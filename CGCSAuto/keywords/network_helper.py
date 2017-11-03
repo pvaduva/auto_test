@@ -253,7 +253,7 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
 
     Args:
         net_id (str): network id
-        field (str): such as 'status', 'subnets', 'wrs-net:vlan_id' or 'vlan_id' if strict=False
+        field (str): such as 'status', 'subnets'
         strict (bool): whether to perform strict search for the name of the field
         auto_info (dict):
         con_ssh (SSHClient):
@@ -908,6 +908,125 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
         return table_parser.get_values(table_, 'id')
 
     return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_qos_names(qos_ids=None, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        qos_ids(str|list|None): QoS id to filter name.
+        con_ssh(SSHClient):  If None, active controller ssh will be used.
+        auth_info(dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns(list): List of neutron qos names filtered by qos_id.
+
+    """
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    if qos_ids is None:
+        return table_parser.get_column(table_, 'name')
+
+    return table_parser.get_values(table_, 'name', strict=True, id=qos_ids)
+
+
+def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
+               con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Args:
+        name(str): Name of the QoS to be created.
+        tenant_name(str): Such as tenant1, tenant2. If none uses primary tenant.
+        description(str): Description of the created QoS.
+        scheduler(dict): Dictionary of scheduler policies formatted as {'policy': value}.
+        dscp(dict): Dictionary of dscp policies formatted as {'policy': value}.
+        ratelimit(dict): Dictionary of ratelimit policies formatted as {'policy': value}.
+        fail_ok(bool):
+        con_ssh(SSHClient):
+        auth_info(dict): Run the neutron qos-create cli using this authorization info. Admin by default,
+
+    Returns(tuple): exit_code(int), qos_id(str)
+                    (0, qos_id) qos successfully created.
+                    (1, output) qos not created successfully
+    """
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+    check_dict = {}
+    args = ''
+    current_qos = get_qos_names(con_ssh=con_ssh, auth_info=auth_info)
+    if name is None:
+        if tenant_name is None:
+            tenant_name = common.get_tenant_name(Tenant.get_primary())
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+        else:
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+    args_dict = {'name': name,
+                 'tenant-id': tenant_id,
+                 'description': description,
+                 'scheduler': scheduler,
+                 'dscp': dscp,
+                 'ratelimit': ratelimit
+                 }
+    check_dict['policies'] = {}
+    for key, value in args_dict.items():
+        if value:
+            if key in ('scheduler', 'dscp', 'ratelimit'):
+                args += " --{}".format(key)
+                for policy, val in value.items():
+                    args += " {}={}".format(policy, val)
+                    value[policy] = str(val)
+                check_dict['policies'][key] = value
+            else:
+                args += " --{} '{}'".format(key, value)
+                if key is 'tenant-id':
+                    key = 'tenant_id'
+                check_dict[key] = value
+
+    LOG.info("Creating QoS with args: {}".format(args))
+    exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                    rtn_list=True)
+    if exit_code == 1:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    for key, exp_value in check_dict.items():
+        if key is 'policies':
+            actual_value = eval(table_parser.get_value_two_col_table(table_, key))
+        else:
+            actual_value = table_parser.get_value_two_col_table(table_, key)
+        if actual_value != exp_value:
+            msg = "Qos created but {} expected to be {} but actually {}".format(key, exp_value, actual_value)
+            raise exceptions.NeutronError(msg)
+
+    qos_id = table_parser.get_value_two_col_table(table_, 'id')
+    LOG.info("QoS successfully created")
+    return 0, qos_id
+
+
+def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        qos_id(str): QoS to be deleted
+        auth_info(dict): tenant to be used, if none admin will be used
+        con_ssh(SSHClient):
+        fail_ok(bool):
+
+    Returns: code(int), output(string)
+            (0, "QoS <qos_id> successfully deleted" )
+            (1, <std_err>)  openstack qos delete cli rejected
+    """
+
+    LOG.info("deleting QoS: {}".format(qos_id))
+    code, output = cli.neutron('qos-delete', qos_id, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, output
+
+    if qos_id in get_qos(auth_info=auth_info, con_ssh=con_ssh):
+        msg = "QoS {} still listed in neutron QoS list".format(qos_id)
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "QoS {} successfully deleted".format(qos_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
 def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
@@ -2314,6 +2433,8 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    if isinstance(nics, str):
+        nics = [nics]
     nics = [eval(nic_) for nic_ in nics]
 
     return nics
@@ -2523,6 +2644,7 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
             nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                        auth_info=auth_info, vlan_id=vlan_id)
 
+            # TODO: US102722 wrs-net:vlan_id removed from neutron subnets
             other_nets = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                      auth_info=auth_info, vlan_id=vlan_id, exclude=True)
 
@@ -3202,7 +3324,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
     return vms_routers
 
 
-def collect_networking_info(routers=None, vms=None):
+def collect_networking_info(routers=None, vms=None, sep_file=None):
     LOG.info("Ping tenant(s) router's external and internal gateway IPs")
 
     if not routers:
@@ -3220,16 +3342,29 @@ def collect_networking_info(routers=None, vms=None):
         router_ips = get_router_subnets(router_id=router_, rtn_val='ip_address', mgmt_only=True)
         ips_to_ping += router_ips
 
-    ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    res_bool, res_dict = ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    if sep_file:
+        res_str = "succeeded" if res_bool else 'failed'
+        content = "Ping router interfaces {}: {}\n".format(res_str, res_dict)
+        common.write_to_file(sep_file, content=content)
 
     hosts = []
     for router in routers:
-        hosts.append(get_router_info(router_id=router, field='wrs-net:host'))
+        router_host = get_router_info(router_id=router, field='wrs-net:host')
+        if router_host:
+            hosts.append(router_host)
+        else:
+            LOG.error("Router {} has no host, it may be down.".format(router))
 
-    LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
-    for host in hosts:
-        ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
-        collect_vswitch_info_on_host(host)
+    if hosts:
+        LOG.info("Collect vswitch.info for {} router(s) on router host(s): ".format(routers, hosts))
+        for host in hosts:
+            ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
+            collect_vswitch_info_on_host(host)
+
+        if sep_file:
+            content = "vswitch.info collected for {} under {}\n".format(hosts, ProjVar.get_var('PING_FAILURE_DIR'))
+            common.write_to_file(sep_file, content=content)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
@@ -3631,3 +3766,34 @@ def get_ip_for_eth(ssh_client, eth_name):
         return ''
 
 
+def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
+    """
+    Get the networks ids that matches the vxlan underlay ip version
+    Args:
+        vxlan_provider_net_id: vxlan provider net id to get the networks info
+        ip_version: 4 or 6 (IPV4 or IPV6)
+        con_ssh (SSHClient):
+
+    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6)
+
+    """
+
+    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
+    if not networks:
+        return ""
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,\
+                                                      rtn_val='providernet_attributes')
+    if not provider_attributes:
+        return ""
+    rtn_networks = []
+    index = 0
+    for attr in provider_attributes:
+        dic_attr = eval (attr)
+        if dic_attr['mode'] == mode:
+            ip = dic_attr['group']
+            ip_addr = ipaddress.ip_address(ip)
+            if ip_addr.version == ip_version:
+                rtn_networks.append(networks[index])
+        index += 1
+
+    return rtn_networks

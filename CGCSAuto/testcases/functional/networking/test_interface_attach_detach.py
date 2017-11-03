@@ -2,7 +2,7 @@ import re
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus, GuestImages
+from consts.cgcs import VMStatus, GuestImages, FlavorSpec, Prompt
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -34,15 +34,16 @@ def base_vm():
 
     vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
-    return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id
+    return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
     ('tis-centos-guest', 'net_id', [('virtio', 1)]),
     ('tis-centos-guest', 'net_id', [('avp', 1)]),
     #('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
-    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)])
+    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
     #('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
+    ('vxworks', 'net_id', [('e1000', 0)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vifs):
     """
@@ -70,7 +71,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
         - Delete base vm, volume    (module)
 
     """
-    base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id = base_vm
+    base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
 
     nic_action = False
     internal_port_id = None
@@ -86,7 +87,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
         ResourceCleanup.add('image', image_id, scope='module')
 
     LOG.tc_step("Create a flavor with 2 vcpus")
-    flavor_id = nova_helper.create_flavor(vcpus=2, guest_os=guest_os)[1]
+    flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
@@ -96,67 +97,74 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     assert 0 == code, "Issue occurred when creating volume"
     source_id = vol_id
 
+    if guest_os == 'vxworks':
+        mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'e1000'}
+
     LOG.tc_step("Boot a vm with mgmt nic only")
-    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic], source_id=source_id,
+    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic], source_id=source_id, flavor=flavor_id,
                                       guest_os=guest_os, cleanup='function')[1]
 
     for vm_actions in [['live_migrate'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
         tenant_port_ids = []
-        LOG.tc_step("atttach maximum number of vnics to the VM")
-        vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-        LOG.info("current nic no {}".format(vnics_attached))
-        expt_vnics = 1
-        new_vnics = 0
-        for vif in vifs:
-            vif_model, vif_count = vif
-            expt_vnics += vif_count
-            LOG.info("iter {}".format(vif_count))
-            for i in range(vif_count):
-                tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
-                new_vnics += 1
-                tenant_port_ids.append(tenant_port_id)
-            LOG.info("Attached new vnics to the VM {}".format(tenant_port_ids))
+        if 'vxworks' not in guest_os:
+            LOG.tc_step("atttach maximum number of vnics to the VM")
+            vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+            LOG.info("current nic no {}".format(vnics_attached))
+            expt_vnics = 1
+            new_vnics = 0
+            for vif in vifs:
+                vif_model, vif_count = vif
+                expt_vnics += vif_count
+                LOG.info("iter {}".format(vif_count))
+                for i in range(vif_count):
+                    tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
+                    new_vnics += 1
+                    tenant_port_ids.append(tenant_port_id)
+                LOG.info("Attached new vnics to the VM {}".format(tenant_port_ids))
 
-        vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-        LOG.info("vnics attached to VM: {}" .format(vnics_attached))
-        assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
+            vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+            LOG.info("vnics attached to VM: {}" .format(vnics_attached))
+            assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
 
-        LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
-        _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
+            LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
+            _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
 
-        if expt_vnics == 16:
-            res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
-            assert res == 1, "vnics attach exceed maximum limit"
+            if expt_vnics == 16:
+                res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
+                assert res == 1, "vnics attach exceed maximum limit"
 
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
             vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
             vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
-            _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
+            if 'vxworks' not in guest_os:
+                _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
         else:
             LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
             for action in vm_actions:
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
                 if action == 'cold_migrate':
                     LOG.tc_step("Bring up all the attached tenant interface from vm after {}".format(vm_actions))
-                    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
+                    if 'vxworks' not in guest_os:
+                        _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                    "after {}".format(vm_actions))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'], retry=10)
+        if 'vxworks' not in guest_os:
+            LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
+                        "after {}".format(vm_actions))
+            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'], retry=10)
 
-        LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
-        for tenant_port_id in tenant_port_ids:
-            vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
+            LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
+            for tenant_port_id in tenant_port_ids:
+                vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
 
-        LOG.tc_step("Remove the dhclient leases cache after detach")
-        _remove_dhclient_cache(vm_id=vm_under_test)
-        res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
-                                         net_types=['data'])[0]
-        assert not res, "Ping from base_vm to vm via detached interface still works"
+            LOG.tc_step("Remove the dhclient leases cache after detach")
+            _remove_dhclient_cache(vm_id=vm_under_test)
+            res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
+                                            net_types=['data'])[0]
+            assert not res, "Ping from base_vm to vm via detached interface still works"
 
 
 def _remove_dhclient_cache(vm_id):
@@ -173,7 +181,8 @@ def _bring_up_attached_interface(vm_id, guest_os, num=1):
         vm_id (str):
     """
     vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+    prompt = Prompt.VXWORKS_PROMPT if guest_os == 'vxworks' else None
+    with vm_helper.ssh_to_vm_from_natbox(vm_id, prompt=prompt, vm_image_name=guest_os) as vm_ssh:
         vnics_to_check = vm_nics[-num:]
         for vnic in vnics_to_check:
             mac_addr = vnic['mac_address']

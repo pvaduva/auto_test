@@ -63,6 +63,7 @@ class GuestImages:
         'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 7.5),
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
+        'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
     }
 
@@ -145,6 +146,7 @@ class Prompt:
     CONTROLLER_1 = '.*controller\-1\:~\$ '
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
 
+    VXWORKS_PROMPT = '-> '
 
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
@@ -210,6 +212,7 @@ class FlavorSpec:
     PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
     CPU_REALTIME = 'hw:cpu_realtime'
     CPU_REALTIME_MASK = 'hw:cpu_realtime_mask'
+    HPET_TIMER = 'sw:wrs:guest:hpet'
     NESTED_VMX = 'hw:wrs:nested_vmx'
 
 
@@ -283,6 +286,7 @@ class EventLogID:
     PROVIDER_NETWORK_FAILURE = '300.005'
     BMC_SENSOR_ACTION = '200.007'
     CPU_USAGE_HIGH = '100.101'
+    FS_THRESHOLD_EXCEEDED = '100.104'
 
 
 class NetworkingVmMapping:
@@ -445,4 +449,3 @@ class BackupRestore:
     USB_MOUNT_POINT = '/media/wrsroot'
     USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
     LOCAL_BACKUP_PATH = '/sandbox/backups'
-

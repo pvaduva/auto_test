@@ -103,7 +103,7 @@ def _perform_action(vm_id, action, expt_fail):
         else:
             LOG.tc_step("Verify that the vm can be paused and unpaused")
             vm_helper.pause_vm(vm_id)
-            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
+            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, wait_login=False), \
                 "The vm is still pingable after pause"
 
             vm_helper.unpause_vm(vm_id)
@@ -111,7 +111,7 @@ def _perform_action(vm_id, action, expt_fail):
 
             LOG.tc_step("Verify that the vm can be suspended and resumed")
             vm_helper.suspend_vm(vm_id)
-            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
+            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, wait_login=False), \
                 "The vm is still pingable after suspend"
 
             vm_helper.resume_vm(vm_id)
@@ -149,7 +149,7 @@ def _perform_action(vm_id, action, expt_fail):
         else:
             LOG.tc_step("Verify a VM can be stopped")
             vm_helper.stop_vms(vm_id)
-            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
+            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, wait_login=False), \
                 "The vm is still pingable after stop"
 
             events_tab = system_helper.get_events_table(num=10)

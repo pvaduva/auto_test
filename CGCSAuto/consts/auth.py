@@ -92,9 +92,6 @@ class HostLinuxCreds:
         'user': 'wrsroot',
         'password': 'Li69nux*'
     }
-    #
-    # USER = 'wrsroot'
-    # PASSWORD = "Li69nux*"
 
     @classmethod
     def get_user(cls):
@@ -170,7 +167,12 @@ class Guest:
         'ge_edge': {
             'user': 'root',
             'password': 'root'
-        }
+        },
+
+        'vxworks': {
+            'user': 'root',
+            'password': 'root'
+        },
 
     }
 

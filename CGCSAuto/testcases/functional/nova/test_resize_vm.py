@@ -22,6 +22,10 @@ def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
             hosts_to_add.append(host_to_add)
             avail_hosts[backing] = host_to_add
             LOG.fixture_step('Select host {} with backing {}'.format(host_to_add, backing))
+
+    if not hosts_to_add:
+        skip("No host in any storage aggregate")
+
     nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)
 
     def remove_hosts_from_zone():

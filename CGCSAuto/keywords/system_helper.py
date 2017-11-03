@@ -1,10 +1,10 @@
 import math
-import time
 import re
+import time
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.timeout import SysInvTimeout
 from consts.cgcs import UUID, Prompt, Networks
+from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -514,7 +514,7 @@ def __process_query_args(args, query_key, query_value, query_type):
     return args
 
 
-def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
+def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
                     strict=True, check_interval=3, event_log_id=None, entity_type_id=None, entity_instance_id=None,
                     severity=None, start=None, end=None, **kwargs):
@@ -903,6 +903,13 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     else:
         # should not get here; cli.system() should already handle these cases
         pass
+
+
+def get_system_name(fail_ok=True, con_ssh=None):
+
+    table_ = table_parser.table(cli.system('show'))
+    system_name = table_parser.get_value_two_col_table(table_, 'name')
+    return system_name
 
 
 def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, period=None):

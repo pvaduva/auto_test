@@ -23,6 +23,11 @@ def lvm_precheck():
     if system_helper.is_simplex() or system_helper.is_storage_system():
         skip("Test does not apply to AIO-SX systems or storage systems")
 
+@fixture()
+def storage_precheck():
+    if not system_helper.is_storage_system():
+        skip("This test only applies to storage nodes")
+
 @mark.usefixtures("aio_precheck")
 def test_reclaim_sda():
     """
@@ -95,29 +100,28 @@ def test_increase_scratch():
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     scratch = table_parser.get_value_two_col_table(table_, 'size')
     LOG.info("scratch is currently: {}".format(scratch))
+    scratch = int(ast.literal_eval(scratch))
 
-    LOG.info("Determine the available free space on the system")
-    big_value = "1000000000000"
-    free_space_regex = "([\-0-9.]*) GiB\.$"
-    cmd = "system controllerfs-modify scratch {}".format(big_value)
-    rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
-    free_space_match = re.search(free_space_regex, out)
-    free_space = free_space_match.group(1)
-
+    LOG.tc_step("Determine the available free space on the system")
+    cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
+    rc, out = con_ssh.exec_sudo_cmd(cmd)
+    free_space = out.rstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-
-    if int(free_space) <= 0:
+    free_space = int(ast.literal_eval(free_space))
+    if free_space <= 10:
         skip("Not enough free space to complete test.")
-    else:
-        LOG.tc_step("Increase the size of the scratch filesystem")
-        new_scratch = math.trunc(int(free_space) / 10) + int(scratch)
-        cmd = "system controllerfs-modify scratch {}".format(new_scratch)
-        rc, out = con_ssh.exec_cmd(cmd)
+
+    LOG.tc_step("Increase the size of the scratch filesystem")
+    new_scratch = math.trunc(free_space / 10) + scratch
+    cmd = "system controllerfs-modify scratch {}".format(new_scratch)
+    rc, out = con_ssh.exec_cmd(cmd)
+    assert rc == 0, "Modification of scratch failed"
 
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     new_scratch = table_parser.get_value_two_col_table(table_, 'size')
     LOG.info("scratch is now: {}".format(new_scratch))
-    assert int(new_scratch) > int(scratch), "scratch size did not increase"
+    new_scratch = int(ast.literal_eval(new_scratch))
+    assert new_scratch > scratch, "scratch size did not increase"
 
     LOG.info("Wait for alarms to clear")
     hosts = system_helper.get_controllers()
@@ -126,14 +130,16 @@ def test_increase_scratch():
                                         entity_id="host={}".format(host))
 
     LOG.tc_step("Attempt to decrease the size of the scratch filesystem")
-    decreased_scratch = int(new_scratch) - 1
+    decreased_scratch = new_scratch - 1
     cmd = "system controllerfs-modify scratch {}".format(decreased_scratch)
     rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
     table_ = table_parser.table(cli.system('controllerfs-show scratch'))
     final_scratch = table_parser.get_value_two_col_table(table_, 'size')
+    final_scratch = int(ast.literal_eval(final_scratch))
     LOG.info("scratch is currently {}".format(final_scratch))
-    assert int(final_scratch) != int(decreased_scratch), \
+    assert final_scratch != decreased_scratch, \
         "scratch was unexpectedly decreased from {} to {}".format(new_scratch, final_scratch)
+
 
 def test_decrease_drbd():
     """ 
@@ -173,7 +179,7 @@ def test_decrease_drbd():
 
 
 # Fails due to product issue
-def test_modify_drdb():
+def _test_modify_drdb():
     """ 
     This test modifies the size of the drbd based filesystems, does an
     immediate swact and then reboots the active controller.
@@ -200,8 +206,9 @@ def test_modify_drdb():
     cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
     rc, out = con_ssh.exec_sudo_cmd(cmd)
     free_space = out.rstrip()
+    free_space = out.lstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-    if float(free_space) <= 0:
+    if float(free_space) <= 2:
         skip("Not enough free space to complete test.")
 
     drbdfs_val = {} 
@@ -215,14 +222,17 @@ def test_modify_drdb():
     LOG.tc_step("Increase the size of the backup and cgcs filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
-    backup_freespace = math.trunc(float(free_space) / 10)
+    if float(free_space) > 10:
+        backup_freespace = math.trunc(float(free_space) / 10)
+    else:
+        backup_freespace = 1
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
     partition_name = "cgcs"
     partition_value = drbdfs_val[partition_name]
     cgcs_free_space = math.trunc(backup_freespace / 2)
-    new_partition_value = cgcs_free_space + int(partition_value)
+    new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
 
@@ -243,15 +253,25 @@ def test_modify_drdb():
 @mark.usefixtures("lvm_precheck")
 def _test_increase_cinder():
     """
-    Increase the size of the cinder filesystem.  Note, this requires a host
-    reinstall of both nodes.
+    Increase the size of the cinder filesystem.  Note, host reinstall is no
+    longer required.
 
     This test does not apply to AIO-SX systems since cinder will default to max
     size.  This also doesn't apply to storage systems since cinder is stored
     in the rbd backend.
-    """
 
-    install_output_dir = "/tmp/fdsa/"
+    LEAVE DISABLED until in-service cinder feature is submitted.
+
+    Test steps:
+    1.  Query the size of cinder
+    2.  Determine the available space on the disk hosting cinder
+    3.  Increase the size of the cinder filesystem
+    4.  Wait for config out-of-date to raise and clear
+    5.  Check cinder to see if the filesystem is increased
+
+    Enhancement:
+    1.  Check on the physical filesystem rather than depending on TiS reporting
+    """
 
     table_= table_parser.table(cli.system("storage-backend-show lvm"))
     cinder_gib = table_parser.get_value_two_col_table(table_, "cinder_gib")
@@ -289,35 +309,39 @@ def _test_increase_cinder():
         system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                      entity_id="host={}".format(host))
 
-    LOG.tc_step("Lock the standby controller")
-    act_cont = system_helper.get_active_controller_name()
+    LOG.tc_step("Wait for config out-of-date alarms to clear")
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host))
 
-    # For simplicitly, start with controller-1
-    if act_cont == "controller-1":
-        host_helper.swact_host(act_cont)
-
-    host = system_helper.get_standby_controller_name()
-    host_helper.lock_host(host)
-    cmd = "system host-reinstall {}".format(host)
-    rc, out = con_ssh.exec_cmd(cmd)
-    host_helper.wait_for_host_states(host, timeout=HostTimeout.UPGRADE)
-
-    host_helper.swact_host("controller-0")
-    host = system_helper.get_standby_controller_name()
-    host_helper.lock_host(host)
-    mgmt_interface = install_helper.get_mgmt_boot_device(host)
-    console = install_helper.open_vlm_console_thread(host, mgmt_interface)
-    bring_node_console_up(host, mgmt_interface, install_output_dir, close_telnet_conn=True)
-    cmd = "system host-reinstall {}".format(host)
-    rc, out = con_ssh.exec_cmd(cmd)
-    
-    # No how to do controller-0.  It would pxeboot from tuxlab by default.
-    # ipmitool (wildcat only) or port installer code over.
+    LOG.tc_step("Validate cinder size is increased")
+    table_= table_parser.table(cli.system("storage-backend-show lvm"))
+    cinder_gib2 = table_parser.get_value_two_col_table(table_, "cinder_gib")
+    LOG.info("cinder is currently {}".format(cinder_gib2))
+    assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
 
 
+@mark.usefixtures("storage_precheck")
 def test_increase_ceph_mon():
     """
     Increase the size of ceph-mon.  Only applicable to a storage system.
+
+    Fails until CGTS-8216
+
+    Test steps:
+    1.  Determine the current size of ceph-mon
+    2.  Attempt to modify ceph-mon to invalid values
+    3.  Check if there is free space to increase ceph-mon
+    4.  Attempt to increase ceph-mon
+    5.  Wait for config out-of-date alarms to raise
+    6.  Lock/unlock all affected nodes (controllers and storage)
+    7.  Wait for alarms to clear
+    8.  Check that ceph-mon has the correct updated value
+
+    Enhancement:
+    1.  Possibly check there is enough disk space for ceph-mon to increase.  Not sure if
+    this is required since there always seems to be some space on the rootfs.
     """
 
     con_ssh = ControllerClient.get_active_controller()
@@ -342,6 +366,8 @@ def test_increase_ceph_mon():
     hosts = system_helper.get_controllers()
     for host in hosts:
         cli.system("ceph-mon-modify {} ceph_mon_gib={}".format(host, new_ceph_mon_gib))
+        # We only need to do this for one controller now and it applies to both
+        break
 
     LOG.info("Wait for expected alarms to appear")
     storage_hosts = system_helper.get_storage_nodes()

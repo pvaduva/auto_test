@@ -12,7 +12,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks
+    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
@@ -343,7 +343,6 @@ def auto_mount_disks(vm_id, rootfs, vm_image_name=None):
             return True
 
 
-
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
@@ -413,14 +412,22 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if flavor is None:
         flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh, guest_os=guest_os)
 
+    if guest_os == 'vxworks':
+        LOG.tc_step("Add HPET Timer extra spec to flavor")
+        extra_specs = {FlavorSpec.HPET_TIMER: 'True'}
+        nova_helper.set_flavor_extra_specs(flavor=flavor, **extra_specs)
+
     # Handle mandatory arg - nics
     if not nics:
+        vif_model = 'virtio'
+        if guest_os == 'vxworks':
+            vif_model = 'e1000'
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info, con_ssh=con_ssh)
         if not mgmt_net_id:
             raise exceptions.NeutronError("Cannot find management network")
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
+        nics = [{'net-id': mgmt_net_id, 'vif-model': vif_model}]
 
-        if 'edge' not in guest_os:
+        if 'edge' not in guest_os and 'vxworks' not in guest_os:
             tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
             # tenant_vif = random.choice(['virtio', 'avp'])
             if tenant_net_id:
@@ -599,7 +606,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 0, vm_ids, "VMs are booted successfully"
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False, wait_login=True):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -620,12 +627,16 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
             time.sleep(3)
             return True
     else:
-        msg = "Ping from NatBox to vm {} failed.".format(vm_id)
+        msg = "Ping from NatBox to vm {} failed for {} seconds.".format(vm_id, timeout)
         if fail_ok:
             LOG.warning(msg)
             return False
         else:
-            network_helper.collect_networking_info(vms=vm_id)
+            f_path = '{}/{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), ProjVar.get_var('TEST_NAME'))
+            common.write_to_file(f_path, "=================={}===============\n".format(msg))
+            ProjVar.set_var(PING_FAILURE=True)
+            get_console_logs(vm_ids=vm_id, sep_file=f_path)
+            network_helper.collect_networking_info(vms=vm_id, sep_file=f_path)
             raise exceptions.VMNetworkError(msg)
 
 
@@ -1209,7 +1220,8 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
+              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False,
+              sep_file=None):
     """
 
     Args:
@@ -1220,6 +1232,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         timeout (int): timeout waiting for response of ping messages in seconds
         fail_ok (bool): Whether it's okay to have 100% packet loss rate.
         use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
+        sep_file (str|None)
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -1271,11 +1284,12 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not internal_ips:
             raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
-        if vlan_zero_only:
-            internal_ips = network_helper.filter_ips_with_subnet_vlan_id(internal_ips, vlan_id=0, con_ssh=con_ssh)
-            if not internal_ips:
-                raise exceptions.VMNetworkError("Internal net ip with subnet vlan id 0 is not found for vms {}".
-                                                format(vm_ids))
+        # vlan subnets removed for US102722
+        # if vlan_zero_only:
+        #    internal_ips = network_helper.filter_ips_with_subnet_vlan_id(internal_ips, vlan_id=0, con_ssh=con_ssh)
+        #    if not internal_ips:
+        #        raise exceptions.VMNetworkError("Internal net ip with subnet vlan id 0 is not found for vms {}".
+        #                                        format(vm_ids))
         vms_ips += internal_ips
 
     res_bool = False
@@ -1303,11 +1317,15 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     if not res_dict:
         raise ValueError("Ping res dict contains no result.")
 
-    err_msg = "Ping unsuccessful from {}: {}".format(ssh_client.host, res_dict)
+    err_msg = "Ping unsuccessful from vm (logged in via {}): {}".format(ssh_client.host, res_dict)
     if fail_ok:
         LOG.info(err_msg)
         return res_bool, res_dict
     else:
+        if sep_file:
+            msg = "==========================Ping unsuccessful from vm to vms===================="
+            common.write_to_file(sep_file, content="{}\nLogged into vm via {}. Result: {}".format(msg, ssh_client.host,
+                                                                                                  res_dict))
         raise exceptions.VMNetworkError(err_msg)
 
 
@@ -1345,10 +1363,67 @@ def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_ping
                                    timeout=timeout, fail_ok=True, use_fip=use_fip, net_types=net_type, retry=retry,
                                    vshell=False)
     if not res_bool and not fail_ok:
-        LOG.error("Ping vm(s) from NatBox failed - Collecting networking info")
-        network_helper.collect_networking_info(vms=vm_ids)
+        msg = "==================Ping vm(s) from NatBox failed - Collecting extra information==============="
+        LOG.error(msg)
+        f_path = '{}/{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), ProjVar.get_var("TEST_NAME"))
+        common.write_to_file(file_path=f_path, content="\n{}\nResult(s): {}\n".format(msg, res_dict))
+        ProjVar.set_var(PING_FAILURE=True)
+        get_console_logs(vm_ids=vm_ids, sep_file=f_path)
+        network_helper.collect_networking_info(vms=vm_ids, sep_file=f_path)
+        raise exceptions.VMNetworkError("Ping failed from NatBox. Details: {}".format(res_dict))
 
     return res_bool, res_dict
+
+
+def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
+    """
+    Get console logs for given vm(s)
+    Args:
+        vm_ids (str|list):
+        length (int|None): how many lines to tail
+        con_ssh:
+        sep_file (str|None): write vm console logs to given sep_file if specified.
+
+    Returns (dict): {<vm1_id>: <vm1_console>, <vm2_id>: <vm2_console>, ...}
+    """
+    if isinstance(vm_ids, str):
+        vm_ids = [vm_ids]
+    console_logs = {}
+    args = '--length={} '.format(length) if length else ''
+    content = ''
+    for vm_id in vm_ids:
+        vm_args = '{}{}'.format(args, vm_id)
+        output = cli.nova('console-log', vm_args, ssh_client=con_ssh)
+        console_logs[vm_id] = output
+        content += "Console log for vm {}:\n{}\n".format(vm_id, output)
+
+    if sep_file:
+        common.write_to_file(sep_file, content=content)
+
+    return console_logs
+
+
+def wait_for_cloud_init_finish(vm_id, timeout=300, con_ssh=None):
+    """
+    Wait for vm to reach login screen via console log. Normally used after vm reboot, evacuation, etc
+    Args:
+        vm_id (str):
+        timeout (int):
+        con_ssh:
+
+    Returns (bool): True if login screen reached, else False
+
+    """
+    LOG.info("Waiting for vm to reach login screen via console log")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        console = get_console_logs(vm_ids=vm_id, length=5, con_ssh=con_ssh)[vm_id]
+        if re.search(' Cloud-init .* finished at | login:', console):
+            return True
+        time.sleep(5)
+
+    LOG.warning("VM {} did not reach login screen within {} seconds".format(vm_id, timeout))
+    return False
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -1413,37 +1488,51 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     if not isinstance(from_vm, str):
         raise ValueError("from_vm is not a string: {}".format(from_vm))
 
+    assert from_vm and to_vms, "from_vm: {}, to_vms: {}".format(from_vm, to_vms)
+
+    f_path = '{}/{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), ProjVar.get_var('TEST_NAME'))
     try:
         with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                    prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
                 res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
                                 timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
                                 retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
-                                vshell=vshell)
-                if not res[0]:
-                    _collect_vm_networking_info(from_vm_ssh)
-
+                                vshell=vshell, sep_file=f_path)
                 return res
 
     except:
-        LOG.error("Ping vm(s) from vm failed - Collecting networking info")
-        network_helper.collect_networking_info(vms=to_vms)
-
+        ProjVar.set_var(PING_FAILURE=True)
+        get_console_logs(vm_ids=from_vm, length=20, sep_file=f_path)
+        get_console_logs(vm_ids=to_vms, sep_file=f_path)
+        network_helper.collect_networking_info(vms=to_vms, sep_file=f_path)
         try:
+            LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to from_vm and collect vm networking info")
+            with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
+                                       prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip,
+                                       use_fip=from_fip) as from_vm_ssh:
+                _collect_vm_networking_info(vm_ssh=from_vm_ssh, sep_file=f_path)
+
             LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
             for vm_ in to_vms:
                 with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
-                    _collect_vm_networking_info(to_ssh)
+                    _collect_vm_networking_info(to_ssh, sep_file=f_path)
         except:
             pass
 
         raise
 
 
-def _collect_vm_networking_info(vm_ssh):
-    vm_ssh.exec_cmd('ip addr', get_exit_code=False)
-    vm_ssh.exec_cmd('ip neigh', get_exit_code=False)
-    vm_ssh.exec_cmd('ip route', get_exit_code=False)
+def _collect_vm_networking_info(vm_ssh, sep_file=None):
+    content = 'VM network info collected when logged in via {}:'.format(vm_ssh.host)
+    output = vm_ssh.exec_cmd('ip addr', get_exit_code=False)[1]
+    content += '\nSent: ip addr\nOutput:\n{}\n'.format(output)
+    output = vm_ssh.exec_cmd('ip neigh', get_exit_code=False)[1]
+    content += '\nSent: ip neigh\nOutput:\n{}\n'.format(output)
+    output = vm_ssh.exec_cmd('ip route', get_exit_code=False)[1]
+    content += '\nSent: ip route\nOutput:\n{}\n'.format(output)
+
+    if sep_file:
+        common.write_to_file(sep_file, content=content)
 
 
 def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
@@ -2309,8 +2398,12 @@ def get_vm_irq_info_from_hypervisor(vm_id, con_ssh=None):
 
             cpu_list = []
             for irq_to_check in irqs_to_check:
-                cpu_list_irq = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check))[1]
-                cpu_list += common._parse_cpus_list(cpu_list_irq)
+
+                code, output = host_ssh.exec_sudo_cmd('cat /proc/irq/{}/smp_affinity_list'.format(irq_to_check),
+                                                      fail_ok=True)
+                if code == 0:
+                    cpu_list_irq = output
+                    cpu_list += common._parse_cpus_list(cpu_list_irq)
             pci_dev_dict['cpulist'] = sorted(list(set([int(i) for i in cpu_list])))
 
             pci_devs_dict[pci_addr] = pci_dev_dict
@@ -2917,7 +3010,7 @@ def _get_cloud_config_add_user(con_ssh=None):
     source_file = TestServerPath.USER_DATA + file_name
 
     dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                 dest_name=file_name, is_dir=False, con_ssh=con_ssh)
+                                                                 dest_name=file_name, con_ssh=con_ssh)
 
     if dest_path is None:
         raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))

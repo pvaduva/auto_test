@@ -36,11 +36,10 @@ def send_bytes(stream, text, timeout=120):
     Send user specified text to stream.
     """
     
-    print("Sending text {}".format(text))
+    print("Sending text: {}".format(text))
     stream.sendall("{}\n".format(text).encode('utf-8'))
     time.sleep(2)
     #stream.sendall("echo $?".encode('utf-8'))
     #rc = stream.expect_regex("(.*)".encode('utf-8'))
     rc = 0
     return rc
-

@@ -306,9 +306,10 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy):
                                                         cpu_thr_pol=thread_policy, numa_num=1, vm_host=vm_host)
 
 
+# TC5140
 def test_vcpu_model_evacuation(add_admin_role_func):
     """
-    Launch vm with vcpu model spec set
+    Launches a set of vms with different cpu models and tests for the their successful evacuation. Tests TC5140.
 
     Skip if:
         - lab has < 2 hosts
@@ -338,7 +339,7 @@ def test_vcpu_model_evacuation(add_admin_role_func):
     LOG.tc_step("Find the newest vm that will be supported by at least 2 hosts and create vm")
     while working_vcpu_model_list:
         vcpu_model = working_vcpu_model_list[0]
-        code, vm, msg = _boot_vm_vcpu_model(vcpu_model, vcpu_model, "volume", avail_zone='nova')
+        code, vm, msg = _boot_vm_vcpu_model(vcpu_model, None, "volume", avail_zone='nova')
 
         # if _boot_vm is unsuccessful
         if code != 0:
@@ -421,9 +422,10 @@ def test_vcpu_model_evacuation(add_admin_role_func):
         check_vm_cpu_model(vm_id=vm, vcpu_model=cpu, expt_arch=post_evac_expt_arch)
 
 
+# TC6569
 def test_vmx_setting():
     """
-    Test that vmx feature can be set in guest VM
+    Test that vmx feature can be set in guest VM. Tests TC6569.
 
     Test Steps:
        - Create a flavor with extra specs hw:wrs:nested_vmx=True and hw:cpu_model=<a cpu model supported by the host>

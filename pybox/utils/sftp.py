@@ -17,8 +17,8 @@ def sftp_get(remote_path, remote_host, local_path):
 
     Note, keys must be setup for this to work.
     """
-
     privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
+    # privatekeyfile = os.path.expanduser('/folk/tmather/.ssh/id_rsa')
     mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
     username = getpass.getuser()
 

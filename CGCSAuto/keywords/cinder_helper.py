@@ -435,7 +435,7 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
         'status': status,
         "Volume ID": vol_id,
         'Status': status,
-        'Display Name': name,
+        'name': name,
         'Size': size
     }
 
@@ -1182,7 +1182,7 @@ def is_volumes_pool_sufficient(min_size=40):
     #   volume-05fa416d-d37b-4d57-a6ff-ab4fe49deece cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
     #   volume-1b04fa7f-b839-4cf9-a177-e676ec6cf9b7 cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
     if lvs_pool:
-        pool_size = float(lvs_pool.splitlines()[0].strip().split()[3].strip()[:-1])
+        pool_size = float(lvs_pool.splitlines()[0].strip().split()[3].strip()[:-1].split(sep='<')[-1])
         return pool_size >= min_size
 
     # assume enough volumes in ceph:

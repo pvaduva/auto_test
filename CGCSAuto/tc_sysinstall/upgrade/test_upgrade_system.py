@@ -19,17 +19,20 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
         rc, output = upgrade_helper.upgrade_host_lock_unlock(controller0.name)
         assert rc == 0, "Failed to lock/unlock host {}: {}".format(controller0.name, output)
 
-    LOG.tc_step("Checking system health for upgrade .....")
-    if check_system_health_query_upgrade[0] == 0:
-        LOG.info("System health OK for upgrade......")
-    if check_system_health_query_upgrade[0] == 1:
-        assert False, "System health query upgrade failed: {}".format(check_system_health_query_upgrade[1])
+    # update health query
+    system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
 
-    if check_system_health_query_upgrade[0] == 4 or check_system_health_query_upgrade[0] == 2:
+    LOG.tc_step("Checking system health for upgrade .....")
+    if system_upgrade_health[0] == 0:
+        LOG.info("System health OK for upgrade......")
+    if system_upgrade_health[0] == 1:
+        assert False, "System health query upgrade failed: {}".format(system_upgrade_health[1])
+
+    if system_upgrade_health[0] == 4 or system_upgrade_health[0] == 2:
         LOG.info("System health indicate missing manifests; lock/unlock controller-0 to resolve......")
         missing_manifests = True
 
-    if check_system_health_query_upgrade[0] == 3 or check_system_health_query_upgrade[0] == 2:
+    if system_upgrade_health[0] == 3 or system_upgrade_health[0] == 2:
 
         LOG.info("System health indicate minor alarms; using --force option to start upgrade......")
         force = True
@@ -38,9 +41,9 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
         LOG.info("Locking/Unlocking to resolve missing manifests in controller......")
 
         lock_unlock_hosts = []
-        if any("controller-1" in k for k in check_system_health_query_upgrade[1].keys()):
+        if any("controller-1" in k for k in system_upgrade_health[1].keys()):
             lock_unlock_hosts.append('controller-1')
-        if any("controller-0" in k for k in check_system_health_query_upgrade[1].keys()):
+        if any("controller-0" in k for k in system_upgrade_health[1].keys()):
             lock_unlock_hosts.append('controller-0')
 
         for host in lock_unlock_hosts:

@@ -36,7 +36,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
                   host.exec_cmd(cmd)
 
     """
-    default_user, default_password = LinuxUser.get_current_user_password()
+    default_user, default_password = LinuxUser.get_current_user_password(con_ssh=con_ssh)
     user = username if username else default_user
     password = password if password else default_password
     if not prompt:
@@ -148,7 +148,8 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     if reboot_con:
         hostnames.append(controller)
-        wait_for_hosts_states(
+        if not is_simplex:
+            wait_for_hosts_states(
                 controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
                 con_ssh=con_ssh, availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
@@ -248,11 +249,9 @@ def recover_simplex(con_ssh=None, fail_ok=False):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    stay = 0
     if not con_ssh._is_connected():
         con_ssh.connect(retry=True, retry_timeout=HostTimeout.REBOOT)
-        stay = 60
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, stay=stay, timeout=HostTimeout.REBOOT)
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=HostTimeout.REBOOT)
 
     host = 'controller-0'
     is_unlocked = (get_hostshow_value(host=host, field='administrative') == HostAdminState.UNLOCKED)
@@ -338,12 +337,12 @@ def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostT
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
-            LOG.info("Hosts {} subfunctions are now in enabled/available states")
+            LOG.info("Hosts subfunctions are now in enabled/available states")
             return True
 
         time.sleep(3)
 
-    err_msg = "Host subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
+    err_msg = "Host(s) subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
     if fail_ok:
         LOG.warning(err_msg)
         return False
@@ -874,45 +873,37 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
 
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
-                                   reconnect=False, reconnect_timeout=60, stay=60):
+                                   reconnect=True):
     cli_enable_end_time = time.time() + timeout
-    eof_count = 0
 
-    def check_sysinv_cli():
-        cli.system('show', ssh_client=con_ssh, timeout=timeout)
-        time.sleep(5)
-        cli.system('host-show', 'controller-0', ssh_client=con_ssh, timeout=timeout)
+    def check_sysinv_cli(con_ssh_):
+        cli.system('show', ssh_client=con_ssh_, timeout=timeout)
+        time.sleep(10)
+        active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_)
+        wait_for_subfunction_ready(hosts=active_con, con_ssh=con_ssh_)
         LOG.info("'system cli enabled")
 
-    while True:
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    while time.time() < cli_enable_end_time:
         try:
-            LOG.info("Wait for system cli to be enabled for at least {} seconds".format(stay))
-            check_sysinv_cli()
-            end_time = time.time() + stay
-            while time.time() < end_time:
-                time.sleep(check_interval)
-                check_sysinv_cli()
+            LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
+            check_sysinv_cli(con_ssh_=con_ssh)
+            # end_time = time.time() + stay
+            # while time.time() < end_time:
+            #     time.sleep(check_interval)
+            #     check_sysinv_cli(con_ssh_=con_ssh)
             return True
 
-        except pexpect.EOF:
-            if reconnect:
-                if con_ssh is None:
-                    con_ssh = ControllerClient.get_active_controller()
-                con_ssh.connect(retry_timeout=reconnect_timeout)
-            elif eof_count < 3:
-                eof_count += 1
-            elif fail_ok:
-                LOG.warning("3 EOF caught. Connection lost")
-                return False
-            else:
-                raise
-
-        except Exception as e:
-            if time.time() > cli_enable_end_time:
-                if fail_ok:
-                    LOG.warning("Timed out waiting for cli to enable. \nException: {}".format(e))
-                    return False
-                raise
+        except Exception:
+            if not con_ssh._is_connected():
+                if reconnect:
+                    con_ssh.connect(retry_timeout=timeout)
+                else:
+                    LOG.error("system disconnected")
+                    if fail_ok:
+                        return False
+                    raise
             time.sleep(check_interval)
 
 
@@ -1248,7 +1239,7 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None):
     return hosts
 
 
-def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
+def get_hosts_by_storage_aggregate(storage_backing='local_image', up_only=True, con_ssh=None):
     """
     Return a list of hosts that supports the given storage backing.
 
@@ -1275,6 +1266,10 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', con_ssh=None):
                          "Please use one of these: 'local_image', 'local_lvm', 'remote'")
 
     hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+
+    if up_only:
+        up_hypervisors = get_up_hypervisors(con_ssh=con_ssh)
+        hosts = list(set(hosts) & set(up_hypervisors))
 
     LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
     return hosts
@@ -2268,10 +2263,11 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     return vcpus
 
 
-def get_hosts_per_storage_backing(con_ssh=None):
+def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     """
     Get hosts for each possible storage backing
     Args:
+        up_only (bool): whether to return up hypervisor only
         con_ssh:
 
     Returns (dict): {'local_image': <cow hosts list>,
@@ -2280,9 +2276,14 @@ def get_hosts_per_storage_backing(con_ssh=None):
                     }
     """
 
-    hosts = {'local_image': get_hosts_by_storage_aggregate('local_image', con_ssh=con_ssh),
-             'local_lvm': get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
-             'remote': get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)}
+    hosts = {'local_image': get_hosts_by_storage_aggregate('local_image', up_only=False, con_ssh=con_ssh),
+             'local_lvm': get_hosts_by_storage_aggregate('local_lvm', up_only=False, con_ssh=con_ssh),
+             'remote': get_hosts_by_storage_aggregate('remote', up_only=False, con_ssh=con_ssh)}
+
+    if up_only:
+        up_hosts = get_up_hypervisors(con_ssh=con_ssh)
+        for backing, hosts_with_backing in hosts.items():
+            hosts[backing] = list(set(hosts_with_backing) & set(up_hosts))
 
     return hosts
 
@@ -3194,8 +3195,9 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
     LOG.info ("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False)
-        status, msg = get_ntpq_status(host)
+        ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False,
+                                              con_ssh=con_ssh)
+        status, msg = get_ntpq_status(host, con_ssh=con_ssh)
         if ntp_alarms and status != 0:
             LOG.info("Valid NTP alarm")
             return True
@@ -3273,8 +3275,6 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
 def lock_unlock_controllers():
     """
     lock/unlock both controller to get rid of the config out of date situations
-    Args:
-        none
 
     Returns (list): return code and msg
 
@@ -3304,3 +3304,29 @@ def lock_unlock_controllers():
         return 1, "Standby controller unavailable. Skip lock unlock controllers"
 
     return 0, "Locking unlocking controllers completed"
+
+
+def get_traffic_control_info(con_ssh=None, port=None):
+    """
+    Check the traffic control profile on given port name
+
+    Returns (list): return traffic control string
+
+    """
+    if con_ssh is None:
+         con_ssh = ControllerClient.get_active_controller()
+    traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
+    return traffic_control
+
+
+def get_nic_speed(con_ssh=None, port=None):
+    """
+    Check the speed on given port name
+
+    Returns (list): return speed
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    traffic_control = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(port), expect_timeout=10)[1]
+    return traffic_control

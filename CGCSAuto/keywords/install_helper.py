@@ -12,18 +12,20 @@ from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITAN
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common
-from CGCSAuto.utils import telnet as telnetlib, exceptions,cli
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
+# from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
+from utils import telnet as telnetlib, exceptions, local_host, cli
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
-from CGCSAuto.utils import local_host
-
+# from CGCSAuto.utils import local_host
+from utils import local_host
+from consts.auth import Tenant, CliAuth
+import setups
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
-
 
 def get_ssh_public_key():
     return local_host.get_ssh_key()
@@ -105,7 +107,9 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
     node_thread = threading.Thread(target=bring_node_console_up,
                                    name=node.name,
-                                   args=(node, boot_device, output_dir, upgrade, vlm_power_on, close_telnet_conn ))
+                                   args=(node, boot_device, output_dir),
+                                   kwargs={'upgrade': upgrade, 'vlm_power_on': vlm_power_on,
+                                           'close_telnet_conn': close_telnet_conn})
 
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
@@ -140,7 +144,7 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint)
+    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -208,7 +212,7 @@ def wipe_disk_hosts(hosts):
 
 def wipe_disk(node, install_output_dir, close_telnet_conn=True):
     """
-    Perform a wipedisk operation on the lab before booting a new load into
+    Perform a wipedisk_via_helper operation on the lab before booting a new load into
         it.
     Args:
         node:
@@ -228,7 +232,7 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
                                              + node.name + ".telnet.log",
                                              debug=False)
 
-    # Check that the node is accessible for wipedisk to run.
+    # Check that the node is accessible for wipedisk_via_helper to run.
     # If we cannot successfully ping the interface of the node, then it is
     # expected that the login will fail. This may be due to the node not
     # being left in an installed state.
@@ -236,13 +240,13 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
     # cmd = "ping -w {} -c 4 {}".format(HostTimeout.PING_TIMEOUT, node.host_ip)
     # if (node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.PING_TIMEOUT +
     #                               HostTimeout.TIMEOUT_BUFFER)[0] != 0):
-    #     err_msg = "Node {} not responding. Skipping wipedisk process".format(node.name)
+    #     err_msg = "Node {} not responding. Skipping wipedisk_via_helper process".format(node.name)
     #     LOG.info(err_msg)
     #     return 1
     # else:
     #     node.telnet_conn.login()
 
-    node.telnet_conn.write_line("sudo -k wipedisk")
+    node.telnet_conn.write_line("sudo -k wipedisk_via_helper")
     node.telnet_conn.get_read_until(Prompt.PASSWORD_PROMPT)
     node.telnet_conn.write_line(HostLinuxCreds.get_password())
     node.telnet_conn.get_read_until("[y/n]")
@@ -276,7 +280,11 @@ def power_off_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
+        LOG.info("node.barcode:{}".format(node.barcode))
+        LOG.info("node:{}".format(node))
+
         rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
+
         if rc != 0:
             err_msg = "Failed to power off nod {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
@@ -1163,17 +1171,38 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     output_dir = ProjVar.get_var('LOG_DIR')
     controller0_node = lab['controller-0']
 
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
 
-    cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-system {}".format(system_backup)
+    cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
+                                                                             system_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+    rc, output = controller0_node.telnet_conn.exec_cmd(cmd,
+                                                       extra_expects=["Enter 'reboot' to reboot controller: "],
+                                                       timeout=HostTimeout.SYSTEM_RESTORE)
+    if rc == 0 and 'reboot controller' in output:
+        msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
+        LOG.info(msg)
+
+        reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+
+        rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd,
+                                                           alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
+        if rc != 0:
+            msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
+            LOG.error(msg)
+            raise exceptions.RestoreSystem
+        LOG.info('OK, system reboot after been patched to previous level')
+
+        LOG.info('re-login')
+        controller0_node.telnet_conn.login()
+        os.environ["TERM"] = "xterm"
+
+        LOG.info('re-run cli:{}'.format(cmd))
+        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+
     if rc != 0:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -1182,43 +1211,37 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         else:
             raise exceptions.CLIRejected(err_msg)
 
-    # If the backed-up version includes patches, the restore process automatically
-    # applies the patches and forces an additional reboot of the controller to make them effective.
-    # Checking first if reboot is required
-
-    if "This controller has been patched. A reboot is required." in output:
-        # controller reboot is required. Reboot controller from telnet session ( console)
-        cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S reboot"
-        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.REBOOT)
-
-        controller0_node.telnet_conn.get_read_until(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
-        LOG.info("Found login prompt. {} reboot has completed".format(controller0_node.name))
-
-        # reconnect SSh connection:
-        con_ssh.connect(retry=True, retry_timeout=60)
-
-        # verifying  patches were applied
-        patch_ids = patching_helper.get_all_patch_ids(con_ssh=con_ssh)
-        patch_states = patching_helper.get_patch_states(patch_ids, con_ssh=con_ssh)
-        for patch_id in patch_ids:
-            if patch_states[patch_id] != 'Applied':
-                err_msg = "Patch  not applied after reboot. {}: {}".format(patch_id, patch_states[patch_id])
-                if fail_ok:
-                    return 2, err_msg
-                else:
-                    raise exceptions.RestoreSystem(err_msg)
-
-    elif "System restore complete" in output:
+    if "System restore complete" in output:
         msg = "System restore completed successfully"
         LOG.info(msg)
         return 0, msg
     else:
-        err_msg = "Unexpected result from system restore: {}".format(output)
+        LOG.warn('No "restore complete" in output, rc={}\noutput:\n{}\n'.format(rc, output))
+        conn = controller0_node.telnet_conn
+        cmd = 'cd; source /etc/nova/openrc'
+        rc, output = conn.exec_cmd(cmd)
+        assert rc == 0, \
+            'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
+        LOG.info('OK to source openrc')
 
-        if fail_ok:
-            return 3, err_msg
-        else:
-            raise exceptions.RestoreSystem(err_msg)
+        cmd = 'system host-list'
+        rc, output = conn.exec_cmd(cmd)
+        assert rc == 0, \
+            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+        cmd = 'openstack endpoint list'
+        rc, output = conn.exec_cmd(cmd)
+        assert rc == 0, \
+            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+        LOG.info('OK to get hosts list\n{}\n'.format(output))
+
+        # err_msg = "Unexpected result from system restore: {}".format(output)
+        #
+        # if fail_ok:
+        #     return 3, err_msg
+        # else:
+        #     raise exceptions.RestoreSystem(err_msg)
 
 
 def restore_controller_system_images(images_backup, tel_net_session=None, fail_ok=False):
@@ -1331,13 +1354,16 @@ def get_backup_files_from_usb(pattern, usb_device=None, con_ssh=None):
 
 def get_backup_files(pattern, backup_src_path, src_conn_ssh):
     """
+
     Args:
         pattern:
         backup_src_path:
-        src_con_ssh:
+        src_conn_ssh:
+
     Returns:
 
     """
+
     if pattern is None or backup_src_path is None or src_conn_ssh is None:
         raise ValueError("pattern, backup_src_path and src_conn_ssh must be specified; cannot be None.")
 
@@ -2121,3 +2147,47 @@ def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=Host
             return None
         else:
             raise
+
+
+def wipedisk_via_helper(ssh_con):
+    """
+    A light-weight tool to wipe disks in order to AVOID booting from hard disks
+
+    Args:
+        ssh_con:
+
+    Returns:
+
+    """
+    cmd = "test -f wipedisk_helper && test -f wipedisk_automater"
+    if ssh_con.exec_cmd(cmd)[0] == 0:
+        cmd = "chmod 755 wipedisk_helper"
+        ssh_con.exec_cmd(cmd)
+
+        cmd = "chmod 755 wipedisk_automater"
+        ssh_con.exec_cmd(cmd)
+
+        cmd = "./wipedisk_automater"
+        ssh_con.exec_cmd(cmd)
+
+    else:
+        LOG.info("wipedisk_via_helper files are not on the load, will not do wipedisk_via_helper")
+
+
+def update_auth_url(ssh_con, region=None, fail_ok=True):
+    """
+
+    Args:
+        ssh_con:
+        region:
+
+    Returns:
+
+    CGTS-8190
+    """
+
+    LOG.info('Attempt to update OS_AUTH_URL from openrc')
+
+    CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
+    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))

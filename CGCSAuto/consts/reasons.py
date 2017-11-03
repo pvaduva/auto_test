@@ -13,3 +13,4 @@ class SkipReason:
     SIMPLEX_SYSTEM = 'Not applicable to Simplex system'
     SIMPLEX_ONLY = 'Only applicable to Simplex system'
     INSUFFICIENT_IMG_CONV = 'Insufficient image-conversion space to convert {} image to raw format'
+    MGMT_INFRA_UNAVAIL = 'traffic control class is not defined in this lab'

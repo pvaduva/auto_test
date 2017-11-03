@@ -58,8 +58,10 @@ class LinuxUser:
         raise NotImplementedError
 
     @classmethod
-    def get_current_user_password(cls):
-        if not cls.con_ssh:
+    def get_current_user_password(cls, con_ssh=None):
+        if con_ssh:
+            cls.con_ssh = con_ssh
+        elif not cls.con_ssh:
             cls.con_ssh = ControllerClient.get_active_controller()
         user = cls.con_ssh.get_current_user()
         return user, cls.users[user]
@@ -831,6 +833,8 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
         if user != 'wrsroot':
             conn.close()
 
+    # flush the output to the cli so the next cli is correctly registered
+    conn.flush()
     LOG.info('Successfully changed password from:\n{}\nto:{} for user:{} on host:{}'.format(
         password, new_password, user, host))
 

@@ -45,5 +45,3 @@ def test_flavor_set_storage(flavor_):
     nova_helper.set_flavor_extra_specs(flavor=flavor_, **local_lvm_spec)
     extra_spec_storage_2 = nova_helper.get_flavor_extra_specs(flavor=flavor_)[storage_spec]
     assert extra_spec_storage_2 == 'local_image', "Actual storage spec: {}".format(extra_spec_storage_2)
-
-
