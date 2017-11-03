@@ -685,7 +685,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None):
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None, prefix_space=False):
         """
         Execute a command with sudo.
 
@@ -700,11 +700,14 @@ class SSHClient:
             strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
                 searchwindowsize instead)
             extra_prompt (str|None)
+            prefix_space (bool): prefix ' ' to cmd, so that it will not go into bash history if HISTCONTROL=ignorespace
 
         Returns (tuple): (exit code (int), command output (str))
 
         """
         cmd = 'sudo ' + cmd
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
         LOG.debug("Executing sudo command...")
         self.send(cmd)
         pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
@@ -1291,6 +1294,9 @@ class ControllerClient:
         """
         if not lab_name:
             lab_dict = ProjVar.get_var('lab')
+            if lab_dict is None:
+                return None
+
             for lab_ in cls.__lab_list:
                 if lab_dict['floating ip'] == lab_.get('floating ip'):
                     lab_name = lab_.get('short_name')

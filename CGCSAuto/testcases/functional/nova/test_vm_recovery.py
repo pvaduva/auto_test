@@ -1,11 +1,13 @@
 import re
 import time
 
-from pytest import mark
+from pytest import mark, fixture
 
 from utils import table_parser, exceptions
 from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
+from utils.kpi import kpi_log_parser
+from consts.kpi_patterns import VMRecovery
 from consts.feature_marks import Features
 from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
@@ -314,9 +316,9 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize('heartbeat', [
     mark.p1(True),
-    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(False)
+    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity', 'kpi')(False)
 ])
-def test_vm_autorecovery_kill_host_kvm(heartbeat):
+def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     """
     Test vm auto recovery by killing the host kvm.
 
@@ -367,3 +369,8 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat):
 
     LOG.tc_step("Ensure VM is still pingable after auto recovery")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+    if collect_kpi:
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
+                                  log_path=VMRecovery.LOG_PATH, end_pattern=VMRecovery.END.format(vm_id),
+                                  start_pattern=VMRecovery.START.format(vm_id))
