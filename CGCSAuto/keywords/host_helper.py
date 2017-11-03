@@ -148,7 +148,8 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
     if reboot_con:
         hostnames.append(controller)
-        wait_for_hosts_states(
+        if not is_simplex:
+            wait_for_hosts_states(
                 controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
                 con_ssh=con_ssh, availability=[HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED])
 
@@ -248,11 +249,9 @@ def recover_simplex(con_ssh=None, fail_ok=False):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    stay = 0
     if not con_ssh._is_connected():
         con_ssh.connect(retry=True, retry_timeout=HostTimeout.REBOOT)
-        stay = 60
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, stay=stay, timeout=HostTimeout.REBOOT)
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=HostTimeout.REBOOT)
 
     host = 'controller-0'
     is_unlocked = (get_hostshow_value(host=host, field='administrative') == HostAdminState.UNLOCKED)
@@ -338,12 +337,12 @@ def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, timeout=HostT
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
-            LOG.info("Hosts {} subfunctions are now in enabled/available states")
+            LOG.info("Hosts subfunctions are now in enabled/available states")
             return True
 
         time.sleep(3)
 
-    err_msg = "Host subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
+    err_msg = "Host(s) subfunctions are not all in enabled/available states: {}".format(hosts_to_check)
     if fail_ok:
         LOG.warning(err_msg)
         return False
@@ -874,45 +873,37 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None):
 
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
-                                   reconnect=False, reconnect_timeout=60, stay=60):
+                                   reconnect=True):
     cli_enable_end_time = time.time() + timeout
-    eof_count = 0
 
-    def check_sysinv_cli():
-        cli.system('show', ssh_client=con_ssh, timeout=timeout)
-        time.sleep(5)
-        cli.system('host-show', 'controller-0', ssh_client=con_ssh, timeout=timeout)
+    def check_sysinv_cli(con_ssh_):
+        cli.system('show', ssh_client=con_ssh_, timeout=timeout)
+        time.sleep(10)
+        active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_)
+        wait_for_subfunction_ready(hosts=active_con, con_ssh=con_ssh_)
         LOG.info("'system cli enabled")
 
-    while True:
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    while time.time() < cli_enable_end_time:
         try:
-            LOG.info("Wait for system cli to be enabled for at least {} seconds".format(stay))
-            check_sysinv_cli()
-            end_time = time.time() + stay
-            while time.time() < end_time:
-                time.sleep(check_interval)
-                check_sysinv_cli()
+            LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
+            check_sysinv_cli(con_ssh_=con_ssh)
+            # end_time = time.time() + stay
+            # while time.time() < end_time:
+            #     time.sleep(check_interval)
+            #     check_sysinv_cli(con_ssh_=con_ssh)
             return True
 
-        except pexpect.EOF:
-            if reconnect:
-                if con_ssh is None:
-                    con_ssh = ControllerClient.get_active_controller()
-                con_ssh.connect(retry_timeout=reconnect_timeout)
-            elif eof_count < 3:
-                eof_count += 1
-            elif fail_ok:
-                LOG.warning("3 EOF caught. Connection lost")
-                return False
-            else:
-                raise
-
-        except Exception as e:
-            if time.time() > cli_enable_end_time:
-                if fail_ok:
-                    LOG.warning("Timed out waiting for cli to enable. \nException: {}".format(e))
-                    return False
-                raise
+        except Exception:
+            if not con_ssh._is_connected():
+                if reconnect:
+                    con_ssh.connect(retry_timeout=timeout)
+                else:
+                    LOG.error("system disconnected")
+                    if fail_ok:
+                        return False
+                    raise
             time.sleep(check_interval)
 
 
