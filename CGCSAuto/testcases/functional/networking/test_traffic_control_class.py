@@ -169,7 +169,7 @@ def test_traffic_controls():
                 # This case will fail for wcp_63_66 because the speed is 1G and cgcs_config has 10G. ignore the failure.
             else:
                 assert 0, "This case is not handled contact domain owner to include this configuration"
-        elif mgmt_net_type == 'ethernet' or mgmt_net_type == 'ae':
+        elif mgmt_net_type == 'ethernet' or 'ae' or 'vlan':
             LOG.info("No infra and mgmt type is {}".format(mgmt_net_type))
             result = _compare_traffic_control(mgmt_port_name, basic_traffic_class)
             assert result, "mgmt traffic class is not set as expected"
