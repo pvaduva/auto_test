@@ -4,7 +4,7 @@ import threading
 import time
 from contextlib import contextmanager
 
-from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
+from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
@@ -12,8 +12,8 @@ from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITAN
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
-from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common
+from CGCSAuto.utils import telnet as telnetlib, exceptions,cli
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 from CGCSAuto.utils import local_host
@@ -23,6 +23,7 @@ UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
+
 
 def get_ssh_public_key():
     return local_host.get_ssh_key()
@@ -111,7 +112,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
 
 def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
-                          close_telnet_conn=True):
+                          close_telnet_conn=True, small_footprint=False):
     """
     Initiate the boot and installation operation.
     Args:
@@ -139,7 +140,7 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade)
+    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -1283,6 +1284,7 @@ def get_backup_files_from_usb(pattern, usb_device=None, con_ssh=None):
     Gets the backup files that match the specified pattern
     Args:
         pattern:
+        usb_device:
         con_ssh:
 
     Returns(list): list of backup files
@@ -1329,16 +1331,13 @@ def get_backup_files_from_usb(pattern, usb_device=None, con_ssh=None):
 
 def get_backup_files(pattern, backup_src_path, src_conn_ssh):
     """
-
     Args:
         pattern:
-        src_path:
+        backup_src_path:
         src_con_ssh:
-
     Returns:
 
     """
-
     if pattern is None or backup_src_path is None or src_conn_ssh is None:
         raise ValueError("pattern, backup_src_path and src_conn_ssh must be specified; cannot be None.")
 
@@ -2001,7 +2000,7 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False):
+def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False,small_footprint=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2034,7 +2033,8 @@ def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True, close_telnet_conn=False)
+    bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True,
+                           close_telnet_conn=False, small_footprint=small_footprint)
 
     LOG.info("Initial login and password set for " + controller0.name)
     controller0.telnet_conn.login(reset=True)
@@ -2043,8 +2043,6 @@ def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=
 
     if patch_dir_paths:
         apply_patches(lab, bld_server_conn, patch_dir_paths)
-
-
         controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
         LOG.info("Controller0 reboot has started")
