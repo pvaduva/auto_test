@@ -407,7 +407,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     heat_templates = None
     license_path = None
     out_put_dir = None
-    vbox = True if 'vbox' in lab else False
+    vbox = True if 'vbox' in lab.lower() else False
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
