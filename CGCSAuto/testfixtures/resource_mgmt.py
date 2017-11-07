@@ -137,6 +137,7 @@ def _delete(resources, scope):
     ports = resources['ports']
     trunks = resources['trunks']
     networks = resources['networks']
+    aggregates = resources['aggregates']
 
     err_msgs = []
     if vms_with_vols:
@@ -236,6 +237,16 @@ def _delete(resources, scope):
             if heat_user is 'admin':
                 auth_info = Tenant.ADMIN
             code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
+    if aggregates:
+        LOG.fixture_step("({}) Attempt to delete following aggregates: {}".format(scope, aggregates))
+        for aggregate in aggregates:
+            code, msg = nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
+            if code > 0:
+                err_msgs.append(msg)
+            code,msg=nova_helper.delete_aggregate(name=aggregate)
             if code > 0:
                 err_msgs.append(msg)
 
