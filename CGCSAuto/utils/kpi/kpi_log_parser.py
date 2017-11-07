@@ -67,8 +67,8 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path, end_pattern, start_patt
 def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=False, top_down=False, sudo=False):
     count = '-m 1 ' if not get_all else ''
     extended_regex = '-E ' if extended_regex else ''
-    base_cmd = 'cat' if top_down else 'tac'
-    cmd = '{} {} | grep --color=never {}{}"{}"'.format(base_cmd, file_path, count, extended_regex, pattern)
+    base_cmd = '' if top_down else ' | tac'
+    cmd = 'zgrep --color=never {}{}"{}" {}{}'.format(count, extended_regex, pattern, file_path, base_cmd)
     prefix_space = False
     if 'bash' in file_path:
         ssh_client.exec_cmd('HISTCONTROL=ignorespace')
