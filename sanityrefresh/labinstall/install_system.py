@@ -1455,6 +1455,11 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                           WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
                           pre_opts=pre_opts, allow_fail=True)
 
+    bld_server_conn.rsync(os.path.join(guest_load_path, "tis-centos-guest.img"),
+                          WRSROOT_USERNAME, controller0.host_ip, \
+                          WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
+                          pre_opts=pre_opts, allow_fail=True)
+
     # Get licenses
     print("This is load_path: {}".format(load_path))
     if lab_type == "regular" or lab_type == "storage":
