@@ -1524,7 +1524,7 @@ def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
         if len(vol_snap_ids):
             for id in vol_snap_ids:
                 LOG.info(" snapshot id {} found; deleting ... ".format(id))
-                if cinder_helper.delete_volume_snapshot(id, con_ssh=con_ssh, force=True)[0] == 0:
+                if cinder_helper.delete_volume_snapshots(id, con_ssh=con_ssh, force=True)[0] == 0:
                     LOG.info(" Deleted snapshot id {} ... ".format(id))
 
         restored_cinder_volumes = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)

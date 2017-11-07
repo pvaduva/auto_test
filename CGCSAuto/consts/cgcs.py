@@ -117,6 +117,12 @@ class VMStatus:
     MIGRATING = 'MIGRATING'
 
 
+class ImageStatus:
+    QUEUED = 'queued'
+    ACTIVE = 'active'
+    SAVING = 'saving'
+
+
 class HostAdminState:
     UNLOCKED = 'unlocked'
     LOCKED = 'locked'

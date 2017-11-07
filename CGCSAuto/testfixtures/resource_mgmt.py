@@ -137,7 +137,9 @@ def _delete(resources, scope):
     ports = resources['ports']
     trunks = resources['trunks']
     networks = resources['networks']
+    vol_snapshots = resources['vol_snapshots']
     aggregates = resources['aggregates']
+
 
     err_msgs = []
     if vms_with_vols:
@@ -162,6 +164,12 @@ def _delete(resources, scope):
     if volume_types:
         LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
         code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
+        if code > 0:
+            err_msgs.append(msg)
+
+    if vol_snapshots:
+        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
+        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
         if code > 0:
             err_msgs.append(msg)
 
