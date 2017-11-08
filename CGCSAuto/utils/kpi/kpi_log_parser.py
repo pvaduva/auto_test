@@ -10,7 +10,7 @@ from utils import lab_info
 from keywords import host_helper, common
 
 
-def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, start_pattern=None,
+def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, start_pattern=None, start_path=None,
                extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
                con_ssh=None, sudo=False, topdown=False):
     """
@@ -28,7 +28,7 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, 
             need to calculate the time delta ourselves.
             1. pattern that signals the start of the kpi. Used in Linux cmd 'grep'.
             2. start timestamp in following format: e.g., 2017-01-23 12:10:00
-
+        start_path (str|None): log path to search for start_pattern if path is different than log_path for end_pattern
         extended_regex (bool): whether to use -E in grep for extended regex.
         python_pattern (str): Only needed for KPI that is directly taken from log without post processing,
             e.g., rate for drbd sync
@@ -74,8 +74,9 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, 
 
     with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
         if start_pattern:
-            kpi_val, time_stamp, count = get_duration(start_pattern=start_pattern, end_pattern=end_pattern,
-                                                      log_path=log_path, host_ssh=host_ssh, sudo=sudo, topdown=topdown,
+            kpi_val, time_stamp, count = get_duration(start_pattern=start_pattern, start_path=start_path,
+                                                      end_pattern=end_pattern, log_path=log_path,
+                                                      host_ssh=host_ssh, sudo=sudo, topdown=topdown,
                                                       extended_regex=extended_regex, average_for_all=average_for_all)
         else:
             kpi_val, time_stamp, count = get_match(pattern=end_pattern, log_path=log_path, host_ssh=host_ssh,
@@ -119,8 +120,8 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Fal
     return out
 
 
-def get_duration(start_pattern, end_pattern, log_path, host_ssh, extended_regex=False, average_for_all=False,
-                 sudo=False, topdown=False):
+def get_duration(start_pattern, end_pattern, log_path, host_ssh, start_path=None, extended_regex=False,
+                 average_for_all=False, sudo=False, topdown=False):
     """
     Get duration in seconds between start and end timestamps when searching log from bottom up
     Args:
@@ -128,6 +129,7 @@ def get_duration(start_pattern, end_pattern, log_path, host_ssh, extended_regex=
         end_pattern:
         log_path:
         host_ssh:
+        start_path:
         extended_regex:
         average_for_all:
         sudo:
@@ -138,7 +140,8 @@ def get_duration(start_pattern, end_pattern, log_path, host_ssh, extended_regex=
     if re.match(TIMESTAMP_PATTERN, start_pattern):
         start_times = [start_pattern]
     else:
-        start_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=start_pattern, sudo=sudo,
+        start_path = start_path if start_path else log_path
+        start_line = search_log(file_path=start_path, ssh_client=host_ssh, pattern=start_pattern, sudo=sudo,
                                 extended_regex=extended_regex, get_all=average_for_all, top_down=topdown)
         start_times = re.findall(TIMESTAMP_PATTERN, start_line)
 
@@ -215,7 +218,10 @@ if __name__ == '__main__':
     parser.add_option('-k', '--kpi', action='store', type='string', dest='kpi_name', help='kpi name')
     parser.add_option('--lab', action='store', dest='lab_name', help='Connect to given lab to check logs')
     parser.add_option('--host', action='store', dest='host', help='Host to check log from')
-    parser.add_option('--log', '--log_path', '--logpath', '--log-path', action='store', dest='log_path')
+    parser.add_option('--log', '--log_path', '--logpath', '--log-path', action='store', dest='log_path',
+                      help="log_path to search for start_pattern and/or end_pattern")
+    parser.add_option('--start_log', '--start-log', '--startlog', action='store', dest='start_path', default=None,
+                      help="log path to search for start_pattern if path is different than log_path for end_pattern")
     parser.add_option('-f', '--file', action='store', dest='local_path', help='local file path to store kpi data')
     parser.add_option('--end', action='store', dest='end_pattern', help='end pattern or the kpi pattern to grep in log')
     parser.add_option('--python', action='store', dest='python_pattern', default=None,
@@ -234,6 +240,6 @@ if __name__ == '__main__':
             raise parser.error("Parameter '{}' is missing. Mandatory parameters: {}".format(mandatory_arg, mandatory))
 
     record_kpi(local_kpi_file=options.local_path, kpi_name=options.kpi_name, log_path=options.log_path,
-               end_pattern=options.end_pattern, start_pattern=options.start_pattern,
+               end_pattern=options.end_pattern, start_pattern=options.start_pattern, start_path=options.start_path,
                python_pattern=options.python_pattern, lab_name=options.lab_name, host=options.host,
                average_for_all=options.get_all, sudo=options.sudo, topdown=options.topdown)
