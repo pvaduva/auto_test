@@ -53,7 +53,7 @@ class BuildServerPath:
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          '17.06': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
-                         '17.07': ['/folk/cgts/lab/license.lic', '/folk/cgts/lab/TiS17-CPE-full.lic', \
+                         '17.07': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic', \
                                    'wrslicense-AIO-SX-17.06-full-jan2018.lic']
                          }
 
