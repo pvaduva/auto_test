@@ -107,7 +107,10 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
         LOG.tc_step("Starting {} upgrade.....".format(host))
         if "storage" in host:
             # wait for replication  to be healthy
-            storage_helper.wait_for_ceph_health_ok()
+            ceph_health_timeout = 300
+            if 'vbox' in lab['name']:
+                ceph_health_timeout = 3600
+            storage_helper.wait_for_ceph_health_ok(timeout=ceph_health_timeout)
 
         upgrade_helper.upgrade_host(host, lock=True)
         LOG.info("{} is upgraded successfully.....".format(host))
