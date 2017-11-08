@@ -4,23 +4,31 @@ from optparse import OptionParser
 
 from consts.auth import HostLinuxCreds, Tenant
 from consts.proj_vars import ProjVar
+from consts.cgcs import TIMESTAMP_PATTERN
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 from utils import lab_info
 from keywords import host_helper, common
 
 
-def record_kpi(local_kpi_file, kpi_name, host, log_path, end_pattern, start_pattern=None, extended_regex=False,
-               python_pattern=None, average_for_all=False, lab_name=None, con_ssh=None, sudo=False, topdown=False):
+def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, start_pattern=None,
+               extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
+               con_ssh=None, sudo=False, topdown=False):
     """
     Record kpi in ini format in given file
     Args:
         local_kpi_file (str): local file path to store the kpi data
         kpi_name (str): name of the kpi
         host (str): which tis host the log is located at
-        log_path (str): log_path on given host to check the kpi timestamps
-        end_pattern (str): pattern that signals the end or the value of the kpi. Used in Linux cmd 'grep'
-        start_pattern (str|None): pattern that signals the end of the kpi. Used in Linux cmd 'grep'. Only required for
-            duration type of the KPI, where we need to calculate the time delta ourselves.
+        log_path (str): log_path on given host to check the kpi timestamps.
+            Required if start_time or end_time is not specified
+        end_pattern (str): One of the two options. Option2 only applies to duration type of KPI
+            1. pattern that signals the end or the value of the kpi. Used in Linux cmd 'grep'
+            2. end timestamp in following format: e.g., 2017-01-23 12:22:59 (for duration type of KPI)
+        start_pattern (str|None): One of the two options. Only required for duration type of the KPI, where we
+            need to calculate the time delta ourselves.
+            1. pattern that signals the start of the kpi. Used in Linux cmd 'grep'.
+            2. start timestamp in following format: e.g., 2017-01-23 12:10:00
+
         extended_regex (bool): whether to use -E in grep for extended regex.
         python_pattern (str): Only needed for KPI that is directly taken from log without post processing,
             e.g., rate for drbd sync
@@ -32,17 +40,37 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path, end_pattern, start_patt
     Returns:
 
     """
+    if not lab_name:
+        lab = ProjVar.get_var('LAB')
+        if not lab:
+            raise ValueError("lab_name needs to be provided")
+    else:
+        lab = lab_info.get_lab_dict(labname=lab_name)
+
+    kpi_dict = {'lab': lab['name']}
+    if start_pattern and end_pattern:
+        # No need to ssh to system if both timestamps are known
+        if re.match(TIMESTAMP_PATTERN, end_pattern) and re.match(TIMESTAMP_PATTERN, start_pattern):
+            duration = common.get_timedelta_for_isotimes(time1=start_pattern, time2=end_pattern).total_seconds()
+            kpi_dict.update({'value': duration, 'timestamp': end_pattern})
+            append_to_kpi_file(local_kpi_file=local_kpi_file, kpi_name=kpi_name, kpi_dict=kpi_dict)
+            return
+
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller(fail_ok=True)
         if not con_ssh:
-            lab = lab_info.get_lab_dict(labname=lab_name)
-            ProjVar.set_var(lab=lab)
-            ProjVar.set_var(source_admin=Tenant.ADMIN)
+            if not ProjVar.get_var('LAB'):
+                ProjVar.set_var(lab=lab)
+                ProjVar.set_var(source_admin=Tenant.ADMIN)
             con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                 CONTROLLER_PROMPT)
             con_ssh.connect()
 
-    kpi_dict = {'host': host, 'log_path': log_path}
+    kpi_dict = {}
+    if host:
+        kpi_dict['host'] = host
+    if log_path:
+        kpi_dict['log_path'] = log_path
 
     with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
         if start_pattern:
@@ -56,6 +84,11 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path, end_pattern, start_patt
 
     kpi_dict.update({'timestamp': time_stamp, 'value': kpi_val})
 
+    append_to_kpi_file(local_kpi_file=local_kpi_file, kpi_name=kpi_name, kpi_dict=kpi_dict)
+
+
+def append_to_kpi_file(local_kpi_file, kpi_name, kpi_dict):
+    print(str(kpi_dict))
     config = ConfigParser()
     config[kpi_name] = kpi_dict
     with open(local_kpi_file, 'a+') as kpi_file:
@@ -65,10 +98,10 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path, end_pattern, start_patt
 
 
 def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=False, top_down=False, sudo=False):
-    count = '-m 1 ' if not get_all else ''
+    count = '' if get_all else '|grep --color=never -m 1 ""'
     extended_regex = '-E ' if extended_regex else ''
-    base_cmd = '' if top_down else ' | tac'
-    cmd = 'zgrep --color=never {}{}"{}" {}{}'.format(count, extended_regex, pattern, file_path, base_cmd)
+    base_cmd = '' if top_down else '|tac'
+    cmd = 'zgrep --color=never {}"{}" {}|grep -v grep{}{}'.format(extended_regex, pattern, file_path, base_cmd, count)
     prefix_space = False
     if 'bash' in file_path:
         ssh_client.exec_cmd('HISTCONTROL=ignorespace')
@@ -102,16 +135,23 @@ def get_duration(start_pattern, end_pattern, log_path, host_ssh, extended_regex=
     Returns:
 
     """
-    start_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=start_pattern, sudo=sudo,
-                            extended_regex=extended_regex, get_all=average_for_all, top_down=topdown)
-    end_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=end_pattern, sudo=sudo,
-                          extended_regex=extended_regex, get_all=average_for_all, top_down=topdown)
+    if re.match(TIMESTAMP_PATTERN, start_pattern):
+        start_times = [start_pattern]
+    else:
+        start_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=start_pattern, sudo=sudo,
+                                extended_regex=extended_regex, get_all=average_for_all, top_down=topdown)
+        start_times = re.findall(TIMESTAMP_PATTERN, start_line)
 
-    timestamp_pattern = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
-    start_times = re.findall(timestamp_pattern, start_line)
-    end_times = re.findall(timestamp_pattern, end_line)
+    if re.match(TIMESTAMP_PATTERN, start_pattern):
+        end_times = [end_pattern]
+    else:
+        end_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=end_pattern, sudo=sudo,
+                              extended_regex=extended_regex, get_all=average_for_all, top_down=topdown)
+        end_times = re.findall(TIMESTAMP_PATTERN, end_line)
+
     count = len(start_times)
-    diff = len(end_times) - count
+    end_count = len(end_times)
+    diff = end_count - count
     if diff in [0, 1]:
         end_times = end_times[:count]
     else:
@@ -187,7 +227,7 @@ if __name__ == '__main__':
     parser.add_option('--topdown', action='store_true', dest='topdown', help='search log from top down')
 
     options, args = parser.parse_args()
-    mandatory = ['kpi_name', 'lab_name', 'host', 'log_path', 'local_path', 'end_pattern']
+    mandatory = ['kpi_name', 'lab_name', 'local_path', 'end_pattern']
     for mandatory_arg in mandatory:
         if not options.__dict__[mandatory_arg]:
             parser.print_help()
