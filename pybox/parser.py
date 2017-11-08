@@ -16,7 +16,7 @@ def handle_args():
           2 - two controllers
         """,
         choices=[1, 2],
-        type=int, required=True)
+        type=int)
 
     parser.add_argument("--computes", help=
         """
@@ -41,7 +41,14 @@ def handle_args():
         If present, install controllers as controller+compute nodes.
         """,
         action='store_true')
-
+        
+    parser.add_argument("--create-vms", help=
+        """
+        If specified we will create and install new vms, otherwise the creation and install will be skipped. 
+        Should be omitted when the vms have already been created and installed.
+        """,
+        action='store_true')
+        
     parser.add_argument("--deletevms", help=
         """
         If present, delete existing VMs. 
@@ -122,32 +129,57 @@ def handle_args():
         """,
         action='store_true')
 
-    parser.add_argument("--create-vms", help=
+    parser.add_argument("--setup-files", help=
         """
-        If specified we will create and install new vms, otherwise the creation and install will be skipped. 
-        Should be omitted when the vms have already been created and installed.
-        """,
-        action='store_true')
-
-    parser.add_argument("--config-location", help=
-        """
-        If specified the config files (i.e. lab_setup.sh, lab_setup.conf, license.lic, TiS_config.ini_centos, ...) will be retrieved from this location.
+        If specified the config files (i.e. lab_setup.sh, lab_setup.conf, license.lic, ...) will be retrieved from this location.
         e.g.  /folk/cgts/myousaf/
+        """,
+        type=str)
+        
+    parser.add_argument("--config-file", help=
+        """
+        If specified the config file (i.e. TiS_config.ini_centos, ...) will be retrieved from this location.
+        e.g.  /folk/cgts/myousaf/TiS_config.ini_centos
         """,
         type=str)
         
     parser.add_argument("--configure", help=
         """
         If specified we will configure controller-0 otherwise the configuration will have to be perfomed manually. 
-        config_controller will be run with the --default parameter
+        config_controller will be run with the --default parameter.
+        Note: currently not working due to CGTS-8122 
         """,
         action='store_true')
-
-    parser.add_argument("--patch-location", help=
+        
+    parser.add_argument("--install-patches", help=
         """
-        Location of patch to install including patch name, if specified the patch will be retrieved and installed.
-        e.g. 
+        If specified patches will be installed.
+        """,
+        action="store_true")
+        
+    parser.add_argument("--patch-dir", help=
+        """
+        Location of patch to install including patch name, if specified the patchs will be retrieved from the directory given.
+        e.g. /folk/tmather/patches/
         """,
         type=str)
         
+    parser.add_argument("--make-patch-current", help=
+        """
+        If specified, patches will be retrieved from the buildserver and installed to make the lab patch current.
+
+        """,
+        action='store_true')
+    parser.add_argument("--get-setup", help=
+        """
+        If specified, files will be retrieved from the buildserver.
+
+        """,
+        action='store_true')
+    parser.add_argument("--get-patches", help=
+        """
+        If specified, patches will be retrieved from the buildserver.
+
+        """,
+        action='store_true')
     return parser

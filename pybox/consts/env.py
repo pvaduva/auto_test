@@ -88,7 +88,7 @@ class Lab:
         'password': 'Li69nux*',
     }
 
-class SetupFiles:
+class Files:
     R5={
         'setup': [
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0030/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
@@ -98,7 +98,8 @@ class SetupFiles:
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0030/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0030/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0030/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
-        ]
+        ],
+        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0030/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/'
     }
 
     R4 = {
@@ -115,20 +116,53 @@ class SetupFiles:
             '/localdisk/designer/jenkins/TS_16.10_Pull/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf'
         ]
     }
-    #TODO:
     R2 = {
         'setup': [
-
+            '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/export/lab/scripts/lab_setup.sh',
+            '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/export/lab/scripts/lab_cleanup.sh',
+            '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/export/lab/yow/cgcs-vbox/lab_setup.conf'
         ]
     }
-    FILENAMES = [
-        'lab_cleanup.sh'
-        'lab_setup.sh'
-        'lab_setup.conf'
-        'iptables.rules'
-        'lab_setup-tenant2-resources.yaml'
-        'lab_setup-tenant1-resources.yaml'
-        'TiS_config.ini_centos'
-        'tis-centos-guest.img'
-        'licence.lic'
-    ]
+    FILENAMES = {
+        'R5':  {
+            'setup': ['lab_cleanup.sh',
+                      'lab_setup.sh',
+                      'lab_setup.conf',
+                      'iptables.rules',
+                      'lab_setup-tenant2-resources.yaml',
+                      'lab_setup-tenant1-resources.yaml',
+                      'lab_setup-admin-resources.yaml'],
+            'config': 'TiS_config.ini_centos',
+            'guest': 'tis-centos-guest.img',
+            'licence': 'licence.lic'},
+        'R4':  {
+            'setup': ['lab_cleanup.sh',
+                      'lab_setup.sh',
+                      'lab_setup.conf',
+                      'iptables.rules'],
+            'config': 'TiS_config.ini_centos',
+            'guest': 'tis-centos-guest.img',
+            'licence': 'licence.lic'},
+        'R3':  {
+            'setup': ['lab_cleanup.sh',
+                      'lab_setup.sh',
+                      'lab_setup.conf',
+                      'iptables.rules'],
+            'config': 'TiS_config.ini_centos',
+            'guest': 'tis-centos-guest.img',
+            'licence': 'licence.lic'},
+        'R2':  {
+            'setup': ['lab_cleanup.sh',
+                      'lab_setup.sh',
+                      'lab_setup.conf',
+                      'iptables.rules'],
+            'config': 'TiS_config.ini_centos',
+            'guest': 'tis-centos-guest.img',
+            'licence': 'licence.lic'},
+        }
+    PATCHES = {
+        'R5':'/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build/latest_build/',
+        'R4':'/localdisk/loadbuild/jenkins/TC_17.06_Test_Patch_Build/latest_build/',
+        'R3':'/localdisk/loadbuild/jenkins/TS_16.10_Patch_Formal_Build/export/patch_data/',
+        'R2':''
+    }

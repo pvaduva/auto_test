@@ -166,12 +166,21 @@ def test_traffic_controls():
                 assert result, "Infra traffic class is not set as expected"
                 result = _compare_traffic_control(mgmt_port_name, mgmt_eth_traffic_class)
                 assert result, "mgmt traffic class is not set as expected"
+                # This case will fail for wcp_63_66 because the speed is 1G and cgcs_config has 10G. ignore the failure.
             else:
                 assert 0, "This case is not handled contact domain owner to include this configuration"
-        else:
+        elif mgmt_net_type == 'ethernet' or 'ae' or 'vlan':
             LOG.info("No infra and mgmt type is {}".format(mgmt_net_type))
             result = _compare_traffic_control(mgmt_port_name, basic_traffic_class)
             assert result, "mgmt traffic class is not set as expected"
+        elif mgmt_net_type == 'virtual':
+            LOG.info("mgmt type is {}".format(mgmt_net_type))
+            with host_helper.ssh_to_host('controller-0') as con0_ssh:
+                LOG.tc_step("Check interface {} traffic control".format(mgmt_port_name))
+                traffic_control_info = keywords.host_helper.get_traffic_control_info(con_ssh=con0_ssh, port=mgmt_port_name)
+                assert not traffic_control_info, "traffic control should not be set in mgmt interface type virtual"
+        else:
+            assert 0, "This case is not handled contact domain owner to include this configuration"
 
     else:
         LOG.info("Skip the test")

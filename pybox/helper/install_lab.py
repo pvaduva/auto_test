@@ -1,15 +1,15 @@
 #!/usr/bin/python3
-
+import os
 from consts.timeout import HostTimeout
-from consts.env import BuildServers, Licenses, Builds, ISOPATH, SetupFiles, Lab
-from utils.sftp import sftp_get
+from consts.env import BuildServers, Licenses, Builds, ISOPATH, Files, Lab
+from utils.sftp import sftp_get, sftp_send, send_dir, get_dir
 from utils import serial
 from helper import host_helper
 
 
-def get_lab_setup_files(stream, remote_host=BuildServers.CGTS4['ip'], release='R5', path=None, host_type='Standard'):
+def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None, local_path=None, host_type='Standard'):
     """
-    Retrieves necessary setup files from the host specified.
+    Retrieves necessary setup files from the host specified. If local_path is specified the files in that directory will be collected else files will be collected from remote_host
     Args:
         stream(stream): Stream to controller-0, required to put files in correct directories.
         remote_host(str): Host to retrieve files from.
@@ -17,50 +17,176 @@ def get_lab_setup_files(stream, remote_host=BuildServers.CGTS4['ip'], release='R
         file_path(str): Path to setup files, if none default path to files will be used
         host_type(str): Type of host either 'AIO' or 'Standard'
     """
-    file_path = []
     serial.send_bytes(stream, "mkdir /home/wrsroot/images")
-    if path is None:
-        if release is 'R5':
-            file_path = SetupFiles.R5['setup']
-            file_path.extend(Builds.R5['guest'])
-            file_path.extend(Licenses.R5[host_type])
-        elif release is 'R4':
-            file_path = SetupFiles.R4['setup']
-            file_path.extend(Builds.R4['guest'])
-            file_path.extend(Licenses.R4[host_type])
-        elif release is 'R3':
-            file_path = SetupFiles.R3['setup']
-            file_path.extend(Builds.R3['guest'])
-            file_path.extend(Licenses.R3[host_type])
-        elif release is 'R2':
-            file_path = SetupFiles.R2['setup']
-            file_path.extend(Builds.R2['guest'])
-            file_path.extend(Licenses.R2[host_type])
+    if local_path:
+        get_lab_setup_scripts(remote_host, release, remote_path, local_path)
     else:
-        for items in SetupFiles.FILENAMES:
-            file_path.extend(path + items)
-    local_path = 'wrsroot@{}:/home/wrsroot/'.format(Lab.VBOX['controller-0_ip'])
-    for items in file_path:
-        print("Retrieving file from {}".format(items))
-        if '.img' in items:
-            sftp_get(remote_path=file_path, remote_host=remote_host,
-                     local_path='wrsroot@{}:/home/wrsroot/images/tis-centos-guest.img'.format(Lab.VBOX['controller-0_ip']))
-        elif '.lic'in items:
-            sftp_get(remote_path=file_path, remote_host=remote_host,
-                     local_path='wrsroot@{}:/home/wrsroot/licence.lic'.format(Lab.VBOX['controller-0_ip']))
+        get_lab_setup_scripts(remote_host, release, remote_path, local_path)
+        get_licence(remote_host, release, remote_path, local_path, host_type)
+        get_guest_img(stream, remote_host, release, remote_path, local_path)
+
+
+def get_lab_setup_scripts(remote_host=None, release='R5', remote_path=None, local_path=None):
+    """
+    Retrieves lab setup scripts including tenant and admin resources.
+    Args:
+        remote_host(str): Host to retrieve files from.
+        release(str): Release to use, if none R5 will be used
+        file_path(str): Path to setup files, if none default path to files will be used
+        local_path(str): Path on local machine to store files for transfer to vbox
+    """
+    if local_path is None:
+        local_path = "/folk/tmather/LabInstall/R5/"
+    file_path=[]
+    if remote_path is None:
+        if release =='R5':
+            file_path = Files.R5['setup']
+        elif release == 'R4':
+            file_path = Files.R4['setup']
+        elif release == 'R3':
+            file_path = Files.R3['setup']
         else:
-            sftp_get(remote_path=file_path, remote_host=remote_host, local_path=local_path)
+            file_path = Files.R2['setup']
+    files = ['lab_cleanup.sh',
+          'lab_setup.sh',
+          'lab_setup.conf',
+          'iptables.rules',
+          'lab_setup-tenant2-resources.yaml',
+          'lab_setup-tenant1-resources.yaml',
+          'lab_setup-admin-resources.yaml']
+    i = 0
+    if remote_host is not None:
+        for items in file_path:
+            sftp_get(source=items, remote_host=remote_host, destination=local_path + files[i])
+            i += 1
+    send_dir(source=local_path)
 
 
+def get_licence(remote_host=None, release='R5', remote_path=None,
+                local_path=None, host_type='Standard'):
+    """
+        Retrieves Licence from specified host and sends it to controller-0.
+    Args:
+        remote_host(str): Host to retrieve files from.
+        release(str): Release to use, if none R5 will be used
+        file_path(str): Path to setup files, if none default path to files will be used
+        host_type(str): Type of host either 'AIO' or 'Standard'
+        local_path(str): Path on local machine to store files for transfer to vbox
+    """
+    if local_path is None:
+        local_path = "/folk/tmather/LabInstall/R5/"
+    file_path = []
+    if remote_path is None:
+        if release == 'R5':
+            file_path = Licenses.R5[host_type]
+        elif release == 'R4':
+            file_path = Licenses.R4[host_type]
+        elif release == 'R3':
+            file_path = Licenses.R3[host_type]
+        else:
+            file_path = Licenses.R2[host_type]
+    local_path = local_path + 'licence.lic'
+    if remote_host is not None:
+        sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
+    sftp_send(source=local_path, destination='/home/wrsroot/licence.lic')
+
+
+def get_guest_img(stream, remote_host=None, release='R5', remote_path=None,
+                  local_path=None):
+    """
+ Retrieves necessary setup files from the host specified.
+    Args:
+        stream(stream): Stream to controller-0, required to put files in correct directories.
+        remote_host(str): Host to retrieve files from.
+        release(str): Release to use, if none R5 will be used
+        file_path(str): Path to setup files, if none default path to files will be used
+        local_path(str): Path on local machine to store files for transfer to vbox
+    """
+    if local_path is None:
+        local_path = "/folk/tmather/LabInstall/R5/" 
+    file_path = []
+    if remote_path is None:
+        if release == 'R5':
+            file_path = Builds.R5['guest']
+        elif release == 'R4':
+            file_path = Builds.R4['guest']
+        elif release == 'R3':
+            file_path = Builds.R3['guest']
+        else:
+            file_path = Builds.R2['guest']      
+    serial.send_bytes(stream, "mkdir /home/wrsroot/images")
+    local_path = local_path + 'tis_centos_guest.img'
+    if remote_host is not None:
+        sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
+    sftp_send(source=local_path, destination="/home/wrsroot/images/tis_centos_guest.img")
+    
+    
+def get_patches(cont0_stream, local_path=None, remote_host=None):
+    """
+    Retrieves patches from remote_host or localhost if remote_host is None
+    """
+    #host_helper.login(cont0_stream)
+    serial.send_bytes(cont0_stream, "mkdir /home/wrsroot/patches")
+    if local_path is None:
+        local_path = '/folk/tmather/patches/'
+    remote_path = '/home/wrsroot/patches/'
+    if remote_host is not None:
+        get_dir(Files.PATCHES['R5'], remote_host, local_path, True)
+        send_dir(local_path, destination=remote_path)
+    else:
+        send_dir(local_path, '10.10.10.2', remote_path)
+    #host_helper.logout(cont0_stream)
+    
+
+def get_config_file(local_path=None, remote_host=None, release='R5'):
+    """
+    Retrieves config file from remote host if specified or localhost if None.
+    Sends file to cont0    
+    """
+    if local_path is None:
+        local_path = '/folk/tmather/patches/TiS_config.ini_centos'
+    remote_path = '/home/wrsroot/TiS_config.ini_centos'
+    #TODO: fix for other releases.
+    if remote_host is not None:
+        if release == 'R5':
+            sftp_get(Files.R5['config'], remote_host, local_path)
+        elif release == 'R4':
+            sftp_get(Files.R4['config'], remote_host, local_path)
+        elif release == 'R3':
+            sftp_get(Files.R3['config'], remote_host, local_path)
+        else:
+            sftp_get(Files.R2['config'], remote_host, local_path)
+    sftp_send(local_path, '10.10.10.2', remote_path)
+    
+    
+def check_services(stream):
+     """
+     Checks to see if sm services are running.
+     Args:
+         stream(stream): Stream to active controller    
+     """
+     serial.send_bytes(stream, "source /etc/nova/openrc")
+     try:
+         serial.expect_bytes(stream, "active controller")
+     except ExpectTimeout:
+         print("Cannot activate keystone admin credentials")
+     serial.send_bytes(stream, "sudo sm-dump")
+     serial.expect_bytes(stream, "assword:")
+     serial.send_bytes(stream, "Li69nux*")
+     try:
+         serial.expect_bytes(stream, "Failed")#check this
+     except ExpectTimeout:
+         print("Not all services were not activated successfully")
+         
 
 def run_install_scripts(stream, host_list, aio=False, storage=False):
     """
     Runs lab install.sh iterations.
     Args:
-        stream(stream): Stream to controller-0
-        host_list(list): list of hosts, used when running aio scripts to install controller-1 at the appropriate time
-        aio(bool): Option to run the script for aio setup
-        storage(bool): Option to run the script for storage setup
+        stream: Stream to controller-0
+        host_list: list of hosts, used when running aio scripts to install controller-1 at the appropriate time
+        aio: Option to run the script for aio setup
+        storage: Option to run the script for storage setup
     """
     serial.send_bytes(stream, "chmod +x *.sh")
     if aio:
@@ -71,7 +197,7 @@ def run_install_scripts(stream, host_list, aio=False, storage=False):
         serial.send_bytes(stream, "sudo sm-dump")
         serial.expect_bytes(stream, "Password:")
         serial.send_bytes(stream, "Li69nux*")
-        # ensure services are running TODO
+        check_services(stream)
         serial.send_bytes(stream, "./lab_setup.sh")
         # check here
         serial.send_bytes(stream, "./lab_setup.sh")
@@ -99,9 +225,9 @@ def run_install_scripts(stream, host_list, aio=False, storage=False):
         serial.expect_bytes(stream, "Done", HostTimeout.LAB_INSTALL)
 
 
-def config_controller(stream, default=True, config_file=None, backup=None, clone_iso=None,
-                      restore_system=None, restore_images=None):
-
+def config_controller(stream, default=True, release='R5', config_file=None, backup=None, clone_iso=None,
+                      restore_system=None, restore_images=None, remote_host=None):
+    # TODO: add support for custom configs
     """
     Configure controller-0 using optional arguments
     Args:
@@ -126,8 +252,81 @@ def config_controller(stream, default=True, config_file=None, backup=None, clone
             args += ' {} {}'.format(key, value)
     if default:
         args += ' --default'
+    if config_file:
+        get_config_file(config_file, remote_host, release)
+            
     serial.send_bytes(stream, "sudo config_controller {}".format(args))
     serial.expect_bytes(stream, "The following configuration will be applied:")
     serial.expect_bytes(stream, "Applying configuration")
     serial.expect_bytes(stream, "Configuration was applied", HostTimeout.LAB_CONFIG)
+    # serial.send_bytes(stream, "system host-unlock controller-0")
 
+
+def install_patches_before_config(stream):
+    """
+    Installs patches before controller_config has been run.
+    Args:
+        stream(stream): Stream to controller-0
+    """
+    serial.send_bytes(stream, 'sudo sw-patch upload-dir /home/wrsroot/patches')
+    serial.expect_bytes(stream, 'Password')
+    serial.send_bytes(stream, 'Li69nux*')
+    serial.send_bytes(stream, 'sudo sw-patch apply --all')
+    serial.send_bytes(stream, "sudo sw-patch install-local")
+    serial.expect_bytes(stream, "installation is complete")
+    serial.send_bytes(stream, 'sudo reboot')
+    serial.expect_bytes(stream, 'login:', HostTimeout.REBOOT)
+    host_helper.login(stream)
+
+
+def install_patches_on_nodes(stream, host_list, patch_dir='/home/wrsroot/patches/'):
+    """
+    Installs patches on nodes in host_list
+    """
+
+    for items in host_list:
+        serial.send_bytes(stream, 'sudo sw-patch upload-dir {}'.format(patch_dir))
+        serial.send_bytes(stream, 'sudo sw-patch apply --all')
+        host_helper.lock_host(stream, items)
+        serial.send_bytes(stream, "sw-patch host-install-async {}".format(items))
+        serial.expect_bytes(stream, "Patch installation request sent to {}".format(items))
+
+
+def remove_patches(stream, host_list, patch_dir='/home/wrsroot/patches/'):
+    """
+    removes patches from nodes in host_list
+    """
+    for items in os.listdir(patch_dir):
+        serial.send_bytes(stream, 'sw-patch remove {}'.format(items))
+        # serial.expect_bytes(stream, "")
+        serial.send_bytes(stream, "sw-patch query-hosts")
+        serial.send_bytes(stream, 'system host-unlock {}'.format(items))
+        serial.expect_bytes(stream, 'login:', HostTimeout.CONTROLLER_UNLOCK)
+        
+        
+def delete_patches(stream, host_list, patch_dir='/home/wrsroot/patches/'):
+    """
+    Deletes patches from nodes in host_list
+    """
+    for items in os.listdir(patch_dir):
+        serial.send_bytes(stream, 'sw-patch delete {}'.format(items))
+        # serial.expect_bytes(stream, "")
+        serial.send_bytes(stream, "sw-patch query-hosts")
+        serial.send_bytes(stream, 'system host-unlock {}'.format(items))
+        serial.expect_bytes(stream, 'login:', HostTimeout.CONTROLLER_UNLOCK)
+        
+        
+def apply_patch(stream, patch_name, host_list):
+    """
+    Applies patch_name to the hosts given in host-list. 
+    """
+    serial.send_bytes(stream, "sw-patch apply {}".format(patch_name))
+    for items in host_list:
+        serial.send_bytes(stream, "sw-patch host-install-async {}".format(items))
+        serial.send_bytes(stream, "sw-patch query-hosts | grep {}".format(items))
+        serial.expect_bytes(stream, "")
+        
+        
+        
+        
+        

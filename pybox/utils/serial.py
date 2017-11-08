@@ -4,6 +4,7 @@
 import socket
 import streamexpect
 import time
+import chardet
 
 
 def connect(hostname):
@@ -25,9 +26,9 @@ def expect_bytes(stream, text, timeout=120):
     """
     Wait for user specified text from stream.
     """
-
+    time.sleep(2)
     print("Waiting for text: {}".format(text))
-    stream.expect_bytes("{}".format(text).encode("utf-8"), timeout=timeout)
+    stream.expect_bytes("{}".format(text).encode('utf-8'), timeout=timeout)
     print("Found text: {}".format(text))
 
 
@@ -38,7 +39,7 @@ def send_bytes(stream, text, timeout=120):
     
     print("Sending text: {}".format(text))
     stream.sendall("{}\n".format(text).encode('utf-8'))
-    time.sleep(2)
+    #time.sleep(2)
     #stream.sendall("echo $?".encode('utf-8'))
     #rc = stream.expect_regex("(.*)".encode('utf-8'))
     rc = 0

@@ -11,6 +11,7 @@ import setups
 from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
 
 
 tc_start_time = None
@@ -249,6 +250,7 @@ def pytest_configure(config):
     resultlog = config.getoption('resultlog')
     session_log_dir = config.getoption('sessiondir')
     no_cgcs = config.getoption('nocgcsdb')
+    col_kpi = config.getoption('col_kpi')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -286,6 +288,8 @@ def pytest_configure(config):
         ProjVar.set_var(CGCS_DB=False)
     if keystone_debug:
         ProjVar.set_var(KEYSTONE_DEBUG=True)
+    if col_kpi:
+        ProjVar.set_var(COLLECT_KPI=True)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -388,6 +392,8 @@ def pytest_addoption(parser):
     parser.addoption('--stress', metavar='stress', action='store', type=int, default=-1, help=count_help)
     parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
     parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
+    parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
+                     help="Collect kpi for applicable test cases")
 
     # Lab install options:
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',

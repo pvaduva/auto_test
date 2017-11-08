@@ -71,7 +71,8 @@ class Labs:
         'floating ip': '128.224.151.49',
         'controller-0 ip': '128.224.151.47',
         'controller-1 ip': '128.224.151.48',
-        'controller_nodes': [18541, 18542],
+        #'controller_nodes': [18541, 18542],
+        'controller_nodes': [18541, 21758],
         'compute_nodes': [22417, 22418, 21762, 18537],
         'storage_nodes': [18536, 18551],
     }
@@ -461,9 +462,8 @@ class Labs:
         'controller-1 ip': '10.10.10.7',
         'controller_nodes': [0, 1],
         'compute_nodes': [0, 1],
-		'storage_nodes': [0, 1]
+        'storage_nodes': [0, 1]
     }
-
 
     VBOX_4 = {
         'short_name': 'vbox_4',

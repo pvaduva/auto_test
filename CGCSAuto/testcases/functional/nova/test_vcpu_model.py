@@ -79,6 +79,7 @@ def _boot_vm_vcpu_model(flv_model, img_model, boot_source, avail_zone=None, vm_h
     return code, vm, msg
 
 
+# TC5141
 @mark.p2
 @mark.parametrize(('vcpu_model', 'vcpu_source', 'boot_source'), [
     ('Conroe', 'flavor', 'volume'),
@@ -93,6 +94,7 @@ def _boot_vm_vcpu_model(flv_model, img_model, boot_source, avail_zone=None, vm_h
     ('Passthrough', 'image', 'image'),
     ('Passthrough', 'image', 'volume'),
     ('SandyBridge', 'image', 'volume'),
+    (None, None, 'volume')  # TC5065 + TC5145
 ])
 def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
     """
@@ -105,8 +107,9 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
         boot_source
 
     Test Steps:
-        - Set flavor extra spec or image metadata with given vcpu model
+        - Set flavor extra spec or image metadata with given vcpu model.
         - Boot a vm from volume/image
+        - Stop and then start vm and ensure that it retains its cpu model
         - If vcpu model is supported by host,
             - Check vcpu model specified in flavor/image is used by vm via virsh, ps aux (and /proc/cpuinfo)
             - Live migrate vm and check vcpu model again
@@ -142,6 +145,11 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
 
     LOG.tc_step("Check vm is launched with expected vcpu model")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+    check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model, expt_arch=expt_arch)
+
+    LOG.tc_step("Stop and then restart vm and check if it retains its vcpu model")
+    vm_helper.stop_vms(vm)
+    vm_helper.start_vms(vm)
     check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model, expt_arch=expt_arch)
 
     LOG.tc_step("Live (block) migrate vm and check {} vcpu model".format(vcpu_model))

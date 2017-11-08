@@ -12,7 +12,7 @@ from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from utils import node
-
+from utils import cli
 
 @pytest.fixture(scope='session', autouse=True)
 def pre_restore_checkup():
@@ -190,8 +190,15 @@ def restore_setup(pre_restore_checkup):
     install_helper.boot_controller(bld_server_conn, load_path)
 
     # establish ssh connection with controller
-    LOG.tc_step("Establishing ssh connection with controller-0 after install... ")
-    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    LOG.tc_step("Establishing ssh connection with controller-0 after install...")
+
+    node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
+    normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
+
+    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) \
+                        + '|' + Prompt.CONTROLLER_0 \
+                        + '|{}'.format(node_name_in_ini) \
+                        + '|{}'.format(normalized_name)
 
     controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                                        initial_prompt=controller_prompt)
@@ -246,6 +253,41 @@ def restore_setup(pre_restore_checkup):
     return _restore_setup
 
 
+def make_sure_all_hosts_locked(con_ssh):
+    LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
+
+    max_tries = 3
+    base_cmd = 'host-lock'
+    for tried in range(1, max_tries+1):
+        hosts = [h for h in host_helper.get_hosts(con_ssh=con_ssh, administrative='unlocked') if h != 'controller-0']
+        if not hosts:
+            LOG.info('all hosts all locked except the controller-0 after tried:{}'.format(tried))
+            break
+
+        if tried > 1:
+            base_cmd += ' -f'
+
+        for host in hosts:
+            cmd = '{} {}'.format(base_cmd, host)
+            LOG.info('try:{} locking:{}'.format(tried, host))
+            code, output = cli.system(cmd, ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+            if 0 != code:
+                LOG.warn('Failed to lock host:{} using CLI:{}'.format(host, cmd))
+
+        locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailabilityState.OFFLINE}
+
+        if not hosts:
+            LOG.info('all hosts all locked except the controller-0 after tried:{}'.format(tried))
+            break
+
+        LOG.info('wait for unlocked host to be locked-offline, hosts:{}'.format(hosts))
+
+        host_helper.wait_for_hosts_states(hosts, con_ssh=con_ssh, timeout=600, **locked_offline)
+
+    code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    LOG.debug('code:{}, output:{}'.format(code, output))
+
+
 def test_restore_from_backup(restore_setup):
 
     controller1 = 'controller-1'
@@ -294,6 +336,8 @@ def test_restore_from_backup(restore_setup):
     controller_node.ssh_conn = con_ssh
     ControllerClient.set_active_controller(con_ssh)
 
+    make_sure_all_hosts_locked(con_ssh)
+
     if backup_src.lower() == 'local':
         images_backup_path = "{}{}".format(WRSROOT_HOME, images_backup_file)
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, images_backup_file),
@@ -308,7 +352,6 @@ def test_restore_from_backup(restore_setup):
     con_ssh.set_prompt(new_prompt)
     install_helper.restore_controller_system_images(images_backup=images_backup_path,
                                                     tel_net_session=controller_node.telnet_conn)
-
     # this is a workaround for CGTS-8190
     install_helper.update_auth_url(con_ssh)
 
@@ -337,7 +380,6 @@ def test_restore_from_backup(restore_setup):
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
     assert  int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
         "Missing backup files in {}".format(TiSPath.BACKUPS)
-
 
     boot_interfaces = lab['boot_device_dict']
     LOG.tc_step("Restoring {}".format(controller1))

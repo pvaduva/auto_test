@@ -137,6 +137,9 @@ def _delete(resources, scope):
     ports = resources['ports']
     trunks = resources['trunks']
     networks = resources['networks']
+    vol_snapshots = resources['vol_snapshots']
+    aggregates = resources['aggregates']
+
 
     err_msgs = []
     if vms_with_vols:
@@ -161,6 +164,12 @@ def _delete(resources, scope):
     if volume_types:
         LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
         code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
+        if code > 0:
+            err_msgs.append(msg)
+
+    if vol_snapshots:
+        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
+        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
         if code > 0:
             err_msgs.append(msg)
 
@@ -236,6 +245,16 @@ def _delete(resources, scope):
             if heat_user is 'admin':
                 auth_info = Tenant.ADMIN
             code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
+    if aggregates:
+        LOG.fixture_step("({}) Attempt to delete following aggregates: {}".format(scope, aggregates))
+        for aggregate in aggregates:
+            code, msg = nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
+            if code > 0:
+                err_msgs.append(msg)
+            code,msg=nova_helper.delete_aggregate(name=aggregate)
             if code > 0:
                 err_msgs.append(msg)
 
