@@ -123,6 +123,9 @@ def orphan_audit_setup(request):
         control_ssh.scp_on_source(img_path, HostLinuxCreds.get_user(), vm_host, TiSPath.IMAGES,
                                   HostLinuxCreds.get_password(), timeout=300)
 
+    else:
+        vm_host = system_helper.get_active_controller_name()
+
     return vm_host
 
 
