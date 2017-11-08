@@ -109,10 +109,9 @@ def test_vxlan_functional(version, mode):
     # create aggregate with 2 computes
     ret_val = nova_helper.create_aggregate(name=aggregate_name, avail_zone=aggregate_name)[1]
     assert ret_val == aggregate_name, "Aggregate is not create as expected."
-    ResourceCleanup.add('aggregates', aggregate_name)
+    ResourceCleanup.add('aggregate', aggregate_name)
 
-    code = nova_helper.add_hosts_to_aggregate(aggregate=aggregate_name, hosts=vxlan_computes)[0]
-    assert code == 0, "Hosts are not added to aggregate as expected."
+    nova_helper.add_hosts_to_aggregate(aggregate=aggregate_name, hosts=vxlan_computes)
 
     for compute in computes:
         assert 0 == clear_vxlan_endpoint_stats(compute), "clear stats failed"

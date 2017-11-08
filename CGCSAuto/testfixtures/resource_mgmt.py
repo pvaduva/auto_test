@@ -251,12 +251,8 @@ def _delete(resources, scope):
     if aggregates:
         LOG.fixture_step("({}) Attempt to delete following aggregates: {}".format(scope, aggregates))
         for aggregate in aggregates:
-            code, msg = nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
-            if code > 0:
-                err_msgs.append(msg)
-            code,msg=nova_helper.delete_aggregate(name=aggregate)
-            if code > 0:
-                err_msgs.append(msg)
+            nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
+            nova_helper.delete_aggregate(name=aggregate)
 
     # Attempt all deletions before raising exception.
     if err_msgs:
