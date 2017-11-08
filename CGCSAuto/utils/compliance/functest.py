@@ -53,7 +53,7 @@ def connect_functest(functest_host, username, password):
         ssh_client.connect()
         # check if Docker exists on functest_host, if not, SSH will throw exception
         ssh_client.send("which docker", flush=True)
-        ssh_client.expect("/usr/bin/docker", timeout=3)
+        ssh_client.expect("/usr/bin/docker", timeout=10)
     except Exception as e:
         print(str(e))
         print("ERROR in Test: Wrong functest Host, Docker is not installed !")
@@ -61,7 +61,7 @@ def connect_functest(functest_host, username, password):
 
 def check_functest():
     try:
-        ssh_client.exec_cmd(cmd="docker ps", blob="FunctestContainer", get_exit_code=False)
+        ssh_client.exec_cmd(cmd="docker ps", blob="FunctestContainer", get_exit_code=False, fail_ok=False)
         ssh_client.set_prompt(FUNCTEST_DOCKER_PROMPT)
         ssh_client.send("docker exec -ti FunctestContainer bash", flush=True)
         ssh_client.expect(timeout=120)
@@ -74,7 +74,7 @@ def run_connection_check():
     # ensure that Functest can call all base API, otherwise no need to continue
     try:
         ssh_client.exec_cmd(cmd="functest testcase run connection_check", blob="functest - INFO - connection_check OK",
-                            expect_timeout=120, get_exit_code=False)
+                            expect_timeout=120, get_exit_code=False, fail_ok=False)
     except Exception as e:
         print(str(e))
         print("ERROR in Test: Functest connection_check failed !")
@@ -186,6 +186,8 @@ def close_functest():
 if __name__ == "__main__":
 
     try:
+        # example to run program from command line:
+        # functest.py yow-spapinea-lx-vm1 opnfv Li69nux*  "connection_check,api_check,rally_sanity" --local_log_directory /tmp
         parser = argparse.ArgumentParser()
         parser.add_argument("functest_host")
         parser.add_argument("username")
