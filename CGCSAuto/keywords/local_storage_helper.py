@@ -1,7 +1,9 @@
+
+import re
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from xml.etree import ElementTree as ET
-from ast import literal_eval
+
 
 from consts.cgcs import LocalStorage
 
@@ -53,13 +55,18 @@ def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
     lvm_pv_name = table_parser.get_values(table, 'lvm_pv_name', lvm_vg_name=lvg_name, strict=True)[0]
     idisk_uuid = table_parser.get_values(table, 'disk_or_part_uuid', lvm_vg_name=lvg_name, strict=True)[0]
     idisk_device_node = table_parser.get_values(table, 'disk_or_part_device_node', lvm_vg_name=lvg_name, strict=True)[0]
+    pv_type = table_parser.get_values(table, 'pv_type', lvm_vg_name=lvg_name, strict=True)[0]
 
-    LOG.debug('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}'.
-              format(pv_uuid, lvm_pv_name, idisk_uuid, idisk_device_node))
+    LOG.debug('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}, pv_type={}'.
+              format(pv_uuid, lvm_pv_name, idisk_uuid, idisk_device_node, pv_type))
+
+    pv_uuid_or_node = pv_uuid
+    if pv_type in ['partition']:
+        pv_uuid_or_node = re.sub('\d*$', '', idisk_device_node)
 
     return {'pv_uuid': pv_uuid,
             'lvm_pv_name': lvm_pv_name,
-            'idisk_uuid': idisk_uuid,
+            'idisk_uuid': pv_uuid_or_node,
             'idisk_device_node': idisk_device_node}
 
 
