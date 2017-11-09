@@ -211,7 +211,7 @@ class TestDnsSettings:
     Test modifying the settings about DNS servers
     """
 
-    DNS_SETTING_FILE = '/etc/resolv.conf'
+    DNS_SETTING_FILE = '/etc/dnsmasq.resolv.conf'
 
     @repeat_checking(repeat_times=10, wait_time=6)
     def wait_for_dns_changed(self, expected_ip_addres):
