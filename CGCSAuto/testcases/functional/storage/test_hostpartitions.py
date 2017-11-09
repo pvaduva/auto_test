@@ -403,7 +403,8 @@ def _test_create_partition_and_associate_with_pv_nova_local():
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             LOG.tc_step("Associating partition {} with nova-local".format(uuid))
-            cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
+            #cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
+            cmd = "host-pv-add {} nova-local {}".format(host, uuid)
             rc, out = cli.system(cmd, rtn_list=True)
             assert rc == 0, "Associating partition with PV failed"
             rc, out = host_helper.unlock_host(host)
@@ -423,7 +424,8 @@ def _test_create_partition_and_associate_with_pv_nova_local():
             rc, out = partition_helper.delete_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
             LOG.tc_step("Attempt to associate the In-Use partition with another PV")
-            cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
+            #cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
+            cmd = "host-pv-add {} cgts-vg {}".format(host, uuid)
             rc, out = cli.system(cmd, rtn_list=True)
             assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
@@ -484,7 +486,8 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             LOG.tc_step("Associating partition {} with cgts-vg".format(uuid))
-            cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
+            #cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
+            cmd = "host-pv-add {} cgts-vg {}".format(host, uuid)
             rc, out = cli.system(cmd, rtn_list=True)
             assert rc == 0, "Associating partition with PV failed"
             LOG.tc_step("Check that partition is In-use state")
@@ -503,7 +506,8 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
             rc, out = partition_helper.delete_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
             LOG.tc_step("Attempt to associate the In-Use partition with another PV")
-            cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
+            #cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
+            cmd = "host-pv-add {} nova-local {}".format(host, uuid)
             rc, out = cli.system(cmd, rtn_list=True)
             assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
@@ -535,13 +539,17 @@ def test_assign_rootfs_disk_to_pv():
 
     for host in rootfs:
         uuid = rootfs[host]
-        cmd = "host-pv-add -t disk {} cgts-vg {}".format(host, uuid[0])
+        #cmd = "host-pv-add -t disk {} cgts-vg {}".format(host, uuid[0])
+        cmd = "host-pv-add {} cgts-vg {}".format(host, uuid[0])
         rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
         assert rc != 0, "Expected PV creation to fail but instead succeeded"
 
 
+# Add TC unlock during partition deletion - rejected
+# Add TC unlock during partition modification - rejected
+
 @mark.usefixtures('delete_partitions_teardown')
-def _test_attempt_host_unlock_during_partition_creation():
+def test_attempt_host_unlock_during_partition_creation():
     """
     This test attempts to unlock a host while a partition is being created.  It
     is expected to fail.
