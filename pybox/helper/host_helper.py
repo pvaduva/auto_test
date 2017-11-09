@@ -117,7 +117,6 @@ def change_password(stream):
     changes the default password on initial login.
     Args:
         stream(stream): stream to cont0
-    
     """
     LOG.info('Changing password to Li69nux*')
     serial.send_bytes(stream, "wrsroot", expect_prompt=False)

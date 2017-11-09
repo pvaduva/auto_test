@@ -47,7 +47,7 @@ def disconnect(sock):
     sock.close()
 
 
-def expect_bytes(stream, text, fail_ok=False, timeout=120):
+def expect_bytes(stream, text, timeout=120, fail_ok=False):
     """
     Wait for user specified text from stream.
     """

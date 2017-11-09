@@ -5,6 +5,7 @@ from consts.env import BuildServers, Licenses, Builds, ISOPATH, Files, Lab
 from utils.sftp import sftp_get, sftp_send, send_dir, get_dir
 from utils import serial
 from helper import host_helper
+import logging as LOG
 
 
 def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None, local_path=None, host_type='Standard'):
@@ -125,7 +126,7 @@ def get_patches(cont0_stream, local_path=None, remote_host=None):
     """
     Retrieves patches from remote_host or localhost if remote_host is None
     """
-    #host_helper.login(cont0_stream)
+
     serial.send_bytes(cont0_stream, "mkdir /home/wrsroot/patches")
     if local_path is None:
         local_path = '/folk/tmather/patches/'
@@ -135,7 +136,6 @@ def get_patches(cont0_stream, local_path=None, remote_host=None):
         send_dir(local_path, destination=remote_path)
     else:
         send_dir(local_path, '10.10.10.2', remote_path)
-    #host_helper.logout(cont0_stream)
     
 
 def get_config_file(local_path=None, remote_host=None, release='R5'):
@@ -160,28 +160,25 @@ def get_config_file(local_path=None, remote_host=None, release='R5'):
     
     
 def check_services(stream):
-     """
-     Checks to see if sm services are running.
-     Args:
-         stream(stream): Stream to active controller    
-     """
-     serial.send_bytes(stream, "source /etc/nova/openrc")
-     try:
-         serial.expect_bytes(stream, "active controller")
-     except ExpectTimeout:
-         print("Cannot activate keystone admin credentials")
-     serial.send_bytes(stream, "sudo sm-dump")
-     serial.expect_bytes(stream, "assword:")
-     serial.send_bytes(stream, "Li69nux*")
-     try:
-         serial.expect_bytes(stream, "Failed")#check this
-     except ExpectTimeout:
-         print("Not all services were not activated successfully")
+    """
+    Checks to see if sm services are running.
+    Args:
+        stream(stream): Stream to active controller
+    """
+    serial.send_bytes(stream, "source /etc/nova/openrc")
+    serial.expect_bytes(stream, "active controller")
+
+    print("Cannot activate keystone admin credentials")
+    serial.send_bytes(stream, "sudo sm-dump")
+    serial.expect_bytes(stream, "assword:")
+    serial.send_bytes(stream, "Li69nux*")
+    serial.expect_bytes(stream, "Failed")#check this
+    print("Not all services were not activated successfully")
          
 
 def run_install_scripts(stream, host_list, aio=False, storage=False):
     """
-    Runs lab install.sh iterations.
+    Runs lab install.sh iterations. Currently does not support Simplex systems
     Args:
         stream: Stream to controller-0
         host_list: list of hosts, used when running aio scripts to install controller-1 at the appropriate time
@@ -189,40 +186,55 @@ def run_install_scripts(stream, host_list, aio=False, storage=False):
         storage: Option to run the script for storage setup
     """
     serial.send_bytes(stream, "chmod +x *.sh")
+    LOG.info("Starting lab install.")
     if aio:
         serial.send_bytes(stream, "./lab_setup.sh")
-        serial.expect_bytes(stream, "Stopping after data interface setup.", HostTimeout.LAB_INSTALL)
+        serial.expect_bytes(stream, "Stopping after data interface setup.",  timeout=HostTimeout.LAB_INSTALL)
+        LOG.info("Running system compute-config-complete, installation will resume once controller-0 reboots and services are active")
         serial.send_bytes(stream, "system compute-config-complete")
-        serial.expect_bytes(stream, "login:", HostTimeout.REBOOT)
+        serial.expect_bytes(stream, "login:",  timeout=HostTimeout.REBOOT)
         serial.send_bytes(stream, "sudo sm-dump")
         serial.expect_bytes(stream, "Password:")
         serial.send_bytes(stream, "Li69nux*")
         check_services(stream)
-        serial.send_bytes(stream, "./lab_setup.sh")
-        # check here
+        LOG.info("Services active, continuing install")
         serial.send_bytes(stream, "./lab_setup.sh")
         # check here
         if 'controller-1' in host_list:
+            LOG.info("Installing controller-1")
+            host_helper.install_host(stream, 'controller-1', 'controller', 2)
+        serial.send_bytes(stream, "./lab_setup.sh")
+        # check here
+
+        if 'controller-1' in host_list:
+            LOG.info("Unlocking Controller-1")
             host_helper.unlock_host(stream, 'controller-1')
         serial.send_bytes(stream, "./lab_setup.sh")
-        serial.expect_bytes(stream, "Done", HostTimeout.LAB_INSTALL)
+        serial.expect_bytes(stream, "Done", timeout=HostTimeout.LAB_INSTALL)
+        LOG.info("Completed install successfully.")
     else:
         serial.send_bytes(stream, "source /etc/nova/openrc")
         serial.send_bytes(stream, "./lab_setup.sh")
-        serial.expect_bytes(stream, "Stopping after provider network creation.", HostTimeout.LAB_INSTALL)
+
+        serial.expect_bytes(stream, "Stopping after provider network creation.",  timeout=HostTimeout.LAB_INSTALL)
         if storage:
             for hosts in host_list:
                 if hosts.startswith('storage'):
+                    LOG.info("Unlocking {}".format(hosts))
                     host_helper.unlock_host(stream, hosts)
             serial.send_bytes(stream, "./lab_setup.sh")
-            serial.expect_bytes(stream, "Stopping after initial storage node setup", HostTimeout.LAB_INSTALL)
+            serial.expect_bytes(stream, "Stopping after initial storage node setup",  timeout=HostTimeout.LAB_INSTALL)
+            LOG.info("Competed storage node unlock")
+        LOG.info("Re-running lab_setup.sh")
         serial.send_bytes(stream, "./lab_setup.sh")
         serial.expect_bytes(stream, "Stopping after data interface setup.", HostTimeout.LAB_INSTALL)
         for host in host_list:
+            LOG.info("Unlocking {}".format(host))
             if host.statswith("compute"):
                 host_helper.unlock_host(stream, host)
         serial.send_bytes(stream, "./lab_setup.sh")
         serial.expect_bytes(stream, "Done", HostTimeout.LAB_INSTALL)
+        LOG.info("Completed lab install.")
 
 
 def config_controller(stream, default=True, release='R5', config_file=None, backup=None, clone_iso=None,
@@ -324,8 +336,3 @@ def apply_patch(stream, patch_name, host_list):
         serial.send_bytes(stream, "sw-patch host-install-async {}".format(items))
         serial.send_bytes(stream, "sw-patch query-hosts | grep {}".format(items))
         serial.expect_bytes(stream, "")
-        
-        
-        
-        
-        

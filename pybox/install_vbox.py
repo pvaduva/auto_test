@@ -9,7 +9,7 @@ import sys
 import os.path
 import pytest
 import datetime
-import logging as LOG
+import logging
 import threading
 
 try:
@@ -28,7 +28,7 @@ from utils.sftp import sftp_get, sftp_send, send_dir
 from utils import serial
 from consts.timeout import HostTimeout
 from parser import handle_args
-
+import logging
 """
 Network Consolidation Abbreviations:
 .
@@ -68,6 +68,8 @@ Network Consolidation Options for Compute (com):
 
 
 """
+logging.basicConfig(filename='vbox_installer.log', level=logging.INFO)
+LOG = logging.getLogger().setLevel(logging.INFO)
 
 
 def menu_selector(stream, controller_type, securityprofile, release, lowlatency):
@@ -319,7 +321,6 @@ def create_vms(vboxoptions):
             for id in range(0, vboxoptions.storage):
                 node_name = "storage-{}".format(id)
                 nodes_list.append(node_name)
-        print("We will create the following nodes: {}".format(nodes_list))
         LOG.info("We will create the following nodes: {}".format(nodes_list))
         for node in nodes_list:
             vboxmanage.vboxmanage_createvm(node)
@@ -354,7 +355,7 @@ def create_vms(vboxoptions):
                                                            hostonlyadapter=data['hostonlyadapter'])
 
     else:
-        print("Setup will proceed with existing VMs as requested by user")
+        LOG.info("Setup will proceed with existing VMs as requested by user")
 
     # Determine ISO to use
     if vboxoptions.useexistingiso is False:
@@ -364,16 +365,16 @@ def create_vms(vboxoptions):
         for item in buildservers:
             if item['short_name'].upper() == vboxoptions.buildserver:
                 remote_server = item['ip']
-        sftp_get(remote_path, remote_server, '/folk/tmather/LabInstall/{}/bootimage.iso'.format(vboxoptions.release))
-        # sftp_get(remote_path, remote_server, ISOPATH))
-        PATH = '/folk/tmather/LabInstall/{}/bootimage.iso'.format(vboxoptions.release)
-        # PATH=ISOPATH
+        # sftp_get(remote_path, remote_server, '/folk/tmather/LabInstall/{}/bootimage.iso'.format(vboxoptions.release))
+        sftp_get(remote_path, remote_server, ISOPATH)
+        # PATH = '/folk/tmather/LabInstall/{}/bootimage.iso'.format(vboxoptions.release)
+        PATH=ISOPATH
     elif vboxoptions.iso_location:
         PATH = vboxoptions.iso_location
-        print("Setup will proceed with existing ISO {} as requested by user".format(PATH))
+        LOG.info("Setup will proceed with existing ISO {} as requested by user".format(PATH))
         assert os.path.isfile(ISOPATH), "ISO doesn't exist at: {}".format(PATH)
     else:
-        print("Setup will proceed with existing ISO {} as requested by user".format(ISOPATH))
+        LOG.info("Setup will proceed with existing ISO {} as requested by user".format(ISOPATH))
         assert os.path.isfile(ISOPATH), "ISO doesn't exist at: {}".format(ISOPATH)
         PATH=ISOPATH
     # Need a more programatic way to do this rather than hardcoding device - INVESTIGATE
@@ -396,6 +397,7 @@ if __name__ == "__main__":
     vboxoptions = handle_args().parse_args()
     print(vboxoptions)
     if vboxoptions.create_vms:
+        assert vboxoptions.controllers, "Controllers need to be specified to create vms"
         cont0_stream = create_vms(vboxoptions)
     node_list = []
     for item in vboxmanage.vboxmanage_list('vms'):

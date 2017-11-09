@@ -12,7 +12,6 @@ class Subnets:
     }
 
 class NICs:
-
     CONTROLLER = {
         'node_type': 'controller',
         '1': {'nic': 'hostonly', 'intnet': 'none', 'nictype': '82540EM', 'nicpromisc': 'deny', 'hostonlyadapter': 'vboxnet0'},
