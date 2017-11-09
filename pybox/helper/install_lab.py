@@ -255,12 +255,11 @@ def config_controller(stream, default=True, release='R5', config_file=None, back
     if config_file:
         get_config_file(config_file, remote_host, release)
             
-    serial.send_bytes(stream, "sudo config_controller {}".format(args))
-    serial.expect_bytes(stream, "The following configuration will be applied:")
-    serial.expect_bytes(stream, "Applying configuration")
-    serial.expect_bytes(stream, "Configuration was applied", HostTimeout.LAB_CONFIG)
-    # serial.send_bytes(stream, "system host-unlock controller-0")
-
+    serial.send_bytes(stream, "sudo config_controller {}".format(args), timeout=HostTimeout.LAB_CONFIG)
+    #serial.expect_bytes(stream, "The following configuration will be applied:")
+    #serial.expect_bytes(stream, "Applying configuration")
+    #serial.expect_bytes(stream, "Configuration was applied")
+    #TODO: Check for return code for sent commands in send_bytes instead
 
 def install_patches_before_config(stream):
     """

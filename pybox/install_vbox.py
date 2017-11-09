@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import pdb
+import subprocess
 import argparse
 import time
 import re
@@ -8,6 +10,7 @@ import os.path
 import pytest
 import datetime
 import logging as LOG
+import threading
 
 try:
     import streamexpect
@@ -86,60 +89,63 @@ def menu_selector(stream, controller_type, securityprofile, release, lowlatency)
         pass
     elif release == 'R3':
         if controller_type == "controller_aio":
-            serial.send_bytes(stream, "\033[B")
-            serial.send_bytes(stream, "\033[B")
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
         serial.send_bytes(stream, '\n')
     elif release=='R2':
         if controller_type == "controller_aio":
-            serial.send_bytes(stream, "\033[B")
-            serial.send_bytes(stream, "\033[B")
-            serial.send_bytes(stream, "\033[B")
-        serial.send_bytes(stream, "\n")
-        serial.send_bytes(stream, "\n")
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
+        serial.send_bytes(stream, "\n", expect_prompt=False)
+        serial.send_bytes(stream, "\n", expect_prompt=False)
     else:
         # Pick install type
         if controller_type == "controller_aio":
-            serial.send_bytes(stream, "\033[B")
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
         if lowlatency == True:
-            serial.send_bytes(stream, "\033[B")
-        serial.send_bytes(stream, "\n")
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
+        serial.send_bytes(stream, "\n", expect_prompt=False)
         
         # Serial or Graphical menu (picking Serial by default)
         # serial.expect_bytes(stream, "Press")
         #if install_mode == "graphical":
         #    serial.send_bytes(stream, "\033[B")
-        serial.send_bytes(stream, "\n")
+        serial.send_bytes(stream, "\n", expect_prompt=False)
         
         # Security profile menu
         # serial.expect_bytes(stream, "Press")
         if securityprofile == "extended":
-            serial.send_bytes(stream, "\033[B")
-        serial.send_bytes(stream, "\n")
+            serial.send_bytes(stream, "\033[B", expect_prompt=False)
+        serial.send_bytes(stream, "\n", expect_prompt=False)
 
 
 def setup_networking(stream, release):
     """
     Setup initial networking so we can transfer files.
     """
-    ip = "10.10.10.2"
+    ip = "10.10.10.3"
     host_ip = "10.10.10.254"
     password = "Li69nux*"
     if release == "R2":
         interface = "eth0"
     else:
         interface = "enp0s3"
-    serial.send_bytes(stream, "sudo /sbin/ip addr add {}/24 dev {}".format(ip, interface))
+    serial.send_bytes(stream, "sudo /sbin/ip addr add {}/24 dev {}".format(ip, interface), expect_prompt=False)
     serial.expect_bytes(stream, "Password:")
     serial.send_bytes(stream, password)
     time.sleep(2)
     serial.send_bytes(stream, "sudo /sbin/ip link set {} up".format(interface))
+    serial.send_bytes(stream, "sudo route add default gw {}".format(host_ip))
 
-    print("Wait a few seconds for networking to be established")
-    time.sleep(10)
+    NETWORKING_TIME = 60
+    print("Wait a minute for networking to be established")
+    time.sleep(NETWORKING_TIME)
 
-    # rc = serial.send_bytes(stream, "ping -c 3 {}".format(host_ip))
-    # print(rc)
-    
+    # Ping from machine hosting virtual box to virtual machine
+    #rc = subprocess.call(['ping', '-c', '3', ip])
+    #assert rc == 0, "Network connectivity test failed"
+
 
 @pytest.mark.unit
 def test_install_vbox(controller_type, securityprofile, release, lowlatency, configure):
@@ -153,14 +159,16 @@ def test_install_vbox(controller_type, securityprofile, release, lowlatency, con
     # Setup basic networking
     # Close stream
     vboxmanage.vboxmanage_startvm("controller-0")
-    cont0_stream = streamexpect.wrap(serial.connect("controller-0"), echo=True)
-    print(
-        "NOTE: Once we select menu options, you will not see much output on the console until the login prompt appears.")
+    cont0_stream = streamexpect.wrap(serial.connect("controller-0"), echo=True, close_stream=False)
     menu_selector(cont0_stream, controller_type, securityprofile, release, lowlatency)
-    serial.expect_bytes(cont0_stream, 'login:', HostTimeout.INSTALL)
+    serial.expect_bytes(cont0_stream, 'login:', timeout=HostTimeout.INSTALL)
     # Change password on initial login
     time.sleep(10)
     host_helper.change_password(cont0_stream)
+
+    # Disable user logout
+    host_helper.disable_logout(cont0_stream)
+
     # Setup basic networking
     time.sleep(10)
 
@@ -178,7 +186,19 @@ def test_install_nodes(cont0_stream, host_list=None):
     NOTE: This function takes about an hour a half to run. Would it be faster to install one at a time?
     """
     host_id = 1
+    streams = {}
+
+    # Since we don't need to install controller-0, let's remove it
+    host_list.remove("controller-0")
+
+    # Create streams early so we can see what's happening
+    # If we don't power on the host, socket connection will fail
     for host in host_list:
+        stream = streamexpect.wrap(serial.connect('{}'.format(host)), echo=True, close_stream=False)
+        streams[host] = stream
+
+    for host in host_list:
+        print("Installing host: {}".format(host))
         if host.startswith('controller'):
             host_helper.install_host(cont0_stream, host, 'controller', host_id)
             host_id += 1
@@ -188,13 +208,15 @@ def test_install_nodes(cont0_stream, host_list=None):
         else:
             host_helper.install_host(cont0_stream, host, 'storage', host_id)
             host_id += 1
+
+    # Look for login
+    # Close the stream if we want
     for host in host_list:
-        if host is 'controller-0':
-            pass
-        else:
-            stream = streamexpect.wrap(serial.connect('{}'.format(host)), echo=True)
-            serial.expect_bytes(stream, "login:", HostTimeout.HOST_INSTALL)
-            stream.close()
+        serial.expect_bytes(streams[host], "login:", HostTimeout.HOST_INSTALL)
+        #stream.close()
+
+    # Return streams dict in case we need to reference the streams later
+    return streams
 
 
 def test_get_install_files(cont0_stream, remote_host, setup_files):
@@ -227,7 +249,7 @@ def test_networking_setup(cont0_stream):
 
     """
     setup_networking(cont0_stream, 'R5')
-    time.sleep(7)
+    time.sleep(10)
     
 
 def create_vms(vboxoptions):
@@ -249,9 +271,9 @@ def create_vms(vboxoptions):
     # List current VMs
     node_list = []
     vm_list = vboxmanage.vboxmanage_list("vms")
-    print("The following VMs are present on the system: {}".format(node_list))
+    print("The following VMs are present on the system: {}".format(vm_list))
     for item in vm_list:
-        if 'controller' in item or 'compute' in item or 'storage' in item:
+        if b'controller' in item or b'compute' in item or b'storage' in item:
             node_list.append(item)
     # Delete VMs if the user requests it
     # Maybe only delete necessary vms? TODO
@@ -368,6 +390,8 @@ def test_get_lab_files(cont0_stream, local_path=None, remote_host=None):
 
     
 if __name__ == "__main__":
+   
+    #pdb.set_trace()
     # START VBOX SETUP
     vboxoptions = handle_args().parse_args()
     print(vboxoptions)
@@ -381,7 +405,7 @@ if __name__ == "__main__":
     #
     # if vms were created this should be done already
     if not vboxoptions.create_vms:
-        cont0_stream = streamexpect.wrap(serial.connect("controller-0"), echo=True)
+        cont0_stream = streamexpect.wrap(serial.connect("controller-0"), echo=True, close_stream=False)
         host_helper.login(cont0_stream)
         test_networking_setup(cont0_stream)
     # Configures controller-0 if requested

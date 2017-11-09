@@ -192,8 +192,8 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
             device_num = 0
         elif disk_count == 4:
             device_num = 1
-       # file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)      #required when using own machine  
-        file_name = "/folk/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+        file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)      #required when using own machine  
+        #file_name = "/folk/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         print("Creating disk {} on VM {} on device {} port {}".format(file_name, hostname, device_num, port_num))
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename', file_name, '--format', 'vdi', '--variant', 'standard'], stderr=subprocess.STDOUT)
         vboxmanage_storageattach(hostname, "ide", "hdd", file_name + ".vdi", str(port_num), str(device_num))
@@ -207,9 +207,16 @@ def vboxmanage_startvm(hostname=None):
 
     assert hostname, "Hostname is required"
 
-    print("Powering on VM {}".format(hostname))
-    result = subprocess.check_output(['vboxmanage', 'startvm', hostname], stderr=subprocess.STDOUT)
-    print(result)
+    print("Check if VM is running")
+    running_vms = vboxmanage_list(option="runningvms")
+    print(running_vms)
+
+    if hostname.encode('utf-8') in running_vms:
+        print("Host {} is already started".format(hostname))
+    else:
+        print("Powering on VM {}".format(hostname))
+        result = subprocess.check_output(['vboxmanage', 'startvm', hostname], stderr=subprocess.STDOUT)
+        print(result)
 
 
 def vboxmanage_controlvms(hosts=None, action=None):

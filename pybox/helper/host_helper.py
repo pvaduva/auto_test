@@ -89,8 +89,8 @@ def install_host(stream, hostname, host_type, host_id):
     if hostname == 'controller-0':
         print("controller-0 is already installed")
         return
+    time.sleep(10)
     serial.send_bytes(stream, "source /etc/nova/openrc")
-    vboxmanage.vboxmanage_startvm(hostname)
     time.sleep(60)
     LOG.info("Installing {} with id {}".format(hostname, host_id))
     if host_type is 'controller':
@@ -102,6 +102,16 @@ def install_host(stream, hostname, host_type, host_id):
     time.sleep(120)
 
 
+def disable_logout(stream):
+    """
+    Disables automatic logout of users.
+    Args:
+        stream(stream): stream to cont0
+    """
+    LOG.info('Disabling automatic logout')
+    serial.send_bytes(stream, "export TMOUT=0")
+
+
 def change_password(stream):
     """
     changes the default password on initial login.
@@ -109,31 +119,33 @@ def change_password(stream):
         stream(stream): stream to cont0
     
     """
-    LOG.info('Changing password to Li69nux*')    
-    serial.send_bytes(stream, "wrsroot")
+    LOG.info('Changing password to Li69nux*')
+    serial.send_bytes(stream, "wrsroot", expect_prompt=False)
     serial.expect_bytes(stream, "Password:")
-    serial.send_bytes(stream, "wrsroot")
+    serial.send_bytes(stream, "wrsroot", expect_prompt=False)
     serial.expect_bytes(stream, "UNIX password:")
-    serial.send_bytes(stream, "wrsroot")
+    serial.send_bytes(stream, "wrsroot", expect_prompt=False)
     serial.expect_bytes(stream, "New password:")
-    serial.send_bytes(stream, "Li69nux*")
+    serial.send_bytes(stream, "Li69nux*", expect_prompt=False)
     serial.expect_bytes(stream, "Retype new")
     serial.send_bytes(stream, "Li69nux*")
-    serial.expect_bytes(stream, "~$")
 
 
-def login(stream):
+def login(stream, timeout=600):
     """
     Logs into controller-0.
     Args:
         stream(stream): stream to cont0
     """    
-    serial.send_bytes(stream, "wrsroot")
-    serial.expect_bytes(stream, "assword:")
-    serial.send_bytes(stream, "Li69nux*")
-    time.sleep(2)
-    serial.expect_bytes(stream, "~$")
-    time.sleep(4)
+    serial.send_bytes(stream, "\n")
+    rc = serial.expect_bytes(stream, "ogin:", fail_ok=True, timeout=timeout)
+    if rc != 0:
+        serial.send_bytes(stream, "\n")
+        serial.expect_bytes(stream, "~$", timeout=timeout)
+    else:
+        serial.send_bytes(stream, "wrsroot", expect_prompt=False)
+        serial.expect_bytes(stream, "assword:")
+        serial.send_bytes(stream, "Li69nux*")
 
 
 def logout(stream):
