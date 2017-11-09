@@ -2685,3 +2685,31 @@ def disable_murano(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     return 0, msg
 
 
+def get_host_addr_list(host, rtn_val='address', ifname=None, id=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Disable Murano Services
+    Args:
+        con_ssh (SSHClient):
+        ifname:
+        id:
+        rtn_val:
+        auth_info (dict):
+        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
+
+    Returns:
+
+    """
+
+    table_ = table_parser.table(cli.system('host-addr-list', host,  ssh_client=con_ssh, auth_info=auth_info,
+                                     fail_ok=fail_ok, rtn_list=True)[1])
+    args_dict = {
+        'id': id,
+        'ifname': ifname,
+    }
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
+
+    address = table_parser.get_values(table_, rtn_val, strict=True, regex=True, merge_lines=True, **kwargs)
+    return address

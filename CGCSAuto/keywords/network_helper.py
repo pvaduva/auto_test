@@ -3766,30 +3766,61 @@ def get_ip_for_eth(ssh_client, eth_name):
         return ''
 
 
+def _is_v4_only(ip_list):
+
+    rtn_val = True
+    for ip in ip_list:
+        ip_addr = ipaddress.ip_address(ip)
+        if ip_addr.version == 6:
+            rtn_val = False
+    return rtn_val
+
+
 def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
     """
     Get the networks ids that matches the vxlan underlay ip version
     Args:
         vxlan_provider_net_id: vxlan provider net id to get the networks info
         ip_version: 4 or 6 (IPV4 or IPV6)
+        mode: mode of the vxlan: dynamic or static
         con_ssh (SSHClient):
 
-    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6)
+    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6) and the mode
 
     """
-
+    rtn_networks = []
     networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
     if not networks:
-        return ""
-    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,\
+        return rtn_networks
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,
                                                       rtn_val='providernet_attributes')
     if not provider_attributes:
-        return ""
-    rtn_networks = []
+        return rtn_networks
+
     index = 0
+    new_attr_list = []
+    # In the case where some val could be 'null', need to change that to 'None'
     for attr in provider_attributes:
-        dic_attr = eval (attr)
-        if dic_attr['mode'] == mode:
+        new_attr = attr.replace('null', 'None')
+        new_attr_list.append(new_attr)
+
+    # getting the configured vxlan mode
+    dic_attr_1 = eval(new_attr_list[0])
+    vxlan_mode = dic_attr_1['mode']
+
+    if mode == 'static' and vxlan_mode == mode:
+        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data')
+        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name)
+        if ip_version == 4 and _is_v4_only(address):
+            rtn_networks.append(networks[index])
+        elif ip_version == 6 and not _is_v4_only(address):
+            LOG.info("here in v6")
+            rtn_networks = networks
+        else:
+            return rtn_networks
+    elif mode == 'dynamic' and vxlan_mode == mode:
+        for attr in provider_attributes:
+            dic_attr = eval (attr)
             ip = dic_attr['group']
             ip_addr = ipaddress.ip_address(ip)
             if ip_addr.version == ip_version:
@@ -3797,3 +3828,4 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
         index += 1
 
     return rtn_networks
+

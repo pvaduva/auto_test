@@ -64,12 +64,12 @@ def clear_vxlan_endpoint_stats(compute):
 
 
 @mark.parametrize(('version', 'mode'), [
-    (4, 'dynamic'),
-    (6, 'dynamic'),
+    (4, "dynamic"),
+    (6, "dynamic"),
     (4, 'static'),
     (6, 'static')
 ])
-def test_vxlan_functional(version, mode):
+def test_dynamic_vxlan_functional(version, mode):
     """
         Vxlan feature test cases
 
@@ -118,7 +118,7 @@ def test_vxlan_functional(version, mode):
 
     LOG.tc_step("Getting Internal net ids.")
     internal_net_ids = network_helper.get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id=vxlan_provider_net_id,
-                                                                          ip_version=version, mode=mode)
+                                                                                  ip_version=version, mode=mode)
     if not internal_net_ids:
         skip("No networks found for ip version {} on the vxlan provider net".format(version))
 
@@ -133,7 +133,7 @@ def test_vxlan_functional(version, mode):
                 {'net-id': internal_net_ids[0], 'vif-model': 'avp'}]
         vm_name = common.get_unique_name(name_str='vxlan')
         vm_ids.append(vm_helper.boot_vm(name=vm_name, vm_host=vm_host, nics=nics, avail_zone=aggregate_name,
-                                        auth_info=auth_info, cleanup='function')[1])
+                                        auth_info=auth_info,cleanup='function')[1])
 
     # make sure VMS are not in the same compute, I don;t need it but just in case (double checking):
     if nova_helper.get_vm_host(vm_id=vm_ids[0]) == nova_helper.get_vm_host(vm_id=vm_ids[1]):
