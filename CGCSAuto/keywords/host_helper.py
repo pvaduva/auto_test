@@ -24,7 +24,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     ssh to a host from sshclient.
 
     Args:
-        hostname (str): host to ssh to
+        hostname (str|None): host to ssh to. When None, return active controller ssh
         username (str):
         password (str):
         prompt (str):
@@ -36,13 +36,18 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
                   host.exec_cmd(cmd)
 
     """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not hostname:
+        yield con_ssh
+        return
+
     default_user, default_password = LinuxUser.get_current_user_password(con_ssh=con_ssh)
     user = username if username else default_user
     password = password if password else default_password
     if not prompt:
         prompt = '.*' + hostname + '\:~\$'
-    if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller()
     original_host = con_ssh.get_hostname()
     host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
     host_ssh.connect()

@@ -36,6 +36,8 @@ CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
 
+TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
+
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
@@ -171,7 +173,6 @@ class Prompt:
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
-
 
 
 class NovaCLIOutput:

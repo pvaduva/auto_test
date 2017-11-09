@@ -5,11 +5,13 @@ import time
 from pytest import mark, skip
 
 from utils.tis_log import LOG
+from utils.kpi import kpi_log_parser
+from consts.kpi_vars import HostLock, HostUnlock, KPI_DATE_FORMAT
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.pre_checks_and_configs import no_simplex
 
-from keywords import host_helper,system_helper, nova_helper, vm_helper
+from keywords import host_helper,system_helper, nova_helper, vm_helper, common
 
 
 @mark.sanity
@@ -37,41 +39,76 @@ def test_lock_active_controller_reject(no_simplex):
     assert status == 'unlocked', "Fail: The active controller was locked."
 
 
-@mark.sanity
-@mark.cpe_sanity
-def test_lock_unlock_standby_controller(no_simplex):
+@mark.parametrize('host_type', [
+    mark.priorities('sanity', 'cpe_sanity', 'kpi')('controller'),
+    mark.priorities('kpi')('compute'),
+    mark.priorities('kpi')('storage'),
+])
+def test_lock_unlock_host(host_type, no_simplex, collect_kpi):
     """
-    Verify lock unlock standby controller
+    Verify lock unlock host
 
     Test Steps:
-        - Get standby controller
-        - Lock standby controller and ensure it is successfully locked
-        - Unlock standby controller and ensure it is successfully unlocked with web-services up
+        - Select a host per given type. If type is controller, select standby controller.
+        - Lock selected host and ensure it is successfully locked
+        - Unlock selected host and ensure it is successfully unlocked
 
     """
-    LOG.tc_step('Retrieve the standby controller from the lab')
-    standby_controller = system_helper.get_standby_controller_name()
+    init_time = None
+    if collect_kpi:
+        init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
 
-    assert standby_controller, "No standby controller available"
+    if host_type == 'controller':
+        LOG.tc_step('Retrieve the standby controller from system')
+        host = system_helper.get_standby_controller_name()
+
+        assert host, "No standby controller available"
+    elif host_type == 'compute':
+        if system_helper.is_small_footprint():
+            skip("No compute host on AIO system")
+
+        LOG.tc_step("Get a compute host from system")
+        hosts = host_helper.get_up_hypervisors()
+        assert hosts, "No hypervisor is up on system"
+        host = hosts[0]
+    elif host_type == 'storage':
+        storage_nodes = system_helper.get_storage_nodes()
+        if not storage_nodes:
+            skip("No storage node on system")
+        host = storage_nodes[0]
+    else:
+        raise ValueError("Unrecognized host_type: {}".format(host_type))
 
     # lock standby controller node and verify it is successfully locked
-    LOG.tc_step("Lock standby controller and ensure it is successfully locked")
-    host_helper.lock_host(standby_controller, swact=False)
+    LOG.tc_step("Lock {} host - {} and ensure it is successfully locked".format(host_type, host))
+    host_helper.lock_host(host, swact=False)
 
-    locked_controller_admin_state = host_helper.get_hostshow_value(standby_controller, 'administrative')
+    locked_controller_admin_state = host_helper.get_hostshow_value(host, 'administrative')
     assert locked_controller_admin_state == 'locked', 'Test Failed. Standby Controller {} should be in locked ' \
-                                                      'state but is not.'.format(standby_controller)
+                                                      'state but is not.'.format(host)
 
     # wait for services to stabilize before unlocking
     time.sleep(20)
 
     # unlock standby controller node and verify controller node is successfully unlocked
-    LOG.tc_step("Unlock standby controller and ensure it is successfully unlocked with web-services up")
-    host_helper.unlock_host(standby_controller)
+    LOG.tc_step("Unlock {} host - {} and ensure it is successfully unlocked".format(host_type, host))
+    host_helper.unlock_host(host)
 
-    unlocked_controller_admin_state = host_helper.get_hostshow_value(standby_controller,'administrative')
+    unlocked_controller_admin_state = host_helper.get_hostshow_value(host,'administrative')
     assert unlocked_controller_admin_state == 'unlocked', 'Test Failed. Standby Controller {} should be in unlocked ' \
-                                                          'state but is not.'.format(standby_controller)
+                                                          'state but is not.'.format(host)
+
+    if collect_kpi:
+        LOG.info("Collect kpi for lock/unlock {}".format(host_type))
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostLock.NAME.format(host_type), host=None,
+                                  log_path=HostLock.LOG_PATH, end_pattern=HostLock.END.format(host),
+                                  start_pattern=HostLock.START.format(host), start_path=HostLock.START_PATH,
+                                  init_time=init_time)
+
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostUnlock.NAME.format(host_type), host=None,
+                                  log_path=HostUnlock.LOG_PATH, end_pattern=HostUnlock.END[host_type].format(host),
+                                  init_time=init_time, start_pattern=HostUnlock.START.format(host),
+                                  start_path=HostUnlock.START_PATH)
 
 
 # Remove since it's already covered by test_lock_with_vms
