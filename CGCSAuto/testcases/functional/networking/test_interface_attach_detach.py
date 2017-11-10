@@ -166,9 +166,10 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
                                             net_types=['data'])[0]
             assert not res, "Ping from base_vm to vm via detached interface still works"
 
+
 @mark.parametrize(('guest_os', 'if_attach_arg', 'boot_source', 'vifs', 'live_migrations'), [
     ('tis-centos-guest', 'net_id', 'image', [('avp', 14)], 1),
-    ('tis-centos-guest', 'port_id', 'volume', [('avp', 1), ('virtio', 1)], 10)
+    ('tis-centos-guest', 'port_id', 'volume', [('avp', 1), ('virtio', 1)], 2)
 ], ids=id_gen)
 
 def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_source, vifs, live_migrations):
@@ -210,6 +211,8 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
         ResourceCleanup.add('port', internal_port_id)
         internal_net_id = None
 
+    initial_port_id = network_helper.create_port(tenant_net_id, 'if_attach_tenant_port')[1]
+
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
     if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
@@ -229,7 +232,7 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
         source_id = vol_id
 
     nics = [mgmt_nic,
-            {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+            {'port-id': initial_port_id, 'vif-model': 'avp'}]
 
     LOG.tc_step("Boot a {} vm and flavor from {}".format(guest_os, boot_source))
     vm_under_test = vm_helper.boot_vm('if_attach-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
@@ -239,6 +242,7 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
     LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'pause'))
     vm_helper.perform_action_on_vm(vm_under_test, action='pause')
     tenant_port_ids = []
+    tenant_port_ids.append(initial_port_id)
     LOG.tc_step("atttach maximum number of vnics to the VM")
     vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
     LOG.info("current nic no {}".format(vnics_attached))
