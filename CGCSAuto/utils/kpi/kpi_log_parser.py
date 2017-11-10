@@ -1,4 +1,6 @@
 import re
+import os
+
 from configparser import ConfigParser
 from optparse import OptionParser
 
@@ -10,9 +12,10 @@ from utils import lab_info
 from keywords import host_helper, common
 
 
-def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, start_pattern=None, start_path=None,
+def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None, start_path=None,
                extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
-               con_ssh=None, sudo=False, topdown=False, init_time=None, uptime=5):
+               con_ssh=None, sudo=False, topdown=False, init_time=None,
+               uptime=5, start_pattern_init=False):
     """
     Record kpi in ini format in given file
     Args:
@@ -38,6 +41,8 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, 
         sudo (bool): whether to access log with sudo
         topdown (bool): whether to search log from top down. Default is bottom up.
         init_time (str|None): when set, logs prior to this timestamp will be ignored.
+        start_pattern_init (bool): when set, use the timestamp of the start
+        pattern as the init time for the end pattern
 
     Returns:
 
@@ -84,7 +89,8 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, 
                                                           host_ssh=host_ssh, sudo=sudo, topdown=topdown,
                                                           extended_regex=extended_regex,
                                                           average_for_all=average_for_all,
-                                                          init_time=init_time)
+                                                          init_time=init_time,
+                                                          start_pattern_init=start_pattern_init)
             else:
                 kpi_val, time_stamp, count = get_match(pattern=end_pattern, log_path=log_path, host_ssh=host_ssh,
                                                        extended_regex=extended_regex, python_pattern=python_pattern,
@@ -105,7 +111,19 @@ def record_kpi(local_kpi_file, kpi_name, host, log_path=None, end_pattern=None, 
 def append_to_kpi_file(local_kpi_file, kpi_name, kpi_dict):
     config = ConfigParser()
     config[kpi_name] = kpi_dict
-    with open(local_kpi_file, 'a+') as kpi_file:
+
+    kpi_expanded_path = os.path.expanduser(local_kpi_file)
+    kpi_directories = os.path.dirname(kpi_expanded_path)
+
+    if os.path.exists(kpi_expanded_path):
+        file_opts = 'a+'
+    else:
+        file_opts = 'w+'
+
+    if not os.path.exists(kpi_directories):
+        os.makedirs(kpi_directories)
+
+    with open(kpi_expanded_path, file_opts) as kpi_file:
         config.write(kpi_file)
         kpi_file.seek(0)
         print("Content in KPI file {}: \n{}".format(local_kpi_file, kpi_file.read()))
@@ -139,10 +157,12 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Fal
         else:
             tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
 
-        if re.search('\dT\d', tmp_time):
-            init_time = init_time.strip().replace(' ', 'T')
-        else:
-            init_time = init_time.strip().replace('T', ' ')
+        # Need the T when searching bash.log
+        if not 'bash' in file_path:
+            if re.search('\dT\d', tmp_time):
+                init_time = init_time.strip().replace(' ', 'T')
+            else:
+                init_time = init_time.strip().replace('T', ' ')
 
     # Compose the zgrep cmd to search the log
     init_filter = """| awk '$0 > "{}"'""".format(init_time) if init_time else ''
@@ -164,7 +184,7 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Fal
 
 
 def get_duration(start_pattern, end_pattern, log_path, host_ssh, start_path=None, extended_regex=False,
-                 average_for_all=False, sudo=False, topdown=False, init_time=None):
+                 average_for_all=False, sudo=False, topdown=False, init_time=None, start_pattern_init=False):
     """
     Get duration in seconds between start and end timestamps when searching log from bottom up
     Args:
@@ -192,6 +212,9 @@ def get_duration(start_pattern, end_pattern, log_path, host_ssh, start_path=None
     if re.match(TIMESTAMP_PATTERN, start_pattern):
         end_times = [end_pattern]
     else:
+        if start_pattern_init:
+            init_time = start_times[0]
+
         end_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=end_pattern, sudo=sudo,
                               extended_regex=extended_regex, get_all=average_for_all, top_down=topdown,
                               init_time=init_time)

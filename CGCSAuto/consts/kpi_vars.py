@@ -40,3 +40,17 @@ class HostUnlock:
     }
     START = 'system.*host-unlock.*{}'
     START_PATH = '/var/log/bash.log'
+
+
+class LabSetup:
+    NAME = 'lab_setup'
+    LOG_PATH = '/var/log/bash.log'
+    START = 'lab_setup.sh'
+    END = '.heat_resources'
+
+
+class HeatStacks:
+    NAME = 'heat_stacks'
+    LOG_PATH = '/var/log/bash.log'
+    START = 'launch_stacks.sh lab_setup.conf'
+    END = 'source /etc/nova/openrc'
