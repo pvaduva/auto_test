@@ -77,5 +77,7 @@ class ImageConversion:
 
 
 class VmStartup:
-    NAME = 'vm_startup'
-    START = 'Instance {}.* owned by .* has been created'
+    NAME = 'vm_startup_{}'
+    LOG_PATH = '/var/log/fm-event.log'
+    START = 'Instance .* owned by .* has been created.*{}'
+    END = 'Instance .* is enabled on host .*{}'

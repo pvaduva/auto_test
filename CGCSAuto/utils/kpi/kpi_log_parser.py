@@ -12,9 +12,9 @@ from utils import lab_info
 from keywords import host_helper, common
 
 
-def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None, start_path=None,
-               extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
-               con_ssh=None, sudo=False, topdown=False, init_time=None,
+def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None,
+               start_path=None, extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
+               con_ssh=None, sudo=False, topdown=False, init_time=None, build_id=None,
                uptime=5, start_pattern_init=False):
     """
     Record kpi in ini format in given file
@@ -41,6 +41,7 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         sudo (bool): whether to access log with sudo
         topdown (bool): whether to search log from top down. Default is bottom up.
         init_time (str|None): when set, logs prior to this timestamp will be ignored.
+        uptime (int|str): get load average for the previous <uptime> minutes via 'uptime' cmd
         start_pattern_init (bool): when set, use the timestamp of the start
         pattern as the init time for the end pattern
 
@@ -56,11 +57,11 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
             lab = lab_info.get_lab_dict(labname=lab_name)
 
         kpi_dict = {'lab': lab['name']}
-        if start_pattern and end_pattern:
+        if start_pattern and end_pattern and build_id:
             # No need to ssh to system if both timestamps are known
             if re.match(TIMESTAMP_PATTERN, end_pattern) and re.match(TIMESTAMP_PATTERN, start_pattern):
                 duration = common.get_timedelta_for_isotimes(time1=start_pattern, time2=end_pattern).total_seconds()
-                kpi_dict.update({'value': duration, 'timestamp': end_pattern})
+                kpi_dict.update({'value': duration, 'timestamp': end_pattern, 'build_id': build_id})
                 append_to_kpi_file(local_kpi_file=local_kpi_file, kpi_name=kpi_name, kpi_dict=kpi_dict)
                 return
 
@@ -73,6 +74,12 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
                 con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                     CONTROLLER_PROMPT)
                 con_ssh.connect()
+
+        if not build_id:
+            build_id = ProjVar.get_var('BUILD_ID')
+            if not build_id:
+                build_id = lab_info.get_build_id(labname=lab['name'], con_ssh=con_ssh)
+        kpi_dict.update({'build_id': build_id})
 
         load_average = get_load_average(ssh_client=con_ssh, uptime=uptime)
         kpi_dict.update({'load_average': load_average})
@@ -284,6 +291,7 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-k', '--kpi', action='store', type='string', dest='kpi_name', help='kpi name')
     parser.add_option('--lab', action='store', dest='lab_name', help='Connect to given lab to check logs')
+    parser.add_option('--build', action='store', dest='build_id', help='Build ID of the TiC system')
     parser.add_option('--host', action='store', dest='host', help='Host to check log from')
     parser.add_option('--log', '--log_path', '--logpath', '--log-path', action='store', dest='log_path',
                       help="log_path to search for start_pattern and/or end_pattern")
@@ -314,4 +322,4 @@ if __name__ == '__main__':
                end_pattern=options.end_pattern, start_pattern=options.start_pattern, start_path=options.start_path,
                python_pattern=options.python_pattern, lab_name=options.lab_name, host=options.host,
                average_for_all=options.get_all, sudo=options.sudo, topdown=options.topdown, init_time=options.init_time,
-               uptime=options.uptime)
+               uptime=options.uptime, build_id=options.build_id)

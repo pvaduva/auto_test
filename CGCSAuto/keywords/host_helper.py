@@ -1280,7 +1280,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', up_only=True, 
     return hosts
 
 
-def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
+def get_hypervisors_with_storage_backing(storage_backing, con_ssh=None):
     hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing, con_ssh=con_ssh)
     up_hosts = get_up_hypervisors(con_ssh=con_ssh)
 

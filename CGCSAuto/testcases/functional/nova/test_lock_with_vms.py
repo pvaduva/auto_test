@@ -227,7 +227,7 @@ class TestLockWithVMsNegative:
 
         storages_to_test = []
         for storage_backing in ['local_image', 'local_lvm', 'remote']:
-            hosts = host_helper.get_nova_hosts_with_storage_backing(storage_backing=storage_backing)
+            hosts = host_helper.get_hypervisors_with_storage_backing(storage_backing=storage_backing)
             if len(hosts) == 1:
                 storages_to_test.append(storage_backing)
 
