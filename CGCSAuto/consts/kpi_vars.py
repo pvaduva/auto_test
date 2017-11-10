@@ -2,7 +2,7 @@ KPI_DATE_FORMAT = '%Y-%m-%d %T'
 
 
 class DRBDSync:
-    NAME = 'drbd_sync'
+    NAME = 'drbd_sync(K/s)'
     LOG_PATH = '/var/log/kern.log'
     GREP_PATTERN = 'Resync done'
     PYTHON_PATTERN = 'Resync done .* (\d+) K\/sec'
@@ -54,3 +54,28 @@ class HeatStacks:
     LOG_PATH = '/var/log/bash.log'
     START = 'launch_stacks.sh lab_setup.conf'
     END = 'source /etc/nova/openrc'
+
+
+class VolCreate:
+    NAME = 'volume_creation'
+    START = 'cinder .*create .*20g'
+    LOG_PATH = '/var/log/bash.log'
+
+
+class ImageDownload:
+    NAME = 'image_download(MB/s)'
+    LOG_PATH = '/var/log/cinder/cinder-volume.log'
+    GREP_PATTERN = 'Image download .* at'
+    PYTHON_PATTERN = 'Image download .* at (.*) MB/s'
+
+
+class ImageConversion:
+    NAME = 'image_conversion((MB/s))'
+    LOG_PATH = '/var/log/cinder/cinder-volume.log'
+    GREP_PATTERN = 'Converted .* at'
+    PYTHON_PATTERN = 'Converted .* image at (.*) MB/s'
+
+
+class VmStartup:
+    NAME = 'vm_startup'
+    START = 'Instance {}.* owned by .* has been created'

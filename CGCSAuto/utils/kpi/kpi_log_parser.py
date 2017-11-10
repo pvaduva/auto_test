@@ -126,7 +126,7 @@ def append_to_kpi_file(local_kpi_file, kpi_name, kpi_dict):
     with open(kpi_expanded_path, file_opts) as kpi_file:
         config.write(kpi_file)
         kpi_file.seek(0)
-        print("Content in KPI file {}: \n{}".format(local_kpi_file, kpi_file.read()))
+        print("\nContent in KPI file {}: \n{}".format(local_kpi_file, kpi_file.read()))
 
 
 def get_load_average(ssh_client, uptime=5):
@@ -151,18 +151,16 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Fal
 
     # Reformat the timestamp to add or remove T based on the actual format in specified log
     if init_time:
-        tmp_cmd = """zgrep -m 1 "" {} | awk '{{print $1}}'"""
+        tmp_cmd = """zgrep -m 1 "" {} | awk '{{print $1}}'""".format(file_path)
         if sudo:
             tmp_time = ssh_client.exec_sudo_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
         else:
             tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
 
-        # Need the T when searching bash.log
-        if not 'bash' in file_path:
-            if re.search('\dT\d', tmp_time):
-                init_time = init_time.strip().replace(' ', 'T')
-            else:
-                init_time = init_time.strip().replace('T', ' ')
+        if re.search('\dT\d', tmp_time):
+            init_time = init_time.strip().replace(' ', 'T')
+        else:
+            init_time = init_time.strip().replace('T', ' ')
 
     # Compose the zgrep cmd to search the log
     init_filter = """| awk '$0 > "{}"'""".format(init_time) if init_time else ''
@@ -176,7 +174,7 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Fal
         out = ssh_client.exec_sudo_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
     else:
         out = ssh_client.exec_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
-    print("Found: {}".format(out))
+    print("Output: {}".format(out))
 
     if not out:
         raise ValueError("Nothing returned when run cmd from {}: {}".format(ssh_client.host, cmd))
@@ -209,12 +207,12 @@ def get_duration(start_pattern, end_pattern, log_path, host_ssh, start_path=None
                                 init_time=init_time)
         start_times = re.findall(TIMESTAMP_PATTERN, start_line)
 
-    if re.match(TIMESTAMP_PATTERN, start_pattern):
+    if start_pattern_init:
+        init_time = start_times[0]
+
+    if re.match(TIMESTAMP_PATTERN, end_pattern):
         end_times = [end_pattern]
     else:
-        if start_pattern_init:
-            init_time = start_times[0]
-
         end_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=end_pattern, sudo=sudo,
                               extended_regex=extended_regex, get_all=average_for_all, top_down=topdown,
                               init_time=init_time)

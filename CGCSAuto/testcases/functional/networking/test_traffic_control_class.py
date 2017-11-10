@@ -4,7 +4,7 @@ from pytest import fixture, skip, mark
 import keywords.host_helper
 from keywords import system_helper, host_helper
 from utils.tis_log import LOG
-from consts.reasons import SkipReason
+from consts.reasons import SkipHostIf
 
 def test_traffic_controls():
     """
@@ -184,7 +184,7 @@ def test_traffic_controls():
 
     else:
         LOG.info("Skip the test")
-        skip(SkipReason.MGMT_INFRA_UNAVAIL)
+        skip(SkipHostIf.MGMT_INFRA_UNAVAIL)
 
 def _compare_traffic_control(port_name, expected_traffic_control):
     """

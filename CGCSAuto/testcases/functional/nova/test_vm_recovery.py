@@ -7,7 +7,7 @@ from utils import table_parser, exceptions
 from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
-from consts.kpi_patterns import VMRecovery
+from consts.kpi_vars import VMRecovery
 from consts.feature_marks import Features
 from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID

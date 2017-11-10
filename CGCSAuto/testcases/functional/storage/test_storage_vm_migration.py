@@ -147,7 +147,6 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     - no storage node
 
     """
-    pre_alarms = pre_alarm_
     for vm in vms_:
         vm_id = vm['id']
 
@@ -172,11 +171,8 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
         assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
         LOG.tc_step("Verifying  filesystem is rw mode after live migration....")
-        assert is_vm_filesystem_rw(vm_id), 'After live migration rootfs filesystem is not RW as expected for VM {}'.format(vm['display_name'])
-
-        # LOG.tc_step("Checking for any new system alarm....")
-        # rc, new_alarm = is_new_alarm_raised(pre_alarms)
-        # assert not rc, " alarm(s) found: {}".format(new_alarm)
+        assert is_vm_filesystem_rw(vm_id), 'After live migration rootfs filesystem is not RW as expected for VM {}'.\
+            format(vm['display_name'])
 
 
 @mark.domain_sanity

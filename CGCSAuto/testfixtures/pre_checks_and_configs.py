@@ -4,7 +4,7 @@ from pytest import fixture, skip
 from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from consts.cgcs import EventLogID, HostAvailabilityState
 from keywords import system_helper, host_helper, keystone_helper, security_helper
 
@@ -13,14 +13,14 @@ from keywords import system_helper, host_helper, keystone_helper, security_helpe
 def no_simplex():
     LOG.fixture_step("(Session) Skip if Simplex")
     if system_helper.is_simplex():
-        skip(SkipReason.SIMPLEX_SYSTEM)
+        skip(SkipSysType.SIMPLEX_SYSTEM)
 
 
 @fixture(scope='session')
 def simplex_only():
     LOG.fixture_step("(Session) Skip if not Simplex")
     if not system_helper.is_simplex():
-        skip(SkipReason.SIMPLEX_ONLY)
+        skip(SkipSysType.SIMPLEX_ONLY)
 
 
 @fixture(scope='module')

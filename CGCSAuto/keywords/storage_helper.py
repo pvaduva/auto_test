@@ -590,3 +590,9 @@ def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_in
         val = int(val)
 
     return val
+
+
+def get_storage_usage(service='cinder', rtn_val='free capacity (GiB)', con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
+    val = table_parser.get_values(table_, rtn_val, service=service)[0]
+    return float(val)

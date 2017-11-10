@@ -3,7 +3,7 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
-from consts.reasons import SkipReason
+from consts.reasons import SkipHostIf
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
@@ -234,9 +234,9 @@ class TestMutiPortsPCI:
         sriov_info = network_helper.get_pci_interface_info(interface='sriov')
         pcipt_info = network_helper.get_pci_interface_info(interface='pthru')
         if not sriov_info:
-            skip(SkipReason.SRIOV_IF_UNAVAIL)
+            skip(SkipHostIf.SRIOV_IF_UNAVAIL)
         if not pcipt_info:
-            skip(SkipReason.PCIPT_IF_UNAVAIL)
+            skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
         LOG.fixture_step("(class) Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
@@ -366,7 +366,7 @@ class TestMutiPortsPCI:
                 break
 
         if pcipt_included and not pcipt_info:
-            skip(SkipReason.PCIPT_IF_UNAVAIL)
+            skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]

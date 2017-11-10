@@ -11,7 +11,6 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.reasons import SkipReason
 from consts.cgcs import QoSSpecs, FlavorSpec
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup

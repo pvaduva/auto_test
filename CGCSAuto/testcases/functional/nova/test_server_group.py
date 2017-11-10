@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
 from consts.cgcs import FlavorSpec, ServerGroupMetadata, VMStatus
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor
 from consts.cli_errs import SrvGrpErr
 from keywords import nova_helper, vm_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -26,7 +26,7 @@ def check_system(add_cgcsauto_zone, add_admin_role_module, request):
     elif len(hosts) >= 2:
         hosts_to_add = hosts[:2]
     else:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
         hosts_to_add = []
 
     LOG.fixture_step("Add hosts to cgcsauto aggregate: {}".format(hosts_to_add))

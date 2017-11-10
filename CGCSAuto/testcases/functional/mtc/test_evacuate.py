@@ -2,7 +2,7 @@ from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper, \
     check_helper
@@ -13,7 +13,7 @@ from testfixtures.recover_hosts import HostsToRecover
 @fixture(scope='module', autouse=True)
 def skip_test_if_less_than_two_hosts():
     if len(host_helper.get_up_hypervisors()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
     if nova_helper.get_quotas(quotas='instances')[0] < 10:

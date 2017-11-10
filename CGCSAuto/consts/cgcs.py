@@ -29,7 +29,7 @@ HEAT_FLAVORS = ['small_ded', 'small_float']
 MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
-PREFIX_BACKUP_FILE  = 'titanium_backup_'
+PREFIX_BACKUP_FILE = 'titanium_backup_'
 TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
 IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
 CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
@@ -405,14 +405,14 @@ class OrchestStrategyStates:
 
     # abort phase
     ABORTING = 'aborting'
-    ABORTED ='aborted'
+    ABORTED = 'aborted'
     ABORT_FAILED = 'abort-failed'
     ABORT_TIMEOUT = 'abort-timeout'
 
     OrchestStrategyPhaseStates = {
-        OrchestStrategyPhases.BUILD : [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT ],
-        OrchestStrategyPhases.ABORT : [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
-        OrchestStrategyPhases.APPLY : [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+        OrchestStrategyPhases.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
+        OrchestStrategyPhases.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhases.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
     }
 
     def validate(self, phase, state):

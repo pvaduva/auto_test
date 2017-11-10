@@ -2,7 +2,7 @@ from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from consts.reasons import SkipReason
+from consts.reasons import SkipStorageBacking, SkipHypervisor
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -23,7 +23,7 @@ class TestDefaultGuest:
     @fixture(scope='class', autouse=True)
     def skip_test_if_less_than_two_hosts(self):
         if len(host_helper.get_up_hypervisors()) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+            skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     @mark.parametrize('storage_backing', [
         'local_image',
@@ -63,7 +63,7 @@ class TestDefaultGuest:
         """
         hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
         if len(hosts) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
+            skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
         target_host = hosts[0]
 
