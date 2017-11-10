@@ -13,6 +13,36 @@ from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from utils import node
 from utils import cli
+from setups import collect_tis_logs
+
+
+def collect_logs(con_ssh, fail_ok=True):
+
+    log_tarball = r'/scratch/ALL_NODES*'
+    log_dir = r'~/collected-logs'
+    old_log_dir = r'~/collected-logs/old-files'
+
+    prep_cmd = 'mkdir {}; mkdir {}'.format(log_dir, old_log_dir)
+    code, output = con_ssh.exec_cmd(prep_cmd, fail_ok=fail_ok)
+    if code != 0:
+        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+
+    prep_cmd = 'mv -f {} {}'.format(log_tarball, old_log_dir)
+    code, output = con_ssh.exec_sudo_cmd(prep_cmd, fail_ok=fail_ok)
+    if code != 0:
+        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+
+        LOG.info('execute: rm -rf /scratch/ALL_NODES*')
+        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+
+        LOG.info('ok, removed /scratch/ALL_NODES*')
+
+    else:
+        LOG.info('ok, {} moved to {}'.format(log_tarball, old_log_dir))
+
+    collect_tis_logs(con_ssh=con_ssh)
+
 
 @pytest.fixture(scope='session', autouse=True)
 def pre_restore_checkup():
@@ -27,6 +57,15 @@ def pre_restore_checkup():
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
     controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                               initial_prompt=extra_controller_prompt,  fail_ok=True)
+
+    collect_logs(controller_conn)
+
+    LOG.info('Collect logs before restore')
+    if not controller_conn:
+        LOG.warn('failed to collect logs because no ssh connection established to controller-0 of lab:{}'.format(
+            controller_node.host_ip))
+    else:
+        pass
 
     LOG.info('backup_src={}, backup_src_path={}'.format(backup_src, backup_src_path))
     if backup_src.lower() == 'usb':
