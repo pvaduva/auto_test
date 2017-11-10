@@ -313,3 +313,16 @@ def is_https_lab(con_ssh=None, source_admin=True, auth_info=Tenant.ADMIN):
     filters = {'Service Name': 'keystone', 'Service Type': 'identity', 'Interface': 'public'}
     keystone_pub = table_parser.get_values(table_=table_, target_header='URL', **filters)[0]
     return 'https' in keystone_pub
+
+
+def delete_users(user, fail_ok=False):
+    """
+    Delete the given openstack user
+    Args:
+        user: user name to delete
+        fail_ok: if the deletion expected to fail
+
+    Returns: tuple, (code, msg)
+    """
+    return cli.openstack('user delete', user, auth_info=Tenant.ADMIN, fail_ok=fail_ok)
+
