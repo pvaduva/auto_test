@@ -758,7 +758,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     return vm_ids
 
 
-def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, fail_ok=False,
+def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, force=None, fail_ok=False,
                     auth_info=Tenant.ADMIN):
     """
 
@@ -767,6 +767,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         destination_host (str): such as compute-0, compute-1
         con_ssh (SSHClient):
         block_migrate (bool): whether to add '--block-migrate' to command
+        force (str): force live migrate
         fail_ok (bool): if fail_ok, return a numerical number to indicate the execution status
                 One exception is if the live-migration command exit_code > 1, which indicating the command itself may
                 be incorrect. In this case CLICommandFailed exception will be thrown regardless of the fail_ok flag.
@@ -802,10 +803,13 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         2) For a test that needs to live migrate
 
     """
+    optional_arg = ''
+
     if block_migrate:
-        optional_arg = '--block-migrate'
-    else:
-        optional_arg = ''
+        optional_arg += '--block-migrate'
+
+    if force:
+        optional_arg += '--force'
 
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
     before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
