@@ -177,21 +177,25 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
     Sample test case for interface attach/detach on stopped vm
     Args:
         base_vm (tuple): (base_vm_id, mgmt_nic, internal_net_id)
+        guest_os (string): type of guest os
         if_attach_arg (str): whether to attach via port_id or net_id
+        boot_source: image or volume
         vif_model (str): vif_model to pass to interface-attach cli, or None
+        live_migrations: Number of times you want to live migrate
 
     Setups:
-        - Boot a base vm with mgmt net and internal0-net1   (module)
+        - Boot a base vm with mgmt net and tenant_port_id (module)
 
     Test Steps:
-        - Boot a vm with only mgmt interface
+        - Boot a vm with mgmt and avp port interface
+        - Pause the vm
         - Attach an vifs to vm with given if_attach_arg and vif_model
+        - perform force live migration and live migration action
+        - unpause the vm
         - Bring up the interface from vm
         - ping between base_vm and vm_under_test over mgmt & tenant network
-        - Perform VM action - Cold migrate, live migrate, pause resume, suspend resume
-        - Verify ping between base_vm and vm_under_test over mgmt & tenant network after vm operation
         - detach all the tenant interface
-        - Repeat attach/detach after performing each vm action
+        - Verify ping to tenant interfaces fail
 
     Teardown:
         - Delete created vm, volume, port (if any)  (func)
