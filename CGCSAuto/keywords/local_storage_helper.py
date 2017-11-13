@@ -60,13 +60,13 @@ def get_pv_of_lvg(host=None, lvg_name='nova-local', con_ssh=None):
     LOG.debug('pv_uuid={}, lvm_pv_name={}, idisk_uuid={}, idisk_device_node={}, pv_type={}'.
               format(pv_uuid, lvm_pv_name, idisk_uuid, idisk_device_node, pv_type))
 
-    pv_uuid_or_node = pv_uuid
+    disk_uuid_or_node = idisk_uuid
     if pv_type in ['partition']:
-        pv_uuid_or_node = re.sub('\d*$', '', idisk_device_node)
+        disk_uuid_or_node = re.sub('\d*$', '', idisk_device_node)
 
     return {'pv_uuid': pv_uuid,
             'lvm_pv_name': lvm_pv_name,
-            'idisk_uuid': pv_uuid_or_node,
+            'idisk_uuid': disk_uuid_or_node,
             'idisk_device_node': idisk_device_node}
 
 
