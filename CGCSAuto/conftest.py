@@ -243,6 +243,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
+    if config.getoption('help'):
+        return
+
     # Common reporting params
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
@@ -350,10 +353,13 @@ def pytest_configure(config):
 
 
 def pytest_addoption(parser):
-    lab_help = "Lab to connect to. Valid input: lab name such as 'cgcs-r720-3_7', or floating ip such as " \
-               "'128.224.150.142'. If it's a new lab, use floating ip before it is added to the automation framework."
+    lab_help = "Lab to connect to. Valid input: Hardware labs - use lab name such as 'r720_2-7', 'yow-cgcs-r720-3_7';" \
+               "if it's a new lab, use floating ip before it is added to the automation framework. " \
+               "VBox - use vbox or the floating ip of your tis system if it is not 10.10.10.2. " \
+               "Cumulus - floating ip of the cumulus tis system"
     tenant_help = "Default tenant to use when unspecified. Valid values: tenant1, tenant2, or admin"
-    natbox_help = "NatBox to use. Valid values: nat_hw, or nat_cumulus."
+    natbox_help = "NatBox to use. Default: NatBox for hardware labs. Valid values: nat_hw (for hardware labs), " \
+                  "<your own natbox ip> (for VBox, choose the 128.224 ip), or nat_cumulus (for Cumulus)."
     bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
@@ -380,9 +386,9 @@ def pytest_addoption(parser):
     parser.addoption('--no-cgcsdb', '--no-cgcs-db', '--nocgcsdb', action='store_true', dest='nocgcsdb')
 
     # Test session options on installed lab:
-    parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
+    parser.addoption('--lab', action='store', metavar='lab', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
-    parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--natbox', action='store', metavar='natbox', default=None, help=natbox_help)
     parser.addoption('--changeadmin', '--change-admin', '--change_admin', dest='changeadmin', action='store_true',
                      help=changeadmin_help)
     parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
@@ -420,8 +426,10 @@ def config_logger(log_dir):
     LOG.addHandler(stream_hdler)
 
 
-def pytest_unconfigure():
+def pytest_unconfigure(config):
     # collect all if needed
+    if config.getoption('help'):
+        return
 
     try:
         natbox_ssh = ProjVar.get_var('NATBOX_SSH')
@@ -470,7 +478,6 @@ def pytest_unconfigure():
                 print(fin.read())
     except Exception as e:
         LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
-
     # Below needs con_ssh to be initialized
     try:
         from utils.ssh import ControllerClient

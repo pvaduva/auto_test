@@ -174,7 +174,7 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
 
 
 def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+    with vm_helper.ssh_to_vm_from_natbox(vm_id, retry_timeout=60) as vm_ssh:
         vm_ssh.send('server_group_app')
         # vm_ssh.expect('\r\n\r\n', timeout=1, searchwindowsize=100)
 

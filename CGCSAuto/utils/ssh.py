@@ -944,7 +944,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
                                             timeout=timeout, fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException("Unable to login to {}. \nOutput: {}".format(self.host,
+                                                                                                   self.cmd_output))
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
@@ -955,7 +956,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
                                             fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException("Unable to login to {}. \nOutput: {}".format(self.host,
+                                                                                                   self.cmd_output,))
 
                     if res_index == 0:
                         self.send('yes')

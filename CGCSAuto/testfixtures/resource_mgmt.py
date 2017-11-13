@@ -155,6 +155,12 @@ def _delete(resources, scope):
         if code not in [0, -1]:
             err_msgs.append(msg)
 
+    if vol_snapshots:
+        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
+        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
+        if code > 0:
+            err_msgs.append(msg)
+
     if volumes:
         LOG.fixture_step("({}) Attempt to delete following volumes: {}".format(scope, volumes))
         code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.ADMIN)
@@ -164,12 +170,6 @@ def _delete(resources, scope):
     if volume_types:
         LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
         code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
-        if code > 0:
-            err_msgs.append(msg)
-
-    if vol_snapshots:
-        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
-        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
         if code > 0:
             err_msgs.append(msg)
 

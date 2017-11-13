@@ -287,7 +287,6 @@ def copy_files_to_con1():
         return
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
-
     file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:

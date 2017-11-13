@@ -165,13 +165,15 @@ def wait_for_vol_attach(vm_id, vol_id, timeout=VMTimeout.VOL_ATTACH, con_ssh=Non
                                                   con_ssh=con_ssh, auth_info=auth_info)
 
 
-def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
+def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None, del_vol=None):
     if vol_id is None:
         vols = cinder_helper.get_volumes(auth_info=auth_info, con_ssh=con_ssh, status='available')
         if vols:
             vol_id = random.choice(vols)
         else:
             vol_id = cinder_helper.create_volume(auth_info=auth_info, con_ssh=con_ssh)[1]
+            if del_vol:
+                ResourceCleanup.add('volume', vol_id, scope=del_vol)
 
     LOG.info("Attaching volume {} to vm {}".format(vol_id, vm_id))
     cli.nova('volume-attach', ' '.join([vm_id, vol_id]))
@@ -3580,10 +3582,8 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
         vm4_name = 'image_root_attachvol'
         vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
 
-        vol = cinder_helper.create_volume(bootable=False)[1]
-        if cleanup:
-            ResourceCleanup.add('volume', vol, scope='class')
-        attach_vol_to_vm(vm4, vol_id=vol)
+        vol = cinder_helper.create_volume(bootable=False, cleanup=cleanup)[1]
+        attach_vol_to_vm(vm4, vol_id=vol, del_vol=cleanup)
 
         wait_for_vm_pingable_from_natbox(vm4)
         launched_vms.append(vm4)

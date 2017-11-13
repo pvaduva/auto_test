@@ -462,7 +462,7 @@ class Labs:
         'controller-1 ip': '10.10.10.7',
         'controller_nodes': [0, 1],
         'compute_nodes': [0, 1],
-		'storage_nodes': [0, 1]
+        'storage_nodes': [0, 1],
     }
 
 

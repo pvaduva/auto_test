@@ -635,7 +635,7 @@ def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_
             snapshots_to_del = list(snapshots)
 
         if check_first:
-            snapshots_to_del = list(set(snapshots) & set(snapshot_list))
+            snapshots_to_del = list(set(snapshots_to_del) & set(snapshot_list))
 
     if not snapshots_to_del:
         msg = "No volume snapshot to delete or provided snapshot(s) not exist on system"
