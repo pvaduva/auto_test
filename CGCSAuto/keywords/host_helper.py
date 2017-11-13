@@ -1231,7 +1231,13 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None):
         LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
         return []
 
-    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
+    software_version = system_helper.get_system_software_version()
+    # aggregate-details is deprecated in newton and removed in pike
+    if float(software_version) >= 17.07:
+        nova_aggregate_show_cmd = 'aggregate-show'
+    else:
+        nova_aggregate_show_cmd = 'aggregate-details'
+    table_ = table_parser.table(cli.nova(nova_aggregate_show_cmd, aggregate, ssh_client=con_ssh,
                                          auth_info=Tenant.ADMIN))
     hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
     hosts = hosts.split(',')
