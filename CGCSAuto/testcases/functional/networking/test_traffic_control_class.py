@@ -55,6 +55,10 @@ def test_traffic_controls():
     class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 10000Mbit burst 15125b cburst 0b
     class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b"""
 
+    MGMT_INFRA_VLAN_NIC_1G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 100000Kbit ceil 200000Kbit burst 15337b cburst 1600b
+    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 100000Kbit ceil 200000Kbit burst 15337b cburst 1600b
+    class htb 1:1 root rate 1000Mbit ceil 1000Mbit burst 15125b cburst 1375b """
+
     MGMT_INFRA_VLAN_NIC_10G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
     class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
     class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b"""
@@ -104,7 +108,7 @@ def test_traffic_controls():
 
     basic_traffic_class = {'1000': NIC_1G_TC,'10000': NIC_10G_TC,  '20000': NIC_20G_TC, '25000': NIC_25G_TC}
     mgmt_eth_traffic_class = {'1000': MGMT_ETH_NIC_1G_TC, '10000': MGMT_ETH_NIC_10G_TC}
-    mgmt_vlan_traffic_class = {'1000': MGMT_INFRA_VLAN_NIC_10G_TC, '10000': MGMT_INFRA_VLAN_NIC_10G_TC}
+    mgmt_vlan_traffic_class = {'1000': MGMT_INFRA_VLAN_NIC_1G_TC, '10000': MGMT_INFRA_VLAN_NIC_10G_TC}
     infra_vlan_traffic_class = {'10000': INFRA_VLAN_NIC_10G_TC, '20000': INFRA_VLAN_NIC_20G_TC}
     infra_pxe_traffic_class = {'10000': INFRA_PXE_NIC_10G_TC, '20000': INFRA_PXE_NIC_20G_TC}
     mgmt_pxe_traffic_class = {'10000': MGMT_PXE_NIC_10G_TC, '20000': MGMT_PXE_NIC_20G_TC}
@@ -166,7 +170,6 @@ def test_traffic_controls():
                 assert result, "Infra traffic class is not set as expected"
                 result = _compare_traffic_control(mgmt_port_name, mgmt_eth_traffic_class)
                 assert result, "mgmt traffic class is not set as expected"
-                # This case will fail for wcp_63_66 because the speed is 1G and cgcs_config has 10G. ignore the failure.
             else:
                 assert 0, "This case is not handled contact domain owner to include this configuration"
         elif mgmt_net_type == 'ethernet' or 'ae' or 'vlan':
