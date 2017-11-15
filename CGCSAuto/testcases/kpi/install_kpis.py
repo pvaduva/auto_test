@@ -55,7 +55,7 @@ def test_drbd_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, python_pattern=python_pattern,
                               lab_name=lab_name,
-                              average_for_all=True, end_pattern=end_pattern)
+                              average_for_all=True, end_pattern=end_pattern, uptime=15)
 
 
 @mark.kpi
@@ -77,7 +77,7 @@ def test_config_controller_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True)
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
 
 
 @mark.kpi
@@ -99,7 +99,7 @@ def test_lab_setup_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True)
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
 
 
 @mark.kpi
@@ -111,7 +111,7 @@ def test_heat_kpi(collect_kpi):
     """
 
     if not collect_kpi:
-        skip("KPI only test.  Skip due to kpi collection is not enabled")
+        skip("KPI only test. Skip due to kpi collection is not enabled")
 
     lab_name = ProjVar.get_var("LAB_NAME")
     log_path = HeatStacks.LOG_PATH
@@ -124,5 +124,4 @@ def test_heat_kpi(collect_kpi):
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
                               end_pattern=end_pattern, sudo=True, topdown=True,
-                              start_pattern_init=True)
-
+                              start_pattern_init=True, uptime=15)

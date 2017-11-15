@@ -486,6 +486,13 @@ def pytest_unconfigure(config):
         LOG.warning("No con_ssh found")
         return
 
+    if ProjVar.get_var('COLLECT_KPI'):
+        try:
+            from utils.kpi import upload_kpi
+            upload_kpi.upload_kpi(kpi_file=ProjVar.get_var('KPI_PATH'))
+        except Exception as e:
+            LOG.warning(e.__str__())
+
     try:
         setups.list_migration_history(con_ssh=con_ssh)
     except:

@@ -10,7 +10,7 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
-from consts.cgcs import MELLANOX_DEVICE
+from consts.cgcs import MELLANOX_DEVICE, GuestImages
 from consts.reasons import SkipStorageSpace
 from testfixtures.resource_mgmt import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
@@ -558,5 +558,5 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
     img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if guest_os != 'ubuntu_14':
+    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
         ResourceCleanup.add('image', img_id)

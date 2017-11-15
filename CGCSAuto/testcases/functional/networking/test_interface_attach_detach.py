@@ -40,9 +40,9 @@ def base_vm():
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
     ('tis-centos-guest', 'net_id', [('virtio', 15)]),
     # ('tis-centos-guest', 'net_id', [('avp', 15)]),
-    #('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
+    # ('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
     ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
-    #('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
+    # ('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
     ('vxworks', 'net_id', [('e1000', 0)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vifs):
@@ -51,7 +51,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     Args:
         base_vm (tuple): (base_vm_id, mgmt_nic, internal_net_id)
         if_attach_arg (str): whether to attach via port_id or net_id
-        vif_model (str): vif_model to pass to interface-attach cli, or None
+        vifs (str): vif_model to pass to interface-attach cli, or None
 
     Setups:
         - Boot a base vm with mgmt net and internal0-net1   (module)
@@ -73,13 +73,10 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     """
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
 
-    nic_action = False
-    internal_port_id = None
     if if_attach_arg == 'port_id':
         LOG.tc_step("Create a new port")
         internal_port_id = network_helper.create_port(internal_net_id, 'if_attach_port')[1]
         ResourceCleanup.add('port', internal_port_id)
-        internal_net_id = None
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
@@ -107,7 +104,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     for vm_actions in [['live_migrate'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume'], ['stop', 'start']]:
         tenant_port_ids = []
         if 'vxworks' not in guest_os:
-            LOG.tc_step("atttach maximum number of vnics to the VM")
+            LOG.tc_step("Attach specified vnics to the VM before {} and bring up interfaces".format(vm_actions))
             vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
             LOG.info("current nic no {}".format(vnics_attached))
             expt_vnics = 1
@@ -126,10 +123,11 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
             LOG.info("vnics attached to VM: {}" .format(vnics_attached))
             assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
 
-            LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
+            LOG.info("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
             _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
 
             if expt_vnics == 16:
+                LOG.tc_step("Verify no more vnic can be attached after reaching upper limit 16")
                 res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
                 assert res == 1, "vnics attach exceed maximum limit"
 
@@ -156,7 +154,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
                         "after {}".format(vm_actions))
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'], retry=10)
 
-            LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
+            LOG.tc_step("Detach all the {} interface {} after {}".format(vif_model, tenant_port_ids, vm_actions))
             for tenant_port_id in tenant_port_ids:
                 vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
 
@@ -171,8 +169,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
     ('tis-centos-guest', 'net_id', 'image', [('avp', 14)], 1),
     ('tis-centos-guest', 'port_id', 'volume', [('avp', 1), ('virtio', 1)], 2)
 ], ids=id_gen)
-
-def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_source, vifs, live_migrations):
+def test_interface_attach_detach_on_paused_vm(base_vm, guest_os, if_attach_arg, boot_source, vifs, live_migrations):
     """
     Sample test case for interface attach/detach on stopped vm
     Args:
@@ -205,15 +202,10 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
 
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
 
-    image_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
-
-    nic_action = False
-    internal_port_id = None
     if if_attach_arg == 'port_id':
         LOG.tc_step("Create a new port")
         internal_port_id = network_helper.create_port(internal_net_id, 'if_attach_port')[1]
         ResourceCleanup.add('port', internal_port_id)
-        internal_net_id = None
 
     initial_port_id = network_helper.create_port(tenant_net_id, 'if_attach_tenant_port')[1]
 
@@ -238,16 +230,16 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
     nics = [mgmt_nic,
             {'port-id': initial_port_id, 'vif-model': 'avp'}]
 
-    LOG.tc_step("Boot a {} vm and flavor from {}".format(guest_os, boot_source))
+    LOG.tc_step("Boot a {} vm and flavor from {} with a mgmt and a data interface".format(guest_os, boot_source))
     vm_under_test = vm_helper.boot_vm('if_attach-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
                                       nics=nics, source=boot_source, source_id=source_id, guest_os=guest_os,
                                       cleanup='function')[1]
 
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'pause'))
+    LOG.tc_step("Pause vm {} before attaching interfaces".format(vm_under_test))
     vm_helper.perform_action_on_vm(vm_under_test, action='pause')
-    tenant_port_ids = []
-    tenant_port_ids.append(initial_port_id)
-    LOG.tc_step("atttach maximum number of vnics to the VM")
+
+    LOG.tc_step("Attach maximum number of vnics to the VM")
+    tenant_port_ids = [initial_port_id]
     vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
     LOG.info("current nic no {}".format(vnics_attached))
     expt_vnics = 2
@@ -270,25 +262,30 @@ def test_attach_detach_on_stopped_vm(base_vm, guest_os, if_attach_arg, boot_sour
         res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
         assert res == 1, "vnics attach exceed maximum limit"
 
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live_migrate'))
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live_migrate and unpause'))
     vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
-
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'unpause'))
     vm_helper.perform_action_on_vm(vm_under_test, action='unpause')
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
     LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
     _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1)
+    LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
+                "after {}".format('pause'))
+    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
 
     for i in range(live_migrations):
         LOG.tc_step("Perform following action(s) on vm {}: {} {} time".format(vm_under_test, 'force-live-migrate', i))
         _force_live_migrate(vm_id=vm_under_test)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
+                    "after {}".format('force-live-migrate'))
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
+
         vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
-
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                "after {}".format('pause'))
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'], retry=10)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
+                    "after {}".format('live migrate'))
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
 
     LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
     for tenant_port_id in tenant_port_ids:
@@ -327,7 +324,6 @@ def _bring_up_attached_interface(vm_id, guest_os, num=1):
             vm_ssh.exec_sudo_cmd('dhclient --restrict-interfaces {}'.format(eth_name), expect_timeout=180)
             vm_ssh.exec_sudo_cmd('pkill -f dhclient')
         vm_ssh.exec_sudo_cmd('ip addr')
-
 
 
 def _force_live_migrate(vm_id):

@@ -44,7 +44,7 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'KPI_PATH': logdir + '/kpi.log'
+            'KPI_PATH': logdir + '/kpi.ini'
         })
 
     @classmethod

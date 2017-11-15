@@ -144,7 +144,7 @@ def get_load_average(ssh_client, uptime=5):
     }
     out = ssh_client.exec_cmd('uptime')[1]
     uptimes = out.split('load average: ')[-1].split(', ')
-    return uptimes[uptime_map[str(uptime)]]
+    return float(uptimes[uptime_map[str(uptime)]])
 
 
 def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=False, top_down=False, sudo=False,
@@ -265,8 +265,8 @@ def get_match(pattern, log_path, host_ssh, python_pattern=None, extended_regex=F
     count = len(vals)
     if count > 1:
         if average_for_all:
-            vals = [float(val) for val in vals]
-            final_val = (sum(vals) / float(count), min(vals), max(vals))
+            vals = [int(float(val)) for val in vals]
+            final_val = ','.join([str(int(sum(vals)/count)), str(min(vals)), str(max(vals))])
         else:
             raise ValueError("Please check python_pattern, more than 1 match found with python pattern in 1 grep match")
     else:
