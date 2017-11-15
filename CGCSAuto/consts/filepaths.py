@@ -21,6 +21,7 @@ class VMPath:
 
 class UserData:
     ADDUSER_WRSROOT = 'cloud_config_adduser_wrsroot.txt'
+    DPDK_USER_DATA = 'dpdk_user_data.txt'
 
 
 class TestServerPath:
