@@ -43,6 +43,8 @@ def pytest_configure(config):
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path, delete_backups=delete_backups)
 
+    ProjVar.set_var(always_collect=True)
+
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_session():

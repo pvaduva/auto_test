@@ -19,6 +19,7 @@ class ProjVar:
                   'PING_FAILURE': False,
                   'COLLECT_KPI': False,
                   'LAB': None,
+                  'ALWAYS_COLLECT': False,
                   }
 
     @classmethod

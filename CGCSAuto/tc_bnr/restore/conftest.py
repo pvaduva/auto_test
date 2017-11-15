@@ -45,6 +45,8 @@ def pytest_configure(config):
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path,
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)
 
+    ProjVar.set_var(always_collect=True)
+
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_session():

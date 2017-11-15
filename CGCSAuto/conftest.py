@@ -498,7 +498,7 @@ def pytest_unconfigure(config):
         except Exception as e:
             LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
-    if has_fail and ProjVar.get_var('COLLECT_ALL'):
+    if ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL')):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
         try:
