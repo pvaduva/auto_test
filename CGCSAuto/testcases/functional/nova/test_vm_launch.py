@@ -40,9 +40,9 @@ def test_kpi_vm_launch(collect_kpi, hosts_per_backing, boot_from):
         skip("KPI only test. Skip due to kpi collection is not enabled.")
 
     if boot_from != 'volume':
-        LOG.tc_step("Create a flavor with 2 vcpus and dedicated cpu policy")
         if not hosts_per_backing.get(boot_from):
             skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(boot_from))
+        LOG.tc_step("Create a flavor with 2 vcpus and dedicated cpu policy")
         boot_source = 'image'
         flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=boot_from,
                                            check_storage_backing=False)[1]
