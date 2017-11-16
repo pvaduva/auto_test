@@ -291,13 +291,20 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     LOG.info("Creating glance image: {}".format(name))
 
+    if not disk_format:
+        if not source_image_file:
+            # default tis-centos-guest image is raw
+            disk_format = 'raw'
+        else:
+            disk_format = 'qcow2'
+
     optional_args = {
         '--id': image_id,
         '--name': name,
         '--visibility': 'private' if public is False else 'public',
         '--protected': protected,
         '--store': store,
-        '--disk-format': disk_format if disk_format else 'qcow2',
+        '--disk-format': disk_format,
         '--container-format': container_format if container_format else 'bare',
         '--min-disk': min_disk,
         '--min-ram': min_ram,
