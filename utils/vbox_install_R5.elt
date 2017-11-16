@@ -1076,6 +1076,7 @@ $directory=R5_files
 		>sudo sw-patch upload-dir /home/wrsroot/patches/
 		>sudo sw-patch query
 		>sudo sw-patch query-hosts
+		*FORK serial
 		; === Apply Patches
 		>sudo sw-patch apply --all
 		; === Install Patches
@@ -1171,7 +1172,7 @@ $directory=R5_files
 >
 *INTERACT
 *EXP_INFO
-*FORK $connection
+*FORK serial
 ; === Configuring Controller Interface with Scenario $controller_consolidation
 >export TMOUT=0
 >time sudo config_controller
