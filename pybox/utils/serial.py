@@ -5,7 +5,9 @@ import socket
 import os
 import streamexpect
 import time
+import logging
 from helper import vboxmanage
+from utils.install_log import LOG
 
 
 def connect(hostname):
@@ -20,7 +22,7 @@ def connect(hostname):
     vboxmanage.vboxmanage_startvm(hostname)
 
     socketname = "/tmp/{}".format(hostname)
-    print("Connecting to socket named: {}".format(socketname))
+    LOG.info("Connecting to socket named: {}".format(socketname))
 
     try:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -43,6 +45,7 @@ def disconnect(sock):
     """
 
     # Shutdown connection and release resources
+    LOG.info("Disconnecting from socket")
     sock.shutdown()
     sock.close()
 
@@ -52,36 +55,43 @@ def expect_bytes(stream, text, timeout=120, fail_ok=False):
     Wait for user specified text from stream.
     """
     time.sleep(2)
-    print("Expecting text: {}".format(text))
+    LOG.info("Expecting text within {} minutes: {}".format((timeout/60), text))
     try:
         stream.expect_bytes("{}".format(text).encode('utf-8'), timeout=timeout)
     except:
         if fail_ok:
             return -1
         else:
-            print("Did not find expected text")
+            LOG.error("Did not find expected text")
             #disconnect(stream)
             raise
 
-    print("Found expected text: {}".format(text))
+    LOG.info("Found expected text: {}".format(text))
     return 0
 
 
-def send_bytes(stream, text, fail_ok=False, expect_prompt=True, timeout=120):
+def send_bytes(stream, text, fail_ok=False, expect_prompt=True, prompt=None, timeout=120):
     """
     Send user specified text to stream.
     """
 
-    print("Sending text: {}".format(text))
+    LOG.info("Sending text: {}".format(text))
     try:
         stream.sendall("{}\n".format(text).encode('utf-8'))
         if expect_prompt:
-            expect_bytes(stream, "~$", timeout=timeout)
+        # ~$ causes issues when using keystone admin credentials since it uses '~(keystone_admin)]$' instead
+        #TODO: find a better way to do this maybe controller-0?
+            time.sleep(2)
+            if prompt:
+                expect_bytes(stream, prompt, timeout=timeout)
+            else:
+            
+                expect_bytes(stream, "~$", timeout=timeout)
     except:
         if fail_ok:
             return -1
         else:
-            print("Failed to send text")
+            LOG.error("Failed to send text")
             #disconnect(stream)
             raise
 

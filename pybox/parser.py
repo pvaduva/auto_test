@@ -147,7 +147,6 @@ def handle_args():
         """
         If specified we will configure controller-0 otherwise the configuration will have to be perfomed manually. 
         config_controller will be run with the --default parameter.
-        Note: currently not working due to CGTS-8122 
         """,
         action='store_true')
         
@@ -182,4 +181,17 @@ def handle_args():
 
         """,
         action='store_true')
+        
+    parser.add_argument("--install-mode", help=
+        """
+        Lab will be installed using the mode specified. Serial mode by default
+        """,
+        type=str, choices=['serial', 'graphical'], default='serial'
+        )
+    parser.add_argument("--complete-install", help = 
+        """
+        TODO
+        Lab will be installed, configured and setup using the lab_setup scripts.
+        """,
+        action = 'store_true')
     return parser

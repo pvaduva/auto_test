@@ -4,7 +4,7 @@ import getpass
 import os
 import paramiko
 import time
-import logging as LOG
+from utils.install_log import LOG
 
 
 def sftp_get(source, remote_host, destination):
@@ -21,7 +21,7 @@ def sftp_get(source, remote_host, destination):
     Note, keys must be setup for this to work.
     """
 
-    privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
+    privatekeyfile = os.path.expanduser('/folk/tmather/.ssh/id_rsa')
     mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
     username = getpass.getuser()
 
@@ -29,9 +29,8 @@ def sftp_get(source, remote_host, destination):
 
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username, password='Oliverthekitty1')
     sftp_client = ssh_client.open_sftp()
-    LOG.info("Sending file from {} to {}".format(source, destination))
     LOG.info("Sending file from {} to {}".format(source, destination))
     sftp_client.get(source, destination)
     LOG.info("Done")
@@ -39,7 +38,7 @@ def sftp_get(source, remote_host, destination):
     ssh_client.close()
 
 
-def sftp_send(source, remote_host='10.10.10.2', destination='/home/wrsroot/'):
+def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     """
     Send files to remote server, usually controller-0
     args:
@@ -59,6 +58,7 @@ def sftp_send(source, remote_host='10.10.10.2', destination='/home/wrsroot/'):
     ssh_client.connect(remote_host, username=username, password=password)
     sftp_client = ssh_client.open_sftp()
 
+
     LOG.info("Sending file from {} to {}".format(source, destination))
     sftp_client.put(source, destination)
     LOG.info("Done")
@@ -66,7 +66,7 @@ def sftp_send(source, remote_host='10.10.10.2', destination='/home/wrsroot/'):
     ssh_client.close()
     
     
-def send_dir(source, remote_host='10.10.10.2', destination='/home/wrsroot/'):
+def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     """
     Send directory contents to remote server, usually controller-0
     Note: does not send nested directories only files.
@@ -85,7 +85,7 @@ def send_dir(source, remote_host='10.10.10.2', destination='/home/wrsroot/'):
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh_client.connect(remote_host, username=username, password=password)
     sftp_client = ssh_client.open_sftp()
-    LOG.info("Sending files {}".format(os.listdir(source)))
+    # LOG.info("Sending files {}".format(os.listdir(source)))
     path = ''
     for items in os.listdir(source):
         path = source+items
@@ -116,12 +116,12 @@ def get_dir(source, remote_host, destination, patch=False, setup=False):
     - destination: where to store the files locally: e.g. /tmp/files/
     """
     username = getpass.getuser()
-    privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
-    mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
+    # privatekeyfile = os.path.expanduser('/folk/tmather/.ssh/id_rsa')
+    # mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username, password='Oliverthekitty1')
     sftp_client = ssh_client.open_sftp()
     LOG.info(sftp_client.listdir(source))
     path = ''
@@ -137,7 +137,7 @@ def get_dir(source, remote_host, destination, patch=False, setup=False):
                 LOG.info('Sending {} to {}'.format(path, local_path))
                 sftp_client.get(path, local_path)
         except IOError:
-            LOG.info("Cannot transfer {}".format(path))
+            LOG.error("Cannot transfer {}".format(path))
     LOG.info("Done")
     sftp_client.close()
     ssh_client.close()
