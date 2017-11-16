@@ -1565,7 +1565,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         'name': if_name,
         'pci address': pci_addr,
         'processor': proc,
-        'device type': dev_type
+        'device_type': dev_type
     }
 
     for key, value in args_tmp.items():
@@ -2821,3 +2821,346 @@ def get_host_disks_table(host, con_ssh=None, use_telnet=False, con_telnet=None, 
                                            use_telnet=use_telnet, con_telnet=con_telnet,
                                            auth_info=auth_info))
     return table_
+
+def get_network_values(header='uuid', uuid=None, ntype=None, 
+                       mtu = None, link_capacity = None, 
+                       dynamic = None, vlan = None, pool_uuid = None,
+                       auth_info=Tenant.ADMIN, con_ssh = None, 
+                       strict = True, regex = None, **kwargs):
+    """
+    Get
+    Args:
+        header: 'uuid' (default)
+        uuid:
+        type: (mapped as ntype)
+        mtu:
+        link-capacity:
+        dynamic:
+        vlan:
+        pool_uuid:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+    """
+    table_ = table_parser.table(cli.system('network-list', 
+                                           ssh_client=con_ssh, 
+                                           auth_info=auth_info))
+    args_temp = {
+        'uuid': uuid,
+        'ntype': ntype,
+        'mtu': mtu,
+        'link-capacity': link_capacity,
+        'dynamic': dynamic,
+        'vlan': vlan,
+        'pool_uuid': pool_uuid
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None,
+                       ntype=None, name=None, auth_info=Tenant.ADMIN,
+                       con_ssh = None, strict = True, regex = None,
+                       **kwargs):
+    """
+    Get cluster values from system cluster-list
+    Args:
+        header: 'uuid' (default)
+        uuid:
+        cluster_uuid:
+        type: (mapped as ntype)
+        name:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('cluster-list',
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'uuid': uuid,
+        'cluster_uuid': cluster_uuid,
+        'ntype': ntype,
+        'name': name,
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_disk_values(host, header='uuid', uuid=None, device_node=None, 
+                    device_num=None,
+                    device_type=None, size_mib=None, 
+                    available_mib=None, rpm=None, serial_id=None, 
+                    device_path=None, auth_info=Tenant.ADMIN,
+                    con_ssh = None, strict = True, regex = None,
+                    **kwargs):
+    """
+    Get disk values from system host-disk-list
+    Args:
+        host: (mandatory)
+        header: 'uuid' (default value)
+        uuid: 
+        device-node:
+        device_num:
+        device_type:
+        size_mib:
+        available_mib:
+        rpm:
+        serial_id:
+        device_path:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('host-disk-list ' + host,
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'uuid': uuid,
+        'device_node': device_node,
+        'device_num': device_num,
+        'device_type': device_type,
+        'size_mib': size_mib,
+        'available_mib': available_mib,
+        'rpm': rpm,
+        'serial_id': serial_id,
+        'device_path': device_path
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_host_lldp_agent_table(host, header='uuid', uuid=None, 
+                       local_port=None, status=None,
+                       chassis_id=None, port_id=None, 
+                       system_name=None, system_description=None, 
+                       auth_info=Tenant.ADMIN,
+                       con_ssh = None, strict = True, regex = None,
+                       **kwargs):
+    """
+    Get lldp agent table via system host-lldp-agent-list <host>
+    Args:
+        host: (mandatory)
+        header: 'uuid' (default)
+        uuid:
+        local_port:
+        status:
+        chassis_id:
+        port_id:
+        system_name:
+        system_description:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(
+        cli.system('host-lldp-agent-list ' + host,
+        ssh_client=con_ssh,
+        auth_info=auth_info))
+
+    args_temp = {
+        'uuid': uuid,
+        'local_port': local_port,
+        'status': status,
+        'chassis_id': chassis_id,
+        'system_name': system_name,
+        'system_description': system_description
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_host_lldp_neighbor_table(host, header='uuid', 
+                       uuid=None, local_port=None, remote_port=None,
+                       chassis_id=None, management_address=None, 
+                       system_name=None, system_description=None,
+                       auth_info=Tenant.ADMIN,
+                       con_ssh = None, strict = True, regex = None,
+                       **kwargs):
+    """
+    Get lldp neighbour table via system host-lldp-neighbor-list <host>
+    Args:
+        host (mandatory - make note of this)
+        header: 'uuid' (default value)
+        uuid:
+        local_port:
+        remote_port:
+        chassis_id:
+        management_address:
+        system_name:
+        system_description:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('host-lldp-neighbor-list ' + host,
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'uuid': uuid,
+        'local_port': local_port,
+        'remote_port': remote_port,
+        'chassis_id': chassis_id,
+        'system_name': system_name,
+        'system_description': system_description,
+        'management_address': management_address
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_service_list_table(header='id', id=None, service_name=None, hostname=None,
+                       state=None, auth_info=Tenant.ADMIN,
+                       con_ssh = None, strict = True, regex = None,
+                       **kwargs):
+    """
+    Get service_list through service service-list command
+    Args:
+        header: 'id' (default value)
+        id:
+        service_name:
+        hostname:
+        state:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('service-list',
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'id': id,
+        'service_name': service_name,
+        'hostname': hostname,
+        'state': state
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_servicenodes_list_table(header='id', id=None, name=None, 
+                       operational=None,
+                       availability=None, 
+                       ready_state=None, 
+                       auth_info=Tenant.ADMIN,
+                       con_ssh = None, strict = True, regex = None,
+                       **kwargs):
+    """
+    Get servicenodes list through service servicenode-list
+
+    Args:
+        header: 'id' (default)
+        id:
+        name:
+        operational:
+        availability:
+        ready_state:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('servicenode-list',
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'id': id,
+        'name': name,
+        'operational': operational,
+        'ready_state': ready_state,
+        'availability': availability
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
+
+
+def get_servicegroups_list_table(header='uuid', uuid=None, 
+                       service_group_name=None, 
+                       hostname=None, state=None, 
+                       auth_info=Tenant.ADMIN,
+                       con_ssh = None, strict = True, regex = None,
+                       **kwargs):
+    """
+    Get servicegroups list through service servicegroup-list command
+    Args:
+        header: 'uuid' (default)
+        uuid:
+        service_group_name:
+        hostname:
+        state:
+        auth_info:
+        con_ssh:
+        strict:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('servicegroup-list',
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'uuid': uuid,
+        'service_group_name': service_group_name,
+        'hostname': hostname,
+        'state': state
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict = strict,
+                                   regex = regex, **kwargs)
