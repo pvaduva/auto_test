@@ -80,6 +80,7 @@ class SSHClient(pxssh.pxssh):
                 return 1, msg
 
     def disconnect(self):
+        log.info("Disconnecting ssh session")
         self.logout()
         self.close()
 

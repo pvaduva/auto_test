@@ -307,6 +307,7 @@ class Telnet:
     def close(self):
         """Close the connection."""
         if self.sock:
+            #self.sock.shutdown()
             self.sock.close()
         self.sock = 0
         self.eof = 1
@@ -773,18 +774,21 @@ class Telnet:
            Returns text in utf-8 encoding.
            Fails if given string is not found or if EOF is encountered.
         """
+        log.info("Looking for: {}".format(expected))
         try:
             output = self.read_until(str.encode(expected), timeout)
         except EOFError:
             msg = "Connection closed: Reached EOF and no data was read in Telnet session: {}:{}.".format(self.host, self.port)
-            log.exception(msg)
+            log.info(msg)
             wr_exit()._exit(1, msg)
 
         output = output.decode('utf-8', 'ignore')
         if expected not in output:
             msg = 'Timeout occurred: Failed to find \"{}\" in output. Output:\n{}'.format(expected, output)
-            log.error(msg)
+            log.info(msg)
             wr_exit()._exit(1, msg)
+        else:
+            log.info("Found expected text")
 
         lines = output.splitlines()
         # Remove command
@@ -1293,6 +1297,7 @@ class Telnet:
         # Not fool-proof.  FIX
         self.get_read_until(LOGIN_PROMPT, install_timeout)
         log.info("Found login prompt. {} installation has completed".format(node.name))
+
 
         return 0
 

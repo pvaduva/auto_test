@@ -10,16 +10,6 @@ of this software may be licensed only pursuant to the terms
 of an applicable Wind River license agreement.
 '''
 
-'''
-modification history:
----------------------
-27apr16,amf  small footprint: handle drbd data-sync and custom configs
-08mar16,mzy  Inserting steps for storage lab installation
-25feb16,amf  Inserting steps for small footprint installations
-22feb16,mzy  Add sshpass support
-18feb16,amf  Adding doc strings to each function
-02dec15,kav  initial version
-'''
 
 import os
 import re
@@ -713,7 +703,24 @@ def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_
     logutils.print_step("Iso copy finished")
     # wr_exit()._exit(54, "done for now")
 
-def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
+def test_state(node, attr_type, expected_state):
+    '''
+    Test the state of the given node
+    '''
+
+    global controller0
+
+    output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")[1]
+    output = "\n".join(output.splitlines()[3:-1])
+    match = re.search("^.*{}.*{}.*$".format(node.name, expected_state), \
+                      output, re.MULTILINE|re.IGNORECASE)
+    if match:
+        return True
+
+    return False
+
+
+def wait_state(nodes, attr_type, expected_state, sut=None, exit_on_find=False, fail_ok=False):
     ''' Function to wait for the lab to enter a specified state.
         If the expected state is not entered, the boot operation will be
         terminated.
@@ -724,14 +731,14 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     else:
         nodes = copy.copy(nodes)
     count = 0
-    if type not in STATE_TYPE_DICT:
+    if attr_type not in STATE_TYPE_DICT:
         msg = "Type of state can only be one of: " + \
                    str(list(STATE_TYPE_DICT.keys()))
         log.error(msg)
         wr_exit()._exit(1, msg)
-    if expected_state not in STATE_TYPE_DICT[type]:
+    if expected_state not in STATE_TYPE_DICT[attr_type]:
         msg = "Expected {} state can only be on one of: {}"\
-                   .format(type, str(STATE_TYPE_DICT[type]))
+                   .format(attr_type, str(STATE_TYPE_DICT[attr_type]))
         log.error(msg)
         wr_exit()._exit(1, msg)
 
@@ -768,13 +775,13 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
             if match:
                 if exit_on_find:
                     return True
-                if type == ADMINISTRATIVE:
+                if attr_type == ADMINISTRATIVE:
                     node.administrative = expected_state
-                elif type == OPERATIONAL:
+                elif attr_type == OPERATIONAL:
                     node.operational = expected_state
-                elif type == AVAILABILITY:
+                elif attr_type == AVAILABILITY:
                     node.availability = expected_state
-                log.info("{} has {} state: {}".format(node.name, type, expected_state))
+                log.info("{} has {} state: {}".format(node.name, attr_type, expected_state))
                 expected_state_count += 1
                 # Remove matched line from output
                 output = re.sub(re.escape(match.group(0)), "", output)
@@ -789,7 +796,7 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
             log.info("Sleeping for {} seconds...".format(str(sleep_secs)))
             time.sleep(sleep_secs)
         count += 1
-    if count == search_attempts:
+    if count == search_attempts and not fail_ok:
         msg = 'Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state)
         log.error(msg)
         wr_exit()._exit(1, msg)
@@ -918,7 +925,7 @@ def get_settings(barcodes_controller, barcodes_compute):
 
     return server_name + last_server_number
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False, security=False, iso_install=False):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=False, lowlat=False, security=False, iso_install=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -940,6 +947,7 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
     rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security, iso_install)
 
     if close_telnet_conn:
+        print("Closing telnet connection")
         node.telnet_conn.close()
 
     return rc
@@ -1267,11 +1275,13 @@ def reserveLabNodes(barcodes):
 
 def establish_ssh_connection(_controller0, install_output_dir):
 
+    print("Opening ssh connection")
     cont0_ssh_conn = SSHClient(log_path=install_output_dir +\
                                "/" + CONTROLLER0 + ".ssh.log")
     cont0_ssh_conn.connect(hostname=_controller0.host_ip,
                            username=WRSROOT_USERNAME,
                            password=WRSROOT_PASSWORD)
+
     return cont0_ssh_conn
 
 
@@ -1461,7 +1471,6 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                           pre_opts=pre_opts, allow_fail=True)
 
     # Get licenses
-    print("This is load_path: {}".format(load_path))
     if lab_type == "regular" or lab_type == "storage":
         license = LICENSE_FILEPATH
     elif lab_type == "cpe":
@@ -1781,7 +1790,7 @@ def boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
             wr_exit()._exit(1, msg)
 
 
-def unlock_node(nodes, selection_filter=None):
+def unlock_node(nodes, selection_filter=None, wait_done=True):
 
     _unlock_nodes = []
     if selection_filter is not None:
@@ -1799,7 +1808,8 @@ def unlock_node(nodes, selection_filter=None):
                 log.error(msg)
                 wr_exit()._exit(1, msg)
 
-        wait_state(_unlock_nodes, AVAILABILITY, AVAILABLE)
+        if wait_done:
+            wait_state(_unlock_nodes, AVAILABILITY, AVAILABLE)
 
 
 def do_next_install_step(_lab_type, step):
@@ -2321,13 +2331,30 @@ def main():
 
     if do_next_install_step(lab_type, lab_install_step):
         configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region)
+        #controller0.ssh_conn.disconnect()
+        controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+        # Depends on when we poll whether controller0 is offline or online
+        node_offline = test_state(controller0, AVAILABILITY, OFFLINE)
+        node_online = test_state(controller0, AVAILABILITY, ONLINE)
+        if node_online or node_offline:
+            if run_labsetup()[0] != 0:
+                msg = "lab_setup failed"
+                log.error(msg)
+                installer_exit._exit(1, msg)
+            unlock_node(nodes, selection_filter="controller-0", wait_done=False)
+            controller0.ssh_conn.disconnect()
+            time.sleep(60)
+            controller0.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
+            controller0.telnet_conn.login()
+            controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+            wait_state(controller0, AVAILABILITY, AVAILABLE)
         set_install_step_complete(lab_install_step)
 
-    time.sleep(10)
+        time.sleep(10)
 
     # Reconnect ssh session
-    controller0.ssh_conn.disconnect()
-    controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+    #controller0.ssh_conn.disconnect()
+    #controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
@@ -2517,7 +2544,6 @@ def main():
     # Lab-install - unlock_computes - applicable storage and regular labs
     lab_install_step = install_step("unlock_computes", 16, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
-        print(nodes)
         unlock_node(nodes, selection_filter="compute")
         wait_state(nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
