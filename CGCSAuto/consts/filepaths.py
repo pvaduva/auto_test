@@ -75,3 +75,8 @@ class BuildServerPath:
 class BMCPath:
     SENSOR_DATA_DIR = '/var/run/ipmitool/'
     SENSOR_DATA_FILE_PATH = '{}/hwmond_{}_sensor_data'      # need to provide dir and host
+
+
+class SecurityPath:
+    DEFAULT_CERT_PATH = '/home/wrsroot/server-with-key.pem'
+    ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'
