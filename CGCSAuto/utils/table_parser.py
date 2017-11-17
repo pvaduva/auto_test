@@ -884,13 +884,24 @@ def convert_value_to_dict(value):
 
     Example:
         input:
-        ['checksum : c1b6664df43550fd5684fe85cdd3ddc3', 'container_format : bare', 'disk_format : qcow2', 'image_id : 8d8ea28f-e633-4e29-8f28-9d8171dbf5b6', 'image_name : ubuntu_14', 'min_disk : 0', 'min_ram : 0', 'size : 260440576', 'store : file']
+        ['checksum : c1b6664df43550fd5684fe85cdd3ddc3',
+        'container_format : bare',
+        'disk_format : qcow2',
+        'image_id : 8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
+        'image_name : ubuntu_14',
+        'min_disk : 0', 'min_ram : 0',
+        'size : 260440576', 'store : file']
         output:
-        {'checksum': 'c1b6664df43550fd5684fe85cdd3ddc3', 'min_ram': '0', 'disk_format': 'qcow2', 'image_name': 'ubuntu_14', 'image_id': '8d8ea28f-e633-4e29-8f28-9d8171dbf5b6', 'container_format': 'bare', 'min_disk': '0', 'store': 'file', 'size': '260440576'}
+        {'checksum': 'c1b6664df43550fd5684fe85cdd3ddc3',
+        'min_ram': '0', 'disk_format': 'qcow2',
+        'image_name': 'ubuntu_14', 'image_id': '8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
+        'container_format': 'bare', 'min_disk': '0', 'store': 'file', 'size': '260440576'}
 
     """
     if not isinstance(value, list):
-        return eval(value)
-
+        if '{' in value:
+            # newton
+            return eval(value)
+        value = [value]
     d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
     return d

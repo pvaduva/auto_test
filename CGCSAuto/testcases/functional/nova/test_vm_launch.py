@@ -42,12 +42,12 @@ def test_kpi_vm_launch(collect_kpi, hosts_per_backing, boot_from):
     if boot_from != 'volume':
         if not hosts_per_backing.get(boot_from):
             skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(boot_from))
-        LOG.tc_step("Create a flavor with 2 vcpus and dedicated cpu policy")
+        LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage backing".format(boot_from))
         boot_source = 'image'
         flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=boot_from,
                                            check_storage_backing=False)[1]
     else:
-        LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage backing".format(boot_from))
+        LOG.tc_step("Create a flavor with 2 vcpus, and dedicated cpu policy")
         boot_source = 'volume'
         flavor = nova_helper.create_flavor(vcpus=2)[1]
 
