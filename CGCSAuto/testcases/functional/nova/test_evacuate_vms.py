@@ -1,12 +1,16 @@
-import time
+import re
+
 from pytest import fixture, skip, mark
 
+from utils import table_parser
 from utils.tis_log import LOG
-from consts.cgcs import VMStatus
+from consts.cgcs import FlavorSpec, VMStatus, InstanceTopology
 from consts.reasons import SkipStorageBacking, SkipHypervisor
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, check_helper, system_helper
+from keywords import vm_helper, host_helper, nova_helper, cinder_helper, system_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
+
+from testfixtures.pre_checks_and_configs import check_numa_num
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -33,6 +37,28 @@ def touch_files_under_vm_disks(vm_id, ephemeral, swap, vm_type, disks):
     LOG.info("\n--------------------------Create files under vm disks: {}".format(mounts))
     file_paths, content = vm_helper.touch_files(vm_id=vm_id, file_dirs=mounts)
     return file_paths, content
+
+
+def check_vm_numa_topology(vm_id, numa_nodes, numa_node0, numa_node1):
+    LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
+    actual_node_vals = vm_helper.get_vm_host_and_numa_nodes(vm_id)[1]
+    if not numa_nodes:
+        nodes = 1
+    else:
+        nodes = numa_nodes
+
+    if nodes == 2 and numa_node0 == None and numa_node1 == None:
+        expected_node_vals = [0, 1]
+    elif nodes == 1 and numa_node0 == None:
+        expected_node_vals = [0]
+    else:
+        expected_node_vals = [int(val) for val in [numa_node0, numa_node1] if val is not None]
+
+    # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
+    # numa nodes for the vm
+    assert nodes == len(actual_node_vals)
+    assert expected_node_vals == actual_node_vals, \
+        "Individual NUMA node value(s) for vm {} is different than numa_node setting in flavor".format(vm_id)
 
 
 class TestDefaultGuest:
@@ -196,6 +222,114 @@ class TestDefaultGuest:
             check_helper.check_vm_files(vm_id=vm_, vm_action='evacuate', storage_backing=storage_backing,
                                         prev_host=target_host, **vms_info[vm_])
         vm_helper.ping_vms_from_natbox(vms)
+
+    @fixture(scope='function')
+    def check_hosts(self):
+        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        if len(hosts) < 2:
+            skip("at least two hosts with the same storage backing are required")
+
+        acceptable_hosts = []
+        for host in hosts:
+            numa_num = len(host_helper.get_host_procs(host))
+            if numa_num > 1:
+                target_host = host
+                acceptable_hosts.append(host)
+                if len(acceptable_hosts) == 2:
+                    break
+        else:
+            skip("at least two hosts with multiple numa nodes are required")
+
+        target_host = acceptable_hosts[0]
+        return target_host
+
+    # TC6500
+    def test_evacuate_numa_setting(self, check_hosts):
+        """
+            Test evacuate vms with various vm numa node settings
+
+            Skip conditions:
+                - Less than two hosts with common storage backing with 2 numa nodes
+
+            Setups:
+                - Check if there are enough hosts with a common backing and 2 numa nodes to execute test
+                - Add admin role to primary tenant (module)
+
+            Test Steps:
+                - Create three flavors:
+                    - First flavor has a dedicated cpu policy, 1 vcpu set on 1 numa node and the vm's numa_node0 is set
+                      to host's numa_node0
+                    - Second flavor has a dedicated cpu policy, 1 vcpu set on 1 numa node and the vm's numa_node0 is set
+                      to host's numa_node1
+                    - Third flavor has a dedicated cpu policy, 2 vcpus split between 2 different numa nodes and the vm's
+                      numa_node0 is set to host's numa_node0 and vm's numa_node1 is set to host's numa_node1
+                - Boot vms from each flavor on same host and wait for them to be pingable from NatBox
+                - Check that the vm's topology is correct
+                - sudo reboot -f on vms host
+                - Ensure evacuation for all 5 vms are successful (vm host changed, active state, pingable from NatBox)
+                - Check that the vm's topology is still correct following the evacuation
+
+            Teardown:
+                - Delete created vms, volumes, flavors
+                - Remove admin role from primary tenant (module)
+
+            """
+
+        target_host = check_hosts
+
+        LOG.tc_step("Create flavor with 1 vcpu, set on host numa node 0")
+        flavor1 = nova_helper.create_flavor('numa_vm', vcpus=1)[1]
+        ResourceCleanup.add('flavor', flavor1, scope='function')
+        extra_specs1 = {FlavorSpec.CPU_POLICY: 'dedicated',
+                        FlavorSpec.NUMA_NODES: 1,
+                        FlavorSpec.NUMA_0: 0
+                        }
+        nova_helper.set_flavor_extra_specs(flavor1, **extra_specs1)
+
+        LOG.tc_step("Create flavor with 1 vcpu, set on host numa node 1")
+        flavor2 = nova_helper.create_flavor('numa_vm', vcpus=1)[1]
+        ResourceCleanup.add('flavor', flavor2, scope='function')
+        extra_specs2 = {FlavorSpec.CPU_POLICY: 'dedicated',
+                        FlavorSpec.NUMA_NODES: 1,
+                        FlavorSpec.NUMA_0: 1
+                        }
+        nova_helper.set_flavor_extra_specs(flavor2, **extra_specs2)
+
+        LOG.tc_step("Create flavor with 1 vcpu, set on host numa node 1")
+        flavor3 = nova_helper.create_flavor('numa_vm', vcpus=2)[1]
+        ResourceCleanup.add('flavor', flavor3, scope='function')
+        extra_specs3 = {FlavorSpec.CPU_POLICY: 'dedicated',
+                        FlavorSpec.NUMA_NODES: 2,
+                        FlavorSpec.NUMA_0: 1,
+                        FlavorSpec.NUMA_1: 0
+                        }
+        nova_helper.set_flavor_extra_specs(flavor3, **extra_specs3)
+
+        LOG.tc_step("Boot vm with cpu on host node 0")
+        vm1 = vm_helper.boot_vm(flavor=flavor1, avail_zone='nova', vm_host=target_host, cleanup='function')[1]
+        vm_helper.wait_for_vm_pingable_from_natbox(vm1)
+        check_vm_numa_topology(vm1, 1, 0, None)
+
+        LOG.tc_step("Boot vm with cpu on host node 1")
+        vm2 = vm_helper.boot_vm(flavor=flavor2, avail_zone='nova', vm_host=target_host, cleanup='function')[1]
+        vm_helper.wait_for_vm_pingable_from_natbox(vm2)
+        check_vm_numa_topology(vm2, 1, 1, None)
+
+        LOG.tc_step("Boot vm with cpus on host nodes 0 and 1, (virtual nodes are switched here)")
+        vm3 = vm_helper.boot_vm(flavor=flavor3, avail_zone='nova', vm_host=target_host, cleanup='function')[1]
+        vm_helper.wait_for_vm_pingable_from_natbox(vm3)
+        check_vm_numa_topology(vm3, 2, 1, 0)
+
+        LOG.tc_step("Check all VMs are booted on {}".format(target_host))
+        vms_on_host = nova_helper.get_vms_on_hypervisor(hostname=target_host)
+        vms = [vm1, vm2, vm3]
+        assert set(vms) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vms, vms_on_host)
+
+        vm_helper.evacuate_vms(target_host, vms, ping_vms=True)
+
+        check_vm_numa_topology(vm1, 1, 0, None)
+        check_vm_numa_topology(vm2, 1, 1, None)
+        check_vm_numa_topology(vm3, 2, 1, 0)
 
 
 class TestOneHostAvail:
