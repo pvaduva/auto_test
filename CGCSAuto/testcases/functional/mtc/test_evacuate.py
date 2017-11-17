@@ -65,9 +65,10 @@ class TestCgcsGuest:
 
         # vm2 cannot be live migrated so choose its host as target host
         target_host = nova_helper.get_vm_host(vm2)
-        vms_to_mig = [vm1, vm3, vm4]
+        # todo: vm3 and vm4 can not be live migrated. they should be launched on target
+        vms_to_mig = [vm1]
 
-        LOG.tc_step("Live migrate vm1, vm3, vm4 to vm2 host {} if not already on it".format(target_host))
+        LOG.tc_step("Live migrate vm1 to vm2 host {} if not already on it".format(target_host))
 
         for vm in vms_to_mig:
             if nova_helper.get_vm_host(vm) != target_host:

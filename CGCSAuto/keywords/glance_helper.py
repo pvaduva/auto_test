@@ -322,6 +322,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
     try:
+        LOG.info("Creating image {}...".format(name))
+        LOG.info("glance image-create {}".format(optional_args_str))
         code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
                                   auth_info=auth_info, timeout=timeout, rtn_list=True)
     except:

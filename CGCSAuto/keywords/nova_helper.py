@@ -69,6 +69,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     subcmd = ' '.join([optional_args, mandatory_args])
 
     LOG.info("Creating flavor {}...".format(flavor_name))
+    LOG.info("nova flavor-create option: {}".format(subcmd))
     exit_code, output = cli.nova('flavor-create', subcmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                  rtn_list=True)
 

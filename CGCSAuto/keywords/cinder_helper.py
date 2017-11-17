@@ -238,7 +238,8 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     size = 5 if size is None else size
 
     subcmd = ' '.join([subcmd, source_arg, str(size)])
-    LOG.info("Creating volume: {}".format(name))
+    LOG.info("Creating Volume {}...".format(name))
+    LOG.info("cinder create {}".format(subcmd))
     exit_code, cmd_output = cli.cinder('create', subcmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                        rtn_list=True)
     if exit_code == 1:
@@ -304,6 +305,9 @@ def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.A
 
     """
     attachments = get_volume_states(vol_id, "attachments", con_ssh=con_ssh, auth_info=auth_info)
+    # pike version cinder show has no 'attachments' field
+    if not attachments['attachments']:
+        return
     attachments = eval(attachments['attachments'])
     LOG.info("Volume {} attachments: {} attachment: {}".format(vol_id, attachments, attachments[0]))
     if attachments and len(attachments) > 0:
@@ -312,6 +316,35 @@ def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.A
                 return [attachment]
 
         return [attachments]
+    return None
+
+# for pike cinderclient
+def get_volume_attachment_ids(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        vol_id (str):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns (list):
+        A  list of dicts with volume attachment_ids
+
+    """
+    vol_show_table = table_parser.table(
+        cli.cinder('show', vol_id, auth_info=Tenant.ADMIN))
+    attached_servers = table_parser.get_value_two_col_table(
+        vol_show_table, 'attached_servers')
+    attached_servers = table_parser.convert_value_to_dict(attached_servers)
+    attachment_ids = table_parser.get_value_two_col_table(
+        vol_show_table, 'attachment_ids')
+    attachment_ids = table_parser.convert_value_to_dict(attachment_ids)
+
+    if attached_servers and len(attached_servers) > 0:
+        for server, att in zip(attached_servers, attachment_ids):
+            if vm_id and server == vm_id:
+                return [att]
+        return [attachment_ids]
     return None
 
 

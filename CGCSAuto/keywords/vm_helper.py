@@ -188,13 +188,31 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None, del_vol=N
     if guest and 'cgcs_guest' not in guest:
 
         LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
-        attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)[0]
+        attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)
         if attachment_info:
-            attached_device_name = attachment_info['device']
+            attached_device_name = attachment_info[0]['device']
             device = attached_device_name.split('/')[-1]
             LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, attached_device_name))
             if not mount_attached_volume(vm_id, device, vm_image_name=guest):
                 LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
+            return
+
+        # for pike cinderclient: there is no 'attachments' field, so have to
+        # get attachments from 2 tables.
+        attachment_ids = cinder_helper.get_volume_attachment_ids(vol_id, vm_id=vm_id)
+        if attachment_ids:
+            att_show_table = table_parser.table(
+                cli.cinder('--os-volume-api-version 3.27 attachment-show',
+                           attachment_ids[0],
+                           auth_info=Tenant.ADMIN))
+            attached_device_name = table_parser.get_value_two_col_table(
+                att_show_table, 'device')
+            device = attached_device_name.split('/')[-1]
+            LOG.info("Volume {} is attached to VM {} as {}".format(
+                vol_id, vm_id, attached_device_name))
+            if not mount_attached_volume(vm_id, device, vm_image_name=guest):
+                LOG.info("Failed to mount the attached Volume {} "
+                         "on VM {} filesystem".format(vol_id, vm_id))
 
 
 def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
@@ -538,6 +556,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         ResourceCleanup.add('volume', new_vol, scope=cleanup)
 
     LOG.info("Booting VM {}...".format(name))
+    LOG.info("nova boot {}".format(args_))
     exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=True, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
@@ -822,8 +841,9 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     extra_str = ''
     if not destination_host == '':
         extra_str = ' to ' + destination_host
-    LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
     positional_args = ' '.join([optional_arg.strip(), str(vm_id), destination_host]).strip()
+    LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
+    LOG.info("nova live-migration {}".format(positional_args))
     exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=fail_ok,
                                  auth_info=auth_info, rtn_list=True)
 
