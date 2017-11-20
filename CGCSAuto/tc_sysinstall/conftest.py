@@ -49,23 +49,6 @@ from utils import lab_info
 # Command line options #
 ########################
 
-def pytest_addoption(parser):
-
-    ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. " \
-                                       "eg /dev/sdb or /dev/sdc"
-    ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1." \
-                                       " eg /dev/sdb or /dev/sdc"
-    ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
-                        "volume, in GiB (the default value is 20)"
-
-    parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
-                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
-    parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
-                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
-    parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
-                     action='store', metavar='SIZE',  help=ceph_mon_gib_help)
-
-
 def pytest_configure(config):
 
     # Lab install params

@@ -401,14 +401,61 @@ def pytest_addoption(parser):
     parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
                      help="Collect kpi for applicable test cases")
 
-    # Lab install options:
+    ##################################
+    # Lab install or upgrade options #
+    ##################################
+    # Install
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
     parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
                      help=skiplabsetup_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+    # Ceph Post Install
+    ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
+    ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
+    ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
+                        "volume, in GiB (the default value is 20)"
+    parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
+    parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
+    parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
+                     action='store', metavar='SIZE',  help=ceph_mon_gib_help)
     # Note --lab is also a lab install option, when config file is not provided.
+
+    ###############################
+    #  Backup and Restore options #
+    ###############################
+    # Backup
+    backup_server_destination_help = "The external destination  where the backupfiles are copied too. " \
+                                     "Choices are USB  ( 16G USB  or above must be plugged to controller-0) or " \
+                                     "local (Test server). Default is USB"
+    backup_destination_path_help = "The path the backup files are copied to if destination is not a USB. " \
+                                   "If destination is  USB, by default, the backup files are copied to " \
+                                   "mount point: /media/wrsroot/backups.  For local (Test Server)" \
+                                   "the default is /sandbox/backups."
+    delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
+                     "to the specified destination. Default is True."
+    parser.addoption('--destination', '--dest',  dest='destination', metavar='dest',
+                     action='store', default='usb',  help=backup_server_destination_help)
+    parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
+                     action='store', metavar='DIR', help=backup_destination_path_help)
+    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups', metavar='delete_backups',
+                     action='store', default=True,  help=delete_backups)
+    # Restore
+    backup_src_path_help = "The path to  backup files in the backup source, if source is not a USB. If source is USB," \
+                           " by default, the backup files are found at the mount point: /media/wrsroot/backups. " \
+                           " For local (Test Server) the default is /sandbox/backups."
+    parser.addoption('--backup-src', '--backup_src',  dest='backup_src', action='store', default='USB',
+                     help="Where to get the bakcup files: choices are 'usb' and 'local'")
+    parser.addoption('--backup-src-path', '--backup_src_path',  dest='backup_src_path',
+                     action='store', metavar='DIR', help=backup_src_path_help)
+    parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
+                     action='store',  help="The build id of the backup")
+    parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
+                     action='store',  help="The Titanium builds dir where the backup build id belong. "
+                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
 
 def config_logger(log_dir):
