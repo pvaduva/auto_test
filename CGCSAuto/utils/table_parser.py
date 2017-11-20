@@ -868,3 +868,40 @@ def remove_columns(table_, headers):
             continue
 
     return new_table_
+
+
+def convert_value_to_dict(value):
+    """
+    In a client (e.g. cinderclient) CLI output, a dict type value can be either
+    a plain raw string (e.g. cinderclient Newton) or a "pretty formatted"
+    multiline dict (e.g. cinderclient Pike).
+
+    Respectively, value parsed from get_value_two_col_table() for these values
+    are either a plain raw string in dict format, or a list of key:value pairs.
+
+    This function convert either types to a dict. For latter type leading and
+    ending spaces removed for each key/value are removed in the process.
+
+    Example:
+        input:
+        ['checksum : c1b6664df43550fd5684fe85cdd3ddc3',
+        'container_format : bare',
+        'disk_format : qcow2',
+        'image_id : 8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
+        'image_name : ubuntu_14',
+        'min_disk : 0', 'min_ram : 0',
+        'size : 260440576', 'store : file']
+        output:
+        {'checksum': 'c1b6664df43550fd5684fe85cdd3ddc3',
+        'min_ram': '0', 'disk_format': 'qcow2',
+        'image_name': 'ubuntu_14', 'image_id': '8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
+        'container_format': 'bare', 'min_disk': '0', 'store': 'file', 'size': '260440576'}
+
+    """
+    if not isinstance(value, list):
+        if '{' in value:
+            # newton
+            return eval(value)
+        value = [value]
+    d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
+    return d

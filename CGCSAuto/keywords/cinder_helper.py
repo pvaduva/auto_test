@@ -10,6 +10,7 @@ from consts.timeout import VolumeTimeout
 from consts.cgcs import GuestImages, Prompt
 
 from keywords import common, glance_helper, keystone_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
@@ -160,7 +161,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=Non
 
 def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snapshot_id=None, vol_type=None, size=None,
                   avail_zone=None, metadata=None, bootable=True, fail_ok=False, auth_info=None, con_ssh=None,
-                  rtn_exist=False, guest_image=None):
+                  rtn_exist=False, guest_image=None, cleanup=None):
     """
     Create a volume with given criteria.
 
@@ -191,6 +192,9 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     Notes:
         snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
+    if cleanup is not None:
+        if cleanup not in ['module', 'session', 'function', 'class']:
+            raise ValueError("Invalid scope provided. Choose from: 'module', 'session', 'function', 'class', None")
 
     bootable_str = str(bootable).lower()
 
@@ -234,7 +238,8 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     size = 5 if size is None else size
 
     subcmd = ' '.join([subcmd, source_arg, str(size)])
-    LOG.info("Creating volume: {}".format(name))
+    LOG.info("Creating Volume {}...".format(name))
+    LOG.info("cinder create {}".format(subcmd))
     exit_code, cmd_output = cli.cinder('create', subcmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                        rtn_list=True)
     if exit_code == 1:
@@ -244,6 +249,8 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
 
     table_ = table_parser.table(cmd_output)
     volume_id = table_parser.get_value_two_col_table(table_, 'id')
+    if cleanup and volume_id:
+        ResourceCleanup.add('volume', volume_id, scope=cleanup)
 
     if not _wait_for_volume_status(vol_id=volume_id, status='available', auth_info=auth_info, fail_ok=fail_ok):
         LOG.warning("Volume is created, but not in available state.")
@@ -298,6 +305,9 @@ def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.A
 
     """
     attachments = get_volume_states(vol_id, "attachments", con_ssh=con_ssh, auth_info=auth_info)
+    # pike version cinder show has no 'attachments' field
+    if not attachments['attachments']:
+        return
     attachments = eval(attachments['attachments'])
     LOG.info("Volume {} attachments: {} attachment: {}".format(vol_id, attachments, attachments[0]))
     if attachments and len(attachments) > 0:
@@ -306,6 +316,35 @@ def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.A
                 return [attachment]
 
         return [attachments]
+    return None
+
+# for pike cinderclient
+def get_volume_attachment_ids(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        vol_id (str):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns (list):
+        A  list of dicts with volume attachment_ids
+
+    """
+    vol_show_table = table_parser.table(
+        cli.cinder('show', vol_id, auth_info=Tenant.ADMIN))
+    attached_servers = table_parser.get_value_two_col_table(
+        vol_show_table, 'attached_servers')
+    attached_servers = table_parser.convert_value_to_dict(attached_servers)
+    attachment_ids = table_parser.get_value_two_col_table(
+        vol_show_table, 'attachment_ids')
+    attachment_ids = table_parser.convert_value_to_dict(attachment_ids)
+
+    if attached_servers and len(attached_servers) > 0:
+        for server, att in zip(attached_servers, attachment_ids):
+            if vm_id and server == vm_id:
+                return [att]
+        return [attachment_ids]
     return None
 
 
@@ -600,12 +639,13 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
     return 0, "Volume(s) deleted successfully"
 
 
-def delete_volume_snapshot(volume_snap_id, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,
+                            con_ssh=None):
     """
     Delete given volume snapshot via cinder snapshot-delete
 
     Args:
-        volume_snap_id (str):
+        snapshots (str|list):
         force (bool):
         check_first (bool):
         fail_ok (bool):
@@ -618,20 +658,27 @@ def delete_volume_snapshot(volume_snap_id, force=False, check_first=True, fail_o
         (2, volume snapshot <volume_snap_id> still exists in cinder qos-list after deletion)
 
     """
+    snapshot_list = get_volume_snapshot_list()
+    if snapshots is None:
+        snapshots_to_del = snapshot_list
+    else:
+        if isinstance(snapshots, str):
+            snapshots_to_del = [snapshots]
+        else:
+            snapshots_to_del = list(snapshots)
 
-    LOG.info("Delete Volume Snapshot with id {}".format(volume_snap_id))
+        if check_first:
+            snapshots_to_del = list(set(snapshots_to_del) & set(snapshot_list))
 
-    if check_first:
-        snapshot_list = get_volume_snapshot_list()
-        if volume_snap_id not in snapshot_list:
-            msg = "Volume snapshot id {} does not exist in cinder snapshot-list. Do nothing.".format(volume_snap_id)
-            LOG.info(msg)
-            return -1, msg
+    if not snapshots_to_del:
+        msg = "No volume snapshot to delete or provided snapshot(s) not exist on system"
+        LOG.info(msg)
+        return -1, msg
 
-    args_ = volume_snap_id
+    args_ = ' '.join(snapshots_to_del)
 
     if force:
-        args_ = '--force {} '.format(force) + args_
+        args_ = '--force {}'.format(force) + args_
 
     code, output = cli.cinder('snapshot-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                               rtn_list=True)
@@ -640,15 +687,16 @@ def delete_volume_snapshot(volume_snap_id, force=False, check_first=True, fail_o
         return code, output
 
     post_vol_snap_list = get_volume_snapshot_list()
-    if volume_snap_id in post_vol_snap_list:
-        err_msg = "Volume snapshot {} still exists in cinder snapshot-list after deletion".format(volume_snap_id)
+    undeleted_snapshots = list(set(snapshots_to_del) & set(post_vol_snap_list))
+    if undeleted_snapshots:
+        err_msg = "Volume snapshot {} still exists in cinder snapshot-list after deletion".format(undeleted_snapshots)
         if fail_ok:
             LOG.warning(err_msg)
             return 2, err_msg
         else:
             raise exceptions.CinderError(err_msg)
 
-    succ_msg = "Volume snapshot {} is successfully deleted".format(volume_snap_id)
+    succ_msg = "Volume snapshot(s) successfully deleted: {}".format(snapshots_to_del)
     LOG.info(succ_msg)
     return 0, succ_msg
 

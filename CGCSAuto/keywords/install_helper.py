@@ -21,11 +21,15 @@ from utils.tis_log import LOG
 from CGCSAuto.utils import local_host
 from consts.auth import Tenant, CliAuth
 import setups
+import configparser
+
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
+
+lab_ini_info = {}
 
 def get_ssh_public_key():
     return local_host.get_ssh_key()
@@ -45,11 +49,36 @@ def download_upgrade_license(lab, server, license_path):
     cmd = "test -h " + license_path
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
             server.name, license_path)
-
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
-                          os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-                          pre_opts=pre_opts)
+
+    if 'vbox' in lab['name']:
+        external_ip = lab['external_ip']
+        external_port = lab['external_port']
+        temp_path = '/tmp'
+        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+
+        server.ssh_conn.rsync("-L " + license_path, external_ip,
+                              os.path.join(temp_path, "upgrade_license.lic"),
+                              dest_user=lab['local_user'], dest_password=lab['local_password'],
+                              pre_opts=local_pre_opts)
+
+        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+
+        server.ssh_conn.rsync("-L " + license_path, external_ip,
+                              os.path.join(temp_path, "upgrade_license.lic"),
+                              dest_user=lab['local_user'], dest_password=lab['local_password'],
+                              pre_opts=local_pre_opts)
+
+        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+        # server.ssh_conn.rsync("-L " + license_path, external_ip,
+        #                       os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+        #                       pre_opts=pre_opts, ssh_port=external_port)
+    else:
+        server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
+                            os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                            pre_opts=pre_opts)
 
 
 def download_upgrade_load(lab, server, load_path):
@@ -60,12 +89,27 @@ def download_upgrade_load(lab, server, load_path):
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    #server.ssh_conn.rsync(iso_file_path,
-    #                      lab['controller-0 ip'],
-    #                      WRSROOT_HOME, pre_opts=pre_opts)
-    server.ssh_conn.rsync("-L " + iso_file_path,
-                          lab['controller-0 ip'],
-                          os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
+
+    if 'vbox' in lab['name']:
+
+        external_ip = lab['external_ip']
+        external_port = lab['external_port']
+        temp_path = '/tmp'
+        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+        server.ssh_conn.rsync("-L " + iso_file_path, external_ip,
+                              os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
+                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+
+        common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
+                                        dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
+
+        server.ssh_conn.rsync("-L " + iso_file_path,
+                          external_ip,
+                          os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
+    else:
+        server.ssh_conn.rsync("-L " + iso_file_path,
+                              lab['controller-0 ip'],
+                              os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
 
 
 def get_mgmt_boot_device(node):
@@ -387,9 +431,22 @@ def download_image(lab, server, guest_path):
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Image file not found in {}:{}'.format(
             server.name, guest_path)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    server.ssh_conn.rsync(guest_path,
-                          lab['controller-0 ip'],
-                          TiSPath.IMAGES, pre_opts=pre_opts)
+
+    if 'vbox' in lab['name']:
+        external_ip = lab['external_ip']
+        temp_path = '/tmp'
+        image_file = os.path.basename(guest_path)
+        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+        server.ssh_conn.rsync(guest_path, external_ip, os.path.join(temp_path, image_file),
+                              dest_user=lab['local_user'],
+                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+
+        common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
+                                        dest_path=TiSPath.IMAGES)
+    else:
+        server.ssh_conn.rsync(guest_path,
+                              lab['controller-0 ip'],
+                              TiSPath.IMAGES, pre_opts=pre_opts)
 
 
 def download_heat_templates(lab, server, load_path):
@@ -401,14 +458,21 @@ def download_heat_templates(lab, server, load_path):
             server.name, load_path)
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    server.ssh_conn.rsync(heat_path + "/*",
-                          lab['controller-0 ip'],
-                          TiSPath.HEAT, pre_opts=pre_opts)
+    if 'vbox' in lab['name']:
+        return
+    else:
+
+        server.ssh_conn.rsync(heat_path + "/*",
+                              lab['controller-0 ip'],
+                              TiSPath.HEAT, pre_opts=pre_opts)
 
 
 def download_lab_config_files(lab, server, load_path):
 
     lab_name = lab['name']
+    if 'vbox' in lab_name:
+        return
+
     if "yow" in lab_name:
         lab_name = lab_name[4:]
     config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
@@ -435,6 +499,9 @@ def download_lab_config_files(lab, server, load_path):
 def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf'):
 
     lab_name = lab['name']
+    if 'vbox' in lab_name:
+        return
+
     if "yow" in lab_name:
         lab_name = lab_name[4:]
 
@@ -1521,7 +1588,7 @@ def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
         if len(vol_snap_ids):
             for id in vol_snap_ids:
                 LOG.info(" snapshot id {} found; deleting ... ".format(id))
-                if cinder_helper.delete_volume_snapshot(id, con_ssh=con_ssh, force=True)[0] == 0:
+                if cinder_helper.delete_volume_snapshots(id, con_ssh=con_ssh, force=True)[0] == 0:
                     LOG.info(" Deleted snapshot id {} ... ".format(id))
 
         restored_cinder_volumes = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
@@ -1876,25 +1943,26 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     img_backup_cmd = 'image-backup export ' + image_id
     # temp sleep wait for image-backup to complete
     con_ssh.exec_sudo_cmd(img_backup_cmd, expect_timeout=300)
-    src_files = "/opt/backups/image_{}*.tgz".format(image_id)
+    src_file = "/opt/backups/image_{}*.tgz".format(image_id)
     if backup_dest == 'local':
         if dest_server:
-            if dest_server.ssh_conn.exec_cmd(["test -e {}".format(backup_dest_path)])[0] != 0:
+            if dest_server.ssh_conn.exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
                 dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
         else:
             if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
                 local_host.exec_cmd("mkdir -p {}".format(backup_dest_path))
 
-        common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+        common.scp_from_active_controller_to_test_server(src_file, backup_dest_path, is_dir=False, multi_files=True)
 
         LOG.info("Verifying if image backup files are copied to destination")
+        base_name_src = os.path.basename(src_file)
         if dest_server:
-            rc, output = dest_server.ssh_conn.exec_cmd("ls {}/{}*.tgz".format(backup_dest_path, src_files ))
+            rc, output = dest_server.ssh_conn.exec_cmd("ls {}/{}".format(backup_dest_path, base_name_src))
         else:
-            rc, output = local_host.exec_cmd(["ls {}/{}*.tgz".format(backup_dest_path, src_files)])
+            rc, output = local_host.exec_cmd("ls {}/{}".format(backup_dest_path, base_name_src))
 
         if rc != 0:
-            err_msg = "Failed to scp image backup files {} to local destination: {}".format(src_files, output)
+            err_msg = "Failed to scp image backup files {} to local destination: {}".format(src_file, output)
             LOG.info(err_msg)
             if fail_ok:
                 return 2, err_msg
@@ -1931,7 +1999,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
                     raise exceptions.CommonError(err_msg)
         else:
             err_msg = "USB {} does not have mount point; cannot copy  backup files {} to USB"\
-                .format(copy_to_usb, src_files)
+                .format(copy_to_usb, src_file)
             LOG.info(err_msg)
             if fail_ok:
                 return 2, err_msg
@@ -2193,3 +2261,28 @@ def update_auth_url(ssh_con, region=None, fail_ok=True):
     CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
     Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+
+
+def get_lab_info(barcode):
+    global lab_ini_info
+
+    if lab_ini_info and barcode in lab_ini_info:
+        return lab_ini_info[barcode]
+
+    ini_file_dir = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, 'sanityrefresh/labinstall/node_info')
+
+    ini_file = os.path.join(os.path.realpath(ini_file_dir), '{}.ini'.format(barcode))
+    LOG.debug('ini file:{}, barcode:{}'.format(ini_file, barcode))
+
+    conf_parser = configparser.ConfigParser()
+    conf_parser.read(ini_file)
+
+    settings = dict(conf_parser.defaults())
+    for ss in conf_parser.sections():
+        settings.update(dict(conf_parser[ss]))
+
+    LOG.debug('settings in ini file:{}'.format(settings))
+
+    lab_ini_info[barcode] = settings
+
+    return settings

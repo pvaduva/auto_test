@@ -24,7 +24,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     ssh to a host from sshclient.
 
     Args:
-        hostname (str): host to ssh to
+        hostname (str|None): host to ssh to. When None, return active controller ssh
         username (str):
         password (str):
         prompt (str):
@@ -36,13 +36,18 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
                   host.exec_cmd(cmd)
 
     """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not hostname:
+        yield con_ssh
+        return
+
     default_user, default_password = LinuxUser.get_current_user_password(con_ssh=con_ssh)
     user = username if username else default_user
     password = password if password else default_password
     if not prompt:
         prompt = '.*' + hostname + '\:~\$'
-    if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller()
     original_host = con_ssh.get_hostname()
     host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
     host_ssh.connect()
@@ -1226,7 +1231,13 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None):
         LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
         return []
 
-    table_ = table_parser.table(cli.nova('aggregate-details', aggregate, ssh_client=con_ssh,
+    software_version = system_helper.get_system_software_version()
+    # aggregate-details is deprecated in newton and removed in pike
+    if float(software_version) >= 17.07:
+        nova_aggregate_show_cmd = 'aggregate-show'
+    else:
+        nova_aggregate_show_cmd = 'aggregate-details'
+    table_ = table_parser.table(cli.nova(nova_aggregate_show_cmd, aggregate, ssh_client=con_ssh,
                                          auth_info=Tenant.ADMIN))
     hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
     hosts = hosts.split(',')
@@ -1275,7 +1286,7 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', up_only=True, 
     return hosts
 
 
-def get_nova_hosts_with_storage_backing(storage_backing, con_ssh=None):
+def get_hypervisors_with_storage_backing(storage_backing, con_ssh=None):
     hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing, con_ssh=con_ssh)
     up_hosts = get_up_hypervisors(con_ssh=con_ssh)
 

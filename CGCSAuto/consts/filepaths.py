@@ -9,6 +9,7 @@ class TiSPath:
     INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
     HEAT = '/home/wrsroot/heat/'
     BACKUPS = '/opt/backups'
+    CUSTOM_HEAT_TEMPLATES = '/home/wrsroot/custom_heat_templates/'
 
 
 class VMPath:
@@ -21,11 +22,18 @@ class VMPath:
 
 class UserData:
     ADDUSER_WRSROOT = 'cloud_config_adduser_wrsroot.txt'
+    DPDK_USER_DATA = 'dpdk_user_data.txt'
+
+
+class HeatTemplate:
+    STRESS_NG = 'stress_ng.yaml'
 
 
 class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
     TEST_SCRIPT = '/home/svc-cgcsauto/test_scripts/'
+    CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
+
 
 
 class PrivKeyPath:
@@ -53,8 +61,8 @@ class BuildServerPath:
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          '17.06': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
-                         '17.07': ['/folk/cgts/lab/license.lic', '/folk/cgts/lab/TiS17-CPE-full.lic', \
-                                   'wrslicense-AIO-SX-17.06-full-jan2018.lic']
+                         '17.07': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic', \
+                                   '/folk/cgts/lab/R5-AIO-SX-full.lic']
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
@@ -73,3 +81,8 @@ class BuildServerPath:
 class BMCPath:
     SENSOR_DATA_DIR = '/var/run/ipmitool/'
     SENSOR_DATA_FILE_PATH = '{}/hwmond_{}_sensor_data'      # need to provide dir and host
+
+
+class SecurityPath:
+    DEFAULT_CERT_PATH = '/home/wrsroot/server-with-key.pem'
+    ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'

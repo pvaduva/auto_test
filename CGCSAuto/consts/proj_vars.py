@@ -17,6 +17,9 @@ class ProjVar:
                   'KEYSTONE_DEBUG': False,
                   'TEST_NAME': None,
                   'PING_FAILURE': False,
+                  'COLLECT_KPI': False,
+                  'LAB': None,
+                  'ALWAYS_COLLECT': False,
                   }
 
     @classmethod
@@ -41,6 +44,7 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
+            'KPI_PATH': logdir + '/kpi.ini'
         })
 
     @classmethod

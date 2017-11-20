@@ -57,7 +57,12 @@ def pytest_collectstart():
         if setups.is_https(con_ssh):
             CliAuth.set_vars(HTTPS=True)
         Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-        Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+        region = CliAuth.get_var('OS_REGION_NAME')
+        Tenant._set_region(region=region)
+        if region == 'RegionTwo':
+            for tenant in ('tenant1', 'tenant2'):
+                r2_tenant = '{}-R2'.format(tenant)
+                Tenant.update_tenant_dict(tenant, username=r2_tenant, tenant=r2_tenant)
         initialized = True
 
 

@@ -168,10 +168,6 @@ def cleanup_test_users(request):
 
         LOG.info('{} test user deleted'.format(count))
 
-
-
-
-
     request.addfinalizer(delete_test_users)
 
 
@@ -283,7 +279,7 @@ def test_non_wrsroot_not_propagating(user, password, host):
         LOG.info('Randomly choice another host to test logging on, expecting to fail')
 
         other_host = random.choice([h for h in hosts if h != host])
-        #check for CPE option
+        # check for CPE option
 
         LOG.tc_step('Attempt to login to other host as user, other-host:{}, this-host:{}, user:{}, password:{}'.format(
             other_host, host, user, password))
@@ -300,7 +296,7 @@ def test_non_wrsroot_not_propagating(user, password, host):
 
 def wait_after_change_wrsroot_password():
     total_wait_time = MAX_WAIT_FOR_ALARM
-    each_wait_time = 60 #120
+    each_wait_time = 60
     waited_time = 0
 
     time.sleep(10)

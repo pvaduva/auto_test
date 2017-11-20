@@ -10,8 +10,8 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
-from consts.cgcs import MELLANOX_DEVICE
-from consts.reasons import SkipReason
+from consts.cgcs import MELLANOX_DEVICE, GuestImages
+from consts.reasons import SkipStorageSpace
 from testfixtures.resource_mgmt import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
     glance_helper
@@ -549,14 +549,14 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
     LOG.info("Check if storage fs is sufficient to launch boot-from-{} vm with {}".format(boot_source, guest_os))
     if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
-            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+            skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
 
     if guest_os == 'win_2016' and boot_source == 'volume':
         if not glance_helper.is_image_conversion_sufficient(guest_os=guest_os):
-            skip(SkipReason.INSUFFICIENT_IMG_CONV.format(guest_os))
+            skip(SkipStorageSpace.INSUFFICIENT_IMG_CONV.format(guest_os))
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
     img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if guest_os != 'ubuntu_14':
+    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
         ResourceCleanup.add('image', img_id)

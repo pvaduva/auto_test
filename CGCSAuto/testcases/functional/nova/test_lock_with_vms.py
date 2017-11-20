@@ -3,7 +3,7 @@ import random
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from consts.cgcs import VMStatus, MaxVmsSupported
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, host_helper, system_helper
@@ -195,7 +195,7 @@ class TestLockWithVMs:
     @mark.sx_nightly
     def test_lock_with_max_vms_simplex(self):
         if not system_helper.is_simplex():
-            skip(SkipReason.SIMPLEX_ONLY)
+            skip(SkipSysType.SIMPLEX_ONLY)
 
         vms_num = MaxVmsSupported.SX
         vm_helper.ensure_vms_quotas(vms_num=vms_num)
@@ -227,7 +227,7 @@ class TestLockWithVMsNegative:
 
         storages_to_test = []
         for storage_backing in ['local_image', 'local_lvm', 'remote']:
-            hosts = host_helper.get_nova_hosts_with_storage_backing(storage_backing=storage_backing)
+            hosts = host_helper.get_hypervisors_with_storage_backing(storage_backing=storage_backing)
             if len(hosts) == 1:
                 storages_to_test.append(storage_backing)
 

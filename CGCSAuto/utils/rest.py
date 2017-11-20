@@ -4,7 +4,7 @@ import re
 from keywords import keystone_helper
 
 from utils.tis_log import LOG
-from utils.kpi import KPI
+from utils.kpi.kpi import KPI
 
 
 class Rest:

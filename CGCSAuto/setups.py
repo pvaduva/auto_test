@@ -1,14 +1,15 @@
 import re
 import time
-import os.path
+import os
 import configparser
 
 import setup_consts
 from utils import exceptions, lab_info
 from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
-from utils.node import create_node_boot_dict, create_node_dict
-from consts.auth import Tenant, HostLinuxCreds
+from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
+from utils.local_host import *
+from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.cgcs import Prompt
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
@@ -286,7 +287,6 @@ def copy_files_to_con1():
         return
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
-
     file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:
@@ -406,6 +406,9 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     heat_templates = None
     license_path = None
     out_put_dir = None
+    vbox = True if 'vbox' in lab.lower() else False
+    if vbox:
+        LOG.info("The test lab is a VBOX TiS setup")
 
     if installconf_path:
         installconf = configparser.ConfigParser()
@@ -494,13 +497,46 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
 
     # add nodes dictionary
-    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller'))
-    if 'compute_nodes' in lab_to_install:
-        lab_to_install.update( create_node_dict(lab_to_install['compute_nodes'], 'compute'))
-    if 'storage_nodes' in lab_to_install:
-        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage'))
 
-    lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
+
+    if 'compute_nodes' in lab_to_install:
+
+        lab_to_install.update( create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
+    if 'storage_nodes' in lab_to_install:
+        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
+
+    if vbox:
+        lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
+    else:
+        lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+
+    if vbox:
+        # if it is a vobx Tis, it is assumed that the test scripts are bing executed from a local linux VM within the
+        # vbox. The local linux will serve as NAT box for pinging vms and TiS connect with external build servers.
+        LOG.info("Enabling the local linux VM for NATBox vm ping and portforwding for Controller-0 external connection")
+        # get the ip address of the local linux vm
+        cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
+        local_external_ip = os.popen(cmd).read().strip()
+        if not local_external_ip or "128.224." not in local_external_ip:
+            raise exceptions.UpgradeError("The local linux VM does not have valid ip for external access: {} "
+                                          .format(local_external_ip if local_external_ip else ''))
+
+        LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
+        lab_to_install['external_ip'] = local_external_ip
+
+        lab_to_install['external_port'] = 22266
+
+        username = getpass.getuser()
+        password = ''
+        if "svc-cgcsauto" in username:
+            password = SvcCgcsAuto.PASSWORD
+        else:
+            password = getpass.getpass()
+
+        lab_to_install['local_user'] = username
+        lab_to_install['local_password'] = password
+
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,

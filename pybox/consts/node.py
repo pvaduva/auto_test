@@ -10,7 +10,7 @@ class Nodes:
         'node_type': 'controller_lvm',
         'memory': 8192,
         'cpus': 2,
-        'disks': [80000, 10000],
+        'disks': [100000, 10000],
     }
 
     CONTROLLER_AIO = {

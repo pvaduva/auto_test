@@ -165,13 +165,15 @@ def wait_for_vol_attach(vm_id, vol_id, timeout=VMTimeout.VOL_ATTACH, con_ssh=Non
                                                   con_ssh=con_ssh, auth_info=auth_info)
 
 
-def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
+def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None, del_vol=None):
     if vol_id is None:
         vols = cinder_helper.get_volumes(auth_info=auth_info, con_ssh=con_ssh, status='available')
         if vols:
             vol_id = random.choice(vols)
         else:
             vol_id = cinder_helper.create_volume(auth_info=auth_info, con_ssh=con_ssh)[1]
+            if del_vol:
+                ResourceCleanup.add('volume', vol_id, scope=del_vol)
 
     LOG.info("Attaching volume {} to vm {}".format(vol_id, vm_id))
     cli.nova('volume-attach', ' '.join([vm_id, vol_id]))
@@ -186,13 +188,31 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None):
     if guest and 'cgcs_guest' not in guest:
 
         LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
-        attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)[0]
+        attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)
         if attachment_info:
-            attached_device_name = attachment_info['device']
+            attached_device_name = attachment_info[0]['device']
             device = attached_device_name.split('/')[-1]
             LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, attached_device_name))
             if not mount_attached_volume(vm_id, device, vm_image_name=guest):
                 LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
+            return
+
+        # for pike cinderclient: there is no 'attachments' field, so have to
+        # get attachments from 2 tables.
+        attachment_ids = cinder_helper.get_volume_attachment_ids(vol_id, vm_id=vm_id)
+        if attachment_ids:
+            att_show_table = table_parser.table(
+                cli.cinder('--os-volume-api-version 3.27 attachment-show',
+                           attachment_ids[0],
+                           auth_info=Tenant.ADMIN))
+            attached_device_name = table_parser.get_value_two_col_table(
+                att_show_table, 'device')
+            device = attached_device_name.split('/')[-1]
+            LOG.info("Volume {} is attached to VM {} as {}".format(
+                vol_id, vm_id, attached_device_name))
+            if not mount_attached_volume(vm_id, device, vm_image_name=guest):
+                LOG.info("Failed to mount the attached Volume {} "
+                         "on VM {} filesystem".format(vol_id, vm_id))
 
 
 def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
@@ -536,6 +556,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         ResourceCleanup.add('volume', new_vol, scope=cleanup)
 
     LOG.info("Booting VM {}...".format(name))
+    LOG.info("nova boot {}".format(args_))
     exitcode, output = cli.nova('boot', positional_args=args_, ssh_client=con_ssh,
                                 fail_ok=True, rtn_list=True, timeout=VMTimeout.BOOT_VM, auth_info=auth_info)
 
@@ -758,7 +779,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
     return vm_ids
 
 
-def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, fail_ok=False,
+def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, force=None, fail_ok=False,
                     auth_info=Tenant.ADMIN):
     """
 
@@ -767,6 +788,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         destination_host (str): such as compute-0, compute-1
         con_ssh (SSHClient):
         block_migrate (bool): whether to add '--block-migrate' to command
+        force (str): force live migrate
         fail_ok (bool): if fail_ok, return a numerical number to indicate the execution status
                 One exception is if the live-migration command exit_code > 1, which indicating the command itself may
                 be incorrect. In this case CLICommandFailed exception will be thrown regardless of the fail_ok flag.
@@ -802,10 +824,13 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         2) For a test that needs to live migrate
 
     """
+    optional_arg = ''
+
     if block_migrate:
-        optional_arg = '--block-migrate'
-    else:
-        optional_arg = ''
+        optional_arg += '--block-migrate'
+
+    if force:
+        optional_arg += '--force'
 
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
     before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
@@ -816,8 +841,9 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     extra_str = ''
     if not destination_host == '':
         extra_str = ' to ' + destination_host
-    LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
     positional_args = ' '.join([optional_arg.strip(), str(vm_id), destination_host]).strip()
+    LOG.info("Live migrating VM {} from {}{} started.".format(vm_id, before_host, extra_str))
+    LOG.info("nova live-migration {}".format(positional_args))
     exit_code, output = cli.nova('live-migration', positional_args=positional_args, ssh_client=con_ssh, fail_ok=fail_ok,
                                  auth_info=auth_info, rtn_list=True)
 
@@ -913,8 +939,8 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     vm_storage_backing = vm_info.get_storage_type()
     current_host = vm_info.get_host_name()
-    candidate_hosts = host_helper.get_nova_hosts_with_storage_backing(storage_backing=vm_storage_backing,
-                                                                      con_ssh=con_ssh)
+    candidate_hosts = host_helper.get_hypervisors_with_storage_backing(storage_backing=vm_storage_backing,
+                                                                       con_ssh=con_ssh)
 
     hosts_table_ = table_parser.table(cli.system('host-list'))
     for host in candidate_hosts:
@@ -964,7 +990,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+        if len(host_helper.get_hypervisors_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
                      "migrate to.".format(vm_id))
             return 1, output
@@ -1713,7 +1739,8 @@ class VMInfo:
         else:      # booted from volume
             vol_show_table = table_parser.table(cli.cinder('show', self.boot_info['id']))
             image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
-            image_name = eval(image_meta_data)['image_name']
+            image_meta_data = table_parser.convert_value_to_dict(image_meta_data)
+            image_name = image_meta_data['image_name']
 
         return image_name
 
@@ -3055,7 +3082,7 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
 
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if len(host_helper.get_nova_hosts_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+        if len(host_helper.get_hypervisors_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
                      "migrate to.".format(vm_id))
             return 1, output
@@ -3576,10 +3603,8 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
         vm4_name = 'image_root_attachvol'
         vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
 
-        vol = cinder_helper.create_volume(bootable=False)[1]
-        if cleanup:
-            ResourceCleanup.add('volume', vol, scope='class')
-        attach_vol_to_vm(vm4, vol_id=vol)
+        vol = cinder_helper.create_volume(bootable=False, cleanup=cleanup)[1]
+        attach_vol_to_vm(vm4, vol_id=vol, del_vol=cleanup)
 
         wait_for_vm_pingable_from_natbox(vm4)
         launched_vms.append(vm4)

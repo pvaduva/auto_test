@@ -11,6 +11,7 @@ import setups
 from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
 
 
 tc_start_time = None
@@ -242,6 +243,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
+    if config.getoption('help'):
+        return
+
     # Common reporting params
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
@@ -249,6 +253,7 @@ def pytest_configure(config):
     resultlog = config.getoption('resultlog')
     session_log_dir = config.getoption('sessiondir')
     no_cgcs = config.getoption('nocgcsdb')
+    col_kpi = config.getoption('col_kpi')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -286,6 +291,8 @@ def pytest_configure(config):
         ProjVar.set_var(CGCS_DB=False)
     if keystone_debug:
         ProjVar.set_var(KEYSTONE_DEBUG=True)
+    if col_kpi:
+        ProjVar.set_var(COLLECT_KPI=True)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -346,10 +353,13 @@ def pytest_configure(config):
 
 
 def pytest_addoption(parser):
-    lab_help = "Lab to connect to. Valid input: lab name such as 'cgcs-r720-3_7', or floating ip such as " \
-               "'128.224.150.142'. If it's a new lab, use floating ip before it is added to the automation framework."
+    lab_help = "Lab to connect to. Valid input: Hardware labs - use lab name such as 'r720_2-7', 'yow-cgcs-r720-3_7';" \
+               "if it's a new lab, use floating ip before it is added to the automation framework. " \
+               "VBox - use vbox or the floating ip of your tis system if it is not 10.10.10.2. " \
+               "Cumulus - floating ip of the cumulus tis system"
     tenant_help = "Default tenant to use when unspecified. Valid values: tenant1, tenant2, or admin"
-    natbox_help = "NatBox to use. Valid values: nat_hw, or nat_cumulus."
+    natbox_help = "NatBox to use. Default: NatBox for hardware labs. Valid values: nat_hw (for hardware labs), " \
+                  "<your own natbox ip> (for VBox, choose the 128.224 ip), or nat_cumulus (for Cumulus)."
     bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
@@ -376,9 +386,9 @@ def pytest_addoption(parser):
     parser.addoption('--no-cgcsdb', '--no-cgcs-db', '--nocgcsdb', action='store_true', dest='nocgcsdb')
 
     # Test session options on installed lab:
-    parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
+    parser.addoption('--lab', action='store', metavar='lab', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
-    parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--natbox', action='store', metavar='natbox', default=None, help=natbox_help)
     parser.addoption('--changeadmin', '--change-admin', '--change_admin', dest='changeadmin', action='store_true',
                      help=changeadmin_help)
     parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
@@ -388,15 +398,64 @@ def pytest_addoption(parser):
     parser.addoption('--stress', metavar='stress', action='store', type=int, default=-1, help=count_help)
     parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
     parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
+    parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
+                     help="Collect kpi for applicable test cases")
 
-    # Lab install options:
+    ##################################
+    # Lab install or upgrade options #
+    ##################################
+    # Install
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
     parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
                      help=skiplabsetup_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+    # Ceph Post Install
+    ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
+    ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
+    ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
+                        "volume, in GiB (the default value is 20)"
+    parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
+    parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
+    parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
+                     action='store', metavar='SIZE',  help=ceph_mon_gib_help)
     # Note --lab is also a lab install option, when config file is not provided.
+
+    ###############################
+    #  Backup and Restore options #
+    ###############################
+    # Backup
+    backup_server_destination_help = "The external destination  where the backupfiles are copied too. " \
+                                     "Choices are USB  ( 16G USB  or above must be plugged to controller-0) or " \
+                                     "local (Test server). Default is USB"
+    backup_destination_path_help = "The path the backup files are copied to if destination is not a USB. " \
+                                   "If destination is  USB, by default, the backup files are copied to " \
+                                   "mount point: /media/wrsroot/backups.  For local (Test Server)" \
+                                   "the default is /sandbox/backups."
+    delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
+                     "to the specified destination. Default is True."
+    parser.addoption('--destination', '--dest',  dest='destination', metavar='dest',
+                     action='store', default='usb',  help=backup_server_destination_help)
+    parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
+                     action='store', metavar='DIR', help=backup_destination_path_help)
+    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups', metavar='delete_backups',
+                     action='store', default=True,  help=delete_backups)
+    # Restore
+    backup_src_path_help = "The path to  backup files in the backup source, if source is not a USB. If source is USB," \
+                           " by default, the backup files are found at the mount point: /media/wrsroot/backups. " \
+                           " For local (Test Server) the default is /sandbox/backups."
+    parser.addoption('--backup-src', '--backup_src',  dest='backup_src', action='store', default='USB',
+                     help="Where to get the bakcup files: choices are 'usb' and 'local'")
+    parser.addoption('--backup-src-path', '--backup_src_path',  dest='backup_src_path',
+                     action='store', metavar='DIR', help=backup_src_path_help)
+    parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
+                     action='store',  help="The build id of the backup")
+    parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
+                     action='store',  help="The Titanium builds dir where the backup build id belong. "
+                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
 
 def config_logger(log_dir):
@@ -414,8 +473,10 @@ def config_logger(log_dir):
     LOG.addHandler(stream_hdler)
 
 
-def pytest_unconfigure():
+def pytest_unconfigure(config):
     # collect all if needed
+    if config.getoption('help'):
+        return
 
     try:
         natbox_ssh = ProjVar.get_var('NATBOX_SSH')
@@ -464,7 +525,6 @@ def pytest_unconfigure():
                 print(fin.read())
     except Exception as e:
         LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
-
     # Below needs con_ssh to be initialized
     try:
         from utils.ssh import ControllerClient
@@ -472,6 +532,13 @@ def pytest_unconfigure():
     except:
         LOG.warning("No con_ssh found")
         return
+
+    if ProjVar.get_var('COLLECT_KPI'):
+        try:
+            from utils.kpi import upload_kpi
+            upload_kpi.upload_kpi(kpi_file=ProjVar.get_var('KPI_PATH'))
+        except Exception as e:
+            LOG.warning("Unable to upload KPIs. {}".format(e.__str__()))
 
     try:
         setups.list_migration_history(con_ssh=con_ssh)
@@ -485,7 +552,7 @@ def pytest_unconfigure():
         except Exception as e:
             LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
-    if has_fail and ProjVar.get_var('COLLECT_ALL'):
+    if ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL')):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
         try:

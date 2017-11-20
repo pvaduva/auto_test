@@ -384,7 +384,8 @@ class SSHClient:
             self.flush(10)
 
     def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None,
+                 prefix_space=False):
         """
 
         Args:
@@ -408,6 +409,10 @@ class SSHClient:
         LOG.debug("Executing command...")
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
+
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
+
         self.send(cmd, reconnect, reconnect_timeout)
         try:
             self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
@@ -476,7 +481,7 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
+    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None, pre_opts=None,
               timeout=60, fail_ok=False):
 
         dest_user = dest_user or HostLinuxCreds.get_user()
@@ -490,6 +495,9 @@ class SSHClient:
             pre_opts = ''
 
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
+        if ssh_port:
+            ssh_opts += ' -p {}'.format(ssh_port)
+
         cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
 
@@ -685,7 +693,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None):
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None, prefix_space=False):
         """
         Execute a command with sudo.
 
@@ -700,11 +708,14 @@ class SSHClient:
             strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
                 searchwindowsize instead)
             extra_prompt (str|None)
+            prefix_space (bool): prefix ' ' to cmd, so that it will not go into bash history if HISTCONTROL=ignorespace
 
         Returns (tuple): (exit code (int), command output (str))
 
         """
         cmd = 'sudo ' + cmd
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
         LOG.debug("Executing sudo command...")
         self.send(cmd)
         pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
@@ -933,7 +944,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
                                             timeout=timeout, fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException(
+                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
@@ -944,7 +956,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
                                             fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException(
+                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
 
                     if res_index == 0:
                         self.send('yes')
@@ -1291,6 +1304,9 @@ class ControllerClient:
         """
         if not lab_name:
             lab_dict = ProjVar.get_var('lab')
+            if lab_dict is None:
+                return None
+
             for lab_ in cls.__lab_list:
                 if lab_dict['floating ip'] == lab_.get('floating ip'):
                     lab_name = lab_.get('short_name')

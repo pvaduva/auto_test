@@ -3,7 +3,7 @@ import os
 from consts import build_server as build_server_consts
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import install_helper,  patching_helper, upgrade_helper
+from keywords import install_helper,  patching_helper, upgrade_helper, common
 from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
@@ -229,7 +229,7 @@ def upgrade_setup(pre_check_upgrade):
         system_helper.import_load(upgrade_load_path)
 
         # download and apply patches if patches are available in patch directory
-        if patch_dir:
+        if patch_dir and upgrade_version != "17.07":
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 
@@ -381,8 +381,25 @@ def apply_patches(lab, server, patch_dir):
 
         patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
 
-        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-        server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        dest_server = lab['controller-0 ip']
+        ssh_port = None
+
+        if 'vbox' in lab['name']:
+            dest_server = lab['external_ip']
+            ssh_port = lab['external_port']
+            temp_path = '/tmp/patches/'
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server,
+                              temp_path, dest_user=lab['local_user'],
+                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+
+            common.scp_to_active_controller(temp_path,
+                                        dest_path=patch_dest_dir, is_dir=True)
+
+        else:
+            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
+                                  pre_opts=pre_opts)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))

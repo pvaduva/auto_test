@@ -6,8 +6,8 @@ from pytest import mark, skip, fixture
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
-from consts.cgcs import FlavorSpec, ServerGroupMetadata, VMStatus
-from consts.reasons import SkipReason
+from consts.cgcs import FlavorSpec, ServerGroupMetadata
+from consts.reasons import SkipHypervisor
 from consts.cli_errs import SrvGrpErr
 from keywords import nova_helper, vm_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -26,7 +26,7 @@ def check_system(add_cgcsauto_zone, add_admin_role_module, request):
     elif len(hosts) >= 2:
         hosts_to_add = hosts[:2]
     else:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
         hosts_to_add = []
 
     LOG.fixture_step("Add hosts to cgcsauto aggregate: {}".format(hosts_to_add))
@@ -70,6 +70,7 @@ def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=
     return flavor_id, srv_grp_msg_flv, srv_grp_id
 
 
+# TC2915 + TC2915
 @mark.parametrize(('srv_grp_msging', 'policy', 'group_size', 'best_effort', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((None, 'affinity', 4, None, 2)),
     mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
@@ -96,9 +97,11 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         - Add given metadata to above server group
         - Boot vm(s) with above server group
         - Verify vm(s) booted successfully and is a member of the server group
+        - Vefiry that all vms have the server group listed in nova show
         - If server_group_messaging is on, then verify
             - vms receive srv grp msg sent from other vm
             - vms receive notification when other vm is paused
+        - Attempt to delete the server group and make sure if fails due to having members
         - If server group messaging is off, verify server_group_app is not included in vm
 
     Teardown:
@@ -135,14 +138,15 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         members = eval(nova_helper.get_server_groups_info(srv_grp_id, header='Members')[0])
         assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id, srv_grp_id)
 
+        server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
+        assert srv_grp_id in server_group_output, 'Server group info does not appear in nova show for vm {}'.format(vm_id)
+
         vm_hosts.append(nova_helper.get_vm_host(vm_id))
 
     for i in range(failed_num):
         LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
         code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
                                                   avail_zone='cgcsauto', fail_ok=True, cleanup='function')
-        # ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=False)
-        # ResourceCleanup.add('volume', vol)
 
         nova_helper.get_vm_nova_show_value(vm_id, 'fault')
         assert 1 == code, "Boot vm is not rejected"
@@ -162,6 +166,12 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_to_ssh)
     vm_helper.wait_for_vm_pingable_from_natbox(another_vm)
 
+    LOG.tc_step("Attempt to delete server group")
+    code, output = nova_helper.delete_server_groups(srv_grp_id, fail_ok=True)
+    assert code == 1, "Deletion not rejected as expected"
+    expt_err = "Instance group {} is not empty. Must delete all group members before deleting group.".format(srv_grp_id)
+    assert expt_err in output, "Expect {} in error, actual error is {}".format(expt_err, output)
+
     if srv_grp_msg_flv:
         LOG.tc_step("Check server group message can be sent/received among group members")
         check_server_group_messaging_enabled(vms=members, action='message')
@@ -174,7 +184,7 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
 
 
 def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+    with vm_helper.ssh_to_vm_from_natbox(vm_id, retry_timeout=60) as vm_ssh:
         vm_ssh.send('server_group_app')
         # vm_ssh.expect('\r\n\r\n', timeout=1, searchwindowsize=100)
 
@@ -251,6 +261,7 @@ def check_server_group_messaging_disabled(vms):
             assert code > 0
 
 
+# TC2913, TC2915
 @mark.parametrize(('policy', 'group_size', 'best_effort', 'min_count', 'max_count'), [
     mark.p2(('affinity', 3, False, 3, 4)),
     mark.p2(('affinity', 2, True, 3, 4)),
@@ -342,5 +353,3 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
     LOG.tc_step("Check vms are in server group {}: {}".format(srv_grp_id, vms))
     members = eval(nova_helper.get_server_groups_info(srv_grp_id, header='Members')[0])
     assert set(vms) <= set(members), "Some vms are not in srv group"
-
-

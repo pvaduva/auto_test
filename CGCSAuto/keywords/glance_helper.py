@@ -291,13 +291,20 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     LOG.info("Creating glance image: {}".format(name))
 
+    if not disk_format:
+        if not source_image_file:
+            # default tis-centos-guest image is raw
+            disk_format = 'raw'
+        else:
+            disk_format = 'qcow2'
+
     optional_args = {
         '--id': image_id,
         '--name': name,
         '--visibility': 'private' if public is False else 'public',
         '--protected': protected,
         '--store': store,
-        '--disk-format': disk_format if disk_format else 'qcow2',
+        '--disk-format': disk_format,
         '--container-format': container_format if container_format else 'bare',
         '--min-disk': min_disk,
         '--min-ram': min_ram,
@@ -315,6 +322,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
     try:
+        LOG.info("Creating image {}...".format(name))
+        LOG.info("glance image-create {}".format(optional_args_str))
         code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
                                   auth_info=auth_info, timeout=timeout, rtn_list=True)
     except:
@@ -608,7 +617,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if guest_os in ['cgcs-guest', 'vxworks'] else 'qcow2'
+        disk_format = 'raw' if guest_os in ['cgcs-guest', 'vxworks', 'tis-centos-guest'] else 'qcow2'
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]
