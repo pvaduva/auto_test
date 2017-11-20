@@ -3,7 +3,7 @@ import os
 import re
 import time
 from utils.tis_log import LOG
-from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
+from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common, vm_helper
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
@@ -501,4 +501,4 @@ def test_restore_from_backup(restore_setup):
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)
     assert rc == 0, "System health not OK: {}".format(failed)
 
-
+    vm_helper.boot_vm()

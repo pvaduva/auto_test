@@ -21,13 +21,13 @@ def pytest_addoption(parser):
     delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
                      "to the specified destination. Default is True."
 
-    parser.addoption('--destination', '--dest',  dest='destination',
+    parser.addoption('--destination', '--dest',  dest='destination', metavar='dest',
                      action='store', default='usb',  help=backup_server_destination_help)
 
     parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
                      action='store', metavar='DIR', help=backup_destination_path_help)
 
-    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups',
+    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups', metavar='delete_backups',
                      action='store', default=True,  help=delete_backups)
 
 
