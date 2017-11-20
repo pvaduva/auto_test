@@ -211,3 +211,38 @@ def scale_down_vms(vm_name=None, expected_count=0, time_out=900, check_interval=
     return _wait_for_scale_up_down_vm(vm_name=vm_name, expected_count=expected_count, time_out=time_out,
                                       check_interval=check_interval, con_ssh=con_ssh, auth_info=auth_info)
 
+
+def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Delete the given heat stack for a given tenant.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        fail_ok (bool):
+        params_string: Parameters to pass to the heat create cmd. ex: -f <stack.yaml> -P IMAGE=tis <stack_name>
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        stack_name (str): Given name for the heat stack
+
+    Returns (tuple): Status and msg of the heat deletion.
+
+    """
+
+    if not params_string:
+        raise ValueError("Parameters not provided.")
+
+    LOG.info("Creating Heat Stack %s", params_string)
+    exitcode, output = cli.heat('stack-create', params_string, ssh_client=con_ssh, auth_info=auth_info,
+                                fail_ok=fail_ok, rtn_list=True)
+    if exitcode == 1:
+        LOG.warning("Create heat stack request rejected.")
+        return [1, output]
+
+    LOG.info("Stack {} created sucessfully.".format(params_string))
+
+    LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s", stack_name)
+
+    if not wait_for_heat_state(stack_name=stack_name, state='CREATE_COMPLETE', auth_info=auth_info):
+        return [1, 'stack did not go to state CREATE_COMPLETE']
+    LOG.info("Stack {} is in expected CREATE_COMPLETE state.".format(stack_name))
+
+    return 0, stack_name

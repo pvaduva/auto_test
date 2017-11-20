@@ -142,6 +142,17 @@ def _delete(resources, scope):
 
 
     err_msgs = []
+    if heat_stacks:
+        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
+        auth_info = None
+        for stack in heat_stacks:
+            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
+            if heat_user is 'admin':
+                auth_info = Tenant.ADMIN
+            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
     if vms_with_vols:
         LOG.fixture_step(
             "({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
@@ -234,17 +245,6 @@ def _delete(resources, scope):
         LOG.fixture_step("({}) Attempt to delete following networks: {}".format(scope, networks))
         for network in networks:
             code, msg = network_helper.delete_network(network_id=network, fail_ok=True, auth_info=Tenant.ADMIN)
-            if code > 0:
-                err_msgs.append(msg)
-
-    if heat_stacks:
-        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
-        auth_info = None
-        for stack in heat_stacks:
-            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
-            if heat_user is 'admin':
-                auth_info = Tenant.ADMIN
-            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
             if code > 0:
                 err_msgs.append(msg)
 

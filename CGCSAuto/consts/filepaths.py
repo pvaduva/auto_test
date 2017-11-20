@@ -9,6 +9,7 @@ class TiSPath:
     INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
     HEAT = '/home/wrsroot/heat/'
     BACKUPS = '/opt/backups'
+    CUSTOM_HEAT_TEMPLATES = '/home/wrsroot/custom_heat_templates/'
 
 
 class VMPath:
@@ -24,9 +25,15 @@ class UserData:
     DPDK_USER_DATA = 'dpdk_user_data.txt'
 
 
+class HeatTemplate:
+    STRESS_NG = 'stress_ng.yaml'
+
+
 class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
     TEST_SCRIPT = '/home/svc-cgcsauto/test_scripts/'
+    CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
+
 
 
 class PrivKeyPath:

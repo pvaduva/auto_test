@@ -31,6 +31,7 @@ class Heat:
                                 'vm_name': 'nova_server'}
     NestedAutoScale = {'params': ['NETWORK', 'IMAGE', 'FLAVOR'], 'verify': ['vm'], 'heat_user': 'tenant',
                        'vm_name': 'nova_server'}
+    stress_ng = {'heat_user': 'tenant','vm_name': 'stress_ng'}
 
 
 class HeatUpdate:

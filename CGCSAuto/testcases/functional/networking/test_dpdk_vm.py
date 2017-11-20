@@ -87,7 +87,7 @@ def test_dpdk_vm(vm_type):
     vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=nics, flavor= flavor_id, user_data=_get_dpdk_user_data(),
                               cleanup='function')[1]
 
-    for vm_actions in [['pause', 'unpause'], ['suspend', 'resume'], ['live_migrate'], ['cold_migrate']]:
+    for vm_actions in [['reboot'], ['pause', 'unpause'], ['suspend', 'resume'], ['live_migrate'], ['cold_migrate']]:
 
         LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_id, vm_actions))
         for action in vm_actions:
