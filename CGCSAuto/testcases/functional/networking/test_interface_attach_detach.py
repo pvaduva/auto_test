@@ -142,7 +142,7 @@ def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vif
             LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
             for action in vm_actions:
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
-                if action == 'cold_migrate':
+                if action == 'cold_migrate' or action == 'start':
                     LOG.tc_step("Bring up all the attached tenant interface from vm after {}".format(vm_actions))
                     if 'vxworks' not in guest_os:
                         _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics)
