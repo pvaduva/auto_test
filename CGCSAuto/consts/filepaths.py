@@ -60,8 +60,7 @@ class BuildServerPath:
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
                        '17.00': DEFAULT_PATCH_DIR + '17.06',
-                       '17.06': DEFAULT_PATCH_DIR + '17.06',
-                       '17.07': DEFAULT_PATCH_DIR + '17.07'
+                       '17.06': DEFAULT_PATCH_DIR + '17.06'
                        }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',

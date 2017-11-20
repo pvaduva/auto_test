@@ -14,11 +14,11 @@ from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
 # from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
-from utils import telnet as telnetlib, exceptions, local_host, cli
+from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 # from CGCSAuto.utils import local_host
-from utils import local_host
+from CGCSAuto.utils import local_host
 from consts.auth import Tenant, CliAuth
 import setups
 
@@ -81,7 +81,8 @@ def get_mgmt_boot_device(node):
     return boot_device
 
 
-def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_power_on=False, close_telnet_conn=True):
+def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_power_on=False, close_telnet_conn=True,
+                            small_footprint=False):
 
     lab = InstallVars.get_install_var("LAB")
     node = lab[hostname]
@@ -109,7 +110,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
                                    name=node.name,
                                    args=(node, boot_device, output_dir),
                                    kwargs={'upgrade': upgrade, 'vlm_power_on': vlm_power_on,
-                                           'close_telnet_conn': close_telnet_conn})
+                                           'close_telnet_conn': close_telnet_conn,'small_footprint':small_footprint})
 
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
@@ -144,7 +145,7 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade)
+    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -2026,7 +2027,8 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller( bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False,small_footprint=False):
+def boot_controller(bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False,
+                     small_footprint=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:

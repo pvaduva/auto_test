@@ -897,16 +897,19 @@ class Telnet:
 
                 if index == 0:
                     LOG.info("Found login prompt. Login as {}".format(username))
-                    #self.write_line(username)
                     self.write(str.encode(username + '\r\n'))
-                    self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
+                    if password and len(password) > 0:
+                       #self.write(str.encode(username + '\r\n'))
+                       self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
                     #self.write_line(password)
-                    self.write(str.encode(password + '\r\n'))
-                    self.find_prompt()
-                    self.write(str.encode('export TMOUT=0 \r\n'))
-                    self.find_prompt()
-                    self.write(str.encode('\r\n'))
-                    self.find_prompt()
+                       self.write(str.encode(password + '\r\n'))
+                       self.find_prompt()
+                       self.write(str.encode('export TMOUT=0 \r\n'))
+                       self.find_prompt()
+                       self.write(str.encode('\r\n'))
+                       self.find_prompt()
+                    else:
+                        self.write_line("")
                     break
 
                 elif index == 1:
