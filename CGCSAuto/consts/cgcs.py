@@ -38,6 +38,8 @@ TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
 
 TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
 
+PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
+
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'

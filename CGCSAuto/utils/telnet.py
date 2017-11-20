@@ -63,6 +63,8 @@ from utils.tis_log import LOG
 import sys
 sys.path.append('../sanityrefresh/labinstall')
 from constants import *
+from consts.lab import Labs
+from consts.proj_vars import ProjVar
 
 __all__ = ["Telnet"]
 
@@ -890,7 +892,7 @@ class Telnet:
                 LOG.info("Searching for login prompt...")
                 self.write_line("")
                 try:
-                    index = (self.expect([b"ogin:", str.encode(PROMPT)], TELNET_EXPECT_TIMEOUT))[0]
+                    index = (self.expect([b"ogin:", str.encode(PROMPT)], 30))[0]
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
                     raise exceptions.TelnetException(msg)
@@ -899,9 +901,7 @@ class Telnet:
                     LOG.info("Found login prompt. Login as {}".format(username))
                     self.write(str.encode(username + '\r\n'))
                     if password and len(password) > 0:
-                       #self.write(str.encode(username + '\r\n'))
-                       self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
-                    #self.write_line(password)
+                       self.get_read_until(PASSWORD_PROMPT, 30)
                        self.write(str.encode(password + '\r\n'))
                        self.find_prompt()
                        self.write(str.encode('export TMOUT=0 \r\n'))
@@ -938,7 +938,8 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', upgrade=False, usb=False):
+    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', upgrade=False, usb=False,
+                clone_install=False):
         boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
 
         if "wildcat" in node.host_name or "supermicro" in node.host_name:
@@ -976,7 +977,7 @@ class Telnet:
                 # GENERIC USB
                 if usb and node.name == CONTROLLER0:
                     LOG.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash"
+                    boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
 
                 LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
@@ -1025,24 +1026,29 @@ class Telnet:
             LOG.info("Waiting for ESC to exit")
             if node.name == CONTROLLER0 and not upgrade:
                 if usb:
-                    self.get_read_until("Select kernel options and boot kernel", 120)
-                    if small_footprint:
-                        LOG.info("Selecting Serial Controller+Compute Node Install")
-                        time.sleep(3)
-                        LOG.info("Pressing down key")
-                        self.write(str.encode(DOWN))
-                        LOG.info("Pressing down key")
-                        self.write(str.encode(DOWN))
-                        if host_os == 'wrlinux':
-                           self.write(str.encode(DOWN))
-                        time.sleep(1)
-                        LOG.info("Pressing ENTER key")
+                    if not clone_install:
+                        self.get_read_until("Select kernel options and boot kernel", 120)
+                        if small_footprint:
+                            LOG.info("Selecting Serial Controller+Compute Node Install")
+                            time.sleep(3)
+                            LOG.info("Pressing down key")
+                            self.write(str.encode(DOWN))
+                            LOG.info("Pressing down key")
+                            self.write(str.encode(DOWN))
+                            if host_os == 'wrlinux':
+                               self.write(str.encode(DOWN))
+                            time.sleep(1)
+                            LOG.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
+                        else:
+                            time.sleep(1)
+                            LOG.info("Selecting Serial Controller Node Install")
+                            LOG.info("Pressing ENTER key")
                         self.write(str.encode("\r\r"))
                     else:
-                        time.sleep(1)
-                        LOG.info("Selecting Serial Controller Node Install")
-                        LOG.info("Pressing ENTER key")
-                    self.write(str.encode("\r\r"))
+                        LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
+                        install_timeout = 4800
+
                 # If we are performing a UEFI install then we need to use
                 # different logic to select the install option
                 elif "UEFI" in boot_device_regex:
@@ -1135,7 +1141,7 @@ class Telnet:
                 # GENERIC USB
                 if usb and node.name == CONTROLLER0:
                     LOG.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash"
+                    boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
 
                 LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
@@ -1170,24 +1176,28 @@ class Telnet:
             if node.name == CONTROLLER0 and not upgrade:
                 # booting device = USB tested only for Ironpass-31_32
                 if usb:
-                    self.get_read_until("Select kernel options and boot kernel", 120)
-                    if small_footprint:
-                        LOG.info("Selecting Serial Controller+Compute Node Install")
-                        time.sleep(1)
-                        LOG.info("Pressing DOWN key")
-                        self.write(str.encode(DOWN))
-                        LOG.info("Pressing DOWN key")
-                        self.write(str.encode(DOWN))
-                        if host_os == 'wrlinux':
-                           self.write(str.encode(DOWN))
-                        time.sleep(1)
-                        LOG.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
+                    if not clone_install:
+                        self.get_read_until("Select kernel options and boot kernel", 120)
+                        if small_footprint:
+                            LOG.info("Selecting Serial Controller+Compute Node Install")
+                            time.sleep(1)
+                            LOG.info("Pressing DOWN key")
+                            self.write(str.encode(DOWN))
+                            LOG.info("Pressing DOWN key")
+                            self.write(str.encode(DOWN))
+                            if host_os == 'wrlinux':
+                               self.write(str.encode(DOWN))
+                            time.sleep(1)
+                            LOG.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
+                        else:
+                            time.sleep(1)
+                            LOG.info("Selecting Serial Controller Node Install")
+                            LOG.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
                     else:
-                        time.sleep(1)
-                        LOG.info("Selecting Serial Controller Node Install")
-                        LOG.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
+                        LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
+                        install_timeout = 4800
                 else:
                     # self.get_read_until("Boot from hard drive", 60)
                     self.get_read_until(boot_menu, 60)
@@ -1366,7 +1376,6 @@ def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False, n
 
     return conn
 
-#-- new functions end
 
 def test():
     """Test program for telnetlib.

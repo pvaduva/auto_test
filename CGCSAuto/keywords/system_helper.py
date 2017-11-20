@@ -8,7 +8,7 @@ from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-
+from utils import telnet as telnetlib
 
 class System:
     def __init__(self, controller_ssh=None):
@@ -67,11 +67,12 @@ def is_two_node_cpe(con_ssh=None):
     return is_small_footprint(controller_ssh=con_ssh) and len(get_controllers(con_ssh=con_ssh)) == 2
 
 
-def is_simplex(con_ssh=None):
-    return is_small_footprint(controller_ssh=con_ssh) and len(get_controllers(con_ssh=con_ssh)) == 1
+def is_simplex(con_ssh=None, use_telnet_session=False, con_telnet=None ):
+    return is_small_footprint(controller_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet) \
+           and len(get_controllers(con_ssh=con_ssh)) == 1
 
 
-def is_small_footprint(controller_ssh=None, controller='controller-0'):
+def is_small_footprint(controller_ssh=None, controller='controller-0', use_telnet_session=False, con_telnet=None):
     """
     Whether it is two node CPE system or Simplex system where controller has both controller and compute functions
     Args:
@@ -81,7 +82,8 @@ def is_small_footprint(controller_ssh=None, controller='controller-0'):
     Returns (bool): True if CPE or Simplex, else False
 
     """
-    table_ = table_parser.table(cli.system('host-show', controller, ssh_client=controller_ssh))
+    table_ = table_parser.table(cli.system('host-show', controller, ssh_client=controller_ssh,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
 
     combined = 'controller' in subfunc and 'compute' in subfunc
@@ -158,7 +160,7 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     return hostnames
 
 
-def _get_nodes(con_ssh=None):
+def _get_nodes(con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
 
     Args:
@@ -180,7 +182,8 @@ def _get_nodes(con_ssh=None):
         }
 
     """
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, use_telnet_session=use_telnet_session,
+                                           con_telnet=con_telnet))
     nodes = {}
 
     for personality in ['controller', 'compute', 'storage']:
@@ -200,7 +203,7 @@ def _get_nodes(con_ssh=None):
     return nodes
 
 
-def get_active_controller_name(con_ssh=None, source_auth_info=False):
+def get_active_controller_name(con_ssh=None, use_telnet_session=False, con_telnet=None, source_auth_info=False):
     """
     This assumes system has 1 active controller
     Args:
@@ -210,10 +213,11 @@ def get_active_controller_name(con_ssh=None, source_auth_info=False):
     Returns: hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
-    return _get_active_standby(controller='active', con_ssh=con_ssh, source_auth_info=source_auth_info)[0]
+    return _get_active_standby(controller='active', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                               con_telnet=con_telnet,  source_auth_info=source_auth_info)[0]
 
 
-def get_standby_controller_name(con_ssh=None):
+def get_standby_controller_name(con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
     This assumes system has 1 standby controller
     Args:
@@ -222,12 +226,17 @@ def get_standby_controller_name(con_ssh=None):
     Returns (str): hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
-    standby = _get_active_standby(controller='standby', con_ssh=con_ssh)
+    standby = _get_active_standby(controller='standby', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                                  con_telnet=con_telnet)
     return '' if len(standby) == 0 else standby[0]
 
 
-def _get_active_standby(controller='active', con_ssh=None, source_auth_info=False):
-    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
+def _get_active_standby(controller='active', con_ssh=None, use_telnet_session=False, con_telnet=None,
+                        source_auth_info=False):
+
+    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet))
+
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
     controllers = table_parser.get_values(table_, 'hostname', state=controller, strict=False)
     LOG.debug(" {} controller(s): {}".format(controller, controllers))
@@ -237,7 +246,7 @@ def _get_active_standby(controller='active', con_ssh=None, source_auth_info=Fals
     return controllers
 
 
-def get_active_standby_controllers(con_ssh=None):
+def get_active_standby_controllers(con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
     Get active controller name and standby controller name (if any)
     Args:
@@ -248,7 +257,8 @@ def get_active_standby_controllers(con_ssh=None):
         (<active_con_name>, None)
 
     """
-    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet))
 
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
     active_con = table_parser.get_values(table_, 'hostname', state='active', strict=False)[0]
@@ -1538,7 +1548,8 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
     return res
 
 
-def get_host_interfaces_table(host, show_all=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_interfaces_table(host, show_all=False, con_ssh=None, use_telnet_session=False, con_telnet=None,
+                              auth_info=Tenant.ADMIN):
     """
     Get system host-if-list <host> table
     Args:
@@ -1554,7 +1565,9 @@ def get_host_interfaces_table(host, show_all=False, con_ssh=None, auth_info=Tena
     args += ' --a' if show_all else ''
     args += ' ' + host
 
-    table_ = table_parser.table(cli.system('host-if-list --nowrap', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('host-if-list --nowrap', args, ssh_client=con_ssh,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet,
+                                           auth_info=auth_info))
     return table_
 
 
@@ -1716,6 +1729,27 @@ def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.ADMI
         res[host] = host_res
 
     return res
+
+
+def get_host_ethernet_port_table(host, con_ssh=None, use_telnet_session=False, con_telnet=None, auth_info=Tenant.ADMIN):
+    """
+    Get system host-if-list <host> table
+    Args:
+        host (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict):
+
+    """
+    args = ''
+    args += ' ' + host
+
+    table_ = table_parser.table(cli.system('host-ethernet-port-list --nowrap', args, ssh_client=con_ssh,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet,
+                                           auth_info=auth_info))
+    return table_
+
 
 
 def get_service_parameter_values(rtn_value='value', service=None, section=None, name=None, con_ssh=None):
@@ -2727,3 +2761,23 @@ def get_host_addr_list(host, rtn_val='address', ifname=None, id=None, con_ssh=No
 
     address = table_parser.get_values(table_, rtn_val, strict=True, regex=True, merge_lines=True, **kwargs)
     return address
+
+
+def get_host_disks_table(host, con_ssh=None, use_telnet_session=False, con_telnet=None, auth_info=Tenant.ADMIN):
+    """
+    Get system host-disk-list <host> table
+    Args:
+        host (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict):
+
+    """
+    args = ''
+    args += ' ' + host
+
+    table_ = table_parser.table(cli.system('host-disk-list --nowrap', args, ssh_client=con_ssh,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet,
+                                           auth_info=auth_info))
+    return table_

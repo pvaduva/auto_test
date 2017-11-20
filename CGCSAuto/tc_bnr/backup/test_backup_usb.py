@@ -15,7 +15,7 @@ from consts.build_server import Server
 from keywords import html_helper
 
 
-@fixture(scope='session')
+@fixture(scope='function')
 def pre_system_backup():
 
     LOG.tc_func_start("BACKUP_TEST")
@@ -93,6 +93,8 @@ def pre_system_backup():
         _backup_info['backup_dest_full_path'] = backup_dest_full_path
 
     return _backup_info
+
+
 
 
 def test_create_backup(pre_system_backup):

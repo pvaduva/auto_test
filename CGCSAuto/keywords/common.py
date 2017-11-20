@@ -479,3 +479,4 @@ def write_to_file(file_path, content, mode='a'):
     time_stamp = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
     with open(file_path, mode=mode) as f:
         f.write('\n-----------------[{}]-----------------\n{}\n'.format(time_stamp, content))
+

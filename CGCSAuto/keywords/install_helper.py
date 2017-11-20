@@ -8,18 +8,15 @@ from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
-    IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore
+    IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
+    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperationalState, EventLogID
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
-# from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
-from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
+from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
-
-# from CGCSAuto.utils import local_host
-from CGCSAuto.utils import local_host
 from consts.auth import Tenant, CliAuth
 import setups
 import configparser
@@ -162,7 +159,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
 
 def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
-                          close_telnet_conn=True, small_footprint=False):
+                          close_telnet_conn=True, small_footprint=False, clone_install=False):
     """
     Initiate the boot and installation operation.
     Args:
@@ -190,7 +187,9 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint)
+
+    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint,
+                             clone_install=clone_install)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -778,7 +777,7 @@ def get_usb_disk_size(usb_device, con_ssh=None):
 
     for k, v in parts_info.items():
        if k == usb_device and v[2] == 'disk':
-           return int(v[1][:-1])
+           return float(v[1][:-1])
     else:
        LOG.info("USB device {} has no partition: {}".format(usb_device, parts_info))
        return -1
@@ -2096,8 +2095,8 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller(bld_server_conn, load_path, patch_dir_paths=None, boot_usb=False, cpe=False, lowlat=False,
-                     small_footprint=False):
+def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False, lowlat=False, small_footprint=False,
+                     clone_install=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2131,14 +2130,18 @@ def boot_controller(bld_server_conn, load_path, patch_dir_paths=None, boot_usb=F
         raise exceptions.InvalidStructure(err_msg)
 
     bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True,
-                           close_telnet_conn=False, small_footprint=small_footprint)
+                           close_telnet_conn=False, small_footprint=small_footprint, clone_install=clone_install)
 
     LOG.info("Initial login and password set for " + controller0.name)
-    controller0.telnet_conn.login(reset=True)
+    reset = True
+    if clone_install:
+        reset = False
+
+    controller0.telnet_conn.login(reset=reset)
 
     time.sleep(60)
 
-    if patch_dir_paths:
+    if patch_dir_paths and bld_server_conn:
         apply_patches(lab, bld_server_conn, patch_dir_paths)
         controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
@@ -2341,4 +2344,324 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
         LOG.info('{} is not ready yet, failed to source /etc/nova/openrc, continue to wait'.format(controller0))
         time.sleep(15)
 
+
     controller0_node.telnet_conn.close()
+
+    host_helper.wait_for_hosts_ready(controller0)
+
+
+def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_system_name=None,
+                  timeout=HostTimeout.SYSTEM_BACKUP, usb_device=None, delete_cloned_image_file=True,
+                  con_ssh=None, fail_ok=False):
+    """
+    Creates system cloned image for AIO systems and copy the iso image to to USB.
+    Args:
+        cloned_image_file_prefix(str): The prefix to the generated system cloned image iso file. The default is "titanium_backup_"
+        lab_system_name(str): is the lab system name
+        timeout(inst): is the timeout value the system clone is expected to finish.
+        usb_device(str): usb device name, if specified,the cloned image iso file is copied to.
+        delete_cloned_image_file(bool): if USB is available, the cloned image iso file is deleted from system to save disk space.
+         Default is enabled
+        con_ssh:
+        fail_ok:
+
+    Returns(tuple): rc, error message
+        0 - Success
+        1 - Fail to create system cloned image iso file
+        2 - Creating cloneed image file succeeded, but the iso file is not found in /opt/backups folder
+        3 - Creating cloned image file succeeded, but failed to copy the iso file to USB
+
+
+    """
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    lab = InstallVars.get_install_var("LAB")
+    if lab_system_name is None:
+        lab_system_name = lab['name']
+
+    # execute backup command
+    LOG.info("Create cloned image iso file under /opt/backups")
+
+    date = time.strftime(BACKUP_FILE_DATE_STR)
+
+    cloned_image_file_name = "{}_{}".format(cloned_image_file_prefix, date)
+    cmd = 'config_controller --clone-iso {}'.format(cloned_image_file_name)
+
+    # max wait 1800 seconds for config controller backup to finish
+    rc, output = con_ssh.exec_sudo_cmd(cmd, expect_timeout=timeout)
+    if rc != 0 or (output and "Cloning complete" not in output):
+        err_msg = "Command {} failed execution: {}".format(output)
+        LOG.info(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.BackupSystem(err_msg)
+
+    # verify the actual backup file are created
+    rc, output = con_ssh.exec_cmd("\ls /opt/backups/{}.iso".format(cloned_image_file_name))
+    if rc != 0:
+        err_msg = "Failed to get the cloned image iso file: {}".format(output)
+        LOG.info(err_msg)
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.BackupSystem(err_msg)
+
+    LOG.info("System cloned image iso file is created in /opt/backups folder: {} ".format(cloned_image_file_name))
+    cloned_iso_path = "/opt/backups/{}.iso".format(cloned_image_file_name)
+
+    # copy cloned image iso file to usb
+    if usb_device is None:
+        usb_device = get_usb_device_name(con_ssh=con_ssh)
+
+    if usb_device:
+        LOG.tc_step("Buring the system cloned image iso file to usb flash drive {}".format(usb_device))
+
+        # Write the ISO to USB
+        cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
+            .format(HostLinuxCreds.get_password(), cloned_iso_path, usb_device)
+
+        rc,  output = con_ssh.exec_cmd(cmd, expect_timeout=900)
+        if rc != 0:
+            err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 3, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+        LOG.info(" The cloned image iso file copied to USB for restore. {}".format(output))
+
+        if delete_cloned_image_file:
+            LOG.info("Deleting system cloned image iso file from tis server /opt/backups folder ")
+            con_ssh.exec_sudo_cmd("rm -f /opt/backups/{}.iso".format(cloned_image_file_name))
+
+        LOG.info("Clone completed successfully")
+    else:
+        LOG.info(" No USB flash drive found. The cloned image iso file are saved in folder {}".format(cloned_iso_path))
+
+    return 0, None
+
+
+def check_clone_status( tel_net_session=None, con_ssh=None, fail_ok=False):
+    """
+    Checks the install-clone status after system is booted from cloned image.
+    Args:
+        tel_net_session:
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple): rc, text message
+        0 - Success
+        1 - Execution of clone status command failed
+    """
+
+    lab = InstallVars.get_install_var("LAB")
+    output_dir = ProjVar.get_var('LOG_DIR')
+    controller0_node = lab['controller-0']
+
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn.login()
+
+    cmd = 'echo "{}" | sudo -S config_controller --clone-status'.format(HostLinuxCreds.get_password())
+    os.environ["TERM"] = "xterm"
+
+    rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.INSTALL_CLONE_STATUS)
+    if rc == 0 and all(m in output for m in ['Installation of cloned image', 'was successful at']):
+        msg = 'System was installed from cloned image successfully'
+        LOG.info(msg)
+        return 0, None
+
+    else:
+        err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
+        LOG.error(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.RestoreSystem(err_msg)
+
+
+def check_cloned_hardware_status(host, fail_ok=False):
+    """
+     Checks the hardware of the cloned controller host bye executing the following cli commands:
+         system show
+         system host-show <host>
+         system host-ethernet-port-list <host>
+         system host-if-list <host>
+         system host-disk-list <host>
+
+    Args:
+        host:
+        fail_ok:
+
+    Returns:
+
+    """
+    lab = InstallVars.get_install_var("LAB")
+    log_dir = ProjVar.get_var('LOG_DIR')
+    controller_0_node = lab["controller-0"]
+    node = lab[host]
+    if node is None:
+        err_msg = "Failed to get node object for hostname {} in the Install parameters".format(host)
+        LOG.error(err_msg)
+        raise exceptions.InvalidStructure(err_msg)
+
+    if controller_0_node.telnet_conn is None:
+        controller_0_node.telnet_conn = open_telnet_session(controller_0_node, log_dir)
+
+    LOG.info("Executing system show on cloned system")
+    table_ = table_parser.table(cli.system('show', use_telnet_session=True, con_telnet=controller_0_node.telnet_conn))
+    system_name = table_parser.get_value_two_col_table(table_, 'name')
+    assert "Cloned_system" in system_name, "Unexpected system name {} after install-clone".format(system_name)
+
+    system_type = table_parser.get_value_two_col_table(table_, 'system_type')
+    assert "All-in-one" in system_type, "Unexpected system type {} after install-clone".format(system_type)
+
+    system_desc = table_parser.get_value_two_col_table(table_, 'description')
+    assert "Cloned_from" in system_desc, "Unexpected system description {} after install-clone".format(system_desc)
+
+    software_version = table_parser.get_value_two_col_table(table_, 'software_version')
+
+    LOG.info("Executing system host show on cloned system host".format(host))
+    table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet_session=True,
+                                           con_telnet=controller_0_node.telnet_conn))
+    host_name = table_parser.get_value_two_col_table(table_, 'hostname')
+    assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
+    host_mgmt_ip = table_parser.get_value_two_col_table(table_, 'mgmt_ip')
+    assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after install-clone".format(host_mgmt_ip, host)
+    host_mgmt_mac = table_parser.get_value_two_col_table(table_, 'mgmt_mac')
+
+    host_software_load = table_parser.get_value_two_col_table(table_, 'software_load')
+    assert host_software_load == software_version, "Unexpected software load {} in host {} after install-clone"\
+        .format(host_software_load, host)
+
+    LOG.info("Executing system host ethernet port list on cloned system host {}".format(host))
+    table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet_session=True,
+                                           con_telnet=controller_0_node.telnet_conn))
+    assert len(table_['values']) >= 2, "Fewer ethernet ports listed than expected for host {}: {}".format(host, table_)
+
+    assert len(table_parser.filter_table(table_, **{'mac address': host_mgmt_mac})['values']) >= 1, \
+        "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
+
+    LOG.info("Executing system host interface list on cloned system host {}".format(host))
+    table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet_session=True,
+                                           con_telnet=controller_0_node.telnet_conn))
+    assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
+        "No data interface type found in Host {} after system clone-install".format(host)
+    assert len(table_parser.filter_table(table_, **{'network type':'mgmt'})['values']) >= 1, \
+        "No mgmt interface type found in Host {} after system clone-install".format(host)
+    assert len(table_parser.filter_table(table_, **{'network type':'oam'})['values']) >= 1, \
+        "No oam interface type found in Host {} after system clone-install".format(host)
+
+    LOG.info("Executing system host disk list on cloned system host {}".format(host))
+    table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet_session=True,
+                                           con_telnet=controller_0_node.telnet_conn))
+    assert len(table_['values']) >= 2, "Fewer disks listed than expected for host {}: {}".format(host, table_)
+
+
+def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
+
+    lab = InstallVars.get_install_var("LAB")
+    output_dir = ProjVar.get_var('LOG_DIR')
+    controller0_node = lab['controller-0']
+
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn.login()
+
+    host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
+    LOG.info("Locking {} for  oam IP configuration update".format(host))
+    cli.system('host-lock {}'.format(host), use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    host_helper.wait_for_hosts_states(host, check_interval=20, use_telnet_session=True,
+                                      con_telnet=controller0_node.telnet_conn,
+                                      administrative=HostAdminState.LOCKED,
+                                      operational=HostOperationalState.DISABLED,
+                                      availability=HostAvailabilityState.ONLINE)
+    cmd = "oam-modify oam_gateway_ip=128.224.150.1 oam_subnet=128.224.150.0/23"
+    if host == 'controller-1':
+        cmd += " oam_c0_ip={}".format(controller0_node.host_ip)
+        cmd += " oam_c1_ip={}".format(lab['controller-1'].host_ip)
+        cmd += " oam_floating_ip={}".format(controller0_node.host_floating_ip)
+    else:
+        cmd += " oam_ip={}".format(controller0_node.host_ip)
+
+    LOG.info("Modifying oam IP configuration: {}".format(cmd))
+    rc, output = cli.system(cmd, use_telnet_session=True, con_telnet=controller0_node.telnet_conn, fail_ok=True)
+    if rc != 0:
+        err_msg = "{} execution failed: rc = {}; {}".format(cmd, rc, output)
+        LOG.error(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.RestoreSystem(err_msg)
+
+    LOG.info("The oam IP configuration modified successfully: {}".format(output))
+    LOG.info("Unlocking {} after  oam IP configuration update".format(host))
+    cli.system('host-unlock {}'.format(host), use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    time.sleep(180)
+    host_helper.wait_for_hosts_states(host, check_interval=20, use_telnet_session=True,
+                                      con_telnet=controller0_node.telnet_conn,
+                                      administrative=HostAdminState.UNLOCKED,
+                                      operational=HostOperationalState.ENABLED,
+                                      availability=HostAvailabilityState.AVAILABLE)
+
+    LOG.info("Unlocked {} successfully after oam IP configuration update".format(host))
+    host_helper.wait_for_subfunction_ready(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    if system_mode == 'duplex':
+        LOG.info("Swacting to controller-0 for oam IP configuration update")
+
+        cli.system('host-swact', "controller-0", use_telnet_session=True, con_telnet=controller0_node.telnet_conn,
+                   fail_ok=fail_ok, )
+        time.sleep(60)
+
+        controller_prompt = Prompt.CONTROLLER_1 + '|' + Prompt.ADMIN_PROMPT
+
+        ssh_conn = establish_ssh_connection(lab['controller-1'].host_ip, initial_prompt=controller_prompt)
+        ssh_conn.deploy_ssh_key()
+
+        ssh_conn.exec_cmd("source /etc/nova/openrc")
+
+        # Give it sometime before openstack cmds enables on after host
+        host_helper._wait_for_openstack_cli_enable(con_ssh=ssh_conn, fail_ok=False)
+
+        drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id='controller-1',
+                                                 con_ssh=ssh_conn, strict=False, fail_ok=fail_ok, timeout=300)
+        if not drbd_res:
+            return 2, "400.001 alarm is not cleared within timeout after swact"
+
+        LOG.info(" The controller is successfully swacted.")
+
+        LOG.info(" Locking controller-0 for oam ip config update.")
+        host_helper.lock_host("controller-0", con_ssh=ssh_conn)
+
+        LOG.info(" Unlocking controller-0 for oam ip config update.")
+        host_helper.unlock_host("controller-0", con_ssh=ssh_conn, available_only=True)
+
+        LOG.info(" Unlocked controller-0 successfully.")
+
+        LOG.info(" Swacting back to controller-0 ...")
+
+        # re-establish ssh connection
+        ssh_conn.close()
+        ssh_conn = establish_ssh_connection(controller0_node.host_floating_ip,
+                                                        initial_prompt=Prompt.CONTROLLER_PROMPT)
+        ssh_conn.deploy_ssh_key()
+        ControllerClient.set_active_controller(ssh_client=ssh_conn)
+
+        host_helper.swact_host('controller-1')
+
+        LOG.info(" Swacted back to controller-0  successfully ...")
+
+
+def update_system_info_for_cloned_system( system_mode='duplex', fail_ok=False):
+
+    lab = InstallVars.get_install_var("LAB")
+
+    system_info = {
+        'description': None,
+        'name': lab['name'],
+    }
+
+    system_helper.set_system_info(**system_info)

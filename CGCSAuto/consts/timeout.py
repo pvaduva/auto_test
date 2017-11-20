@@ -20,6 +20,8 @@ class HostTimeout:
     SYSTEM_RESTORE = 3600   # System restore complete
     SYSTEM_BACKUP = 1800    # system backup complete
     BACKUP_COPY_USB = 600
+    INSTALL_CLONE = 3600
+    INSTALL_CLONE_STATUS = 60
 
 
 class VMTimeout:

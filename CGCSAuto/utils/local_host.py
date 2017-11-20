@@ -133,3 +133,22 @@ def vlm_exec_cmd(action, barcode, reserve=True):
         return 1, msg
 
     return 0, None
+
+
+def ping_to_host(host_ip, count=4):
+    """
+    Tests connectivity to host using ping utility
+    Args:
+        host_ip: the ip address of host
+        count: the number of pings to do before decision
+
+    Returns:
+        True if pings succeed
+        False if ping fail
+    """
+
+    if host_ip is None:
+        raise ValueError("Valid host ip must be provided")
+    ping_cmd = ['ping', '-c', 4, host_ip]
+
+    return True if exec_cmd(ping_cmd)[0] == 0 else False
