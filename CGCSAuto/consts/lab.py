@@ -31,7 +31,9 @@ class Labs:
         'controller-0 ip': '128.224.151.196',
         'controller-1 ip': '128.224.151.197',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
-        'controller_nodes': [20525, 20526]
+        'controller_nodes': [20525, 20526],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     IP_7_12 = {
@@ -93,8 +95,9 @@ class Labs:
         'floating ip': '128.224.150.96',
         'controller-0 ip': '128.224.150.92',
         'controller-1 ip': '128.224.150.22',
-        'system_type': 'CPE',
         'controller_nodes': [21750, 21758],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     IP_33_36 = {
@@ -164,8 +167,9 @@ class Labs:
         'floating ip': '128.224.150.141',
         'controller-0 ip': '128.224.150.130',
         'controller-1 ip': '128.224.150.106',
-        'system_type': 'CPE',
         'controller_nodes': [22351, 22352],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     R720_3_7 = {
@@ -185,6 +189,8 @@ class Labs:
         'controller-0 ip': '128.224.150.48',
         'controller-1 ip': '128.224.150.52',
         'controller_nodes': [23512, 23513],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
     
     SM_1 = {
@@ -193,6 +199,8 @@ class Labs:
         'floating ip': '128.224.150.221',
         'controller-0 ip': '128.224.150.221',
         'controller_nodes': [46808],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     SM_2 = {
@@ -201,6 +209,8 @@ class Labs:
         'floating ip': '128.224.150.222',
         'controller-0 ip': '128.224.150.222',
         'controller_nodes': [23907],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     SM_3 = {
@@ -209,6 +219,8 @@ class Labs:
         'floating ip': '128.224.150.81',
         'controller-0 ip': '128.224.150.81',
         'controller_nodes': [23514],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     SM_4 = {
@@ -217,6 +229,8 @@ class Labs:
         'floating ip': '128.224.150.83',
         'controller-0 ip': '128.224.150.83',
         'controller_nodes': [23515],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     SM_5_6 = {
@@ -226,6 +240,8 @@ class Labs:
         'controller-0 ip': '128.224.150.84',
         'controller-1 ip': '128.224.150.56',
         'controller_nodes': [23516, 23517],
+        # 'system_type': 'CPE',
+        # 'system_mode': 'duplex',
     }
 
     WCP_3_6 = {
@@ -257,6 +273,8 @@ class Labs:
         'controller-0 ip': '128.224.150.133',
         'controller-1 ip': '128.224.150.136',
         'controller_nodes': [23213, 23214],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_13 = {
@@ -307,6 +325,8 @@ class Labs:
         'controller-0 ip': '128.224.151.80',
         'controller-1 ip': '128.224.151.81',
         'controller_nodes': [23280, 23281],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_63_66 = {
@@ -326,6 +346,8 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.33',
         'controller_nodes': [23286],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     WCP_68 = {
@@ -335,6 +357,9 @@ class Labs:
         'auth_url': 'http://127.168.204.2:5000/v3/',
         'controller-0 ip': '128.224.151.38',
         'controller_nodes': [23287],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+
     }
 
     WCP_69_70 = {
@@ -344,6 +369,8 @@ class Labs:
         'controller-0 ip': '128.224.151.240',
         'controller-1 ip': '128.224.151.253',
         'controller_nodes': [23288, 23289],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_71_75 = {
@@ -363,6 +390,8 @@ class Labs:
         'controller-0 ip': '128.224.150.3',
         'controller-1 ip': '128.224.150.4',
         'controller_nodes': [23276, 23277],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_78_79 = {
@@ -372,6 +401,8 @@ class Labs:
         'controller-0 ip': '128.224.151.235',
         'controller-1 ip': '128.224.151.236',
         'controller_nodes': [23278, 23279],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_80_84 = {
@@ -401,6 +432,8 @@ class Labs:
         'controller-0 ip': '128.224.151.151',
         'controller-1 ip': '128.224.151.153',
         'controller_nodes': [23328, 23329],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_92_98 = {
