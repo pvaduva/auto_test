@@ -2286,3 +2286,14 @@ def get_lab_info(barcode):
     lab_ini_info[barcode] = settings
 
     return settings
+
+
+def run_cpe_compute_config_complete(ssh_client):
+
+    cmd = 'compute-config-complete'
+    cli.system(cmd)
+
+    LOG.info("Controller0 reset has started")
+    ssh_client.close()
+
+    host_helper.wait_for_hosts_ready()

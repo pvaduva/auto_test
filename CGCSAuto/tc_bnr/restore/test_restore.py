@@ -58,9 +58,12 @@ def pre_restore_checkup():
     controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                               initial_prompt=extra_controller_prompt,  fail_ok=True)
 
-    collect_logs(controller_conn)
-
     LOG.info('Collect logs before restore')
+    if controller_conn:
+        collect_logs(controller_conn)
+    else:
+        LOG.info('Cannot collect logs because no ssh connection to the lab')
+
     if not controller_conn:
         LOG.warn('failed to collect logs because no ssh connection established to controller-0 of lab:{}'.format(
             controller_node.host_ip))
@@ -226,7 +229,8 @@ def restore_setup(pre_restore_checkup):
     install_helper.power_off_host(hostnames)
 
     LOG.tc_step("Booting controller-0 ... ")
-    install_helper.boot_controller(bld_server_conn, load_path)
+    is_cpe = (lab['system_type'] == 'CPE')
+    install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe)
 
     # establish ssh connection with controller
     LOG.tc_step("Establishing ssh connection with controller-0 after install...")
@@ -400,6 +404,7 @@ def test_restore_from_backup(restore_setup):
 
     host_helper.wait_for_hosts_states(controller0, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
 
+
     # delete the system backup files from wrsroot home
     LOG.tc_step("Copying backup files to /opt/backups ... ")
     if backup_src.lower() == 'local':
@@ -416,8 +421,11 @@ def test_restore_from_backup(restore_setup):
         cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, TiSPath.BACKUPS)
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
+    if lab.get('system_type', 'Standard') == 'CPE':
+        install_helper.run_cpe_compute_config_complete(con_ssh)
+
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
-    assert  int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
+    assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
         "Missing backup files in {}".format(TiSPath.BACKUPS)
 
     boot_interfaces = lab['boot_device_dict']
