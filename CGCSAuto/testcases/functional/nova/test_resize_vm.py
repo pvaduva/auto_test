@@ -54,18 +54,14 @@ def get_expected_disk_occupancy_increase(origin_flavor, dest_flavor, boot_source
 
     if storage_backing == 'remote':
         expected_increase = 0
+        expect_to_check = True
     else:
         if boot_source == 'volume':
             expected_increase = ephemeral_diff + swap_diff
+            expect_to_check = False
         else:
             expected_increase = root_diff + ephemeral_diff + swap_diff
-
-    if boot_source == 'volume':
-        expect_to_check = False
-    elif storage_backing != 'remote' and expected_increase < 2:
-        expect_to_check = False
-    else:
-        expect_to_check = True
+            expect_to_check = expected_increase >= 2
 
     return expected_increase, expect_to_check
 
