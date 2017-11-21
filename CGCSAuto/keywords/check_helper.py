@@ -327,7 +327,9 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     LOG.tc_step('Check vm topology from vm_host via: nova-compute.log, virsh vcpupin, taskset')
     instance_name = nova_helper.get_vm_instance_name(vm_id)
     procs = host_helper.get_host_procs(hostname=vm_host)
-    numa_nodes = list(range(len(procs)))
+    # numa_nodes = list(range(len(procs)))
+    vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+    assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
     with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
@@ -377,7 +379,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
             err_msg = "Affined cpus for vm: {}, Unpinned cpus on vm host: {}".format(affined_cpus, unpinned_cpus)
             assert affined_cpus == unpinned_cpus, 'Affined cpus for floating vm are different than unpinned cpus ' \
-                                                  'on vm host {}\n{}'.format(vm_host, err_msg)
+                                                  'on vm host {} numa {}\n{}'.format(vm_host, numa_nodes, err_msg)
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None):
