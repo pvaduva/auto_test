@@ -1494,7 +1494,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
     Get
     Args:
         host:
-        header:
+        header (str|list):
         if_name:
         pci_addr:
         proc:
@@ -1505,7 +1505,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         auth_info:
         **kwargs:
 
-    Returns (list):
+    Returns (list|dict): list if header is string, dict if header is list.
 
     """
     table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -1521,7 +1521,21 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         if value is not None:
             kwargs[key] = value
 
-    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
+    rtn_dict = True
+    if isinstance(header, str):
+        rtn_dict = False
+        header = [header]
+
+    table_ = table_parser.filter_table(table_, strict=strict, regex=regex, **kwargs)
+    res = {}
+    for header_ in header:
+        vals = table_parser.get_column(table_, header_)
+        res[header_] = vals
+
+    if not rtn_dict:
+        res = res[header[0]]
+
+    return res
 
 
 def get_host_interfaces_table(host, show_all=False, con_ssh=None, auth_info=Tenant.ADMIN):

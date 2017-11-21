@@ -26,12 +26,21 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
+    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, rtn_list=True)
 
-    device_types = system_helper.get_host_ports_values(host, 'device type', if_name=data_ports, strict=True)
+    ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
+
     extra_mt_ports = 0
-    for device_type in device_types:
+    for i in range(len(ports_dict['device type'])):
+        device_type = ports_dict['device type'][i]
         if re.search(MELLANOX_DEVICE, device_type):
-            extra_mt_ports += 1
+            # Only +1 if the other port of MX-4 is not used. CGTS-8303
+            port_name = ports_dict['name'][i]
+            dev = port_name[-1]
+            other_dev = '0' if dev == '1' else '1'
+            other_port = port_name[:-1] + other_dev
+            if other_port not in all_ports_used:
+                extra_mt_ports += 1
 
     if extra_mt_ports > 0:
         LOG.info("{}Mellanox devices are used on {} data interfaces. Perform loose check on port-engine map.".
@@ -47,7 +56,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
                 'Expected engines: {}; Actual engines: {}'.format(host, port, engines, actual_vswitch_map[port])
 
     else:
-        LOG.info("{}No Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
+        LOG.info("{}No extra Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
                  format(SEP, host))
 
         assert expt_vswitch_map == actual_vswitch_map, "vSwitch mapping unexpected. Expect: {}; Actual: {}".format(
