@@ -404,7 +404,6 @@ def test_restore_from_backup(restore_setup):
 
     host_helper.wait_for_hosts_states(controller0, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
 
-
     # delete the system backup files from wrsroot home
     LOG.tc_step("Copying backup files to /opt/backups ... ")
     if backup_src.lower() == 'local':
@@ -422,7 +421,7 @@ def test_restore_from_backup(restore_setup):
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
     if lab.get('system_type', 'Standard') == 'CPE':
-        install_helper.run_cpe_compute_config_complete(con_ssh)
+        install_helper.run_cpe_compute_config_complete(con_ssh, controller0)
 
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
     assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \

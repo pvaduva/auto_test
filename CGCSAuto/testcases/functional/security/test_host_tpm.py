@@ -37,6 +37,10 @@ expected_install = (
 
 @fixture(scope='session', autouse=True)
 def check_lab_status():
+    current_lab = ProjVar.get_var('lab')
+    if not current_lab or not current_lab.get('tpm_installed', False):
+        skip('Non-TPM lab, skip the test.')
+
     if not keystone_helper.is_https_lab():
         skip('Non-HTTPs lab, skip the test.')
 
@@ -296,7 +300,7 @@ def __install_uninstall_cert_into_tpm(ssh_client,
     expected_outputs += [Prompt.CONTROLLER_PROMPT, Prompt.ADMIN_PROMPT]
     total_outputs = len(expected_outputs)
 
-    user_inputs = [input.format(**settings) for _, input in expected_install]
+    user_inputs = [user_input.format(**settings) for _, user_input in expected_install]
     total_inputs = len(user_inputs)
 
     LOG.info('cert-file:{}'.format(cert_file_to_test))
