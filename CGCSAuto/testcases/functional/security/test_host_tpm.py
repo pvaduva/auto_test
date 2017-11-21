@@ -362,7 +362,11 @@ def test_enable_tpm(swact_first):
 
     if swact_first:
         LOG.tc_step('Swact the active controller as instructed')
-        host_helper.swact_host(fail_ok=False)
+        num_controllers = len([c for c in system_helper.get_controllers()])
+        if num_controllers < 2:
+            LOG.info('Less than 2 controllers, skip swact')
+        else:
+            host_helper.swact_host(fail_ok=False)
 
     LOG.tc_step('Install HTTPS Certificate into TPM')
     store_cert_into_tpm(con_ssh, fail_ok=False)
@@ -383,7 +387,11 @@ def test_disable_tpm(swact_first):
 
         if swact_first:
             LOG.tc_step('Swact the active controller as instructed')
-            host_helper.swact_host(fail_ok=False)
+            num_controllers = len([c for c in system_helper.get_controllers()])
+            if num_controllers < 2:
+                LOG.info('Less than 2 controllers, skip swact')
+            else:
+                host_helper.swact_host(fail_ok=False)
 
         LOG.tc_step('disable TPM first in order to test enabling TPM')
         code, output = remove_cert_from_tpm(ssh_client, fail_ok=False, check_first=False)
@@ -392,10 +400,3 @@ def test_disable_tpm(swact_first):
     else:
         LOG.info('TPM is NOT configured on the lab, skip the test')
         skip('TPM is NOT configured on the lab, skip the test')
-
-
-def test_get_file():
-    ssh_client = ControllerClient.get_active_controller()
-
-    LOG.tc_step("will fetch cert file")
-    fetch_cert_file(ssh_client=ssh_client)
