@@ -1,14 +1,15 @@
 from pytest import mark
 
 from utils.tis_log import LOG
-from keywords import vm_helper, network_helper, nova_helper, common, host_helper
+from keywords import vm_helper, network_helper, nova_helper, common, host_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import FlavorSpec
 from consts.filepaths import TiSPath, UserData, TestServerPath
 from utils.ssh import ControllerClient
 from consts.proj_vars import ProjVar
 from testfixtures.recover_hosts import HostsToRecover
-from consts.cgcs import VMStatus
+from consts.cgcs import VMStatus, GuestImages
+from utils import table_parser
 
 
 def _get_dpdk_user_data(con_ssh=None):
@@ -47,11 +48,12 @@ def _get_dpdk_user_data(con_ssh=None):
     return file_path
 
 
-@mark.parametrize('vm_type', [
-    'dpdk',
-    'vhost'
+@mark.parametrize(('vm_type', 'num_vcpu'), [
+    ("dpdk", 2),
+    ("vhost", 2),
+    ("vhost", 3)
 ])
-def test_dpdk_vm(vm_type):
+def test_dpdk_vm(vm_type, num_vcpu):
     """
     DPDK VM with nova operations,  and evacuation test cases
 
@@ -68,11 +70,15 @@ def test_dpdk_vm(vm_type):
 
     if vm_type == 'vhost':
         vif_model = 'virtio'
+        if num_vcpu > 2:
+            name = GuestImages.DEFAULT_GUEST
+            image_ids = glance_helper.get_image_id_from_name(name=name)
+            glance_helper.set_unset_image_vif_multiq(image_name=name)
     else:
         vif_model = 'avp'
 
     LOG.tc_step("Create a flavor with 2 vcpus and extra-spec for dpdk")
-    flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=2)[1]
+    flavor_id = nova_helper.create_flavor(vcpus=num_vcpu, ram=1024, root_disk=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
     extra_specs = {FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.CPU_POLICY: 'dedicated',
                    FlavorSpec.MEM_PAGE_SIZE: '2048'}
