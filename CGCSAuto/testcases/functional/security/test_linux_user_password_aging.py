@@ -143,7 +143,7 @@ def cleanup_test_users(request):
     def delete_test_users():
         global _host_users
 
-        restore_wrsroot_password(target_password="Li69nux*")
+        restore_wrsroot_password(target_password=HostLinuxCreds.get_password())
 
         LOG.info('Deleting users created for testing\n')
         conn_to_ac = ControllerClient.get_active_controller()
@@ -161,7 +161,6 @@ def cleanup_test_users(request):
             else:
                 # sleep a bit so controller-1 have same password as controller-0
                 time.sleep(30)
-                print("password blah " + str(_host_users.items()))
                 with host_helper.ssh_to_host(host, password='Li69nux*') as conn:
                     LOG.info('TODO: delete user:{} on host:{} by CLI: userdel -r {}\n'.format(user, host, user))
                     conn.exec_sudo_cmd("userdel -r '{}'".format(user))
@@ -251,7 +250,7 @@ def update_host_user(host, user, password):
 @mark.parametrize(('user', 'password', 'host'), (
     ('testuser01', 'Li69nux*', 'controller-0'),
     ('testuser02', 'Li69nux*', 'controller-1'),
-    #('testuser03', 'Li69nux*', 'compute-0'),
+    ('testuser03', 'Li69nux*', 'compute-0'),
 ))
 def test_non_wrsroot_not_propagating(user, password, host):
     '''create only non wrsroot users'''
@@ -266,6 +265,10 @@ def test_non_wrsroot_not_propagating(user, password, host):
     if len(hosts) < 2:
         LOG.info('Only 1 host: {}\n'.format(hosts))
         skip('Only 1 host: {}, needs 2+ hosts to test\n'.format(hosts))
+
+    elif host == "compute-0" and len(hosts) < 3:
+        LOG.info('Only controller lab cannot execute compute test {}\n'.format(hosts))
+        skip('Only controllers are avaliable {}, needs 2+ hosts to test\n'.format(hosts))
 
     else:
 
@@ -368,9 +371,6 @@ def test_wrsroot_password_propagation():
         login_as_linux_user(user, new_password, host=other_host, expecting_fail=False)
 
 
-
-
-
 def swact_host_after_reset_wrsroot_raw(connect, active_controller_name):
     cmd = 'source /etc/nova/openrc; system host-swact {}'.format(active_controller_name)
     prompt = r'controller-[01] \~\(keystone_admin\)'
@@ -462,7 +462,11 @@ def execute_cmd(connect, cmd, allow_fail=False, prompt=Prompt.CONTROLLER_PROMPT)
     return index, output
 
 
-def test_wrsroot_aging():
+@mark.parametrize(('swact'), (
+    ('swact'),
+    ('no-swact'),
+))
+def test_wrsroot_aging_and_swact(swact):
     """
     Test password aging.
 
@@ -513,6 +517,7 @@ def test_wrsroot_aging():
     LOG.tc_step('Verify new password needs to be set upon login')
     exclude_list = [original_password]
 
+    # verify password was expired
     new_password = security_helper.gen_linux_password(exclude_list=exclude_list, length=PASSWORD_LEGNTH)
     set_password = first_login_to_floating_ip(user, original_password, new_password)[1]
     if set_password != new_password:
@@ -521,6 +526,7 @@ def test_wrsroot_aging():
         LOG.warn(message)
         assert False, message
 
+    # and reset with new password
     new_password = set_password
     if new_password != original_password:
         _host_users[('active-controller', 'wrsroot')].append(new_password)
@@ -529,6 +535,7 @@ def test_wrsroot_aging():
     exclude_list.append(new_password)
     LOG.info('OK, new password was required and logged in\n')
 
+    # reconnect after set new password
     LOG.info('reconnect to the active controller')
     host = lab_info.get_lab_floating_ip()
     connect = log_in_raw(host, user, new_password)
@@ -538,6 +545,29 @@ def test_wrsroot_aging():
 
     code, output = execute_cmd(connect, cmd)
     LOG.info('output:\n{}\n, code:{}, cmd:{}\n'.format(output, code, cmd))
+
+    # Uncomment following line and test when CGTS-8346 is resolved
+    # perform swact and verify swact is working
+    #wait_time = 300
+    #LOG.info('wait for {} seconds after aging settings been modified'.format(wait_time))
+    #time.sleep(wait_time)
+
+    #if swact == 'swact':
+    #    LOG.tc_step('Swact host')
+    #    swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
+    #    LOG.info('OK, host swact')
+
+    #LOG.info('Closing raw ssh connection to the active controller\n')
+    #connect.logout()
+
+    #wait_time = 180
+    #LOG.info('wait for {} after swact and closing own ssh connection'.format(wait_time))
+    #time.sleep(wait_time)
+
+    # reconnect to active after swact
+    #LOG.info('reconnect to the active controller')
+    #host = lab_info.get_lab_floating_ip()
+    #connect = log_in_raw(host, user, new_password)
 
     LOG.tc_step('Restore the password ')
 
