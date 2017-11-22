@@ -1396,13 +1396,7 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             LOG.info("Deleteing snapshot Volume snapshot {} after export ".format(snap_shot_id))
             cli.cinder('snapshot-delete', snap_shot_id, auth_info=auth_info)
 
-<<<<<<< HEAD
-            LOG.info("Exported 'in-use'Volume  {} successfully ".format(vol_id))
-            volume_exported.append(vol_id)
-
-=======
             LOG.info("Exported 'in-use' Volume {} successfully ".format(vol_id))
             volume_exported.append(vol_id)
->>>>>>> change export_volumes, return actually exported volume IDs
 
     return 0, volume_exported
