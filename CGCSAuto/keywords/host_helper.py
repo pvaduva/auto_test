@@ -7,7 +7,7 @@ from xml.etree import ElementTree
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
-
+from utils import telnet as telnetlib
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailabilityState, HostAdminState, HostOperationalState, Prompt, MELLANOX_DEVICE, \
     Networks, EventLogID
@@ -510,7 +510,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
                                                          con_telnet=con_telnet)
         entity_id = 'host={}'.format(active_con)
         system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, entity_id)], check_interval=10,
-                                           fail_ok=fail_ok, timeout=300, use_telnet_session=use_telnet_session,
+                                           fail_ok=fail_ok, con_ssh=con_ssh, timeout=300, use_telnet_session=use_telnet_session,
                                            con_telnet=con_telnet)
 
     positional_arg = host
@@ -526,27 +526,32 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if exitcode == 1:
         return 1, output
 
-    wait_for_host_states(host=host, timeout=30, check_interval=0, fail_ok=True, task='Locking')
+    wait_for_host_states(host=host, timeout=30, check_interval=0, fail_ok=True, task='Locking', con_ssh=con_ssh,
+                         use_telnet_session=use_telnet_session, con_telnet=con_telnet)
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
-    wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False)
+    wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False, con_ssh=con_ssh,
+                         use_telnet_session=use_telnet_session, con_telnet=con_telnet)
 
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
     if wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
-                            regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
+                            regex=True, strict=False, fail_ok=True, con_ssh=con_ssh,
+                            use_telnet_session=use_telnet_session, con_telnet=con_telnet):
         msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
         if fail_ok:
             return 4, msg
         raise exceptions.HostPostCheckFailed(msg)
 
     if wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
-                            regex=True, strict=False, fail_ok=True, con_ssh=con_ssh):
+                            regex=True, strict=False, fail_ok=True, con_ssh=con_ssh,
+                            use_telnet_session=use_telnet_session, con_telnet=con_telnet):
         msg = "Lock host {} failed due to migrate vm failed. Details in host-show vm_process_status.".format(host)
         if fail_ok:
             return 5, msg
         exceptions.HostPostCheckFailed(msg)
 
-    if not wait_for_host_states(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh):
+    if not wait_for_host_states(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh,
+                                use_telnet_session=use_telnet_session, con_telnet=con_telnet):
         msg = "Host is not in locked state"
         if fail_ok:
             return 2, msg
@@ -554,11 +559,14 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     LOG.info("{} is {}locked. Waiting for it to go Online...".format(host, extra_msg))
 
-    if wait_for_host_states(host, timeout=timeout, availability='online'):
+    if wait_for_host_states(host, timeout=timeout, availability='online', con_ssh=con_ssh,
+                            use_telnet_session=use_telnet_session, con_telnet=con_telnet):
         # ensure the online status lasts for more than 5 seconds. Sometimes host goes online then offline to reboot..
         time.sleep(5)
-        if wait_for_host_states(host, timeout=timeout, availability='online'):
-            if wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, task=''):
+        if wait_for_host_states(host, timeout=timeout, availability='online', con_ssh=con_ssh,
+                                use_telnet_session=use_telnet_session, con_telnet=con_telnet):
+            if wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, task='', con_ssh=con_ssh,
+                                    use_telnet_session=use_telnet_session, con_telnet=con_telnet):
                 LOG.info("Host is successfully locked and in online state.")
                 return 0, "Host is locked and in online state."
             else:
@@ -635,19 +643,22 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
     """
     LOG.info("Unlocking {}...".format(host))
-    if get_hostshow_value(host, 'availability') in [HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED]:
+    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                          con_telnet=con_telnet,) in [HostAvailabilityState.OFFLINE, HostAvailabilityState.FAILED]:
         LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
         wait_for_host_states(host, availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE,
-                                                 HostAvailabilityState.DEGRADED],
+                                                 HostAvailabilityState.DEGRADED], con_ssh=con_ssh,
                              use_telnet_session=use_telnet_session, con_telnet=con_telnet, fail_ok=False)
 
-    if get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
+    if get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                          con_telnet=con_telnet) == HostAdminState.UNLOCKED:
         message = "Host already unlocked. Do nothing"
         LOG.info(message)
         return -1, message
 
-    con_ssh = ControllerClient.get_active_controller()
-    is_simplex = system_helper.is_simplex(con_ssh=con_ssh)
+    #con_ssh = ControllerClient.get_active_controller()
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                                          con_telnet=con_telnet)
 
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet_session=use_telnet_session,
                                   con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,
@@ -672,8 +683,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                 use_telnet_session=use_telnet_session, con_telnet=con_telnet, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
-    if get_hostshow_value(host, 'availability', use_telnet_session=use_telnet_session, con_telnet=con_telnet)\
-            == HostAvailabilityState.DEGRADED:
+    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                          con_telnet=con_telnet) == HostAvailabilityState.DEGRADED:
         if not available_only:
             LOG.warning("Host is in degraded state after unlocked.")
             return 4, "Host is in degraded state after unlocked."
@@ -719,7 +730,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 LOG.warning(err_msg)
                 return 9, err_msg
 
-    if get_hostshow_value(host, 'availability', use_telnet_session=use_telnet_session, con_telnet=con_telnet) \
+    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet) \
             == HostAvailabilityState.DEGRADED:
         if not available_only:
             LOG.warning("Host is in degraded state after unlocked.")
@@ -787,7 +798,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
-    con_ssh = ControllerClient.get_active_controller()
+    #con_ssh = ControllerClient.get_active_controller()
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet)
     hosts_to_check = []
     for host in hosts_to_unlock:
@@ -964,11 +975,14 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         time.sleep(10)
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet_session=use_telnet_session_,
                                                               con_telnet=con_telnet_)
-        wait_for_subfunction_ready(hosts=active_con, con_ssh=con_ssh_)
+        wait_for_subfunction_ready(hosts=active_con, con_ssh=con_ssh_, use_telnet_session=use_telnet_session_,
+                                   con_telnet=con_telnet_)
         LOG.info("'system cli enabled")
 
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+    if not use_telnet_session:
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+
     while time.time() < cli_enable_end_time:
         try:
             LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
@@ -981,14 +995,15 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
             return True
 
         except Exception:
-            if not con_ssh._is_connected():
-                if reconnect:
-                    con_ssh.connect(retry_timeout=timeout)
-                else:
-                    LOG.error("system disconnected")
-                    if fail_ok:
-                        return False
-                    raise
+            if not use_telnet_session:
+                if not con_ssh._is_connected():
+                    if reconnect:
+                        con_ssh.connect(retry_timeout=timeout)
+                    else:
+                        LOG.error("system disconnected")
+                        if fail_ok:
+                            return False
+                        raise
             time.sleep(check_interval)
 
 
@@ -1088,21 +1103,34 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         return 2, "{} is not active controller host, thus swact request failed as expected.".format(hostname)
 
     if use_telnet_session:
-        time.sleep(60)
-        new_active_host = 'controller-1' if hostname == 'controller-0' else 'controller-0'
-
-
-    rtn = wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
+        rtn = wait_for_swact_complete_tel_session(hostname, swact_start_timeout=swact_start_timeout,
                                   swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
+    else:
+        rtn = wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
+                                      swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
     if rtn[0] == 0:
-        res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok, con_ssh=con_ssh)[0]
-        if not res:
-            return 5, "Web-services for new controller is not active"
+        if use_telnet_session:
+            new_active_host = 'controller-1' if hostname == 'controller-0' else 'controller-0'
+            telnet_session = get_host_telnet_session(new_active_host)
+            res = wait_for_webservice_up(new_active_host, use_telnet_session=True, con_telnet=telnet_session,
+                                         fail_ok=fail_ok)[0]
+            if not res:
+                return 5, "Web-services for new controller is not active"
 
-    if system_helper.is_two_node_cpe(con_ssh=con_ssh):
-        hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
-        if not hypervisor_up_res:
-            return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
+            hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, use_telnet_session=True,
+                                                    con_telnet=telnet_session)
+            if not hypervisor_up_res:
+                return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
+        else:
+            res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok,
+                                         con_ssh=con_ssh)[0]
+            if not res:
+                return 5, "Web-services for new controller is not active"
+
+            if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+                hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
+                if not hypervisor_up_res:
+                    return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
 
     return rtn
 
@@ -1161,66 +1189,70 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
 
     return 0, "Active controller is successfully swacted."
 
-def wait_for_swact_complete_(before_host, con_ssh=None, swact_start_timeout=HostTimeout.SWACT,
+
+def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTimeout.SWACT,
                             swact_complete_timeout=HostTimeout.SWACT, fail_ok=True):
     """
-    Wait for swact to start and complete
-    NOTE: This function assumes swact command was run from ssh session using floating ip!!
+    Wait for swact to start and complete. It uses telnet session to check swact
 
     Args:
         before_host (str): Active controller name before swact request
-        con_ssh (SSHClient):
+
         swact_start_timeout (int): Max time to wait between cli executs and swact starts
         swact_complete_timeout (int): Max time to wait for swact to complete after swact started
 
     Returns (tuple):
         (0, "Active controller is successfully swacted.")
-        (3, "Swact did not start within <swact_start_timeout>")     # returns when fail_ok=True
-        (4, "Active controller did not change after swact within <swact_complete_timeou>")  # returns when fail_ok=True
-        (5, "400.001 alarm is not cleared within timeout after swact")
+        (3, "No telnet session with new active host"
+        (4, "Swact did not start within <swact_start_timeout>")     # returns when fail_ok=True
+        (5, "Active controller did not change after swact within <swact_complete_timeou>")  # returns when fail_ok=True
+        (6, "400.001 alarm is not cleared within timeout after swact")
 
     """
 
     time.sleep(60)
 
     new_active_controller = 'controller-1' if before_host == 'controller-0' else 'controller-0'
-    lab = proj_vars.ProjVar.get_var['LAB']
-    active_node = lab['new_active_controller']
-    if active_node.telnet_conn is None:
-         _telnet_conn = telnetlib.connect(node_obj.telnet_ip,
-                                      int(node_obj.telnet_port),
-                                      negotiate=node_obj.telnet_negotiate,
-                                      port_login=True if node_obj.telnet_login_prompt else False,
-                                      vt100query=node_obj.telnet_vt100query,\
-                                      log_path=install_output_dir + "/" + node_obj.name +\
-                                      ".telnet.log", debug=False)
-    while con_ssh._is_connected(fail_ok=True):
+    host_telnet_session = get_host_telnet_session(new_active_controller)
+
+    if host_telnet_session is None:
+        err_msg = "Cannot open telnet session with new active controller {}".format(new_active_controller)
+        if fail_ok:
+               return 3, err_msg
+        else:
+            raise exceptions.HostPostCheckFailed(err_msg)
+
+    start = time.time()
+    end_swact_start = start + swact_start_timeout
+    swacted = False
+    while not swacted:
+        host_telnet_session.write_line("source /etc/nova/openrc")
+        index, match, output = host_telnet_session.expect([bytes(Prompt.ADMIN_PROMPT, 'utf-8')], timeout=2)
+        if match:
+            swacted = True
         if time.time() > end_swact_start:
             if fail_ok:
-                return 3, "Swact did not start within {}".format(swact_start_timeout)
-            raise exceptions.HostPostCheckFailed("Timed out waiting for swact. SSH to {} is still alive.".
-                                                 format(con_ssh.host))
-    LOG.info("ssh to {} disconnected, indicating swacting initiated.".format(con_ssh.host))
+                return 4, "Swact did not start within {}".format(swact_start_timeout)
+            raise exceptions.HostPostCheckFailed("Timed out waiting for swact.")
 
-    # permission denied is received when ssh right after swact initiated. Add delay to avoid sanity failure
     time.sleep(30)
-    con_ssh.connect(retry=True, retry_timeout=swact_complete_timeout-30)
 
     # Give it sometime before openstack cmds enables on after host
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False)
+    _wait_for_openstack_cli_enable(use_telnet_session=True, con_telnet=host_telnet_session)
 
-    after_host = system_helper.get_active_controller_name()
+    after_host = system_helper.get_active_controller_name(use_telnet_session=True, con_telnet=host_telnet_session)
     LOG.info("Host before swacting: {}, host after swacting: {}".format(before_host, after_host))
 
     if before_host == after_host:
         if fail_ok:
-            return 4, "Active controller did not change after swact within {}".format(swact_complete_timeout)
+            return 5, "Active controller did not change after swact within {}".format(swact_complete_timeout)
         raise exceptions.HostPostCheckFailed("Swact failed. Active controller host did not change")
 
     drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=after_host,
+                                                 use_telnet_session=True, con_telnet=host_telnet_session,
                                                  strict=False, fail_ok=fail_ok, timeout=300)
     if not drbd_res:
-        return 5, "400.001 alarm is not cleared within timeout after swact"
+        return 6, "400.001 alarm is not cleared within timeout after swact"
 
     return 0, "Active controller is successfully swacted."
 
@@ -1291,7 +1323,8 @@ def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP, check_inte
     LOG.info("Waiting for {} to be up in nova hypervisor-list...".format(hosts))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        up_hosts = get_hypervisors(state='up', status='enabled')
+        up_hosts = get_hypervisors(state='up', status='enabled', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                                   con_telnet=con_telnet)
         for host in hosts_to_check:
             if host in up_hosts:
                 hosts_to_check.remove(host)
@@ -3496,3 +3529,31 @@ def get_nic_speed(con_ssh=None, port=None):
         con_ssh = ControllerClient.get_active_controller()
     traffic_control = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(port), expect_timeout=10)[1]
     return traffic_control
+
+
+def get_host_telnet_session(host, login=True, lab=None):
+
+    if lab is None:
+        lab = proj_vars.ProjVar.get_var('LAB')
+
+    host_node = lab[host]
+    if host_node is None:
+        raise ValueError("A node object for host {} is not defined in lab dict : {}".format(host, lab))
+
+    log_dir = proj_vars.ProjVar.get_var('LOG_DIR')
+
+    if host_node.telnet_conn:
+         host_node.telnet_conn.close()
+
+    host_node.telnet_conn = telnetlib.connect(host_node.telnet_ip,
+                                  int(host_node.telnet_port),
+                                  negotiate=host_node.telnet_negotiate,
+                                  port_login=True if host_node.telnet_login_prompt else False,
+                                  vt100query=host_node.telnet_vt100query,
+                                  log_path=log_dir + "/" + host_node.name + ".telnet.log", debug=False)
+
+
+    if host_node.telnet_conn and login:
+        host_node.telnet_conn.login()
+    lab[host] = host_node
+    return host_node.telnet_conn

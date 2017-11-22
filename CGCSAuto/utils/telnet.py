@@ -822,7 +822,6 @@ class Telnet:
         LOG.info('executing: {}'.format(cmd))
         self.write_line(cmd)
         expected = []
-
         if extra_expects:
             expected += [str.encode(s) for s in extra_expects]
 
@@ -870,6 +869,65 @@ class Telnet:
 
         return int(rc), output
 
+
+    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT, show_output=True, alt_prompt=None):
+
+        cmd = 'sudo ' + cmd
+
+        LOG.info("Executing sudo command...")
+        self.write_line(cmd)
+        expected = [str.encode(PASSWORD_PROMPT), str.encode(PROMPT)]
+
+        try:
+            index, matched, output = self.expect(expected, timeout=timeout)
+        except EOFError:
+            msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+            raise exceptions.TelnetException(msg)
+
+        if index == 0:
+            LOG.info("Found passord prompt. enter passowrd {}".format(password))
+            self.write(str.encode(password + '\r\n'))
+            expected = expected[1:]
+            try:
+                index, matched, output = self.expect(expected, timeout=timeout)
+            except EOFError:
+                msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+                raise exceptions.TelnetException(msg)
+
+        output = '\n'.join(output.decode('utf-8', 'ignore').splitlines())
+        LOG.info("Index: {}, Matched: {}, Output: {}".format(index, matched, output))
+
+        if index == len(expected):
+            LOG.error('Timeout occurred: Failed to find prompt')
+            return -1, output
+
+        if show_output:
+            LOG.info("index:{},output:\n{}\n".format(index, output))
+
+        self.write_line(RETURN_CODE_CMD)
+        try:
+            index, match = self.expect([str.encode(RETURN_CODE_REGEX)], TELNET_EXPECT_TIMEOUT)[:2]
+        except EOFError:
+            msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+            raise exceptions.TelnetException(msg)
+
+        if index == 0:
+            rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
+            LOG.info("Return code: " + rc)
+        else:
+            msg = "Timeout occurred: Failed to find return code"
+            LOG.error(msg)
+            raise exceptions.TelnetException(msg)
+
+        if alt_prompt:
+            LOG.info('wait for special prompt:{}'.format(alt_prompt))
+            self.find_prompt(prompt=alt_prompt, timeout=timeout)
+        else:
+            self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
+
+        return (int(rc), output)
+
+
     def login(self, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
         """Waits for login prompt to authenticate user.
 
@@ -901,13 +959,13 @@ class Telnet:
                     LOG.info("Found login prompt. Login as {}".format(username))
                     self.write(str.encode(username + '\r\n'))
                     if password and len(password) > 0:
-                       self.get_read_until(PASSWORD_PROMPT, 30)
-                       self.write(str.encode(password + '\r\n'))
-                       self.find_prompt()
-                       self.write(str.encode('export TMOUT=0 \r\n'))
-                       self.find_prompt()
-                       self.write(str.encode('\r\n'))
-                       self.find_prompt()
+                        self.get_read_until(PASSWORD_PROMPT, 30)
+                        self.write(str.encode(password + '\r\n'))
+                        self.find_prompt(timeout=60)
+                        self.write(str.encode('export TMOUT=0 \r\n'))
+                        self.find_prompt()
+                        self.write(str.encode('\r\n'))
+                        self.find_prompt()
                     else:
                         self.write_line("")
                     break
@@ -943,7 +1001,13 @@ class Telnet:
         boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
 
         if "wildcat" in node.host_name or "supermicro" in node.host_name:
-            index = 0
+            if "wildcat" in node.host_name:
+                index = 0
+                boot_menu_name = "boot menu"
+            else:
+                index = 4
+                boot_menu_name = "Boot Menu"
+
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
@@ -952,7 +1016,7 @@ class Telnet:
             LOG.info("Use BIOS key: " + bios_key_hr)
             LOG.info("Installation timeout: " + str(install_timeout))
 
-            self.get_read_until("boot menu", 360)
+            self.get_read_until(boot_menu_name, 360)
             LOG.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 
@@ -989,7 +1053,10 @@ class Telnet:
                 if "wildcat" in node.host_name:
                     regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
                 else:
-                    regex = re.compile(b"Slot (\d{4}) v\d+")
+                    if usb:
+                        regex = re.compile(b"\|(.+)(USB|Kingston|JetFlash|SanDisk)(.+)\|")
+                    else:
+                        regex = re.compile(b"Slot (\d{4}) v\d+")
 
                 LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
 

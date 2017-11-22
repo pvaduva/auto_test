@@ -124,7 +124,7 @@ def get_mgmt_boot_device(node):
 
 
 def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_power_on=False, close_telnet_conn=True,
-                            small_footprint=False):
+                            small_footprint=False, wait_for_thread=False):
 
     lab = InstallVars.get_install_var("LAB")
     node = lab[hostname]
@@ -156,6 +156,12 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
+    if wait_for_thread:
+        node_thread.join(HostTimeout.SYSTEM_RESTORE)
+        if node_thread.is_alive():
+            err_msg = "Host {} failed to install within the {} seconds".format(node.name, HostTimeout.SYSTEM_RESTORE)
+            LOG.error(err_msg)
+            raise exceptions.InvalidStructure(err_msg)
 
 
 def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
@@ -2462,18 +2468,20 @@ def check_clone_status( tel_net_session=None, con_ssh=None, fail_ok=False):
     controller0_node = lab['controller-0']
 
     if controller0_node.telnet_conn is None:
+        LOG.info("Setting up telnet connection ...")
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
+        controller0_node.telnet_conn.exec_cmd("xterm")
 
-    cmd = 'echo "{}" | sudo -S config_controller --clone-status'.format(HostLinuxCreds.get_password())
+    cmd = 'config_controller --clone-status'.format(HostLinuxCreds.get_password())
     os.environ["TERM"] = "xterm"
 
-    rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.INSTALL_CLONE_STATUS)
+    rc, output = tel_net_session.exec_sudo_cmd(cmd, timeout=HostTimeout.INSTALL_CLONE_STATUS)
+
     if rc == 0 and all(m in output for m in ['Installation of cloned image', 'was successful at']):
-        msg = 'System was installed from cloned image successfully'
+        msg = 'System was installed from cloned image successfully: {}'.format(output)
         LOG.info(msg)
         return 0, None
-
     else:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -2573,12 +2581,8 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
     LOG.info("Locking {} for  oam IP configuration update".format(host))
-    cli.system('host-lock {}'.format(host), use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
-    host_helper.wait_for_hosts_states(host, check_interval=20, use_telnet_session=True,
-                                      con_telnet=controller0_node.telnet_conn,
-                                      administrative=HostAdminState.LOCKED,
-                                      operational=HostOperationalState.DISABLED,
-                                      availability=HostAvailabilityState.ONLINE)
+    host_helper.lock_host(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+
     cmd = "oam-modify oam_gateway_ip=128.224.150.1 oam_subnet=128.224.150.0/23"
     if host == 'controller-1':
         cmd += " oam_c0_ip={}".format(controller0_node.host_ip)
@@ -2599,37 +2603,22 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     LOG.info("The oam IP configuration modified successfully: {}".format(output))
     LOG.info("Unlocking {} after  oam IP configuration update".format(host))
-    cli.system('host-unlock {}'.format(host), use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
-    time.sleep(180)
-    host_helper.wait_for_hosts_states(host, check_interval=20, use_telnet_session=True,
-                                      con_telnet=controller0_node.telnet_conn,
-                                      administrative=HostAdminState.UNLOCKED,
-                                      operational=HostOperationalState.ENABLED,
-                                      availability=HostAvailabilityState.AVAILABLE)
+    host_helper.unlock_host(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
 
     LOG.info("Unlocked {} successfully after oam IP configuration update".format(host))
-    host_helper.wait_for_subfunction_ready(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+
     if system_mode == 'duplex':
         LOG.info("Swacting to controller-0 for oam IP configuration update")
 
-        cli.system('host-swact', "controller-0", use_telnet_session=True, con_telnet=controller0_node.telnet_conn,
-                   fail_ok=fail_ok, )
-        time.sleep(60)
+        host_helper.swact_host(controller0_node.name, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
 
         controller_prompt = Prompt.CONTROLLER_1 + '|' + Prompt.ADMIN_PROMPT
 
         ssh_conn = establish_ssh_connection(lab['controller-1'].host_ip, initial_prompt=controller_prompt)
         ssh_conn.deploy_ssh_key()
+        ControllerClient.set_active_controller(ssh_conn)
 
-        ssh_conn.exec_cmd("source /etc/nova/openrc")
-
-        # Give it sometime before openstack cmds enables on after host
-        host_helper._wait_for_openstack_cli_enable(con_ssh=ssh_conn, fail_ok=False)
-
-        drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id='controller-1',
-                                                 con_ssh=ssh_conn, strict=False, fail_ok=fail_ok, timeout=300)
-        if not drbd_res:
-            return 2, "400.001 alarm is not cleared within timeout after swact"
+        #ssh_conn.exec_cmd("source /etc/nova/openrc")
 
         LOG.info(" The controller is successfully swacted.")
 
@@ -2645,11 +2634,12 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
         # re-establish ssh connection
         ssh_conn.close()
+        controller_prompt = Prompt.CONTROLLER_PROMPT + '|' + Prompt.ADMIN_PROMPT
         ssh_conn = establish_ssh_connection(controller0_node.host_floating_ip,
-                                                        initial_prompt=Prompt.CONTROLLER_PROMPT)
+                                                        initial_prompt=controller_prompt)
         ssh_conn.deploy_ssh_key()
         ControllerClient.set_active_controller(ssh_client=ssh_conn)
-
+        #ssh_conn.exec_cmd("source /etc/nova/openrc")
         host_helper.swact_host('controller-1')
 
         LOG.info(" Swacted back to controller-0  successfully ...")

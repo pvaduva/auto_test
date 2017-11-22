@@ -28,6 +28,7 @@ def pytest_configure(config):
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)
 
     ProjVar.set_var(always_collect=True)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 
 
 @pytest.fixture(scope='session', autouse=True)

@@ -37,14 +37,18 @@ def get_hostname(con_ssh=None):
     return _get_info_non_cli(r'cat /etc/hostname', con_ssh=con_ssh)
 
 
-def get_buildinfo(con_ssh=None):
-    return _get_info_non_cli(r'cat /etc/build.info', con_ssh=con_ssh)
+def get_buildinfo(con_ssh=None, use_telnet_session=False, con_telnet=None):
+    return _get_info_non_cli(r'cat /etc/build.info', con_ssh=con_ssh,  use_telnet_session=use_telnet_session,
+                             con_telnet=con_telnet)
 
 
-def _get_info_non_cli(cmd, con_ssh=None):
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-    exitcode, output = con_ssh.exec_cmd(cmd, rm_date=True)
+def _get_info_non_cli(cmd, con_ssh=None, use_telnet_session=False, con_telnet=None):
+    if not use_telnet_session:
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+        exitcode, output = con_ssh.exec_cmd(cmd, rm_date=True)
+    else:
+        exitcode, output = con_telnet.exec_cmd(cmd)
     if not exitcode == 0:
         raise exceptions.SSHExecCommandFailed("Command failed to execute.")
 
@@ -55,7 +59,7 @@ def is_storage_system(con_ssh=None):
     return bool(get_storage_nodes(con_ssh=con_ssh))
 
 
-def is_two_node_cpe(con_ssh=None):
+def is_two_node_cpe(con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
     Whether it is two node CPE system
     Args:
@@ -64,12 +68,13 @@ def is_two_node_cpe(con_ssh=None):
     Returns (bool):
 
     """
-    return is_small_footprint(controller_ssh=con_ssh) and len(get_controllers(con_ssh=con_ssh)) == 2
-
-
-def is_simplex(con_ssh=None, use_telnet_session=False, con_telnet=None ):
     return is_small_footprint(controller_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet) \
-           and len(get_controllers(con_ssh=con_ssh)) == 1
+           and len(get_controllers(con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet)) == 2
+
+
+def is_simplex(con_ssh=None, use_telnet_session=False, con_telnet=None):
+    return is_small_footprint(controller_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet) \
+           and len(get_controllers(con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet)) == 1
 
 
 def is_small_footprint(controller_ssh=None, controller='controller-0', use_telnet_session=False, con_telnet=None):
@@ -106,7 +111,7 @@ def get_storage_nodes(con_ssh=None):
     return get_hostnames(personality='storage', con_ssh=con_ssh)
 
 
-def get_controllers(con_ssh=None):
+def get_controllers(con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
     Get hostnames with 'controller' personality from system host-list
     Args:
@@ -115,10 +120,11 @@ def get_controllers(con_ssh=None):
     Returns (list): list of hostnames
 
     """
-    return get_hostnames(personality='controller', con_ssh=con_ssh)
+    return get_hostnames(personality='controller', con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                         con_telnet=con_telnet)
 
 
-def get_computes(con_ssh=None):
+def get_computes(con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
     Get hostnames with 'compute' personality from system host-list
     Args:
@@ -127,12 +133,12 @@ def get_computes(con_ssh=None):
     Returns (list): list of hostnames. Empty list [] returns when no compute nodes.
 
     """
-    nodes = _get_nodes(con_ssh)
+    nodes = _get_nodes(con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet)
     return nodes['computes']
 
 
 def get_hostnames(personality=None, administrative=None, operational=None, availability=None, name=None,
-                  strict=True, exclude=False, con_ssh=None):
+                  strict=True, exclude=False, con_ssh=None, use_telnet_session=False, con_telnet=None):
     """
     Get hostnames with given criteria
     Args:
@@ -148,7 +154,8 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     Returns (list): hostnames
 
     """
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, use_telnet_session=use_telnet_session,
+                                           con_telnet=con_telnet))
     filters = {'hostname': name,
                'personality': personality,
                'administrative': administrative,
@@ -234,10 +241,14 @@ def get_standby_controller_name(con_ssh=None, use_telnet_session=False, con_teln
 def _get_active_standby(controller='active', con_ssh=None, use_telnet_session=False, con_telnet=None,
                         source_auth_info=False):
 
+    output = cli.system('servicegroup-list', ssh_client=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet)
+    LOG.info(" service g list: {}".format(output))
+
     table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh,
                                            use_telnet_session=use_telnet_session, con_telnet=con_telnet))
 
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
+    LOG.debug(" controller services: {}".format(table_))
     controllers = table_parser.get_values(table_, 'hostname', state=controller, strict=False)
     LOG.debug(" {} controller(s): {}".format(controller, controllers))
     if isinstance(controllers, str):
@@ -269,7 +280,7 @@ def get_active_standby_controllers(con_ssh=None, use_telnet_session=False, con_t
 
 
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-                     auth_info=Tenant.ADMIN):
+                     auth_info=Tenant.ADMIN, use_telnet_session=False, con_telnet=None):
     """
     Get active alarms_and_events dictionary with given criteria
     Args:
@@ -291,7 +302,8 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     if show_suppress:
         args += ' --include_suppress'
 
-    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info),
+    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet),
                                 combine_multiline_entry=True)
 
     table_ = _compose_alarm_table(table_, uuid=uuid)
@@ -313,7 +325,8 @@ def _compose_alarm_table(output, uuid=False):
 
 def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
                severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
-               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True):
+               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True, use_telnet_session=False,
+               con_telnet=None):
     """
     Get a list of alarms with values for specified fields.
     Args:
@@ -339,7 +352,8 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
     """
 
     table_ = get_alarms_table(show_suppress=show_suppress, query_key=query_key, query_value=query_value,
-                              query_type=query_type, con_ssh=con_ssh, auth_info=auth_info)
+                              query_type=query_type, con_ssh=con_ssh, auth_info=auth_info,
+                              use_telnet_session=use_telnet_session, con_telnet=con_telnet)
 
     if alarm_id:
         table_ = table_parser.filter_table(table_, **{'Alarm ID': alarm_id})
@@ -435,7 +449,8 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
 
 def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, event_log_id=None, entity_type_id=None,
                      entity_instance_id=None, severity=None, start=None, end=None, query_key=None,
-                     query_value=None, query_type=None, con_ssh=None, auth_info=Tenant.ADMIN):
+                     query_value=None, query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, use_telnet_session=False,
+                     con_telnet=None):
     """
     Get a list of events with given criteria as dictionary
     Args:
@@ -498,7 +513,8 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
     if show_suppress:
         args += ' --include_suppress'
 
-    table_ = table_parser.table(cli.system('event-list ', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('event-list ', args, ssh_client=con_ssh, auth_info=auth_info,
+                                           use_telnet_session=use_telnet_session, con_telnet=con_telnet,))
     # table_ = _compose_events_table(table_, uuid=uuid)
     return table_
 
@@ -526,6 +542,7 @@ def __process_query_args(args, query_key, query_value, query_type):
 
 def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
+                    use_telnet_session=False, con_telnet=None,
                     strict=True, check_interval=3, event_log_id=None, entity_type_id=None, entity_instance_id=None,
                     severity=None, start=None, end=None, **kwargs):
     """
@@ -564,7 +581,8 @@ def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=No
                                       entity_type_id=entity_type_id, entity_instance_id=entity_instance_id,
                                       severity=severity, start=start, end=end, query_key=query_key,
                                       query_value=query_value, query_type=query_type,
-                                      con_ssh=con_ssh, auth_info=auth_info)
+                                      con_ssh=con_ssh, auth_info=auth_info, use_telnet_session=use_telnet_session,
+                                      con_telnet=con_telnet)
         events_tab = table_parser.filter_table(events_tab, strict=strict, regex=regex, **kwargs)
         events = table_parser.get_column(events_tab, rtn_val)
         if events:
@@ -581,7 +599,8 @@ def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=No
         raise exceptions.TimeoutException(msg)
 
 
-def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                  use_telnet_session=False, con_telnet=None):
     """
     Delete active alarms_and_events
 
@@ -610,7 +629,8 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     res = {}
     failed_clis = []
     for alarm in alarms:
-        code, out = cli.system('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+        code, out = cli.system('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                               use_telnet_session=use_telnet_session, con_telnet=con_telnet)
         res[alarm] = code, out
 
         if code != 0:
@@ -641,7 +661,8 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
 
 
 def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False, timeout=120, check_interval=3,
-                        fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+                        use_telnet_session=False, con_telnet=None, fail_ok=False, con_ssh=None,
+                        auth_info=Tenant.ADMIN):
     """
     Wait for given alarm to disappear from system alarm-list
     Args:
@@ -660,7 +681,8 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
     """
 
     LOG.info("Waiting for alarm {} to disappear from system alarm-list".format(alarm_id))
-    build_ver = get_system_software_version(con_ssh=con_ssh)
+    build_ver = get_system_software_version(con_ssh=con_ssh, use_telnet_session=use_telnet_session,
+                                            con_telnet=con_telnet)
 
     alarmcmd = 'alarm-list'
     if build_ver != '15.12':
@@ -669,7 +691,8 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
     end_time = time.time() + timeout
     while time.time() < end_time:
         #alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
-        alarms_tab = table_parser.table(cli.system(alarmcmd, ssh_client=con_ssh, auth_info=auth_info))
+        alarms_tab = table_parser.table(cli.system(alarmcmd, ssh_client=con_ssh, auth_info=auth_info,
+                                                   use_telnet_session=use_telnet_session, con_telnet=con_telnet))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
 
         alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})
@@ -709,7 +732,8 @@ def _get_alarms(alarms_tab):
 
 
 def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=None, severity=None, timeout=60,
-                   check_interval=3, regex=False, strict=False, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+                   check_interval=3, regex=False, strict=False, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+                   use_telnet_session=False, con_telnet=None):
     """
     Wait for given alarm to appear
     Args:
@@ -742,7 +766,8 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info,
+                                              use_telnet_session=use_telnet_session, con_telnet=con_telnet)
         val = table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs)
         if val:
             LOG.info('Expected alarm appeared. Filters: {}'.format(kwargs))
@@ -759,7 +784,7 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
 
 
 def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.ADMIN):
+                         auth_info=Tenant.ADMIN, use_telnet_session=False, con_telnet=None):
     """
     Wait for given alarms_and_events to be gone from system alarm-list
     Args:
@@ -780,7 +805,8 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
     alarms_cleared = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info,
+                                              use_telnet_session=use_telnet_session, con_telnet=con_telnet)
         current_alarms = _get_alarms(current_alarms_tab)
 
         for alarm in pre_alarms:
@@ -805,7 +831,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
             raise exceptions.TimeoutException(err_msg)
 
 def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.ADMIN):
+                         auth_info=Tenant.ADMIN, use_telnet_session=False, con_telnet=None):
     """
     Wait for all alarms_and_events to be cleared from system alarm-list
     Args:
@@ -823,7 +849,8 @@ def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_s
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info,
+                                              use_telnet_session=use_telnet_session, con_telnet=con_telnet)
         current_alarms = _get_alarms(current_alarms_tab)
 
         if len(current_alarms) == 0:
@@ -901,6 +928,57 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     if not kwargs:
         raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
 
+    system_attributes = ["system_mode", "sdn_enabled", "timezone", "name", "description", "contact", "location",
+                         "https_enabled"]
+
+    attr_values_ = ['--{} {}'.format(attr, value) for attr, value in kwargs.items() if attr in system_attributes]
+    args_ = ' '.join(attr_values_)
+
+    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+    elif code == 0:
+        return 0, ''
+    else:
+        # should not get here; cli.system() should already handle these cases
+        pass
+
+
+def set_system_values(name=None, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+    """
+    Modify the System Information.
+
+    Args:
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        **kwargs:   attribute-value pairs
+
+    Returns: (int, str)
+         0  - success
+         1  - error
+
+    Test Steps:
+        - Set the value via system modify <attr>=<value> [,<attr>=<value]
+
+    Notes:
+        Currently only the following are allowed to change:
+        name
+        description
+        location
+        contact
+
+        The following attributes are readonly and not allowed CLI user to change:
+            system_type
+            software_version
+            uuid
+            created_at
+            updated_at
+    """
+    if not kwargs:
+        raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
+
     attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
@@ -915,9 +993,10 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
         pass
 
 
-def get_system_name(fail_ok=True, con_ssh=None):
+def get_system_name(fail_ok=True, con_ssh=None, use_telnet_session=False, con_telnet=None):
 
-    table_ = table_parser.table(cli.system('show'))
+    table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet_session=use_telnet_session,
+                                           con_telnet=con_telnet, fail_ok=fail_ok)[1])
     system_name = table_parser.get_value_two_col_table(table_, 'name')
     return system_name
 
@@ -2192,7 +2271,7 @@ def is_patch_current(con_ssh=None):
     return 'OK' in patch_line.pop()
 
 
-def get_system_software_version(con_ssh=None):
+def get_system_software_version(con_ssh=None, use_telnet_session=False, con_telnet=None,):
     """
 
     Args:
@@ -2201,7 +2280,7 @@ def get_system_software_version(con_ssh=None):
     Returns (str): e.g., 16.10
 
     """
-    build_info = get_buildinfo(con_ssh=con_ssh)
+    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet,)
     sw_line = [l for l in build_info.splitlines() if "SW_VERSION" in l]
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
