@@ -91,7 +91,7 @@ def test_create_flavor_with_excessive_vcpu_negative():
 
     # Check if create_flavor returns erroneous exit code and error output is a proper human-readable message
 
-    expt_err = "Invalid input .* vcpus .*{}.* is greater than the maximum of 128".format(vcpu_num)
+    expt_err = "Invalid input .* vcpus.*{}.* is greater than the maximum of 128".format(vcpu_num)
 
     LOG.tc_step("Check flavor creation fails and proper error message displayed")
 

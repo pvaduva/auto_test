@@ -387,7 +387,7 @@ def apply_patches(lab, server, patch_dir):
         if 'vbox' in lab['name']:
             dest_server = lab['external_ip']
             ssh_port = lab['external_port']
-            temp_path = '/tmp/patches/'
+            temp_path = '/tmp/upgrade_patches/'
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server,
                               temp_path, dest_user=lab['local_user'],

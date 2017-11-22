@@ -437,12 +437,16 @@ def touch_files(vm_id, file_dirs, file_name=None, content=None, guest_os=None):
             file_path = "{}/{}".format(file_dir, file_name)
             file_path = file_path.replace('//', '/')
             vm_ssh.exec_sudo_cmd('mkdir -p {}; touch {}'.format(file_dir, file_path), fail_ok=False)
+            time.sleep(3)
             vm_ssh.exec_sudo_cmd('echo "{}" >> {}'.format(content, file_path), fail_ok=False)
             output = vm_ssh.exec_sudo_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+            # TO DELETE: Debugging purpose only
+            vm_ssh.exec_sudo_cmd('mount | grep vd')
             assert content in output, "Expected content {} is not in {}. Actual content: {}".\
                 format(content, file_path, output)
             file_paths.append(file_path)
 
+        vm_ssh.exec_sudo_cmd('sync')
     return file_paths, content
 
 
@@ -1856,7 +1860,7 @@ class VMInfo:
         if self.boot_info['type'] == 'image':
             image_id = self.boot_info['id']
             image_show_table = table_parser.table(cli.glance('image-show', image_id))
-            image_name = table_parser.get_value_two_col_table(image_show_table, 'image_name', strict=False)
+            image_name = table_parser.get_value_two_col_table(image_show_table, 'name', strict=False)
         else:      # booted from volume
             vol_show_table = table_parser.table(cli.cinder('show', self.boot_info['id']))
             image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')

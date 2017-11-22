@@ -647,6 +647,8 @@ def mount_partition(ssh_client, disk, partition=None, fs_type=None):
         LOG.info("mount {} to {}".format(partition, mount_on))
         ssh_client.exec_sudo_cmd('mkdir -p {}; mount {} {}'.format(mount_on, partition, mount_on), fail_ok=False)
         LOG.info("{} successfully mounted to {}".format(partition, mount_on))
+        mount_on_, fs_type_ = get_fs_mount_path(ssh_client=ssh_client, fs=partition)
+        assert mount_on == mount_on_ and fs_type == fs_type_
 
     return mount_on, fs_type
 
@@ -654,12 +656,14 @@ def mount_partition(ssh_client, disk, partition=None, fs_type=None):
 def turn_on_swap(ssh_client, disk, partition=None):
     if not partition:
         partition = '/dev/{}'.format(disk)
-    swap_info = ssh_client.exec_sudo_cmd('blkid | grep --color=never "{}:"'.format(partition))[1]
+    swap_info = ssh_client.exec_sudo_cmd('blkid | grep --color=never "{}:"'.format(partition), fail_ok=False)[1]
     swap_uuid = re.findall('UUID="(.*)" TYPE="swap"', swap_info)[0]
     LOG.info('swapon for {}'.format(partition))
-    ssh_client.exec_sudo_cmd('swapon {}'.format(partition))
     proc_swap = ssh_client.exec_sudo_cmd('cat /proc/swaps | grep --color=never "{} "'.format(partition))[1]
-    assert proc_swap, "swap partition is not shown in /proc/swaps after swapon"
+    if not proc_swap:
+        ssh_client.exec_sudo_cmd('swapon {}'.format(partition))
+        proc_swap = ssh_client.exec_sudo_cmd('cat /proc/swaps | grep --color=never "{} "'.format(partition))[1]
+        assert proc_swap, "swap partition is not shown in /proc/swaps after swapon"
 
     return swap_uuid
 

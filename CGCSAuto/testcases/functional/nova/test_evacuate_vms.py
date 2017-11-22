@@ -1,3 +1,4 @@
+import time
 from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
@@ -22,14 +23,14 @@ def touch_files_under_vm_disks(vm_id, ephemeral, swap, vm_type, disks):
 
     expt_len = 1 + int(bool(ephemeral)) + int(bool(swap)) + (1 if 'with_vol' in vm_type else 0)
 
-    LOG.tc_step("Auto mount non-root disks if any")
+    LOG.info("\n--------------------------Auto mount non-root disks if any")
     mounts = vm_helper.auto_mount_vm_disks(vm_id=vm_id, disks=disks)
     assert expt_len == len(mounts)
 
     if bool(swap):
         mounts.remove('none')
 
-    LOG.tc_step("Create files under vm disks: {}".format(mounts))
+    LOG.info("\n--------------------------Create files under vm disks: {}".format(mounts))
     file_paths, content = vm_helper.touch_files(vm_id=vm_id, file_dirs=mounts)
     return file_paths, content
 
@@ -158,6 +159,7 @@ class TestDefaultGuest:
         assert set(vms) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vms, vms_on_host)
 
         for vm_ in vms:
+            LOG.tc_step("Touch files under vm disks {}: {}".format(vm_, vms_info[vm_]))
             file_paths, content = touch_files_under_vm_disks(vm_, **vms_info[vm_])
             vms_info[vm_]['file_paths'] = file_paths
             vms_info[vm_]['content'] = content

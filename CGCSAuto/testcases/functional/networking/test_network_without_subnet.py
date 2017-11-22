@@ -38,9 +38,7 @@ def update_net_quota(request):
 
 @mark.parametrize(('if_attach_arg', 'vif_model'), [
     ('port_id', 'virtio'),
-    #('port_id', 'avp'),
     ('net-id', 'avp')
-    #('net-id', 'virtio')
 ])
 def test_network_without_subnets(base_vm, if_attach_arg, vif_model):
     """
@@ -82,8 +80,7 @@ def test_network_without_subnets(base_vm, if_attach_arg, vif_model):
     vm_under_test = vm_helper.boot_vm(name='vm-net-without-subnet', nics=[mgmt_nic, tenant_net_nic],
                                       cleanup='function')[1]
 
-    for vm_actions in [['cold_migrate'], ['live_migrate'], ['pause', 'unpause'], ['suspend', 'resume'],
-                      ['stop', 'start']]:
+    for vm_actions in [['cold_migrate'], ['live_migrate'], ['suspend', 'resume'], ['stop', 'start']]:
         tenant_port_id = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_net_id)
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "

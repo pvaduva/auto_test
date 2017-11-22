@@ -22,7 +22,7 @@ def skip_test_if_less_than_two_hosts():
         cinder_helper.update_quotas(volumes=20)
 
 
-class TestCgcsGuest:
+class TestTisGuest:
 
     @fixture(scope='class')
     def vms_(self):

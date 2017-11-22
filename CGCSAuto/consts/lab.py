@@ -73,7 +73,6 @@ class Labs:
         'floating ip': '128.224.151.49',
         'controller-0 ip': '128.224.151.47',
         'controller-1 ip': '128.224.151.48',
-        #'controller_nodes': [18541, 18542],
         'controller_nodes': [18541, 21758],
         'compute_nodes': [22417, 22418, 21762, 18537],
         'storage_nodes': [18536, 18551],
@@ -141,6 +140,7 @@ class Labs:
         'controller_nodes': [23136, 23138],
         'compute_nodes': [23135, 23137, 23140, 23143, 23139, 23141, 23142, 23096],
         'storage_nodes': [23146, 23147],
+        'tpm_installed': True,
     }
 
     PV1_2 = {
@@ -191,6 +191,7 @@ class Labs:
         'controller_nodes': [23512, 23513],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'tpm_installed': True,
     }
     
     SM_1 = {
@@ -337,6 +338,7 @@ class Labs:
         'controller-1 ip': '128.224.151.84',
         'controller_nodes': [23282, 23283],
         'compute_nodes': [23284, 23285],
+        'tpm_installed': True,
     }
 
     WCP_67 = {
@@ -359,7 +361,7 @@ class Labs:
         'controller_nodes': [23287],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-
+        'tpm_installed': True,
     }
 
     WCP_69_70 = {
@@ -371,6 +373,7 @@ class Labs:
         'controller_nodes': [23288, 23289],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'tpm_installed': True,
     }
 
     WCP_71_75 = {
@@ -381,6 +384,7 @@ class Labs:
         'controller-1 ip': '128.224.151.24',
         'controller_nodes': [23271, 23272],
         'compute_nodes': [23273, 23274, 23275],
+        'tpm_installed': True,
     }
 
     WCP_76_77 = {
@@ -392,6 +396,7 @@ class Labs:
         'controller_nodes': [23276, 23277],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'tpm_installed': True,
     }
 
     WCP_78_79 = {
@@ -403,6 +408,7 @@ class Labs:
         'controller_nodes': [23278, 23279],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'tpm_installed': True,
     }
 
     WCP_80_84 = {
@@ -434,6 +440,7 @@ class Labs:
         'controller_nodes': [23328, 23329],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'tpm_installed': True,
     }
 
     WCP_92_98 = {
@@ -454,7 +461,8 @@ class Labs:
         'controller-0 ip': '128.224.151.11',
         'controller-1 ip': '128.224.151.13',
         'controller_nodes': [23312, 23313],
-        'compute_nodes': [23314, 23315, 23316]
+        'compute_nodes': [23314, 23315, 23316],
+        'tpm_installed': True,
     }
 
     VBOX = {
@@ -484,27 +492,26 @@ class Labs:
         'controller-0 ip': '10.10.10.6',
         'controller-1 ip': '10.10.10.7',
         'controller_nodes': [0, 1],
-        'compute_nodes': [0, 1]
+        'compute_nodes': [0, 1],
+		'storage_nodes': [0, 1]
     }
 
     VBOX_3 = {
         'short_name': 'vbox_3',
         'name': 'yow-cgcs-vbox-3',
-        'floating ip': '10.10.10.5',
-        'controller-0 ip': '10.10.10.6',
-        'controller-1 ip': '10.10.10.7',
+        'floating ip': '10.10.10.8',
+        'controller-0 ip': '10.10.10.9',
+        'controller-1 ip': '10.10.10.10',
         'controller_nodes': [0, 1],
         'compute_nodes': [0, 1],
-        'storage_nodes': [0, 1],
     }
-
 
     VBOX_4 = {
         'short_name': 'vbox_4',
         'name': 'yow-cgcs-vbox-4',
-        'floating ip': '10.10.10.8',
-        'controller-0 ip': '10.10.10.9',
-        'controller-1 ip': '10.10.10.10',
+        'floating ip': '10.10.10.11',
+        'controller-0 ip': '10.10.10.12',
+        'controller-1 ip': '10.10.10.13',
         'controller_nodes': [0, 1],
     }
 

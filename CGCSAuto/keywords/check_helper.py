@@ -648,13 +648,22 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
     if disk_check == 'no_loss':
         no_loss_paths = final_paths
     else:
+        # If there's any loss, we must not have remote storage. And any ephemeral/swap disks will be local.
         disks_to_check = disks.get('eph', {})
+        # skip swap type checking for data loss since it's not a regular filesystem
         # swap_disks = disks.get('swap', {})
         # disks_to_check.update(swap_disks)
+
+        for path_ in final_paths:
+            # For tis-centos-guest, ephemeral disk is mounted to /mnt after vm launch.
+            if str(path_).rsplit('/', 1)[0] == '/mnt':
+                loss_paths.append(path_)
+                break
 
         for disk in disks_to_check:
             for path in final_paths:
                 if disk in path:
+                    # We mount disk vdb to /mnt/vdb, so this is looking for vdb in the mount path
                     loss_paths.append(path)
                     break
 
