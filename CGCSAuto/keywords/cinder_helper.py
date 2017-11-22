@@ -1349,6 +1349,9 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
                 else:
                     raise exceptions.CinderError(err_msg)
 
+            LOG.info("Exported 'Available' Volume {} successfully ".format(vol_id))
+            volume_exported.append(vol_id)
+
         # execute backup in-use volume command
         if get_volume_states(vol_id, 'status')['status'] == 'in-use':
             LOG.tc_step("export in use volume {} ".format(vol_id))
@@ -1393,7 +1396,7 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             LOG.info("Deleteing snapshot Volume snapshot {} after export ".format(snap_shot_id))
             cli.cinder('snapshot-delete', snap_shot_id, auth_info=auth_info)
 
-        LOG.info("Exported Volume  {} successfully ".format(vol_id))
-        volume_exported.append(vol_id)
+            LOG.info("Exported 'in-use' Volume {} successfully ".format(vol_id))
+            volume_exported.append(vol_id)
 
     return 0, volume_exported

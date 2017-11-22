@@ -866,7 +866,7 @@ class Telnet:
         else:
             self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
 
-        return (int(rc), output)
+        return int(rc), output
 
     def login(self, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
         """Waits for login prompt to authenticate user.
