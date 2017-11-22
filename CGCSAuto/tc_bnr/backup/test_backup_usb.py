@@ -156,7 +156,8 @@ def test_create_backup(pre_system_backup):
     # execute backup available volume command
     LOG.tc_step("Cinder Volumes backup ...")
 
-    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.ADMIN)
+    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.ADMIN, status='Available')
+    vol_ids += cinder_helper.get_volumes(auth_info=Tenant.ADMIN, status='in-use')
     if len(vol_ids) > 0:
         LOG.info("Exporting cinder volumes: {}".format(vol_ids))
         exported = install_helper.export_cinder_volumes(backup_dest=backup_dest,
@@ -166,7 +167,7 @@ def test_create_backup(pre_system_backup):
         assert len(exported) > 0, "Fail to export all volumes"
         assert len(exported) == len(vol_ids), "Some volumes failed export: {}".format(set(vol_ids)-set(exported))
     else:
-        LOG.info("No cinder volumes are avaialbe in the system; skipping cinder volume export...")
+        LOG.info("No cinder volumes are avaialbe or in-use states in the system; skipping cinder volume export...")
 
     # Copying ystem backup lSO file for future restore
     assert backup_load_iso_image(backup_info)

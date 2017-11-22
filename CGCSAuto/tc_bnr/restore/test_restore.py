@@ -229,7 +229,8 @@ def restore_setup(pre_restore_checkup):
     install_helper.power_off_host(hostnames)
 
     LOG.tc_step("Booting controller-0 ... ")
-    is_cpe = (lab['system_type'] == 'CPE')
+    # is_cpe = (lab['system_type'] == 'CPE')
+    is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
     install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe)
 
     # establish ssh connection with controller
@@ -421,7 +422,13 @@ def test_restore_from_backup(restore_setup):
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
     if lab.get('system_type', 'Standard') == 'CPE':
-        install_helper.run_cpe_compute_config_complete(con_ssh, controller0)
+        controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+        install_helper.run_cpe_compute_config_complete(controller_node, controller0)
+        con_ssh.close()
+        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+        controller_node.ssh_conn = con_ssh
+        ControllerClient.set_active_controller(con_ssh)
+        host_helper.wait_for_hosts_ready(controller0)
 
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
     assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \

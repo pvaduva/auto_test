@@ -17,6 +17,7 @@ from keywords import system_helper, host_helper, vm_helper, patching_helper, cin
 from CGCSAuto.utils import telnet as telnetlib, exceptions, local_host, cli
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
+
 # from CGCSAuto.utils import local_host
 from CGCSAuto.utils import local_host
 from consts.auth import Tenant, CliAuth
@@ -611,7 +612,7 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
     if config:
-        cmd = "test -e {}/{}.conf".format( WRSROOT_HOME, script)
+        cmd = "test -e {}/{}.conf".format(WRSROOT_HOME, script)
         rc = con_ssh.exec_cmd(cmd)[0]
 
         if rc != 0:
@@ -2288,12 +2289,56 @@ def get_lab_info(barcode):
     return settings
 
 
-def run_cpe_compute_config_complete(ssh_client, controller0):
+def run_cpe_compute_config_complete(controller0_node, controller0):
+    output_dir = ProjVar.get_var('LOG_DIR')
 
-    cmd = 'compute-config-complete'
-    cli.system(cmd)
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn.login()
 
-    LOG.info("Controller0 reset has started")
-    ssh_client.close()
+    telnet_client = controller0_node.telnet_conn
 
-    host_helper.wait_for_hosts_ready(controller0)
+    cmd = 'system compute-config-complete'
+    LOG.info('To run CLI:{}'.format(cmd))
+
+    LOG.info('execute CLI:{}'.format(cmd))
+    rc, output = telnet_client.exec_cmd(cmd)
+    if rc != 0:
+        msg = '{} failed, rc:{}\noutput:\n{}'.format(cmd, rc, output)
+        LOG.error(msg)
+        raise exceptions.RestoreSystem
+
+    LOG.info('wait controller reboot after CLI:{}'.format(cmd))
+    time.sleep(30)
+    for count in range(50):
+        try:
+            hosts = host_helper.get_hosts()
+            if hosts:
+                LOG.debug('hosts:{}'.format(hosts))
+        except:
+            break
+
+        time.sleep(10)
+
+    LOG.info('SSH connectiong is down, wait 120 seconds and reconnect with telnet')
+    time.sleep(120)
+
+    LOG.info('re-login')
+    controller0_node.telnet_conn.login()
+    os.environ["TERM"] = "xterm"
+
+    for _ in range(40):
+        try:
+            controller0_node.telnet_conn.exec_cmd('source /etc/nova/openrc')
+            if rc == 0:
+                rc, output = controller0_node.telnet_conn.exec_cmd('system host-show {}'.format(controller0))
+                if rc == 0 and output.strip():
+                    LOG.info('System is ready, {} status: {}'.format(controller0, output))
+                    break
+        except exceptions.TelnetException as e:
+            LOG.warn('got error:{}'.format(e))
+
+        LOG.info('{} is not ready yet, failed to source /etc/nova/openrc, continue to wait'.format(controller0))
+        time.sleep(15)
+
+    controller0_node.telnet_conn.close()
