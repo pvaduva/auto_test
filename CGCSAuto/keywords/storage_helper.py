@@ -566,7 +566,7 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         controler_ssh.send('yes')
         controler_ssh.expect()
 
-    rc, output = controler_ssh.proecess_cmd_result(cmd)
+    rc, output = controler_ssh.process_cmd_result(cmd)
     if rc != 0:
         if fail_ok:
             return rc, output
@@ -680,3 +680,9 @@ def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True)
     cmd = 'echo "{} {} {}  defaults 0 0" >> /etc/fstab'.format(fs, mount_on, fs_type)
     ssh_client.exec_sudo_cmd(cmd, fail_ok=False)
     ssh_client.exec_sudo_cmd('cat /etc/fstab', get_exit_code=False)
+
+
+def get_storage_usage(service='cinder', rtn_val='free capacity (GiB)', con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
+    val = table_parser.get_values(table_, rtn_val, service=service)[0]
+    return float(val)

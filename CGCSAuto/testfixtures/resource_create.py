@@ -132,7 +132,7 @@ def __create_image(img_os, scope):
 
     img_id = glance_helper.get_image_id_from_name(img_os, strict=True)
     if not img_id:
-        disk_format = 'raw' if img_os == 'cgcs-guest' else 'qcow2'
+        disk_format = 'raw' if img_os in ['cgcs-guest', 'tis-centos-guest', 'vxworks'] else 'qcow2'
         img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format=disk_format,
                                             container_format='bare')[1]
 

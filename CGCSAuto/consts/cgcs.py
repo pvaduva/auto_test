@@ -29,6 +29,15 @@ HEAT_FLAVORS = ['small_ded', 'small_float']
 MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
+PREFIX_BACKUP_FILE = 'titanium_backup_'
+TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
+IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
+CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
+BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
+TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+
+TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
+
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
@@ -56,6 +65,7 @@ class GuestImages:
         'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 7.5),
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
+        'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
     }
 
@@ -109,6 +119,12 @@ class VMStatus:
     MIGRATING = 'MIGRATING'
 
 
+class ImageStatus:
+    QUEUED = 'queued'
+    ACTIVE = 'active'
+    SAVING = 'saving'
+
+
 class HostAdminState:
     UNLOCKED = 'unlocked'
     LOCKED = 'locked'
@@ -138,6 +154,8 @@ class Prompt:
     CONTROLLER_1 = '.*controller\-1\:~\$ '
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
 
+    VXWORKS_PROMPT = '-> '
+
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
@@ -145,15 +163,16 @@ class Prompt:
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
     PASSWORD_PROMPT = '.*assword\:.*'
+    LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
     TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
+    TIS_NODE_PROMPT_BASE = '{}\:~\$ '
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
-
 
 
 class NovaCLIOutput:
@@ -200,6 +219,8 @@ class FlavorSpec:
     PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
     CPU_REALTIME = 'hw:cpu_realtime'
     CPU_REALTIME_MASK = 'hw:cpu_realtime_mask'
+    HPET_TIMER = 'sw:wrs:guest:hpet'
+    NESTED_VMX = 'hw:wrs:nested_vmx'
 
 
 class ImageMetadata:
@@ -259,6 +280,7 @@ class EventLogID:
     NETWORK_AGENT_NOT_RESPOND = '300.003'
     CON_DRBD_SYNC = '400.001'
     SERVICE_GROUP_STATE_CHANGE = '400.001'
+    LOSS_OF_REDUNDANCY = '400.002'
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
@@ -271,6 +293,7 @@ class EventLogID:
     PROVIDER_NETWORK_FAILURE = '300.005'
     BMC_SENSOR_ACTION = '200.007'
     CPU_USAGE_HIGH = '100.101'
+    FS_THRESHOLD_EXCEEDED = '100.104'
 
 
 class NetworkingVmMapping:
@@ -382,14 +405,14 @@ class OrchestStrategyStates:
 
     # abort phase
     ABORTING = 'aborting'
-    ABORTED ='aborted'
+    ABORTED = 'aborted'
     ABORT_FAILED = 'abort-failed'
     ABORT_TIMEOUT = 'abort-timeout'
 
     OrchestStrategyPhaseStates = {
-        OrchestStrategyPhases.BUILD : [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT ],
-        OrchestStrategyPhases.ABORT : [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
-        OrchestStrategyPhases.APPLY : [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+        OrchestStrategyPhases.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
+        OrchestStrategyPhases.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhases.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
     }
 
     def validate(self, phase, state):
@@ -422,3 +445,14 @@ class OrchestrationStrategyKeyNames:
 class DevClassIds:
     QAT_VF = '0b4000'
     GPU = '030000'
+
+
+class MaxVmsSupported:
+    SX = 10
+    DX = 10
+
+
+class BackupRestore:
+    USB_MOUNT_POINT = '/media/wrsroot'
+    USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
+    LOCAL_BACKUP_PATH = '/sandbox/backups'

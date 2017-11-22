@@ -76,7 +76,7 @@ Install VirtualBox on Linux or Windows Host
 
 .	Network Consolidation Options for controller (con): 
 
-.		 M_O   - Separate Management & OAM Interface (Only supported for 2only)
+.		 M_O   - Separate Management & OAM Interface 
 .                M_O_I - Separate Management, OAM & Infrastructure network
 .	         M_O_TI- Seperate Management, OAM network & Tagged Infrastruture 
 .		 MOI   - Combined Management, OAM, Infrastructure network
@@ -907,7 +907,7 @@ $part=1
 
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id
-<root
+<li69nux
 >export TMOUT=0
 
 ; === setup first IP interface
@@ -937,7 +937,7 @@ $part=1
 @3
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id
-<root
+<li69nux
 
 ; === show version
 >cat /etc/build.info
@@ -992,11 +992,17 @@ $directory=R2_files
 		<Patch installation is complete
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<root
+		###<li69nux####
                 >sudo sw-patch query
+		<ssword
+		>$pass
                 >sudo sw-patch query-hosts
+		<ssword
+		>$pass
 		; === Reboot the controller
 		>sudo reboot
+		<ssword
+		>$pass
 		*FORK serial
 		>>^M
 		; === reconnect to serial
@@ -1013,12 +1019,16 @@ $directory=R2_files
 
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<root
+		<li69nux
 		>export TMOUT=0
-
+		@60
 		; === setup first IP interface
 		>sudo /sbin/ip addr add $IP/24 dev $eth0
+		<ssword
+		>$pass
 		>sudo /sbin/ip link set $eth0 up
+		<ssword
+		>$pass
 		>ping $ping_opt  $IP
 		<time=
 		>
@@ -1039,15 +1049,19 @@ $directory=R2_files
 		>
 		>export TMOUT=0
 
-		@3
+		@30
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<root
+		<li69nux
 
 		; === show version
 		>cat /etc/build.info
                 >sudo sw-patch query
+		<ssword
+		>li69nux
                 >sudo sw-patch query-hosts
+		<ssword
+		>li69nux
 		
 	]
 ######################## Patching Ends ###############################
@@ -1316,6 +1330,109 @@ $node_controllers=$node_list
 
 @100
 
+
+?if $topology == 2only ? [
+	?if $node_controllers == controller ? [
+		@60
+		$i=0
+		$controller_node=controller-1
+		>system host-list
+		<$controller_node
+		+$administrative=(locked|unlocked)
+		?if $administrative == locked ? [
+			$state=none
+			>system host-list
+			<$controller_node
+			+$state=(available|online|offline|failed|intest)
+			[ $state != online
+				$state=none
+				[ $state != online
+					; === wait for $controller_node to come online
+					>system host-list
+					<$controller_node
+					+$state=(available|online|offline|failed|intest)
+	
+					!sleep 5
+					+$i
+					?if $i > $max? [
+						;red $controller_node did not become online
+						# break out of while loop
+						$state=online
+						; Giving user the option to recover the lab
+						$i=0
+						*INTERACT
+					]
+				]
+			]
+
+		]
+
+	; === Only controller, run lab_setup
+	>
+	#----------- 1 of 3 Lab_setup
+	@300
+	>time ./lab_setup.sh
+	<real
+	>echo $?
+	+$return=\n(\d)
+	#oops, run lab_setup again
+	?if $return != 0? >time ./lab_setup.sh
+	>
+		$state=none
+		>system host-list
+		<$controller_node
+		+$state=(available|online|offline|failed|intest)
+		?if $state == online		
+			>system host-list
+			<$controller_node
+			+$administrative=(locked|unlocked)
+			?if $administrative == locked ? [
+			    >system host-if-modify -n oam0 -nt oam controller-1 $eth0
+			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
+        		    ?if $configure_infrastructure_interface == Y ? [
+				    ?if $configure_infrastructure_VLAN == Y ? [
+					>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			            ?if $configure_infrastructure_VLAN == N ? [
+					>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			    ]
+			    ; === Unlock  
+		            >system host-unlock $controller_node
+			    $state=none		
+			    [ $state != available
+				; === wait for $controller_node to come available
+				>system host-list
+				<$controller_node
+				+$state=(available|online|offline|failed|intest)
+				!sleep 5
+				+$i
+				?if $i > $max? [
+					;red $controller_node did not become available
+					# break out of while loop
+					$state=available
+					; Giving user the option to recover the lab
+					*INTERACT
+				]
+			    ]
+		            #----------- 2 of 3 Lab_setup
+			@300
+			>time ./lab_setup.sh
+			<real
+			>echo $?
+			+$return=\n(\d)
+			#oops, run lab_setup again
+			?if $return != 0? >time ./lab_setup.sh
+			>
+		  	]
+		]
+	]
+]
+
 #; === Get the infra interface name from controller-0 
 
 >system host-if-list controller-0 
@@ -1519,8 +1636,9 @@ $node_storage=$node_list
 $node_computes=$node_list
 =$node_computes/.*(compute)-\d.*/\1/
 *INTERACT
-; === Wait for Computes to come Online/ stopped before lab_setup
 ?if $node_computes == compute ? [
+	; === Wait for Computes to come Online/ stopped before lab_setup
+
 	; === Computes present, run lab_setup
 	>
 	#----------- 1 of 3 Lab_setup
@@ -1624,6 +1742,8 @@ $node_computes=$node_list
 
 	#----------- 2 of 3 Lab_setup
 	@300
+
+	; === Inside compute setup function
 	>time ./lab_setup.sh
 	<real
 	>echo $?
@@ -1691,9 +1811,13 @@ $node_computes=$node_list
 	# configure computes
 ]
 >
+
+
+
+
 ; === Adding tempest.conf info (in order to run nosetest)
 >echo "$pass" | sudo -S id
-<root
+<li69nux
 $tempest_conf=/etc/tempest/tempest.conf
 >cp $tempest_conf $tempest_conf.bak
 >sudo chmod 666 $tempest_conf
@@ -1721,7 +1845,6 @@ Add to tempest.conf to run tests
 #	;purple NOTE: controller-1 is just completing installation, and will need another few minutes to finish booting
 #	>
 #]
-
 
 ?if $node_controllers == controller ? [
 	@60
@@ -1751,10 +1874,13 @@ Add to tempest.conf to run tests
 		]
 	]
 ]
-
 ?if $patch == yes ?[
         >sudo sw-patch query
+	<ssword
+	>li69nux
         >sudo sw-patch query-hosts
+	<ssword
+	>li69nux
 ]
 
 ; === Install Complete!!

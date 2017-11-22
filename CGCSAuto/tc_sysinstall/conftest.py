@@ -1,5 +1,6 @@
 
 import pytest
+import os
 
 
 import setups
@@ -48,23 +49,6 @@ from utils import lab_info
 # Command line options #
 ########################
 
-def pytest_addoption(parser):
-
-    ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. " \
-                                       "eg /dev/sdb or /dev/sdc"
-    ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1." \
-                                       " eg /dev/sdb or /dev/sdc"
-    ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
-                        "volume, in GiB (the default value is 20)"
-
-    parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
-                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
-    parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
-                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
-    parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
-                     action='store', metavar='SIZE',  help=ceph_mon_gib_help)
-
-
 def pytest_configure(config):
 
     # Lab install params
@@ -103,7 +87,8 @@ def setup_test_session():
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    # os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
@@ -113,7 +98,12 @@ def setup_test_session():
     con_ssh.set_prompt()
 
     global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
+    natbox = ProjVar.get_var('NATBOX')
+    if natbox['ip'] == 'localhost':
+        natbox_ssh = 'localhost'
+    else:
+        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), natbox, con_ssh=con_ssh)
+
     ProjVar.set_var(natbox_ssh=natbox_ssh)
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
@@ -133,8 +123,9 @@ def reconnect_before_test():
     """
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    natbox_ssh.flush()
-    natbox_ssh.connect(retry=False)
+    if natbox_ssh and isinstance(natbox_ssh, SSHClient):
+        natbox_ssh.flush()
+        natbox_ssh.connect(retry=False)
 
 
 def pytest_collectstart():

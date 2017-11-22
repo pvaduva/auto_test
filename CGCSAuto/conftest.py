@@ -11,19 +11,22 @@ import setups
 from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
 
 
 tc_start_time = None
 tc_end_time = None
 has_fail = False
-stress_iteration = -1
+repeat_count = -1
+stress_count = -1
+count = -1
 no_teardown = False
 tracebacks = []
-
 
 ################################
 # Process and log test results #
 ################################
+
 
 class MakeReport:
     nodeid = None
@@ -107,9 +110,11 @@ def pytest_runtest_makereport(item, call, __multicall__):
     my_rep = MakeReport.get_report(item)
     my_rep.update_results(call, report)
 
-    test_name = item.nodeid.replace('::()::', '::').replace('testcases/', '')
+    test_name = item.nodeid.replace('::()::', '::')     # .replace('testcases/', '')
     res_in_tests = ''
     res = my_rep.get_results()
+
+    # Write final result to test_results.log
     if report.when == 'teardown':
         res_in_log = 'Test Passed'
         fail_at = []
@@ -131,6 +136,8 @@ def pytest_runtest_makereport(item, call, __multicall__):
             res_in_tests = 'PASS'
         elif 'Test Failed' in res_in_log:
             res_in_tests = 'FAIL'
+            if ProjVar.get_var('PING_FAILURE'):
+                setups.add_ping_failure(test_name=test_name)
 
         if not res_in_tests:
             res_in_tests = 'UNKNOWN'
@@ -146,11 +153,13 @@ def pytest_runtest_makereport(item, call, __multicall__):
 
         _write_results(res_in_tests=res_in_tests, test_name=test_name)
 
-    if stress_iteration > 0:
+    if repeat_count > 0:
         for key, val in res.items():
             if val[0] == 'Failed':
                 _write_results(res_in_tests='Failed', test_name=test_name)
                 TestRes.FAILNUM += 1
+                if ProjVar.get_var('PING_FAILURE'):
+                    setups.add_ping_failure(test_name=test_name)
                 pytest.exit("Skip rest of the iterations upon stress test failure")
 
     if no_teardown and report.when == 'call':
@@ -181,6 +190,10 @@ def pytest_runtest_setup(item):
     print('')
     message = "Setup started:"
     testcase_log(message, item.nodeid, log_type='tc_setup')
+    # set test name for ping vm failure
+    test_name = 'test_{}'.format(item.nodeid.rsplit('::test_', 1)[-1].replace('/', '_'))
+    ProjVar.set_var(TEST_NAME=test_name)
+    ProjVar.set_var(PING_FAILURE=False)
 
 
 def pytest_runtest_call(item):
@@ -230,12 +243,17 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
+    if config.getoption('help'):
+        return
+
     # Common reporting params
     collect_all = config.getoption('collectall')
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
     session_log_dir = config.getoption('sessiondir')
+    no_cgcs = config.getoption('nocgcsdb')
+    col_kpi = config.getoption('col_kpi')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -245,10 +263,19 @@ def pytest_configure(config):
     openstack_cli = config.getoption('openstackcli')
     global change_admin
     change_admin = config.getoption('changeadmin')
-    global stress_iteration
-    stress_iteration = config.getoption('repeat')
+    global repeat_count
+    repeat_count = config.getoption('repeat')
+    global stress_count
+    stress_count = config.getoption('stress')
+    global count
+    if repeat_count > 0:
+        count = repeat_count
+    elif stress_count > 0:
+        count = stress_count
+
     global no_teardown
     no_teardown = config.getoption('noteardown')
+    keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
@@ -259,6 +286,13 @@ def pytest_configure(config):
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+
+    if no_cgcs:
+        ProjVar.set_var(CGCS_DB=False)
+    if keystone_debug:
+        ProjVar.set_var(KEYSTONE_DEBUG=True)
+    if col_kpi:
+        ProjVar.set_var(COLLECT_KPI=True)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -278,48 +312,62 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
+    # put keyfile to home directory of localhost
+    if natbox['ip'] == 'localhost':
+        labname = ProjVar.get_var('LAB_NAME')
+        ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+
     InstallVars.set_install_var(lab=lab)
 
     config_logger(log_dir)
 
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
-
     # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
     file_or_dir = config.getoption('file_or_dir')
     origin_file_dir = list(file_or_dir)
-    if stress_iteration > 0:
-        for f_or_d in origin_file_dir:
-            if '[' in f_or_d:
-                # Below setting seems to have no effect. Test did not continue upon collection failure.
-                # config.option.continue_on_collection_errors = True
-                # return
-                file_or_dir.remove(f_or_d)
-                origin_f_or_list = list(f_or_d)
 
-                for i in range(stress_iteration):
-                    extra_str = 'iter{}-'.format(i)
-                    f_or_d_list = list(origin_f_or_list)
-                    f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
-                    new_f_or_d = ''.join(f_or_d_list)
-                    file_or_dir.append(new_f_or_d)
+    if count > 1:
+        print("Repeat following tests {} times: {}".format(count, file_or_dir))
+        del file_or_dir[:]
+        for f_or_d in origin_file_dir:
+            for i in range(count):
+                file_or_dir.append(f_or_d)
+            # Note! Below code was a workaround for parametrized repeat.
+            # if '[' in f_or_d:
+            #     # Below setting seems to have no effect. Test did not continue upon collection failure.
+            #     # config.option.continue_on_collection_errors = True
+            #     # return
+            #     file_or_dir.remove(f_or_d)
+            #     origin_f_or_list = list(f_or_d)
+            #
+            #     for i in range(count):
+            #         extra_str = 'iter{}-'.format(i)
+            #         f_or_d_list = list(origin_f_or_list)
+            #         f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
+            #         new_f_or_d = ''.join(f_or_d_list)
+            #         file_or_dir.append(new_f_or_d)
 
         # print("after modify: {}".format(config.option.file_or_dir))
 
 
 def pytest_addoption(parser):
-    lab_help = "Lab to connect to. Valid input: lab name such as 'cgcs-r720-3_7', or floating ip such as " \
-               "'128.224.150.142'. If it's a new lab, use floating ip before it is added to the automation framework."
+    lab_help = "Lab to connect to. Valid input: Hardware labs - use lab name such as 'r720_2-7', 'yow-cgcs-r720-3_7';" \
+               "if it's a new lab, use floating ip before it is added to the automation framework. " \
+               "VBox - use vbox or the floating ip of your tis system if it is not 10.10.10.2. " \
+               "Cumulus - floating ip of the cumulus tis system"
     tenant_help = "Default tenant to use when unspecified. Valid values: tenant1, tenant2, or admin"
-    natbox_help = "NatBox to use. Valid values: nat_hw, or nat_cumulus."
+    natbox_help = "NatBox to use. Default: NatBox for hardware labs. Valid values: nat_hw (for hardware labs), " \
+                  "<your own natbox ip> (for VBox, choose the 128.224 ip), or nat_cumulus (for Cumulus)."
     bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
     collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
     logdir_help = "Directory to store test session logs. If this is specified, then --resultlog will be ignored."
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
-    stress_help = "Number of iterations to run specified testcase(s)"
+    stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
+    count_help = "Repeat tests x times - NO stop on failure"
     skiplabsetup_help = "Do not run lab_setup post lab install"
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
@@ -331,30 +379,83 @@ def pytest_addoption(parser):
                      help=collect_all_help)
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
-    parser.addoption('--report_tag', action='store', dest='report_tag', metavar='tagname', default=None, help=tag_help)
+    parser.addoption('--report_tag', '--report-tag', action='store', dest='report_tag', metavar='tagname', default=None,
+                     help=tag_help)
     parser.addoption('--sessiondir', '--session_dir', '--session-dir', action='store', dest='sessiondir',
                      metavar='sessiondir', default=None, help=logdir_help)
+    parser.addoption('--no-cgcsdb', '--no-cgcs-db', '--nocgcsdb', action='store_true', dest='nocgcsdb')
 
     # Test session options on installed lab:
-    parser.addoption('--lab', action='store', metavar='labname', default=None, help=lab_help)
+    parser.addoption('--lab', action='store', metavar='lab', default=None, help=lab_help)
     parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
-    parser.addoption('--natbox', action='store', metavar='natboxname', default=None, help=natbox_help)
+    parser.addoption('--natbox', action='store', metavar='natbox', default=None, help=natbox_help)
     parser.addoption('--changeadmin', '--change-admin', '--change_admin', dest='changeadmin', action='store_true',
                      help=changeadmin_help)
     parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
     parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
                      help=openstackcli_help)
     parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
+    parser.addoption('--stress', metavar='stress', action='store', type=int, default=-1, help=count_help)
     parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
+    parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
+    parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
+                     help="Collect kpi for applicable test cases")
 
-    # Lab install options:
+    ##################################
+    # Lab install or upgrade options #
+    ##################################
+    # Install
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
     parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
                      help=skiplabsetup_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+    # Ceph Post Install
+    ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
+    ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
+    ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
+                        "volume, in GiB (the default value is 20)"
+    parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
+    parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
+    parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
+                     action='store', metavar='SIZE',  help=ceph_mon_gib_help)
     # Note --lab is also a lab install option, when config file is not provided.
+
+    ###############################
+    #  Backup and Restore options #
+    ###############################
+    # Backup
+    backup_server_destination_help = "The external destination  where the backupfiles are copied too. " \
+                                     "Choices are USB  ( 16G USB  or above must be plugged to controller-0) or " \
+                                     "local (Test server). Default is USB"
+    backup_destination_path_help = "The path the backup files are copied to if destination is not a USB. " \
+                                   "If destination is  USB, by default, the backup files are copied to " \
+                                   "mount point: /media/wrsroot/backups.  For local (Test Server)" \
+                                   "the default is /sandbox/backups."
+    delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
+                     "to the specified destination. Default is True."
+    parser.addoption('--destination', '--dest',  dest='destination', metavar='dest',
+                     action='store', default='usb',  help=backup_server_destination_help)
+    parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
+                     action='store', metavar='DIR', help=backup_destination_path_help)
+    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups', metavar='delete_backups',
+                     action='store', default=True,  help=delete_backups)
+    # Restore
+    backup_src_path_help = "The path to  backup files in the backup source, if source is not a USB. If source is USB," \
+                           " by default, the backup files are found at the mount point: /media/wrsroot/backups. " \
+                           " For local (Test Server) the default is /sandbox/backups."
+    parser.addoption('--backup-src', '--backup_src',  dest='backup_src', action='store', default='USB',
+                     help="Where to get the bakcup files: choices are 'usb' and 'local'")
+    parser.addoption('--backup-src-path', '--backup_src_path',  dest='backup_src_path',
+                     action='store', metavar='DIR', help=backup_src_path_help)
+    parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
+                     action='store',  help="The build id of the backup")
+    parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
+                     action='store',  help="The Titanium builds dir where the backup build id belong. "
+                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
 
 def config_logger(log_dir):
@@ -372,8 +473,10 @@ def config_logger(log_dir):
     LOG.addHandler(stream_hdler)
 
 
-def pytest_unconfigure():
+def pytest_unconfigure(config):
     # collect all if needed
+    if config.getoption('help'):
+        return
 
     try:
         natbox_ssh = ProjVar.get_var('NATBOX_SSH')
@@ -422,7 +525,6 @@ def pytest_unconfigure():
                 print(fin.read())
     except Exception as e:
         LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
-
     # Below needs con_ssh to be initialized
     try:
         from utils.ssh import ControllerClient
@@ -430,6 +532,13 @@ def pytest_unconfigure():
     except:
         LOG.warning("No con_ssh found")
         return
+
+    if ProjVar.get_var('COLLECT_KPI'):
+        try:
+            from utils.kpi import upload_kpi
+            upload_kpi.upload_kpi(kpi_file=ProjVar.get_var('KPI_PATH'))
+        except Exception as e:
+            LOG.warning("Unable to upload KPIs. {}".format(e.__str__()))
 
     try:
         setups.list_migration_history(con_ssh=con_ssh)
@@ -443,13 +552,19 @@ def pytest_unconfigure():
         except Exception as e:
             LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
-    if has_fail and ProjVar.get_var('COLLECT_ALL'):
+    if ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL')):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
         try:
             setups.collect_tis_logs(con_ssh)
         except:
             LOG.warning("'collect all' failed.")
+
+    # if ProjVar.get_var('KEYSTONE_DEBUG'):
+    #     try:
+    #         setups.enable_disable_keystone_debug(enable=False, con_ssh=con_ssh)
+    #     except:
+    #         LOG.warning("Disable keystone debug failed")
 
     # close ssh session
     try:
@@ -503,34 +618,6 @@ def pytest_collection_modifyitems(items):
         items.remove(i)
         items.append(i)
 
-    # # # Stress test iterations
-    # # TODO: Reorder stress testcases if more than one test collected.
-
-    # original_items = list(items)
-    # if stress_iteration > 0:
-    #     for item in original_items:
-    #         testname = item.nodeid
-    #         if '[' not in testname:
-    #             testname += '[]'
-    #
-    #         items.remove(item)
-    #         items_to_add = []
-    #         for i in range(stress_iteration):
-    #             items_to_add.append(item)
-    #
-    #         for i in range(stress_iteration):
-    #             item_to_add = items_to_add[i]
-    #             testname_list = list(testname)
-    #             index_ = testname_list.index('[') + 1
-    #             extra_str = 'iter{}'.format(i)
-    #             new_name = testname_list.insert(index_, extra_str)
-    #
-    #             # Do not work: cannot set attribute nodeid
-    #             item_to_add.nodeid = new_name
-    #             items.append(item_to_add)
-    #
-    # print("New items : {}".format(items))
-
 
 def pytest_generate_tests(metafunc):
     # Modify the order of the fixtures to delete resources before revert host
@@ -545,14 +632,16 @@ def pytest_generate_tests(metafunc):
     #         metafunc.fixturenames.remove(config_fixture)
     #         metafunc.fixturenames.insert(index, config_fixture)
 
+    pass
+    # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
     # Stress fixture
-    if metafunc.config.option.repeat > 0:
-        # Add autorepeat fixture and parametrize the fixture
-        param_name = 'autorepeat'
-
-        count = int(metafunc.config.option.repeat)
-        metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
-
+    # global count
+    # if count > 0:
+    #     # Add autorepeat fixture and parametrize the fixture
+    #     param_name = 'autorepeat'
+    #     metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
+    #
+    # print(str(count))
     # print("{}".format(metafunc.fixturenames))
 
 
@@ -598,12 +687,13 @@ def c2_fixture(config_host_class):
     return
 
 
-@pytest.fixture(autouse=True)
-def autorepeat(request):
-    try:
-        return request.param
-    except:
-        return None
+# Note! parametrized repeat is replaced with test list modification
+# @pytest.fixture(autouse=True)
+# def autorepeat(request):
+#     try:
+#         return request.param
+#     except:
+#         return None
 
 
 @pytest.fixture(autouse=True)
@@ -622,9 +712,9 @@ def __params_gen(index):
 
 def pytest_sessionfinish(session):
 
-    if stress_iteration > 0 and has_fail:
+    if repeat_count > 0 and has_fail:
         # _thread.interrupt_main()
-        # print('Printing traceback: \n' + '\n'.join(tracebacks))
+        print('Printing traceback: \n' + '\n'.join(tracebacks))
         pytest.exit("Abort upon stress test failure")
 
     if no_teardown:

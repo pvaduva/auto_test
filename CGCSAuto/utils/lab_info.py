@@ -11,7 +11,7 @@ from keywords import system_helper
 
 
 def get_lab_floating_ip(labname=None):
-    lab_dict = __get_lab_dict(labname)
+    lab_dict = get_lab_dict(labname)
     return lab_dict['floating ip']
 
 
@@ -100,7 +100,7 @@ def __get_lab_ssh(labname, log_dir=None):
     Returns (SSHClient):
 
     """
-    lab = __get_lab_dict(labname)
+    lab = get_lab_dict(labname)
 
     # Doesn't have to save logs
     # if log_dir is None:
@@ -110,7 +110,8 @@ def __get_lab_ssh(labname, log_dir=None):
 
     ProjVar.set_var(lab=lab)
     ProjVar.set_var(source_admin=Tenant.ADMIN)
-    con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(), CONTROLLER_PROMPT)
+    con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                        CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
@@ -139,7 +140,7 @@ def get_all_targets(rtn_str=True, sep=' ', labname=None):
 
 def _get_all_targets_by_host_type(labname=None):
 
-    lab_dict = __get_lab_dict(labname)
+    lab_dict = get_lab_dict(labname)
 
     controllers = [str(bar_code) for bar_code in lab_dict['controller_nodes']]
     computes = [str(bar_code) for bar_code in lab_dict.get('compute_nodes', [])]
@@ -178,7 +179,7 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
     return sys_type
 
 
-def __get_lab_dict(labname):
+def get_lab_dict(labname):
     """
 
     Args:
@@ -195,12 +196,12 @@ def __get_lab_dict(labname):
     labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
-        if labname in lab['name'].replace('-', '_').lower().strip() \
-                or labname == lab['short_name'].replace('-', '_').lower().strip() \
-                or labname == lab['floating ip']:
+        if labname in lab.get('name').replace('-', '_').lower().strip() \
+                or labname == lab.get('short_name').replace('-', '_').lower().strip() \
+                or labname == lab.get('floating ip'):
             return lab
     else:
-        lab_valid_short_names = [lab['short_name'] for lab in labs]
+        lab_valid_short_names = [lab.get('short_name') for lab in labs]
         # lab_valid_names = [lab['name'] for lab in labs]
         raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
 

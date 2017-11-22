@@ -38,7 +38,7 @@ def base_vm_():
 @mark.parametrize(('spec_name', 'spec_val', 'vm_type', 'vif_model'), [
     mark.p3((FlavorSpec.NIC_ISOLATION, 'true', 'avp', 'avp')),
     mark.p3((FlavorSpec.NIC_ISOLATION, 'true', 'virtio', 'virtio')),
-    mark.priorities('domain_sanity', 'nightly')((FlavorSpec.NIC_ISOLATION, 'true', 'vswitch', 'avp')),
+    mark.priorities('domain_sanity', 'nightly', 'sx_nightly')((FlavorSpec.NIC_ISOLATION, 'true', 'vswitch', 'avp')),
 ])
 def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_vm_):
     """

@@ -2,7 +2,7 @@ from pytest import mark, skip
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
-from consts.reasons import SkipReason
+from consts.reasons import SkipStorageSpace
 
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -14,16 +14,16 @@ def id_gen(val):
 
 
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'dedicated', ['pause', 'unpause'])),
+    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['pause', 'unpause'])),
     mark.sanity(('ubuntu_14', 'shared', ['stop', 'start'])),
     mark.sanity(('ubuntu_14', 'dedicated', ['auto_recover'])),
     # mark.priorities('sanity', 'cpe_sanity')(('cgcs-guest', 'dedicated', ['suspend', 'resume'])),
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
+    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
     if guest_os == 'opensuse_12':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
-            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+            skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
 
     img_id = glance_helper.get_guest_image(guest_os=guest_os)
 
@@ -78,7 +78,7 @@ class TestVariousGuests:
         ('rhel_6', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('win_2012', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
         ('win_2016', 'dedicated', 'image', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
-        ('ge_edge', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover']),
+        ('ge_edge', 'dedicated', 'volume', ['pause', 'unpause', 'suspend', 'resume', 'stop', 'start', 'auto_recover'])
     ], ids=id_gen)
     def test_nova_actions_various_guest(self, guest_os, cpu_pol, boot_source, actions):
         """

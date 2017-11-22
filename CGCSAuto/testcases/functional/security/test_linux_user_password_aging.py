@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 from pytest import fixture, mark, skip
 from utils import lab_info
 from utils.ssh import ControllerClient
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxCreds,Tenant
 from consts.cgcs import HostAvailabilityState, Prompt
 from keywords import security_helper, host_helper, system_helper
 from utils.tis_log import LOG
@@ -20,6 +20,7 @@ ALARM_ID_OUTOF_CONFIG = '250.001'
 MAX_WAIT_FOR_ALARM = 600
 MAX_FAILED_LOGINS = 5
 MAX_NUM_PASSWORDS_TRACKED = 5
+PASSWORD_LEGNTH = 13
 SSH_OPTS = {
     'RSAAuthentication': 'no',
     'PubkeyAuthentication': 'no',
@@ -92,10 +93,10 @@ def restore_wrsroot_password(current_password=None, target_password=None):
     exclude_list = deque(old_passwords[0 - MAX_NUM_PASSWORDS_TRACKED:], MAX_NUM_PASSWORDS_TRACKED)
 
     for n in range(1, MAX_NUM_PASSWORDS_TRACKED+1):
-        new_password = security_helper.gen_linux_password(exclude_list=list(exclude_list))
+        new_password = security_helper.gen_linux_password(exclude_list=list(exclude_list), length=PASSWORD_LEGNTH)
         LOG.info('chaning password {} times: from:{} to:{}\n'.format(n, current_password, new_password))
 
-        security_helper.change_linux_user_password(current_password, new_password)
+        security_helper.change_linux_user_password(current_password, new_password,host=current_host)
         HostLinuxCreds.set_password(new_password)
         current_password = new_password
         exclude_list.append(new_password)
@@ -115,13 +116,13 @@ def restore_wrsroot_password(current_password=None, target_password=None):
     return original_password
 
 
-def restore_wrsroot_password_raw(connect, current_password, original_password, exclude_list=None):
+def restore_wrsroot_password_raw(connect, current_password, original_password, exclude_list):
     if current_password == original_password:
         LOG.info('Current password is the same as the original password?!, do nothing')
         return
 
     for n in range(1, MAX_NUM_PASSWORDS_TRACKED+1):
-        new_password = security_helper.gen_linux_password(exclude_list=exclude_list)
+        new_password = security_helper.gen_linux_password(exclude_list=exclude_list, length=PASSWORD_LEGNTH)
         exclude_list.append(new_password)
         LOG.info('chaning password {} times: from:{} to:{}\n'.format(n, current_password, new_password))
 
@@ -142,6 +143,8 @@ def cleanup_test_users(request):
     def delete_test_users():
         global _host_users
 
+        restore_wrsroot_password(target_password="Li69nux*")
+
         LOG.info('Deleting users created for testing\n')
         conn_to_ac = ControllerClient.get_active_controller()
         count = 0
@@ -156,13 +159,15 @@ def cleanup_test_users(request):
             if host == 'active-controller':
                 conn_to_ac.exec_sudo_cmd('userdel -r {}'.format(user))
             else:
-                with host_helper.ssh_to_host(host) as conn:
+                # sleep a bit so controller-1 have same password as controller-0
+                time.sleep(30)
+                print("password blah " + str(_host_users.items()))
+                with host_helper.ssh_to_host(host, password='Li69nux*') as conn:
                     LOG.info('TODO: delete user:{} on host:{} by CLI: userdel -r {}\n'.format(user, host, user))
                     conn.exec_sudo_cmd("userdel -r '{}'".format(user))
 
         LOG.info('{} test user deleted'.format(count))
 
-        # restore_wrsroot_password()
     request.addfinalizer(delete_test_users)
 
 
@@ -175,7 +180,8 @@ def login_as_linux_user(user, password, host, cmd='whoami', expecting_fail=False
     if is_on_action_controller(host):
         LOG.info('Login to the active controller:{}\n'.format(host))
         if user != HostLinuxCreds.get_user():
-            skip('Login to the active controller, host:{}, user:{}'.format(host, user))
+            skip('Login to the active controller(will not skip if controller-1 is active), '
+                 'host:{}, user:{}'.format(host, user))
             return False, ''
 
     if user == 'wrsroot':
@@ -245,30 +251,36 @@ def update_host_user(host, user, password):
 @mark.parametrize(('user', 'password', 'host'), (
     ('testuser01', 'Li69nux*', 'controller-0'),
     ('testuser02', 'Li69nux*', 'controller-1'),
-    ('testuser03', 'Li69nux*', 'compute-0'),
+    #('testuser03', 'Li69nux*', 'compute-0'),
 ))
 def test_non_wrsroot_not_propagating(user, password, host):
+    '''create only non wrsroot users'''
+
     LOG.tc_step('Create user for test, user:{}, password:"{}", host:{}\n'.format(user, password, host))
 
     if user == 'wrsroot':
         skip('User name "wrsroot" is dedicated to the special Local Linux Account used by Administrator.')
         return
 
-    active_controller = system_helper.get_active_controller_name()
-
-    create_linux_user(user, password, host, fail_ok=False)
-    update_host_user(host, user, password)
-
-    LOG.info('OK, created user for test, user:{}, password:"{}", host:{}\n'.format(user, password, host))
-
-    LOG.info('Randomly choice another host to test logging on, expecting to fail')
     hosts = host_helper.get_hosts(availability=[HostAvailabilityState.AVAILABLE])
     if len(hosts) < 2:
         LOG.info('Only 1 host: {}\n'.format(hosts))
         skip('Only 1 host: {}, needs 2+ hosts to test\n'.format(hosts))
 
     else:
-        other_host = random.choice([h for h in hosts if h != host and h != active_controller])
+
+        active_controller = system_helper.get_active_controller_name()
+
+        create_linux_user(user, password, host, fail_ok=False)
+        update_host_user(host, user, password)
+
+        LOG.info('OK, created user for test, user:{}, password:"{}", host:{}\n'.format(user, password, host))
+
+        LOG.info('Randomly choice another host to test logging on, expecting to fail')
+
+        other_host = random.choice([h for h in hosts if h != host])
+        # check for CPE option
+
         LOG.tc_step('Attempt to login to other host as user, other-host:{}, this-host:{}, user:{}, password:{}'.format(
             other_host, host, user, password))
 
@@ -284,10 +296,11 @@ def test_non_wrsroot_not_propagating(user, password, host):
 
 def wait_after_change_wrsroot_password():
     total_wait_time = MAX_WAIT_FOR_ALARM
-    each_wait_time = 120
+    each_wait_time = 60
     waited_time = 0
 
     time.sleep(10)
+
     alarm_id = ALARM_ID_OUTOF_CONFIG
     while waited_time < total_wait_time:
         waited_time += each_wait_time
@@ -319,7 +332,7 @@ def test_wrsroot_password_propagation():
     password = HostLinuxCreds.get_password()
     update_host_user('active-controller', user, password)
 
-    new_password = security_helper.gen_linux_password(exclude_list=_host_users[('active-controller', user)])
+    new_password = security_helper.gen_linux_password(exclude_list=_host_users[('active-controller', user)],length=PASSWORD_LEGNTH)
 
     current_host = system_helper.get_active_controller_name()
 
@@ -336,6 +349,7 @@ def test_wrsroot_password_propagation():
     update_host_user('active-controller', user, new_password)
 
     LOG.tc_step('Wait alarms for password changed raised and cleared')
+
     wait_after_change_wrsroot_password()
     LOG.info('OK, alarms raised and cleared after previous password change')
 
@@ -352,6 +366,9 @@ def test_wrsroot_password_propagation():
 
     for other_host in hosts:
         login_as_linux_user(user, new_password, host=other_host, expecting_fail=False)
+
+
+
 
 
 def swact_host_after_reset_wrsroot_raw(connect, active_controller_name):
@@ -444,11 +461,8 @@ def execute_cmd(connect, cmd, allow_fail=False, prompt=Prompt.CONTROLLER_PROMPT)
 
     return index, output
 
-@mark.parametrize(('swact'), (
-    ('swact'),
-    ('no-swact'),
-))
-def test_wrsroot_aging_and_swact(swact):
+
+def test_wrsroot_aging():
     """
     Test password aging.
 
@@ -456,8 +470,7 @@ def test_wrsroot_aging_and_swact(swact):
 
     Test Steps:
     1   change the aging setting, forcing current password expired, new password be set and required by next login
-    2   swact the active controller
-    3   verify the new password is required upon login to the floating IP
+    2   verify the new password is required upon login to the floating IP
 
     Returns:
 
@@ -486,7 +499,8 @@ def test_wrsroot_aging_and_swact(swact):
 
     # command = 'chage -d 0 -M 0 wrsroot'
     # this is from the test plan
-    command = 'chage -M 0 wrsroot'
+    # sudo passwd -e wrsroot
+    command = 'sudo passwd -e wrsroot'
     LOG.info('changing password aging using command:\n{}'.format(command))
     connect = log_in_raw(host, user, original_password)
     LOG.info('sudo execute:{}\n'.format(command))
@@ -495,26 +509,11 @@ def test_wrsroot_aging_and_swact(swact):
     LOG.info('OK, aging settings of wrsroot was successfully changed with command:\n{}\ncode:{}, output:{}'.format(
         command, code, output))
 
-    wait_time = 300
-    LOG.info('wait for {} seconds after aging settings been modified'.format(wait_time))
-    time.sleep(wait_time)
-
-    if swact == 'swact':
-        LOG.tc_step('Swact host')
-        swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
-        LOG.info('OK, host swact')
-
-    LOG.info('Closing raw ssh connection to the active controller\n')
-    connect.logout()
-
-    wait_time = 180
-    LOG.info('wait for {} after swact and closing own ssh connection'.format(wait_time))
-    time.sleep(wait_time)
 
     LOG.tc_step('Verify new password needs to be set upon login')
     exclude_list = [original_password]
 
-    new_password = security_helper.gen_linux_password(exclude_list=exclude_list)
+    new_password = security_helper.gen_linux_password(exclude_list=exclude_list, length=PASSWORD_LEGNTH)
     set_password = first_login_to_floating_ip(user, original_password, new_password)[1]
     if set_password != new_password:
         message = 'first time login did not ask for new password:{}, ' \
@@ -540,11 +539,10 @@ def test_wrsroot_aging_and_swact(swact):
     code, output = execute_cmd(connect, cmd)
     LOG.info('output:\n{}\n, code:{}, cmd:{}\n'.format(output, code, cmd))
 
-    LOG.tc_step('Restore the password to {} for framework ')
-    ControllerClient.get_active_controller().connect()
+    LOG.tc_step('Restore the password ')
 
     # restore_wrsroot_password_raw(connect, new_password, original_password, exclude_list=exclude_list)
-    restore_wrsroot_password(current_password=new_password, target_password=original_password)
+    restore_wrsroot_password_raw(connect, current_password=new_password, original_password="Li69nux*", exclude_list=exclude_list)
 
     HostLinuxCreds.set_password(original_password)
     LOG.info('Close the connection to {} as user:{} with password:{}'.format(host, user, original_password))
@@ -656,7 +654,7 @@ def login_host_first_time(host, user, password, new_password, expect_fail=False,
         except Exception as e:
             LOG.info('got error when closing connection:{}\n'.format(e))
 
-        wait_time = 300
+        wait_time = 180
         LOG.info('Wait {} seconds after change/reset the password of wrsroot'.format(wait_time))
         time.sleep(wait_time)
 
@@ -747,6 +745,10 @@ def test_linux_user_lockout():
     invalid_password = '123'
     host = lab_info.get_lab_floating_ip()
 
+    LOG.info('verify we can login in at beginning')
+    connect = log_in_raw(host, user, password, expect_fail=False)
+    assert connect, 'Failed to login in at beginning with password'.format(password)
+
     for n in range(1, MAX_FAILED_LOGINS+1):
         message = '{}: Expecting to fail to login with invalid password, host:{}, user:{}, password:{}\n'.format(
             n, host, user, invalid_password)
@@ -755,7 +757,7 @@ def test_linux_user_lockout():
         assert not connect, 'Expecting to fail but not.' + message
 
     LOG.info('OK, failed {} times to login with invalid password:{} as user:{} to host:{}\n'.format(
-        MAX_FAILED_LOGINS, password, user, host))
+        MAX_FAILED_LOGINS, invalid_password, user, host))
 
     LOG.tc_step('Now attempt to login with CORRECT password:{}, expecting to fail\n'.format(password))
     connect = log_in_raw(host, user, password, expect_fail=True)
@@ -763,8 +765,11 @@ def test_linux_user_lockout():
     assert not connect, 'Expecting to fail but not.' + message
     LOG.info('OK, failed to login with CORRECT password due to the user account was locked down\n')
 
-    LOG.tc_step('Wait for 5 minutes for the account been automatically unlocked\n')
-    time.sleep(300)
+    LOG.tc_step('Wait for 5 minutes + 20 seconds for the account been automatically unlocked\n')
+    time.sleep(320)
     LOG.info('verify we can login again after waiting for 5 minutes')
     connect = log_in_raw(host, user, password, expect_fail=False)
     assert connect, 'Failed to login again after waiting for 5 minutes.' + message
+
+
+

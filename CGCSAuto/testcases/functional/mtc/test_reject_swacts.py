@@ -3,14 +3,14 @@ import time
 from pytest import fixture, skip, mark
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
 def skip_simplex():
     if len(system_helper.get_controllers()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
 
 def test_swact_standby_controller_negative():

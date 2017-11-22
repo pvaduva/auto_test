@@ -120,6 +120,10 @@ def parse_args():
                          " as small footprint. Not applicable"
                          " for tis-on-tis install")
 
+    lab_grp.add_argument('--security', dest='security', default='',
+                          choices=['', 'standard', 'extended'],
+                          help="Install security profile")
+
     lab_grp.add_argument('--postinstall', choices=['True', 'False'],
                           default=True, help="Run post install scripts")
 
@@ -182,9 +186,9 @@ def parse_args():
                          choices=['before', 'no'], default='before',
                          help='Apply branding files before config controller')
 
-    lab_grp.add_argument('--wipedisk', dest='wipedisk',
+    lab_grp.add_argument('--wipedisk_via_helper', dest='wipedisk_via_helper',
                          action='store_true',
-                         help="wipedisk during installation")
+                         help="wipedisk_via_helper during installation")
 
     #TODO: Custom directory path is not supported yet. Need to add code
     #      to rsync files from custom directory path on local PC to controller-0
@@ -863,7 +867,7 @@ def get_settings(barcodes_controller, barcodes_compute):
 
     return server_name + last_server_number
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False, security=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -882,7 +886,7 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security)
 
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -1268,7 +1272,8 @@ def setupNetworking(host_os):
 
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
-                      tis_on_tis, boot_usb, iso_path, iso_host, lowlat):
+                      tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
+                      security):
 
     global controller0
     #global cumulus
@@ -1286,7 +1291,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             usb = False
 
         # Boot up controller0
-        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat, security=security)
         if rc != 0:
             msg = "Unable to bring up controller-0"
             wr_exit()._exit(1, msg)
@@ -1367,9 +1372,16 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                                   WRSROOT_HOME_DIR, pre_opts=pre_opts)
         else:
             scripts_path = lab_cfg_path + "/../../scripts/"
-            bld_server_conn.rsync(os.path.join(scripts_path, "*"),
-                                    WRSROOT_USERNAME, controller0.host_ip,
-                                    WRSROOT_HOME_DIR, pre_opts=pre_opts)
+            rc = bld_server_conn.rsync(os.path.join(scripts_path, "*"),
+                                       WRSROOT_USERNAME, controller0.host_ip,
+                                       WRSROOT_HOME_DIR, pre_opts=pre_opts,
+                                       allow_fail=True)
+
+            # For custom config installs
+            if rc != 0:
+                bld_server_conn.rsync(os.path.join(load_path, centos_lab_path, "scripts", "*"),
+                                       WRSROOT_USERNAME, controller0.host_ip,
+                                       WRSROOT_HOME_DIR, pre_opts=pre_opts)
 
         bld_server_conn.rsync(os.path.join(load_path, heat_temp_path, "*"),
                                 WRSROOT_USERNAME, controller0.host_ip, \
@@ -1829,6 +1841,7 @@ def main():
     override = args.override
     banner = args.banner
     wipedisk = args.wipedisk
+    security = args.security
 
     branding = args.branding
 
@@ -1913,7 +1926,7 @@ def main():
     logutils.print_name_value("Stop", stop)
     logutils.print_name_value("Override", override)
     logutils.print_name_value("Banner", banner)
-    logutils.print_name_value("wipedisk", wipedisk)
+    logutils.print_name_value("wipedisk_via_helper", wipedisk)
     logutils.print_name_value("Branding", branding)
     logutils.print_name_value("Skip feed", skip_feed)
     logutils.print_name_value("Boot USB", boot_usb)
@@ -1921,6 +1934,7 @@ def main():
     logutils.print_name_value("ISO Host", iso_host)
     logutils.print_name_value("ISO Path", iso_path)
     logutils.print_name_value("Simplex", simplex)
+    logutils.print_name_value("Security", security)
     logutils.print_name_value("Low Lat", lowlat)
     logutils.print_name_value("Run Postinstall Scripts", postinstall)
     logutils.print_name_value("Run config_region instead of config_controller", config_region)
@@ -2158,7 +2172,7 @@ def main():
         vlm_unreserve(barcodes)
         vlm_reserve(barcodes, note=INSTALLATION_RESERVE_NOTE)
 
-        # Run the wipedisk utility if the nodes are accessible
+        # Run the wipedisk_via_helper utility if the nodes are accessible
         if wipedisk:
             log.info("Attempting to wipe disks")
             with open(os.devnull, 'wb') as devnull:
@@ -2175,9 +2189,9 @@ def main():
                     cmd = "./wipedisk_automater"
                     controller0.ssh_conn.exec_cmd(cmd)
                 else:
-                    log.info("wipedisk files are not on the load, will not wipedisks")
+                    log.info("wipedisk_via_helper files are not on the load, will not wipedisks")
             else:
-                log.info("Unable to reach controller-0, will continue without wipedisk")
+                log.info("Unable to reach controller-0, will continue without wipedisk_via_helper")
 
         # Power down all the nodes via VLM (note: this can also be done via board management control)
         if not continue_install:
@@ -2200,7 +2214,8 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
                           boot_device_dict, small_footprint, burn_usb,
-                          tis_on_tis, boot_usb, iso_path, iso_host, lowlat)
+                          tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
+                          security)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":
@@ -2372,7 +2387,7 @@ def main():
     if lab_type is 'cpe':
         wait_until_alarm_clears(controller0, timeout=840, check_interval=60, alarm_id="400.002", host_os=host_os)
         wait_until_alarm_clears(controller0, timeout=720, check_interval=60, alarm_id="250.010", host_os=host_os)
-        wait_until_alarm_clears(controller0, timeout=14400, check_interval=60, alarm_id="400.001", host_os=host_os)
+        wait_until_alarm_clears(controller0, timeout=25200, check_interval=60, alarm_id="400.001", host_os=host_os)
 
     # For storage lab run lab setup
     executed = False
@@ -2402,6 +2417,7 @@ def main():
 
     # After unlocking storage nodes, wait for ceph to come up
     if lab_type == 'storage':
+        time.sleep(10)
         wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
     # Lab-install -  run_lab_setup - applicable storage labs
@@ -2431,7 +2447,7 @@ def main():
         set_install_step_complete(lab_install_step)
 
     # Lab-install - run_lab_setup - applicable storage and regular labs
-    lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage'])
+    lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         # do run lab setup to add osd
         if run_labsetup()[0] != 0:
@@ -2446,6 +2462,8 @@ def main():
         lab_install_step = install_step("check_heat_resources_file", 18, ['cpe', 'regular', 'storage'])
         if do_next_install_step(lab_type, lab_install_step):
             setupHeat(bld_server_conn)
+            if len(controller_dict) > 1:
+                wait_state(controller1, AVAILABILITY, AVAILABLE)
             set_install_step_complete(lab_install_step)
 
     #Lab-install - swact and then lock/unlock controller-0 to complete setup
@@ -2455,6 +2473,11 @@ def main():
         if host_os == "centos" and len(controller_dict) > 1:
             cmd = "system alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
+
+            # Wait for degrade sysinv set to raise
+            time.sleep(10)
+            wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="400.001", host_os=host_os)
+            wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
 
             if find_error_msg(output, "250.001"):
                 log.info('Config out-of-date alarm is present')
@@ -2503,6 +2526,8 @@ def main():
         # Required due to ip28-30 unsupported config
         elif host_os == "centos" and len(controller_dict) == 1:
             log.info("Skipping this step since we only have one controller")
+    
+    wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="250.001", host_os=host_os)
 
     if postinstall and host_os == "centos":
         run_postinstall(controller0)

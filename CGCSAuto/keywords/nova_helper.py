@@ -69,6 +69,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     subcmd = ' '.join([optional_args, mandatory_args])
 
     LOG.info("Creating flavor {}...".format(flavor_name))
+    LOG.info("nova flavor-create option: {}".format(subcmd))
     exit_code, output = cli.nova('flavor-create', subcmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                  rtn_list=True)
 
@@ -952,7 +953,7 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     Returns (dict): e.g.,{<vm_id1>: <value of the field for vm1>, <vm_id2>: <value of the field for vm2>}
 
     """
-    args =  '--all-tenants' if auth_info['tenant'] == 'admin' else ''
+    args = '--all-tenants' if auth_info['tenant'] == 'admin' else ''
 
     table_ = table_parser.table(cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info))
     if vm_ids:
@@ -1118,7 +1119,8 @@ def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
     else:      # booted from volume
         vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.ADMIN))
         image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
-        image_name = eval(image_meta_data)['image_name']
+        image_meta_data = table_parser.convert_value_to_dict(image_meta_data)
+        image_name = image_meta_data['image_name']
 
     return image_name
 

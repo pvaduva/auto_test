@@ -3,7 +3,7 @@ from time import sleep
 
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
@@ -129,7 +129,7 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
     heartbeat_flavors, is_simplex = heartbeat_flavors
 
     if is_simplex and action in ['swact', 'lock', 'migrate']:
-        skip(SkipReason.SIMPLEX_SYSTEM)
+        skip(SkipSysType.SIMPLEX_SYSTEM)
 
     LOG.tc_step("Booting vm. heartbeat enabled: {}".format(hb_enabled))
     vm_id = vm_helper.boot_vm('hb_guest', flavor=heartbeat_flavors[hb_enabled], cleanup='function')[1]

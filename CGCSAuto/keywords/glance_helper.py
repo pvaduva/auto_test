@@ -7,10 +7,11 @@ from pytest import skip
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from consts.auth import Tenant, SvcCgcsAuto
+from utils.ssh import ControllerClient, NATBoxClient
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.timeout import ImageTimeout
 from consts.cgcs import Prompt, GuestImages
+from consts.proj_vars import ProjVar
 from keywords import common, storage_helper, system_helper, host_helper
 
 
@@ -272,7 +273,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'centos', 'win', 'ge_edge']
+    known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'centos', 'win', 'ge_edge',
+                  'vxworks']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -289,13 +291,20 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     LOG.info("Creating glance image: {}".format(name))
 
+    if not disk_format:
+        if not source_image_file:
+            # default tis-centos-guest image is raw
+            disk_format = 'raw'
+        else:
+            disk_format = 'qcow2'
+
     optional_args = {
         '--id': image_id,
         '--name': name,
         '--visibility': 'private' if public is False else 'public',
         '--protected': protected,
         '--store': store,
-        '--disk-format': disk_format if disk_format else 'qcow2',
+        '--disk-format': disk_format,
         '--container-format': container_format if container_format else 'bare',
         '--min-disk': min_disk,
         '--min-ram': min_ram,
@@ -313,6 +322,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
     try:
+        LOG.info("Creating image {}...".format(name))
+        LOG.info("glance image-create {}".format(optional_args_str))
         code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
                                   auth_info=auth_info, timeout=timeout, rtn_list=True)
     except:
@@ -515,7 +526,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=None, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=3600, con_ssh=None):
     """
 
     Args:
@@ -551,32 +562,30 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
     source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
-    LOG.info('scp image from test server to active controller')
-    scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
-            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)
+    source_ip = SvcCgcsAuto.SERVER
+    source_user = SvcCgcsAuto.USER
 
-    try:
-        con_ssh.send(scp_cmd)
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
-        if index == 2:
-            con_ssh.send('yes')
-            index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
-        if index == 1:
-            con_ssh.send(SvcCgcsAuto.PASSWORD)
-            index = con_ssh.expect(timeout=timeout)
-        if index != 0:
-            raise exceptions.SSHException("Failed to scp files")
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
+        nat_dest_path = '/tmp/{}'.format(dest_name)
+        nat_ssh = NATBoxClient.get_natbox_client()
+        if not nat_ssh.file_exists(nat_dest_path):
+            LOG.info("scp image from test server to NatBox: {}".format(nat_name))
+            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
+                                dest_path=nat_dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
 
-        exit_code = con_ssh.get_exit_code()
-        if not exit_code == 0:
-            raise exceptions.CommonError("scp unsuccessfully")
-
-        if not con_ssh.file_exists(file_path=dest_path):
+        LOG.info('scp image from natbox {} to active controller'.format(nat_name))
+        dest_user = HostLinuxCreds.get_user()
+        dest_pswd = HostLinuxCreds.get_password()
+        dest_ip = ProjVar.get_var('LAB').get('floating ip')
+        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
+                              dest_password=dest_pswd, timeout=timeout)
+        if not con_ssh.file_exists(dest_path):
             raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
-    except:
-        LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
-        con_ssh.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
-        raise
+    else:
+        LOG.info('scp image from test server to active controller')
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
+                            dest_path=dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
@@ -587,13 +596,18 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
     Get or create a glance image with given guest OS
     Args:
         guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
-                cgcs-guest
+                cgcs-guest, vxworks-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
 
     Returns (str): image_id
 
     """
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if nat_name == 'localhost' or nat_name.startswith("128.224"):
+        if re.search('win|rhel|opensuse', guest_os):
+            skip("Skip tests with large images for vbox")
+
     LOG.info("Get or create a glance image with {} guest OS".format(guest_os))
     img_id = get_image_id_from_name(guest_os, strict=True)
 
@@ -603,7 +617,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
+        disk_format = 'raw' if guest_os in ['cgcs-guest', 'vxworks', 'tis-centos-guest'] else 'qcow2'
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]
@@ -615,3 +629,38 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 con_ssh.exec_cmd('rm -f {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
     return img_id
+
+
+def set_unset_image_vif_multiq(image_name, set=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Set or unset a glance image with multiple vif-Queues
+    Args:
+        image_name (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
+                cgcs-guest, vxworks-guest
+        set (bool): whether or not to set the  hw_vif_multiqueue_enabled
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns (str): code, msg
+
+    """
+
+    if image_name is None:
+        return 1, "Error:image_name not provided"
+    if set:
+        cmd = 'image set '
+    else:
+        cmd = 'image unset '
+
+    cmd += image_name
+    cmd += ' --property'
+
+    if set:
+        cmd += ' hw_vif_multiqueue_enabled=True'
+    else:
+        cmd += ' hw_vif_multiqueue_enabled'
+
+    res, out = cli.openstack(cmd,rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+
+    return res, out

@@ -10,16 +10,20 @@ class HostTimeout:
     LOCK = 900      # Host in locked state after system host-lock cli returned
     TASK_CLEAR = 300    # Task clears in system host-show after host reaches enabled/available state
     FAIL_AFTER_REBOOT = 120     # Host in offline or failed state via system host-show after sudo reboot -f returned
-    HYPERVISOR_UP_AFTER_AVAIL = 180     # Hypervsior in enabled/up state after host in available state and task clears
+    HYPERVISOR_UP = 300     # Hypervsior in enabled/up state after host in available state and task clears
+    WEB_SERVICE_UP = 180    # Web service up in sudo sm-dump after host in available state and task clears
     UPGRADE = 7200
     WIPE_DISK_TIMEOUT = 30
     PING_TIMEOUT = 60
     TIMEOUT_BUFFER = 2
     SUBFUNC_READY = 300     # subfunction go enabled/available after host admin/avail states go enabled/available
+    SYSTEM_RESTORE = 3600   # System restore complete
+    SYSTEM_BACKUP = 1800    # system backup complete
+    BACKUP_COPY_USB = 600
 
 
 class VMTimeout:
-    STATUS_CHANGE = 120
+    STATUS_CHANGE = 300
     STATUS_VERIFY_RESIZE = 30
     LIVE_MIGRATE_COMPLETE = 120
     COLD_MIGRATE_CONFIRM = 600
@@ -56,7 +60,7 @@ class CMDTimeout:
 
 class ImageTimeout:
     CREATE = 600
-    STATUS_CHANGE = 30
+    STATUS_CHANGE = 60
     DELETE = 120
 
 
@@ -87,4 +91,4 @@ class OrchestrationPhaseTimeout:
 
 
 class MiscTimeout:
-    NTPQ_UPDATE = 700   # sudo ntpq updates every 10 minutes
+    NTPQ_UPDATE = 1260     # timeout for two audits. 'sudo ntpq' got pulled every 10 minutes in /var/log/user.log

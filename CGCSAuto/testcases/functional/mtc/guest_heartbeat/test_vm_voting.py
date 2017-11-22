@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils import cli
 from consts.timeout import EventLogTimeout
 from consts.cgcs import FlavorSpec, VMStatus, EventLogID
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -103,7 +103,7 @@ def _perform_action(vm_id, action, expt_fail):
         else:
             LOG.tc_step("Verify that the vm can be paused and unpaused")
             vm_helper.pause_vm(vm_id)
-            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
+            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, wait_login=False), \
                 "The vm is still pingable after pause"
 
             vm_helper.unpause_vm(vm_id)
@@ -111,7 +111,7 @@ def _perform_action(vm_id, action, expt_fail):
 
             LOG.tc_step("Verify that the vm can be suspended and resumed")
             vm_helper.suspend_vm(vm_id)
-            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
+            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, wait_login=False), \
                 "The vm is still pingable after suspend"
 
             vm_helper.resume_vm(vm_id)
@@ -149,7 +149,7 @@ def _perform_action(vm_id, action, expt_fail):
         else:
             LOG.tc_step("Verify a VM can be stopped")
             vm_helper.stop_vms(vm_id)
-            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
+            assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, wait_login=False), \
                 "The vm is still pingable after stop"
 
             events_tab = system_helper.get_events_table(num=10)
@@ -173,7 +173,7 @@ def _perform_action(vm_id, action, expt_fail):
     mark.p2('migrate'),
     mark.p2('suspend'),
     mark.p2('reboot'),
-    mark.priorities('domain_sanity', 'nightly')('stop'),
+    mark.priorities('domain_sanity', 'nightly', 'sx_nightly')('stop'),
 ])
 def test_vm_voting(action, hb_flavor):
     """
@@ -197,7 +197,7 @@ def test_vm_voting(action, hb_flavor):
     """
     if action == 'migrate':
         if len(host_helper.get_hypervisors()) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+            skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     vm_id = boot_vm_(hb_flavor)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -239,7 +239,7 @@ def test_vm_voting_no_hb_migrate():
 
     """
     if len(host_helper.get_hypervisors()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.tc_step("Boot a vm without guest heartbeat")
     vm_name = 'vm_no_hb_migrate'

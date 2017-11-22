@@ -189,9 +189,10 @@ class MThread(threading.Thread):
         LOG.info("Wait for {} to finish".format(self.name))
         self.join(timeout)
 
+        if not fail_ok:
+            assert not self._err, "{} ran into an error: {}".format(self.name, self._err)
+
         if not self.is_alive():
-            if not fail_ok:
-                assert not self._err, "{} ran into an error: {}".format(self.name, self._err)
             LOG.info("{} has finished".format(self.name))
         else:
             # Thread didn't finish before timeout

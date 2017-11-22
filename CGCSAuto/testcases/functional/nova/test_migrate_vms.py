@@ -4,7 +4,6 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, EventLogID, GuestImages
-from consts.reasons import SkipReason
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -51,7 +50,7 @@ def touch_files_under_vm_disks(vm_id, ephemeral=0, swap=0, vm_type='volume', dis
     mark.domain_sanity(('remote', 0, 512, 'dedicated', 2, 'image_with_vol', False)),
 ])
 def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
-                                  hosts_per_stor_backing):
+                                  hosts_per_stor_backing, no_simplex):
     """
     Skip Condition:
         - Less than two hosts have specified storage backing
@@ -122,7 +121,7 @@ def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcp
     mark.p1(('remote', 0, 0, 'image_with_vol', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
 ])
 def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, block_mig, expt_err,
-                                  hosts_per_stor_backing):
+                                  hosts_per_stor_backing, no_simplex):
     """
     Skip Condition:
         - Less than two hosts have specified storage backing
@@ -204,7 +203,8 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     mark.p1(('remote', 0, 0, None, 1, 'image', 'revert')),
     mark.p1(('remote', 1, 0, None, 2, 'image_with_vol', 'revert')),
 ])
-def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, resize, hosts_per_stor_backing):
+def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, resize, hosts_per_stor_backing,
+                         no_simplex):
     """
     Skip Condition:
         - Less than two hosts have specified storage backing
@@ -216,6 +216,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         - Cold migrate vm
         - Confirm/Revert resize as specified
         - Verify VM is successfully cold migrated and confirmed/reverted resize
+        - Verify that instance files are not found on original host. (TC6621)
 
     Teardown:
         - Delete created vm, volume, flavor
@@ -244,6 +245,11 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         assert prev_vm_host == post_vm_host, "vm host changed after cold migrate revert"
     else:
         assert prev_vm_host != post_vm_host, "vm host did not change after cold migrate"
+        LOG.tc_step("Check that source host no longer has instance files")
+        with host_helper.ssh_to_host(prev_vm_host) as prev_ssh:
+            # TC6621
+            assert not prev_ssh.file_exists('/etc/nova/instances/{}'.format(vm_id)), \
+                "Instance files found on previous host {} after cold migrate to {}".format(prev_vm_host, post_vm_host)
 
     LOG.tc_step("Ensure vm is pingable from NatBox after cold migration {}".format(resize))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -257,6 +263,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
 
 @mark.p3
 @mark.parametrize(('storage_backing', 'ephemeral', 'swap', 'boot_source'), [
+    mark.priorities('sx_nightly')(('local_image', 0, 0, 'volume')),
     ('local_image', 0, 0, 'image'),
     ('local_image', 1, 0, 'volume'),
     ('local_image', 1, 512, 'volume'),
@@ -350,7 +357,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     mark.sanity(('tis-centos-guest', 'live', None)),
     mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),
 ])
-def test_migrate_vm(guest_os, mig_type, cpu_pol):
+def test_migrate_vm(guest_os, mig_type, cpu_pol, no_simplex):
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -411,7 +418,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol):
     ('ge_edge', 1, 1024, 'shared', 'image'),
     ('ge_edge', 4, 4096, 'dedicated', 'volume')
 ])
-def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source):
+def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no_simplex):
     img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
     LOG.tc_step("Create a flavor with 1 vcpu")

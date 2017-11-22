@@ -33,6 +33,8 @@ DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
 INTERVAL_BETWEEN_SWACT = 300 + 10
 
+IS_SIMPLEX = system_helper.is_simplex()
+
 SKIP_PROCESS_LIST = ('postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd')
 
 PROCESSES = {
@@ -383,6 +385,12 @@ class MonitoredProcess:
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
 
+        if IS_SIMPLEX:
+            if self.impact == 'swact':
+                self.impact = 'enabled-degraded'
+            if self.node_type == 'controller':
+                self.node_type = 'active'
+
         if cmd:
             main_cmd = cmd.split()[0]
 
@@ -500,13 +508,13 @@ class MonitoredProcess:
             LOG.info('Choose the standby-controller:{} to test on, node-type:{}'.format(self.host, self.node_type))
 
         elif self.node_type in ('compute', 'all'):
-            computes = host_helper.get_hypervisors()
-            self.host = random.choice([h for h in computes if h != active_controller])
-            if not self.host:
-                LOG.error('No hypervisor other than the active-controller?! This is a SIMPLEX system?')
-                self.host = system_helper.get_active_controller_name(con_ssh=self.con_ssh)
-
-            LOG.info('Choose a non-active hypervisor:{} to test on, node-type:{}'.format(self.host, self.node_type))
+            if IS_SIMPLEX:
+                self.host = active_controller
+                LOG.info("Choose controller-0 for simplex system")
+            else:
+                computes = host_helper.get_hypervisors()
+                self.host = random.choice([h for h in computes if h != active_controller])
+                LOG.info('Choose a non-active hypervisor:{} to test on, node-type:{}'.format(self.host, self.node_type))
 
         else:
             # should never reach here
@@ -757,7 +765,7 @@ class MonitoredProcess:
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
-                    retries+1, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+                    retries+2, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
@@ -776,7 +784,7 @@ class MonitoredProcess:
                     full_cmd = "nohup ./test_process.sh > ./results.txt 2>&1 &"
 
                     code, output = con.exec_cmd(full_cmd, fail_ok=True, expect_timeout=wait_time)
-                    #code, output = con.exec_sudo_cmd( full_cmd, fail_ok=True, expect_timeout=wait_time)
+                    # code, output = con.exec_sudo_cmd( full_cmd, fail_ok=True, expect_timeout=wait_time)
                     if 0 != code:
                         LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
                             name, host, cmd, output))
@@ -794,8 +802,6 @@ class MonitoredProcess:
             expected = {'operational': 'enabled', 'availability': 'available'}
 
             wait_time_for_host_status = 90
-
-            time.sleep((retries + 1) * wait_after_each_kill)
 
             if impact in ('log'):
                 check_event = True
@@ -823,8 +829,23 @@ class MonitoredProcess:
                 LOG.error('unknown IMPACT:{}'.format(impact))
                 assert False, 'Unknown IMPACT:{}'.format(impact)
 
-            reached = host_helper.wait_for_host_states(
-                host, timeout=wait_time_for_host_status, con_ssh=con_ssh, fail_ok=True, **expected)
+            sleep_time = (retries + 1) * wait_after_each_kill
+            if IS_SIMPLEX and expected['operational'] == 'Disabled':
+                LOG.info("Simplex system - check ssh disconnected")
+                reached = host_helper.wait_for_ssh_disconnect(fail_ok=True, timeout=sleep_time + 120)
+
+                if reached:
+                    host_helper.recover_simplex(fail_ok=True)
+
+            else:
+
+                LOG.info("Sleep for some time after each kill: {}".format(sleep_time))
+                time.sleep(sleep_time)
+
+                LOG.info("After process:{} been killed {} times, wait for {} to reach: {}".format(name, retries,
+                                                                                                  host, expected))
+                reached = host_helper.wait_for_host_states(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
+                                                           fail_ok=True, **expected)
 
             if not reached:
                 LOG.warn('Host:{} failed to get into status:{} after process:{} been killed {} times'.format(
@@ -845,8 +866,7 @@ class MonitoredProcess:
 
             if not reached and not found_event:
                 LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
-                          'and there is no relevant alarms/events found neither'.format(
-                    host, expected, name, retries))
+                          'and there is no relevant alarms/events found neither'.format(host, expected, name, retries))
             else:
                 if wait_recover:
                     operational = impact.split('-')[0]
@@ -907,7 +927,6 @@ class MonitoredProcess:
         return -1
 
     def kill_process_and_verify_impact(self, con_ssh=None):
-
         host = self.host
         node_type = self.node_type
         active_controller = self.active_controller
@@ -958,7 +977,7 @@ class MonitoredProcess:
     # TODO CGTS-6451
     mark.p1(('rmond')),
     mark.p1(('fsmond')),
-    mark.p1(('hbsClient')),
+    mark.priorities('p1', 'sx_nightly')('hbsClient'),
     mark.p1(('mtcClient')),
     mark.p1(('mtcalarmd')),
     mark.p1(('sm-api')),
@@ -1025,7 +1044,7 @@ class MonitoredProcess:
     mark.p1(('heat-engine')),
 
     # TODO CGTS-6396
-    mark.p1(('heat-api')),
+    mark.priorities('p1', 'sx_nightly')('heat-api'),
     mark.p1(('heat-api-cfn')),
     mark.p1(('heat-api-cloudwatch')),
     #

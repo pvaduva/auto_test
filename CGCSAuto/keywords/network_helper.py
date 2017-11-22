@@ -159,7 +159,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
     if isinstance(dns_servers, list):
         args += ' --dns-nameservers list=true {}'.format(' '.join(dns_servers))
     elif dns_servers is not None:
-        args += ' --dns-nameservers {}'.format(dns_servers)
+        args += ' --dns-nameserver {}'.format(dns_servers)
 
     if no_gateway:
         args += ' --no-gateway'
@@ -171,7 +171,9 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         '--gateway': gateway,
         '--ip-version': ip_version,
         '--subnetpool': subnet_pool,
-        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None
+        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None,
+        '--ipv6-ra-mode': "dhcpv6-stateful " if ip_version == 6 else None,
+        '--ipv6-address-mode': "dhcpv6-stateful " if ip_version == 6 else None
     }
 
     for key, value in args_dict.items():
@@ -251,7 +253,7 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
 
     Args:
         net_id (str): network id
-        field (str): such as 'status', 'subnets', 'wrs-net:vlan_id' or 'vlan_id' if strict=False
+        field (str): such as 'status', 'subnets'
         strict (bool): whether to perform strict search for the name of the field
         auto_info (dict):
         con_ssh (SSHClient):
@@ -267,6 +269,156 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
             value = [value]
 
     return value
+
+
+def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=None):
+    if isinstance(fields, str):
+        fields = [fields]
+    table_ = table_parser.table(cli.openstack('network show', net_id, ssh_client=con_ssh))
+    res = {}
+    for field in fields:
+        val = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
+        if field == 'subnets':
+            val = val.split(',')
+            val = [val_.strip() for val_ in val]
+        res[field] = val
+
+    if rtn_dict:
+        return res
+    else:
+        return list(res.values())
+
+
+def set_network(net_id, name=None, enable=None, share=None, enable_port_security=None, external=None, default=None,
+                provider_net_type=None, provider_phy_net=None, provider_segment=None, transparent_vlan=None,
+                auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None, **kwargs):
+    """
+    Update network with given parameters
+    Args:
+        net_id (str):
+        name (str|None): name to update to. Don't update name when None.
+        enable (bool|None): True to add --enable. False to add --disable. Don't update enable/disable when None.
+        share (bool|None):
+        enable_port_security (bool|None):
+        external (bool|None):
+        default (bool|None):
+        provider_net_type (str|None):
+        provider_phy_net (str|None):
+        provider_segment (str|int|None):
+        transparent_vlan (bool|None):
+        auth_info (dict):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        **kwargs: additional key/val pairs that are not listed in 'openstack network update -h'.
+            e,g.,{'wrs-tm:qos': <qos_id>}
+
+    Returns (tuple): (code, msg)
+        (0, "Network <net_id> is successfully updated")   Network updated successfully
+        (1, <std_err>)    'openstack network update' cli is rejected
+
+    """
+    args_dict = {
+        '--name': (name, {'name': name}),
+        '--enable': ('store_true' if enable is True else None, {'admin_state_up': 'UP'}),
+        '--disable': ('store_true' if enable is False else None, {'admin_state_up': 'DOWN'}),
+        '--share': ('store_true' if share is True else None, {'shared': 'True'}),
+        '--no-share': ('store_true' if share is False else None, {'shared': 'False'}),
+        '--enable-port-security': ('store_true' if enable_port_security is True else None, {}),
+        '--disable-port-security': ('store_true' if enable_port_security is False else None, {}),
+        '--external': ('store_true' if external is True else None, {'router:external': 'External'}),
+        '--internal': ('store_true' if external is False else None, {'router:external': 'Internal'}),
+        '--default': ('store_true' if default is True else None, {'is_default': 'True'}),
+        '--no-default': ('store_true' if default is False else None, {'is_default': 'False'}),
+        '--transparent-vlan': ('store_true' if transparent_vlan is True else None, {'vlan_transparent': 'True'}),
+        '--no-transparent-vlan': ('store_true' if transparent_vlan is False else None, {'vlan_transparent': 'False'}),
+        '--provider-network-type': (provider_net_type, {'provider:network_type': provider_net_type}),
+        '--provider-physical-network': (provider_phy_net, {'provider:physical_network': provider_phy_net}),
+        '--provider-segment': (provider_segment, {'provider:segmentation_id': provider_segment}),
+    }
+    checks = {}
+    args_str = ''
+    for arg in args_dict:
+        val, check = args_dict[arg]
+        if val is not None:
+            set_val = '' if val == 'store_true' else ' {}'.format(val)
+            args_str += ' {}{}'.format(arg, set_val)
+            if check:
+                checks.update(**check)
+            else:
+                LOG.info("Unknown check field in 'openstack network show' for arg {}".format(arg))
+
+    for key, val_ in kwargs.items():
+        val_ = ' {}'.format(val_) if val_ else ''
+        field_name = key.split('--', 1)[-1]
+        arg = '--{}'.format(field_name)
+        args_str += ' {}{}'.format(arg, val_)
+        if val_:
+            checks.update(**kwargs)
+        else:
+            LOG.info("Unknown check field in 'openstack network show' for arg {}".format(arg))
+
+    if not args_str:
+        raise ValueError("Nothing to update. Please specify at least one None value")
+
+    LOG.info("Attempt to update network {} with following args: {}".format(net_id, args_str))
+    code, out = cli.openstack('network set', '{} {}'.format(args_str, net_id), ssh_client=con_ssh, rtn_list=True,
+                              fail_ok=fail_ok, auth_info=auth_info)
+    if code > 0:
+        return 1, out
+
+    if checks:
+        LOG.info("Check the values are updated to following in network show: {}".format(checks))
+        actual_res = get_net_show_values(net_id, fields=list(checks.keys()), rtn_dict=True)
+        failed = {}
+        for field in checks:
+            expt_val = checks[field]
+            actual_val = actual_res[field]
+            if expt_val != actual_val:
+                failed[field] = (expt_val, actual_val)
+
+        # Fail directly. If a field is not allowed to be updated, the cli should be rejected
+        assert not failed, "Actual value is different than set value in following fields: {}".format(failed)
+
+    msg = "Network {} is successfully updated".format(net_id)
+    return 0, msg
+
+
+def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Update network qos to given value
+    Args:
+        net_id (str): network to update
+        qos_id (str|None): when None, remove the qos from network
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (code, msg)
+        (0, "Network <net_id> qos is successfully updated to <qos_id>")
+        (1, <std_err>)  openstack network update cli rejected
+
+    """
+    if qos_id:
+        kwargs = {'--wrs-tm:qos': qos_id}
+        arg_str = '--wrs-tm:qos {}'.format(qos_id)
+    else:
+        kwargs = {'--no-qos': None}
+        arg_str = '--no-qos'
+
+    # code, msg = update_network(net_id=net_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh, **kwargs)
+
+    code, msg = cli.neutron('net-update', '{} {}'.format(arg_str, net_id), fail_ok=fail_ok, ssh_client=con_ssh,
+                            auth_info=auth_info, rtn_list=True)
+    if code > 0:
+        return code, msg
+
+    if '--no-qos' in kwargs:
+        actual_qos = get_net_info(net_id, field='wrs-tm:qos', auto_info=auth_info, con_ssh=con_ssh)
+        assert not actual_qos, "Qos {} is not removed from {}".format(actual_qos, net_id)
+
+    msg = "Network {} qos is successfully updated to {}".format(net_id, qos_id)
+    LOG.info(msg)
+    return 0, msg
 
 
 def _get_net_ids(net_name, con_ssh=None, auth_info=None):
@@ -756,6 +908,125 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
         return table_parser.get_values(table_, 'id')
 
     return table_parser.get_values(table_, 'id', strict=False, name=name)
+
+
+def get_qos_names(qos_ids=None, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        qos_ids(str|list|None): QoS id to filter name.
+        con_ssh(SSHClient):  If None, active controller ssh will be used.
+        auth_info(dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns(list): List of neutron qos names filtered by qos_id.
+
+    """
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    if qos_ids is None:
+        return table_parser.get_column(table_, 'name')
+
+    return table_parser.get_values(table_, 'name', strict=True, id=qos_ids)
+
+
+def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
+               con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Args:
+        name(str): Name of the QoS to be created.
+        tenant_name(str): Such as tenant1, tenant2. If none uses primary tenant.
+        description(str): Description of the created QoS.
+        scheduler(dict): Dictionary of scheduler policies formatted as {'policy': value}.
+        dscp(dict): Dictionary of dscp policies formatted as {'policy': value}.
+        ratelimit(dict): Dictionary of ratelimit policies formatted as {'policy': value}.
+        fail_ok(bool):
+        con_ssh(SSHClient):
+        auth_info(dict): Run the neutron qos-create cli using this authorization info. Admin by default,
+
+    Returns(tuple): exit_code(int), qos_id(str)
+                    (0, qos_id) qos successfully created.
+                    (1, output) qos not created successfully
+    """
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+    check_dict = {}
+    args = ''
+    current_qos = get_qos_names(con_ssh=con_ssh, auth_info=auth_info)
+    if name is None:
+        if tenant_name is None:
+            tenant_name = common.get_tenant_name(Tenant.get_primary())
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+        else:
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+    args_dict = {'name': name,
+                 'tenant-id': tenant_id,
+                 'description': description,
+                 'scheduler': scheduler,
+                 'dscp': dscp,
+                 'ratelimit': ratelimit
+                 }
+    check_dict['policies'] = {}
+    for key, value in args_dict.items():
+        if value:
+            if key in ('scheduler', 'dscp', 'ratelimit'):
+                args += " --{}".format(key)
+                for policy, val in value.items():
+                    args += " {}={}".format(policy, val)
+                    value[policy] = str(val)
+                check_dict['policies'][key] = value
+            else:
+                args += " --{} '{}'".format(key, value)
+                if key is 'tenant-id':
+                    key = 'tenant_id'
+                check_dict[key] = value
+
+    LOG.info("Creating QoS with args: {}".format(args))
+    exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                    rtn_list=True)
+    if exit_code == 1:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    for key, exp_value in check_dict.items():
+        if key is 'policies':
+            actual_value = eval(table_parser.get_value_two_col_table(table_, key))
+        else:
+            actual_value = table_parser.get_value_two_col_table(table_, key)
+        if actual_value != exp_value:
+            msg = "Qos created but {} expected to be {} but actually {}".format(key, exp_value, actual_value)
+            raise exceptions.NeutronError(msg)
+
+    qos_id = table_parser.get_value_two_col_table(table_, 'id')
+    LOG.info("QoS successfully created")
+    return 0, qos_id
+
+
+def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        qos_id(str): QoS to be deleted
+        auth_info(dict): tenant to be used, if none admin will be used
+        con_ssh(SSHClient):
+        fail_ok(bool):
+
+    Returns: code(int), output(string)
+            (0, "QoS <qos_id> successfully deleted" )
+            (1, <std_err>)  openstack qos delete cli rejected
+    """
+
+    LOG.info("deleting QoS: {}".format(qos_id))
+    code, output = cli.neutron('qos-delete', qos_id, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, output
+
+    if qos_id in get_qos(auth_info=auth_info, con_ssh=con_ssh):
+        msg = "QoS {} still listed in neutron QoS list".format(qos_id)
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "QoS {} successfully deleted".format(qos_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
 def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
@@ -2162,6 +2433,8 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    if isinstance(nics, str):
+        nics = [nics]
     nics = [eval(nic_) for nic_ in nics]
 
     return nics
@@ -2371,6 +2644,7 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
             nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                        auth_info=auth_info, vlan_id=vlan_id)
 
+            # TODO: US102722 wrs-net:vlan_id removed from neutron subnets
             other_nets = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                      auth_info=auth_info, vlan_id=vlan_id, exclude=True)
 
@@ -3050,7 +3324,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
     return vms_routers
 
 
-def collect_networking_info(routers=None, vms=None):
+def collect_networking_info(routers=None, vms=None, sep_file=None):
     LOG.info("Ping tenant(s) router's external and internal gateway IPs")
 
     if not routers:
@@ -3068,16 +3342,29 @@ def collect_networking_info(routers=None, vms=None):
         router_ips = get_router_subnets(router_id=router_, rtn_val='ip_address', mgmt_only=True)
         ips_to_ping += router_ips
 
-    ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    res_bool, res_dict = ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    if sep_file:
+        res_str = "succeeded" if res_bool else 'failed'
+        content = "Ping router interfaces {}: {}\n".format(res_str, res_dict)
+        common.write_to_file(sep_file, content=content)
 
     hosts = []
     for router in routers:
-        hosts.append(get_router_info(router_id=router, field='wrs-net:host'))
+        router_host = get_router_info(router_id=router, field='wrs-net:host')
+        if router_host:
+            hosts.append(router_host)
+        else:
+            LOG.error("Router {} has no host, it may be down.".format(router))
 
-    LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
-    for host in hosts:
-        ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
-        collect_vswitch_info_on_host(host)
+    if hosts:
+        LOG.info("Collect vswitch.info for {} router(s) on router host(s): ".format(routers, hosts))
+        for host in hosts:
+            ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
+            collect_vswitch_info_on_host(host)
+
+        if sep_file:
+            content = "vswitch.info collected for {} under {}\n".format(hosts, ProjVar.get_var('PING_FAILURE_DIR'))
+            common.write_to_file(sep_file, content=content)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
@@ -3477,4 +3764,68 @@ def get_ip_for_eth(ssh_client, eth_name):
     else:
         LOG.warning("Cannot find provided interface{} in 'ip addr'".format(eth_name))
         return ''
+
+
+def _is_v4_only(ip_list):
+
+    rtn_val = True
+    for ip in ip_list:
+        ip_addr = ipaddress.ip_address(ip)
+        if ip_addr.version == 6:
+            rtn_val = False
+    return rtn_val
+
+
+def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
+    """
+    Get the networks ids that matches the vxlan underlay ip version
+    Args:
+        vxlan_provider_net_id: vxlan provider net id to get the networks info
+        ip_version: 4 or 6 (IPV4 or IPV6)
+        mode: mode of the vxlan: dynamic or static
+        con_ssh (SSHClient):
+
+    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6) and the mode
+
+    """
+    rtn_networks = []
+    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
+    if not networks:
+        return rtn_networks
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,
+                                                      rtn_val='providernet_attributes')
+    if not provider_attributes:
+        return rtn_networks
+
+    index = 0
+    new_attr_list = []
+    # In the case where some val could be 'null', need to change that to 'None'
+    for attr in provider_attributes:
+        new_attr = attr.replace('null', 'None')
+        new_attr_list.append(new_attr)
+
+    # getting the configured vxlan mode
+    dic_attr_1 = eval(new_attr_list[0])
+    vxlan_mode = dic_attr_1['mode']
+
+    if mode == 'static' and vxlan_mode == mode:
+        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data')
+        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name)
+        if ip_version == 4 and _is_v4_only(address):
+            rtn_networks.append(networks[index])
+        elif ip_version == 6 and not _is_v4_only(address):
+            LOG.info("here in v6")
+            rtn_networks = networks
+        else:
+            return rtn_networks
+    elif mode == 'dynamic' and vxlan_mode == mode:
+        for attr in provider_attributes:
+            dic_attr = eval (attr)
+            ip = dic_attr['group']
+            ip_addr = ipaddress.ip_address(ip)
+            if ip_addr.version == ip_version:
+                rtn_networks.append(networks[index])
+        index += 1
+
+    return rtn_networks
 

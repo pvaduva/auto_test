@@ -2,7 +2,7 @@ from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper, \
     check_helper
@@ -13,7 +13,7 @@ from testfixtures.recover_hosts import HostsToRecover
 @fixture(scope='module', autouse=True)
 def skip_test_if_less_than_two_hosts():
     if len(host_helper.get_up_hypervisors()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
     if nova_helper.get_quotas(quotas='instances')[0] < 10:
@@ -29,30 +29,30 @@ class TestCgcsGuest:
 
         LOG.fixture_step("Create a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.create_flavor('flv_nolocaldisk')[1]
-        ResourceCleanup.add('flavor', flavor_1, scope='module')
+        ResourceCleanup.add('flavor', flavor_1, scope='class')
 
         LOG.fixture_step("Create a flavor with ephemeral and swap disks")
         flavor_2 = nova_helper.create_flavor('flv_localdisk', ephemeral=1, swap=512)[1]
-        ResourceCleanup.add('flavor', flavor_2, scope='module')
+        ResourceCleanup.add('flavor', flavor_2, scope='class')
 
         LOG.fixture_step("Boot vm1 from volume with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm1_name = "vol_nolocal"
-        vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', cleanup='module')[1]
+        vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
 
         LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_local"
-        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', cleanup='module')[1]
+        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
 
         LOG.fixture_step("Boot vm3 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm3_name = "image_novol"
-        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', cleanup='module')[1]
+        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
 
         LOG.fixture_step("Boot vm4 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm4_name = 'image_vol'
-        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', cleanup='module')[1]
+        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
 
         return [vm1, vm2, vm3, vm4]
@@ -65,9 +65,10 @@ class TestCgcsGuest:
 
         # vm2 cannot be live migrated so choose its host as target host
         target_host = nova_helper.get_vm_host(vm2)
-        vms_to_mig = [vm1, vm3, vm4]
+        # todo: vm3 and vm4 can not be live migrated. they should be launched on target
+        vms_to_mig = [vm1]
 
-        LOG.tc_step("Live migrate vm1, vm3, vm4 to vm2 host {} if not already on it".format(target_host))
+        LOG.tc_step("Live migrate vm1 to vm2 host {} if not already on it".format(target_host))
 
         for vm in vms_to_mig:
             if nova_helper.get_vm_host(vm) != target_host:

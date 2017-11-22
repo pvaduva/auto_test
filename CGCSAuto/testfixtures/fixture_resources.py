@@ -22,6 +22,8 @@ class ResourceCleanup:
         'ports': [],
         'trunks': [],
         'networks': [],
+        'vol_snapshots': [],
+        'aggregates': [],
     }
     __resources_to_cleanup = {
         'function': deepcopy(__resources_dict),
@@ -55,7 +57,7 @@ class ResourceCleanup:
         resource_type = resource_type.lower()
         valid_scopes = ['function', 'class', 'module', 'session']
         valid_types = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
-                       'subnet', 'floating_ip', 'heat_stack', 'port', 'trunk', 'network']
+                       'subnet', 'floating_ip', 'heat_stack', 'port', 'trunk', 'network', 'vol_snapshot', 'aggregate']
 
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))

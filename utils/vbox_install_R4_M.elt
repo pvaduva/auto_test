@@ -183,21 +183,6 @@ Version 2.0 by senthilkumar
 #*~fail_time.inc
 $load=GA2
 $load=none
-# TiS version  14
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_1.0_Unified_Daily_Build/latest_bootimage.iso
-# TiS version  15
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_2.0_Unified_Daily_Build/latest_bootimage.iso
-# TiS version  16
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Unified_Daily_Build/latest_bootimage.iso
-# Centos Version
-$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
-# Centos Version
-$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_3.0_Centos_Build/latest_bootimage.iso
-# GA3
-$source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_bootimage.iso
-?if $load == GA2 ?[
-	$source_image=yow-cgts3-lx.wrs.com:/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso
-]
 $source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 $source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 $source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_bootimage.iso
@@ -262,7 +247,7 @@ $com=MI_D
 
 # Default ipv6=no
 $ipv6=no
-?if ipv6 == yes ?[
+?if $ipv6 == yes ?[
 	## Controller Consolidation Combinations
 	$con=TMI_O
 	# Storage Consolidation Combinations
@@ -278,7 +263,7 @@ $storage_consolidation=$str
 $infra_name=infra0
 
 # Default session
-$connection=SSH
+$connection=serial
 
 $heat_tarball=heat.tgz
 
@@ -295,7 +280,7 @@ $console_win=nc localhost 7000
 $boot_image_win=/drives/c/Users/$USER/VBox/latest_bootimage.iso
 
 ## Patch
-$patch=no
+$patch=yes
 
 ## sdn
 $sdn=no
@@ -1032,14 +1017,13 @@ $part=1
 ; === show version
 >cat /etc/build.info
 
+*INTERACT
 
 
 ; === install tenant files and guest images
 $install_tenant_files=yes
 $directory=R4_files
-? if $load == GA2 ?[
-	$directory=R2_files
-]
+
 ?if $install_sw !=no? [	
 	# get IP address of host (use netstat -an | grep :22)
 	>netstat -an | grep :22
@@ -1068,7 +1052,7 @@ $directory=R4_files
 	?if $patch == yes ? [
 		@1500
 		; === Copying Patch file for 15.12
-		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R2_patches/
+		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R4_patches/
 		>mkdir patches
 		>mv *.patch patches/
 		>sudo sw-patch query
@@ -1109,8 +1093,8 @@ $directory=R4_files
 		>export TMOUT=0
 
 		; === setup first IP interface
-		>sudo /sbin/ip addr add $IP/24 dev eth0
-		>sudo /sbin/ip link set eth0 up
+		>sudo /sbin/ip addr add $IP/24 dev $eth0
+		>sudo /sbin/ip link set $eth0 up
 		>ping $ping_opt  $IP
 		<time=
 		>
@@ -1351,13 +1335,13 @@ $directory=R4_files
 <Repeat admin user password
 !send "$admin_password\r"
 <Apply the above configuration
-@20000
+@5000
 
 >y
 <real
 ; === wait for config controller to do its thing
-*FORK serial
->>^M
+#*FORK serial
+#>>^M
 >
 >
 >
@@ -1423,6 +1407,108 @@ $node_controllers=$node_list
 >
 
 @100
+
+?if $topology == 2only ? [
+	?if $node_controllers == controller ? [
+		@60
+		$i=0
+		$controller_node=controller-1
+		>system host-list
+		<$controller_node
+		+$administrative=(locked|unlocked)
+		?if $administrative == locked ? [
+			$state=none
+			>system host-list
+			<$controller_node
+			+$state=(available|online|offline|failed|intest)
+			[ $state != online
+				$state=none
+				[ $state != online
+					; === wait for $controller_node to come online
+					>system host-list
+					<$controller_node
+					+$state=(available|online|offline|failed|intest)
+	
+					!sleep 5
+					+$i
+					?if $i > $max? [
+						;red $controller_node did not become online
+						# break out of while loop
+						$state=online
+						; Giving user the option to recover the lab
+						$i=0
+						*INTERACT
+					]
+				]
+			]
+
+		]
+
+	; === Only controller, run lab_setup
+	>
+	#----------- 1 of 3 Lab_setup
+	@300
+	>time ./lab_setup.sh
+	<real
+	>echo $?
+	+$return=\n(\d)
+	#oops, run lab_setup again
+	?if $return != 0? >time ./lab_setup.sh
+	>
+		$state=none
+		>system host-list
+		<$controller_node
+		+$state=(available|online|offline|failed|intest)
+		?if $state == online		
+			>system host-list
+			<$controller_node
+			+$administrative=(locked|unlocked)
+			?if $administrative == locked ? [
+			    >system host-if-modify -n oam0 -nt oam controller-1 $eth0
+			    >system host-stor-add controller-1 cinder $(system host-disk-list controller-1 | awk '{if ($4 == "/dev/sdb") { print $2;}}')
+        		    ?if $configure_infrastructure_interface == Y ? [
+				    ?if $configure_infrastructure_VLAN == Y ? [
+					>system host-if-add -V $infrastructure_VLAN_ID -nt infra $controller_node $infra_name vlan $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			            ?if $configure_infrastructure_VLAN == N ? [
+					>system host-if-modify -n $infra_name -nt infra  $controller_node $controller_infra_interface
+					!sleep 2
+					<created_at
+				    ]
+			    ]
+			    ; === Unlock  
+		            >system host-unlock $controller_node
+			    $state=none		
+			    [ $state != available
+				; === wait for $controller_node to come available
+				>system host-list
+				<$controller_node
+				+$state=(available|online|offline|failed|intest)
+				!sleep 5
+				+$i
+				?if $i > $max? [
+					;red $controller_node did not become available
+					# break out of while loop
+					$state=available
+					; Giving user the option to recover the lab
+					*INTERACT
+				]
+			    ]
+		            #----------- 2 of 3 Lab_setup
+			@300
+			>time ./lab_setup.sh
+			<real
+			>echo $?
+			+$return=\n(\d)
+			#oops, run lab_setup again
+			?if $return != 0? >time ./lab_setup.sh
+			>
+		  	]
+		]
+	]
+]
 
 #; === Get the infra interface name from controller-0 
 
@@ -1627,8 +1713,8 @@ $node_storage=$node_list
 $node_computes=$node_list
 =$node_computes/.*(compute)-\d.*/\1/
 *INTERACT
-; === Wait for Computes to come Online/ stopped before lab_setup
 ?if $node_computes == compute ? [
+	; === Wait for Computes to come Online/ stopped before lab_setup
 	; === Computes present, run lab_setup
 	>
 	#----------- 1 of 3 Lab_setup

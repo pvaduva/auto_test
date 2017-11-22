@@ -10,8 +10,8 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
-from consts.cgcs import MELLANOX_DEVICE
-from consts.reasons import SkipReason
+from consts.cgcs import MELLANOX_DEVICE, GuestImages
+from consts.reasons import SkipStorageSpace
 from testfixtures.resource_mgmt import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
     glance_helper, storage_helper
@@ -26,12 +26,21 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
+    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, rtn_list=True)
 
-    device_types = system_helper.get_host_ports_values(host, 'device type', if_name=data_ports, strict=True)
+    ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
+
     extra_mt_ports = 0
-    for device_type in device_types:
+    for i in range(len(ports_dict['device type'])):
+        device_type = ports_dict['device type'][i]
         if re.search(MELLANOX_DEVICE, device_type):
-            extra_mt_ports += 1
+            # Only +1 if the other port of MX-4 is not used. CGTS-8303
+            port_name = ports_dict['name'][i]
+            dev = port_name[-1]
+            other_dev = '0' if dev == '1' else '1'
+            other_port = port_name[:-1] + other_dev
+            if other_port not in all_ports_used:
+                extra_mt_ports += 1
 
     if extra_mt_ports > 0:
         LOG.info("{}Mellanox devices are used on {} data interfaces. Perform loose check on port-engine map.".
@@ -47,7 +56,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
                 'Expected engines: {}; Actual engines: {}'.format(host, port, engines, actual_vswitch_map[port])
 
     else:
-        LOG.info("{}No Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
+        LOG.info("{}No extra Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
                  format(SEP, host))
 
         assert expt_vswitch_map == actual_vswitch_map, "vSwitch mapping unexpected. Expect: {}; Actual: {}".format(
@@ -326,6 +335,10 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     # Check host side info such as nova-compute.log and virsh pcpupin
     LOG.tc_step('Check vm topology from vm_host via: nova-compute.log, virsh vcpupin, taskset')
     instance_name = nova_helper.get_vm_instance_name(vm_id)
+    procs = host_helper.get_host_procs(hostname=vm_host)
+    # numa_nodes = list(range(len(procs)))
+    vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+    assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
     with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
@@ -365,8 +378,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         else:
             LOG.info("{}Check affined cpus for floating vm is the same as unpinned cpus on vm host".format(SEP))
-            # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically from vm host?
-            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=[0, 1])
+            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=numa_nodes)
             unpinned_cpus = []
 
             for item in cpus_info:
@@ -376,7 +388,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
             err_msg = "Affined cpus for vm: {}, Unpinned cpus on vm host: {}".format(affined_cpus, unpinned_cpus)
             assert affined_cpus == unpinned_cpus, 'Affined cpus for floating vm are different than unpinned cpus ' \
-                                                  'on vm host {}\n{}'.format(vm_host, err_msg)
+                                                  'on vm host {} numa {}\n{}'.format(vm_host, numa_nodes, err_msg)
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None):
@@ -548,16 +560,16 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
     LOG.info("Check if storage fs is sufficient to launch boot-from-{} vm with {}".format(boot_source, guest_os))
     if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
-            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+            skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
 
     if guest_os == 'win_2016' and boot_source == 'volume':
         if not glance_helper.is_image_conversion_sufficient(guest_os=guest_os):
-            skip(SkipReason.INSUFFICIENT_IMG_CONV.format(guest_os))
+            skip(SkipStorageSpace.INSUFFICIENT_IMG_CONV.format(guest_os))
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
     img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if guest_os != 'ubuntu_14':
+    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
         ResourceCleanup.add('image', img_id)
 
 

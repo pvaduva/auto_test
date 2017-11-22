@@ -303,7 +303,6 @@ class TestVmPCIOperations:
 
         return numa_match
 
-
     NIC_PCI_TYPES = ['pci-passthrough', 'pci-sriov']
     PCI_NUMA_AFFINITY_VALUES = ['strict', 'prefer']
 

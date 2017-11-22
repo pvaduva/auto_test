@@ -12,12 +12,12 @@ from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
+from utils.ssh import ControllerClient, NATBoxClient
 from consts.filepaths import WRSROOT_HOME
+from keywords import system_helper
 
 
-def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120,
-                                              is_dir=False, con_ssh=None):
+def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120, con_ssh=None):
     """
     SCP file or files under a directory from test server to TiS server
 
@@ -35,44 +35,49 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    dir_option = '-r ' if is_dir else ''
     source_server = SvcCgcsAuto.SERVER
     source_user = SvcCgcsAuto.USER
     source_password = SvcCgcsAuto.PASSWORD
 
-    if not is_dir and dest_name is None:
+    if dest_name is None:
         dest_name = source_path.split(sep='/')[-1]
 
     dest_path = dest_dir if not dest_name else dest_dir + dest_name
 
-    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
-            dir_option, source_user, source_server, source_path, dest_path)
-
+    LOG.info('Check if file already exists on TiS')
     if con_ssh.file_exists(file_path=dest_path):
         LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
         return dest_path
 
-    LOG.debug('Create destination directory on tis server if not already exists')
+    LOG.info('Create destination directory on tis server if not already exists')
     cmd = 'mkdir -p {}'.format(dest_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    LOG.info("scp file(s) from test server to tis server")
-    con_ssh.send(scp_cmd)
-    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
-    if index == 2:
-        con_ssh.send('yes')
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
-    if index == 1:
-        con_ssh.send(source_password)
-        index = con_ssh.expect()
-    if index != 0:
-        LOG.error("Failed to scp files")
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
+        LOG.info('VBox detected, performing intermediate scp')
 
-    if not con_ssh.file_exists(file_path=dest_path):
-        LOG.error("File path {} does not exist after scp".format(dest_path))
-        return None
-    else:
-        return dest_path
+        nat_dest_path = '/tmp/{}'.format(dest_name)
+        nat_ssh = NATBoxClient.get_natbox_client()
+
+        if not nat_ssh.file_exists(nat_dest_path):
+            LOG.info("scp file from test server to NatBox: {}".format(nat_name))
+            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
+                                dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout)
+
+        LOG.info('scp file from natbox {} to active controller'.format(nat_name))
+        dest_user = HostLinuxCreds.get_user()
+        dest_pswd = HostLinuxCreds.get_password()
+        dest_ip = ProjVar.get_var('LAB').get('floating ip')
+        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
+                              dest_password=dest_pswd, timeout=timeout)
+
+    else: # if not a VBox lab, scp from test server directly to TiS server
+        LOG.info("scp file(s) from test server to tis server")
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
+                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
+
+    return dest_path
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=180, is_dir=False,
@@ -113,7 +118,7 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
         index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
     if index == 1:
         con_ssh.send(dest_password)
-        index = con_ssh.expect()
+        index = con_ssh.expect(timeout=timeout)
 
     assert index == 0, "Failed to scp files"
 
@@ -458,3 +463,19 @@ def get_date_in_format(ssh_client=None, date_format="%Y%m%d %T"):
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller()
     return ssh_client.exec_cmd("date +'{}'".format(date_format), fail_ok=False)[1]
+
+
+def write_to_file(file_path, content, mode='a'):
+    """
+    Write content to specified local file
+    Args:
+        file_path (str): file path on localhost
+        content (str): content to write to file
+        mode (str): file operation mode. Default is 'a' (append to end of file).
+
+    Returns: None
+
+    """
+    time_stamp = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+    with open(file_path, mode=mode) as f:
+        f.write('\n-----------------[{}]-----------------\n{}\n'.format(time_stamp, content))

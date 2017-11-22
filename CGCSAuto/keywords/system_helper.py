@@ -1,10 +1,10 @@
 import math
-import time
 import re
+import time
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.timeout import SysInvTimeout
 from consts.cgcs import UUID, Prompt, Networks
+from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -514,7 +514,7 @@ def __process_query_args(args, query_key, query_value, query_type):
     return args
 
 
-def wait_for_events(timeout=30, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
+def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=None, query_value=None, query_type=None,
                     fail_ok=True, rtn_val='Event Log ID', con_ssh=None, auth_info=Tenant.ADMIN, regex=False,
                     strict=True, check_interval=3, event_log_id=None, entity_type_id=None, entity_instance_id=None,
                     severity=None, start=None, end=None, **kwargs):
@@ -794,6 +794,42 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         else:
             raise exceptions.TimeoutException(err_msg)
 
+def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
+                         auth_info=Tenant.ADMIN):
+    """
+    Wait for all alarms_and_events to be cleared from system alarm-list
+    Args:
+        timeout (int):
+        check_interval (int):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple): (res(bool), remaining_alarms(tuple))
+
+    """
+
+    LOG.info("Waiting for all existing alarms_and_events to disappear from system alarm-list: {}".format(get_alarms()))
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info)
+        current_alarms = _get_alarms(current_alarms_tab)
+
+        if len(current_alarms) == 0:
+            return True, []
+        else:
+            time.sleep(check_interval)
+
+    else:
+        existing_alarms = get_alarms()
+        err_msg = "Alarms did not clear within {} seconds: {}".format(timeout, existing_alarms)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False, existing_alarms
+        else:
+            raise exceptions.TimeoutException(err_msg)
+
 
 def host_exists(host, field='hostname', con_ssh=None):
     """
@@ -867,6 +903,13 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     else:
         # should not get here; cli.system() should already handle these cases
         pass
+
+
+def get_system_name(fail_ok=True, con_ssh=None):
+
+    table_ = table_parser.table(cli.system('show'))
+    system_name = table_parser.get_value_two_col_table(table_, 'name')
+    return system_name
 
 
 def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, period=None):
@@ -1451,7 +1494,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
     Get
     Args:
         host:
-        header:
+        header (str|list):
         if_name:
         pci_addr:
         proc:
@@ -1462,7 +1505,7 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         auth_info:
         **kwargs:
 
-    Returns (list):
+    Returns (list|dict): list if header is string, dict if header is list.
 
     """
     table_ = table_parser.table(cli.system('host-port-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
@@ -1478,7 +1521,21 @@ def get_host_ports_values(host, header='name', if_name=None, pci_addr=None, proc
         if value is not None:
             kwargs[key] = value
 
-    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
+    rtn_dict = True
+    if isinstance(header, str):
+        rtn_dict = False
+        header = [header]
+
+    table_ = table_parser.filter_table(table_, strict=strict, regex=regex, **kwargs)
+    res = {}
+    for header_ in header:
+        vals = table_parser.get_column(table_, header_)
+        res[header_] = vals
+
+    if not rtn_dict:
+        res = res[header[0]]
+
+    return res
 
 
 def get_host_interfaces_table(host, show_all=False, con_ssh=None, auth_info=Tenant.ADMIN):
@@ -2642,11 +2699,14 @@ def disable_murano(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     return 0, msg
 
 
-def enable_murano_agent(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def get_host_addr_list(host, rtn_val='address', ifname=None, id=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     """
-    Enable Murano Agent
+    Disable Murano Services
     Args:
         con_ssh (SSHClient):
+        ifname:
+        id:
+        rtn_val:
         auth_info (dict):
         fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
 
@@ -2654,34 +2714,16 @@ def enable_murano_agent(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
 
     """
 
-    res, output = cli.system('service-parameter-add murano engine disable_murano_agent=false',
-                        ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
-    if res == 1:
-        return 1, output
+    table_ = table_parser.table(cli.system('host-addr-list', host,  ssh_client=con_ssh, auth_info=auth_info,
+                                     fail_ok=fail_ok, rtn_list=True)[1])
+    args_dict = {
+        'id': id,
+        'ifname': ifname,
+    }
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
 
-    msg = "Enabled Murano Agent"
-
-    return 0, msg
-
-
-def disable_murano_agent(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
-    """
-    Disable Murano Agent
-    Args:
-        con_ssh (SSHClient):
-        auth_info (dict):
-        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
-
-    Returns:
-
-    """
-
-    res, output = cli.system('service-parameter-add murano engine disable_murano_agent=true',
-                             ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
-    if res == 1:
-        return 1, output
-
-    msg = "Disale Murano Agent"
-
-    return 0, msg
-
+    address = table_parser.get_values(table_, rtn_val, strict=True, regex=True, merge_lines=True, **kwargs)
+    return address

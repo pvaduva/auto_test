@@ -7,9 +7,10 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.timeout import VolumeTimeout
-from consts.cgcs import GuestImages
+from consts.cgcs import GuestImages, Prompt
 
 from keywords import common, glance_helper, keystone_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
@@ -85,6 +86,50 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
     return table_parser.get_column(table_, rtn_val)
 
 
+def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size=None, status=None, attached_vm=None,
+                 rtn_val='ID', auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Return a list of volume ids based on the given criteria
+
+    Args:
+        vol_snaps (list or str):
+        name (str):
+        name_strict (bool):
+        size (str):
+        status:(str)
+        attached_vm (str):
+        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
+        con_ssh (str):
+
+    Returns (list): a list of volume snapshot ids based on the given criteria
+    """
+
+    optional_args = {
+        'ID': vol_snaps,
+        'Size': size,
+        'Attached to': attached_vm,
+        'Status': status
+    }
+
+    criteria = {}
+    for key, value in optional_args.items():
+        if value is not None:
+            criteria[key] = value
+
+    table_ = table_parser.table(cli.cinder('snapshot-list --all-tenants', auth_info=auth_info, ssh_client=con_ssh))
+
+    if name is not None:
+        table_ = table_parser.filter_table(table_, strict=name_strict, **{'Name': name})
+
+    if criteria:
+        table_ = table_parser.filter_table(table_, **criteria)
+
+    if name is None and not criteria:
+        LOG.debug("No criteria specified, return {}s for all volume snapshots for specific tenant".format(rtn_val))
+
+    return table_parser.get_column(table_, rtn_val)
+
+
 def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Filter out the volumes that are attached to a vm.
@@ -116,7 +161,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=Non
 
 def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snapshot_id=None, vol_type=None, size=None,
                   avail_zone=None, metadata=None, bootable=True, fail_ok=False, auth_info=None, con_ssh=None,
-                  rtn_exist=False, guest_image=None):
+                  rtn_exist=False, guest_image=None, cleanup=None):
     """
     Create a volume with given criteria.
 
@@ -147,6 +192,9 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     Notes:
         snapshot_id > source_vol_id > image_id if more than one source ids are provided.
     """
+    if cleanup is not None:
+        if cleanup not in ['module', 'session', 'function', 'class']:
+            raise ValueError("Invalid scope provided. Choose from: 'module', 'session', 'function', 'class', None")
 
     bootable_str = str(bootable).lower()
 
@@ -190,7 +238,8 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     size = 5 if size is None else size
 
     subcmd = ' '.join([subcmd, source_arg, str(size)])
-    LOG.info("Creating volume: {}".format(name))
+    LOG.info("Creating Volume {}...".format(name))
+    LOG.info("cinder create {}".format(subcmd))
     exit_code, cmd_output = cli.cinder('create', subcmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                        rtn_list=True)
     if exit_code == 1:
@@ -200,6 +249,8 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
 
     table_ = table_parser.table(cmd_output)
     volume_id = table_parser.get_value_two_col_table(table_, 'id')
+    if cleanup and volume_id:
+        ResourceCleanup.add('volume', volume_id, scope=cleanup)
 
     if not _wait_for_volume_status(vol_id=volume_id, status='available', auth_info=auth_info, fail_ok=fail_ok):
         LOG.warning("Volume is created, but not in available state.")
@@ -254,6 +305,9 @@ def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.A
 
     """
     attachments = get_volume_states(vol_id, "attachments", con_ssh=con_ssh, auth_info=auth_info)
+    # pike version cinder show has no 'attachments' field
+    if not attachments['attachments']:
+        return
     attachments = eval(attachments['attachments'])
     LOG.info("Volume {} attachments: {} attachment: {}".format(vol_id, attachments, attachments[0]))
     if attachments and len(attachments) > 0:
@@ -264,14 +318,43 @@ def get_volume_attachments(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.A
         return [attachments]
     return None
 
-
-def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-                            check_interval=3, con_ssh=None, auth_info=None):
+# for pike cinderclient
+def get_volume_attachment_ids(vol_id, vm_id=None,  con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
         vol_id (str):
-        status (str):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns (list):
+        A  list of dicts with volume attachment_ids
+
+    """
+    vol_show_table = table_parser.table(
+        cli.cinder('show', vol_id, auth_info=Tenant.ADMIN))
+    attached_servers = table_parser.get_value_two_col_table(
+        vol_show_table, 'attached_servers')
+    attached_servers = table_parser.convert_value_to_dict(attached_servers)
+    attachment_ids = table_parser.get_value_two_col_table(
+        vol_show_table, 'attachment_ids')
+    attachment_ids = table_parser.convert_value_to_dict(attachment_ids)
+
+    if attached_servers and len(attached_servers) > 0:
+        for server, att in zip(attached_servers, attachment_ids):
+            if vm_id and server == vm_id:
+                return [att]
+        return [attachment_ids]
+    return None
+
+
+def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+                            check_interval=3, snapshot_vol=False,  con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        vol_id (str):
+        status (str/list):
         timeout (int):
         fail_ok (bool):
         check_interval (int):
@@ -283,18 +366,25 @@ def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.ST
         false if timed out or otherwise
 
     """
-    LOG.info("Waiting for cinder volume {} status: {}".format(vol_id, status))
+    snapshot = ''
+    if snapshot_vol:
+        snapshot += 'snapshot-'
+
+    LOG.info("Waiting for cinder {}volume {} status: {}".format(snapshot, vol_id, status))
     end_time = time.time() + timeout
     current_status = ''
     prev_status = 'unknown'
+    if isinstance(status, str):
+        status = [status]
+    cmd = "{}show".format(snapshot)
     while time.time() < end_time:
-        table_ = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.cinder(cmd, vol_id, ssh_client=con_ssh, auth_info=auth_info))
         current_status = table_parser.get_value_two_col_table(table_, 'status')
-        if current_status == status:
-            LOG.info("Volume {} is in {} state".format(vol_id, status))
+        if current_status in status:
+            LOG.info("Volume {} is in {} state".format(vol_id, current_status))
             return True
         elif current_status == 'error':
-            show_vol_tab = table_parser.table(cli.cinder('show', vol_id, ssh_client=con_ssh, auth_info=auth_info))
+            show_vol_tab = table_parser.table(cli.cinder(cmd, vol_id, ssh_client=con_ssh, auth_info=auth_info))
             error_msg = table_parser.get_value_two_col_table(show_vol_tab, 'error')
             if fail_ok:
                 LOG.warning("Volume {} is in error state! Details: {}".format(vol_id, error_msg))
@@ -310,6 +400,55 @@ def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.ST
             return False
         raise exceptions.TimeoutException("Timed out waiting for volume {} status to reach status: {}. "
                                           "Actual status: {}".format(vol_id, status, current_status))
+
+
+def _wait_for_snapshot_volume_status(snap_vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+                            check_interval=3, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        snap_vol_id (str):
+        status (str/list):
+        timeout (int):
+        fail_ok (bool):
+        check_interval (int):
+        con_ssh (str):
+        auth_info (dict):
+
+    Returns:
+        True if the status of the volume is same as the status(str) that was passed into the function \n
+        false if timed out or otherwise
+
+    """
+    LOG.info("Waiting for cinder volume snapshot {} status: {}".format(snap_vol_id, status))
+    end_time = time.time() + timeout
+    current_status = ''
+    prev_status = 'unknown'
+    if isinstance(status, str):
+        status = [status]
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.cinder('snapshot-show', snap_vol_id, ssh_client=con_ssh, auth_info=auth_info))
+        current_status = table_parser.get_value_two_col_table(table_, 'status')
+        if current_status in status:
+            LOG.info("Volume snapshot {} is in {} state".format(snap_vol_id, current_status))
+            return True
+        elif current_status == 'error':
+            show_vol_tab = table_parser.table(cli.cinder('snapshot-show', snap_vol_id, ssh_client=con_ssh, auth_info=auth_info))
+            error_msg = table_parser.get_value_two_col_table(show_vol_tab, 'error')
+            if fail_ok:
+                LOG.warning("Volume snapshot {} is in error state! Details: {}".format(snap_vol_id, error_msg))
+                return False
+            raise exceptions.VolumeError(error_msg)
+        elif current_status != prev_status:
+            LOG.info("Volume snapshot status reached: {}".format(current_status))
+            prev_status = current_status
+
+        time.sleep(check_interval)
+    else:
+        if fail_ok:
+            return False
+        raise exceptions.TimeoutException("Timed out waiting for volume snapshot {} status to reach status: {}. "
+                                          "Actual status: {}".format(snap_vol_id, status, current_status))
 
 
 def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_ssh=None, auth_info=None):
@@ -335,7 +474,7 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
         'status': status,
         "Volume ID": vol_id,
         'Status': status,
-        'Display Name': name,
+        'name': name,
         'Size': size
     }
 
@@ -498,6 +637,68 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
 
     LOG.info("Volume(s) are successfully deleted: {}".format(vols_to_check))
     return 0, "Volume(s) deleted successfully"
+
+
+def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,
+                            con_ssh=None):
+    """
+    Delete given volume snapshot via cinder snapshot-delete
+
+    Args:
+        snapshots (str|list):
+        force (bool):
+        check_first (bool):
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple):
+        (0, volume snapshot  <volume_snap_id> is successfully deleted)
+        (1, <std_err>)
+        (2, volume snapshot <volume_snap_id> still exists in cinder qos-list after deletion)
+
+    """
+    snapshot_list = get_volume_snapshot_list()
+    if snapshots is None:
+        snapshots_to_del = snapshot_list
+    else:
+        if isinstance(snapshots, str):
+            snapshots_to_del = [snapshots]
+        else:
+            snapshots_to_del = list(snapshots)
+
+        if check_first:
+            snapshots_to_del = list(set(snapshots_to_del) & set(snapshot_list))
+
+    if not snapshots_to_del:
+        msg = "No volume snapshot to delete or provided snapshot(s) not exist on system"
+        LOG.info(msg)
+        return -1, msg
+
+    args_ = ' '.join(snapshots_to_del)
+
+    if force:
+        args_ = '--force {}'.format(force) + args_
+
+    code, output = cli.cinder('snapshot-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                              rtn_list=True)
+
+    if code == 1:
+        return code, output
+
+    post_vol_snap_list = get_volume_snapshot_list()
+    undeleted_snapshots = list(set(snapshots_to_del) & set(post_vol_snap_list))
+    if undeleted_snapshots:
+        err_msg = "Volume snapshot {} still exists in cinder snapshot-list after deletion".format(undeleted_snapshots)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 2, err_msg
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    succ_msg = "Volume snapshot(s) successfully deleted: {}".format(snapshots_to_del)
+    LOG.info(succ_msg)
+    return 0, succ_msg
 
 
 def get_quotas(quotas=None, con_ssh=None, auth_info=None):
@@ -1029,7 +1230,7 @@ def is_volumes_pool_sufficient(min_size=40):
     #   volume-05fa416d-d37b-4d57-a6ff-ab4fe49deece cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
     #   volume-1b04fa7f-b839-4cf9-a177-e676ec6cf9b7 cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16
     if lvs_pool:
-        pool_size = float(lvs_pool.splitlines()[0].strip().split()[3].strip()[:-1])
+        pool_size = float(lvs_pool.splitlines()[0].strip().split()[3].strip()[:-1].split(sep='<')[-1])
         return pool_size >= min_size
 
     # assume enough volumes in ceph:
@@ -1045,3 +1246,154 @@ def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.ADMIN):
     val = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
 
     return val
+
+
+def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+    """
+    Imports a cinder volume from a backup file located in /opt/backups folder. The backup file is expected in
+    volume-<uuid>-<date>.tgz  format. Either volume_backup filename or vol_id must be provided
+    Args:
+        cinder_volume_backup(str):  the filename of the backup file
+        vol_id (str): - is the uuid of the cinder volume to be imported
+        con_ssh:
+        fail_ok:
+        auth_info:
+
+    Returns:
+
+    """
+
+    if not cinder_volume_backup and not vol_id:
+        raise ValueError("Volume backup file name or vol_id must be provided.")
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    controller_prompt = Prompt.CONTROLLER_0 + '|' + '.*controller\-0\:/opt/backups\$'
+    vol_backup = cinder_volume_backup
+    vol_id_ = vol_id
+    cd_cmd = "cd /opt/backups"
+    con_ssh.set_prompt(prompt=controller_prompt)
+
+    con_ssh.exec_cmd(cd_cmd, )
+
+    if not cinder_volume_backup:
+        # search backup file in /opt/backups
+        search_str = "volume-" + vol_id_ + "*.tgz"
+        cmd = "cd /opt/backups; ls {}".format(search_str)
+
+        rc, output = con_ssh.exec_cmd(cmd)
+        if rc == 0:
+            vol_backup = output.split()[0]
+        else:
+            err_msg = "volume backup file not found in /opt/backups: {}".format(output)
+            LOG.error(err_msg)
+            if fail_ok:
+                return -1, err_msg
+            else:
+                raise exceptions.CinderError(err_msg)
+    if not vol_id_:
+        vol_id_ = vol_backup[7:-20]
+
+    rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                              rtn_list=True)
+    if rc == 1:
+        return 1, output
+
+    if not _wait_for_volume_status(vol_id=vol_id_, status=['available', 'in-use'], auth_info=auth_info,
+                                   con_ssh=con_ssh, fail_ok=True):
+        err_msg = "Volume is imported, but not in available/in-use state."
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 2, vol_id_
+        else:
+            raise exceptions.CinderError(err_msg)
+
+    return 0, "Volume {} is imported successfully".format(vol_id_)
+
+
+def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+    """
+    Exports cinder volume to controller's /opt/backups folder. The backup file is in
+    volume-<uuid>-<date>.tgz  format.
+    Args:
+        vol_ids(list/str):  the list of volume ids to be exported, if none, all system volumes are exported
+        con_ssh:
+        fail_ok:
+        auth_info:
+
+    Returns:
+
+    """
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+    if isinstance(vol_ids, str):
+        vol_ids = [vol_ids]
+    if not vol_ids:
+        vol_ids = get_volumes()
+    volume_exported = []
+    for vol_id in vol_ids:
+
+        if get_volume_states(vol_id, 'status')['status'] == 'available':
+            # export available volume to ~/opt/backups
+            LOG.tc_step("export available volume {} ".format(vol_id))
+            table_ = table_parser.table(cli.cinder('export', vol_id, auth_info=Tenant.ADMIN))
+
+            # wait for volume copy to complete
+            if not _wait_for_volume_status(vol_id, fail_ok=fail_ok, auth_info=auth_info):
+                err_msg = "cinder volume failed to reach available status after export"
+                if fail_ok:
+                    LOG.warning(err_msg)
+                    return 2, vol_id
+                else:
+                    raise exceptions.CinderError(err_msg)
+
+        # execute backup in-use volume command
+        if get_volume_states(vol_id, 'status')['status'] == 'in-use':
+            LOG.tc_step("export in use volume {} ".format(vol_id))
+            snapshot_name = 'snapshot_'+vol_id
+            cli_args = '--force True --name '+snapshot_name+' '+vol_id
+            table_ = table_parser.table(cli.cinder('snapshot-create', cli_args, auth_info=Tenant.ADMIN))
+            snap_shot_id = table_parser.get_values(table_, 'Value', Property='id')[0]
+            LOG.info("Volume snapshot {} created for volume {}".format(snap_shot_id, vol_id))
+
+            #time.sleep(120)
+            # wait for volume copy to complete
+            if not _wait_for_volume_status(snap_shot_id, snapshot_vol=True, fail_ok=fail_ok, auth_info=auth_info):
+                err_msg = "cinder snapshot volume {} failed to reach available status after copy".format(snap_shot_id)
+                if fail_ok:
+                    LOG.warning(err_msg)
+                    return 3, err_msg
+                else:
+                    raise exceptions.CinderError(err_msg)
+
+            found_snap = get_snapshot_id(vol_id=vol_id, auth_info=auth_info)
+            LOG.info("Matched Volume snapshot {} to volume {}".format(found_snap, vol_id))
+            if found_snap not in snap_shot_id:
+                err_msg = "cinder volume snapshot {} for volume {} not found after export"\
+                    .format(snap_shot_id, vol_id)
+                LOG.warn(err_msg)
+                if fail_ok:
+                    LOG.warning(err_msg)
+                    return 4, err_msg
+                else:
+                    raise exceptions.CinderError(err_msg)
+
+            LOG.info("Exporting in-use Volume snapshot {} ".format(snap_shot_id))
+            table_ = table_parser.table(cli.cinder('snapshot-export', snap_shot_id, auth_info=auth_info))
+            if not _wait_for_volume_status(snap_shot_id, snapshot_vol=True, fail_ok=fail_ok, auth_info=auth_info):
+                err_msg = "cinder snapshot volume {} failed to reach available status after export".format(snap_shot_id)
+                if fail_ok:
+                    LOG.warning(err_msg)
+                    return 5, err_msg
+                else:
+                    raise exceptions.CinderError(err_msg)
+            # delete the snapshot after export
+            LOG.info("Deleteing snapshot Volume snapshot {} after export ".format(snap_shot_id))
+            cli.cinder('snapshot-delete', snap_shot_id, auth_info=auth_info)
+
+        LOG.info("Exported Volume  {} successfully ".format(vol_id))
+        volume_exported.append(vol_id)
+
+    return 0, volume_exported

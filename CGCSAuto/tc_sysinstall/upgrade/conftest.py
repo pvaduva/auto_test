@@ -3,7 +3,7 @@ import os
 from consts import build_server as build_server_consts
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import install_helper,  patching_helper, upgrade_helper
+from keywords import install_helper,  patching_helper, upgrade_helper, common
 from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
@@ -166,12 +166,14 @@ def upgrade_setup(pre_check_upgrade):
     cpe = system_helper.is_small_footprint(controller0_conn)
     upgrade_version = UpgradeVars.get_upgrade_var('UPGRADE_VERSION')
     license_path = UpgradeVars.get_upgrade_var('UPGRADE_LICENSE')
+    is_simplex = system_helper.is_simplex()
     if license_path is None:
         if cpe:
             license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][1]
+        elif is_simplex:
+            license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][2]
         else:
             license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][0]
-
     bld_server = get_build_server_info(UpgradeVars.get_upgrade_var('BUILD_SERVER'))
     load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
     output_dir = ProjVar.get_var('LOG_DIR')
@@ -227,11 +229,25 @@ def upgrade_setup(pre_check_upgrade):
         system_helper.import_load(upgrade_load_path)
 
         # download and apply patches if patches are available in patch directory
-        if patch_dir:
+        if patch_dir and upgrade_version != "17.07":
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 
-    # check which nodes are upgraded using orchestration
+    # check disk space
+    check_controller_filesystem()
+
+    # Check for simplex and return
+    if is_simplex:
+        _upgrade_setup_simplex = {'lab': lab,
+                                  'cpe': cpe,
+                                  'output_dir': output_dir,
+                                  'current_version': current_version,
+                                  'upgrade_version': upgrade_version,
+                                  'build_server': bld_server_obj
+                                  }
+        return _upgrade_setup_simplex
+            # check which nodes are upgraded using orchestration
+
     orchestration_after = UpgradeVars.get_upgrade_var('ORCHESTRATION_AFTER')
     storage_apply_strategy = UpgradeVars.get_upgrade_var('STORAGE_APPLY_TYPE')
     compute_apply_strategy = UpgradeVars.get_upgrade_var('COMPUTE_APPLY_TYPE')
@@ -365,8 +381,25 @@ def apply_patches(lab, server, patch_dir):
 
         patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
 
-        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-        server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        dest_server = lab['controller-0 ip']
+        ssh_port = None
+
+        if 'vbox' in lab['name']:
+            dest_server = lab['external_ip']
+            ssh_port = lab['external_port']
+            temp_path = '/tmp/patches/'
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server,
+                              temp_path, dest_user=lab['local_user'],
+                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+
+            common.scp_to_active_controller(temp_path,
+                                        dest_path=patch_dest_dir, is_dir=True)
+
+        else:
+            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
+                                  pre_opts=pre_opts)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))
@@ -384,3 +417,36 @@ def apply_patches(lab, server, patch_dir):
 
         LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+
+
+def check_controller_filesystem(con_ssh=None):
+
+    LOG.info("Checking controller root fs size ... ")
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    patch_dest_dir1 = WRSROOT_HOME + "patches/"
+    patch_dest_dir2 = WRSROOT_HOME + "upgrade_patches/"
+    upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
+    current_version = install_helper.get_current_system_version()
+    cmd = "df | grep /dev/root | awk ' { print $5}'"
+    rc, output = con_ssh.exec_cmd(cmd)
+    if rc == 0 and output:
+        LOG.info("controller root fs size is {} full ".format(output))
+        percent = int(output.strip()[:-1])
+        if percent > 69:
+            con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir1))
+            con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir2))
+            con_ssh.exec_cmd("rm {}".format(upgrade_load_path))
+            with host_helper.ssh_to_host('controller-1') as host_ssh:
+                host_ssh.exec_cmd("rm {}/*".format(patch_dest_dir1))
+                host_ssh.exec_cmd("rm {}/*".format(patch_dest_dir2))
+                host_ssh.exec_cmd("rm {}".format(upgrade_load_path))
+
+            if current_version == '15.12':
+                time.sleep(120)
+            else:
+                entity_id = 'host=controller-0.filesystem=/'
+                system_helper.wait_for_alarms_gone([(EventLogID.FS_THRESHOLD_EXCEEDED, entity_id)], check_interval=10,
+                                           fail_ok=True, timeout=180)
+

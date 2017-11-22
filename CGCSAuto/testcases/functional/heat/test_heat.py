@@ -12,7 +12,7 @@ from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 from consts.auth import Tenant
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -327,27 +327,27 @@ def revert_quota(request):
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
     mark.sanity('WR_Neutron_ProviderNetRange.yaml'),
-    mark.nightly('WR_Neutron_ProviderNet.yaml'),
-    mark.nightly('OS_Cinder_Volume.yaml'),
-    mark.nightly('OS_Glance_Image.yaml'),
-    mark.nightly('OS_Ceilometer_Alarm.yaml'),
-    mark.nightly('OS_Neutron_Port.yaml'),
-    mark.nightly('OS_Neutron_Net.yaml'),
-    mark.nightly('OS_Neutron_Subnet.yaml'),
-    mark.nightly('OS_Nova_Flavor.yaml'),
-    mark.nightly('OS_Neutron_FloatingIP.yaml'),
-    mark.nightly('OS_Neutron_Router.yaml'),
-    mark.nightly('OS_Neutron_RouterGateway.yaml'),
-    mark.nightly('OS_Neutron_RouterInterface.yaml'),
-    mark.nightly('OS_Neutron_SecurityGroup.yaml'),
-    mark.nightly('OS_Nova_ServerGroup.yaml'),
-    mark.nightly('OS_Nova_KeyPair.yaml'),
-    mark.nightly('WR_Neutron_QoSPolicy.yaml'),
-    mark.nightly('OS_Heat_Stack.yaml'),
-    mark.nightly('OS_Cinder_VolumeAttachment.yaml'),
-    mark.nightly('OS_Nova_Server.yaml'),
-    mark.nightly('OS_Heat_AccessPolicy.yaml'),
-    mark.nightly('OS_Heat_AutoScalingGroup.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('WR_Neutron_ProviderNet.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Port.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Net.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Subnet.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Nova_Flavor.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_FloatingIP.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Router.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_RouterGateway.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_RouterInterface.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_SecurityGroup.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Nova_ServerGroup.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Nova_KeyPair.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Heat_Stack.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Cinder_VolumeAttachment.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Nova_Server.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Heat_AccessPolicy.yaml'),
+    mark.priorities('nightly', 'sx_nightly')('OS_Heat_AutoScalingGroup.yaml'),
     ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name, revert_quota):
@@ -419,7 +419,7 @@ def test_delete_heat_after_swact(template_name):
 
     """
     if len(system_helper.get_controllers()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     # add test step
     return_code, msg = verify_basic_template(template_name, delete_after_swact=True)

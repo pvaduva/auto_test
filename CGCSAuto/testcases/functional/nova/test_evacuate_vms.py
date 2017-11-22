@@ -2,18 +2,15 @@ from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from consts.reasons import SkipReason
+from consts.reasons import SkipStorageBacking, SkipHypervisor
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, check_helper
+from keywords import vm_helper, host_helper, nova_helper, cinder_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
-def skip_test_if_less_than_two_hosts():
-    if len(host_helper.get_up_hypervisors()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
-
+def update_quotas(add_admin_role_module):
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
     if nova_helper.get_quotas(quotas='instances')[0] < 10:
         nova_helper.update_quotas(instances=10, cores=20)
@@ -39,12 +36,17 @@ def touch_files_under_vm_disks(vm_id, ephemeral, swap, vm_type, disks):
 
 class TestDefaultGuest:
 
+    @fixture(scope='class', autouse=True)
+    def skip_test_if_less_than_two_hosts(self):
+        if len(host_helper.get_up_hypervisors()) < 2:
+            skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
+
     @mark.parametrize('storage_backing', [
         'local_image',
         'local_lvm',
         'remote',
     ])
-    def test_evacuate_vms_with_inst_backing(self, storage_backing, add_admin_role_class):
+    def test_evacuate_vms_with_inst_backing(self, storage_backing):
         """
         Test evacuate vms with various vm storage configs and host instance backing configs
 
@@ -77,7 +79,7 @@ class TestDefaultGuest:
         """
         hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
         if len(hosts) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
+            skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
         target_host = hosts[0]
 
@@ -191,3 +193,48 @@ class TestDefaultGuest:
             LOG.info("--------------------Check files for vm {}".format(vm_))
             check_helper.check_vm_files(vm_id=vm_, vm_action='evacuate', storage_backing=storage_backing,
                                         prev_host=target_host, **vms_info[vm_])
+        vm_helper.ping_vms_from_natbox(vms)
+
+
+class TestOneHostAvail:
+    @fixture(scope='class', autouse=not system_helper.is_simplex())
+    def add_hosts_to_zone(self, request, add_cgcsauto_zone):
+        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        host = hosts[0]
+        LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
+        nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=[host])
+
+        def remove_hosts_from_zone():
+            nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
+        request.addfinalizer(remove_hosts_from_zone)
+
+    @mark.sx_sanity
+    def test_reboot_only_host(self):
+        zone = 'nova' if system_helper.is_simplex() else 'cgcsauto'
+
+        LOG.tc_step("Launch 5 vms in {} zone".format(zone))
+        vms = vm_helper.boot_vms_various_types(avail_zone=zone, cleanup='function')
+        target_host = nova_helper.get_vm_host(vm_id=vms[0])
+        for vm in vms[1:]:
+            vm_host = nova_helper.get_vm_host(vm)
+            assert target_host == vm_host, "VMs are not booted on same host"
+
+        LOG.tc_step("Reboot -f from target host {}".format(target_host))
+        HostsToRecover.add(target_host)
+        host_helper.reboot_hosts(target_host, wait_for_reboot_finish=True)
+
+        LOG.tc_step("Check vms are in Active state after host come back up")
+        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
+
+        vms_host_err = []
+        for vm in vms:
+            if nova_helper.get_vm_host(vm) != target_host:
+                vms_host_err.append(vm)
+
+        assert not vms_host_err, "Following VMs are not on the same host {}: {}\nVMs did not reach Active state: {}". \
+            format(target_host, vms_host_err, inactive_vms)
+
+        assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+
+        LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
+        vm_helper.ping_vms_from_natbox(vms)

@@ -402,11 +402,14 @@ if __name__ == '__main__':
 
         lab_names = sorted([lab_['name'] for lab_ in labs if isinstance(lab_, dict) and lab_['name'].startswith('yow')])
 
-        with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
-            for lab_name in lab_names:
-                insert_lab(lab_name, cursor=cur, check_first=True)
+        try:
+            with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
+                for lab_name in lab_names:
+                    insert_lab(lab_name, cursor=cur, check_first=True)
 
-        print("All labs are uploaded!")
+            print("All labs are uploaded!")
+        except Exception as e:
+            print("Unable to upload. Details: {}".format(e.__str__()))
 
     else:
         try:
@@ -415,5 +418,8 @@ if __name__ == '__main__':
             raise ValueError("Automation session log directory has to be provided!\n"
                              "Usage: upload_results.py <log_dir>")
 
-        with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
-            upload_test_results(cursor=cur, log_dir=logdir, tag=options.session_tag)
+        try:
+            with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
+                upload_test_results(cursor=cur, log_dir=logdir, tag=options.session_tag)
+        except Exception as e:
+            "Unable to upload test results. Details: {}".format(e.__str__())

@@ -5,7 +5,7 @@
 from pytest import mark, skip
 
 from utils.tis_log import LOG
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from keywords import host_helper, system_helper, vm_helper, network_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -28,7 +28,7 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         skip("Simplex system detected")
 
     if not wait_for_con_drbd_sync_complete:
-        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     LOG.tc_step('retrieve active and available controllers')
     pre_active_controller = system_helper.get_active_controller_name()

@@ -1,7 +1,9 @@
+import re
+
 from pytest import fixture, mark
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from keywords import nova_helper
+from keywords import nova_helper, host_helper, vm_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -67,3 +69,31 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
         post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)
         assert post_extra_spec[extra_spec_name] == value, "Actual flavor extra specs: {}".format(post_extra_spec)
 
+
+# TC6497
+def test_create_flavor_with_excessive_vcpu_negative():
+
+    """
+    Test that flavor creation fails and sends a human-readable error message if a flavor with >128 vCPUs is attempted
+    to be created.
+
+    Test Steps:
+       - Create a new flavor with 129 vCPUs
+       - Check that create_flavor returns an error exit code and a proper readable output message is generated
+    """
+
+    # Create a flavor with over 128 vcpus
+    vcpu_num = 129
+    LOG.tc_step("Create flavor with over 128 vCPUs - {}".format(vcpu_num))
+    exitcode, output = nova_helper.create_flavor(vcpus=129, fail_ok=True)
+    if exitcode == 0:
+        ResourceCleanup.add('vm', output)
+
+    # Check if create_flavor returns erroneous exit code and error output is a proper human-readable message
+
+    expt_err = "Invalid input .* vcpus .*{}.* is greater than the maximum of 128".format(vcpu_num)
+
+    LOG.tc_step("Check flavor creation fails and proper error message displayed")
+
+    assert 1 == exitcode
+    assert re.search(expt_err, output), "\nExpected pattern:{}\nActual output: {}".format(expt_err, output)

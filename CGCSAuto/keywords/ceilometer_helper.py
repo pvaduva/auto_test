@@ -209,3 +209,21 @@ def get_meters_table(limit=None, unique=None, meter=None, resource=None, auth_in
     table_ = table_parser.table(cli.ceilometer('meter-list', args_, auth_info=auth_info, ssh_client=con_ssh))
 
     return table_
+
+
+def alarm_list(header='State', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get a list of alarms that can be tracked by Ceilometer
+    Args:
+        header (str): the column to get the values from
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): a list of all the values in the header column of the returned resources
+
+    """
+    table_ = table_parser.table(cli.ceilometer('alarm-list', auth_info=auth_info, ssh_client=con_ssh))
+
+    values = table_parser.get_values(table_, target_header=header)
+
+    return values

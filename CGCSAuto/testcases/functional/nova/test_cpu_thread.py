@@ -4,7 +4,7 @@ from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
 
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor, SkipHyperthreading
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
 # Do not remove used imports below as they are used in eval()
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
@@ -680,7 +680,7 @@ class TestHTEnabled:
         mark.p1((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None)),
         mark.p1((2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None)),
         mark.p1((4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None)),
-        mark.priorities('nightly', 'domain_sanity')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         mark.p1((5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
         mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
@@ -691,9 +691,9 @@ class TestHTEnabled:
 
         if 'mig' in nova_actions or 'evacuate' == host_action:
             if len(ht_hosts) + len(non_ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+                skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
             if cpu_thr_pol in ['require', 'isolate'] and len(ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
+                skip(SkipHyperthreading.LESS_THAN_TWO_HT_HOSTS)
 
         # Boot vm with given requirements and check vm is booted with correct topology
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
@@ -818,9 +818,9 @@ class TestHTEnabled:
         ht_hosts, non_ht_hosts = ht_hosts_
         if 'mig' in nova_actions:
             if len(ht_hosts) + len(non_ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+                skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
             if cpu_thr_pol in ['require', 'isolate'] and len(ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
+                skip(SkipHyperthreading.LESS_THAN_TWO_HT_HOSTS)
 
         name_str = 'cpu_thr_{}_in_img'.format(cpu_pol)
 

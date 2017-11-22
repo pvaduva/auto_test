@@ -1,5 +1,5 @@
 from consts import build_server as build_server_consts
-from consts.proj_vars import ProjVar, PatchingVars
+from consts.proj_vars import PatchingVars
 
 
 def pytest_addoption(parser):
