@@ -486,8 +486,8 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
         'entity_type_id': entity_type_id,
         'entity_instance_id': entity_instance_id,
         'severity': severity,
-        'start': '"{}"'.format(start) if start else None,
-        'end': '"{}"'.format(end) if end else None
+        'start': '{}'.format(start) if start else None,
+        'end': '{}'.format(end) if end else None
     }
 
     queries = []

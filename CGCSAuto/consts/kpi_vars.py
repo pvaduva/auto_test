@@ -81,3 +81,19 @@ class VmStartup:
     LOG_PATH = '/var/log/fm-event.log'
     START = 'Instance .* owned by .* has been created.*{}'
     END = 'Instance .* is enabled on host .*{}'
+
+
+class Swact:
+    NAME = 'swact_controlled'
+    START_PATH = '/var/log/bash.log'
+    START = 'system .*host-swact'
+    LOG_PATH = '/var/log/sm.log'
+    END = 'Swact has completed successfully'
+
+
+class SwactUncontrolled:
+    NAME = 'swact_uncontrolled'
+    START_PATH = '/var/log/bash.log'
+    START = 'sudo reboot -f'
+    LOG_PATH = '/var/log/sm.log'
+    END = 'Swact has completed successfully'

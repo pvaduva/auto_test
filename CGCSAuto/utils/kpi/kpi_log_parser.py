@@ -14,7 +14,7 @@ from keywords import host_helper, common
 
 def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None,
                start_path=None, extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
-               con_ssh=None, sudo=False, topdown=False, init_time=None, build_id=None,
+               con_ssh=None, sudo=False, topdown=False, init_time=None, build_id=None, start_host=None,
                uptime=5, start_pattern_init=False):
     """
     Record kpi in ini format in given file
@@ -22,6 +22,7 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         local_kpi_file (str): local file path to store the kpi data
         kpi_name (str): name of the kpi
         host (str|None): which tis host the log is located at. When None, assume host is active controller
+        start_host (str|None): specify only if host to collect start log is different than host for end log
         log_path (str): log_path on given host to check the kpi timestamps.
             Required if start_time or end_time is not specified
         end_pattern (str): One of the two options. Option2 only applies to duration type of KPI
@@ -89,20 +90,19 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         if log_path:
             kpi_dict['log_path'] = log_path
 
-        with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
-            if start_pattern:
-                kpi_val, time_stamp, count = get_duration(start_pattern=start_pattern, start_path=start_path,
-                                                          end_pattern=end_pattern, log_path=log_path,
-                                                          host_ssh=host_ssh, sudo=sudo, topdown=topdown,
-                                                          extended_regex=extended_regex,
-                                                          average_for_all=average_for_all,
-                                                          init_time=init_time,
-                                                          start_pattern_init=start_pattern_init)
-            else:
-                kpi_val, time_stamp, count = get_match(pattern=end_pattern, log_path=log_path, host_ssh=host_ssh,
-                                                       extended_regex=extended_regex, python_pattern=python_pattern,
-                                                       average_for_all=average_for_all, sudo=sudo, topdown=topdown,
-                                                       init_time=init_time)
+        if start_pattern:
+            kpi_val, time_stamp, count = get_duration(start_pattern=start_pattern, start_path=start_path,
+                                                      end_pattern=end_pattern, log_path=log_path,
+                                                      host=host, sudo=sudo, topdown=topdown,
+                                                      extended_regex=extended_regex,
+                                                      average_for_all=average_for_all,
+                                                      init_time=init_time, start_host=start_host,
+                                                      start_pattern_init=start_pattern_init, con_ssh=con_ssh)
+        else:
+            kpi_val, time_stamp, count = get_match(pattern=end_pattern, log_path=log_path, host=host,
+                                                   extended_regex=extended_regex, python_pattern=python_pattern,
+                                                   average_for_all=average_for_all, sudo=sudo, topdown=topdown,
+                                                   init_time=init_time, con_ssh=con_ssh)
 
         kpi_dict.update({'timestamp': time_stamp, 'value': kpi_val})
 
@@ -188,42 +188,59 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Fal
     return out
 
 
-def get_duration(start_pattern, end_pattern, log_path, host_ssh, start_path=None, extended_regex=False,
-                 average_for_all=False, sudo=False, topdown=False, init_time=None, start_pattern_init=False):
+def get_duration(start_pattern, end_pattern, log_path, host, con_ssh, start_path=None, extended_regex=False,
+                 start_host=None, average_for_all=False, sudo=False, topdown=False, init_time=None,
+                 start_pattern_init=False):
     """
     Get duration in seconds between start and end timestamps when searching log from bottom up
     Args:
         start_pattern:
         end_pattern:
         log_path:
-        host_ssh:
+        host:
+        con_ssh: SSHClient for active controller
         start_path:
         extended_regex:
+        start_host
         average_for_all:
         sudo:
+        topdown
+        init_time: only look for matching line in log after init_time
+        start_pattern_init (bool): whether to use the start time stamp as the init time for end time stamp.
 
     Returns:
 
     """
-    if re.match(TIMESTAMP_PATTERN, start_pattern):
-        start_times = [start_pattern]
-    else:
-        start_path = start_path if start_path else log_path
-        start_line = search_log(file_path=start_path, ssh_client=host_ssh, pattern=start_pattern, sudo=sudo,
-                                extended_regex=extended_regex, get_all=average_for_all, top_down=topdown,
-                                init_time=init_time)
-        start_times = re.findall(TIMESTAMP_PATTERN, start_line)
+    def get_end_times(init_time_, host_ssh_):
+        if re.match(TIMESTAMP_PATTERN, end_pattern):
+            end_times_ = [end_pattern]
+        else:
+            end_line = search_log(file_path=log_path, ssh_client=host_ssh_, pattern=end_pattern, sudo=sudo,
+                                  extended_regex=extended_regex, get_all=average_for_all, top_down=topdown,
+                                  init_time=init_time_)
+            end_times_ = re.findall(TIMESTAMP_PATTERN, end_line)
+        return end_times_
 
-    if start_pattern_init:
-        init_time = start_times[0]
+    start_host = start_host if start_host else host
+    end_times = None
+    with host_helper.ssh_to_host(hostname=start_host, con_ssh=con_ssh) as host_ssh:
+        if re.match(TIMESTAMP_PATTERN, start_pattern):
+            start_times = [start_pattern]
+        else:
+            start_path = start_path if start_path else log_path
+            start_line = search_log(file_path=start_path, ssh_client=host_ssh, pattern=start_pattern, sudo=sudo,
+                                    extended_regex=extended_regex, get_all=average_for_all, top_down=topdown,
+                                    init_time=init_time)
+            start_times = re.findall(TIMESTAMP_PATTERN, start_line)
+        if start_pattern_init:
+            init_time = start_times[0]
 
-    if re.match(TIMESTAMP_PATTERN, end_pattern):
-        end_times = [end_pattern]
-    else:
-        end_line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=end_pattern, sudo=sudo,
-                              extended_regex=extended_regex, get_all=average_for_all, top_down=topdown,
-                              init_time=init_time)
-        end_times = re.findall(TIMESTAMP_PATTERN, end_line)
+        if start_host == host:
+            end_times = get_end_times(init_time_=init_time, host_ssh_=host_ssh)
+
+    if end_times is None:
+        with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as end_ssh:
+            end_times = get_end_times(init_time_=init_time, host_ssh_=end_ssh)
 
     count = len(start_times)
     end_count = len(end_times)
@@ -253,10 +270,12 @@ def get_duration(start_pattern, end_pattern, log_path, host_ssh, start_path=None
     return average_duration, end_time, count
 
 
-def get_match(pattern, log_path, host_ssh, python_pattern=None, extended_regex=False, average_for_all=False,
+def get_match(pattern, log_path, host, con_ssh, python_pattern=None, extended_regex=False, average_for_all=False,
               sudo=False, topdown=False, init_time=None):
-    line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=pattern, extended_regex=extended_regex,
-                      get_all=average_for_all, sudo=sudo, top_down=topdown, init_time=init_time)
+    with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+        line = search_log(file_path=log_path, ssh_client=host_ssh, pattern=pattern, extended_regex=extended_regex,
+                          get_all=average_for_all, sudo=sudo, top_down=topdown, init_time=init_time)
+
     timestamp_pattern = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
     time_stamp = re.findall(timestamp_pattern, line)[-1]
 
