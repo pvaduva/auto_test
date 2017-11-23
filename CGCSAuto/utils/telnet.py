@@ -1031,34 +1031,57 @@ class Telnet:
             else:
                 LOG.info("Boot device is: " + str(boot_device_regex))
 
-
             self.get_read_until("Please select boot device", 60)
 
             count = 0
             down_press_count = 0
+
+             # GENERIC USB
+            if usb and node.name == CONTROLLER0:
+                LOG.info("Looking for USB device")
+                boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
+
+            LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
+            #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+            # Construct regex to work with wildcatpass machines
+            # in legacy and uefi mode
+            #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+            #regex = re.compile(b"\[\d+(.*?)\x1b")
+            # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+            if "wildcat" in node.host_name:
+                regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+            else:
+                if usb:
+                    regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
+                else:
+                    regex = re.compile(b"Slot (\d{4}) v\d+")
+
+            LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
+
+
             while count < MAX_SEARCH_ATTEMPTS:
 
-                # GENERIC USB
-                if usb and node.name == CONTROLLER0:
-                    LOG.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
-
-                LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
-                #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
-                # Construct regex to work with wildcatpass machines
-                # in legacy and uefi mode
-                #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
-                #regex = re.compile(b"\[\d+(.*?)\x1b")
-                # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
-                if "wildcat" in node.host_name:
-                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
-                else:
-                    if usb:
-                        regex = re.compile(b"\|(.+)(USB|Kingston|JetFlash|SanDisk)(.+)\|")
-                    else:
-                        regex = re.compile(b"Slot (\d{4}) v\d+")
-
-                LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
+                # # GENERIC USB
+                # if usb and node.name == CONTROLLER0:
+                #     LOG.info("Looking for USB device")
+                #     boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
+                #
+                # LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
+                # #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+                # # Construct regex to work with wildcatpass machines
+                # # in legacy and uefi mode
+                # #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+                # #regex = re.compile(b"\[\d+(.*?)\x1b")
+                # # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                # if "wildcat" in node.host_name:
+                #     regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                # else:
+                #     if usb:
+                #         regex = re.compile(b"\[\d+(;32H)\|(.+)\|")
+                #     else:
+                #         regex = re.compile(b"Slot (\d{4}) v\d+")
+                #
+                # LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
 
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]

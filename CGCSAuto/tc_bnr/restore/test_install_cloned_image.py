@@ -141,9 +141,8 @@ def test_install_cloned_image(install_clone_setup):
     LOG.info("Changing the system name ... ")
     install_helper.update_system_info_for_cloned_system()
 
-
     LOG.tc_step("Verifying system health after restore ...")
-    system_helper.wait_for_all_alarms_gone()
+    system_helper.wait_for_all_alarms_gone(timeout=300)
     rc, failed = system_helper.get_system_health_query()
     assert rc == 0, "System health not OK: {}".format(failed)
 

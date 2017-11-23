@@ -601,9 +601,15 @@ def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
 def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNLOCK, use_telnet_session=False,
                                 con_telnet=None):
     time.sleep(30)
-    wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
-    time.sleep(30)
-    con_ssh.connect(retry=True, retry_timeout=timeout)
+    if not use_telnet_session:
+        wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
+        time.sleep(30)
+        con_ssh.connect(retry=True, retry_timeout=timeout)
+    else:
+        con_telnet.get_read_until("ogin:", HostTimeout.CONTROLLER_UNLOCK)
+        con_telnet.login()
+        con_telnet.exec_cmd("xterm")
+
     # Give it sometime before openstack cmds enables on after host
     _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet_session=use_telnet_session, con_telnet=con_telnet,
                                    fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)

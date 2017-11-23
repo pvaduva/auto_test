@@ -2508,6 +2508,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
 
     """
     lab = InstallVars.get_install_var("LAB")
+    system_mode = 'duplex' if len(lab['controller_nodes']) > 1 else 'simplex'
     log_dir = ProjVar.get_var('LOG_DIR')
     controller_0_node = lab["controller-0"]
     node = lab[host]
@@ -2515,6 +2516,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         err_msg = "Failed to get node object for hostname {} in the Install parameters".format(host)
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
+
 
     if controller_0_node.telnet_conn is None:
         controller_0_node.telnet_conn = open_telnet_session(controller_0_node, log_dir)
@@ -2537,8 +2539,11 @@ def check_cloned_hardware_status(host, fail_ok=False):
                                            con_telnet=controller_0_node.telnet_conn))
     host_name = table_parser.get_value_two_col_table(table_, 'hostname')
     assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
-    host_mgmt_ip = table_parser.get_value_two_col_table(table_, 'mgmt_ip')
-    assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after install-clone".format(host_mgmt_ip, host)
+    if system_mode == 'duplex':
+        host_mgmt_ip = table_parser.get_value_two_col_table(table_, 'mgmt_ip')
+        assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after install-clone"\
+            .format(host_mgmt_ip, host)
+
     host_mgmt_mac = table_parser.get_value_two_col_table(table_, 'mgmt_mac')
 
     host_software_load = table_parser.get_value_two_col_table(table_, 'software_load')
@@ -2549,9 +2554,9 @@ def check_cloned_hardware_status(host, fail_ok=False):
     table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet_session=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_['values']) >= 2, "Fewer ethernet ports listed than expected for host {}: {}".format(host, table_)
-
-    assert len(table_parser.filter_table(table_, **{'mac address': host_mgmt_mac})['values']) >= 1, \
-        "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
+    if system_mode == 'duplex':
+        assert len(table_parser.filter_table(table_, **{'mac address': host_mgmt_mac})['values']) >= 1, \
+            "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
 
     LOG.info("Executing system host interface list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet_session=True,
@@ -2618,8 +2623,6 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
         ssh_conn.deploy_ssh_key()
         ControllerClient.set_active_controller(ssh_conn)
 
-        #ssh_conn.exec_cmd("source /etc/nova/openrc")
-
         LOG.info(" The controller is successfully swacted.")
 
         LOG.info(" Locking controller-0 for oam ip config update.")
@@ -2639,10 +2642,19 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
                                                         initial_prompt=controller_prompt)
         ssh_conn.deploy_ssh_key()
         ControllerClient.set_active_controller(ssh_client=ssh_conn)
-        #ssh_conn.exec_cmd("source /etc/nova/openrc")
+
         host_helper.swact_host('controller-1')
 
         LOG.info(" Swacted back to controller-0  successfully ...")
+
+    else:
+        controller_prompt = Prompt.CONTROLLER_0 + '|' + Prompt.ADMIN_PROMPT
+        if controller0_node.ssh_conn:
+            controller0_node.ssh_conn.close()
+
+        ssh_conn = establish_ssh_connection(controller0_node.host_ip, initial_prompt=controller_prompt)
+        ssh_conn.deploy_ssh_key()
+        ControllerClient.set_active_controller(ssh_conn)
 
 
 def update_system_info_for_cloned_system( system_mode='duplex', fail_ok=False):
