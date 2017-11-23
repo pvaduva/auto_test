@@ -574,7 +574,8 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
 
 
 def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths, content, root=None, vm_action=None,
-                   prev_host=None, post_host=None, disks=None, post_disks=None, guest_os=None):
+                   prev_host=None, post_host=None, disks=None, post_disks=None, guest_os=None,
+                   check_volume_root=False):
     """
     Check the files on vm after specified action. This is to check the disks in the basic nova matrix table.
     Args:
@@ -592,6 +593,7 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
         disks (dict): disks that are returned from vm_helper.get_vm_devices_via_virsh()
         post_disks (dict): only used in resize case
         guest_os (str|None): default guest assumed for None. e,g., ubuntu_16
+        check_volume_root (bool): whether to check root disk size even if vm is booted from image
 
     Returns:
 
@@ -717,14 +719,18 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
         if eph_disk:
             LOG.info("Check ephemeral disk size")
             eph_name = list(eph_disk.keys())[0]
-            LOG.info("Check ephemeral disk size")
             _check_disk_size(vm_ssh, eph_name, expt_size=ephemeral*1024)
 
         if root:
-            root_disk = final_disks.get('root_img', {})
-            if root_disk:
-                root_name = list(root_disk.keys())[0]
-                LOG.info("Check root disk size when vm is booted from image")
+            image_root = final_disks.get('root_img', {})
+            root_name = ''
+            if image_root:
+                root_name = list(image_root.keys())[0]
+            elif check_volume_root:
+                root_name = list(final_disks.get('root_vol').keys())[0]
+
+            if root_name:
+                LOG.info("Check root disk size")
                 _check_disk_size(vm_ssh, disk_name=root_name, expt_size=root*1024)
 
 

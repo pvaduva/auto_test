@@ -803,7 +803,7 @@ class MonitoredProcess:
 
             wait_time_for_host_status = 90
 
-            if impact in ('log'):
+            if impact in ('log',):
                 check_event = True
 
             elif impact in ('enabled-degraded', 'disabled-failed'):
@@ -812,15 +812,15 @@ class MonitoredProcess:
                 if quorum == '1':
                     LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
                     wait_time_for_host_status = HostTimeout.REBOOT
-                    expected = {'operational': 'Disabled', 'availability': 'offline'}
+                    expected = {'operational': 'Disabled', 'availability': 'Offline'}
 
-                elif impact in ('disabled-failed'):
+                elif impact in ('disabled-failed',):
                     LOG.debug('wait host getting into status:disabled-failed')
                     wait_time_for_host_status = HostTimeout.REBOOT
-                    expected = {'operational': 'Disabled', 'availability': 'Failed'}
+                    expected = {'operational': 'Disabled', 'availability': ['Failed', 'Offline']}
                     # check_event = True
 
-                elif impact in ('enabled-degraded'):
+                elif impact in ('enabled-degraded',):
                     wait_time_for_host_status = 90
 
                     expected = {'operational': 'Enabled', 'availability': 'Degraded'}

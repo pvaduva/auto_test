@@ -333,7 +333,7 @@ def get_vm_devices_via_virsh(vm_id, con_ssh=None):
         disks = {}
         root_line = disk_lines.pop(0)
         root_dev, root_source = root_line.split()
-        if re.search('openstack:volume', root_source):
+        if re.search('openstack:volume|cinder-volumes', root_source):
             disk_type = 'root_vol'
         else:
             disk_type = 'root_img'

@@ -176,6 +176,8 @@ class TestResizeSameHost:
 
         vm_disks = vm_helper.get_vm_devices_via_virsh(vm_id)
         root, ephemeral, swap = origin_flavor
+        if boot_source == 'volume':
+            root = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1]
         file_paths, content = touch_files_under_vm_disks(vm_id=vm_id, ephemeral=ephemeral, swap=swap,
                                                          vm_type=boot_source, disks=vm_disks)
 
@@ -193,7 +195,7 @@ class TestResizeSameHost:
         LOG.tc_step("Check files after resize revert")
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, root=root, ephemeral=ephemeral,
                                     swap=swap, vm_type=boot_source, vm_action=None, file_paths=file_paths,
-                                    content=content, disks=vm_disks)
+                                    content=content, disks=vm_disks, check_volume_root=True)
 
         prev_host = nova_helper.get_vm_host(vm_id)
 
@@ -207,12 +209,15 @@ class TestResizeSameHost:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         post_host = nova_helper.get_vm_host(vm_id)
         post_root, post_ephemeral, post_swap = dest_flavor
+        if boot_source == 'volume':
+            post_root = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1]
         post_ephemeral = ephemeral if ephemeral else post_ephemeral      # CGTS-8041
         LOG.tc_step("Check files after resize attempt")
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, ephemeral=post_ephemeral,
                                     swap=post_swap, vm_type=boot_source, vm_action='resize', file_paths=file_paths,
                                     content=content, prev_host=prev_host, post_host=post_host, root=post_root,
-                                    disks=vm_disks, post_disks=vm_helper.get_vm_devices_via_virsh(vm_id))
+                                    disks=vm_disks, post_disks=vm_helper.get_vm_devices_via_virsh(vm_id),
+                                    check_volume_root=True)
 
         # TODO: Check that root Cinder volume does not resize, for appropriate cases
         # Check for TC5155 blocked by JIRA: CGTS-8299

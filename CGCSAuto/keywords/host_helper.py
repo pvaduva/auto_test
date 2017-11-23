@@ -957,7 +957,7 @@ def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, str
             else:   # no match found. run system host-show again
                 if last_vals[field] != actual_val_lower:
                     LOG.info("{} {} is {}.".format(host, field, actual_val))
-                last_vals[field] = actual_val_lower
+                    last_vals[field] = actual_val_lower
                 break
         else:
             LOG.info("{} is in states: {}".format(host, states))
