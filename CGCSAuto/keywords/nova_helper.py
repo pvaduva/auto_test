@@ -1113,9 +1113,7 @@ def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
     if boot_info['type'] == 'image':
         image_id = boot_info['id']
         image_show_table = table_parser.table(cli.glance('image-show', image_id))
-        image_name = table_parser.get_value_two_col_table(image_show_table, 'image_name', strict=False)
-        if not image_name:
-            image_name = table_parser.get_value_two_col_table(image_show_table, 'name')
+        image_name = table_parser.get_value_two_col_table(image_show_table, 'name')
     else:      # booted from volume
         vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.ADMIN))
         image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')

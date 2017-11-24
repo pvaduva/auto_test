@@ -189,31 +189,14 @@ def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None, mount=Tru
         guest = nova_helper.get_vm_image_name(vm_id)
         if guest and 'cgcs_guest' not in guest:
             LOG.info("Attached Volume {} need to be mounted on vm {}".format(vol_id, vm_id))
-            attachment_info = cinder_helper.get_volume_attachments(vol_id, vm_id=vm_id)
-            if attachment_info:
-                attached_device_name = attachment_info[0]['device']
-                device = attached_device_name.split('/')[-1]
-                LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, attached_device_name))
-                if not mount_attached_volume(vm_id, device, vm_image_name=guest):
-                    LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
-                return
-
-            # for pike cinderclient: there is no 'attachments' field, so have to
-            # get attachments from 2 tables.
-            attachment_ids = cinder_helper.get_volume_attachment_ids(vol_id, vm_id=vm_id)
-            if attachment_ids:
-                att_show_table = table_parser.table(
-                    cli.cinder('--os-volume-api-version 3.27 attachment-show',
-                               attachment_ids[0],
-                               auth_info=Tenant.ADMIN))
-                attached_device_name = table_parser.get_value_two_col_table(
-                    att_show_table, 'device')
-                device = attached_device_name.split('/')[-1]
-                LOG.info("Volume {} is attached to VM {} as {}".format(
-                    vol_id, vm_id, attached_device_name))
-                if not mount_attached_volume(vm_id, device, vm_image_name=guest):
-                    LOG.info("Failed to mount the attached Volume {} "
-                             "on VM {} filesystem".format(vol_id, vm_id))
+            attached_devs = get_vm_volume_attachments(vm_id=vm_id, rtn_val='device', vol_id=vol_id, auth_info=auth_info,
+                                                      con_ssh=con_ssh)
+            device_name = attached_devs[0]
+            device = device_name.split('/')[-1]
+            LOG.info("Volume {} is attached to VM {} as {}".format(vol_id, vm_id, device_name))
+            if not mount_attached_volume(vm_id, device, vm_image_name=guest):
+                LOG.info("Failed to mount the attached Volume {} on VM {} filesystem".format(vol_id, vm_id))
+            return
 
 
 def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
@@ -251,6 +234,23 @@ def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
             return True
         LOG.info(not_mount_msg)
         return False
+
+
+def get_vm_volume_attachments(vm_id, vol_id=None, rtn_val='device', con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get volume attachments for given vm
+    Args:
+        vm_id:
+        vol_id:
+        rtn_val:
+        con_ssh:
+        auth_info:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.nova('volume-attachments', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, rtn_val, **{'volume id': vol_id})
 
 
 def mount_attached_volume(vm_id, rootfs, vm_image_name=None):
