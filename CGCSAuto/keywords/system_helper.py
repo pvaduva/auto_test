@@ -8,7 +8,7 @@ from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils import telnet as telnetlib
+
 
 class System:
     def __init__(self, controller_ssh=None):
