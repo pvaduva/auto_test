@@ -227,3 +227,28 @@ def alarm_list(header='State', con_ssh=None, auth_info=Tenant.ADMIN):
     values = table_parser.get_values(table_, target_header=header)
 
     return values
+
+
+def get_events(event_type, limit=None, header='message_id', con_ssh=None, auth_info=Tenant.ADMIN,
+               **filters):
+    """
+
+    Args:
+        event_type:
+        limit
+        header:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    args = ''
+    if limit:
+        args = '--limit {}'.format(limit)
+    args += ' --filter event_type={}'.format(event_type)
+    for key, val in filters.items():
+        args += ';{}={}'.format(key, val)
+
+    table_ = table_parser.table(cli.openstack('event list', args, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, header)
