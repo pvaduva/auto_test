@@ -2102,7 +2102,7 @@ def set_network_boot_feed(bld_server_conn, load_path):
 
 
 def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False, lowlat=False, small_footprint=False,
-                     clone_install=False):
+                     clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2147,7 +2147,7 @@ def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
 
     time.sleep(60)
 
-    if patch_dir_paths and bld_server_conn:
+    if not system_restore and (patch_dir_paths and bld_server_conn):
         apply_patches(lab, bld_server_conn, patch_dir_paths)
         controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
@@ -2157,7 +2157,6 @@ def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
         # Reconnect telnet session
         LOG.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
-
 
         # controller0.ssh_conn.disconnect()
         # controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
@@ -2175,10 +2174,12 @@ def apply_patches(lab, build_server, patch_dir):
 
     """
     patch_names = []
-    rc = build_server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
+    # rc = build_server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
+    rc = build_server.exec_cmd("test -d " + patch_dir)[0]
     assert rc == 0, "Patch directory path {} not found".format(patch_dir)
 
-    rc, output = build_server.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
+    # rc, output = build_server.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
+    rc, output = build_server.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
     assert rc == 0, "Failed to list patch files in directory path {}.".format(patch_dir)
 
     # LOG.info("No path found in {} ".format(patch_dir))
@@ -2193,7 +2194,8 @@ def apply_patches(lab, build_server, patch_dir):
         patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-        build_server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        # build_server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        build_server.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))

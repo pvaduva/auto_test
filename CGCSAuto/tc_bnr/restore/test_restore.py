@@ -231,7 +231,7 @@ def restore_setup(pre_restore_checkup):
     LOG.tc_step("Booting controller-0 ... ")
     # is_cpe = (lab['system_type'] == 'CPE')
     is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
-    install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe)
+    install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
 
     # establish ssh connection with controller
     LOG.tc_step("Establishing ssh connection with controller-0 after install...")
