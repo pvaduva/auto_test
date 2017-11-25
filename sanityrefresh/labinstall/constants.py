@@ -97,6 +97,7 @@ CONTROLLER0 = 'controller-0'
 CONTROLLER1 = 'controller-1'
 
 ONLINE = "online"
+DEGRADED = "degraded"
 OFFLINE = "offline"
 AVAILABLE = "available"
 ENABLED = "enabled"
@@ -110,7 +111,7 @@ AVAILABILITY = "availability"
 
 STATE_TYPE_DICT = {ADMINISTRATIVE: [UNLOCKED, LOCKED],
                    OPERATIONAL: [ENABLED, DISABLED],
-                   AVAILABILITY: [ONLINE, OFFLINE, AVAILABLE]}
+                   AVAILABILITY: [ONLINE, OFFLINE, AVAILABLE, DEGRADED]}
 
 PATCH_AVAILABLE_STATE = "Available"
 

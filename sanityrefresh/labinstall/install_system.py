@@ -113,6 +113,10 @@ def parse_args():
                          " as small footprint. Not applicable"
                          " for tis-on-tis install")
 
+    lab_grp.add_argument('--system-mode', dest='system_mode', default='',
+                         choices=['duplex-direct', 'duplex', 'simplex'],
+                         help="select system mode")
+
     lab_grp.add_argument('--security', dest='security', default='',
                           choices=['', 'standard', 'extended'],
                           help="Install security profile")
@@ -1894,6 +1898,7 @@ def main():
     tuxlab_server = args.tuxlab_server
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
+    system_mode = args.system_mode
     postinstall = args.postinstall
     burn_usb = args.burn_usb
     boot_usb = args.boot_usb
@@ -2334,9 +2339,14 @@ def main():
         #controller0.ssh_conn.disconnect()
         controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
         # Depends on when we poll whether controller0 is offline or online
+        # Starting in R5 - since the controller-0 is initially in locked state after
+        # running config_controller there is a special case in AIO-direct where after
+        # the initial unlock controller-0 will be in degraded state (which is valid)
+        # AIO-direct controller-0 will only come online when controller-1 is powered on
         node_offline = test_state(controller0, AVAILABILITY, OFFLINE)
         node_online = test_state(controller0, AVAILABILITY, ONLINE)
-        if node_online or node_offline:
+        node_degraded = test_state(controller0, AVAILABILITY, DEGRADED)
+        if node_online or node_offline or node_degraded:
             if run_labsetup()[0] != 0:
                 msg = "lab_setup failed"
                 log.error(msg)
@@ -2347,7 +2357,10 @@ def main():
             controller0.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
             controller0.telnet_conn.login()
             controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
-            wait_state(controller0, AVAILABILITY, AVAILABLE)
+            if "duplex-direct" in system_mode:
+                wait_state(controller0, AVAILABILITY, DEGRADED)
+            else:
+                wait_state(controller0, AVAILABILITY, AVAILABLE)
         set_install_step_complete(lab_install_step)
 
         time.sleep(10)
@@ -2381,11 +2394,14 @@ def main():
     # Lab-install -  Run_lab_setup - applicable cpe labs only
 
     if not tis_blds_dir in older_rel:
+        log.info("tis_blds_dir: {} not in older_rel: {}".format(tis_blds_dir, older_rel))
         lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex', 'storage'])
     else:
         lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
-        if run_labsetup()[0] != 0:
+        # lab_setup.sh only be ran when hosts are online
+        # TODO: below is a hack that ignores lab_setup failure - this makes the new istalls...
+        if run_labsetup()[0] not in [0,1]:
             msg = "lab_setup failed in small footprint configuration."
             log.error(msg)
             installer_exit._exit(1, msg)
@@ -2400,12 +2416,15 @@ def main():
             bulkAddHosts()
             set_install_step_complete(lab_install_step)
 
-     # Lab-install - cpe_compute_config_complete - applicable cpe labs only
-    lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
-    if do_next_install_step(lab_type, lab_install_step):
-        if small_footprint:
-            run_cpe_compute_config_complete(host_os, install_output_dir)
-            set_install_step_complete(lab_install_step)
+    # Lab-install - cpe_compute_config_complete - applicable cpe labs only
+    # system compute-config-complete is only applicable to R3 and R4
+    # SW_VERSION="16.10 and SW_VERSION="17.06
+    if tis_blds_dir in older_rel:
+        lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
+        if do_next_install_step(lab_type, lab_install_step):
+            if small_footprint:
+                run_cpe_compute_config_complete(host_os, install_output_dir)
+                set_install_step_complete(lab_install_step)
 
     # Lab-install -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 7, ['cpe', 'simplex'])
