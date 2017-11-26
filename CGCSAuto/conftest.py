@@ -12,9 +12,7 @@ from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
-from consts import build_server as build_server_consts
 
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00'], ['16.10', '17.06'], ['17.06', '17.07']]
 
 tc_start_time = None
 tc_end_time = None
@@ -425,69 +423,6 @@ def pytest_addoption(parser):
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
     # Note --lab is also a lab install option, when config file is not provided.
-
-    upgrade_version_help = "TiS next software version that the lab is upgraded to. " \
-                           "Valid options are: {}".format(' '.join(v[1] for v in SUPPORTED_UPGRADES))
-    build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
-                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
-    upgrade_build_dir_path = "The path to the upgrade software release build directory in build server." \
-                             " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
-                             " Otherwise the default  build dir path for the upgrade software " \
-                             "version will be used"
-
-    license_help = "The full path to the new release software license file in build-server. " \
-                   "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
-                   " Otherwise, default license for the upgrade release will be used"
-
-    patch_dir_help = "The path to the directory in build server where the patch files are located"
-
-    orchestration_help = "The point in upgrade procedure where we start to use orchestration. Possible options are:" \
-                         "  default - to start orchestration after controller-1 is upgraded; " \
-                         "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
-                         "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
-                         " The default is default. Applicable only for upgrades from R3."
-    apply_strategy_help = "How the orchestration strategy is applied:" \
-                          "  serial - apply orchestration strategy one node  at a time; " \
-                          "  parallel - apply orchestration strategy in parallel; " \
-                          "  ignore - do not apply the orchestration strategy; " \
-                          " If not specified,  the system will choose the option to apply the strategy. " \
-                          "Applicable only for upgrades from R3."
-    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
-                                " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
-
-    parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
-                     action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
-    parser.addoption('--build-server', '--build_server',  dest='build_server',
-                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
-                     help=build_server_help)
-    parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
-                     action='store', metavar='DIR',  help=upgrade_build_dir_path)
-    parser.addoption('--license',  dest='upgrade_license', action='store',
-                     metavar='license full path', help=license_help)
-
-    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir',
-                     action='store', metavar='DIR',  help=patch_dir_help)
-
-    parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
-                     action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
-
-    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
-                     action='store',  help=apply_strategy_help)
-    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
-                     action='store',  help=max_parallel_compute_help)
-
-    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
-                     action='store', default='strict',  help=alarm_restriction_help)
-
 
     ###############################
     #  Backup and Restore options #
