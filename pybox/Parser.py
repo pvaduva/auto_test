@@ -188,10 +188,15 @@ def handle_args():
         """,
         type=str, choices=['serial', 'graphical'], default='serial'
         )
-    parser.add_argument("--complete-install", help = 
+    parser.add_argument("--run-scripts", help=
         """
-        TODO
-        Lab will be installed, configured and setup using the lab_setup scripts.
+        If specified the lab_setup.sh iterations will be run.
         """,
-        action = 'store_true')
+        action='store_true')
+    parser.add_argument("--patch-nodes", help=
+        """
+        If specified, any patches that have been installed on controller-0 will be installed on the other nodes.
+        
+        """,
+        action='store_true')
     return parser

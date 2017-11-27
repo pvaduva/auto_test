@@ -4,6 +4,14 @@ import subprocess
 import re
 import getpass
 from utils.install_log import LOG
+import time
+from sys import platform
+from consts import env
+
+
+def add_to_path():
+    subprocess.check_output(['PATH=%PATH%;C:\Program Files\Oracle\VirtualBox'], stderr = subprocess.STDOUT)
+
 
 def vboxmanage_version():
     """ 
@@ -37,7 +45,6 @@ def vboxmanage_list(option="vms"):
     """
     This returns a list of vm names. 
     """
-
     result = subprocess.check_output(['vboxmanage', 'list', option], stderr=subprocess.STDOUT)
     vms_list = []
     for item in result.splitlines():
@@ -51,7 +58,8 @@ def vboxmanage_showinfo(host="controller-0"):
     """
     This returns info about the host 
     """
-
+    if not isinstance(host, str):
+        host.decode('utf-8')
     result = subprocess.check_output(['vboxmanage', 'showvminfo', host, '--machinereadable'], stderr=subprocess.STDOUT)
     return result
 
@@ -76,7 +84,7 @@ def vboxmanage_deletevms(hosts=None):
     if len(hosts) != 0:
         for hostname in hosts:
             LOG.info("Deleting VM {}".format(hostname))
-            result = subprocess.check_output(['vboxmanage', 'unregistervm', hostname, '--delete'], stderr=subprocess.STDOUT)
+            result = subprocess.check_output(['vboxmanage', 'unregistervm', hostname.decode('utf-8'), '--delete'], stderr=subprocess.STDOUT)
 
     vms_list = vboxmanage_list("vms")
     for items in hosts:
@@ -145,7 +153,11 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
         cmd.extend(['{}'.format(uartport)])
         cmd.extend(['--uartmode1'])
         cmd.extend(['{}'.format(uartmode)])
-        cmd.extend(['{}/{}'.format(uartpath, hostname)])
+        if platform == 'win32' or platform == 'win64':
+            cmd.extend(['{}'.format(env.PORT)])
+            env.PORT += 1
+        else:
+            cmd.extend(['{}\{}'.format(uartpath, hostname)])
     if nicbootprio2:
         cmd.extend(['--nicbootprio2'])
         cmd.extend(['{}'.format(nicbootprio2)])
@@ -203,8 +215,10 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
             device_num = 0
         elif disk_count == 4:
             device_num = 1
-        # file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)      #required when using own machine  
-        file_name = "/folk/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+        if platform == 'win32' or platform == 'win64':
+            file_name = "C:\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
+        else:
+            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} on VM {} on device {} port {}".format(file_name, hostname, device_num, port_num))
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename', file_name, '--format', 'vdi', '--variant', 'standard'], stderr=subprocess.STDOUT)
         vboxmanage_storageattach(hostname, "ide", "hdd", file_name + ".vdi", str(port_num), str(device_num))
@@ -240,5 +254,5 @@ def vboxmanage_controlvms(hosts=None, action=None):
  
     for host in hosts:
         LOG.info("Executing {} action on VM {}".format(action, host))
-        result = subprocess.call(['vboxmanage', 'controlvm', host, action], stderr=subprocess.STDOUT)
-
+        result = subprocess.call(["vboxmanage", "controlvm", host.decode('utf-8'), action], stderr=subprocess.STDOUT)
+    time.sleep(1)

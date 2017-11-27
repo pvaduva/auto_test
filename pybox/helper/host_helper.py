@@ -1,11 +1,12 @@
 import time
 import threading
+import sys
 import streamexpect
-import logging 
 from helper import vboxmanage
 from consts.timeout import HostTimeout
 from utils import serial
 from utils.install_log import LOG
+from consts.env import REBOOTTIME, UNLOCKTIME
 
 
 def unlock_host(stream, hostname):
@@ -16,24 +17,19 @@ def unlock_host(stream, hostname):
         hostname(str): Name of host to unlock
     
     """
-    LOG.info("Unlocking {}".format(hostname))    
-    serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-    serial.expect_bytes(stream, "locked")
+    LOG.info("Unlocking {}".format(hostname))
+    serial.send_bytes(stream, "system host-list | grep {}".format(hostname), expect_prompt=False)
+    try:
+        serial.expect_bytes(stream, "locked")
+    except:
+        LOG.info("Host {} not locked".format(hostname))
+        return 1
     if 'compute' in hostname:
-        serial.send_bytes(stream, "system host-unlock {}".format(hostname))
-        time.sleep(HostTimeout.COMPUTE_UNLOCK)
-        serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-        serial.expect_bytes(stream, "unlocked")
+        serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
     elif 'controller' in hostname:
-        serial.send_bytes(stream, "system host-unlock {}".format(hostname))
-        time.sleep(HostTimeout.CONTROLLER_UNLOCK)
-        serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-        serial.expect_bytes(stream, "unlocked")
+        serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
     elif 'storage' in hostname:
-        serial.send_bytes(stream, "system host-unlock {}".format(hostname))
-        time.sleep(HostTimeout.COMPUTE_UNLOCK)
-        serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-        serial.expect_bytes(stream, "unlocked")
+        serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
     LOG.info("{} is unlocked".format(hostname))
     
             
@@ -45,23 +41,18 @@ def lock_host(stream, hostname):
         hostname(str): Name of host to lock
     """
     LOG.info("Locking {}".format(hostname))    
-    serial.send_bytes(stream, "system host-list |grep {}".format(hostname))
-    serial.expect_bytes(stream, "unlocked")
+    serial.send_bytes(stream, "system host-list |grep {}".format(hostname), expect_prompt=False)
+    try:
+        serial.expect_bytes(stream, "unlocked")
+    except:
+        LOG.info("Host {} not unlocked".format(hostname))
+        return
     if 'compute' in hostname:
-        serial.send_bytes(stream, "system host-lock {}".format(hostname))
-        time.sleep(HostTimeout.LOCK)
-        serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-        serial.expect_bytes(stream, "locked")
+        serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
     elif 'controller' in hostname:
-        serial.send_bytes(stream, "system host-lock {}".format(hostname))
-        time.sleep(HostTimeout.LOCK)
-        serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-        serial.expect_bytes(stream, "locked")
+        serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
     elif 'storage' in hostname:
-        serial.send_bytes(stream, "system host-lock {}".format(hostname))
-        time.sleep(HostTimeout.LOCK)
-        serial.send_bytes(stream, "system host-list | grep {}".format(hostname))
-        serial.expect_bytes(stream, "locked")
+        serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
     LOG.info("{} is locked".format(hostname))
 
 
@@ -72,11 +63,11 @@ def reboot_host(stream, hostname):
         stream():
         hostname(str): Host to reboot
     """
-    LOG.info("Rebooting {}".format(hostname))    
-    serial.send_bytes(stream, "system host-reboot {}".format(hostname))
+    LOG.info("Rebooting {}".format(hostname))
+    serial.send_bytes(stream, "system host-reboot {}".format(hostname), expect_prompt=False)
     serial.expect_bytes(stream, "rebooting", HostTimeout.REBOOT)
-    
-    
+
+
 def install_host(stream, hostname, host_type, host_id):
     """
     Initiates install of specified host. Requires controller-0 to be installed.
@@ -98,7 +89,7 @@ def install_host(stream, hostname, host_type, host_id):
     elif host_type is 'storage':
         serial.send_bytes(stream, "system host-update {} personality=storage".format(host_id), expect_prompt=False)
     else:
-        serial.send_bytes(stream, "system host-update {} personality=compute hostname={} boot_device=/dev/sdb rootfs_device=/dev/sdb".format(host_id, hostname), expect_prompt=False)
+        serial.send_bytes(stream, "system host-update {} personality=compute hostname={}".format(host_id, hostname), expect_prompt=False)
     time.sleep(30)
 
 
@@ -137,11 +128,16 @@ def login(stream, timeout=600):
     Args:
         stream(stream): stream to cont0
     """    
-    serial.send_bytes(stream, "\n", expect_prompt=False)
+    try:
+        serial.send_bytes(stream, "\n", expect_prompt=False)
+    except:
+        LOG.info("Connection could not be established")
+        sys.exit()
     rc = serial.expect_bytes(stream, "ogin:", fail_ok=True, timeout=timeout)
     if rc != 0:
         serial.send_bytes(stream, "\n", expect_prompt=False)
         if serial.expect_bytes(stream, "~$", timeout=timeout, fail_ok=True) == -1:
+            serial.send_bytes(stream, '\n', expect_prompt=False)
             serial.expect_bytes(stream, "keystone", timeout=timeout)
     else:
         serial.send_bytes(stream, "wrsroot", expect_prompt=False)
@@ -160,6 +156,6 @@ def logout(stream):
 
 
 def check_password(stream):
-    ret = serial.expect_bytes(stream, 'Password', fail_ok=True, timeout=20)
+    ret = serial.expect_bytes(stream, 'Password', fail_ok=True, timeout=5)
     if ret == 0:    
         serial.send_bytes(stream, 'Li69nux*')

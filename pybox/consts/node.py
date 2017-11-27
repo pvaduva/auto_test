@@ -17,7 +17,7 @@ class Nodes:
         'node_type': 'controller_aio',
         'memory': 12288,
         'cpus': 4,
-        'disks': [24000, 40000],
+        'disks': [240000, 40000],
     }
 
     COMPUTE = {

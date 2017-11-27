@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 import os
 import time
+import streamexpect
 from consts.timeout import HostTimeout
-from consts.env import BuildServers, Licenses, Builds, ISOPATH, Files, Lab
+from consts import env
 from utils.sftp import sftp_get, sftp_send, send_dir, get_dir
 from utils import serial
 from helper import host_helper
 from utils.install_log import LOG
+
 
 def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None, local_path=None, host_type='Standard'):
     """
@@ -20,6 +22,8 @@ def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None
     """
     serial.send_bytes(stream, "mkdir /home/wrsroot/images")
     if local_path:
+        if not local_path.endswith('/') or not local_path.endswith('\\'):
+            local_path = local_path + '/'
         get_lab_setup_scripts(remote_host, release, remote_path, local_path)
     else:
         get_lab_setup_scripts(remote_host, release, remote_path, local_path)
@@ -37,24 +41,25 @@ def get_lab_setup_scripts(remote_host=None, release='R5', remote_path=None, loca
         local_path(str): Path on local machine to store files for transfer to vbox
     """
     if local_path is None:
-        local_path = "/folk/tmather/LabInstall/R5/"
+        local_path = env.FILEPATH + '{}/'.format(release)
     file_path=[]
     if remote_path is None:
         if release =='R5':
-            file_path = Files.R5['setup']
+            file_path = env.Files.R5['setup']
         elif release == 'R4':
-            file_path = Files.R4['setup']
+            file_path = env.Files.R4['setup']
         elif release == 'R3':
-            file_path = Files.R3['setup']
+            file_path = env.Files.R3['setup']
         else:
-            file_path = Files.R2['setup']
-    files = ['lab_cleanup.sh',
-          'lab_setup.sh',
-          'lab_setup.conf',
-          'iptables.rules',
-          'lab_setup-tenant2-resources.yaml',
-          'lab_setup-tenant1-resources.yaml',
-          'lab_setup-admin-resources.yaml']
+            file_path = env.Files.R2['setup']
+    files = ['lab_setup.sh',
+            'lab_cleanup.sh',
+            'lab_setup.conf',
+            'iptables.rules',
+            'lab_setup-tenant2-resources.yaml',
+            'lab_setup-tenant1-resources.yaml',
+            'lab_setup-admin-resources.yaml'
+             ]
     i = 0
     if remote_host is not None:
         for items in file_path:
@@ -63,7 +68,7 @@ def get_lab_setup_scripts(remote_host=None, release='R5', remote_path=None, loca
     send_dir(source=local_path)
 
 
-def get_licence(remote_host=BuildServers.CGTS4['ip'], release='R5', remote_path=None,
+def get_licence(remote_host=env.BuildServers.CGTS4['ip'], release='R5', remote_path=None,
                 local_path=None, host_type='Standard'):
     """
         Retrieves Licence from specified host and sends it to controller-0.
@@ -75,17 +80,17 @@ def get_licence(remote_host=BuildServers.CGTS4['ip'], release='R5', remote_path=
         local_path(str): Path on local machine to store files for transfer to vbox
     """
     if local_path is None:
-        local_path = "/folk/tmather/LabInstall/{}/".format(release)
+        local_path = env.FILEPATH + '{}/'.format(release)
     file_path = []
     if remote_path is None:
         if release == 'R5':
-            file_path = Licenses.R5[host_type]
+            file_path = env.Licenses.R5[host_type]
         elif release == 'R4':
-            file_path = Licenses.R4[host_type]
+            file_path = env.Licenses.R4[host_type]
         elif release == 'R3':
-            file_path = Licenses.R3[host_type]
+            file_path = env.Licenses.R3[host_type]
         else:
-            file_path = Licenses.R2[host_type]
+            file_path = env.Licenses.R2[host_type]
     local_path = local_path + 'license.lic'
     sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
     sftp_send(source=local_path, destination='/home/wrsroot/license.lic')
@@ -103,19 +108,19 @@ def get_guest_img(stream, remote_host=None, release='R5', remote_path=None,
         local_path(str): Path on local machine to store files for transfer to vbox
     """
     if local_path is None:
-        local_path = "/folk/tmather/LabInstall/R5/" 
+        local_path = env.FILEPATH + '{}/'.format(release)
     file_path = []
     if remote_path is None:
         if release == 'R5':
-            file_path = Builds.R5['guest']
+            file_path = env.Builds.R5['guest']
         elif release == 'R4':
-            file_path = Builds.R4['guest']
+            file_path = env.Builds.R4['guest']
         elif release == 'R3':
-            file_path = Builds.R3['guest']
+            file_path = env.Builds.R3['guest']
         else:
-            file_path = Builds.R2['guest']      
+            file_path = env.Builds.R2['guest']
     serial.send_bytes(stream, "mkdir /home/wrsroot/images")
-    local_path = local_path + 'tis_centos_guest.img'
+    local_path = local_path + 'tis-centos-guest.img'
     if remote_host is not None:
         sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
     sftp_send(source=local_path, destination="/home/wrsroot/images/tis_centos_guest.img")
@@ -132,23 +137,25 @@ def get_patches(cont0_stream, local_path=None, remote_host=None, release = 'R5')
         pass
         LOG.info("UnicodeDecodeError occured.")
     if local_path is None:
-        local_path = '/folk/tmather/patches/{}/'.format(release)
+        local_path = env.FILEPATH + '{}/patches/'.format(release)
     remote_path = '/home/wrsroot/patches/'
     if remote_host is not None:
         if release == 'R5':
-            patch_loc = Builds.R5['patches']
+            patch_loc = env.Builds.R5['patches']
         elif release == 'R4':
-            patch_loc = Builds.R4['patches']
+            patch_loc = env.Builds.R4['patches']
         elif release == 'R3':
-            patch_loc = Builds.R3['patches']   
+            patch_loc = env.Builds.R3['patches']
         else:
-            patch_loc = Builds.R2['patches']   
-        get_dir(patch_loc, remote_host, local_path, True)
+            patch_loc = env.Builds.R2['patches']
+        get_dir(patch_loc, remote_host, local_path, patch=True)
         send_dir(local_path, destination=remote_path)
     else:
-        send_dir(local_path, '10.10.10.2', remote_path)
+        LOG.info("Retrieving patches from {}".format(local_path))
+        if not local_path.endswith('/') or not local_path.endswith('\\'):
+            local_path = local_path + '/'
+        send_dir(local_path, '10.10.10.3', remote_path)
 
-    
 
 def get_config_file(local_path=None, remote_host=None, release='R5'):
     """
@@ -156,19 +163,19 @@ def get_config_file(local_path=None, remote_host=None, release='R5'):
     Sends file to cont0    
     """
     if local_path is None:
-        local_path = '/folk/tmather/patches/TiS_config.ini_centos'
+        local_path = env.FILEPATH + '{}/'.format(release)
     remote_path = '/home/wrsroot/TiS_config.ini_centos'
 
     if remote_host is not None:
         if release == 'R5':
-            sftp_get(Files.R5['config'], remote_host, local_path)
+            sftp_get(env.Files.R5['config'], remote_host, local_path)
         elif release == 'R4':
-            sftp_get(Files.R4['config'], remote_host, local_path)
+            sftp_get(env.Files.R4['config'], remote_host, local_path)
         elif release == 'R3':
-            sftp_get(Files.R3['config'], remote_host, local_path)
+            sftp_get(env.Files.R3['config'], remote_host, local_path)
         else:
-            sftp_get(Files.R2['config'], remote_host, local_path)
-    sftp_send(local_path, '10.10.10.2', remote_path)
+            sftp_get(env.Files.R2['config'], remote_host, local_path)
+    sftp_send(local_path, '10.10.10.3', remote_path)
     
     
 def check_services(stream):
@@ -192,8 +199,9 @@ def check_patches(stream):
     ret = serial.send_bytes(stream, "sw-patch query-hosts | grep controller-0", prompt="", fail_ok=True)
     if ret != 0:
         LOG.info("Patches not correctly installed")
-        raise 
+        return
     LOG.info("Patches installed correctly")
+
 
 def install_controller_0(stream):
     """
@@ -202,16 +210,18 @@ def install_controller_0(stream):
         stream: Stream to controller-0
     """
     time.sleep(10)
-    serial.send_bytes(stream, "system host-list")
+    serial.send_bytes(stream, "system host-list", expect_prompt=False)
     try:  
-        serial.expect_bytes(stream, "online")
+        serial.expect_bytes(stream, "locked")
     except:
-        return
-    serial.send_bytes(stream, "sh lab_setup.sh", timeout=LAB_INSTALL)
+        LOG.info("Controller should be locked when configuration is completed.")
+        return 1
+    serial.send_bytes(stream, "sh lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, prompt='keystone')
     host_helper.unlock_host(stream, 'controller-0')
+    serial.expect_bytes(stream, 'login:', timeout=HostTimeout.CONTROLLER_UNLOCK)
     
         
-def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5'):
+def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5', streams=None):
     """
     Runs lab install.sh iterations. Currently does not support Simplex systems
     Args:
@@ -219,57 +229,74 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
         host_list: list of hosts, used when running aio scripts to install controller-1 at the appropriate time
         aio: Option to run the script for aio setup
         storage: Option to run the script for storage setup
+        streams: Dictionary of streams to nodes
     """
     serial.send_bytes(stream, "chmod +x *.sh")
     LOG.info("Starting lab install.")
+    start = time.time()
     if aio:
+        serial.send_bytes(stream, "source /etc/nova/openrc", prompt='keystone')
         if release != 'R5':
-            serial.send_bytes(stream, "source /etc/nova/openrc")
-            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-            serial.expect_bytes(stream, "Stopping after data interface setup.",  timeout=HostTimeout.LAB_INSTALL)
+            serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, prompt='keystone')
+            # serial.expect_bytes(stream, "Stopping after data interface setup.",  timeout=HostTimeout.LAB_INSTALL)
         LOG.info("Running system compute-config-complete, installation will resume once controller-0 reboots and services are active")
         serial.send_bytes(stream, "source/etc/nova/openrc", prompt='keystone')
         serial.send_bytes(stream, "system compute-config-complete", expect_prompt=False)
         serial.expect_bytes(stream, "login:",  timeout=HostTimeout.REBOOT)
         serial.send_bytes(stream, "sudo sm-dump", expect_prompt=False)
-        ret = serial.expect_bytes(stream, "Password:", fail_ok=True)
-        if ret == 0:
-            serial.send_bytes(stream, "Li69nux*")
+        host_helper.check_password(stream)
         check_services(stream)
         LOG.info("Services active, continuing install")
         serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL)
         if 'controller-1' in host_list:
             LOG.info("Installing controller-1")
             host_helper.install_host(stream, 'controller-1', 'controller', 2)
-            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
+            serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL)
         if 'controller-1' in host_list:
             LOG.info("Unlocking Controller-1")
             host_helper.unlock_host(stream, 'controller-1')
-        serial.expect_bytes(stream, "Done", timeout=HostTimeout.LAB_INSTALL)
+        # serial.expect_bytes(stream, "Done", timeout=HostTimeout.LAB_INSTALL)
         LOG.info("Completed install successfully.")
     else:
+        serial.send_bytes(stream, "source /etc/nova/openrc", prompt='keystone')
         if release != 'R5':
-            serial.send_bytes(stream, "source /etc/nova/openrc")
-            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-        serial.expect_bytes(stream, "Stopping after provider network creation.",  timeout=HostTimeout.LAB_INSTALL)
+            serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, prompt='keystone')
+        # serial.expect_bytes(stream, "Stopping after provider network creation.",  timeout=HostTimeout.LAB_INSTALL)
         if storage:
             for hosts in host_list:
                 if hosts.startswith('storage'):
                     LOG.info("Unlocking {}".format(hosts))
                     host_helper.unlock_host(stream, hosts)
-            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-            serial.expect_bytes(stream, "Stopping after initial storage node setup",  timeout=HostTimeout.LAB_INSTALL)
+            serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, prompt='keystone')
+            # serial.expect_bytes(stream, "Stopping after initial storage node setup",  timeout=HostTimeout.LAB_INSTALL)
             LOG.info("Competed storage node unlock")
         LOG.info("Re-running lab_setup.sh")
-        serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-        serial.expect_bytes(stream, "Stopping after data interface setup.", HostTimeout.LAB_INSTALL)
+        serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, prompt='keystone')
+        #serial.expect_bytes(stream, "Stopping after data interface setup.", HostTimeout.LAB_INSTALL)
         for host in host_list:
-            LOG.info("Unlocking {}".format(host))
-            if host.statswith("compute"):
-                host_helper.unlock_host(stream, host)
-        serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-        serial.expect_bytes(stream, "Done", HostTimeout.LAB_INSTALL)
+            if host.startswith("compute"):
+                ret = host_helper.unlock_host(stream, host)
+                if ret == 1:
+                    LOG.info("Computes not unlocked successfully exiting installation")
+                    return
+        LOG.info("Waiting for computes to unlock.")
+        now = time.time()
+        port = 10002
+        for host in host_list:
+            if 'compute' in host and streams is None:
+                stream = streamexpect.wrap(serial.connect('{}'.format(host), port), echo=True, close_stream=False)
+                time.sleep(10)
+                streams[host] = stream
+                port += 1
+        for host in host_list:
+            if 'compute' in host:
+                serial.expect_bytes(streams[host], 'ogin:', timeout=HostTimeout.COMPUTE_UNLOCK)
+                LOG.info("Unlock time: {}".format(time.time() - now))
+        serial.send_bytes(stream, "./lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, prompt='keystone')
         LOG.info("Completed lab install.")
+
+        env.LABTIME = time.time()-start
+        LOG.info("Lab install time: {}".format(env.LABTIME))
 
 
 def config_controller(stream, default=True, release='R5', config_file=None, backup=None, clone_iso=None,
@@ -284,8 +311,7 @@ def config_controller(stream, default=True, release='R5', config_file=None, back
         clone_iso(str):
         restore_system(str):
         restore_images(str):
-        
-    ~30 mins
+
     """
     args_dict = {
         '--config-file': config_file,
@@ -304,16 +330,17 @@ def config_controller(stream, default=True, release='R5', config_file=None, back
         get_config_file(config_file, remote_host, release)
     if release != 'R5':
         get_licence(remote_host, release)
-    LOG.info("Configuring controller-0")        
-    serial.send_bytes(stream, "sudo config_controller {}".format(args), timeout=HostTimeout.LAB_CONFIG)
-    #ret = serial.expect_bytes(stream, 'assword:', fail_ok=True, timeout=20)
-    #if ret == 0:
-    #    serial.send_bytes(stream, "Li69nux*")
-    #serial.expect_bytes(stream, "Configuration failed", fail_ok=True)
-    #serial.expect_bytes(stream, "The following configuration will be applied:")
-    #serial.expect_bytes(stream, "Applying configuration")
-    #serial.expect_bytes(stream, "Configuration was applied", timeout=HostTimeout.LAB_CONFIG)
+    if release == 'R4' or release == 'R3':
+        LOG.info("Configuration fails for R4/3 when using --default. Please configure manually before continuing the installation")
+        return 1
+    LOG.info("Configuring controller-0")
+    start = time.time()
+    serial.send_bytes(stream, "sudo config_controller {}".format(args), expect_prompt=False)
+    host_helper.check_password(stream)
+    serial.expect_bytes(stream, "Configuration was applied", timeout=HostTimeout.LAB_CONFIG)
     #TODO: Check for return code for sent commands in send_bytes instead
+    env.CONFIGTIME=time.time()-start
+    LOG.info("Configuration time: {}".format(env.CONFIGTIME))
 
 
 def install_patches_before_config(stream):
@@ -325,39 +352,47 @@ def install_patches_before_config(stream):
     """
     LOG.info("Installing patches on controller-0")
     serial.send_bytes(stream, 'sudo sw-patch upload-dir /home/wrsroot/patches', expect_prompt=False)
-    ret = serial.expect_bytes(stream, 'Password', fail_ok=True, timeout=20)
-    if ret == 0:    
-        serial.send_bytes(stream, 'Li69nux*')
+    host_helper.check_password(stream)
     serial.send_bytes(stream, 'sudo sw-patch apply --all', timeout=240)
+    host_helper.check_password(stream)
     serial.send_bytes(stream, "sudo sw-patch install-local", timeout=HostTimeout.INSTALL_PATCHES)
+    host_helper.check_password(stream)
     try:
         serial.expect_bytes(stream, "installation is complete", timeout=HostTimeout.INSTALL_PATCHES)
     except:
         LOG.info("Patches were unalble to be installed.")
         return
     LOG.info("Rebooting controller-0")
+    now = time.time()
     serial.send_bytes(stream, 'sudo reboot', expect_prompt=False)
-    ret = serial.expect_bytes(stream, 'Password', fail_ok=True, timeout=20)
-    if ret == 0:    
-        serial.send_bytes(stream, 'Li69nux*')
+    host_helper.check_password(stream)
     serial.expect_bytes(stream, 'login:', HostTimeout.REBOOT)
+    env.REBOOTTIME = time.time()-now
+    LOG.info("Length of reboot {}".format(env.REBOOTTIME))
     host_helper.login(stream)
 
 
-def install_patches_on_nodes(stream, host_list, patch_dir='/home/wrsroot/patches/'):
+def install_patches_on_nodes(stream, host_list, patch_dir='/home/wrsroot/patches/', streams=None):
     """
     Installs patches on nodes in host_list
     """
+    if 'controller-0' in host_list:
+        host_list.remove('controller-0')
     LOG.info("Installing patches on {}".format(host_list))
+    serial.send_bytes(stream, 'sudo sw-patch upload-dir {}'.format(patch_dir))
+    host_helper.check_password(stream)
+    serial.send_bytes(stream, 'sudo sw-patch apply --all')
+    host_helper.check_password(stream)
+    serial.expect_bytes(stream, "in the repo", timeout=240)
+    port = 10001
+    for host in host_list:
+        if streams is None:
+            new_stream = streamexpect.wrap(serial.connect('{}'.format(host), port), echo=True, close_stream=False)
+            streams.extend(new_stream)
+            port += 1
     for items in host_list:
-        serial.send_bytes(stream, 'sudo sw-patch upload-dir {}'.format(patch_dir))
-        ret = serial.expect_bytes(stream, 'assword:', fail_ok=True)
-        if ret == 0:
-            serial.send_bytes(stream, "Li69nux*")
-        serial.send_bytes(stream, 'sudo sw-patch apply --all')
-        host_helper.lock_host(stream, items)
-        serial.send_bytes(stream, "sw-patch host-install-async {}".format(items))
-        serial.expect_bytes(stream, "Patch installation request sent to {}".format(items))
+        serial.send_bytes(stream, "system host-reboot {}".format(items))
+        serial.expect_bytes(streams[items], "ogin:", timeout=HostTimeout.REBOOT)
 
 
 def remove_patches(stream, host_list, patch_dir='/home/wrsroot/patches/'):
@@ -367,9 +402,7 @@ def remove_patches(stream, host_list, patch_dir='/home/wrsroot/patches/'):
     LOG.info("Removing patches from {}".format(host_list))
     for items in os.listdir(patch_dir):
         serial.send_bytes(stream, 'sudo sw-patch remove {}'.format(items))
-        ret = serial.expect_bytes(stream, 'assword:', fail_ok=True)
-        if ret == 0:
-            serial.send_bytes(stream, "Li69nux*l")
+        host_helper.check_password(stream)
         serial.send_bytes(stream, "sw-patch query-hosts")
         serial.send_bytes(stream, 'system host-unlock {}'.format(items))
         serial.expect_bytes(stream, 'login:', HostTimeout.CONTROLLER_UNLOCK)
