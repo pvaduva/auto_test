@@ -174,7 +174,7 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 @fixture(scope='module')
 def ht_and_nonht_hosts():
     LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
     ht_hosts = []
     non_ht_hosts = []
     for host in nova_hosts:
@@ -1136,7 +1136,7 @@ class TestVariousHT:
     def ht_hosts_(self, request, ht_and_nonht_hosts):
 
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
-        if len(host_helper.get_nova_hosts()) < 2:
+        if len(host_helper.get_up_hypervisors()) < 2:
             skip("Less than two up hypervisors in system.")
         if not ht_hosts:
             skip("System does not have up host with hyper-threading enabled")

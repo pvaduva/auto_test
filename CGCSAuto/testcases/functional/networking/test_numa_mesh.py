@@ -8,7 +8,7 @@ from keywords import host_helper, check_helper
 # Remove since it's covered by test_modify_cpu_unlock_negative
 @mark.p2
 def _test_set_cpu_cores_denied_unlocked_host():
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
 
     assert nova_hosts, "No nova host is up."
 

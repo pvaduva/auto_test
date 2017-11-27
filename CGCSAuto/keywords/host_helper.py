@@ -1296,8 +1296,8 @@ def get_nova_hosts(zone='nova', con_ssh=None, auth_info=Tenant.ADMIN):
 
     Returns (list): a list of hypervisors in given zone
     """
-
-    table_ = table_parser.table(cli.nova('host-list', ssh_client=con_ssh, auth_info=auth_info))
+    # TODO: Update required to use nova availability-zone-list
+    table_ = table_parser.table(cli.nova('--os-compute-api-version 2.3 host-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'host_name', service='compute', zone=zone)
 
 
@@ -1348,35 +1348,35 @@ def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP, check_inte
             return False, hosts_to_check
         raise exceptions.HostTimeout(msg)
 
-
-def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN,
-                                   con_ssh=None):
-
-    if isinstance(hosts, str):
-        hosts = [hosts]
-
-    hosts_to_check = list(hosts)
-    LOG.info("Waiting for {} to be shown in nova host-list...".format(hosts))
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        hosts_in_nova = get_nova_hosts(con_ssh=con_ssh, auth_info=auth_info)
-
-        for host in hosts:
-            if host in hosts_in_nova:
-                hosts_to_check.remove(host)
-
-        if not hosts_to_check:
-            msg = "Host(s) {} appeared in nova host-list".format(hosts)
-            LOG.info(msg)
-            return True, hosts_to_check
-
-        time.sleep(check_interval)
-    else:
-        msg = "Host(s) {} did not shown in nova host-list within timeout".format(hosts_to_check)
-        if fail_ok:
-            LOG.warning(msg)
-            return False, hosts_to_check
-        raise exceptions.HostTimeout(msg)
+# Obsolete in pike. Use wait_for_hypervisors_up instead
+# def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN,
+#                                    con_ssh=None):
+#
+#     if isinstance(hosts, str):
+#         hosts = [hosts]
+#
+#     hosts_to_check = list(hosts)
+#     LOG.info("Waiting for {} to be shown in nova host-list...".format(hosts))
+#     end_time = time.time() + timeout
+#     while time.time() < end_time:
+#         hosts_in_nova = get_nova_hosts(con_ssh=con_ssh, auth_info=auth_info)
+#
+#         for host in hosts:
+#             if host in hosts_in_nova:
+#                 hosts_to_check.remove(host)
+#
+#         if not hosts_to_check:
+#             msg = "Host(s) {} appeared in nova host-list".format(hosts)
+#             LOG.info(msg)
+#             return True, hosts_to_check
+#
+#         time.sleep(check_interval)
+#     else:
+#         msg = "Host(s) {} did not shown in nova host-list within timeout".format(hosts_to_check)
+#         if fail_ok:
+#             LOG.warning(msg)
+#             return False, hosts_to_check
+#         raise exceptions.HostTimeout(msg)
 
 
 def wait_for_webservice_up(hosts, timeout=HostTimeout.WEB_SERVICE_UP, check_interval=3, fail_ok=False, con_ssh=None,
@@ -2300,9 +2300,14 @@ def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
     elif isinstance(hosts, str):
         hosts = [hosts]
 
+    # if rtn_val == 'used_now':
+    #     rtn_val = 'vcpus_used'
+
     hosts_cpus = {}
     for host in hosts:
-        table_ = table_parser.table(cli.nova('host-describe', host, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+        # TODO: pike rebase issue nova hypervisor-show does not work. Work around for now
+        table_ = table_parser.table(cli.nova('--os-compute-api-version 2.3 host-describe', host, ssh_client=con_ssh,
+                                             auth_info=Tenant.ADMIN))
         cpus_str = table_parser.get_values(table_, target_header='cpu', strict=False, PROJECT=rtn_val)[0]
         hosts_cpus[host] = round(float(cpus_str), 4)
 

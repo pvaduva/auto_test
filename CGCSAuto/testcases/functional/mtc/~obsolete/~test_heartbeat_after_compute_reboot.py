@@ -95,7 +95,6 @@ def test_heartbeat_after_compute_reboot(heartbeat_flavor_vm):
     host_helper.reboot_hosts(vm_host)
     # wait for hostname to be back in host list in nova
     host_helper.wait_for_hypervisors_up(vm_host)
-    host_helper.wait_for_hosts_in_nova_compute(vm_host)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 

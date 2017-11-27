@@ -163,7 +163,7 @@ def test_patch_log_what_requires(get_patch_name):
 @fixture(scope='function')
 def setup_host_install(request, get_patch_name):
     con_ssh = ControllerClient.get_active_controller()
-    hosts = host_helper.get_nova_hosts()
+    hosts = host_helper.get_up_hypervisors()
     host = hosts[len(hosts) - 1]
     if host == system_helper.get_active_controller_name():
         host = hosts[len(hosts) - 2]

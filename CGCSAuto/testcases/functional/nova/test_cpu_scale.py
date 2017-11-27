@@ -59,7 +59,7 @@ def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err)
 @fixture(scope='module')
 def ht_and_nonht_hosts():
     LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
     ht_hosts = []
     non_ht_hosts = []
     for host in nova_hosts:
@@ -161,7 +161,7 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     LOG.tc_step("Check vm vcpus in nova show did not change")
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
-    all_hosts = host_helper.get_nova_hosts()
+    all_hosts = host_helper.get_up_hypervisors()
     pre_action_vm_host = vm_host
 
     for actions in [['pause', 'unpause'], ['suspend', 'resume'], ['live_migrate'], ['cold_migrate'], ['stop', 'start']]:

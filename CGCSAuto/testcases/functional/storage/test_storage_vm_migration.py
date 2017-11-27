@@ -249,7 +249,7 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
 
     LOG.tc_step("Verify VMs are evacuated.....")
 
-    computes = host_helper.get_nova_hosts()
+    computes = host_helper.get_up_hypervisors()
     computes.remove(host_0)
     after_evac_host_0 = nova_helper.get_vm_host((vms_[0])['id'])
     after_evac_host_1 = nova_helper.get_vm_host((vms_[1])['id'])
