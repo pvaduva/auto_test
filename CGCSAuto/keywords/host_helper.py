@@ -2236,8 +2236,9 @@ def get_total_allocated_vcpus_in_log(host, con_ssh=None):
 
     """
     with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-        output = host_ssh.exec_cmd('cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3',
-                                   fail_ok=False)[1]
+        cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
+        output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
+        assert output, "Empty return from cmd: {}".format(cmd)
         total_allocated_vcpus = __parse_total_cpus(output)
         return total_allocated_vcpus
 
