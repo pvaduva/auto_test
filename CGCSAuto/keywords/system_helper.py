@@ -928,57 +928,6 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     if not kwargs:
         raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
 
-    system_attributes = ["system_mode", "sdn_enabled", "timezone", "name", "description", "contact", "location",
-                         "https_enabled"]
-
-    attr_values_ = ['--{} {}'.format(attr, value) for attr, value in kwargs.items() if attr in system_attributes]
-    args_ = ' '.join(attr_values_)
-
-    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
-
-    if code == 1:
-        return 1, output
-    elif code == 0:
-        return 0, ''
-    else:
-        # should not get here; cli.system() should already handle these cases
-        pass
-
-
-def set_system_values(name=None, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
-    """
-    Modify the System Information.
-
-    Args:
-        fail_ok (bool):
-        con_ssh (SSHClient):
-        auth_info (dict):
-        **kwargs:   attribute-value pairs
-
-    Returns: (int, str)
-         0  - success
-         1  - error
-
-    Test Steps:
-        - Set the value via system modify <attr>=<value> [,<attr>=<value]
-
-    Notes:
-        Currently only the following are allowed to change:
-        name
-        description
-        location
-        contact
-
-        The following attributes are readonly and not allowed CLI user to change:
-            system_type
-            software_version
-            uuid
-            created_at
-            updated_at
-    """
-    if not kwargs:
-        raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
-
     attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
