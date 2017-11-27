@@ -242,7 +242,7 @@ def _get_active_standby(controller='active', con_ssh=None, use_telnet=False, con
                         source_auth_info=False):
 
     output = cli.system('servicegroup-list', ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
-    LOG.info(" service g list: {}".format(output))
+    LOG.info("system servicegroup list: \n{}".format(output))
 
     table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh,
                                            use_telnet=use_telnet, con_telnet=con_telnet))
