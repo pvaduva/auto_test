@@ -2343,10 +2343,13 @@ def main():
         # running config_controller there is a special case in AIO-direct where after
         # the initial unlock controller-0 will be in degraded state (which is valid)
         # AIO-direct controller-0 will only come online when controller-1 is powered on
+        # Maybe just check if not available instead
         node_offline = test_state(controller0, AVAILABILITY, OFFLINE)
         node_online = test_state(controller0, AVAILABILITY, ONLINE)
         node_degraded = test_state(controller0, AVAILABILITY, DEGRADED)
+        run_config_complete = True
         if node_online or node_offline or node_degraded:
+            run_config_complete = False
             if run_labsetup()[0] != 0:
                 msg = "lab_setup failed"
                 log.error(msg)
@@ -2419,7 +2422,8 @@ def main():
     # Lab-install - cpe_compute_config_complete - applicable cpe labs only
     # system compute-config-complete is only applicable to R3 and R4
     # SW_VERSION="16.10 and SW_VERSION="17.06
-    if tis_blds_dir in older_rel:
+    #if tis_blds_dir in older_rel:
+    if run_config_complete:
         lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
         if do_next_install_step(lab_type, lab_install_step):
             if small_footprint:
