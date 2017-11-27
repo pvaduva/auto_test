@@ -115,7 +115,7 @@ def test_install_cloned_image(install_clone_setup):
         LOG.info("waiting for {} to boot ...".format(controller1))
 
         LOG.info("Verifying {} is Locked, Disabled and Online ...".format(controller1))
-        host_helper.wait_for_hosts_states(controller1, check_interval=20, use_telnet_session=True,
+        host_helper.wait_for_hosts_states(controller1, check_interval=20, use_telnet=True,
                                           con_telnet=controller0_node.telnet_conn,
                                           administrative=HostAdminState.LOCKED,
                                           operational=HostOperationalState.DISABLED,
@@ -123,7 +123,7 @@ def test_install_cloned_image(install_clone_setup):
 
         LOG.info("Unlocking {} ...".format(controller1))
 
-        rc, output = host_helper.unlock_host(controller1, use_telnet_session=True,
+        rc, output = host_helper.unlock_host(controller1, use_telnet=True,
                                              con_telnet=controller0_node.telnet_conn)
         assert rc == 0, "Host {} unlock failed: {}".format(controller1, output)
 

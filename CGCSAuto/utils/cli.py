@@ -9,7 +9,7 @@ from consts.proj_vars import ProjVar
 from consts.openstack_cli import NEUTRON_MAP
 
 
-def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet_session=False, con_telnet=None,
+def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
              flags='', fail_ok=False, cli_dir='', auth_info=None, source_creden_=None, err_only=False,
              timeout=CLI_TIMEOUT, rtn_list=False):
     """
@@ -40,10 +40,10 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet_sessi
             if not fail_ok: raise exception
     """
     lab = ProjVar.get_var('LAB')
-    if use_telnet_session and con_telnet is None:
+    if use_telnet and con_telnet is None:
         raise ValueError("No Telenet session provided")
 
-    if ssh_client is None and not use_telnet_session:
+    if ssh_client is None and not use_telnet:
         ssh_client = ControllerClient.get_active_controller()
 
     if auth_info is None:
@@ -61,15 +61,15 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet_sessi
     if source_creden_:
         if source_creden_ is Tenant.TENANT2:
             cmd = "source /home/wrsroot/openrc.tenant2; " + cmd
-            if not use_telnet_session:
+            if not use_telnet:
                 ssh_client.set_prompt(prompt=ssh.TENANT2_PROMPT)
         elif source_creden_ is Tenant.TENANT1:
             cmd = "source /home/wrsroot/openrc.tenant1; " + cmd
-            if not use_telnet_session:
+            if not use_telnet:
                 ssh_client.set_prompt(prompt=ssh.TENANT1_PROMPT)
         else:
             cmd = "source /etc/nova/openrc; " + cmd
-            if not use_telnet_session:
+            if not use_telnet:
                 ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
     else:
         if auth_info:
@@ -87,13 +87,13 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet_sessi
 
             flags = (auth_args + ' ' + flags).strip()
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
-    if  use_telnet_session:
+    if  use_telnet:
         exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, timeout=timeout)
     else:
         exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
                                                     searchwindowsize=100)
     if source_creden_:
-        if not use_telnet_session:
+        if not use_telnet:
             ssh_client.set_prompt()
             ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
 
@@ -156,12 +156,12 @@ def _source_user(ssh_client, fail_ok, cmd, prompt):
 
 
 def nova(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-         auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, use_telnet_session=False,
+         auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, use_telnet=False,
          con_telnet=None):
 
     return exec_cli('nova', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, use_telnet_session=use_telnet_session,
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, use_telnet=use_telnet,
                     con_telnet=con_telnet)
 
 
@@ -175,12 +175,12 @@ def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_creden_=source_cred_)
 
 
-def system(cmd, positional_args='', ssh_client=None, use_telnet_session=False, con_telnet=None,
+def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
            flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_creden_=None, err_only=False,
            timeout=CLI_TIMEOUT, rtn_list=False):
 
     return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, use_telnet_session=use_telnet_session, con_telnet=con_telnet,
+                    ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
                     fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_creden_=source_creden_,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 

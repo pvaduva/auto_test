@@ -2524,7 +2524,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         controller_0_node.telnet_conn = open_telnet_session(controller_0_node, log_dir)
 
     LOG.info("Executing system show on cloned system")
-    table_ = table_parser.table(cli.system('show', use_telnet_session=True, con_telnet=controller_0_node.telnet_conn))
+    table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
     system_name = table_parser.get_value_two_col_table(table_, 'name')
     assert "Cloned_system" in system_name, "Unexpected system name {} after install-clone".format(system_name)
 
@@ -2537,7 +2537,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
     software_version = table_parser.get_value_two_col_table(table_, 'software_version')
 
     LOG.info("Executing system host show on cloned system host".format(host))
-    table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     host_name = table_parser.get_value_two_col_table(table_, 'hostname')
     assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
@@ -2553,7 +2553,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         .format(host_software_load, host)
 
     LOG.info("Executing system host ethernet port list on cloned system host {}".format(host))
-    table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_['values']) >= 2, "Fewer ethernet ports listed than expected for host {}: {}".format(host, table_)
     if system_mode == 'duplex':
@@ -2561,7 +2561,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
             "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
 
     LOG.info("Executing system host interface list on cloned system host {}".format(host))
-    table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
         "No data interface type found in Host {} after system clone-install".format(host)
@@ -2571,7 +2571,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         "No oam interface type found in Host {} after system clone-install".format(host)
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
-    table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_['values']) >= 2, "Fewer disks listed than expected for host {}: {}".format(host, table_)
 
@@ -2588,7 +2588,7 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
     LOG.info("Locking {} for  oam IP configuration update".format(host))
-    host_helper.lock_host(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    host_helper.lock_host(host, use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     cmd = "oam-modify oam_gateway_ip=128.224.150.1 oam_subnet=128.224.150.0/23"
     if host == 'controller-1':
@@ -2599,7 +2599,7 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
         cmd += " oam_ip={}".format(controller0_node.host_ip)
 
     LOG.info("Modifying oam IP configuration: {}".format(cmd))
-    rc, output = cli.system(cmd, use_telnet_session=True, con_telnet=controller0_node.telnet_conn, fail_ok=True)
+    rc, output = cli.system(cmd, use_telnet=True, con_telnet=controller0_node.telnet_conn, fail_ok=True)
     if rc != 0:
         err_msg = "{} execution failed: rc = {}; {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -2610,14 +2610,14 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     LOG.info("The oam IP configuration modified successfully: {}".format(output))
     LOG.info("Unlocking {} after  oam IP configuration update".format(host))
-    host_helper.unlock_host(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    host_helper.unlock_host(host, use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     LOG.info("Unlocked {} successfully after oam IP configuration update".format(host))
 
     if system_mode == 'duplex':
         LOG.info("Swacting to controller-0 for oam IP configuration update")
 
-        host_helper.swact_host(controller0_node.name, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+        host_helper.swact_host(controller0_node.name, use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
         controller_prompt = Prompt.CONTROLLER_1 + '|' + Prompt.ADMIN_PROMPT
 
