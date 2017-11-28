@@ -7,11 +7,13 @@ from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailabilityState
-from keywords import host_helper, system_helper, local_storage_helper, install_helper
+from keywords import host_helper, system_helper, local_storage_helper, install_helper, filesystem_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
+    
+DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
 
 @fixture()
 def aio_precheck():
@@ -28,8 +30,25 @@ def storage_precheck():
     if not system_helper.is_storage_system():
         skip("This test only applies to storage nodes")
 
+@fixture()
+def freespace_check():
+    """
+    See if there is enough free space to run tests.
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
+    rc, out = con_ssh.exec_sudo_cmd(cmd)
+    free_space = out.rstrip()
+    LOG.info("Available free space on the system is: {}".format(free_space))
+    free_space = int(ast.literal_eval(free_space))
+    if free_space <= 10:
+        skip("Not enough free space to complete test.")
+
+
 @mark.usefixtures("aio_precheck")
-def test_reclaim_sda():
+def _test_reclaim_sda():
     """
     On Simplex or Duplex systems that use a dedicated disk for nova-local,
     recover reserved root disk space for use by the cgts-vg volume group to allow
@@ -46,6 +65,7 @@ def test_reclaim_sda():
     - Retrieve current value of cgts-vg
     - Check that the cgts-vg size is larger than before
 
+    Need to CHECK if this even applies anymore
     """
 
     con_ssh = ControllerClient.get_active_controller()
@@ -84,98 +104,84 @@ def test_reclaim_sda():
     assert float(new_cgts_vg_val.group(1)) > float(cgts_vg_val.group(1)), "cgts-vg size did not increase"
 
 
-def test_increase_scratch():
+@mark.usefixtures("freespace_check")
+def test_increase_controllerfs():
     """ 
-    This test increases the size of the scratch filesystem.  The scratch
-    filesystem is used for activities such as uploading swift object files,
-    etc.
-
-    It also attempts to decrease the size of the scratch filesystem (which
-    should fail).
-
-    """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    table_ = table_parser.table(cli.system('controllerfs-show scratch'))
-    scratch = table_parser.get_value_two_col_table(table_, 'size')
-    LOG.info("scratch is currently: {}".format(scratch))
-    scratch = int(ast.literal_eval(scratch))
-
-    LOG.tc_step("Determine the available free space on the system")
-    cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
-    rc, out = con_ssh.exec_sudo_cmd(cmd)
-    free_space = out.rstrip()
-    LOG.info("Available free space on the system is: {}".format(free_space))
-    free_space = int(ast.literal_eval(free_space))
-    if free_space <= 10:
-        skip("Not enough free space to complete test.")
-
-    LOG.tc_step("Increase the size of the scratch filesystem")
-    new_scratch = math.trunc(free_space / 10) + scratch
-    cmd = "system controllerfs-modify scratch {}".format(new_scratch)
-    rc, out = con_ssh.exec_cmd(cmd)
-    assert rc == 0, "Modification of scratch failed"
-
-    table_ = table_parser.table(cli.system('controllerfs-show scratch'))
-    new_scratch = table_parser.get_value_two_col_table(table_, 'size')
-    LOG.info("scratch is now: {}".format(new_scratch))
-    new_scratch = int(ast.literal_eval(new_scratch))
-    assert new_scratch > scratch, "scratch size did not increase"
-
-    LOG.info("Wait for alarms to clear")
-    hosts = system_helper.get_controllers()
-    for host in hosts:
-        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                        entity_id="host={}".format(host))
-
-    LOG.tc_step("Attempt to decrease the size of the scratch filesystem")
-    decreased_scratch = new_scratch - 1
-    cmd = "system controllerfs-modify scratch {}".format(decreased_scratch)
-    rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
-    table_ = table_parser.table(cli.system('controllerfs-show scratch'))
-    final_scratch = table_parser.get_value_two_col_table(table_, 'size')
-    final_scratch = int(ast.literal_eval(final_scratch))
-    LOG.info("scratch is currently {}".format(final_scratch))
-    assert final_scratch != decreased_scratch, \
-        "scratch was unexpectedly decreased from {} to {}".format(new_scratch, final_scratch)
-
-
-def test_decrease_drbd():
-    """ 
-    This test attempts to decrease the size of the drbd based filesystems.
-    The expectation is that this should be rejected.
+    This test increases the size of the various controllerfs filesystems all at
+    once.
 
     Arguments:
     - None
 
     Test Steps:
+    - Query the filesystem for their current size
+    - Increase the size of each filesystem at once
 
-    1.  Query the value of each drbd partition
-    2.  Attempt to decrease each partition
+    Assumptions:
+    - There is sufficient free space to allow for an increase, otherwise skip
+      test.
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    drbdfs_val = {} 
+    LOG.tc_step("Determine the space available for each drbd filesystem")
+    for fs in DRBDFS: 
+        drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+        LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
+        if fs == 'backup':
+            drbdfs_val[fs] = drbdfs_val[fs] + 4
+        else:
+            drbdfs_val[fs] = drbdfs_val[fs] + 1
+        LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs])) 
+
+    LOG.tc_step("Increase the size of all filesystems") 
+
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in drbdfs_val.items()]
+    args_ = ' '.join(attr_values_)
+    filesystem_helper.modify_controllerfs(**drbdfs_val)
+
+    # Need to wait until the change takes effect before checkign the
+    # filesystems
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                         entity_id="host={}".format(host),
+                                         timeout=600)
+
+    filesystem_helper.check_controllerfs(**drbdfs_val)
+
+
+def test_decrease_controllerfs():
+    """ 
+    This test attempts to decrease the size of each of the controllerfs
+    filesystems.  The expectation is that this should be rejected.
+
+    Arguments:
+    - None
+
+    Test Steps:
+    1.  Query the value of each controllerfs filesystem 
+    2.  Attempt to decrease each filesystem individually (since we want to make
+    sure each works)
 
     Assumptions:
     - None
     """
 
-    drbdfs = ['backup', 'cgcs', 'database', 'img-conversions']
     con_ssh = ControllerClient.get_active_controller()
 
     drbdfs_val = {} 
-    LOG.tc_step("Determine the space available for each drbd fs")
-    for fs in drbdfs:
-        table_ = table_parser.table(cli.system('controllerfs-show {}'.format(fs)))
-        drbdfs_val[fs] = table_parser.get_value_two_col_table(table_, 'size')
-
-    LOG.info("Current fs values are: {}".format(drbdfs_val))
-
-    for partition_name in drbdfs:
-        LOG.tc_step("Increase the size of the backup and cgcs filesystem")
-        partition_value = drbdfs_val[partition_name]
+    for fs in DRBDFS: 
+        LOG.tc_step("Determine the current size of the filesystem") 
+        drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+        LOG.info("{} is currently {}".format(fs, drbdfs_val[fs]))
+        LOG.tc_step("Decrease the size of the filesystem")
+        partition_value = drbdfs_val[fs]
         new_partition_value = int(partition_value) - 1
-        cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
-        rc, out = con_ssh.exec_cmd(cmd, fail_ok=True)
-        assert rc != 0, "Filesystem {} was unexpectedly decreased".format(partition)
+        kwargs = {fs: new_partition_value}
+        LOG.tc_step("Attempt to decrease {} from {} to {}".format(fs, partition_value, new_partition_value))
+        filesystem_helper.modify_controllerfs(fail_ok=True, **kwargs)
 
 
 # Fails due to product issue
@@ -227,13 +233,13 @@ def _test_modify_drdb():
     else:
         backup_freespace = 1
     new_partition_value = backup_freespace + int(partition_value)
-    cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
+    cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
     partition_name = "cgcs"
     partition_value = drbdfs_val[partition_name]
     cgcs_free_space = math.trunc(backup_freespace / 2)
     new_partition_value = backup_freespace + int(partition_value)
-    cmd = "system controllerfs-modify {} {}".format(partition_name, new_partition_value)
+    cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
 
 
@@ -300,7 +306,7 @@ def _test_increase_cinder():
 
     LOG.tc_step("Increase the size of the cinder filesystem")
     new_cinder_val = math.trunc(int(cont0_avail_gib) / 10) + int(cinder_gib)
-    cmd = "system controllerfs-modify cinder {}".format(new_cinder_val)
+    cmd = "system controllerfs-modify cinder={}".format(new_cinder_val)
     rc, out = con_ssh.exec_cmd(cmd)
     
     LOG.tc_step("Wait for config out-of-date alarms to raise")
