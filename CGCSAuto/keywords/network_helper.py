@@ -2054,7 +2054,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
         table_ = table_parser.table(cli.nova('device-show {}'.format(alias)))
         # LOG.debug('output from nova device-show for device-id:{}\n{}'.format(alias, table_))
 
-        table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True)
+        table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True, lower_case=False)
         nova_pci_devices[alias] = table_dict
         # {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 

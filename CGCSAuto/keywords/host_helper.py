@@ -2218,9 +2218,12 @@ def get_hosts_with_local_storage_backing_type(storage_type=None, con_ssh=None):
 
 
 def __parse_total_cpus(output):
-    last_line = output.split()[-1]
-    # Total usable vcpus: 64.0, total allocated vcpus: 56.0 >> 56.0000
-    total = round(float(last_line.split(sep=':')[-1].strip()), 4)
+    last_line = output.splitlines()[-1]
+    print(last_line)
+    # Final resource view: name=controller-0 phys_ram=44518MB used_ram=0MB phys_disk=141GB used_disk=1GB
+    # free_disk=133GB total_vcpus=31 used_vcpus=0.0 pci_stats=[PciDevicePool(count=1,numa_node=0,product_id='0522',
+    # tags={class_id='030000',configured='1',dev_type='type-PCI'},vendor_id='102b')]
+    total = round(float(re.findall('used_vcpus=(.*) ', last_line)[0]), 4)
     return total
 
 
@@ -2235,7 +2238,7 @@ def get_total_allocated_vcpus_in_log(host, con_ssh=None):
 
     """
     with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-        cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
+        cmd = 'cat /var/log/nova/nova-compute.log | grep -i --color=never "Final resource view" | tail -n 3'
         output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
         assert output, "Empty return from cmd: {}".format(cmd)
         total_allocated_vcpus = __parse_total_cpus(output)
@@ -2256,7 +2259,7 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_
     Returns (float): New value of total allocated vcpus as float with 4 digits after decimal point
 
     """
-    cmd = 'cat /var/log/nova/nova-compute.log | grep -i "total allocated vcpus" | tail -n 3'
+    cmd = 'cat /var/log/nova/nova-compute.log | grep -i --color=never "Final resource view" | tail -n 3'
 
     end_time = time.time() + timeout
     if prev_cpus is None and expt_cpus is None:
@@ -2284,12 +2287,12 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_
         raise exceptions.HostTimeout(msg)
 
 
-def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
+def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', con_ssh=None):
     """
 
     Args:
         hosts:
-        rtn_val (str): valid values: used_now, used_max, total
+        rtn_val (str): valid values: vcpus_used, vcpus
         con_ssh:
 
     Returns (dict): host(str),cpu_val(float with 4 digits after decimal point) pairs as dictionary
@@ -2300,19 +2303,69 @@ def get_vcpus_for_computes(hosts=None, rtn_val='used_now', con_ssh=None):
     elif isinstance(hosts, str):
         hosts = [hosts]
 
-    # if rtn_val == 'used_now':
-    #     rtn_val = 'vcpus_used'
+    if rtn_val == 'used_now':
+        rtn_val = 'vcpus_used'
 
-    hosts_cpus = {}
-    for host in hosts:
-        # TODO: pike rebase issue nova hypervisor-show does not work. Work around for now
-        table_ = table_parser.table(cli.nova('--os-compute-api-version 2.3 host-describe', host, ssh_client=con_ssh,
-                                             auth_info=Tenant.ADMIN))
-        cpus_str = table_parser.get_values(table_, target_header='cpu', strict=False, PROJECT=rtn_val)[0]
-        hosts_cpus[host] = round(float(cpus_str), 4)
-
-    LOG.debug("Hosts {} cpus: {}".format(rtn_val, hosts_cpus))
+    hosts_cpus = get_hypervisor_info(hosts=hosts, rtn_val=rtn_val, con_ssh=con_ssh)
+    LOG.debug("Hosts {}: {}".format(rtn_val, hosts_cpus))
     return hosts_cpus
+
+
+def get_hypervisor_info(hosts, rtn_val='id', rtn_str=True, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get info from nova hypervisor-show for specified field
+    Args:
+        hosts (str|list): hostname(s)
+        rtn_val (str): a field in hypervisor-show
+        rtn_str (bool): whether to return str type if only 1 host is provided
+        con_ssh:
+        auth_info:
+
+    Returns (dict|str):
+
+    """
+    convert = False
+    if isinstance(hosts, str):
+        hosts = [hosts]
+        if rtn_str:
+            convert = True
+
+    hosts_info = get_hypervisor_list_info(hosts=hosts, con_ssh=con_ssh)
+    hosts_vals = {}
+    for host in hosts:
+        host_uuid = hosts_info[host]['id']
+        table_ = table_parser.table(cli.nova('hypervisor-show', host_uuid, ssh_client=con_ssh, auth_info=auth_info))
+        val = table_parser.get_value_two_col_table(table_, field=rtn_val, strict=True)[0]
+        try:
+            val = eval(val)
+        except NameError:
+            pass
+        hosts_vals[host] = val
+
+    if convert:
+        # only one host provided, convert result from dict to str
+        return hosts_vals[hosts[0]]
+
+    return hosts_vals
+
+
+def get_hypervisor_list_info(hosts=None, con_ssh=None):
+    """
+
+    Args:
+        hosts:
+        con_ssh:
+
+    Returns (dict): host info in dict. e.g.,
+        {'compute-0': {'id': <uuid>, 'state': 'up', 'status': 'enabled'}}
+
+    """
+    table_ = table_parser.table(cli.nova('hypervisor-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    if hosts:
+        table_ = table_parser.filter_table(table_, **{'Hypervisor hostname': hosts})
+
+    table_dict = table_parser.row_dict_table(table_, 'Hypervisor hostname', unique_key=True)
+    return table_dict
 
 
 def _get_host_logcores_per_thread(host, con_ssh=None):

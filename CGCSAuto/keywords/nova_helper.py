@@ -965,20 +965,25 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     return dict(zip(vm_ids, info))
 
 
-def get_vm_flavor(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_flavor(vm_id, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get flavor id of given vm
 
     Args:
         vm_id (str):
+        rtn_val (str): id or name
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (str):
 
     """
-    flavor_output = get_vm_nova_show_value(vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=auth_info)
-    return re.search(r'\((.*)\)', flavor_output).group(1)
+    flavor = get_vm_nova_show_value(vm_id, field='flavor:original_name', strict=True, con_ssh=con_ssh,
+                                    auth_info=auth_info)
+    if 'id' in rtn_val:
+        flavor = get_flavor_id(name=flavor, strict=True, con_ssh=con_ssh, auth_info=auth_info)
+
+    return flavor
 
 
 def get_vm_host(vm_id, con_ssh=None):

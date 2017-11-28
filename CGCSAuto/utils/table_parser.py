@@ -764,7 +764,7 @@ def sm_dump_table(output_lines):
     return table_
 
 
-def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None):
+def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None, lower_case=True):
     """
     convert original table to a dictionary with a given column to be the keys.
 
@@ -798,6 +798,9 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None):
     """
     keys = get_column(table_, key_header)
     all_headers = table_['headers']
+    if lower_case:
+        all_headers = [header.lower() for header in all_headers]
+        keys = [key.lower() for key in keys]
     if eliminate_keys is None:
         eliminate_keys = []
     elif isinstance(eliminate_keys, str):
@@ -817,6 +820,7 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None):
 
         if unique_key:
             values = values[0]
+
         rtn_dict[header_val] = values
 
     LOG.debug("Converted table: {}".format(rtn_dict))

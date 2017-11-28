@@ -53,9 +53,7 @@ def get_expt_disk_increase(origin_flavor, dest_flavor, boot_source, storage_back
 
 
 def get_compute_disk_space(vm_host):
-    hosttable_ = table_parser.table(cli.nova("hypervisor-show {}".format(vm_host), auth_info=Tenant.ADMIN))
-    free_disk_space = int(table_parser.get_value_two_col_table(hosttable_, 'disk_available_least'))
-    return free_disk_space
+    return host_helper.get_hypervisor_info(hosts=vm_host, rtn_val='disk_available_least')
 
 
 def check_correct_post_resize_value(original_disk_value, expected_increase, vm_host, sleep=True):
@@ -405,8 +403,7 @@ class TestResizeDiffHost:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_2)
 
         LOG.tc_step('Check disk usage before resize')
-        hosttable_ = table_parser.table(cli.nova("hypervisor-show {}".format(vm_host), auth_info=Tenant.ADMIN))
-        original_disk_value_old_host = int(table_parser.get_value_two_col_table(hosttable_, 'disk_available_least'))
+        original_disk_value_old_host = get_compute_disk_space(vm_host)
         LOG.info("{} space left on compute".format(original_disk_value_old_host))
 
         # create a larger flavor and resize

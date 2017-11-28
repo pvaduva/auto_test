@@ -127,9 +127,9 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
 @fixture(scope='function', autouse=True)
 def print_hosts_memories(add_1g_and_4k_pages):
     hosts, storage_backing = add_1g_and_4k_pages
+    host_helper.get_hypervisor_info(hosts=hosts)
     for host in hosts:
         cli.system('host-memory-list', host)
-        cli.nova('hypervisor-show', host)
 
 
 @fixture(scope='module')
