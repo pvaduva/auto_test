@@ -2307,45 +2307,37 @@ def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', con_ssh=None):
         rtn_val = 'vcpus_used'
 
     hosts_cpus = get_hypervisor_info(hosts=hosts, rtn_val=rtn_val, con_ssh=con_ssh)
-    LOG.debug("Hosts {}: {}".format(rtn_val, hosts_cpus))
     return hosts_cpus
 
 
-def get_hypervisor_info(hosts, rtn_val='id', rtn_str=True, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get info from nova hypervisor-show for specified field
     Args:
         hosts (str|list): hostname(s)
         rtn_val (str): a field in hypervisor-show
-        rtn_str (bool): whether to return str type if only 1 host is provided
         con_ssh:
         auth_info:
 
-    Returns (dict|str):
-
+    Returns (dict):
     """
-    convert = False
     if isinstance(hosts, str):
         hosts = [hosts]
-        if rtn_str:
-            convert = True
 
     hosts_info = get_hypervisor_list_info(hosts=hosts, con_ssh=con_ssh)
     hosts_vals = {}
     for host in hosts:
         host_uuid = hosts_info[host]['id']
-        table_ = table_parser.table(cli.nova('hypervisor-show', host_uuid, ssh_client=con_ssh, auth_info=auth_info))
-        val = table_parser.get_value_two_col_table(table_, field=rtn_val, strict=True)[0]
+        table_ = table_parser.table(cli.nova('hypervisor-show', host_uuid, ssh_client=con_ssh, auth_info=auth_info),
+                                    combine_multiline_entry=True)
+        val = table_parser.get_value_two_col_table(table_, field=rtn_val, strict=True, merge_lines=True)
         try:
             val = eval(val)
         except NameError:
             pass
         hosts_vals[host] = val
 
-    if convert:
-        # only one host provided, convert result from dict to str
-        return hosts_vals[hosts[0]]
-
+    LOG.info("Hosts_info: {}".format(hosts_vals))
     return hosts_vals
 
 

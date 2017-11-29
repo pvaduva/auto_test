@@ -52,8 +52,8 @@ def get_expt_disk_increase(origin_flavor, dest_flavor, boot_source, storage_back
     return expected_increase, expect_to_check
 
 
-def get_compute_disk_space(vm_host):
-    return host_helper.get_hypervisor_info(hosts=vm_host, rtn_val='disk_available_least')
+def get_compute_disk_space(host):
+    return host_helper.get_hypervisor_info(hosts=host, rtn_val='disk_available_least')[host]
 
 
 def check_correct_post_resize_value(original_disk_value, expected_increase, vm_host, sleep=True):
