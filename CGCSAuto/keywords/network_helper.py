@@ -3829,3 +3829,56 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 
     return rtn_networks
 
+
+def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
+                                              pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
+                                              con_ssh=None, strict=True, **filters):
+    args = []
+    if audit_id:
+        args.append('--audit-uuid {}'.format(audit_id))
+    if seg_id:
+        args.append('--segmentation_id {}'.format(seg_id))
+    if host:
+        args.append('--host_name {}'.format(host))
+    if pnet_id:
+        args.append('--providernet_id {}'.format(pnet_id))
+    if pnet_name:
+        args.append('providernet_name {}'.format(pnet_name))
+
+    LOG.info("Getting neutron providnet-connectivity-test-list. Filters: {}".format(args))
+
+    out = cli.neutron('providernet-connectivity-test-list', args, ssh_client=con_ssh, auth_info=auth_info)
+    if not out:
+        return None
+
+    table_ = table_parser.table(out)
+    return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
+
+
+def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=300,
+                                           auth_info=Tenant.ADMIN, con_ssh=None):
+    args = []
+    if host:
+        args.append('--host {}'.format(host))
+    if seg_id:
+        args.append('--segmentation_id {}'.format(seg_id))
+    if pnet:
+        args.append('--providernet {}'.format(pnet))
+    args = ' '.join(args)
+
+    LOG.info("Scheduling providernet-connectivity-test. Args: {}".format(args))
+    table_ = table_parser.table(cli.neutron('providernet-connectivity-test-schedule', args, auth_info=auth_info,
+                                            ssh_client=con_ssh))
+    audit_id = table_parser.get_value_two_col_table(table_, field='audit_uuid')
+
+    if wait_for_test:
+        LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
+                LOG.info("providernet connectivity test scheduled successfully.")
+                return audit_id
+        else:
+            raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
+                                          "seconds after running 'neutron providernet-connectivity-test-schedule'".
+                                          format(audit_id, timeout))

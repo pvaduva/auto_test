@@ -197,10 +197,10 @@ def table(output_lines, combine_multiline_entry=False):
                 # each column value is a list
                 entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
                 if combine_multiline_entry:
-                    entry = [''.join(item) for item in entry_combined]
+                    entry = [' '.join(item) for item in entry_combined]
                 else:
                     # convert column value to string if list len is 1
-                    entry = [item if len(item) > 1 else ''.join(item) for item in entry_combined]
+                    entry = [item if len(item) > 1 else ' '.join(item) for item in entry_combined]
                 LOG.debug("Multi-row entry found: {}".format(entry))
 
             entries.append(entry)
@@ -486,7 +486,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
         # handle multi-line value
         if merge_lines and isinstance(target_value, list):
-            target_value = ''.join(target_value)
+            target_value = ' '.join(target_value)
 
         target_values.append(target_value)
 

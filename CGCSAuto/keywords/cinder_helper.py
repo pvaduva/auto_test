@@ -169,7 +169,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     Args:
         name (str): display name of the volume
         desc (str): description of the volume
-        image_id (str): image_id to create volume from
+        image_id (str|None): image_id to create volume from
         source_vol_id (str): source volume id to create volume from
         snapshot_id (str): snapshot_id to create volume from.
         vol_type (str): volume type such as 'raw'

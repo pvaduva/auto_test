@@ -631,13 +631,12 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
     return img_id
 
 
-def set_unset_image_vif_multiq(image_name, set=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Set or unset a glance image with multiple vif-Queues
     Args:
-        image_name (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
-                cgcs-guest, vxworks-guest
-        set (bool): whether or not to set the  hw_vif_multiqueue_enabled
+        image (str): name or id of a glance image
+        set_ (bool): whether or not to set the  hw_vif_multiqueue_enabled
         fail_ok:
         con_ssh:
         auth_info:
@@ -646,21 +645,132 @@ def set_unset_image_vif_multiq(image_name, set=True, fail_ok=False, con_ssh=None
 
     """
 
-    if image_name is None:
+    if image is None:
         return 1, "Error:image_name not provided"
-    if set:
+    if set_:
         cmd = 'image set '
     else:
         cmd = 'image unset '
 
-    cmd += image_name
+    cmd += image
     cmd += ' --property'
 
-    if set:
+    if set_:
         cmd += ' hw_vif_multiqueue_enabled=True'
     else:
         cmd += ' hw_vif_multiqueue_enabled'
 
-    res, out = cli.openstack(cmd,rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    res, out = cli.openstack(cmd, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
 
     return res, out
+
+
+def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None, container_format=None,
+              disk_format=None, architecture=None, instance_id=None, kernel_id=None, os_distro=None,
+              os_version=None, ramdisk_id=None, activate=None, project=None, project_domain=None, tags=None,
+              protected=None, visibility=None, membership=None, con_ssh=None, auth_info=Tenant.ADMIN):
+
+    post_checks = {}
+    args = []
+    if protected is not None:
+        if protected:
+            args.append('--protected')
+            post_check_val = True
+        else:
+            args.append('--unprocteced')
+            post_check_val = False
+        post_checks['protected'] = post_check_val
+
+    if visibility is not None:
+        valid_vals = ('public', 'private', 'community', 'shared')
+        if visibility not in valid_vals:
+            raise ValueError("Invalid visibility specified. Valid options: {}".format(valid_vals))
+        args.append('--{}'.format(visibility))
+        post_checks['visibility'] = visibility
+
+    if activate is not None:
+        if activate:
+            args.append('--activate')
+            post_check_val = 'active'
+        else:
+            args.append('--deactivate')
+            post_check_val = 'deactivated'
+        post_checks['status'] = post_check_val
+
+    if membership is not None:
+        valid_vals = ('accept', 'reject', 'pending')
+        if membership not in valid_vals:
+            raise ValueError("Invalid membership specified. Valid options: {}".format(valid_vals))
+        args.append('--{}'.format(membership))
+        # Unsure how to do post check
+
+    if properties:
+        for key, val in properties.items():
+            args.append('--property {}="{}"'.format(key, val))
+            post_checks['properties'] = properties
+
+    if tags:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            args.append('--tag {}'.format(tag))
+        post_checks['tags'] = list(tags)
+
+    other_args = {
+        '--name': (new_name, 'name'),
+        '--min-disk': (min_disk, 'min_disk'),
+        '--min-ram': (min_ram, 'min_ram'),
+        '--container-format': (container_format, 'container_format'),
+        '--disk-format': (disk_format, 'disk_format'),
+        '--project': (project, 'owner'),    # assume project id will be given
+        '--project-domain': (project_domain, None),      # Post check unhandled atm
+        '--architecture': (architecture, None),
+        '--instance-id': (instance_id, None),
+        '--kernel-id': (kernel_id, None),
+        '--os-distro': (os_distro, None),
+        '--os-version': (os_version, None),
+        '--ramdisk-id': (ramdisk_id, None),
+    }
+
+    for key, val in other_args.items():
+        if val[0] is not None:
+            args[key] = val[0]
+            if val[1]:
+                post_checks[val[1]] = val[0]
+
+    args = ' '.join(args)
+    if not args:
+        raise ValueError("Nothing to set")
+
+    args += ' {}'.format(image)
+    code, out = cli.openstack('image set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    LOG.info("Checking image setting is as specified: {}".format(post_checks))
+
+    post_tab = table_parser.table(cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info),
+                                  combine_multiline_entry=True)
+    for field, expt_val in post_checks.items():
+        actual_val = table_parser.get_value_two_col_table(post_tab, field=field, merge_lines=True)
+        if field == 'properties':
+            actual_vals = actual_val.split(', ')
+            actual_vals = ((val.split('=')) for val in actual_vals)
+            actual_dict = {k.strip(): v.strip() for k, v in actual_vals}
+            for key, val in expt_val.items():
+                actual = actual_dict[key]
+                try:
+                    actual = eval(actual)
+                except NameError:
+                    pass
+                assert str(val) == str(actual), "Property {} is not as set. Expected: {}, actual: {}".\
+                    format(key, val, actual_dict[key])
+        elif field == 'tags':
+            actual_vals = [val.strip() for val in actual_val.split(',')]
+            assert set(expt_val) <= set(actual_vals), "Expected tags: {}, actual: {}".format(expt_val, actual_vals)
+        else:
+            assert expt_val == actual_val, "{} is not as set. Expected: {}, actual: {}".\
+                format(field, expt_val, actual_val)
+
+    msg = "Image {} is successfully modified".format(image)
+    return 0, msg
