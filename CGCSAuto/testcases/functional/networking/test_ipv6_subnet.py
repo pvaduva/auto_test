@@ -24,6 +24,7 @@ def _bring_up_interface(vm_id):
         vm_id (str): VM to configure the vlan interface
 
     """
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     cmds_to_exe = ["ls /etc/sysconfig/network-scripts/",
                    "sed -i -- 's/IPV6INIT=no/IPV6INIT=yes/g' /etc/sysconfig/network-scripts/ifcfg-eth1",
                    "sed -i '1 i\DHCPV6C=yes' /etc/sysconfig/network-scripts/ifcfg-eth1",

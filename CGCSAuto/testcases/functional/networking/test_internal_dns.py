@@ -159,6 +159,9 @@ def get_subnets(net_name):
     subnet_list = table_parser.get_value_two_col_table(net_show_table_, "subnets")
     LOG.info("Subnets are: {}".format(subnet_list))
 
+    if isinstance(subnet_list, str):
+        subnet_list = [subnet_list]
+
     return subnet_list
 
 
@@ -190,7 +193,6 @@ def set_dns_servers(net_name, subnet_list, dns_servers=[]):
     - dns_servers: a list of DNS Servers
 
     """
-
 
     LOG.info("DNS servers are set to: {}".format(dns_servers))
     if not dns_servers:

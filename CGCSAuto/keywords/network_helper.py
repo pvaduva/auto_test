@@ -743,7 +743,8 @@ def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_inf
     return 0, succ_msg
 
 
-def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=30, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+# TODO reduce timeout to 30s after issue fixed.
+def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=300, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     end_time = time.time() + timeout
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('list --a', ssh_client=con_ssh, auth_info=auth_info))
