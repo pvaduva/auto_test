@@ -224,7 +224,7 @@ def test_decrease_controllerfs():
     - None
 
     Test Steps:
-    1.  Query the value of each controllerfs filesystem 
+    1.  Query the value of each controllerfs filesystem
     2.  Attempt to decrease each filesystem individually (since we want to make
     sure each works)
 
@@ -276,13 +276,71 @@ def test_controllerfs_mod_when_host_locked():
 
     drbdfs_val = {}
     fs = "backup"
-    LOG.tc_step("Determine the space available for filesystem")
+    LOG.tc_step("Determine the current filesystem size")
     drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
 
     LOG.tc_step("Increase the size of filesystems")
+    filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
+
+
+@mark.usefixtures("freespace_check")
+def _test_resize_drbd_filesystem_while_resize_inprogress():
+    """
+    This test attempts to resize a drbd filesystem while an existing drbd
+    resize is in progress.  This should be rejected.
+
+    Arguments:
+    - None
+
+    Test steps:
+    1.  Increase the size of backup to allow for test to proceed.
+    2.  Wait for alarms to clear and then check the underlying filesystem is
+    updated
+    2.  Attempt to resize the cgcs filesystem.  This should be successful.
+    3.  Attempt to resize cgcs again immediately.  This should be rejected.
+
+    Assumptions:
+    - None
+
+    DISABLE until CGTS-8424 is fixed.
+    """
+
+
+    drbdfs_val = {}
+    fs = "backup"
+    LOG.tc_step("Increase the backup size before proceeding with rest of test")
+    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
+    drbdfs_val[fs] = int(drbdfs_val[fs]) + 5
+    LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
+    LOG.tc_step("Increase the size of filesystems")
+    filesystem_helper.modify_controllerfs(**drbdfs_val)
+
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                         entity_id="host={}".format(host),
+                                         timeout=600)
+
+    LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
+    filesystem_helper.check_controllerfs(**drbdfs_val)
+
+    drbdfs_val = {}
+    fs = "cgcs"
+    LOG.tc_step("Determine the current filesystem size")
+    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
+    drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
+    LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
+
+    LOG.tc_step("Increase the size of filesystems")
+    filesystem_helper.modify_controllerfs(**drbdfs_val)
+
+    LOG.tc_step("Attempt to increase the size of the filesystem again")
+    drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
 
 
