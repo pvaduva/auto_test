@@ -1829,8 +1829,9 @@ class VMInfo:
         Returns: (dict) {'name': flavor_name, 'id': flavor_id}
 
         """
-        flavor_output = table_parser.get_value_two_col_table(self.table_, 'flavor')
-        return re.search(r'\((.*)\)', flavor_output).group(1)
+        flavor_name = table_parser.get_value_two_col_table(self.table_, 'flavor:original_name')
+        flavor_id = nova_helper.get_flavor_id(name=flavor_name, strict=True)
+        return flavor_id
 
     def __get_boot_info(self):
         image_ = table_parser.get_value_two_col_table(self.table_, 'image')

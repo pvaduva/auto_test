@@ -816,12 +816,8 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     Returns (str): storage extra spec value. Possible return values: 'local_image', 'local_lvm', or 'remote'
 
     """
-    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh,
-                                           auth_info=Tenant.ADMIN)
-    # extra_specs = eval(flavor_output)['extra_specs']
-    # return extra_specs['aggregate_instance_extra_specs:storage']
-
-    flavor_id = re.search(r'\((.*)\)', flavor_output).group(1)
+    # TODO: Update to get it from nova show directly
+    flavor_id = get_vm_flavor(vm_id=vm_id, rtn_val='id')
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
