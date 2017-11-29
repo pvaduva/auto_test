@@ -19,8 +19,11 @@ TEST_USER_NAME = 'keystoneuser'
 
 SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 MIN_PASSWORD_LEN = 7
-# MAX_PASSWORD_LEN = 15
-MAX_PASSWORD_LEN = 4096
+
+# Reduce password length due to upsteam issue https://bugs.launchpad.net/keystone/+bug/1735250
+# MAX_PASSWORD_LEN = 4096
+MAX_PASSWORD_LEN = 1024
+
 NUM_TRACKED_PASSWORD = 2
 # WAIT_BETWEEN_CHANGE = 60
 WAIT_BETWEEN_CHANGE = 6
