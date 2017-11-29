@@ -874,7 +874,7 @@ def remove_columns(table_, headers):
     return new_table_
 
 
-def convert_value_to_dict(value):
+def convert_value_to_dict_cinder(value):
     """
     In a client (e.g. cinderclient) CLI output, a dict type value can be either
     a plain raw string (e.g. cinderclient Newton) or a "pretty formatted"

@@ -1865,7 +1865,7 @@ class VMInfo:
         else:      # booted from volume
             vol_show_table = table_parser.table(cli.cinder('show', self.boot_info['id']))
             image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
-            image_meta_data = table_parser.convert_value_to_dict(image_meta_data)
+            image_meta_data = table_parser.convert_value_to_dict_cinder(image_meta_data)
             image_name = image_meta_data['image_name']
 
         return image_name

@@ -730,7 +730,8 @@ def create_qos_specs(qos_name=None, fail_ok=False, consumer=None, auth_info=Tena
 
     LOG.info("Check created QoS specs are correct")
     qos_tab = table_parser.table(output)
-    post_qos_specs = eval(table_parser.get_value_two_col_table(qos_tab, 'specs'))
+    post_qos_specs = table_parser.get_value_two_col_table(qos_tab, 'specs')
+    post_qos_specs = table_parser.convert_value_to_dict_cinder(value=post_qos_specs)
     post_consumer = table_parser.get_value_two_col_table(qos_tab, 'consumer')
 
     for spec_name in specs:
