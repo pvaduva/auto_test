@@ -83,7 +83,8 @@ timeout=CP_TIMEOUT):
     * rc, out - return code and output of the host-disk-partition-command
     """
 
-    rc, out = cli.system('host-disk-partition-add -t lvm_phys_vol {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
+    #rc, out = cli.system('host-disk-partition-add -t lvm_phys_vol {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
+    rc, out = cli.system('host-disk-partition-add {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
     if fail_ok or not wait:
         return rc, out
 

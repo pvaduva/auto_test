@@ -384,7 +384,8 @@ class SSHClient:
             self.flush(10)
 
     def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None,
+                 prefix_space=False):
         """
 
         Args:
@@ -408,6 +409,10 @@ class SSHClient:
         LOG.debug("Executing command...")
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
+
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
+
         self.send(cmd, reconnect, reconnect_timeout)
         try:
             self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
@@ -939,7 +944,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
                                             timeout=timeout, fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException(
+                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
@@ -950,7 +956,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
                                             fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException(
+                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
 
                     if res_index == 0:
                         self.send('yes')

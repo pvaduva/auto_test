@@ -231,6 +231,7 @@ def _perform_nova_actions(vms_dict, flavors, vfs=None):
 
         LOG.info("Resizing VM {} to new flavor {} ...".format(vm_name, resize_flavor_id))
         vm_helper.resize_vm(vm_id, resize_flavor_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
 
 @mark.parametrize('vfs', [32, 33])

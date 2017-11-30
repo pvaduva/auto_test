@@ -12,7 +12,7 @@ from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH
 from consts.auth import Tenant
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -419,7 +419,7 @@ def test_delete_heat_after_swact(template_name):
 
     """
     if len(system_helper.get_controllers()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     # add test step
     return_code, msg = verify_basic_template(template_name, delete_after_swact=True)

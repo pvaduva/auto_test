@@ -3,7 +3,7 @@ import os
 import re
 import time
 from utils.tis_log import LOG
-from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
+from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common, vm_helper
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
@@ -13,6 +13,36 @@ from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from utils import node
 from utils import cli
+from setups import collect_tis_logs
+
+
+def collect_logs(con_ssh, fail_ok=True):
+
+    log_tarball = r'/scratch/ALL_NODES*'
+    log_dir = r'~/collected-logs'
+    old_log_dir = r'~/collected-logs/old-files'
+
+    prep_cmd = 'mkdir {}; mkdir {}'.format(log_dir, old_log_dir)
+    code, output = con_ssh.exec_cmd(prep_cmd, fail_ok=fail_ok)
+    if code != 0:
+        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+
+    prep_cmd = 'mv -f {} {}'.format(log_tarball, old_log_dir)
+    code, output = con_ssh.exec_sudo_cmd(prep_cmd, fail_ok=fail_ok)
+    if code != 0:
+        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+
+        LOG.info('execute: rm -rf /scratch/ALL_NODES*')
+        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+
+        LOG.info('ok, removed /scratch/ALL_NODES*')
+
+    else:
+        LOG.info('ok, {} moved to {}'.format(log_tarball, old_log_dir))
+
+    collect_tis_logs(con_ssh=con_ssh)
+
 
 @pytest.fixture(scope='session', autouse=True)
 def pre_restore_checkup():
@@ -27,6 +57,18 @@ def pre_restore_checkup():
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
     controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                               initial_prompt=extra_controller_prompt,  fail_ok=True)
+
+    LOG.info('Collect logs before restore')
+    if controller_conn:
+        collect_logs(controller_conn)
+    else:
+        LOG.info('Cannot collect logs because no ssh connection to the lab')
+
+    if not controller_conn:
+        LOG.warn('failed to collect logs because no ssh connection established to controller-0 of lab:{}'.format(
+            controller_node.host_ip))
+    else:
+        pass
 
     LOG.info('backup_src={}, backup_src_path={}'.format(backup_src, backup_src_path))
     if backup_src.lower() == 'usb':
@@ -187,7 +229,9 @@ def restore_setup(pre_restore_checkup):
     install_helper.power_off_host(hostnames)
 
     LOG.tc_step("Booting controller-0 ... ")
-    install_helper.boot_controller(bld_server_conn, load_path)
+    # is_cpe = (lab['system_type'] == 'CPE')
+    is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
+    install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
 
     # establish ssh connection with controller
     LOG.tc_step("Establishing ssh connection with controller-0 after install...")
@@ -377,8 +421,17 @@ def test_restore_from_backup(restore_setup):
         cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, TiSPath.BACKUPS)
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
+    if lab.get('system_type', 'Standard') == 'CPE':
+        controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+        install_helper.run_cpe_compute_config_complete(controller_node, controller0)
+        con_ssh.close()
+        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+        controller_node.ssh_conn = con_ssh
+        ControllerClient.set_active_controller(con_ssh)
+        host_helper.wait_for_hosts_ready(controller0)
+
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
-    assert  int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
+    assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
         "Missing backup files in {}".format(TiSPath.BACKUPS)
 
     boot_interfaces = lab['boot_device_dict']
@@ -462,4 +515,4 @@ def test_restore_from_backup(restore_setup):
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)
     assert rc == 0, "System health not OK: {}".format(failed)
 
-
+    vm_helper.boot_vm()

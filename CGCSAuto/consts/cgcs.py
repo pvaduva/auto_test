@@ -29,12 +29,17 @@ HEAT_FLAVORS = ['small_ded', 'small_float']
 MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
-PREFIX_BACKUP_FILE  = 'titanium_backup_'
+PREFIX_BACKUP_FILE = 'titanium_backup_'
 TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
 IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
 CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
+PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
+
+REGION_MAP = {'RegionOne': '',
+              'RegionTwo': '-R2'}
 
 
 class GuestImages:
@@ -87,6 +92,18 @@ class Networks:
         'external': EXT_IP
     }
     INFRA_NETWORK_CIDR = "192.168.205.0/24"
+
+    @classmethod
+    def mgmt_net_name_pattern(cls):
+        from consts.proj_vars import ProjVar
+        region = REGION_MAP[ProjVar.get_var('REGION')]
+        return 'tenant\d{}-mgmt-net'.format(region)
+
+    @classmethod
+    def data_net_name_pattern(cls):
+        from consts.proj_vars import ProjVar
+        region = REGION_MAP[ProjVar.get_var('REGION')]
+        return 'tenant\d{}-net'.format(region)
 
 
 class SystemType:
@@ -171,7 +188,6 @@ class Prompt:
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
-
 
 
 class NovaCLIOutput:
@@ -404,14 +420,14 @@ class OrchestStrategyStates:
 
     # abort phase
     ABORTING = 'aborting'
-    ABORTED ='aborted'
+    ABORTED = 'aborted'
     ABORT_FAILED = 'abort-failed'
     ABORT_TIMEOUT = 'abort-timeout'
 
     OrchestStrategyPhaseStates = {
-        OrchestStrategyPhases.BUILD : [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT ],
-        OrchestStrategyPhases.ABORT : [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
-        OrchestStrategyPhases.APPLY : [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+        OrchestStrategyPhases.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
+        OrchestStrategyPhases.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhases.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
     }
 
     def validate(self, phase, state):

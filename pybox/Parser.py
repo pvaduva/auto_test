@@ -147,7 +147,6 @@ def handle_args():
         """
         If specified we will configure controller-0 otherwise the configuration will have to be perfomed manually. 
         config_controller will be run with the --default parameter.
-        Note: currently not working due to CGTS-8122 
         """,
         action='store_true')
         
@@ -180,6 +179,24 @@ def handle_args():
         """
         If specified, patches will be retrieved from the buildserver.
 
+        """,
+        action='store_true')
+        
+    parser.add_argument("--install-mode", help=
+        """
+        Lab will be installed using the mode specified. Serial mode by default
+        """,
+        type=str, choices=['serial', 'graphical'], default='serial'
+        )
+    parser.add_argument("--run-scripts", help=
+        """
+        If specified the lab_setup.sh iterations will be run.
+        """,
+        action='store_true')
+    parser.add_argument("--patch-nodes", help=
+        """
+        If specified, any patches that have been installed on controller-0 will be installed on the other nodes.
+        
         """,
         action='store_true')
     return parser

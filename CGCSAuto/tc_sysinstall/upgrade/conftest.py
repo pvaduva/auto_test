@@ -229,7 +229,7 @@ def upgrade_setup(pre_check_upgrade):
         system_helper.import_load(upgrade_load_path)
 
         # download and apply patches if patches are available in patch directory
-        if patch_dir:
+        if patch_dir and upgrade_version != "17.07":
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 
@@ -387,7 +387,7 @@ def apply_patches(lab, server, patch_dir):
         if 'vbox' in lab['name']:
             dest_server = lab['external_ip']
             ssh_port = lab['external_port']
-            temp_path = '/tmp/patches/'
+            temp_path = '/tmp/upgrade_patches/'
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server,
                               temp_path, dest_user=lab['local_user'],

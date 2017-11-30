@@ -197,10 +197,10 @@ def table(output_lines, combine_multiline_entry=False):
                 # each column value is a list
                 entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
                 if combine_multiline_entry:
-                    entry = [''.join(item) for item in entry_combined]
+                    entry = [' '.join(item) for item in entry_combined]
                 else:
                     # convert column value to string if list len is 1
-                    entry = [item if len(item) > 1 else ''.join(item) for item in entry_combined]
+                    entry = [item if len(item) > 1 else ' '.join(item) for item in entry_combined]
                 LOG.debug("Multi-row entry found: {}".format(entry))
 
             entries.append(entry)
@@ -486,7 +486,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
         # handle multi-line value
         if merge_lines and isinstance(target_value, list):
-            target_value = ''.join(target_value)
+            target_value = ' '.join(target_value)
 
         target_values.append(target_value)
 
@@ -868,3 +868,40 @@ def remove_columns(table_, headers):
             continue
 
     return new_table_
+
+
+def convert_value_to_dict(value):
+    """
+    In a client (e.g. cinderclient) CLI output, a dict type value can be either
+    a plain raw string (e.g. cinderclient Newton) or a "pretty formatted"
+    multiline dict (e.g. cinderclient Pike).
+
+    Respectively, value parsed from get_value_two_col_table() for these values
+    are either a plain raw string in dict format, or a list of key:value pairs.
+
+    This function convert either types to a dict. For latter type leading and
+    ending spaces removed for each key/value are removed in the process.
+
+    Example:
+        input:
+        ['checksum : c1b6664df43550fd5684fe85cdd3ddc3',
+        'container_format : bare',
+        'disk_format : qcow2',
+        'image_id : 8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
+        'image_name : ubuntu_14',
+        'min_disk : 0', 'min_ram : 0',
+        'size : 260440576', 'store : file']
+        output:
+        {'checksum': 'c1b6664df43550fd5684fe85cdd3ddc3',
+        'min_ram': '0', 'disk_format': 'qcow2',
+        'image_name': 'ubuntu_14', 'image_id': '8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
+        'container_format': 'bare', 'min_disk': '0', 'store': 'file', 'size': '260440576'}
+
+    """
+    if not isinstance(value, list):
+        if '{' in value:
+            # newton
+            return eval(value)
+        value = [value]
+    d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
+    return d

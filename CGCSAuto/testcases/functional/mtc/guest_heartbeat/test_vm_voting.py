@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils import cli
 from consts.timeout import EventLogTimeout
 from consts.cgcs import FlavorSpec, VMStatus, EventLogID
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -197,7 +197,7 @@ def test_vm_voting(action, hb_flavor):
     """
     if action == 'migrate':
         if len(host_helper.get_hypervisors()) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+            skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     vm_id = boot_vm_(hb_flavor)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -239,7 +239,7 @@ def test_vm_voting_no_hb_migrate():
 
     """
     if len(host_helper.get_hypervisors()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.tc_step("Boot a vm without guest heartbeat")
     vm_name = 'vm_no_hb_migrate'

@@ -11,16 +11,20 @@ def add_admin_role(request):
 
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
-
-    for auth_info in [primary_tenant, other_tenant]:
-        keystone_helper.add_or_remove_role(add_=True, role='admin', user=auth_info.get('user'),
-                                           project=auth_info.get('user'))
+    other_tenant = Tenant.TENANT2 if 'tenant1' in primary_tenant_name else Tenant.TENANT1
+    tenants = [primary_tenant, other_tenant]
+    res = []
+    for auth_info in tenants:
+        code = keystone_helper.add_or_remove_role(add_=True, role='admin', user=auth_info.get('user'),
+                                                  project=auth_info.get('tenant'))[0]
+        res.append(code)
 
     def remove_admin_role():
-        for auth_info_ in [primary_tenant, other_tenant]:
-            keystone_helper.add_or_remove_role(add_=False, role='admin', user=auth_info_.get('user'),
-                                               project=auth_info_.get('user'))
+        for i in range(len(res)):
+            if res[i] != -1:
+                auth_info_ = tenants[i]
+                keystone_helper.add_or_remove_role(add_=False, role='admin', user=auth_info_.get('user'),
+                                                   project=auth_info_.get('tenant'))
 
     request.addfinalizer(remove_admin_role)
 
@@ -64,12 +68,12 @@ def clear_vxlan_endpoint_stats(compute):
 
 
 @mark.parametrize(('version', 'mode'), [
-    (4, 'dynamic'),
-    (6, 'dynamic'),
+    (4, "dynamic"),
+    (6, "dynamic"),
     (4, 'static'),
     (6, 'static')
 ])
-def test_vxlan_functional(version, mode):
+def test_dynamic_vxlan_functional(version, mode):
     """
         Vxlan feature test cases
 
@@ -109,17 +113,16 @@ def test_vxlan_functional(version, mode):
     # create aggregate with 2 computes
     ret_val = nova_helper.create_aggregate(name=aggregate_name, avail_zone=aggregate_name)[1]
     assert ret_val == aggregate_name, "Aggregate is not create as expected."
-    ResourceCleanup.add('aggregates', aggregate_name)
+    ResourceCleanup.add('aggregate', aggregate_name)
 
-    code = nova_helper.add_hosts_to_aggregate(aggregate=aggregate_name, hosts=vxlan_computes)[0]
-    assert code == 0, "Hosts are not added to aggregate as expected."
+    nova_helper.add_hosts_to_aggregate(aggregate=aggregate_name, hosts=vxlan_computes)
 
     for compute in computes:
         assert 0 == clear_vxlan_endpoint_stats(compute), "clear stats failed"
 
     LOG.tc_step("Getting Internal net ids.")
     internal_net_ids = network_helper.get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id=vxlan_provider_net_id,
-                                                                          ip_version=version, mode=mode)
+                                                                                  ip_version=version, mode=mode)
     if not internal_net_ids:
         skip("No networks found for ip version {} on the vxlan provider net".format(version))
 
@@ -134,7 +137,7 @@ def test_vxlan_functional(version, mode):
                 {'net-id': internal_net_ids[0], 'vif-model': 'avp'}]
         vm_name = common.get_unique_name(name_str='vxlan')
         vm_ids.append(vm_helper.boot_vm(name=vm_name, vm_host=vm_host, nics=nics, avail_zone=aggregate_name,
-                                        auth_info=auth_info, cleanup='function')[1])
+                                        auth_info=auth_info,cleanup='function')[1])
 
     # make sure VMS are not in the same compute, I don;t need it but just in case (double checking):
     if nova_helper.get_vm_host(vm_id=vm_ids[0]) == nova_helper.get_vm_host(vm_id=vm_ids[1]):

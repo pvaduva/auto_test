@@ -1164,7 +1164,7 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.data_net_name_pattern(), ip_pattern=Networks.DATA_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1190,7 +1190,7 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
 
 
 def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.EXT_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.EXT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1210,7 +1210,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.MGMT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1289,9 +1289,9 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
 def get_net_type_from_name(net_name):
     if re.search(Networks.INTERNAL_NET_NAME, net_name):
         net_type = 'internal'
-    elif re.search(Networks.DATA_NET_NAME, net_name):
+    elif re.search(Networks.data_net_name_pattern(), net_name):
         net_type = 'data'
-    elif re.search(Networks.MGMT_NET_NAME, net_name):
+    elif re.search(Networks.mgmt_net_name_pattern(), net_name):
         net_type = 'mgmt'
     else:
         raise ValueError("Unknown net_type for net_name - {}".format(net_name))
@@ -2661,9 +2661,9 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
                 # If net_name unspecified:
                 elif re.search(Networks.INTERNAL_NET_NAME, net):
                     internal_nets.append(net)
-                elif re.search(Networks.DATA_NET_NAME, net):
+                elif re.search(Networks.data_net_name_pattern(), net):
                     tenant_nets.append(net)
-                elif re.search(Networks.MGMT_NET_NAME, net):
+                elif re.search(Networks.mgmt_net_name_pattern(), net):
                     mgmt_nets.append(net)
                 else:
                     LOG.warning("Unknown network with {} interface: {}. Ignore.".format(pci_type, net))
@@ -2697,9 +2697,9 @@ def _get_preferred_nets(nets, net_name=None, strict=False):
         # If net_name unspecified:
         elif re.search(Networks.INTERNAL_NET_NAME, net):
             internal_nets.append(net)
-        elif re.search(Networks.DATA_NET_NAME, net):
+        elif re.search(Networks.data_net_name_pattern(), net):
             tenant_nets.append(net)
-        elif re.search(Networks.MGMT_NET_NAME, net):
+        elif re.search(Networks.mgmt_net_name_pattern(), net):
             mgmt_nets.append(net)
         else:
             LOG.warning("Unknown network: {}. Ignore.".format(net))
@@ -3766,30 +3766,61 @@ def get_ip_for_eth(ssh_client, eth_name):
         return ''
 
 
+def _is_v4_only(ip_list):
+
+    rtn_val = True
+    for ip in ip_list:
+        ip_addr = ipaddress.ip_address(ip)
+        if ip_addr.version == 6:
+            rtn_val = False
+    return rtn_val
+
+
 def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
     """
     Get the networks ids that matches the vxlan underlay ip version
     Args:
         vxlan_provider_net_id: vxlan provider net id to get the networks info
         ip_version: 4 or 6 (IPV4 or IPV6)
+        mode: mode of the vxlan: dynamic or static
         con_ssh (SSHClient):
 
-    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6)
+    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6) and the mode
 
     """
-
+    rtn_networks = []
     networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
     if not networks:
-        return ""
-    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,\
+        return rtn_networks
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,
                                                       rtn_val='providernet_attributes')
     if not provider_attributes:
-        return ""
-    rtn_networks = []
+        return rtn_networks
+
     index = 0
+    new_attr_list = []
+    # In the case where some val could be 'null', need to change that to 'None'
     for attr in provider_attributes:
-        dic_attr = eval (attr)
-        if dic_attr['mode'] == mode:
+        new_attr = attr.replace('null', 'None')
+        new_attr_list.append(new_attr)
+
+    # getting the configured vxlan mode
+    dic_attr_1 = eval(new_attr_list[0])
+    vxlan_mode = dic_attr_1['mode']
+
+    if mode == 'static' and vxlan_mode == mode:
+        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data')
+        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name)
+        if ip_version == 4 and _is_v4_only(address):
+            rtn_networks.append(networks[index])
+        elif ip_version == 6 and not _is_v4_only(address):
+            LOG.info("here in v6")
+            rtn_networks = networks
+        else:
+            return rtn_networks
+    elif mode == 'dynamic' and vxlan_mode == mode:
+        for attr in provider_attributes:
+            dic_attr = eval (attr)
             ip = dic_attr['group']
             ip_addr = ipaddress.ip_address(ip)
             if ip_addr.version == ip_version:
@@ -3797,3 +3828,57 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
         index += 1
 
     return rtn_networks
+
+
+def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
+                                              pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
+                                              con_ssh=None, strict=True, **filters):
+    args = []
+    if audit_id:
+        args.append('--audit-uuid {}'.format(audit_id))
+    if seg_id:
+        args.append('--segmentation_id {}'.format(seg_id))
+    if host:
+        args.append('--host_name {}'.format(host))
+    if pnet_id:
+        args.append('--providernet_id {}'.format(pnet_id))
+    if pnet_name:
+        args.append('providernet_name {}'.format(pnet_name))
+
+    LOG.info("Getting neutron providnet-connectivity-test-list. Filters: {}".format(args))
+
+    out = cli.neutron('providernet-connectivity-test-list', args, ssh_client=con_ssh, auth_info=auth_info)
+    if not out:
+        return None
+
+    table_ = table_parser.table(out)
+    return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
+
+
+def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=300,
+                                           auth_info=Tenant.ADMIN, con_ssh=None):
+    args = []
+    if host:
+        args.append('--host {}'.format(host))
+    if seg_id:
+        args.append('--segmentation_id {}'.format(seg_id))
+    if pnet:
+        args.append('--providernet {}'.format(pnet))
+    args = ' '.join(args)
+
+    LOG.info("Scheduling providernet-connectivity-test. Args: {}".format(args))
+    table_ = table_parser.table(cli.neutron('providernet-connectivity-test-schedule', args, auth_info=auth_info,
+                                            ssh_client=con_ssh))
+    audit_id = table_parser.get_value_two_col_table(table_, field='audit_uuid')
+
+    if wait_for_test:
+        LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
+                LOG.info("providernet connectivity test scheduled successfully.")
+                return audit_id
+        else:
+            raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
+                                          "seconds after running 'neutron providernet-connectivity-test-schedule'".
+                                          format(audit_id, timeout))

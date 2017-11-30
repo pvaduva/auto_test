@@ -1,5 +1,5 @@
 from utils.tis_log import LOG
-from keywords import murano_helper
+from keywords import murano_helper, host_helper, system_helper
 from pytest import mark, fixture
 
 result_ = None
@@ -53,6 +53,15 @@ def test_murano(_disable_murano):
         else:
            LOG.info("Importing Murano package failed{}".format(pkg))
 
+    LOG.tc_step("Ensure system has standby controller")
+    standby = system_helper.get_standby_controller_name()
+    assert standby
+    # add a swact here:
+    LOG.tc_step("Swact active controller and ensure active controller is changed")
+    host_helper.swact_host()
+
+    LOG.tc_step("Check all services are up on active controller via sudo sm-dump")
+    host_helper.wait_for_sm_dump_desired_states(controller=standby, fail_ok=False)
 
     #create Environment
     name = 'Test_env2'

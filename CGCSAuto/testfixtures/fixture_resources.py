@@ -59,7 +59,6 @@ class ResourceCleanup:
         valid_types = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
                        'subnet', 'floating_ip', 'heat_stack', 'port', 'trunk', 'network', 'vol_snapshot', 'aggregate']
 
-
         if scope not in valid_scopes:
             raise ValueError("'scope' param value has to be one of the: {}".format(valid_scopes))
         if resource_type not in valid_types:

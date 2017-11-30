@@ -69,6 +69,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     subcmd = ' '.join([optional_args, mandatory_args])
 
     LOG.info("Creating flavor {}...".format(flavor_name))
+    LOG.info("nova flavor-create option: {}".format(subcmd))
     exit_code, output = cli.nova('flavor-create', subcmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                  rtn_list=True)
 
@@ -918,7 +919,7 @@ def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
     return _get_vm_volumes(table_)
 
 
-def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN, use_openstack_cmd=False):
     """
     Get vm nova show value for given field
     Args:
@@ -927,11 +928,16 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         strict (bool): whether to perform a strict search on given field name
         con_ssh (SSHClient):
         auth_info (dict):
+        use_openstack_cmd:
 
     Returns (str|list): value of specified field. Return list for multi-line value
 
     """
-    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    if use_openstack_cmd:
+        table_ = table_parser.table(cli.openstack('server show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    else:
+        table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
@@ -1055,7 +1061,7 @@ def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
     Returns (bool):
     """
-    exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
+    exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
     return exit_code == 0
 
 
@@ -1118,7 +1124,8 @@ def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
     else:      # booted from volume
         vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.ADMIN))
         image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
-        image_name = eval(image_meta_data)['image_name']
+        image_meta_data = table_parser.convert_value_to_dict(image_meta_data)
+        image_name = image_meta_data['image_name']
 
     return image_name
 

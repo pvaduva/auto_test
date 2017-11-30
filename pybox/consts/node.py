@@ -10,14 +10,14 @@ class Nodes:
         'node_type': 'controller_lvm',
         'memory': 8192,
         'cpus': 2,
-        'disks': [80000, 10000],
+        'disks': [100000, 10000],
     }
 
     CONTROLLER_AIO = {
         'node_type': 'controller_aio',
         'memory': 12288,
         'cpus': 4,
-        'disks': [24000, 40000],
+        'disks': [240000, 40000],
     }
 
     COMPUTE = {

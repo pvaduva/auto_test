@@ -142,6 +142,17 @@ def _delete(resources, scope):
 
 
     err_msgs = []
+    if heat_stacks:
+        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
+        auth_info = None
+        for stack in heat_stacks:
+            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
+            if heat_user is 'admin':
+                auth_info = Tenant.ADMIN
+            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
     if vms_with_vols:
         LOG.fixture_step(
             "({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
@@ -155,6 +166,12 @@ def _delete(resources, scope):
         if code not in [0, -1]:
             err_msgs.append(msg)
 
+    if vol_snapshots:
+        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
+        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
+        if code > 0:
+            err_msgs.append(msg)
+
     if volumes:
         LOG.fixture_step("({}) Attempt to delete following volumes: {}".format(scope, volumes))
         code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.ADMIN)
@@ -164,12 +181,6 @@ def _delete(resources, scope):
     if volume_types:
         LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
         code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.ADMIN)
-        if code > 0:
-            err_msgs.append(msg)
-
-    if vol_snapshots:
-        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
-        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
         if code > 0:
             err_msgs.append(msg)
 
@@ -237,26 +248,11 @@ def _delete(resources, scope):
             if code > 0:
                 err_msgs.append(msg)
 
-    if heat_stacks:
-        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
-        auth_info = None
-        for stack in heat_stacks:
-            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
-            if heat_user is 'admin':
-                auth_info = Tenant.ADMIN
-            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
-            if code > 0:
-                err_msgs.append(msg)
-
     if aggregates:
         LOG.fixture_step("({}) Attempt to delete following aggregates: {}".format(scope, aggregates))
         for aggregate in aggregates:
-            code, msg = nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
-            if code > 0:
-                err_msgs.append(msg)
-            code,msg=nova_helper.delete_aggregate(name=aggregate)
-            if code > 0:
-                err_msgs.append(msg)
+            nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
+            nova_helper.delete_aggregate(name=aggregate)
 
     # Attempt all deletions before raising exception.
     if err_msgs:

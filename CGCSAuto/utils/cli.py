@@ -9,8 +9,9 @@ from consts.proj_vars import ProjVar
 from consts.openstack_cli import NEUTRON_MAP
 
 
-def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-             auth_info=None, source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
+             flags='', fail_ok=False, cli_dir='', auth_info=None, source_creden_=None, err_only=False,
+             timeout=CLI_TIMEOUT, rtn_list=False):
     """
 
     Args:
@@ -39,14 +40,17 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
             if not fail_ok: raise exception
     """
     lab = ProjVar.get_var('LAB')
-    if ssh_client is None:
+    if use_telnet and con_telnet is None:
+        raise ValueError("No Telenet session provided")
+
+    if ssh_client is None and not use_telnet:
         ssh_client = ControllerClient.get_active_controller()
 
     if auth_info is None:
         auth_info = Tenant.get_primary()
 
     if 'auth_url' in lab:
-        Tenant._set_url(lab['auth_url'])
+        Tenant.set_url(lab['auth_url'])
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)
@@ -57,13 +61,16 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
     if source_creden_:
         if source_creden_ is Tenant.TENANT2:
             cmd = "source /home/wrsroot/openrc.tenant2; " + cmd
-            ssh_client.set_prompt(prompt=ssh.TENANT2_PROMPT)
+            if not use_telnet:
+                ssh_client.set_prompt(prompt=ssh.TENANT2_PROMPT)
         elif source_creden_ is Tenant.TENANT1:
             cmd = "source /home/wrsroot/openrc.tenant1; " + cmd
-            ssh_client.set_prompt(prompt=ssh.TENANT1_PROMPT)
+            if not use_telnet:
+                ssh_client.set_prompt(prompt=ssh.TENANT1_PROMPT)
         else:
             cmd = "source /etc/nova/openrc; " + cmd
-            ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
+            if not use_telnet:
+                ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
     else:
         if auth_info:
             auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {}"
@@ -80,11 +87,15 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, flags='', fail_o
 
             flags = (auth_args + ' ' + flags).strip()
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
-    exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
-                                                searchwindowsize=100)
+    if  use_telnet:
+        exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, timeout=timeout)
+    else:
+        exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
+                                                    searchwindowsize=100)
     if source_creden_:
-        ssh_client.set_prompt()
-        ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
+        if not use_telnet:
+            ssh_client.set_prompt()
+            ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
 
     if fail_ok:
         if exit_code == 0:
@@ -145,11 +156,13 @@ def _source_user(ssh_client, fail_ok, cmd, prompt):
 
 
 def nova(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-         auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+         auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, use_telnet=False,
+         con_telnet=None):
 
     return exec_cli('nova', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, use_telnet=use_telnet,
+                    con_telnet=con_telnet)
 
 
 def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
@@ -162,12 +175,14 @@ def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_creden_=source_cred_)
 
 
-def system(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-           auth_info=Tenant.ADMIN, source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
+           flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_creden_=None, err_only=False,
+           timeout=CLI_TIMEOUT, rtn_list=False):
 
     return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_creden_=source_creden_,
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',

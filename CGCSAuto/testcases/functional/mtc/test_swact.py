@@ -1,14 +1,10 @@
-###
-# TC451 TiS_Mapping_AutomatedTests_v2.xlsx
-###
-
 from pytest import mark, skip
 
 from utils.tis_log import LOG
-from consts.reasons import SkipReason
-from keywords import host_helper, system_helper, vm_helper, network_helper
-
-from testfixtures.resource_mgmt import ResourceCleanup
+from utils.kpi import kpi_log_parser
+from consts.reasons import SkipSysType
+from consts.kpi_vars import Swact, SwactUncontrolled, KPI_DATE_FORMAT
+from keywords import host_helper, system_helper, vm_helper, network_helper, common
 
 
 @mark.sanity
@@ -28,7 +24,7 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         skip("Simplex system detected")
 
     if not wait_for_con_drbd_sync_complete:
-        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     LOG.tc_step('retrieve active and available controllers')
     pre_active_controller = system_helper.get_active_controller_name()
@@ -74,3 +70,34 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         format(post_msg_sys, pre_msg_sys)
     assert post_res_neutron, "\nPost evac neutron agents stats: {}\nPre-evac neutron agents stats: {}". \
         format(pre_msg_neutron, post_msg_neutron)
+
+
+@mark.kpi
+def test_swact_controlled_kpi(collect_kpi):
+    if not collect_kpi:
+        skip("KPI only test. Skip due to kpi collection is not enabled.")
+    start_host, end_host = system_helper.get_active_standby_controllers()
+    if not end_host:
+        skip("No standby host to swact to")
+
+    init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
+    host_helper.swact_host(hostname=start_host)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Swact.NAME, init_time=init_time,
+                              log_path=Swact.LOG_PATH, end_pattern=Swact.END, host=end_host, start_host=start_host,
+                              start_pattern=Swact.START, start_path=Swact.START_PATH, uptime=1)
+
+
+@mark.kpi
+def test_swact_uncontrolled_kpi(collect_kpi):
+    if not collect_kpi:
+        skip("KPI only test. Skip due to kpi collection is not enabled.")
+    start_host, end_host = system_helper.get_active_standby_controllers()
+    if not end_host:
+        skip("No standby host to swact to")
+
+    init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
+    host_helper.reboot_hosts(hostnames=start_host, wait_for_reboot_finish=True)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=SwactUncontrolled.NAME, init_time=init_time,
+                              log_path=SwactUncontrolled.LOG_PATH, end_pattern=SwactUncontrolled.END, host=end_host,
+                              start_host=start_host, start_pattern=SwactUncontrolled.START,
+                              start_path=SwactUncontrolled.START_PATH, uptime=5)

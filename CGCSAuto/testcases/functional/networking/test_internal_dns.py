@@ -12,6 +12,8 @@ from consts.auth import Tenant
 from testfixtures.fixture_resources import ResourceCleanup
 
 DEFAULT_DNS_SERVERS = ['147.11.57.133', '128.224.144.130', '147.11.57.128']
+UNRESTORED_DNS_SERVERS = []
+NET_NAME = None
 
 
 def apply_service_parameters(service):
@@ -159,6 +161,9 @@ def get_subnets(net_name):
     subnet_list = table_parser.get_value_two_col_table(net_show_table_, "subnets")
     LOG.info("Subnets are: {}".format(subnet_list))
 
+    if isinstance(subnet_list, str):
+        subnet_list = [subnet_list]
+
     return subnet_list
 
 
@@ -180,7 +185,7 @@ def get_dns_servers(net_name):
     return dns_servers
 
 
-def set_dns_servers(net_name, subnet_list, dns_servers=[]):
+def set_dns_servers(net_name, subnet_list, dns_servers=None):
     """
     Helper function to set dns servers on a list of subnets.
 
@@ -190,8 +195,6 @@ def set_dns_servers(net_name, subnet_list, dns_servers=[]):
     - dns_servers: a list of DNS Servers
 
     """
-
-
     LOG.info("DNS servers are set to: {}".format(dns_servers))
     if not dns_servers:
         LOG.info("Clearing DNS entries")
@@ -212,15 +215,13 @@ def invoketeardown(request):
         """
         If DNS servers are not set, set them.  Deprovision internal DNS.
         """
-        global dns_servers
-        global net_name
+        global UNRESTORED_DNS_SERVERS
+        global NET_NAME
 
-        current_dns_servers = get_dns_servers(net_name)
-        LOG.info("DNS servers are set to: {}".format(dns_servers))
-        if not dns_servers:
-            LOG.info("Restoring DNS entries to: {}".format(dns_servers))
-            subnet_list = get_subnets(net_name)
-            set_dns_servers(net_name, subnet_list, dns_servers)
+        if UNRESTORED_DNS_SERVERS:
+            LOG.info("Restoring DNS entries to: {}".format(UNRESTORED_DNS_SERVERS))
+            subnet_list = get_subnets(NET_NAME)
+            set_dns_servers(NET_NAME, subnet_list, UNRESTORED_DNS_SERVERS)
         vm_helper.delete_vms()
 
     request.addfinalizer(teardown)
@@ -268,18 +269,10 @@ def test_ping_between_vms_using_hostnames():
 
     """
 
-    global dns_servers
-    global net_name
-
-    dns_servers = []
-    net_name = ""
-
     vm_helper.delete_vms()
 
-    if ProjVar.get_var('PRIMARY_TENANT') == 'tenant1':
-        net_name = "tenant1-mgmt-net"
-    else:
-        net_name = "tenant2-mgmt-net"
+    net_id = network_helper.get_mgmt_net_id()
+    net_name = network_helper.get_net_name_from_id(net_id=net_id)
 
     LOG.tc_step("Store existing DNS entries so they can be restored later")
     dns_servers = get_dns_servers(net_name)
@@ -289,6 +282,11 @@ def test_ping_between_vms_using_hostnames():
         dns_servers = DEFAULT_DNS_SERVERS
         subnet_list = get_subnets(net_name)
         set_dns_servers(net_name, subnet_list, dns_servers)
+
+    global NET_NAME
+    global UNRESTORED_DNS_SERVERS
+    NET_NAME = net_name
+    UNRESTORED_DNS_SERVERS = dns_servers
 
     LOG.tc_step("Enabling internal dns resolution")
     provision_internal_dns()
@@ -315,6 +313,7 @@ def test_ping_between_vms_using_hostnames():
 
     LOG.tc_step("Restore DNS entries for each subnet in the network")
     set_dns_servers(net_name, subnet_list, dns_servers)
+    UNRESTORED_DNS_SERVERS = []
 
     LOG.tc_step("Cleanup VMs")
     vm_helper.delete_vms()

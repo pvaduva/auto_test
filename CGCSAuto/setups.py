@@ -9,8 +9,8 @@ from utils.tis_log import LOG
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
 from utils.local_host import *
-from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
-from consts.cgcs import Prompt
+from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
+from consts.cgcs import Prompt, REGION_MAP
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
@@ -210,7 +210,7 @@ def get_natbox_dict(natboxname):
 
 
 def get_tenant_dict(tenantname):
-    tenantname = tenantname.lower().strip().replace('_', '').replace('-', '')
+    # tenantname = tenantname.lower().strip().replace('_', '').replace('-', '')
     tenants = [getattr(Tenant, item) for item in dir(Tenant) if not item.startswith('_') and item.isupper()]
 
     for tenant in tenants:
@@ -287,7 +287,6 @@ def copy_files_to_con1():
         return
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
-
     file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:
@@ -526,7 +525,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
         lab_to_install['external_ip'] = local_external_ip
 
-        lab_to_install['external_port'] = 2222
+        lab_to_install['external_port'] = 22266
+
         username = getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:
@@ -665,3 +665,16 @@ def add_ping_failure(test_name):
     file_path = '{}{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), 'ping_failures.txt')
     with open(file_path, mode='a') as f:
         f.write(test_name + '\n')
+
+
+def set_region(region=None):
+    local_region = CliAuth.get_var('OS_REGION_NAME')
+    if not region:
+        region = local_region
+    Tenant.set_region(region=region)
+    ProjVar.set_var(REGION=region)
+    for tenant in ('tenant1', 'tenant2'):
+        region_tenant = '{}{}'.format(tenant, REGION_MAP[region])
+        Tenant.update_tenant_dict(tenant, username=region_tenant, tenant=region_tenant)
+        if region != local_region:
+            keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)

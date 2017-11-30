@@ -1,6 +1,5 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.cgcs import BackupRestore
 
 
 class ProjVar:
@@ -19,6 +18,8 @@ class ProjVar:
                   'PING_FAILURE': False,
                   'COLLECT_KPI': False,
                   'LAB': None,
+                  'ALWAYS_COLLECT': False,
+                  'REGION': 'RegionOne',
                   }
 
     @classmethod
@@ -43,7 +44,7 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'KPI_PATH': logdir + '/kpi.log'
+            'KPI_PATH': logdir + '/kpi.ini'
         })
 
     @classmethod
@@ -264,6 +265,12 @@ class PatchingVars:
     @classmethod
     def set_patching_var(cls, **kwargs):
         cls.__var_dict.update(**kwargs)
+
+
+class BackupRestore:
+    USB_MOUNT_POINT = '/media/wrsroot'
+    USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
+    LOCAL_BACKUP_PATH = '/sandbox/backups'
 
 
 class RestoreVars:

@@ -2,7 +2,7 @@ from pytest import mark, skip
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
-from consts.reasons import SkipReason
+from consts.reasons import SkipStorageSpace
 
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -23,7 +23,7 @@ def id_gen(val):
 def test_nova_actions(guest_os, cpu_pol, actions):
     if guest_os == 'opensuse_12':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
-            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+            skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
 
     img_id = glance_helper.get_guest_image(guest_os=guest_os)
 
