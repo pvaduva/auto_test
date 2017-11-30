@@ -333,7 +333,7 @@ def get_vm_devices_via_virsh(vm_id, con_ssh=None):
         disks = {}
         root_line = disk_lines.pop(0)
         root_dev, root_source = root_line.split()
-        if re.search('openstack:volume|cinder-volumes', root_source):
+        if re.search('openstack:volume|cinder-volumes|/dev/sd', root_source):
             disk_type = 'root_vol'
         else:
             disk_type = 'root_img'
@@ -345,7 +345,7 @@ def get_vm_devices_via_virsh(vm_id, con_ssh=None):
             dev, source = line.split()
             if re.search('disk.swap', source):
                 disk_type = 'swap'
-            elif re.search('openstack:volume', source):
+            elif re.search('openstack:volume|cinder-volumes|/dev/sd', source):
                 disk_type = 'attached_vol'
             elif re.search('disk.eph|disk.local', source):
                 disk_type = 'eph'
