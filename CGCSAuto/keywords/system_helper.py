@@ -950,7 +950,8 @@ def get_system_name(fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=Non
     return system_name
 
 
-def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, period=None):
+def set_retention_period(period, name='metering_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
+                         auth_info=Tenant.ADMIN):
     """
     Sets the PM retention period
     Args:
@@ -973,18 +974,31 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
     if not isinstance(period, int):
         raise ValueError("Retention period has to be an integer. Value provided: {}".format(period))
     if check_first:
-        retention = get_retention_period()
+        retention = get_retention_period(name=name)
         if period == retention:
             msg = "The retention period is already set to {}".format(period)
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.system('pm-modify', 'retention_secs={}'.format(period), auth_info=auth_info,
-                              ssh_client=con_ssh, timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok,
-                              rtn_list=True)
+    section = 'database'
+    if name in ('metering_time_to_live', 'event_time_to_live'):
+        service = 'ceilometer'
+    elif name == 'alarm_history_time_to_live':
+        service = 'aodh'
+    else:
+        raise ValueError("Unknown name: {}".format(name))
+
+    args = '{} {} {}={}'.format(service, section, name, period)
+    code, output = cli.system('service-parameter-modify', args, auth_info=auth_info, ssh_client=con_ssh,
+                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_list=True)
 
     if code == 1:
         return 1, output
+
+    code, output = cli.system('service-parameter-apply', service, auth_info=auth_info, ssh_client=con_ssh,
+                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_list=True)
+    if code == 1:
+        return 2, output
 
     new_retention = get_retention_period()
 
@@ -992,24 +1006,23 @@ def set_retention_period(fail_ok=True, check_first=True, con_ssh=None, auth_info
         err_msg = "Current retention period is still: {}".format(new_retention)
         if fail_ok:
             LOG.warning(err_msg)
-            return 2, err_msg
+            return 3, err_msg
         raise exceptions.CeilometerError(err_msg)
 
-    return 0, "Retention period is successfully set to: {}".format(new_retention)
+    return 0, "{} {} is successfully set to: {}".format(service, name, new_retention)
 
 
-def get_retention_period(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_retention_period(name='metering_time_to_live', con_ssh=None):
     """
     Returns the current retention period
     Args:
+        name (str): choose from: metering_time_to_live, event_time_to_live, alarm_history_time_to_live
         con_ssh (SSHClient):
-        auth_info (dict)
 
     Returns (int): Current PM retention period
 
     """
-    table_ = table_parser.table(cli.system('pm-show', ssh_client=con_ssh, auth_info=auth_info))
-    ret_per = table_parser.get_value_two_col_table(table_, 'retention_secs')
+    ret_per = get_service_parameter_values(name=name, rtn_value='value', con_ssh=con_ssh)[0]
     return int(ret_per)
 
 
@@ -1777,7 +1790,6 @@ def get_host_ethernet_port_table(host, con_ssh=None, use_telnet=False, con_telne
                                            use_telnet=use_telnet, con_telnet=con_telnet,
                                            auth_info=auth_info))
     return table_
-
 
 
 def get_service_parameter_values(rtn_value='value', service=None, section=None, name=None, con_ssh=None):

@@ -113,7 +113,7 @@ class TestRetentionPeriod:
     PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
     MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour, minimum value allowed
     MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year, maximum value allowed
-    SEARCH_KEY_FOR_RENTION_PERIOD = r'_time_to_live'
+    SEARCH_KEY_FOR_RENTION_PERIOD = r'event_time_to_live'
 
     @fixture(scope='class', autouse=True)
     def backup_restore_rention_period(self, request):
@@ -124,15 +124,14 @@ class TestRetentionPeriod:
             request: request passed in to the fixture.
 
         """
-
+        name = 'event_time_to_live'
         LOG.info('Backup Retention Period')
-        table_ = table_parser.table(cli.system('pm-show'))
-        self.retention_period = table_parser.get_value_two_col_table(table_, 'retention_secs')
+        self.retention_period = system_helper.get_retention_period(name=name)
         LOG.info('Current Retention Period is {}'.format(self.retention_period))
 
         def restore_rention_period():
             LOG.info('Restore Retention Period to its orignal value {}'.format(self.retention_period))
-            system_helper.set_retention_period(fail_ok=True, period=int(self.retention_period))
+            system_helper.set_retention_period(fail_ok=True, period=int(self.retention_period), name=name)
 
         request.addfinalizer(restore_rention_period)
 
@@ -144,9 +143,9 @@ class TestRetentionPeriod:
             24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
-    def test_modify_pm_retention_period(self, new_retention_period):
+    def test_modify_ceilometer_event_retention_period(self, new_retention_period):
         """
-        Test change the 'retention period' to new values.
+        Test change the 'retention period for ceilometer event' to new values.
 
         Args:
             new_retention_period(int):
@@ -167,7 +166,7 @@ class TestRetentionPeriod:
             - We can determine the range of accepted values on the running system in stead of parameterizing
                 on hardcoded values
         """
-
+        name = 'event_time_to_live'
         LOG.tc_step('Check if the modification attempt will fail based on the input value')
         if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
             expect_fail = True
@@ -175,7 +174,7 @@ class TestRetentionPeriod:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.ADMIN,
-                                                       period=new_retention_period)
+                                                       period=new_retention_period, name=name)
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
             assert 1 == code, msg
