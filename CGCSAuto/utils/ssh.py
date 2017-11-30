@@ -65,7 +65,7 @@ class SSHClient:
 
     def __init__(self, host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
                  force_password=True, initial_prompt=CONTROLLER_PROMPT, timeout=60, session=None,
-                 searchwindownsize=None):
+                 searchwindownsize=None, port=None):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -89,6 +89,7 @@ class SSHClient:
         self.timeout = timeout
         self.searchwindowsize = searchwindownsize
         # self.logpath = None
+        self.port = port
 
     def _get_logpath(self):
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
@@ -151,7 +152,7 @@ class SSHClient:
 
                 # Login
                 self._session.login(self.host, self.user, self.password, login_timeout=timeout,
-                                    auto_prompt_reset=False, quiet=False)
+                                    port=self.port, auto_prompt_reset=False, quiet=False)
 
                 # Set prompt for matching
                 self.set_prompt(prompt)

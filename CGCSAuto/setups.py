@@ -36,6 +36,25 @@ def setup_tis_ssh(lab):
     return con_ssh
 
 
+def setup_vbox_tis_ssh(lab):
+    
+    if 'external_ip'in lab.keys():
+        
+        con_ssh = ControllerClient.get_active_controller(fail_ok=True)
+        if con_ssh:
+            con_ssh.disconnect()
+            con_ssh = SSHClient(lab['external_ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                            CONTROLLER_PROMPT, port=lab['external_port'])
+        con_ssh.connect(retry=True, retry_timeout=30)
+        ControllerClient.set_active_controller(con_ssh)
+    # if 'auth_url' in lab:
+    #     Tenant._set_url(lab['auth_url'])
+    else:
+        con_ssh = setup_tis_ssh(lab)
+
+    return con_ssh
+
+
 def set_env_vars(con_ssh):
     # TODO: delete this after source to bash issue is fixed on centos
     con_ssh.exec_cmd("bash")
@@ -392,6 +411,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
+    print("Setting Install vars : {} ".format(locals()))
 
     errors = []
     lab_to_install = lab
@@ -406,7 +426,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     heat_templates = None
     license_path = None
     out_put_dir = None
-    vbox = True if 'vbox' in lab.lower() else False
+    vbox = True if lab and 'vbox' in lab.lower() else False
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
@@ -417,6 +437,9 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         # Parse lab info
         lab_info = installconf['LAB']
         lab_name = lab_info['LAB_NAME']
+        vbox = True if 'vbox' in lab_name.lower() else False
+        if vbox:
+            LOG.info("The test lab is a VBOX TiS setup")
         if lab_name:
             lab_to_install = get_lab_dict(lab_name)
 
@@ -425,9 +448,15 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             if con0_ip:
                 lab_to_install['controller-0 ip'] = con0_ip
 
-            con1_ip = lab_info['CONTROLLER0_IP']
+            con1_ip = lab_info['CONTROLLER1_IP']
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
+
+            float_ip = lab_info['FLOATING_IP']
+            if float_ip:
+                lab_to_install['floating ip'] = float_ip
+
+
         else:
             raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf "
                              "file")
@@ -512,20 +541,35 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
 
     if vbox:
-        # if it is a vobx Tis, it is assumed that the test scripts are bing executed from a local linux VM within the
-        # vbox. The local linux will serve as NAT box for pinging vms and TiS connect with external build servers.
-        LOG.info("Enabling the local linux VM for NATBox vm ping and portforwding for Controller-0 external connection")
         # get the ip address of the local linux vm
         cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
         local_external_ip = os.popen(cmd).read().strip()
-        if not local_external_ip or "128.224." not in local_external_ip:
-            raise exceptions.UpgradeError("The local linux VM does not have valid ip for external access: {} "
-                                          .format(local_external_ip if local_external_ip else ''))
+        
+        vbox_gw = installconf['VBOX_GATEWAY']
+        external_ip = vbox_gw['EXTERNAL_IP']
+        if external_ip and external_ip != local_external_ip:
+            LOG.info("TiS VM external gwy IP is {}".format(external_ip))
+            lab_to_install['external_ip'] = external_ip
+            external_port = vbox_gw['EXTERNAL_PORT']
+            if external_port:
+                LOG.info("TiS VM external gwy port is {}".format(external_port))
+                lab_to_install['external_port'] = external_port
+            else:
+                raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
+                                          .format(external_ip ))
 
-        LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
-        lab_to_install['external_ip'] = local_external_ip
-
-        lab_to_install['external_port'] = 22266
+        # if not external_ip:
+        #    # if it is a vobx Tis, it is assumed that the test scripts are bing executed from a local linux VM within the
+        #    # vbox. The local linux will serve as NAT box for pinging vms and TiS connect with external build servers.
+        #    LOG.info("Enabling the local linux VM for NATBox vm ping and portforwding for Controller-0 external connection")
+        #    # get the ip address of the local linux vm
+        #    cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
+        #    local_external_ip = os.popen(cmd).read().strip()
+        #    if not local_external_ip or "128.224." not in local_external_ip:
+        #        raise exceptions.UpgradeError("The local linux VM does not have valid ip for external access: {} "
+        #                                  .format(local_external_ip if local_external_ip else ''))
+        #
+        #    LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
 
         username = getpass.getuser()
         password = ''
