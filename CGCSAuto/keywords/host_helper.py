@@ -2287,12 +2287,12 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_
         raise exceptions.HostTimeout(msg)
 
 
-def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', con_ssh=None):
+def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', numa_node=None, con_ssh=None):
     """
 
     Args:
         hosts:
-        rtn_val (str): valid values: vcpus_used, vcpus
+        rtn_val (str): valid values: vcpus_used, vcpus, vcpu_avail
         con_ssh:
 
     Returns (dict): host(str),cpu_val(float with 4 digits after decimal point) pairs as dictionary
@@ -2306,7 +2306,24 @@ def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', con_ssh=None):
     if rtn_val == 'used_now':
         rtn_val = 'vcpus_used'
 
-    hosts_cpus = get_hypervisor_info(hosts=hosts, rtn_val=rtn_val, con_ssh=con_ssh)
+    if 'avail' not in rtn_val:
+        hosts_cpus = get_hypervisor_info(hosts=hosts, rtn_val=rtn_val, con_ssh=con_ssh)
+    elif numa_node is None:
+        cpus_info = get_hypervisor_info(hosts=hosts, rtn_val=('vcpus', 'vcpus_used'), con_ssh=con_ssh)
+        hosts_cpus = {}
+        for host in hosts:
+            total_cpu, used_cpu = cpus_info[host]
+            hosts_cpus[host] = float(total_cpu) - float(used_cpu)
+    else:
+        numa_node = str(numa_node)
+        cpus_node_info = get_hypervisor_info(hosts=hosts, rtn_val=('vcpus_node', 'vcpus_used_node'), con_ssh=con_ssh)
+        hosts_cpus = {}
+        for host in hosts:
+            total_cpu_dict, used_cpu_dict = cpus_node_info[host]
+            total_cpu = float(total_cpu_dict[numa_node])
+            used_cpu = float(used_cpu_dict[numa_node]['shared']) + float(used_cpu_dict[numa_node]['dedicated'])
+            hosts_cpus[host] = total_cpu - used_cpu
+
     return hosts_cpus
 
 
@@ -2315,7 +2332,7 @@ def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMI
     Get info from nova hypervisor-show for specified field
     Args:
         hosts (str|list): hostname(s)
-        rtn_val (str): a field in hypervisor-show
+        rtn_val (str|list|tuple): a field in hypervisor-show
         con_ssh:
         auth_info:
 
@@ -2324,18 +2341,29 @@ def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMI
     if isinstance(hosts, str):
         hosts = [hosts]
 
+    convert_to_str = False
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+        convert_to_str = True
+
     hosts_info = get_hypervisor_list_info(hosts=hosts, con_ssh=con_ssh)
     hosts_vals = {}
     for host in hosts:
         host_uuid = hosts_info[host]['id']
         table_ = table_parser.table(cli.nova('hypervisor-show', host_uuid, ssh_client=con_ssh, auth_info=auth_info),
                                     combine_multiline_entry=True)
-        val = table_parser.get_value_two_col_table(table_, field=rtn_val, strict=True, merge_lines=True)
-        try:
-            val = eval(val)
-        except NameError:
-            pass
-        hosts_vals[host] = val
+
+        vals = []
+        for field_ in rtn_val:
+            val = table_parser.get_value_two_col_table(table_, field=field_, strict=True, merge_lines=True)
+            try:
+                val = eval(val)
+            except NameError:
+                pass
+            vals.append(val)
+        if convert_to_str:
+            vals = vals[0]
+        hosts_vals[host] = vals
 
     LOG.info("Hosts_info: {}".format(hosts_vals))
     return hosts_vals

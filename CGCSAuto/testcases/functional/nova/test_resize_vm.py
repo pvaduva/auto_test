@@ -1,4 +1,5 @@
 import time
+import math
 
 from pytest import fixture, mark, skip
 from utils import table_parser, cli
@@ -290,7 +291,7 @@ class TestResizeSameHost:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         assert nova_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor'
-        assert 1 or 2 == code, "Resize VM CLI is not rejected"
+        assert code > 0, "Resize VM CLI is not rejected"
 
         LOG.tc_step("Check files after resize attempt")
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, root=root, ephemeral=ephemeral,
@@ -321,8 +322,9 @@ def get_cpu_count(hosts_with_backing):
     compute_space_dict = {}
 
     vm_host = hosts_with_backing[0]
-    vm_cpu_dict = host_helper.get_host_cpu_cores_for_function(vm_host, function='VMs', thread=None)
-    vm_host_cpu_count = len(vm_cpu_dict[0])
+    numa0_avail_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_with_backing, rtn_val='vcpus_avail',
+                                                          numa_node=0)[vm_host]
+    numa0_avail_cpus = math.floor(numa0_avail_cpus)
     for host in hosts_with_backing:
         free_space = get_compute_disk_space(host)
         compute_space_dict[host] = free_space
@@ -330,9 +332,9 @@ def get_cpu_count(hosts_with_backing):
 
     # increase quota
     LOG.fixture_step("Increase quota of allotted cores")
-    vm_helper.ensure_vms_quotas(cores_num=(vm_host_cpu_count + 1))
+    vm_helper.ensure_vms_quotas(cores_num=(numa0_avail_cpus + 30))
 
-    return vm_host, vm_host_cpu_count, compute_space_dict
+    return vm_host, numa0_avail_cpus, compute_space_dict
 
 
 class TestResizeDiffHost:
