@@ -664,3 +664,214 @@ def set_unset_image_vif_multiq(image_name, set=True, fail_ok=False, con_ssh=None
     res, out = cli.openstack(cmd,rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
 
     return res, out
+
+
+def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        image (str): image name or id
+        properties (None|str|list|tuple): properties to unset
+        tags (None|str|list|tuple): tags to unset
+        con_ssh:
+        auth_info:
+
+    Returns:
+    """
+    args = []
+    post_checks = {}
+    if properties:
+        if isinstance(properties, str):
+            properties = [properties]
+        for item in properties:
+            args.append('--property {}'.format(item))
+        post_checks['properties'] = properties
+
+    if tags:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            args.append('--tag {}'.format(tag))
+        post_checks['tags'] = tags
+
+    if not args:
+        raise ValueError("Nothing to unset. Please specify property or tag to unset")
+
+    args = ' '.join(args) + ' {}'.format(image)
+    code, out = cli.openstack('image unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    check_image_settings(image=image, check_dict=post_checks, unset=True, con_ssh=con_ssh, auth_info=auth_info)
+    msg = "Image {} is successfully modified".format(image)
+    return 0, msg
+
+
+def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None, container_format=None,
+              disk_format=None, architecture=None, instance_id=None, kernel_id=None, os_distro=None,
+              os_version=None, ramdisk_id=None, activate=None, project=None, project_domain=None, tags=None,
+              protected=None, visibility=None, membership=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Set image properties/metadata
+    Args:
+        image (str):
+        new_name (str|None):
+        properties (dict|None):
+        min_disk (int|str|None):
+        min_ram (int|str|None):
+        container_format (str|None):
+        disk_format (str|None):
+        architecture (str|None):
+        instance_id (str|None):
+        kernel_id (str|None):
+        os_distro (str|None):
+        os_version (str|None):
+        ramdisk_id (str|None):
+        activate (bool|None):
+        project (str|None):
+        project_domain (str|None):
+        tags (list|tuple|None):
+        protected (bool|None):
+        visibility (str): valid values: 'public', 'private', 'community', 'shared'
+        membership (str): valid values: 'accept', 'reject', 'pending'
+        con_ssh:
+        auth_info:
+
+    Returns (tupe):
+        (0, Image <image> is successfully modified)
+        (1, <stderr>)   - openstack image set is rejected
+
+    """
+
+    post_checks = {}
+    args = []
+    if protected is not None:
+        if protected:
+            args.append('--protected')
+            post_check_val = True
+        else:
+            args.append('--unprocteced')
+            post_check_val = False
+        post_checks['protected'] = post_check_val
+
+    if visibility is not None:
+        valid_vals = ('public', 'private', 'community', 'shared')
+        if visibility not in valid_vals:
+            raise ValueError("Invalid visibility specified. Valid options: {}".format(valid_vals))
+        args.append('--{}'.format(visibility))
+        post_checks['visibility'] = visibility
+
+    if activate is not None:
+        if activate:
+            args.append('--activate')
+            post_check_val = 'active'
+        else:
+            args.append('--deactivate')
+            post_check_val = 'deactivated'
+        post_checks['status'] = post_check_val
+
+    if membership is not None:
+        valid_vals = ('accept', 'reject', 'pending')
+        if membership not in valid_vals:
+            raise ValueError("Invalid membership specified. Valid options: {}".format(valid_vals))
+        args.append('--{}'.format(membership))
+        # Unsure how to do post check
+
+    if properties:
+        for key, val in properties.items():
+            args.append('--property {}="{}"'.format(key, val))
+            post_checks['properties'] = properties
+
+    if tags:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            args.append('--tag {}'.format(tag))
+        post_checks['tags'] = list(tags)
+
+    other_args = {
+        '--name': (new_name, 'name'),
+        '--min-disk': (min_disk, 'min_disk'),
+        '--min-ram': (min_ram, 'min_ram'),
+        '--container-format': (container_format, 'container_format'),
+        '--disk-format': (disk_format, 'disk_format'),
+        '--project': (project, 'owner'),    # assume project id will be given
+        '--project-domain': (project_domain, None),      # Post check unhandled atm
+        '--architecture': (architecture, None),
+        '--instance-id': (instance_id, None),
+        '--kernel-id': (kernel_id, None),
+        '--os-distro': (os_distro, None),
+        '--os-version': (os_version, None),
+        '--ramdisk-id': (ramdisk_id, None),
+    }
+
+    for key, val in other_args.items():
+        if val[0] is not None:
+            args[key] = val[0]
+            if val[1]:
+                post_checks[val[1]] = val[0]
+
+    args = ' '.join(args)
+    if not args:
+        raise ValueError("Nothing to set")
+
+    args += ' {}'.format(image)
+    code, out = cli.openstack('image set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    check_image_settings(image=image, check_dict=post_checks, con_ssh=con_ssh, auth_info=auth_info)
+    msg = "Image {} is successfully modified".format(image)
+    return 0, msg
+
+
+def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Check image settings via openstack image show.
+    Args:
+        image (str):
+        check_dict (dict): key should be the field;
+            if unset, value should be a list or tuple, key should be properties and/or tags
+            if set, value should be dict if key is properties or tags, otherwise value should normally be a str
+        unset (bool): whether to check if given metadata are set or unset
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (None):
+
+    """
+    LOG.info("Checking image setting is as specified: {}".format(check_dict))
+
+    post_tab = table_parser.table(cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info),
+                                  combine_multiline_entry=True)
+
+    for field, expt_val in check_dict.items():
+        actual_val = table_parser.get_value_two_col_table(post_tab, field=field, merge_lines=True)
+        if field == 'properties':
+            actual_vals = actual_val.split(', ')
+            actual_vals = ((val.split('=')) for val in actual_vals)
+            actual_dict = {k.strip(): v.strip() for k, v in actual_vals}
+            if unset:
+                for key in expt_val:
+                    assert -1 == actual_dict.get(key, -1)
+            else:
+                for key, val in expt_val.items():
+                    actual = actual_dict[key]
+                    try:
+                        actual = eval(actual)
+                    except NameError:
+                        pass
+                    assert str(val) == str(actual), "Property {} is not as set. Expected: {}, actual: {}".\
+                        format(key, val, actual_dict[key])
+        elif field == 'tags':
+            actual_vals = [val.strip() for val in actual_val.split(',')]
+            if unset:
+                assert not (set(expt_val) & set(actual_val)), "Expected to be unset: {}, actual: {}".\
+                    format(expt_val, actual_vals)
+            else:
+                assert set(expt_val) <= set(actual_vals), "Expected tags: {}, actual: {}".format(expt_val, actual_vals)
+        else:
+            if unset:
+                LOG.warning("Unset flag ignored. Only property and tag is valid for unset")
+            assert str(expt_val) == str(actual_val), "{} is not as set. Expected: {}, actual: {}".\
+                format(field, expt_val, actual_val)

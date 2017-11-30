@@ -2358,7 +2358,7 @@ def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMI
             val = table_parser.get_value_two_col_table(table_, field=field_, strict=True, merge_lines=True)
             try:
                 val = eval(val)
-            except NameError:
+            except:
                 pass
             vals.append(val)
         if convert_to_str:

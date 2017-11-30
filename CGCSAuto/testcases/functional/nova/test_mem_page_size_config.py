@@ -201,11 +201,12 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
     flavor_id, hosts, storage_backing = flavor_2g
 
     if image_mem_page_size is None:
-        nova_helper.delete_image_metadata(image_mempage, ImageMetadata.MEM_PAGE_SIZE)
+        glance_helper.unset_image(image_mempage, properties=ImageMetadata.MEM_PAGE_SIZE)
         expt_code = 0
 
     else:
-        nova_helper.set_image_metadata(image_mempage, **{ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
+        # nova_helper.set_image_metadata(image_mempage, **{ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
+        glance_helper.set_image(image=image_mempage, properties={ImageMetadata.MEM_PAGE_SIZE: image_mem_page_size})
         if flavor_mem_page_size is None:
             expt_code = 4
 
