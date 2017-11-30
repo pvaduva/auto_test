@@ -1164,7 +1164,7 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.data_net_name_pattern(), ip_pattern=Networks.DATA_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1190,7 +1190,7 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
 
 
 def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.EXT_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.EXT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1210,7 +1210,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.MGMT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1289,9 +1289,9 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
 def get_net_type_from_name(net_name):
     if re.search(Networks.INTERNAL_NET_NAME, net_name):
         net_type = 'internal'
-    elif re.search(Networks.DATA_NET_NAME, net_name):
+    elif re.search(Networks.data_net_name_pattern(), net_name):
         net_type = 'data'
-    elif re.search(Networks.MGMT_NET_NAME, net_name):
+    elif re.search(Networks.mgmt_net_name_pattern(), net_name):
         net_type = 'mgmt'
     else:
         raise ValueError("Unknown net_type for net_name - {}".format(net_name))
@@ -2661,9 +2661,9 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
                 # If net_name unspecified:
                 elif re.search(Networks.INTERNAL_NET_NAME, net):
                     internal_nets.append(net)
-                elif re.search(Networks.DATA_NET_NAME, net):
+                elif re.search(Networks.data_net_name_pattern(), net):
                     tenant_nets.append(net)
-                elif re.search(Networks.MGMT_NET_NAME, net):
+                elif re.search(Networks.mgmt_net_name_pattern(), net):
                     mgmt_nets.append(net)
                 else:
                     LOG.warning("Unknown network with {} interface: {}. Ignore.".format(pci_type, net))
@@ -2697,9 +2697,9 @@ def _get_preferred_nets(nets, net_name=None, strict=False):
         # If net_name unspecified:
         elif re.search(Networks.INTERNAL_NET_NAME, net):
             internal_nets.append(net)
-        elif re.search(Networks.DATA_NET_NAME, net):
+        elif re.search(Networks.data_net_name_pattern(), net):
             tenant_nets.append(net)
-        elif re.search(Networks.MGMT_NET_NAME, net):
+        elif re.search(Networks.mgmt_net_name_pattern(), net):
             mgmt_nets.append(net)
         else:
             LOG.warning("Unknown network: {}. Ignore.".format(net))

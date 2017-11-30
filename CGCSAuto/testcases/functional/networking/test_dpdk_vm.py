@@ -134,8 +134,9 @@ def test_evacuate_dpdk_and_vhost_vms(add_admin_role_func):
         - sudo reboot -f on vm host
         - Check vms are moved to other host, in active state, and are pingable after evacuation
     Teardown:
-        - Delete created vms
+        - Remove admin role from tenant user
         - Wait for failed host to recover
+        - Delete created vms
     """
     storage, hosts = nova_helper.get_storage_backing_with_max_hosts()
     if len(hosts) < 2:

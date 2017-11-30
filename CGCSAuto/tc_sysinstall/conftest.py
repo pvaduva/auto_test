@@ -82,13 +82,11 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_test_session():
+def setup_test_session(global_setup):
     """
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
-    os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))

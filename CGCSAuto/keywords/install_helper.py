@@ -2271,8 +2271,8 @@ def update_auth_url(ssh_con, region=None, fail_ok=True):
     LOG.info('Attempt to update OS_AUTH_URL from openrc')
 
     CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
-    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def get_lab_info(barcode):

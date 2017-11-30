@@ -27,13 +27,13 @@ class Tenant:
     }
 
     @classmethod
-    def _set_url(cls, url):
+    def set_url(cls, url):
         cls.ADMIN['auth_url'] = url
         cls.TENANT1['auth_url'] = url
         cls.TENANT2['auth_url'] = url
 
     @classmethod
-    def _set_region(cls, region):
+    def set_region(cls, region):
         cls.ADMIN['region'] = region
         cls.TENANT1['region'] = region
         cls.TENANT2['region'] = region

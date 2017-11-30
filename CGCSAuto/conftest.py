@@ -22,6 +22,7 @@ stress_count = -1
 count = -1
 no_teardown = False
 tracebacks = []
+region = None
 
 ################################
 # Process and log test results #
@@ -277,6 +278,8 @@ def pytest_configure(config):
     no_teardown = config.getoption('noteardown')
     keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
+    global region
+    region = config.getoption('region')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
@@ -373,6 +376,8 @@ def pytest_addoption(parser):
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
+    region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
+                  "e.g., creating vm on RegionTwo from RegionOne"
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -400,6 +405,7 @@ def pytest_addoption(parser):
     parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
     parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
                      help="Collect kpi for applicable test cases")
+    parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
 
     ##################################
     # Lab install or upgrade options #
@@ -704,6 +710,16 @@ def autostart(request):
 
 def __params_gen(index):
     return 'iter{}'.format(index)
+
+
+@pytest.fixture(scope='session')
+def global_setup():
+    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
+
+    if region:
+        setups.set_region(region=region)
+        print("fdfhdfhdj {}".format(region))
 
 #####################################
 # End of fixture order manipulation #

@@ -50,7 +50,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         auth_info = Tenant.get_primary()
 
     if 'auth_url' in lab:
-        Tenant._set_url(lab['auth_url'])
+        Tenant.set_url(lab['auth_url'])
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)

@@ -35,10 +35,11 @@ IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
 CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
-
 TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
-
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
+
+REGION_MAP = {'RegionOne': '',
+              'RegionTwo': '-R2'}
 
 
 class GuestImages:
@@ -91,6 +92,18 @@ class Networks:
         'external': EXT_IP
     }
     INFRA_NETWORK_CIDR = "192.168.205.0/24"
+
+    @classmethod
+    def mgmt_net_name_pattern(cls):
+        from consts.proj_vars import ProjVar
+        region = REGION_MAP[ProjVar.get_var('REGION')]
+        return 'tenant\d{}-mgmt-net'.format(region)
+
+    @classmethod
+    def data_net_name_pattern(cls):
+        from consts.proj_vars import ProjVar
+        region = REGION_MAP[ProjVar.get_var('REGION')]
+        return 'tenant\d{}-net'.format(region)
 
 
 class SystemType:

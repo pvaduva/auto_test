@@ -27,7 +27,7 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_test_session():
+def setup_test_session(global_setup):
     """
     Setup primary tenant  before the first test gets executed.
     TIS ssh was already set up at collecting phase.
@@ -59,7 +59,6 @@ def reconnect_before_test():
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
 
 
-
 def pytest_collectstart():
     """
     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
@@ -68,8 +67,8 @@ def pytest_collectstart():
     con_ssh = setups.setup_tis_ssh(InstallVars.get_install_var("LAB"))
     InstallVars.set_install_var(con_ssh=con_ssh)
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def pytest_runtest_teardown(item):

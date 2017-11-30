@@ -2,6 +2,7 @@ import time
 
 from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient
 
 from consts.auth import Tenant
 from keywords import common
@@ -307,9 +308,11 @@ def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
 
 
 def is_https_lab(con_ssh=None, source_admin=True, auth_info=Tenant.ADMIN):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
     table_ = table_parser.table(cli.openstack('endpoint list', source_admin_=source_admin, ssh_client=con_ssh,
                                               auth_info=auth_info))
-
+    con_ssh.exec_cmd('unset OS_REGION_NAME')    # Workaround for CGTS-8348
     filters = {'Service Name': 'keystone', 'Service Type': 'identity', 'Interface': 'public'}
     keystone_pub = table_parser.get_values(table_=table_, target_header='URL', **filters)[0]
     return 'https' in keystone_pub
