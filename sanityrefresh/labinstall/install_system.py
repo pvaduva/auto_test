@@ -1652,7 +1652,30 @@ def bulkAddHosts():
 def run_labsetup():
     cmd = './lab_setup.sh'
     cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
-    return controller0.ssh_conn.exec_cmd(cmd)
+    log.info("Running cmd: {}".format(cmd))
+    controller0.ssh_conn.sendline(cmd)
+
+    try:
+        log.info("Checking for password prompt")
+        controller0.ssh_conn.expect("Password:", timeout=20)
+        log.info("Found lab_setup password prompt.  Sending password.")
+        controller0.ssh_conn.sendline(WRSROOT_PASSWORD)
+    except:
+        log.info("Password prompt not found")
+        pass
+
+    log.info("Waiting for lab_setup.sh to complete")
+    controller0.ssh_conn.find_prompt(LAB_SETUP_TIMEOUT)
+    out = controller0.ssh_conn.get_after()
+    rc = controller0.ssh_conn.get_rc()
+
+    installer_exit = wr_exit()
+    if rc != "0":
+        msg = "lab_setup failed"
+        log.error(msg)
+        installer_exit._exit(1, msg)
+
+    return
 
 
 def run_cpe_compute_config_complete(host_os, install_output_dir):
@@ -2350,10 +2373,7 @@ def main():
         run_config_complete = True
         if node_online or node_offline or node_degraded:
             run_config_complete = False
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed"
-                log.error(msg)
-                installer_exit._exit(1, msg)
+            run_labsetup()
             unlock_node(nodes, selection_filter="controller-0", wait_done=False)
             controller0.ssh_conn.disconnect()
             time.sleep(60)
@@ -2404,10 +2424,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         # lab_setup.sh only be ran when hosts are online
         # TODO: below is a hack that ignores lab_setup failure - this makes the new istalls...
-        if run_labsetup()[0] not in [0,1]:
-            msg = "lab_setup failed in small footprint configuration."
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
         set_install_step_complete(lab_install_step)
 
     # Lab-install -  Bulk hosts add- applicable all lab types
@@ -2435,14 +2452,11 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
         # Run lab_setup again to setup controller-1 interfaces
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed in small footprint configuration."
-                log.error(msg)
-                installer_exit._exit(1, msg)
+            run_labsetup()
 
-                log.info("Waiting for controller0 come online")
-                wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
-                wait_state(controller0, OPERATIONAL, ENABLED)
+            log.info("Waiting for controller0 come online")
+            wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
+            wait_state(controller0, OPERATIONAL, ENABLED)
 
             set_install_step_complete(lab_install_step)
 
@@ -2477,10 +2491,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         log.info("Beginning lab setup procedure for {} lab".format(lab_type))
 
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
         set_install_step_complete(lab_install_step)
 
     # Extra lab_setup.sh after cinder changes
@@ -2491,10 +2502,7 @@ def main():
         if lab_type is "regular" or "storage":
             # do run lab setup again
             # Run lab setup
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-                log.error(msg)
-                installer_exit._exit(1, msg)
+            run_labsetup()
 
             set_install_step_complete(lab_install_step)
 
@@ -2522,10 +2530,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
         # do run lab setup to add osd
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
 
         set_install_step_complete(lab_install_step)
 
@@ -2557,10 +2562,7 @@ def main():
         wait_state(computes, AVAILABILITY, ONLINE)
 
         # do run lab setup to add osd
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
 
         set_install_step_complete(lab_install_step)
 
@@ -2575,10 +2577,7 @@ def main():
     lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         # do run lab setup to add osd
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
 
         set_install_step_complete(lab_install_step)
 
