@@ -1074,10 +1074,10 @@ class Telnet:
                 # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 # Construct regex to work with wildcatpass machines
                 # in legacy and uefi mode
-                if "wildcat" in node.host_name:
-                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                if "wildcat" in node.host_name or "wolfpass" in node.host_name:
+                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H|;13H)(.*?)\x1b")
                 else:
-                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b|Slot \d{4} v\d+")
+                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H|;13H)(.*?)\x1b|Slot \d{4} v\d+")
                     #regex = re.compile(b"Slot \d{4} v\d+")
 
                 try:
