@@ -1115,10 +1115,25 @@ class Telnet:
                 elif "UEFI" in boot_device_regex:
                     # Special case for wcp92-98 (NVME default)
                     log.info("boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
-                    self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
+                    #self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
+                    self.get_read_until("Automatic Anaconda", BOOT_MENU_TIMEOUT)
+                    time.sleep(3)
+                    log.info("Pressing DOWN key")
                     self.write(str.encode(DOWN))
-                    if security:
+                    if small_footprint:
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
                         self.write(str.encode(DOWN))
+                    if lowlat:
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
+                        self.write(str.encode(DOWN))
+                    if security:
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
+                        self.write(str.encode(DOWN))
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
                         self.write(str.encode(DOWN))
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\r\r"))
