@@ -18,7 +18,7 @@ from testfixtures.pre_checks_and_configs import *
 def pytest_configure(config):
     # Lab install params
     lab_arg = config.getoption('lab')
-    use_usb = config.getoption('usb')
+    use_usb = config.getoption('use_usb')
     backup_src_path = config.getoption('backup_path')
     backup_build_id = config.getoption('backup_build_id')
     backup_builds_dir = config.getoption('backup_builds_dir')
