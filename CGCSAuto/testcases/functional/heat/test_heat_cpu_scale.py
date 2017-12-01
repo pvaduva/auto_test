@@ -62,10 +62,9 @@ def launch_cpu_scaling_stack(vcpus, min_vcpus, con_ssh=None, auth_info=None):
     LOG.tc_step("Creating Heat Stack..using template %s", template_name)
 
     code, msg = heat_helper.create_stack(stack_name=stack_name, params_string=params_string, fail_ok=fail_ok)
-    assert code == 0, "Failed to create heat stack"
-
     # add the heat stack name for deleteion on failure
     ResourceCleanup.add(resource_type='heat_stack', resource_id=t_name)
+    assert code == 0, "Failed to create heat stack"
 
     return 0, stack_name
 
@@ -98,6 +97,25 @@ def scale_up_vcpu(vm_name=None,  con_ssh=None, auth_info=None,cpu_num=1):
 
     LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
     dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+    image = GuestImages.DEFAULT_GUEST
+
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=image, close_ssh=False) as vm_ssh:
+        VM_SSHS.append(vm_ssh)
+        vm_ssh.exec_cmd(cmd=dd_cmd, fail_ok=False)
+
+    return vm_ssh
+
+
+def scale_down_vcpu(vm_name=None,  con_ssh=None, auth_info=None,cpu_num=1):
+    """
+    Returns:
+
+    """
+    # create a trigger for auto scale by login to vm and issue dd cmd
+    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
+
+    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
+    dd_cmd = 'pkill dd'
     image = GuestImages.DEFAULT_GUEST
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=image, close_ssh=False) as vm_ssh:
@@ -180,11 +198,10 @@ def test_heat_cpu_scale(vcpus, min_vcpus):
     if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
         assert "Failed to go to min vcpu {} after inital boot".format(min_vcpus)
 
-
     # scale up now
     LOG.tc_step("Scaling up vcpu")
     if not scale_up_vcpu(vm_name=vm_name):
-        assert "Failed to scale up, expected to see 3 vms in total"
+        assert "Failed to scale up vcpus"
 
     # check if vcpu has gone up by one
     expt_current_cpu += 1
@@ -193,6 +210,20 @@ def test_heat_cpu_scale(vcpus, min_vcpus):
         assert "Failed to reach {} vcpus".format(expt_current_cpu)
 
     # scale up to maximum
+    for i in range (expt_current_cpu, vcpus):
+        if not scale_up_vcpu(vm_name=vm_name):
+            assert "Failed to scale up vcpus"
+
+    expt_current_cpu = vcpus
+    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
+        assert "Failed to reach {} vcpus".format(expt_current_cpu)
+
+    # scaling down to min
+    scale_down_vcpu(vm_name=vm_name)
+
+    expt_current_cpu = min_vcpus
+    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
+        assert "Failed to reach {} vcpus".format(expt_current_cpu)
 
     # delete heat stack
     LOG.tc_step("Deleting heat stack{}".format(stack_name))
