@@ -287,7 +287,7 @@ def test_controllerfs_mod_when_host_locked():
 
 
 @mark.usefixtures("freespace_check")
-def _test_resize_drbd_filesystem_while_resize_inprogress():
+def test_resize_drbd_filesystem_while_resize_inprogress():
     """
     This test attempts to resize a drbd filesystem while an existing drbd
     resize is in progress.  This should be rejected.
@@ -417,7 +417,7 @@ def _test_modify_drdb():
 
 
 @mark.usefixtures("lvm_precheck")
-def test_increase_cinder():
+def _test_increase_cinder():
     """
     Increase the size of the cinder filesystem.  Note, host reinstall is no
     longer required.
