@@ -1031,8 +1031,8 @@ class Telnet:
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False, security=False, iso_install=False):
-        if "wildcat" in node.host_name or "supermicro" in node.host_name:
-            if "wildcat" in node.host_name:
+        if "wildcat" in node.host_name or "supermicro" in node.host_name or "wolfpass" in node.host_name:
+            if "wildcat" in node.host_name or "wolfpass" in node.host_name:
                 index = 0
                 boot_menu_name = "boot menu"
             else:
