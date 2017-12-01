@@ -23,6 +23,7 @@ count = -1
 no_teardown = False
 tracebacks = []
 region = None
+test_count = 0
 
 ################################
 # Process and log test results #
@@ -79,7 +80,8 @@ def _write_results(res_in_tests, test_name):
     global tc_start_time
     with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
         f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
-
+    global test_count
+    test_count += 1
     # reset tc_start and end time for next test case
     build_id = ProjVar.get_var('BUILD_ID')
     build_server = ProjVar.get_var('BUILD_SERVER')
@@ -552,7 +554,7 @@ def pytest_unconfigure(config):
         except Exception as e:
             LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
-    if ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL')):
+    if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
         try:
