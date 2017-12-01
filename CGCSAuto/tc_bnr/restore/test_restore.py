@@ -182,7 +182,6 @@ def pre_restore_checkup():
 
     assert backup_build_id, "The Build id of the system backup must be provided."
 
-
     return tis_backup_files
 
 
@@ -365,7 +364,6 @@ def restore_volumes():
 
 
 def test_restore(restore_setup):
-
     controller1 = 'controller-1'
     controller0 = 'controller-0'
 
