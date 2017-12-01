@@ -6,7 +6,6 @@ from helper import vboxmanage
 from consts.timeout import HostTimeout
 from utils import serial
 from utils.install_log import LOG
-from consts.env import REBOOTTIME, UNLOCKTIME
 
 
 def unlock_host(stream, hostname):
@@ -89,7 +88,8 @@ def install_host(stream, hostname, host_type, host_id):
     elif host_type is 'storage':
         serial.send_bytes(stream, "system host-update {} personality=storage".format(host_id), expect_prompt=False)
     else:
-        serial.send_bytes(stream, "system host-update {} personality=compute hostname={}".format(host_id, hostname), expect_prompt=False)
+        serial.send_bytes(stream, "system host-update {} personality=compute hostname={}".format(host_id, hostname),
+                          expect_prompt=False)
     time.sleep(30)
 
 
@@ -127,12 +127,10 @@ def login(stream, timeout=600):
     Logs into controller-0.
     Args:
         stream(stream): stream to cont0
+        timeout(int): Time before login fails in seconds.
     """    
-    try:
-        serial.send_bytes(stream, "\n", expect_prompt=False)
-    except:
-        LOG.info("Connection could not be established")
-        sys.exit()
+
+    serial.send_bytes(stream, "\n", expect_prompt=False)
     rc = serial.expect_bytes(stream, "ogin:", fail_ok=True, timeout=timeout)
     if rc != 0:
         serial.send_bytes(stream, "\n", expect_prompt=False)
@@ -143,6 +141,7 @@ def login(stream, timeout=600):
         serial.send_bytes(stream, "wrsroot", expect_prompt=False)
         serial.expect_bytes(stream, "assword:")
         serial.send_bytes(stream, "Li69nux*")
+    disable_logout(stream)
 
 
 def logout(stream):
@@ -156,6 +155,6 @@ def logout(stream):
 
 
 def check_password(stream):
-    ret = serial.expect_bytes(stream, 'Password', fail_ok=True, timeout=5)
+    ret = serial.expect_bytes(stream, 'assword', fail_ok=True, timeout=5)
     if ret == 0:    
         serial.send_bytes(stream, 'Li69nux*')

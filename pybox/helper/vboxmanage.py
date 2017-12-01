@@ -9,10 +9,6 @@ from sys import platform
 from consts import env
 
 
-def add_to_path():
-    subprocess.check_output(['PATH=%PATH%;C:\Program Files\Oracle\VirtualBox'], stderr = subprocess.STDOUT)
-
-
 def vboxmanage_version():
     """ 
     Return version of vbox.
@@ -21,6 +17,7 @@ def vboxmanage_version():
     version = subprocess.check_output(['vboxmanage', '--version'], stderr = subprocess.STDOUT)
 
     return version
+
 
 def vboxmanage_extpack(action="install"):
     """
@@ -40,6 +37,7 @@ def vboxmanage_extpack(action="install"):
     LOG.info("Installing extension pack")
     result = subprocess.check_output(['vboxmanage', 'extpack', 'install', '/tmp/' + filename, '--replace'], stderr = subprocess.STDOUT)
     LOG.info(result)
+
 
 def vboxmanage_list(option="vms"):
     """
@@ -101,15 +99,7 @@ def vboxmanage_hostonlyifcreate(name="vboxnet0", ip=None, netmask=None):
     assert netmask, "Must provide an OAM Netmask"
 
     LOG.info("Creating Host-only Network")
-    # Loop to check if hostonlyif is unused?
-    """
-    count = 0
-    while result != '':
-        result = subprocess.check_output(['vboxmanage', 'list', 'hostonlyifs', '|', 'grep', 'vboxnet{}'.format(count)], stderr=subprocess.STDOUT)
-        count+=1
-    name='vboxnet{}'.format(count-1)
-    """
-    
+
     result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'create'], stderr=subprocess.STDOUT)
 
     LOG.info("Provisioning {} with IP {} and Netmask {}".format(name, ip, netmask))
@@ -216,7 +206,7 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
         elif disk_count == 4:
             device_num = 1
         if platform == 'win32' or platform == 'win64':
-            file_name = "C:\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
+            file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
             file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} on VM {} on device {} port {}".format(file_name, hostname, device_num, port_num))

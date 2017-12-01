@@ -13,13 +13,6 @@ else:
     LOGPATH = '/tmp/pybox_logs'
     ISOPATH = "/tmp/bootimage.iso"
 
-CONT0INSTALL = 0
-NODEINSTALL = 0
-UNLOCKTIME = 0
-REBOOTTIME = 0
-TOTALTIME = 0
-LABTIME = 0
-CONFIGTIME = 0
 
 class BuildServers:
     CGTS4 = {
@@ -150,40 +143,3 @@ class Files:
         ],
         'config': "/localdisk/designer/jenkins/TS_15.12_Pull/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/system_config" #TODO
     }
-    FILENAMES = {
-        'R5':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules',
-                      'lab_setup-tenant2-resources.yaml',
-                      'lab_setup-tenant1-resources.yaml',
-                      'lab_setup-admin-resources.yaml'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'license.lic'},
-        'R4':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'license.lic'},
-        'R3':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'license.lic'},
-        'R2':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'license.lic'},
-        }
