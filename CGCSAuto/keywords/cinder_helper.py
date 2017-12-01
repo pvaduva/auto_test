@@ -1302,11 +1302,13 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
     if not vol_id_:
         vol_id_ = vol_backup[7:-20]
 
-    for _ in range(retries if 2 <= retries <= 10 else 2):
+    # according to the user documents, the first time of 'cinder import' may fail, in which case
+    # we just have to try again
+    for retry in range(retries if 2 <= retries <= 10 else 2):
         rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                             rtn_list=True)
-        # if rc == 1:
-            # return 1, output
+        if rc == 1:
+            LOG.warn('Failed to import volume for the:{} time'.format(retry+1))
 
         if _wait_for_volume_status(vol_id=vol_id_, status=['available', 'in-use'], auth_info=auth_info,
                                    con_ssh=con_ssh, fail_ok=True):
