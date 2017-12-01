@@ -436,9 +436,8 @@ def pytest_addoption(parser):
 
     # Backup only
     keep_backups = "Whether to keep the backupfiles from controller-0:/opt/backups after transfer " \
-                     "to the specified destination. Default is remove."
-    parser.addoption('--keep-backups', '--keep_backups',  dest='keep_backups', metavar='keep_backups',
-                     action='store_true', help=keep_backups)
+                   "to the specified destination. Default is remove."
+    parser.addoption('--keep-backups', '--keep_backups',  dest='keep_backups', action='store_true', help=keep_backups)
 
     # Common for backup and restore
     backup_server_destination_help = "Whether to save/get backupfiles on/from USB. Default is test server." \
@@ -447,17 +446,16 @@ def pytest_addoption(parser):
                                    "For USB, the backup files are at mount point: /media/wrsroot/backups. " \
                                    "For Test Server, the default is /sandbox/backups."
 
-    parser.addoption('--usb', '--usb',  dest='use_usb', metavar='use_usb',
-                     action='store_true', default='use_usb',  help=backup_server_destination_help)
+    parser.addoption('--usb', '--usb',  dest='use_usb', action='store_true',  help=backup_server_destination_help)
     parser.addoption('--backup-path', '--backup_path',  dest='backup_path',
                      action='store', metavar='DIR', help=backup_destination_path_help)
 
     # Restore only
     parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
-                     action='store',  help="The build id of the backup")
+                     action='store', help="The build id of the backup")
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
-                     action='store',  help="The Titanium builds dir where the backup build id belong. "
-                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
+                     action='store', help="The Titanium builds dir where the backup build id belong. "
+                                          "Such as CGCS_5.0_Host or TC_17.06_Host")
 
 
 def config_logger(log_dir):
