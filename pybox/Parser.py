@@ -42,7 +42,7 @@ def handle_args():
         """,
         action='store_true')
         
-    parser.add_argument("--create-vms", help=
+    parser.add_argument("--createvms", help=
         """
         If specified we will create and install new vms, otherwise the creation and install will be skipped. 
         Should be omitted when the vms have already been created and installed.
@@ -162,13 +162,7 @@ def handle_args():
         e.g. /folk/tmather/patches/
         """,
         type=str)
-        
-    parser.add_argument("--make-patch-current", help=
-        """
-        If specified, patches will be retrieved from the buildserver and installed to make the lab patch current.
 
-        """,
-        action='store_true')
     parser.add_argument("--get-setup", help=
         """
         If specified, files will be retrieved from the buildserver.
@@ -191,12 +185,6 @@ def handle_args():
     parser.add_argument("--run-scripts", help=
         """
         If specified the lab_setup.sh iterations will be run.
-        """,
-        action='store_true')
-    parser.add_argument("--patch-nodes", help=
-        """
-        If specified, any patches that have been installed on controller-0 will be installed on the other nodes.
-        
         """,
         action='store_true')
     return parser

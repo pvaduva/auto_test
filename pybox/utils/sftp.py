@@ -28,7 +28,6 @@ def sftp_get(source, remote_host, destination):
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
     mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
 
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
 
     ssh_client = paramiko.SSHClient()
