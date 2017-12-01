@@ -959,10 +959,6 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
             LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
             check_sysinv_cli(con_ssh_=con_ssh, use_telnet_session_=use_telnet_session,
                              con_telnet_=con_telnet)
-            # end_time = time.time() + stay
-            # while time.time() < end_time:
-            #     time.sleep(check_interval)
-            #     check_sysinv_cli(con_ssh_=con_ssh)
             return True
 
         except Exception:
