@@ -332,7 +332,7 @@ def make_sure_all_hosts_locked(con_ssh):
     LOG.debug('code:{}, output:{}'.format(code, output))
 
 
-def test_restore_from_backup(restore_setup):
+def test_restore(restore_setup):
 
     controller1 = 'controller-1'
     controller0 = 'controller-0'
