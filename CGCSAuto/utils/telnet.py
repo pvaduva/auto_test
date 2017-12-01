@@ -1055,14 +1055,13 @@ class Telnet:
                 if usb:
                     regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
                 else:
-                    regex = re.compile(b"Slot (\d{4}) v\d+")
-                    # regex = re.compile(b"(\d{4}).*v\d+")
+                    regex = re.compile(b"(\d{4}).*v\d+")
                     # regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
+                    # regex = re.compile(b"Slot (\d{4}) v\d+")
 
             LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
 
             while count < MAX_SEARCH_ATTEMPTS:
-
                 # # GENERIC USB
                 # if usb and node.name == CONTROLLER0:
                 #     LOG.info("Looking for USB device")
