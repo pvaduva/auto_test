@@ -95,7 +95,8 @@ class SSHClient:
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
         lab_list = [lab_ for lab_ in lab_list if isinstance(lab_, dict)]
         for lab in lab_list:
-            if lab.get('floating ip') == self.host:
+            if lab.get('floating ip') == self.host or lab.get('controller-0 ip') == self.host \
+                    or lab.get('external_ip') == self.host:
                 lab_name = lab.get('short_name')
                 break
         else:
@@ -1374,7 +1375,8 @@ class ControllerClient:
             raise TypeError("ssh_client has to be an instance of SSHClient!")
 
         for lab_ in cls.__lab_list:
-            if ssh_client.host == lab_.get('floating ip') or ssh_client.host == lab_.get('controller-0 ip'):
+            if ssh_client.host == lab_.get('floating ip') or ssh_client.host == lab_.get('controller-0 ip') \
+                    or ssh_client.host == lab_.get('external_ip'):
                 lab_name_ = lab_.get('short_name')
                 break
         else:

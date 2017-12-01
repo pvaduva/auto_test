@@ -50,29 +50,32 @@ def download_upgrade_license(lab, server, license_path):
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     if 'vbox' in lab['name']:
-        external_ip = lab['external_ip']
-        external_port = lab['external_port']
-        temp_path = '/tmp'
-        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync("-L " + license_path, external_ip,
+                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                              pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            local_ip = lab['local_ip']
 
-        server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(temp_path, "upgrade_license.lic"),
-                              dest_user=lab['local_user'], dest_password=lab['local_password'],
-                              pre_opts=local_pre_opts)
+            server.ssh_conn.rsync("-L " + license_path, local_ip,
+                                  os.path.join(temp_path, "upgrade_license.lic"),
+                                  dest_user=lab['local_user'], dest_password=lab['local_password'],
+                                  pre_opts=local_pre_opts)
 
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                            dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
 
-        server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(temp_path, "upgrade_license.lic"),
-                              dest_user=lab['local_user'], dest_password=lab['local_password'],
-                              pre_opts=local_pre_opts)
-
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
-        # server.ssh_conn.rsync("-L " + license_path, external_ip,
-        #                       os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-        #                       pre_opts=pre_opts, ssh_port=external_port)
+            # server.ssh_conn.rsync("-L " + license_path, external_ip,
+            #                       os.path.join(temp_path, "upgrade_license.lic"),
+            #                       dest_user=lab['local_user'], dest_password=lab['local_password'],
+            #                       pre_opts=local_pre_opts)
+            #
+            # common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+            #                                 dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
     else:
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
                             os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
@@ -90,25 +93,27 @@ def download_upgrade_load(lab, server, load_path):
 
     if 'vbox' in lab['name']:
 
-        external_ip = lab['external_ip']
-        external_port = lab['external_port']
-        temp_path = '/tmp'
-        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-        server.ssh_conn.rsync("-L " + iso_file_path, external_ip,
-                              os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
-                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
-
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
-                                        dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
-
-        server.ssh_conn.rsync("-L " + iso_file_path,
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync("-L " + iso_file_path,
                           external_ip,
                           os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            local_ip = lab['local_ip']
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            server.ssh_conn.rsync("-L " + iso_file_path, local_ip,
+                                  os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
+                                  dest_password=lab['local_password'], pre_opts=local_pre_opts)
+
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
+                                            dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
+
     else:
         server.ssh_conn.rsync("-L " + iso_file_path,
                               lab['controller-0 ip'],
                               os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
-
 
 def get_mgmt_boot_device(node):
     boot_device = {}
@@ -439,15 +444,20 @@ def download_image(lab, server, guest_path):
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     if 'vbox' in lab['name']:
-        external_ip = lab['external_ip']
-        temp_path = '/tmp'
-        image_file = os.path.basename(guest_path)
-        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-        server.ssh_conn.rsync(guest_path, external_ip, os.path.join(temp_path, image_file),
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync(guest_path, external_ip, TiSPath.IMAGES, pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            image_file = os.path.basename(guest_path)
+            local_ip = lab['local_ip']
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            server.ssh_conn.rsync(guest_path, local_ip, os.path.join(temp_path, image_file),
                               dest_user=lab['local_user'],
                               dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
                                         dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
@@ -493,6 +503,7 @@ def download_lab_config_files(lab, server, load_path):
             server.name, script_path)
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+
     server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)

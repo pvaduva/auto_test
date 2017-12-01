@@ -43,11 +43,12 @@ def setup_vbox_tis_ssh(lab):
         con_ssh = ControllerClient.get_active_controller(fail_ok=True)
         if con_ssh:
             con_ssh.disconnect()
-            con_ssh = SSHClient(lab['external_ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
-                            CONTROLLER_PROMPT, port=lab['external_port'])
+
+        con_ssh = SSHClient(lab['external_ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                        CONTROLLER_PROMPT, port=lab['external_port'])
         con_ssh.connect(retry=True, retry_timeout=30)
         ControllerClient.set_active_controller(con_ssh)
-    # if 'auth_url' in lab:
+# if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
     else:
         con_ssh = setup_tis_ssh(lab)
@@ -544,7 +545,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         # get the ip address of the local linux vm
         cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
         local_external_ip = os.popen(cmd).read().strip()
-        
+        lab_to_install['local_ip'] = local_external_ip
         vbox_gw = installconf['VBOX_GATEWAY']
         external_ip = vbox_gw['EXTERNAL_IP']
         if external_ip and external_ip != local_external_ip:

@@ -151,5 +151,6 @@ def pytest_runtest_teardown(item):
     # print('')
     # message = 'Teardown started:'
     # testcase_log(message, item.nodeid, log_type='tc_teardown')
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    if not con_ssh._is_connected():
+        con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
