@@ -1671,9 +1671,11 @@ def run_labsetup():
 
     installer_exit = wr_exit()
     if rc != "0":
-        msg = "lab_setup failed"
-        log.error(msg)
-        installer_exit._exit(1, msg)
+        msg = "lab_setup returned non-zero exit code but continuing anyways."
+        log.info(msg)
+        #msg = "lab_setup failed"
+        #log.error(msg)
+        #installer_exit._exit(1, msg)
 
     return
 
