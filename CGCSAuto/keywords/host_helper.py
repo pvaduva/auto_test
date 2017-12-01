@@ -935,41 +935,6 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
     return rtn
 
 
-def _wait_for_openstack_cli_enable_old(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
-                                   reconnect=True):
-    cli_enable_end_time = time.time() + timeout
-
-    def check_sysinv_cli(con_ssh_):
-        cli.system('show', ssh_client=con_ssh_, timeout=timeout)
-        time.sleep(10)
-        active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_)
-        wait_for_subfunction_ready(hosts=active_con, con_ssh=con_ssh_)
-        LOG.info("'system cli enabled")
-
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-    while time.time() < cli_enable_end_time:
-        try:
-            LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
-            check_sysinv_cli(con_ssh_=con_ssh)
-            # end_time = time.time() + stay
-            # while time.time() < end_time:
-            #     time.sleep(check_interval)
-            #     check_sysinv_cli(con_ssh_=con_ssh)
-            return True
-
-        except Exception:
-            if not con_ssh._is_connected():
-                if reconnect:
-                    con_ssh.connect(retry_timeout=timeout)
-                else:
-                    LOG.error("system disconnected")
-                    if fail_ok:
-                        return False
-                    raise
-            time.sleep(check_interval)
-
-
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
                                    reconnect=True, use_telnet_session=False,  con_telnet=None):
     cli_enable_end_time = time.time() + timeout
@@ -993,7 +958,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         try:
             LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
             check_sysinv_cli(con_ssh_=con_ssh, use_telnet_session_=use_telnet_session,
-                                con_telnet_=con_telnet)
+                             con_telnet_=con_telnet)
             # end_time = time.time() + stay
             # while time.time() < end_time:
             #     time.sleep(check_interval)
@@ -1001,16 +966,24 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
             return True
 
         except Exception:
-            if not use_telnet_session:
-                if not con_ssh._is_connected():
-                    if reconnect:
-                        con_ssh.connect(retry_timeout=timeout)
-                    else:
-                        LOG.error("system disconnected")
-                        if fail_ok:
-                            return False
-                        raise
+            if use_telnet_session:
+                pass
+            if not con_ssh._is_connected():
+                if reconnect:
+                    LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
+                    con_ssh.connect(retry_timeout=timeout)
+                else:
+                    LOG.error("system disconnected")
+                    if fail_ok:
+                        return False
+                    raise
             time.sleep(check_interval)
+
+    err_msg = "Timed out waiting for system to recover. Time waited: {}".format(timeout)
+    if fail_ok:
+        LOG.warning(err_msg)
+        return False
+    raise TimeoutError(err_msg)
 
 
 def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,

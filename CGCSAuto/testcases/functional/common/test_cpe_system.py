@@ -19,7 +19,7 @@ def test_cpe_services_and_functions():
 
     LOG.tc_step("Check CPE system services via nova service-list")
     check_params = ["nova-scheduler",
-                    "nova-cert",
+                    # "nova-cert",
                     "nova-conductor",
                     "nova-consoleauth",
                     "nova-scheduler",

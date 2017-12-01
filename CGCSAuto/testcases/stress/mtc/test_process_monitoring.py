@@ -229,9 +229,9 @@ PROCESSES = {
         'cmd': '/usr/bin/python2 /bin/nova-conductor', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    'nova-cert': {
-        'cmd': '/usr/bin/python2 /bin/nova-cert', 'impact': 'swact',
-        'severity': 'critical', 'node_type': 'active'},
+    # 'nova-cert': {
+    #     'cmd': '/usr/bin/python2 /bin/nova-cert', 'impact': 'swact',
+    #     'severity': 'critical', 'node_type': 'active'},
 
     # {'nova-consoleauth': {
     'nova-console-auth': {
@@ -1027,7 +1027,7 @@ class MonitoredProcess:
     mark.p1(('nova-api')),
     mark.p1(('nova-scheduler')),
     mark.p1(('nova-conductor')),
-    mark.p1(('nova-cert')),
+    # mark.p1(('nova-cert')),       # Removed in pike
     mark.p1(('nova-console-auth')),
     # minor
     mark.p1(('nova-novnc')),

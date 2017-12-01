@@ -54,7 +54,10 @@ class Rest:
     def retrieve_token(self, endpoint, token_request=None):
         if token_request is None:
             token_request = json.dumps(self.token_payload)
+
         headers = {'Content-type': 'application/json'}
+        LOG.debug("Retrieving token. post URL: {}, headers: {}, data: {}".format(self.ksURL + endpoint, headers,
+                                                                                 token_request))
         r = requests.post(self.ksURL+endpoint,
                           headers=headers,
                           data=token_request, verify=True)
