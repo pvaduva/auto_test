@@ -503,30 +503,26 @@ def pytest_addoption(parser):
     ###############################
     #  Backup and Restore options #
     ###############################
-    # Backup
-    backup_server_destination_help = "The external destination  where the backupfiles are copied too. " \
-                                     "Choices are USB  ( 16G USB  or above must be plugged to controller-0) or " \
-                                     "local (Test server). Default is USB"
-    backup_destination_path_help = "The path the backup files are copied to if destination is not a USB. " \
-                                   "If destination is  USB, by default, the backup files are copied to " \
-                                   "mount point: /media/wrsroot/backups.  For local (Test Server)" \
-                                   "the default is /sandbox/backups."
-    delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
-                     "to the specified destination. Default is True."
-    parser.addoption('--destination', '--dest',  dest='destination', metavar='dest',
-                     action='store', default='usb',  help=backup_server_destination_help)
-    parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
+
+    # Backup only
+    keep_backups = "Whether to keep the backupfiles from controller-0:/opt/backups after transfer " \
+                     "to the specified destination. Default is remove."
+    parser.addoption('--keep-backups', '--keep_backups',  dest='keep_backups', metavar='keep_backups',
+                     action='store_true', help=keep_backups)
+
+    # Common for backup and restore
+    backup_server_destination_help = "Whether to save/get backupfiles on/from USB. Default is test server." \
+                                     "When true, 16G USB  or above must be plugged to controller-0 "
+    backup_destination_path_help = "The path the backup files are copied to/taken from if destination is not a USB. " \
+                                   "For USB, the backup files are at mount point: /media/wrsroot/backups. " \
+                                   "For Test Server, the default is /sandbox/backups."
+
+    parser.addoption('--usb', '--usb',  dest='use_usb', metavar='use_usb',
+                     action='store_true', default='use_usb',  help=backup_server_destination_help)
+    parser.addoption('--backup-path', '--backup_path',  dest='backup_path',
                      action='store', metavar='DIR', help=backup_destination_path_help)
-    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups', metavar='delete_backups',
-                     action='store', default=True,  help=delete_backups)
-    # Restore
-    backup_src_path_help = "The path to  backup files in the backup source, if source is not a USB. If source is USB," \
-                           " by default, the backup files are found at the mount point: /media/wrsroot/backups. " \
-                           " For local (Test Server) the default is /sandbox/backups."
-    parser.addoption('--backup-src', '--backup_src',  dest='backup_src', action='store', default='USB',
-                     help="Where to get the bakcup files: choices are 'usb' and 'local'")
-    parser.addoption('--backup-src-path', '--backup_src_path',  dest='backup_src_path',
-                     action='store', metavar='DIR', help=backup_src_path_help)
+
+    # Restore only
     parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
                      action='store',  help="The build id of the backup")
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
