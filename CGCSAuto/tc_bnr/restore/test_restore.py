@@ -220,21 +220,21 @@ def restore_setup(pre_restore_checkup):
     InstallVars.set_install_var(tis_build_dir=load_path)
 
     # set up feed for controller
-    LOG.tc_step("Setting install feed in tuxlab for controller-0 ... ")
+    LOG.fixture_step("Setting install feed in tuxlab for controller-0 ... ")
     if not 'vbox' in lab['name']:
         assert install_helper.set_network_boot_feed(bld_server_conn, load_path), "Fail to set up feed for controller"
 
     # power off hosts
-    LOG.tc_step("Powring off system hosts ... ")
+    LOG.fixture_step("Powring off system hosts ... ")
     install_helper.power_off_host(hostnames)
 
-    LOG.tc_step("Booting controller-0 ... ")
+    LOG.fixture_step("Booting controller-0 ... ")
     # is_cpe = (lab['system_type'] == 'CPE')
     is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
     install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
 
     # establish ssh connection with controller
-    LOG.tc_step("Establishing ssh connection with controller-0 after install...")
+    LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
 
     node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
     normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
@@ -254,7 +254,7 @@ def restore_setup(pre_restore_checkup):
     backup_src = RestoreVars.get_restore_var('backup_src'.upper())
     backup_src_path = RestoreVars.get_restore_var('backup_src_path'.upper())
     if backup_src.lower() == 'local':
-        LOG.tc_step("Transferring system backup file to controller-0 {} ... ".format(WRSROOT_HOME))
+        LOG.fixture_step("Transferring system backup file to controller-0 {} ... ".format(WRSROOT_HOME))
 
         system_backup_file = [file for file in tis_backup_files if "system.tgz" in file].pop()
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, system_backup_file),
@@ -268,10 +268,10 @@ def restore_setup(pre_restore_checkup):
         usb_device_name = install_helper.get_usb_device_name(con_ssh=con_ssh)
         usb_part_name = "{}2".format(usb_device_name)
         assert usb_device_name, "No USB found "
-        LOG.tc_step("USB flash drive found, checking for backup files ... ")
+        LOG.fixture_step("USB flash drive found, checking for backup files ... ")
 
         if len(tis_backup_files) == 0:
-            LOG.tc_step("Checking for backup files in USB ... ")
+            LOG.fixture_step("Checking for backup files in USB ... ")
             usb_part_info = install_helper.get_usb_device_partition_info(usb_device=usb_device_name,
                                                                          con_ssh=con_ssh)
             assert usb_part_info and len(usb_part_info) > 0, "No USB or partition found"
