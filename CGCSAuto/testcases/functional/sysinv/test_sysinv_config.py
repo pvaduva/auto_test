@@ -174,7 +174,7 @@ class TestRetentionPeriod:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.ADMIN,
-                                                       period=new_retention_period, name=name)
+                                                       period=new_retention_period, name=name, check_first=False)
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
             assert 1 == code, msg
