@@ -25,7 +25,7 @@ def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None
     if local_path:
         if not local_path.endswith('/') or not local_path.endswith('\\'):
             local_path = local_path + '/'
-        get_lab_setup_scripts(None, release, remote_path, local_path)
+        get_lab_setup_scripts(remote_host, release, remote_path, local_path)
     else:
         get_lab_setup_scripts(remote_host, release, remote_path, local_path)
         get_licence(remote_host, release, remote_path, local_path, host_type)
@@ -207,13 +207,13 @@ def install_controller_0(stream):
     except:
         LOG.info("Controller should be locked when configuration is completed.")
         return 1
-    serial.send_bytes(stream, "sh lab_setup.sh", timeout=HostTimeout.LAB_INSTALL)
+    serial.send_bytes(stream, "sh lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, expect_prompt=False)
     host_helper.check_password(stream)
     serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL)
     host_helper.unlock_host(stream, 'controller-0')
     serial.expect_bytes(stream, 'login:', timeout=HostTimeout.CONTROLLER_UNLOCK)
     host_helper.login(stream)
-    LOG.info("Controller-0 unlock time: {}".format(time.time() - start))
+    LOG.info("Controller-0 unlock time: {} minutes".format((time.time() - start)/60))
 
 
 def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5', streams=None):
@@ -226,7 +226,7 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
         storage: Option to run the script for storage setup
         streams: Dictionary of streams to nodes
     """
-    serial.send_bytes(stream, "chmod +x *.sh")
+    serial.send_bytes(stream, "chmod +x *.sh", timeout=20)
     LOG.info("Starting lab install.")
     start = time.time()
     if aio:
@@ -244,8 +244,6 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
         serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
         host_helper.check_password(stream)
         ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
-        if ret != 0:
-            serial.expect_bytes(stream, "Done", timeout=HostTimeout.LAB_INSTALL)
         if 'controller-1' in host_list:
             LOG.info("Installing controller-1")
             cont1_stream = streamexpect.wrap(serial.connect('controller-1', 10001), echo=True, close_stream=False)
@@ -361,7 +359,7 @@ def config_controller(stream, default=True, release='R5', config_file=None, back
     host_helper.check_password(stream)
     serial.expect_bytes(stream, "Configuration was applied", timeout=HostTimeout.LAB_CONFIG)
     kpi.CONFIGTIME = time.time() - start
-    LOG.info("Configuration time: {}".format(kpi.CONFIGTIME))
+    LOG.info("Configuration time: {} minutes".format(kpi.CONFIGTIME/60))
 
 
 def install_patches_before_config(stream):

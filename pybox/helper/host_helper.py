@@ -19,7 +19,7 @@ def unlock_host(stream, hostname):
     LOG.info("Unlocking {}".format(hostname))
     serial.send_bytes(stream, "system host-list | grep {}".format(hostname), expect_prompt=False)
     try:
-        serial.expect_bytes(stream, "locked")
+        serial.expect_bytes(stream, "unlocked")
     except:
         LOG.info("Host {} not locked".format(hostname))
         return 1
@@ -42,7 +42,7 @@ def lock_host(stream, hostname):
     LOG.info("Locking {}".format(hostname))    
     serial.send_bytes(stream, "system host-list |grep {}".format(hostname), expect_prompt=False)
     try:
-        serial.expect_bytes(stream, "unlocked")
+        serial.expect_bytes(stream, "locked")
     except:
         LOG.info("Host {} not unlocked".format(hostname))
         return
