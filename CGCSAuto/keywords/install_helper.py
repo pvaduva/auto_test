@@ -27,6 +27,8 @@ BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 
+outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ", "compute-config in progress ...")
+
 lab_ini_info = {}
 
 def get_ssh_public_key():
@@ -1220,7 +1222,7 @@ def mount_usb (usb_device, mount=None, unmount=True, format_=False, con_ssh=None
     return True
 
 
-def restore_controller_system_config(system_backup, tel_net_session=None, con_ssh=None, fail_ok=False):
+def restore_controller_system_config(system_backup, tel_net_session=None, con_ssh=None, is_aio=False, fail_ok=False):
     """
     Restores the controller system config for system restore.
     Args:
@@ -1249,73 +1251,85 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
 
+    connection = controller0_node.telnet_conn
     cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
                                                                              system_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = controller0_node.telnet_conn.exec_cmd(cmd,
-                                                       extra_expects=["Enter 'reboot' to reboot controller: "],
-                                                       timeout=HostTimeout.SYSTEM_RESTORE)
-    if rc == 0 and 'reboot controller' in output:
-        msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
-        LOG.info(msg)
+    rc, output = connection.exec_cmd(cmd, extra_expects=outputs_restore_system_conf, timeout=HostTimeout.SYSTEM_RESTORE)
+    compute_configured = False
+    if rc == 0:
+        if 'compute-config in progress' in output:
+            if not is_aio:
+                LOG.fatal('Not an AIO lab, but the system IS configuring compute functionality')
+            else:
+                LOG.info('No need to do compute-config-complete, which is a new behavior after 2017-11-27.')
+                LOG.info('Instead, we will have to wait the node self-boot and boot up to ready states.')
 
-        reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+            connection.find_prompt(prompt='controller\-[01] login:')
 
-        rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd,
-                                                           alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
-        if rc != 0:
-            msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
-            LOG.error(msg)
-            raise exceptions.RestoreSystem
-        LOG.info('OK, system reboot after been patched to previous level')
+            LOG.info('Find login prompt, try to login')
+            connection.login()
 
-        LOG.info('re-login')
-        controller0_node.telnet_conn.login()
-        os.environ["TERM"] = "xterm"
+            compute_configured = True
+            # todo: just be consistent with other codes, maybe not the correct type
+            os.environ["TERM"] = "xterm"
 
-        LOG.info('re-run cli:{}'.format(cmd))
-        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+            LOG.warn('checking system states')
 
-    if rc != 0:
+            cmd = 'cd; source /etc/nova/openrc'
+            rc, output = connection.exec_cmd(cmd)
+            assert rc == 0, \
+                'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
+            LOG.info('OK to source openrc')
+
+            cmd = 'system host-list'
+            rc, output = connection.exec_cmd(cmd)
+            assert rc == 0, \
+                'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+            cmd = 'openstack endpoint list'
+            rc, output = connection.exec_cmd(cmd)
+            assert rc == 0, \
+                'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+            LOG.info('OK to get hosts list\n{}\n'.format(output))
+
+        elif 'reboot controller' in output:
+            LOG.info('Prompted to reboot, reboot now')
+            msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
+            LOG.info(msg)
+
+            reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+
+            rc, output = connection.exec_cmd(reboot_cmd, alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
+            if rc != 0:
+                msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
+                LOG.error(msg)
+                raise exceptions.RestoreSystem
+            LOG.info('OK, system reboot after been patched to previous level')
+
+            LOG.info('re-login')
+            connection.login()
+            os.environ["TERM"] = "xterm"
+
+            LOG.info('re-run cli:{}'.format(cmd))
+            rc, output = connection.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+
+            if "System restore complete" in output:
+                msg = "System restore completed successfully"
+                LOG.info(msg)
+                return 0, msg, compute_configured
+
+    else:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
         if fail_ok:
-            return 1, err_msg
+            return 1, err_msg, compute_configured
         else:
             raise exceptions.CLIRejected(err_msg)
 
-    if "System restore complete" in output:
-        msg = "System restore completed successfully"
-        LOG.info(msg)
-        return 0, msg
-    else:
-        LOG.warn('No "restore complete" in output, rc={}\noutput:\n{}\n'.format(rc, output))
-        conn = controller0_node.telnet_conn
-        cmd = 'cd; source /etc/nova/openrc'
-        rc, output = conn.exec_cmd(cmd)
-        assert rc == 0, \
-            'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
-        LOG.info('OK to source openrc')
-
-        cmd = 'system host-list'
-        rc, output = conn.exec_cmd(cmd)
-        assert rc == 0, \
-            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
-
-        cmd = 'openstack endpoint list'
-        rc, output = conn.exec_cmd(cmd)
-        assert rc == 0, \
-            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
-
-        LOG.info('OK to get hosts list\n{}\n'.format(output))
-
-        # err_msg = "Unexpected result from system restore: {}".format(output)
-        #
-        # if fail_ok:
-        #     return 3, err_msg
-        # else:
-        #     raise exceptions.RestoreSystem(err_msg)
+    return rc, output, compute_configured
 
 
 def restore_controller_system_images(images_backup, tel_net_session=None, fail_ok=False):
@@ -2303,6 +2317,8 @@ def get_lab_info(barcode):
 def run_cpe_compute_config_complete(controller0_node, controller0):
     output_dir = ProjVar.get_var('LOG_DIR')
 
+    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
@@ -2352,10 +2368,12 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
         LOG.info('{} is not ready yet, failed to source /etc/nova/openrc, continue to wait'.format(controller0))
         time.sleep(15)
 
-
+    LOG.info('closing the telnet connnection to node:{}'.format(controller0))
     controller0_node.telnet_conn.close()
 
+    LOG.info('waiting for node:{} to be ready'.format(controller0))
     host_helper.wait_for_hosts_ready(controller0)
+    LOG.info('OK, {} is up and ready'.format(controller0))
 
 
 def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_system_name=None,
