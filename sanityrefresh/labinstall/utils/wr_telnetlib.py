@@ -890,6 +890,7 @@ class Telnet:
                 log.error(msg)
                 wr_exit()._exit(1, msg)
 
+
     def menu_selection(self, host_os, small_footprint, lowlat, usb, security, iso_install):
         """
         Menu selection logic
@@ -1248,7 +1249,8 @@ class Telnet:
             self.write(str.encode(bios_key))
 
             if node.name == CONTROLLER0:
-                self.get_read_until("Kickstart Boot Menu", 120)
+                #self.get_read_until("Kickstart Boot Menu", 120)
+                self.get_read_until("Boot Menu", 360)
                 self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
         elif bios_type == BIOS_TYPES[2]:
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)

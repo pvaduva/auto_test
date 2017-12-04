@@ -2282,9 +2282,18 @@ def main():
             with open(os.devnull, 'wb') as devnull:
                 isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(controller0.host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
             if(isControllerOnline == 0):
+                #controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
+                #controller0.telnet_conn.login(reset=True)
                 if controller0.ssh_conn is None:
                     controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
                 cmd = "test -f " + "wipedisk_helper " + "&& " + "test -f " + "wipedisk_automater"
+                #if controller0.telnet_conn.exec_cmd(cmd)[0] == 0:
+                #    cmd = "chmod 755 wipedisk_helper"
+                #    controller0.telnet_conn.exec_cmd(cmd)
+                #    cmd = "chmod 755 wipedisk_automater"
+                #    controller0.telnet_conn.exec_cmd(cmd)
+                #    cmd = "./wipedisk_automater"
+                #    controller0.telnet_conn.exec_cmd(cmd)
                 if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                     cmd = "chmod 755 wipedisk_helper"
                     controller0.ssh_conn.exec_cmd(cmd)
