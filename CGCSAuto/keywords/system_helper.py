@@ -1000,7 +1000,7 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
     if code == 1:
         return 2, output
 
-    new_retention = get_retention_period()
+    new_retention = get_retention_period(name=name)
 
     if period != new_retention:
         err_msg = "Current retention period is still: {}".format(new_retention)
