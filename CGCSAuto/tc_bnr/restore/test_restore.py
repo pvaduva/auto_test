@@ -61,6 +61,7 @@ def pre_restore_checkup():
     LOG.info('Collect logs before restore')
     if controller_conn:
         collect_logs(controller_conn)
+        ControllerClient.set_active_controller(controller_conn)
     else:
         LOG.info('Cannot collect logs because no ssh connection to the lab')
 
@@ -231,6 +232,7 @@ def restore_setup(pre_restore_checkup):
     LOG.fixture_step("Booting controller-0 ... ")
     # is_cpe = (lab['system_type'] == 'CPE')
     is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
+
     install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
 
     # establish ssh connection with controller
@@ -297,11 +299,12 @@ def restore_setup(pre_restore_checkup):
     return _restore_setup
 
 
-def make_sure_all_hosts_locked(con_ssh):
+def make_sure_all_hosts_locked(con_ssh, max_tries=5):
     LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
 
-    max_tries = 3
     base_cmd = 'host-lock'
+    locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailabilityState.OFFLINE}
+
     for tried in range(1, max_tries+1):
         hosts = [h for h in host_helper.get_hosts(con_ssh=con_ssh, administrative='unlocked') if h != 'controller-0']
         if not hosts:
@@ -318,8 +321,6 @@ def make_sure_all_hosts_locked(con_ssh):
             if 0 != code:
                 LOG.warn('Failed to lock host:{} using CLI:{}'.format(host, cmd))
 
-        locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailabilityState.OFFLINE}
-
         if not hosts:
             LOG.info('all hosts all locked except the controller-0 after tried:{}'.format(tried))
             break
@@ -332,12 +333,46 @@ def make_sure_all_hosts_locked(con_ssh):
     LOG.debug('code:{}, output:{}'.format(code, output))
 
 
+def install_non_active_node(node_name, lab):
+    boot_interfaces = lab['boot_device_dict']
+    LOG.tc_step("Restoring {}".format(node_name))
+    install_helper.open_vlm_console_thread(node_name, boot_interface=boot_interfaces, vlm_power_on=True)
+
+    LOG.info("Verifying {} is Locked, Disabled and Online ...".format(node_name))
+    host_helper.wait_for_hosts_states(node_name, administrative=HostAdminState.LOCKED,
+                                      operational=HostOperationalState.DISABLED,
+                                      availability=HostAvailabilityState.ONLINE)
+
+    LOG.info("Unlocking {} ...".format(node_name))
+    rc, output = host_helper.unlock_host(node_name, available_only=True)
+
+    assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(node_name, rc, output)
+    LOG.info('{} is installed')
+
+
+def restore_volumes():
+    # Getting all registered cinder volumes
+    volumes = cinder_helper.get_volumes()
+
+    if len(volumes) > 0:
+        LOG.info("System has {} registered volumes: {}".format(len(volumes), volumes))
+        rc, restored_vols = install_helper.restore_cinder_volumes_from_backup()
+        assert rc == 0, "All or some volumes has failed import: Restored volumes {}; Expected volumes {}"\
+            .format(restored_vols, volumes)
+        LOG.info('all {} volumes are imported'.format(len(restored_vols)))
+    else:
+        LOG.info("System has {} NO registered volumes; skipping cinder volume restore")
+
+
 def test_restore(restore_setup):
 
     controller1 = 'controller-1'
     controller0 = 'controller-0'
 
     lab = restore_setup["lab"]
+    is_aio_lab = lab.get('system_type', 'Standard') == 'CPE'
+    is_sx = is_aio_lab and (len(lab['controller_nodes']) < 2)
+
     tis_backup_files = restore_setup['tis_backup_files']
     backup_src = RestoreVars.get_restore_var('backup_src'.upper())
     backup_src_path = RestoreVars.get_restore_var('backup_src_path'.upper())
@@ -367,14 +402,14 @@ def test_restore(restore_setup):
     else:
         system_backup_path = "{}{}".format(WRSROOT_HOME, system_backup_file)
 
-    install_helper.restore_controller_system_config(system_backup=system_backup_path,
-                                                    tel_net_session=controller_node.telnet_conn)
+    compute_configured = install_helper.restore_controller_system_config(system_backup=system_backup_path,
+                                                    tel_net_session=controller_node.telnet_conn, is_aio=is_aio_lab)[2]
 
     LOG.info("Source Keystone user admin environment ...")
 
     controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
 
-    # re-establish ssh connection to controller
+    LOG.info('re-connect to the active controller using ssh')
     con_ssh.close()
     con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
     controller_node.ssh_conn = con_ssh
@@ -410,6 +445,9 @@ def test_restore(restore_setup):
     if backup_src.lower() == 'local':
         con_ssh.exec_cmd("rm -f {} {}".format(system_backup_path, images_backup_path))
 
+        cmd_rm_known_host = r'sed -i "s/^[^#]\(.*\)"/#\1/g /etc/ssh/ssh_known_hosts; \sync'
+        con_ssh.exec_sudo_cmd(cmd_rm_known_host)
+
         # transfer all backup files to /opt/backups from test server
         con_ssh.scp_files(backup_src_path + "/*", TiSPath.BACKUPS + '/', source_server=SvcCgcsAuto.SERVER,
                           source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
@@ -421,89 +459,83 @@ def test_restore(restore_setup):
         cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, TiSPath.BACKUPS)
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
-    if lab.get('system_type', 'Standard') == 'CPE':
-        controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
-        install_helper.run_cpe_compute_config_complete(controller_node, controller0)
-        con_ssh.close()
-        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
-        controller_node.ssh_conn = con_ssh
-        ControllerClient.set_active_controller(con_ssh)
-        host_helper.wait_for_hosts_ready(controller0)
-
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
     assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
         "Missing backup files in {}".format(TiSPath.BACKUPS)
 
-    boot_interfaces = lab['boot_device_dict']
-    LOG.tc_step("Restoring {}".format(controller1))
-    install_helper.open_vlm_console_thread(controller1, boot_interface=boot_interfaces, vlm_power_on=True)
+    if is_aio_lab:
+        LOG.tc_step("Restoring Cinder Volumes ...")
+        restore_volumes()
 
-    LOG.info("Verifying {} is Locked, Disabled and Online ...".format(controller1))
-    host_helper.wait_for_hosts_states(controller1, administrative=HostAdminState.LOCKED,
-                                      operational=HostOperationalState.DISABLED,
-                                      availability=HostAvailabilityState.ONLINE)
+        if not compute_configured:
+            LOG.tc_step('Old-load on AIO/CPE lab: config its compute functionalities')
+            install_helper.run_cpe_compute_config_complete(controller_node, controller0)
 
-    LOG.info("Unlocking {} ...".format(controller1))
-    rc, output = host_helper.unlock_host(controller1, available_only=True)
+            LOG.info('closing current ssh connection')
+            con_ssh.close()
 
-    assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(controller1, rc, output)
+            LOG.info('rebuild ssh connection')
+            con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+            controller_node.ssh_conn = con_ssh
 
-    hostnames = system_helper.get_hostnames()
-    storage_hosts = [host for host in hostnames if 'storage' in host]
-    compute_hosts = [host for host in hostnames if 'storage' not in host and 'controller' not in host]
+            ControllerClient.set_active_controller(con_ssh)
+            host_helper.wait_for_hosts_ready(controller0)
 
-    if len(storage_hosts) > 0:
-        for storage_host in storage_hosts:
-            LOG.tc_step("Restoring {}".format(storage_host))
-            install_helper.open_vlm_console_thread(storage_host, boot_interface=boot_interfaces, vlm_power_on=True)
+        LOG.tc_step('Install the standby controller: {}'.format(controller1))
+        if not is_sx:
+            install_non_active_node(controller1, lab)
 
-            LOG.info("Verifying {} is Locked, Diabled and Online ...".format(storage_host))
-            host_helper.wait_for_hosts_states(storage_host, administrative=HostAdminState.LOCKED,
-                                            operational=HostOperationalState.DISABLED,
-                                            availability=HostAvailabilityState.ONLINE)
-
-            LOG.info("Unlocking {} ...".format(storage_host))
-            rc, output = host_helper.unlock_host(storage_host, available_only=True)
-            assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(storage_host, rc, output)
-
-        LOG.info("Veryifying the Ceph cluster is healthy ...")
-        storage_helper.wait_for_ceph_health_ok(timeout=600)
-
-        LOG.info("Importing images ...")
-        image_backup_files = install_helper.get_backup_files(IMAGE_BACKUP_FILE_PATTERN, TiSPath.BACKUPS,  con_ssh)
-        LOG.info("Image backup found: {}".format(image_backup_files))
-        imported = install_helper.import_image_from_backup(image_backup_files)
-        LOG.info("Images successfully imported: {}".format(imported))
-
-
-    LOG.tc_step("Restoring Cinder Volumes ...")
-    # Getting all registered cinder volumes
-    volumes = cinder_helper.get_volumes()
-
-    if len(volumes) > 0:
-        LOG.info("System has {} registered volumes: {}".format(len(volumes), volumes))
-        rc, restored_vols = install_helper.restore_cinder_volumes_from_backup()
-        assert rc == 0, "All or some volumes has failed import: Restored volumes {}; Expected volumes {}"\
-            .format(restored_vols, volumes)
     else:
-        LOG.info("System has {} NO registered volumes; skipping cinder volume restore")
+        LOG.tc_step('Install the standby controller: {}'.format(controller1))
+        install_non_active_node(controller1, lab)
 
-    LOG.tc_step("Restoring Compute Nodes ...")
+        boot_interfaces = lab['boot_device_dict']
 
-    if len(compute_hosts) > 0:
-        for compute_host in compute_hosts:
-            LOG.tc_step("Restoring {}".format(compute_host))
-            install_helper.open_vlm_console_thread(compute_host, boot_interface=boot_interfaces, vlm_power_on=True)
+        hostnames = system_helper.get_hostnames()
+        storage_hosts = [host for host in hostnames if 'storage' in host]
+        compute_hosts = [host for host in hostnames if 'storage' not in host and 'controller' not in host]
 
-            LOG.info("Verifying {} is Locked, Diabled and Online ...".format(compute_host))
-            host_helper.wait_for_hosts_states(compute_host, administrative=HostAdminState.LOCKED,
-                                            operational=HostOperationalState.DISABLED,
-                                            availability=HostAvailabilityState.ONLINE)
-            LOG.info("Unlocking {} ...".format(compute_host))
-            rc, output = host_helper.unlock_host(compute_host, available_only=True)
-            assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(compute_host, rc, output)
+        if len(storage_hosts) > 0:
+            for storage_host in storage_hosts:
+                LOG.tc_step("Restoring {}".format(storage_host))
+                install_helper.open_vlm_console_thread(storage_host, boot_interface=boot_interfaces, vlm_power_on=True)
 
-    LOG.info("All nodes {} are restored ...".format(hostnames))
+                LOG.info("Verifying {} is Locked, Diabled and Online ...".format(storage_host))
+                host_helper.wait_for_hosts_states(storage_host, administrative=HostAdminState.LOCKED,
+                                                operational=HostOperationalState.DISABLED,
+                                                availability=HostAvailabilityState.ONLINE)
+
+                LOG.info("Unlocking {} ...".format(storage_host))
+                rc, output = host_helper.unlock_host(storage_host, available_only=True)
+                assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(storage_host, rc, output)
+
+            LOG.info("Veryifying the Ceph cluster is healthy ...")
+            storage_helper.wait_for_ceph_health_ok(timeout=600)
+
+            LOG.info("Importing images ...")
+            image_backup_files = install_helper.get_backup_files(IMAGE_BACKUP_FILE_PATTERN, TiSPath.BACKUPS,  con_ssh)
+            LOG.info("Image backup found: {}".format(image_backup_files))
+            imported = install_helper.import_image_from_backup(image_backup_files)
+            LOG.info("Images successfully imported: {}".format(imported))
+
+        LOG.tc_step("Restoring Cinder Volumes ...")
+        restore_volumes()
+
+        LOG.tc_step("Restoring Compute Nodes ...")
+        if len(compute_hosts) > 0:
+            for compute_host in compute_hosts:
+                LOG.tc_step("Restoring {}".format(compute_host))
+                install_helper.open_vlm_console_thread(compute_host, boot_interface=boot_interfaces, vlm_power_on=True)
+
+                LOG.info("Verifying {} is Locked, Diabled and Online ...".format(compute_host))
+                host_helper.wait_for_hosts_states(compute_host, administrative=HostAdminState.LOCKED,
+                                                operational=HostOperationalState.DISABLED,
+                                                availability=HostAvailabilityState.ONLINE)
+                LOG.info("Unlocking {} ...".format(compute_host))
+                rc, output = host_helper.unlock_host(compute_host, available_only=True)
+                assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(compute_host, rc, output)
+
+        LOG.info("All nodes {} are restored ...".format(hostnames))
 
     LOG.tc_step("Delete backup files from {} ....".format(TiSPath.BACKUPS))
     con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))

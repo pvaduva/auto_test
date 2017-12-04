@@ -172,7 +172,8 @@ class Prompt:
 
     VXWORKS_PROMPT = '-> '
 
-    ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
+    # ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
+    ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
 

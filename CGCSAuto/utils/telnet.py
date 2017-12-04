@@ -1020,7 +1020,8 @@ class Telnet:
             LOG.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 
-            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                      if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
@@ -1055,9 +1056,10 @@ class Telnet:
                     regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
                 else:
                     regex = re.compile(b"Slot (\d{4}) v\d+")
+                    # regex = re.compile(b"(\d{4}).*v\d+")
+                    # regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
 
             LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
-
 
             while count < MAX_SEARCH_ATTEMPTS:
 

@@ -1253,7 +1253,7 @@ def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.ADMIN):
     return val
 
 
-def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN, retries=2):
     """
     Imports a cinder volume from a backup file located in /opt/backups folder. The backup file is expected in
     volume-<uuid>-<date>.tgz  format. Either volume_backup filename or vol_id must be provided
@@ -1275,12 +1275,14 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
         con_ssh = ControllerClient.get_active_controller()
 
     controller_prompt = Prompt.CONTROLLER_0 + '|' + '.*controller\-0\:/opt/backups\$'
+    controller_prompt += '|.*controller\-0.*backups.*\$'
+    LOG.info('set prompt to:{}'.format(controller_prompt))
     vol_backup = cinder_volume_backup
     vol_id_ = vol_id
     cd_cmd = "cd /opt/backups"
     con_ssh.set_prompt(prompt=controller_prompt)
 
-    con_ssh.exec_cmd(cd_cmd, )
+    con_ssh.exec_cmd(cd_cmd)
 
     if not cinder_volume_backup:
         # search backup file in /opt/backups
@@ -1300,13 +1302,16 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
     if not vol_id_:
         vol_id_ = vol_backup[7:-20]
 
-    rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+    for _ in range(retries if 2 <= retries <= 10 else 2):
+        rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                             rtn_list=True)
-    if rc == 1:
-        return 1, output
+        # if rc == 1:
+            # return 1, output
 
-    if not _wait_for_volume_status(vol_id=vol_id_, status=['available', 'in-use'], auth_info=auth_info,
+        if _wait_for_volume_status(vol_id=vol_id_, status=['available', 'in-use'], auth_info=auth_info,
                                    con_ssh=con_ssh, fail_ok=True):
+            break
+    else:
         err_msg = "Volume is imported, but not in available/in-use state."
         LOG.warning(err_msg)
         if fail_ok:
