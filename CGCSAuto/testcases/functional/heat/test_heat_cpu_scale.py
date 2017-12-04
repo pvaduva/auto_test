@@ -5,7 +5,7 @@ from pytest import mark, fixture
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
-from keywords import nova_helper, vm_helper, heat_helper, network_helper
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
@@ -143,17 +143,20 @@ def aa_close_vm_ssh(request):
 
 
 @mark.usefixtures('check_alarms')
-@mark.parametrize(('vcpus', 'min_vcpus'), [
-    mark.p1((3, 1)),
-    mark.priorities('nightly', 'sx_nightly')((3, 1)),
+@mark.parametrize(('vcpus', 'min_vcpus', 'swact', 'live_mig'), [
+    mark.p1((3, 1, True, False)),
+    mark.p1((3, 1, False, True)),
+    mark.priorities('nightly', 'sx_nightly')((3, 1, False, False)),
 ])
-def test_heat_cpu_scale(vcpus, min_vcpus):
+def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
     """
     Vcpu auto scale via  Heat template testing:
 
     Args:
         vcpus (int): Max number of vcpus to use in the flavor
         min_vcpus (Int): min number of vcpus use in  the flavor
+        swact: trigger scale down and swact anc check
+        live_mig: trigger scale down, live-migrate and check
 
     =====
     Prerequisites (skip test if not met):
@@ -220,6 +223,21 @@ def test_heat_cpu_scale(vcpus, min_vcpus):
 
     # scaling down to min
     scale_down_vcpu(vm_name=vm_name)
+
+    if swact and system_helper.is_simplex() == False:
+        LOG.tc_step("Ensure system has standby controller")
+        standby = system_helper.get_standby_controller_name()
+        assert standby
+        # add a swact here:
+        LOG.tc_step("Swact active controller and ensure active controller is changed")
+        host_helper.swact_host()
+
+        LOG.tc_step("Check all services are up on active controller via sudo sm-dump")
+        host_helper.wait_for_sm_dump_desired_states(controller=standby, fail_ok=False)
+
+    if live_mig:
+        LOG.tc_step("Live migrating the vm after triggering scale down")
+        vm_helper.perform_action_on_vm(vm_id=vm_id,action='live_migrate')
 
     expt_current_cpu = min_vcpus
     if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
