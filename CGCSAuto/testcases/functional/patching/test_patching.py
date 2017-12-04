@@ -321,7 +321,7 @@ def connect_to_build_server(server=None, username='', password='', prompt=''):
 
 def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build_server=None):
     patch_dir_or_file = patch_dir
-    patch_base_dir = PatchingVars.get_patching_var('def_patch_build_base_dir')
+    patch_base_dir = PatchingVars.get_patching_var('patch_base_dir')
 
     # if an absolute path is specified, we do not need to guess the location of patch file(s),
     # otherwise, we need to deduce where they are based on the build information

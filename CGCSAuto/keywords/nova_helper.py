@@ -1182,9 +1182,10 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
         raise ValueError("Please specify at least one quota=value pair via kwargs.")
 
     args_ = ''
-    for key in kwargs:
-        key = key.strip().replace('_', '-')
-        args_ += '--{} {} '.format(key, kwargs[key])
+    for key, val in kwargs.items():
+        if val is not None:
+            key = key.strip().replace('_', '-')
+            args_ += '--{} {} '.format(key, val)
 
     if force:
         args_ += '--force '

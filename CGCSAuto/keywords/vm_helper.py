@@ -3841,5 +3841,14 @@ def ensure_vms_quotas(vms_num=10, cores_num=None, vols_num=None, tenant=None, co
         vols_num = 2 * vms_num
     if not cores_num:
         cores_num = 2 * vms_num
-    cinder_helper.update_quotas(volumes=vols_num, con_ssh=con_ssh, tenant=tenant)
-    nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)
+    if cinder_helper.get_quotas(quotas='volume', con_ssh=con_ssh)[0] < vols_num:
+        cinder_helper.update_quotas(volumes=vols_num, con_ssh=con_ssh, tenant=tenant)
+
+    vms_quota, cores_quota = nova_helper.get_quotas(quotas=('instances, cores'), con_ssh=con_ssh)
+    if vms_num < vms_quota:
+        vms_num = None
+    if cores_num < cores_quota:
+        cores_num = None
+
+    if vms_num is not None or cores_num is not None:
+        nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)

@@ -251,6 +251,7 @@ class PatchingVars:
         'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
+        'PATCH_BASE_DIR': None,
     }
 
     @classmethod
@@ -264,6 +265,7 @@ class PatchingVars:
 
     @classmethod
     def set_patching_var(cls, **kwargs):
+        kwargs = {k.upper(): v for k, v in kwargs.items()}
         cls.__var_dict.update(**kwargs)
 
 
