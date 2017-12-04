@@ -516,6 +516,9 @@ if __name__ == "__main__":
             streams = None
         install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio=vboxoptions.aio, storage=vboxoptions.storage,
                           release=vboxoptions.release, streams=streams)
+    if 'controller-1' in node_list:
+        host_helper.unlock_host(cont0_stream, 'controller-1')
+        serial.expect_bytes(streams['controller-1'], 'ogin:', HostTimeout.CONTROLLER_UNLOCK)
     host_helper.logout(cont0_stream)
     serial.disconnect(sock)
     LOG.info("Installation complete.")
