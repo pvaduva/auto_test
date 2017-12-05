@@ -232,7 +232,8 @@ def restore_setup(pre_restore_checkup):
     # is_cpe = (lab['system_type'] == 'CPE')
     is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
 
-    install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
+    # install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
+    install_helper.boot_controller(small_footprint=is_cpe, system_restore=True)
 
     # establish ssh connection with controller
     LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
@@ -546,4 +547,4 @@ def test_restore(restore_setup):
     assert rc == 0, "System health not OK: {}".format(failed)
 
     ProjVar.set_var(SOURCE_CREDENTIAL=None)
-    vm_helper.boot_vm()
+    # vm_helper.boot_vm()
