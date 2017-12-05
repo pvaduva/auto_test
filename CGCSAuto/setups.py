@@ -559,19 +559,6 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
                 raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
                                           .format(external_ip ))
 
-        # if not external_ip:
-        #    # if it is a vobx Tis, it is assumed that the test scripts are bing executed from a local linux VM within the
-        #    # vbox. The local linux will serve as NAT box for pinging vms and TiS connect with external build servers.
-        #    LOG.info("Enabling the local linux VM for NATBox vm ping and portforwding for Controller-0 external connection")
-        #    # get the ip address of the local linux vm
-        #    cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
-        #    local_external_ip = os.popen(cmd).read().strip()
-        #    if not local_external_ip or "128.224." not in local_external_ip:
-        #        raise exceptions.UpgradeError("The local linux VM does not have valid ip for external access: {} "
-        #                                  .format(local_external_ip if local_external_ip else ''))
-        #
-        #    LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
-
         username = getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:

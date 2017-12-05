@@ -241,8 +241,8 @@ class Labs:
         'controller-0 ip': '128.224.150.84',
         'controller-1 ip': '128.224.150.56',
         'controller_nodes': [23516, 23517],
-        # 'system_type': 'CPE',
-        # 'system_mode': 'duplex',
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WCP_3_6 = {

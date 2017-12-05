@@ -6,7 +6,7 @@ from keywords import install_helper, host_helper, system_helper
 from consts.proj_vars import InstallVars, ProjVar
 from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt
 from utils.ssh import ControllerClient
-
+from consts.filepaths import BuildServerPath
 from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto
 from consts.timeout import HostTimeout
@@ -16,6 +16,7 @@ from utils import node, local_host
 @pytest.fixture(scope='session')
 def install_clone_setup():
 
+    LOG.tc_func_start("CLONE_INSTALL_TEST")
     lab = InstallVars.get_install_var('LAB')
     LOG.info("Lab info; {}".format(lab))
     install_cloned_info = {'usb_verified': False,
@@ -138,8 +139,21 @@ def test_install_cloned_image(install_clone_setup):
     LOG.info("Changing the OAM IP configuration ... ")
     install_helper.update_oam_for_cloned_system(system_mode=system_mode)
 
-    LOG.info("Changing the system name ... ")
-    install_helper.update_system_info_for_cloned_system()
+    LOG.tc_step ("Downloading lab specific license, config and scripts ....")
+    software_version = system_helper.get_system_software_version()
+    load_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[software_version]
+    install_helper.download_lab_config_files(lab, install_clone_setup['build_server'], load_path)
+
+    LOG.tc_step ("Running lab cleanup to removed source attributes ....")
+    rc, output = install_helper.run_setup_script(script='lab_cleanup')
+    assert rc == 0, "Lab cleanup script run failed: {}".format(output)
+
+    LOG.tc_step ("Running lab setup script to upadate cloned system attributes ....")
+    rc, output = install_helper.run_lab_setup()
+    assert rc == 0, "Lab setup run failed: {}".format(output)
+    #
+    # LOG.info("Changing the system name ... ")
+    # install_helper.update_system_info_for_cloned_system()
 
     LOG.tc_step("Verifying system health after restore ...")
     system_helper.wait_for_all_alarms_gone(timeout=300)
