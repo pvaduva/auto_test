@@ -86,12 +86,24 @@ def _verify_iptables_status(con_ssh, active_controller):
 
 
 def _check_ports_with_netstat(con_ssh, active_controller, ports):
-
     LOG.tc_step("Verify ports on {}".format(active_controller))
-    for port in ports:
-        cmd = 'netstat -lntu | grep --color=never -w {}'.format(port)
-        code, output = con_ssh.exec_cmd(cmd)
-        assert output is not '', "Port {} is not listed in netstat. Expected to be open.".format(port)
+    end_time = time.time() + 5
+    failed_ports = []
+    while time.time() < end_time:
+        failed_ports = []
+        for port in ports:
+            cmd = 'netstat -lntu | grep --color=never -w {}'.format(port)
+            code, output = con_ssh.exec_cmd(cmd)
+            if not output:
+                failed_ports.append(port)
+
+        if not failed_ports:
+            LOG.info("Ports {} are listed in netstat")
+            return
+
+        time.sleep(3)
+
+    assert False, "Timed out waiting for ports {} to be listed in netstat. Expected to be open.".format(failed_ports)
 
 
 def test_firewall_rules_custom():
@@ -203,13 +215,15 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)
-    output = con_ssh.exec_sudo_cmd(cmd, get_exit_code=False)[1]
-    if port_expected_open:
-        if output is '':
-            assert 0, "Port {} is not listed in iptables. Expected to be open.".format(port)
+    end_time = time.time() + 30
+    while time.time() < end_time:
+        output = con_ssh.exec_sudo_cmd(cmd, get_exit_code=False)[1]
+        if (port_expected_open and output) or (not port_expected_open and not output):
+            LOG.info("Port {} is {}listed in iptables as expected".format(port, '' if port_expected_open else 'not '))
+            break
+        time.sleep(3)
     else:
-        if output is not '':
-            assert 0, "Port {} is listed in iptables. Expected to be closed.".format(port)
+        assert 0, "Port {} is {}listed in iptables. ".format(port, 'not ' if port_expected_open else '')
 
     LOG.info("Open listener on port {}".format(port))
     listener_thread = MThread(_listen_on_port, port)
@@ -218,22 +232,21 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
         if not _wait_for_listener(con_ssh, port):
             assert 0, "Port {} does not show listening in netstat. Expected to be listening.".format(port)
 
-    LOG.info("Verify port {} can be accessed from natbox".format(port))
-    natbox_ssh = NATBoxClient.get_natbox_client()
-    output = natbox_ssh.exec_cmd("nc -v -w 2 {} {}".format(lab_ip, port), get_exit_code=False)[1]
-    listener_thread.end_thread()
-    listener_thread.wait_for_thread_end()
-
+    LOG.info("Verify port {} can{} be accessed from natbox".format(port, '' if port_expected_open else 'not'))
     try:
-        if port_expected_open:
-            if 'succeeded' not in output:
-                raise ValueError("Natbox failed to connect to port {}. Expected to succeed.".format(port))
+        natbox_ssh = NATBoxClient.get_natbox_client()
+        end_time = time.time() + 60
+        while time.time() < end_time:
+            output = natbox_ssh.exec_cmd("nc -v -w 2 {} {}".format(lab_ip, port), get_exit_code=False)[1]
+            if (port_expected_open and 'succeeded' in output) or (not port_expected_open and not 'succeeded' in output):
+                LOG.info("Access via port {} {} as expected".format(port, 'succeeded' if port_expected_open else
+                'rejected'))
+                return
         else:
-            if 'succeeded' in output:
-                raise ValueError("Natbox connected to port {}. Expected to fail.".format(port))
-    except ValueError as error:
-        assert 0, error
+            assert False, "Access via port is not {}".format(port, 'succeeded' if port_expected_open else 'rejected')
     finally:
+        listener_thread.end_thread()
+        listener_thread.wait_for_thread_end()
         con_ssh.send_control('c')
         con_ssh.expect(Prompt.CONTROLLER_PROMPT)
 
