@@ -5,6 +5,7 @@ import pytest
 import setups
 from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar
+from consts.cgcs import REGION_MAP
 
 
 natbox_ssh = None
@@ -13,13 +14,11 @@ initialized = False
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_test_session():
+def setup_test_session(global_setup):
     """
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
-    os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.set_env_vars(con_ssh)
 
@@ -56,13 +55,9 @@ def pytest_collectstart():
         CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
         if setups.is_https(con_ssh):
             CliAuth.set_vars(HTTPS=True)
-        Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-        region = CliAuth.get_var('OS_REGION_NAME')
-        Tenant._set_region(region=region)
-        if region == 'RegionTwo':
-            for tenant in ('tenant1', 'tenant2'):
-                r2_tenant = '{}-R2'.format(tenant)
-                Tenant.update_tenant_dict(tenant, username=r2_tenant, tenant=r2_tenant)
+        Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+        setups.set_region(region=None)
+        print("ollect {} region")
         initialized = True
 
 

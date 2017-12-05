@@ -21,6 +21,7 @@ MAX_WAIT_FOR_ALARM = 600
 MAX_FAILED_LOGINS = 5
 MAX_NUM_PASSWORDS_TRACKED = 5
 PASSWORD_LEGNTH = 13
+TARGET_PASSWORD = 'Li69nux*'
 SSH_OPTS = {
     'RSAAuthentication': 'no',
     'PubkeyAuthentication': 'no',
@@ -68,8 +69,8 @@ def change_password(connect, password, new_password, expecting_fail=False):
 
     else:
         LOG.info('OK, password changed to {}'.format(new_password))
-        LOG.info('Wait for 300 seconds'.format())
-        time.sleep(300)
+        LOG.info('Wait for 180 seconds'.format())
+        time.sleep(180)
 
         return True
 
@@ -143,7 +144,7 @@ def cleanup_test_users(request):
     def delete_test_users():
         global _host_users
 
-        restore_wrsroot_password(target_password=HostLinuxCreds.get_password())
+        restore_wrsroot_password(target_password=TARGET_PASSWORD)
 
         LOG.info('Deleting users created for testing\n')
         conn_to_ac = ControllerClient.get_active_controller()
@@ -546,28 +547,27 @@ def test_wrsroot_aging_and_swact(swact):
     code, output = execute_cmd(connect, cmd)
     LOG.info('output:\n{}\n, code:{}, cmd:{}\n'.format(output, code, cmd))
 
-    # Uncomment following line and test when CGTS-8346 is resolved
     # perform swact and verify swact is working
-    #wait_time = 300
-    #LOG.info('wait for {} seconds after aging settings been modified'.format(wait_time))
-    #time.sleep(wait_time)
+    wait_time = 300
+    LOG.info('wait for {} seconds after aging settings been modified'.format(wait_time))
+    time.sleep(wait_time)
 
-    #if swact == 'swact':
-    #    LOG.tc_step('Swact host')
-    #    swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
-    #    LOG.info('OK, host swact')
+    if swact == 'swact':
+        LOG.tc_step('Swact host')
+        swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
+        LOG.info('OK, host swact')
 
-    #LOG.info('Closing raw ssh connection to the active controller\n')
-    #connect.logout()
+    LOG.info('Closing raw ssh connection to the active controller\n')
+    connect.logout()
 
-    #wait_time = 180
-    #LOG.info('wait for {} after swact and closing own ssh connection'.format(wait_time))
-    #time.sleep(wait_time)
+    wait_time = 180
+    LOG.info('wait for {} after swact and closing own ssh connection'.format(wait_time))
+    time.sleep(wait_time)
 
     # reconnect to active after swact
-    #LOG.info('reconnect to the active controller')
-    #host = lab_info.get_lab_floating_ip()
-    #connect = log_in_raw(host, user, new_password)
+    LOG.info('reconnect to the active controller')
+    host = lab_info.get_lab_floating_ip()
+    connect = log_in_raw(host, user, new_password)
 
     LOG.tc_step('Restore the password ')
 

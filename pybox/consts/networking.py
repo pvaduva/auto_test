@@ -1,3 +1,5 @@
+from sys import platform
+
 class Subnets:
     IPV4 = {
         'mgmt_subnet': '192.168.204.0/24',
@@ -12,13 +14,21 @@ class Subnets:
     }
 
 class NICs:
+    if platform == 'win32' or platform == 'win64':
 
-    CONTROLLER = {
-        'node_type': 'controller',
-        '1': {'nic': 'hostonly', 'intnet': 'none', 'nictype': '82540EM', 'nicpromisc': 'deny', 'hostonlyadapter': 'vboxnet0'},
-        '2': {'nic': 'intnet', 'intnet': 'intnet-management', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
-        '3': {'nic': 'intnet', 'intnet': 'intnet-infra', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
-    }
+        CONTROLLER = {
+            'node_type': 'controller',
+            '1': {'nic': 'hostonly', 'intnet': 'none', 'nictype': '82540EM', 'nicpromisc': 'deny', 'hostonlyadapter': 'VirtualBox Host-Only Ethernet Adapter'},
+            '2': {'nic': 'intnet', 'intnet': 'intnet-management', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+            '3': {'nic': 'intnet', 'intnet': 'intnet-infra', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+        }
+    else:
+        CONTROLLER = {
+            'node_type': 'controller',
+            '1': {'nic': 'hostonly', 'intnet': 'none', 'nictype': '82540EM', 'nicpromisc': 'deny', 'hostonlyadapter': 'vboxnet0'},
+            '2': {'nic': 'intnet', 'intnet': 'intnet-management', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+            '3': {'nic': 'intnet', 'intnet': 'intnet-infra', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+        }
 
     COMPUTE = {
         'node_type': 'compute',
@@ -42,9 +52,17 @@ class OAM:
     }
 
 class Serial:
-    SERIAL = {
-        'uartbase': '0x3F8',
-        'uartport': '4',
-        'uartmode': 'server',
-        'uartpath': '/tmp'
-    }
+    if platform == 'win32' or platform == 'win64':
+        SERIAL = {
+            'uartbase': '0x3F8',
+            'uartport': '4',
+            'uartmode': 'tcpserver',
+            'uartpath': '10000'
+        }
+    else:
+        SERIAL = {
+            'uartbase': '0x3F8',
+            'uartport': '4',
+            'uartmode': 'server',
+            'uartpath': '/tmp/'
+        }

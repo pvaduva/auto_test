@@ -576,6 +576,7 @@ def test_install_impacted_hosts(con_ssh=None):
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('insvc_controller')),
     mark.p1(('all')),
 ])
 def test_apply_patches(patch_type, con_ssh=None):
@@ -631,6 +632,7 @@ def test_apply_patches(patch_type, con_ssh=None):
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('insvc_controller')),
     mark.p1(('all')),
 ])
 def test_upload_patch_files(patch_types, download_if_not_found=True, con_ssh=None):
@@ -705,6 +707,7 @@ def test_install_patch_dir_file(con_ssh=None):
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('insvc_controller')),
     mark.p1(('all')),
 ])
 def test_remove_patches(patch_type, con_ssh=None):
@@ -754,6 +757,7 @@ def test_remove_patches(patch_type, con_ssh=None):
     mark.p1(('nova')),
     mark.p1(('large')),
     mark.p1(('insvc_nova')),
+    mark.p1(('insvc_controller')),
     mark.p1('all'),
 ])
 def test_delete_patches(patch_type, con_ssh=None):

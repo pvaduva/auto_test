@@ -1,12 +1,14 @@
 import datetime
 import logging
+from consts.env import LOGPATH
 
 current_time = datetime.datetime.now()
 
 LOG = logging.getLogger()
 LOG.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s: %(message)s")
-handler = logging.FileHandler("logs/{}_{}_{}_{}:{}.log".format(current_time.year, current_time.month, current_time.day, current_time.hour, current_time.minute))
+log_file = "{}/{}_{}_{}_{}_{}.log".format(LOGPATH, current_time.year, current_time.month, current_time.day, current_time.hour, current_time.minute)
+handler = logging.FileHandler("{}/{}_{}_{}_{}_{}.log".format(LOGPATH, current_time.year, current_time.month, current_time.day, current_time.hour, current_time.minute))
 handler.setFormatter(formatter)
 handler.setLevel(logging.INFO)
 LOG.addHandler(handler)

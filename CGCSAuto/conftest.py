@@ -22,6 +22,8 @@ stress_count = -1
 count = -1
 no_teardown = False
 tracebacks = []
+region = None
+test_count = 0
 
 ################################
 # Process and log test results #
@@ -78,7 +80,8 @@ def _write_results(res_in_tests, test_name):
     global tc_start_time
     with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
         f.write('\n{}\t{}\t{}'.format(res_in_tests, tc_start_time, test_name))
-
+    global test_count
+    test_count += 1
     # reset tc_start and end time for next test case
     build_id = ProjVar.get_var('BUILD_ID')
     build_server = ProjVar.get_var('BUILD_SERVER')
@@ -277,6 +280,8 @@ def pytest_configure(config):
     no_teardown = config.getoption('noteardown')
     keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
+    global region
+    region = config.getoption('region')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
@@ -373,6 +378,8 @@ def pytest_addoption(parser):
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
+    region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
+                  "e.g., creating vm on RegionTwo from RegionOne"
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -400,6 +407,7 @@ def pytest_addoption(parser):
     parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
     parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
                      help="Collect kpi for applicable test cases")
+    parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
 
     ##################################
     # Lab install or upgrade options #
@@ -427,37 +435,33 @@ def pytest_addoption(parser):
     ###############################
     #  Backup and Restore options #
     ###############################
-    # Backup
-    backup_server_destination_help = "The external destination  where the backupfiles are copied too. " \
-                                     "Choices are USB  ( 16G USB  or above must be plugged to controller-0) or " \
-                                     "local (Test server). Default is USB"
-    backup_destination_path_help = "The path the backup files are copied to if destination is not a USB. " \
-                                   "If destination is  USB, by default, the backup files are copied to " \
-                                   "mount point: /media/wrsroot/backups.  For local (Test Server)" \
-                                   "the default is /sandbox/backups."
-    delete_backups = "Whether to delete the backupfiles from controller-0:/opt/backups after transfer " \
-                     "to the specified destination. Default is True."
-    parser.addoption('--destination', '--dest',  dest='destination', metavar='dest',
-                     action='store', default='usb',  help=backup_server_destination_help)
-    parser.addoption('--dest-path', '--dest_path',  dest='dest_path',
+
+    # Backup only
+    keep_backups = "Whether to keep the backupfiles from controller-0:/opt/backups after transfer " \
+                   "to the specified destination. Default is remove."
+    parser.addoption('--keep-backups', '--keep_backups',  dest='keep_backups', action='store_true', help=keep_backups)
+
+    # Common for backup and restore
+    backup_server_destination_help = "Whether to save/get backupfiles on/from USB. Default is test server." \
+                                     "When true, 16G USB  or above must be plugged to controller-0 "
+    backup_destination_path_help = "The path the backup files are copied to/taken from if destination is not a USB. " \
+                                   "For USB, the backup files are at mount point: /media/wrsroot/backups. " \
+                                   "For Test Server, the default is /sandbox/backups."
+
+    parser.addoption('--usb', '--usb',  dest='use_usb', action='store_true',  help=backup_server_destination_help)
+    parser.addoption('--backup-path', '--backup_path',  dest='backup_path',
                      action='store', metavar='DIR', help=backup_destination_path_help)
-    parser.addoption('--delete-backups', '--delete_backups',  dest='delete_backups', metavar='delete_backups',
-                     action='store', default=True,  help=delete_backups)
-    # Restore
-    backup_src_path_help = "The path to  backup files in the backup source, if source is not a USB. If source is USB," \
-                           " by default, the backup files are found at the mount point: /media/wrsroot/backups. " \
-                           " For local (Test Server) the default is /sandbox/backups."
-    parser.addoption('--backup-src', '--backup_src',  dest='backup_src', action='store', default='USB',
-                     help="Where to get the bakcup files: choices are 'usb' and 'local'")
-    parser.addoption('--backup-src-path', '--backup_src_path',  dest='backup_src_path',
-                     action='store', metavar='DIR', help=backup_src_path_help)
+
+    # Restore only
     parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
-                     action='store',  help="The build id of the backup")
+                     action='store', help="The build id of the backup")
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
-                     action='store',  help="The Titanium builds dir where the backup build id belong. "
-                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
+                     action='store', help="The Titanium builds dir where the backup build id belong. "
+                                          "Such as CGCS_5.0_Host or TC_17.06_Host")
 
-
+    parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
+                     action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
+                                           "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
 def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
@@ -552,7 +556,7 @@ def pytest_unconfigure(config):
         except Exception as e:
             LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
-    if ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL')):
+    if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
         try:
@@ -704,6 +708,16 @@ def autostart(request):
 
 def __params_gen(index):
     return 'iter{}'.format(index)
+
+
+@pytest.fixture(scope='session')
+def global_setup():
+    os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+    os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
+
+    if region:
+        setups.set_region(region=region)
+        print("fdfhdfhdj {}".format(region))
 
 #####################################
 # End of fixture order manipulation #

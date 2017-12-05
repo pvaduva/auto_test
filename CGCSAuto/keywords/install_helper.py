@@ -14,9 +14,10 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
-from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser
+from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
+from utils.node import create_node_boot_dict, create_node_dict
 from consts.auth import Tenant, CliAuth
 import setups
 import configparser
@@ -26,6 +27,8 @@ UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
+
+outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ", "compute-config in progress ...")
 
 lab_ini_info = {}
 
@@ -165,7 +168,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
 
 def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
-                          close_telnet_conn=True, small_footprint=False, clone_install=False):
+                          close_telnet_conn=True, small_footprint=False, clone_install=False, log_file_prefix=''):
     """
     Initiate the boot and installation operation.
     Args:
@@ -181,18 +184,19 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.error("Cannot bring vlm console for {} without valid mgmt boot device: {}".format(node.name, boot_device))
         return 1
 
+    log_path = "{}/{}{}.telnet.log".format(install_output_dir, log_file_prefix, node.name)
+
     if node.telnet_conn is None:
         node.telnet_conn = telnetlib.connect(node.telnet_ip,
                                              int(node.telnet_port),
                                              negotiate=node.telnet_negotiate,
                                              port_login=True if node.telnet_login_prompt else False,
                                              vt100query=node.telnet_vt100query,
-                                             log_path=install_output_dir + "/" + node.name + ".telnet.log")
+                                             log_path=log_path)
 
     if vlm_power_on:
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
-
 
     node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint,
                              clone_install=clone_install)
@@ -209,14 +213,14 @@ def get_non_controller_system_hosts():
     return storages + computes
 
 
-def open_telnet_session(node_obj, install_output_dir):
+def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
 
     _telnet_conn = telnetlib.connect(node_obj.telnet_ip,
                                       int(node_obj.telnet_port),
                                       negotiate=node_obj.telnet_negotiate,
                                       port_login=True if node_obj.telnet_login_prompt else False,
                                       vt100query=node_obj.telnet_vt100query,\
-                                      log_path=install_output_dir + "/" + node_obj.name +\
+                                      log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
                                       ".telnet.log", debug=False)
 
     return _telnet_conn
@@ -1220,7 +1224,7 @@ def mount_usb (usb_device, mount=None, unmount=True, format_=False, con_ssh=None
     return True
 
 
-def restore_controller_system_config(system_backup, tel_net_session=None, con_ssh=None, fail_ok=False):
+def restore_controller_system_config(system_backup, tel_net_session=None, con_ssh=None, is_aio=False, fail_ok=False):
     """
     Restores the controller system config for system restore.
     Args:
@@ -1249,73 +1253,85 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
 
+    connection = controller0_node.telnet_conn
     cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
                                                                              system_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = controller0_node.telnet_conn.exec_cmd(cmd,
-                                                       extra_expects=["Enter 'reboot' to reboot controller: "],
-                                                       timeout=HostTimeout.SYSTEM_RESTORE)
-    if rc == 0 and 'reboot controller' in output:
-        msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
-        LOG.info(msg)
+    rc, output = connection.exec_cmd(cmd, extra_expects=outputs_restore_system_conf, timeout=HostTimeout.SYSTEM_RESTORE)
+    compute_configured = False
+    if rc == 0:
+        if 'compute-config in progress' in output:
+            if not is_aio:
+                LOG.fatal('Not an AIO lab, but the system IS configuring compute functionality')
+            else:
+                LOG.info('No need to do compute-config-complete, which is a new behavior after 2017-11-27.')
+                LOG.info('Instead, we will have to wait the node self-boot and boot up to ready states.')
 
-        reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+            connection.find_prompt(prompt='controller\-[01] login:')
 
-        rc, output = controller0_node.telnet_conn.exec_cmd(reboot_cmd,
-                                                           alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
-        if rc != 0:
-            msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
-            LOG.error(msg)
-            raise exceptions.RestoreSystem
-        LOG.info('OK, system reboot after been patched to previous level')
+            LOG.info('Find login prompt, try to login')
+            connection.login()
 
-        LOG.info('re-login')
-        controller0_node.telnet_conn.login()
-        os.environ["TERM"] = "xterm"
+            compute_configured = True
+            # todo: just be consistent with other codes, maybe not the correct type
+            os.environ["TERM"] = "xterm"
 
-        LOG.info('re-run cli:{}'.format(cmd))
-        rc, output = controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+            LOG.warn('checking system states')
 
-    if rc != 0:
+            cmd = 'cd; source /etc/nova/openrc'
+            rc, output = connection.exec_cmd(cmd)
+            assert rc == 0, \
+                'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
+            LOG.info('OK to source openrc')
+
+            cmd = 'system host-list'
+            rc, output = connection.exec_cmd(cmd)
+            assert rc == 0, \
+                'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+            cmd = 'openstack endpoint list'
+            rc, output = connection.exec_cmd(cmd)
+            assert rc == 0, \
+                'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
+
+            LOG.info('OK to get hosts list\n{}\n'.format(output))
+
+        elif 'reboot controller' in output:
+            LOG.info('Prompted to reboot, reboot now')
+            msg = 'System WAS patched, and now is restored to the previous patch-level, but still needs a reboot'
+            LOG.info(msg)
+
+            reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
+
+            rc, output = connection.exec_cmd(reboot_cmd, alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
+            if rc != 0:
+                msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
+                LOG.error(msg)
+                raise exceptions.RestoreSystem
+            LOG.info('OK, system reboot after been patched to previous level')
+
+            LOG.info('re-login')
+            connection.login()
+            os.environ["TERM"] = "xterm"
+
+            LOG.info('re-run cli:{}'.format(cmd))
+            rc, output = connection.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+
+            if "System restore complete" in output:
+                msg = "System restore completed successfully"
+                LOG.info(msg)
+                return 0, msg, compute_configured
+
+    else:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
         if fail_ok:
-            return 1, err_msg
+            return 1, err_msg, compute_configured
         else:
             raise exceptions.CLIRejected(err_msg)
 
-    if "System restore complete" in output:
-        msg = "System restore completed successfully"
-        LOG.info(msg)
-        return 0, msg
-    else:
-        LOG.warn('No "restore complete" in output, rc={}\noutput:\n{}\n'.format(rc, output))
-        conn = controller0_node.telnet_conn
-        cmd = 'cd; source /etc/nova/openrc'
-        rc, output = conn.exec_cmd(cmd)
-        assert rc == 0, \
-            'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
-        LOG.info('OK to source openrc')
-
-        cmd = 'system host-list'
-        rc, output = conn.exec_cmd(cmd)
-        assert rc == 0, \
-            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
-
-        cmd = 'openstack endpoint list'
-        rc, output = conn.exec_cmd(cmd)
-        assert rc == 0, \
-            'Failed to run {}, rc:{}, output:\n{}'.format(cmd, rc, output)
-
-        LOG.info('OK to get hosts list\n{}\n'.format(output))
-
-        # err_msg = "Unexpected result from system restore: {}".format(output)
-        #
-        # if fail_ok:
-        #     return 3, err_msg
-        # else:
-        #     raise exceptions.RestoreSystem(err_msg)
+    return rc, output, compute_configured
 
 
 def restore_controller_system_images(images_backup, tel_net_session=None, fail_ok=False):
@@ -2101,8 +2117,8 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False, lowlat=False, small_footprint=False,
-                     clone_install=False, system_restore=False):
+def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, lowlat=False,
+                    small_footprint=False,  clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2110,20 +2126,26 @@ def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
         load_path:
         patch_dir_paths:
         boot_usb:
-        cpe:
+        small_footprint:
         lowlat:
+        clone_install:
+        system_restore:
 
     Returns:
 
     """
 
-    lab = InstallVars.get_install_var("LAB")
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
 
     controller0 = lab["controller-0"]
     install_output_dir = ProjVar.get_var("LOG_DIR")
+    log_file_prefix = ''
+    if lab['short_name'] not in install_output_dir:
+        log_file_prefix += "{}_".format(lab['short_name'])
 
     if controller0.telnet_conn is None:
-        controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
+        controller0.telnet_conn = open_telnet_session(controller0, install_output_dir, log_file_prefix=log_file_prefix)
 
     boot_interfaces = lab['boot_device_dict']
 
@@ -2145,9 +2167,10 @@ def boot_controller( bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
 
     controller0.telnet_conn.login(reset=reset)
 
-    time.sleep(60)
+    time.sleep(20)
 
     if not system_restore and (patch_dir_paths and bld_server_conn):
+        time.sleep(20)
         apply_patches(lab, bld_server_conn, patch_dir_paths)
         controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
@@ -2271,8 +2294,8 @@ def update_auth_url(ssh_con, region=None, fail_ok=True):
     LOG.info('Attempt to update OS_AUTH_URL from openrc')
 
     CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
-    Tenant._set_url(CliAuth.get_var('OS_AUTH_URL'))
-    Tenant._set_region(CliAuth.get_var('OS_REGION_NAME'))
+    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def get_lab_info(barcode):
@@ -2302,6 +2325,8 @@ def get_lab_info(barcode):
 
 def run_cpe_compute_config_complete(controller0_node, controller0):
     output_dir = ProjVar.get_var('LOG_DIR')
+
+    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
 
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
@@ -2352,14 +2377,16 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
         LOG.info('{} is not ready yet, failed to source /etc/nova/openrc, continue to wait'.format(controller0))
         time.sleep(15)
 
-
+    LOG.info('closing the telnet connnection to node:{}'.format(controller0))
     controller0_node.telnet_conn.close()
 
+    LOG.info('waiting for node:{} to be ready'.format(controller0))
     host_helper.wait_for_hosts_ready(controller0)
+    LOG.info('OK, {} is up and ready'.format(controller0))
 
 
 def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_system_name=None,
-                  timeout=HostTimeout.SYSTEM_BACKUP, usb_device=None, delete_cloned_image_file=True,
+                  timeout=HostTimeout.SYSTEM_BACKUP, dest_labs=None, delete_cloned_image_file=True,
                   con_ssh=None, fail_ok=False):
     """
     Creates system cloned image for AIO systems and copy the iso image to to USB.
@@ -2367,6 +2394,7 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
         cloned_image_file_prefix(str): The prefix to the generated system cloned image iso file. The default is "titanium_backup_"
         lab_system_name(str): is the lab system name
         timeout(inst): is the timeout value the system clone is expected to finish.
+        dest_labs (str/list): list of labs the cloned image iso file is scped. Default is local.
         usb_device(str): usb device name, if specified,the cloned image iso file is copied to.
         delete_cloned_image_file(bool): if USB is available, the cloned image iso file is deleted from system to save disk space.
          Default is enabled
@@ -2399,7 +2427,7 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
     # max wait 1800 seconds for config controller backup to finish
     rc, output = con_ssh.exec_sudo_cmd(cmd, expect_timeout=timeout)
     if rc != 0 or (output and "Cloning complete" not in output):
-        err_msg = "Command {} failed execution: {}".format(output)
+        err_msg = "Command {} failed execution: {}".format(cmd, output)
         LOG.info(err_msg)
         if fail_ok:
             return 1, err_msg
@@ -2416,40 +2444,10 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
         else:
             raise exceptions.BackupSystem(err_msg)
 
+    cloned_image_file_name += ".iso"
     LOG.info("System cloned image iso file is created in /opt/backups folder: {} ".format(cloned_image_file_name))
-    cloned_iso_path = "/opt/backups/{}.iso".format(cloned_image_file_name)
 
-    # copy cloned image iso file to usb
-    if usb_device is None:
-        usb_device = get_usb_device_name(con_ssh=con_ssh)
-
-    if usb_device:
-        LOG.tc_step("Buring the system cloned image iso file to usb flash drive {}".format(usb_device))
-
-        # Write the ISO to USB
-        cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
-            .format(HostLinuxCreds.get_password(), cloned_iso_path, usb_device)
-
-        rc,  output = con_ssh.exec_cmd(cmd, expect_timeout=900)
-        if rc != 0:
-            err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
-            LOG.info(err_msg)
-            if fail_ok:
-                return 3, err_msg
-            else:
-                raise exceptions.BackupSystem(err_msg)
-
-        LOG.info(" The cloned image iso file copied to USB for restore. {}".format(output))
-
-        if delete_cloned_image_file:
-            LOG.info("Deleting system cloned image iso file from tis server /opt/backups folder ")
-            con_ssh.exec_sudo_cmd("rm -f /opt/backups/{}.iso".format(cloned_image_file_name))
-
-        LOG.info("Clone completed successfully")
-    else:
-        LOG.info(" No USB flash drive found. The cloned image iso file are saved in folder {}".format(cloned_iso_path))
-
-    return 0, None
+    return 0, cloned_image_file_name
 
 
 def check_clone_status( tel_net_session=None, con_ssh=None, fail_ok=False):
@@ -2524,7 +2522,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         controller_0_node.telnet_conn = open_telnet_session(controller_0_node, log_dir)
 
     LOG.info("Executing system show on cloned system")
-    table_ = table_parser.table(cli.system('show', use_telnet_session=True, con_telnet=controller_0_node.telnet_conn))
+    table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
     system_name = table_parser.get_value_two_col_table(table_, 'name')
     assert "Cloned_system" in system_name, "Unexpected system name {} after install-clone".format(system_name)
 
@@ -2537,7 +2535,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
     software_version = table_parser.get_value_two_col_table(table_, 'software_version')
 
     LOG.info("Executing system host show on cloned system host".format(host))
-    table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     host_name = table_parser.get_value_two_col_table(table_, 'hostname')
     assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
@@ -2553,7 +2551,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         .format(host_software_load, host)
 
     LOG.info("Executing system host ethernet port list on cloned system host {}".format(host))
-    table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_['values']) >= 2, "Fewer ethernet ports listed than expected for host {}: {}".format(host, table_)
     if system_mode == 'duplex':
@@ -2561,7 +2559,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
             "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
 
     LOG.info("Executing system host interface list on cloned system host {}".format(host))
-    table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
         "No data interface type found in Host {} after system clone-install".format(host)
@@ -2571,7 +2569,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         "No oam interface type found in Host {} after system clone-install".format(host)
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
-    table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet_session=True,
+    table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_['values']) >= 2, "Fewer disks listed than expected for host {}: {}".format(host, table_)
 
@@ -2588,7 +2586,7 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
     LOG.info("Locking {} for  oam IP configuration update".format(host))
-    host_helper.lock_host(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    host_helper.lock_host(host, use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     cmd = "oam-modify oam_gateway_ip=128.224.150.1 oam_subnet=128.224.150.0/23"
     if host == 'controller-1':
@@ -2599,7 +2597,7 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
         cmd += " oam_ip={}".format(controller0_node.host_ip)
 
     LOG.info("Modifying oam IP configuration: {}".format(cmd))
-    rc, output = cli.system(cmd, use_telnet_session=True, con_telnet=controller0_node.telnet_conn, fail_ok=True)
+    rc, output = cli.system(cmd, use_telnet=True, con_telnet=controller0_node.telnet_conn, fail_ok=True)
     if rc != 0:
         err_msg = "{} execution failed: rc = {}; {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -2610,14 +2608,14 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     LOG.info("The oam IP configuration modified successfully: {}".format(output))
     LOG.info("Unlocking {} after  oam IP configuration update".format(host))
-    host_helper.unlock_host(host, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+    host_helper.unlock_host(host, use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     LOG.info("Unlocked {} successfully after oam IP configuration update".format(host))
 
     if system_mode == 'duplex':
         LOG.info("Swacting to controller-0 for oam IP configuration update")
 
-        host_helper.swact_host(controller0_node.name, use_telnet_session=True, con_telnet=controller0_node.telnet_conn)
+        host_helper.swact_host(controller0_node.name, use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
         controller_prompt = Prompt.CONTROLLER_1 + '|' + Prompt.ADMIN_PROMPT
 
@@ -2669,3 +2667,200 @@ def update_system_info_for_cloned_system( system_mode='duplex', fail_ok=False):
     }
 
     system_helper.set_system_info(**system_info)
+
+
+def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,  clone_image_iso_path=None,
+                             con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        dest_labs (dict/list): list of AIO lab dictionaries similar to the src_lab that the cloned image is scped.
+        boot_lab(bool): Whether to boot the lab if not accessible; default is true
+        src_lab(dict): is the current lab where the clone image iso is created. Default is current lab
+        clone_image_iso_path(str): -The path to the cloned image iso file in source lab controller-0.
+        The default is /opt/backups.
+        con_ssh:
+
+    Returns:
+
+    """
+    if dest_labs is None or (isinstance(dest_labs, list) and len(dest_labs) == 0):
+        raise ValueError("A list lab dictionary object must be provided")
+    if isinstance(dest_labs, str):
+        dest_labs = [dest_labs]
+
+    src_lab = ProjVar.get_var("LAB")
+    if 'system_type' not in  src_lab.keys() or  src_lab['system_type'] != 'CPE':
+        err_msg = "Lab {} is not AIO; System clone is only supported for AIO systems only".format(src_lab['name'])
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise ValueError(err_msg)
+    src_lab_name = src_lab['short_name']
+    verified_dest_labs = []
+    # check if labs are AIO systems
+    for lab_ in dest_labs:
+        if lab_.replace('-', '_').lower() == src_lab_name:
+            verified_dest_labs.append(src_lab)
+            continue
+
+        lab_dict = lab_info.get_lab_dict(lab_)
+        if 'system_type' in lab_dict.keys():
+            if lab_dict['system_type'] == 'CPE' and lab_dict['system_mode'] == src_lab['system_mode']:
+                verified_dest_labs.append(lab_dict)
+            else:
+                LOG.warn("Lab {} has not the same TiS system configuration as  source lab {}-{}"
+                         .format(lab_['short_name'], lab_info._get_sys_type(src_lab_name)))
+
+    if len(verified_dest_labs) == 0:
+        err_msg = "None of the specified labs match the system type and mode of the source lab {} ".format(src_lab['name'])
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise ValueError(err_msg)
+
+    for lab_dict in verified_dest_labs:
+        if lab_dict['short_name'] == src_lab_name:
+            continue
+        lab_dict.update(create_node_dict(lab_dict['controller_nodes'], 'controller'))
+
+        lab_dict['boot_device_dict'] = create_node_boot_dict(lab_dict['name'])
+
+    if clone_image_iso_path is None:
+        clone_image_iso_path = "/opt/backups"
+
+    clone_image_iso_full_path = "{}/{}".format(clone_image_iso_path, clone_image_iso_filename)
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if con_ssh.exec_cmd("ls {}".format(clone_image_iso_full_path))[0] != 0:
+        err_msg = "The cloned image iso file {} does not exist in the  {}"\
+            .format(clone_image_iso_full_path, con_ssh.get_hostname())
+        if fail_ok:
+            return 3, err_msg
+        else:
+            raise exceptions.BackupSystem(err_msg)
+
+    boot_lab = True
+    threads = {}
+    clone_install_ready_labs = []
+    for lab_dict in verified_dest_labs:
+        lab_name = lab_dict['short_name']
+        thread = multi_thread.MThread(scp_cloned_image_to_another, lab_dict, boot_lab=boot_lab,
+                                      clone_image_iso_full_path=clone_image_iso_full_path)
+
+        LOG.info("Starting thread for {}".format(thread.name))
+
+        threads[lab_name] = thread
+        try:
+            thread.start_thread(timeout=HostTimeout.INSTALL_CONTROLLER)
+        except:
+            LOG.warn("SCP to lab {} encountered error".format(lab_name))
+
+    for k, v in threads.items():
+        v.wait_for_thread_end()
+
+    result = 0
+    for k, v in threads.items():
+        rc = v.get_output()
+        if rc[0] == 0:
+            clone_install_ready_labs.append(k)
+            LOG.info("Transfer of cloned image iso file to Lab {} successful".format(k))
+        else:
+            result = 4
+            LOG.info("Transfer of cloned image iso file to Lab {} not completed: {}".format(k, rc))
+
+
+    return result, clone_install_ready_labs
+
+
+def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_path=None, con_ssh=None,
+                             fail_ok=False):
+    if lab_dict is None or not isinstance(lab_dict, dict):
+        raise ValueError("The Lab atribute value dictinary must be provided")
+    if 'controller-0' not in lab_dict.keys():
+        raise ValueError("The Lab controller-0 node object must be provided")
+
+    con_ssh = ControllerClient.get_active_controller()
+    clone_image_iso_dest_path = clone_image_iso_full_path
+    src_lab = ProjVar.get_var("LAB")
+    dest_lab_name = lab_dict['short_name']
+    controller0_node = lab_dict['controller-0']
+
+    if src_lab['short_name'] != dest_lab_name:
+        LOG.info("Transferring cloned image iso file to lab: {}".format(dest_lab_name))
+        clone_image_iso_dest_path = WRSROOT_HOME + os.path.basename(clone_image_iso_full_path)
+        if not local_host.ping_to_host(controller0_node.host_ip):
+            msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
+            if boot_lab:
+                LOG.info("{} ; Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
+                boot_controller(lab=lab_dict)
+                if not local_host.ping_to_host(controller0_node.host_ip):
+
+                    err_msg = "Cannot ping destination lab {} controller-0 after install".format(dest_lab_name)
+                    LOG.warn(err_msg)
+                    if fail_ok:
+                        return 1, err_msg
+                    else:
+                        raise exceptions.BackupSystem(err_msg)
+                LOG.info("Lab {}: controller-0  booted successfully".format(dest_lab_name))
+            else:
+                LOG.warn(msg)
+                if fail_ok:
+                    return 1, msg
+                else:
+                    raise exceptions.BackupSystem(msg)
+
+        log_file_prefix = ''
+        install_output_dir = ProjVar.get_var("LOG_DIR")
+        log_file_prefix += "{}_".format(dest_lab_name)
+
+        con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
+                          dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
+
+    with common.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
+            as node_ssh:
+
+        if node_ssh.exec_cmd("ls {}".format(clone_image_iso_dest_path))[0] != 0:
+            err_msg = "The cloned image iso file {} does not exist in the lab {} {}"\
+                .format(clone_image_iso_dest_path, dest_lab_name, node_ssh.get_hostname())
+            if fail_ok:
+                return 2, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+        # Burn the iso image file to USB
+        usb_device = get_usb_device_name(con_ssh=node_ssh)
+
+        if usb_device:
+            LOG.info("Burning the system cloned image iso file to usb flash drive {}".format(usb_device))
+
+            # Write the ISO to USB
+            cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
+                .format(HostLinuxCreds.get_password(), clone_image_iso_dest_path, usb_device)
+
+            rc,  output = node_ssh.exec_cmd(cmd, expect_timeout=900)
+            if rc != 0:
+                err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
+                LOG.info(err_msg)
+                if fail_ok:
+                     return 3, err_msg
+                else:
+                    raise exceptions.BackupSystem(err_msg)
+
+            LOG.info(" The cloned image iso file copied to USB for restore. {}".format(output))
+
+            LOG.info("Deleting system cloned image iso file from the dest lab folder ")
+            node_ssh.exec_sudo_cmd("rm -f {}".format(clone_image_iso_dest_path))
+
+            LOG.info("Cloned image iso file transfer to dest lab {} completed successfully".format(lab_dict['short_name']))
+
+        else:
+            err_msg = "No USB device found in destination lab {}".format(dest_lab_name)
+            LOG.info(err_msg)
+            if fail_ok:
+                 return 4, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+    return 0, None

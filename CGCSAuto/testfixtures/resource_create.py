@@ -58,11 +58,12 @@ def add_admin_role_func(request):
 
 def __add_admin_role(scope, request):
     LOG.fixture_step("({}) Add admin role to user under primary tenant".format(scope))
-    keystone_helper.add_or_remove_role(add_=True, role='admin')
+    code = keystone_helper.add_or_remove_role(add_=True, role='admin')[0]
 
     def remove_admin():
-        LOG.fixture_step("({}) Remove admin role from user under primary tenant".format(scope))
-        keystone_helper.add_or_remove_role(add_=False, role='admin')
+        if code != -1:
+            LOG.fixture_step("({}) Remove admin role from user under primary tenant".format(scope))
+            keystone_helper.add_or_remove_role(add_=False, role='admin')
     request.addfinalizer(remove_admin)
 
 

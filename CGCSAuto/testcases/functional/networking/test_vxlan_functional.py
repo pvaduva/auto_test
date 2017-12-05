@@ -11,16 +11,20 @@ def add_admin_role(request):
 
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
-
-    for auth_info in [primary_tenant, other_tenant]:
-        keystone_helper.add_or_remove_role(add_=True, role='admin', user=auth_info.get('user'),
-                                           project=auth_info.get('user'))
+    other_tenant = Tenant.TENANT2 if 'tenant1' in primary_tenant_name else Tenant.TENANT1
+    tenants = [primary_tenant, other_tenant]
+    res = []
+    for auth_info in tenants:
+        code = keystone_helper.add_or_remove_role(add_=True, role='admin', user=auth_info.get('user'),
+                                                  project=auth_info.get('tenant'))[0]
+        res.append(code)
 
     def remove_admin_role():
-        for auth_info_ in [primary_tenant, other_tenant]:
-            keystone_helper.add_or_remove_role(add_=False, role='admin', user=auth_info_.get('user'),
-                                               project=auth_info_.get('user'))
+        for i in range(len(res)):
+            if res[i] != -1:
+                auth_info_ = tenants[i]
+                keystone_helper.add_or_remove_role(add_=False, role='admin', user=auth_info_.get('user'),
+                                                   project=auth_info_.get('tenant'))
 
     request.addfinalizer(remove_admin_role)
 

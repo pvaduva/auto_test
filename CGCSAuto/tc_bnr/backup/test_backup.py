@@ -95,9 +95,7 @@ def pre_system_backup():
     return _backup_info
 
 
-
-
-def test_create_backup(pre_system_backup):
+def test_backup(pre_system_backup):
     """
     Test create backup on the system and it's avaliable and in-use volumes.
     copy backup files to USB flash drive

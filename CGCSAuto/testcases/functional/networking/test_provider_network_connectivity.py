@@ -424,7 +424,26 @@ def test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
     assert first_test == second_test, "MTU change impacted providernet-connectivity-test-list"
 
 
-def test_vlan_providernet_connectivity_delete_segment(get_vlan_providernet):
+@fixture(scope='function')
+def create_delete_range(get_vlan_providernet, request):
+    providernet = get_vlan_providernet[2]
+    min_range = 4080
+    max_range = 4085
+    LOG.fixture_step("Create range on {} with the values {}".format(providernet, '{}-{}'.format(min_range, max_range)))
+    range_name = network_helper.create_providernet_range(providernet, min_range, max_range, rtn_val='name')[1]
+
+    def del_range():
+        if DEL_RANGE:
+            LOG.fixture_step("Delete providernet range {}".format(range_name))
+            network_helper.delete_providernet_range(range_name)
+    request.addfinalizer(del_range)
+    return range_name, min_range, max_range
+
+
+DEL_RANGE = True
+
+
+def test_vlan_providernet_connectivity_delete_segment(create_delete_range):
     """
         US75531 - Providernet Connectivity Test after deleting vlan segment range
 
@@ -445,26 +464,26 @@ def test_vlan_providernet_connectivity_delete_segment(get_vlan_providernet):
             - Revert pnet_audit_interval to 1800 seconds from 30 seconds
             - Revert MTU size to original
     """
-    providernet = get_vlan_providernet[2]
-    LOG.tc_step("Create range on {} with the values {}".format(providernet, '4080-4085'))
-    code, range = network_helper.create_providernet_range(providernet, 4080, 4085, rtn_val='name')
+    range_name, min_range, max_range = create_delete_range
 
-    LOG.tc_step("Wait for the providernet-connectivity-test-list to show the new range")
-    kwargs = {'segmentation_ids': '4080-4085', 'status': 'PASS'}
-    timeout = time.time() + 240
-    while time.time() < timeout:
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        providernet_test_table = table_parser.table(cmd)
-        filtered_test_table = table_parser.filter_table(providernet_test_table, strict=False, **kwargs)
-        if len(filtered_test_table['values']) > 0:
-            break
+    global DEL_RANGE
+    DEL_RANGE = True
+
+    LOG.tc_step("Schedule providernet-connectivity-test and ensure newly created range to be listed in "
+                "providernet-connectivity-test-list")
+
+    kwargs = {'segmentation_ids': '{}-{}'.format(min_range, max_range)}
+    network_helper.schedule_providernet_connectivity_test()
+
+    res_for_seg = network_helper.get_providernet_connectivity_test_results(**kwargs)
+    assert res_for_seg, "Seg range {}-{} is not listed in providernet-connectivity-test".format(min_range, max_range)
 
     LOG.tc_step("Delete the providernet range")
-    network_helper.delete_providernet_range(range)
-    assert len(filtered_test_table['values']) > 0, "Segmentation range did not show up or pass during test"
+    network_helper.delete_providernet_range(range_name)
+    DEL_RANGE = False
 
+    network_helper.schedule_providernet_connectivity_test()
     LOG.tc_step("Verify the providernet-connectivity-test-list no longer shows the providernet range")
-    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-    providernet_test_table = table_parser.table(cmd)
-    filtered_test_table = table_parser.filter_table(providernet_test_table, **kwargs)
-    assert len(filtered_test_table['values']) == 0, "Segmentation range did not delete"
+    res_after_del = network_helper.get_providernet_connectivity_test_results(**kwargs)
+    assert not res_after_del, "Segmentation range {}-{} is still listed in providernet-connectivity-test after " \
+                              "deletion".format(min_range, max_range)

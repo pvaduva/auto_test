@@ -631,13 +631,12 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
     return img_id
 
 
-def set_unset_image_vif_multiq(image_name, set=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Set or unset a glance image with multiple vif-Queues
     Args:
-        image_name (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
-                cgcs-guest, vxworks-guest
-        set (bool): whether or not to set the  hw_vif_multiqueue_enabled
+        image (str): name or id of a glance image
+        set_ (bool): whether or not to set the  hw_vif_multiqueue_enabled
         fail_ok:
         con_ssh:
         auth_info:
@@ -646,22 +645,22 @@ def set_unset_image_vif_multiq(image_name, set=True, fail_ok=False, con_ssh=None
 
     """
 
-    if image_name is None:
+    if image is None:
         return 1, "Error:image_name not provided"
-    if set:
+    if set_:
         cmd = 'image set '
     else:
         cmd = 'image unset '
 
-    cmd += image_name
+    cmd += image
     cmd += ' --property'
 
-    if set:
+    if set_:
         cmd += ' hw_vif_multiqueue_enabled=True'
     else:
         cmd += ' hw_vif_multiqueue_enabled'
 
-    res, out = cli.openstack(cmd,rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    res, out = cli.openstack(cmd, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
 
     return res, out
 
@@ -703,7 +702,7 @@ def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenan
         return 1, out
 
     check_image_settings(image=image, check_dict=post_checks, unset=True, con_ssh=con_ssh, auth_info=auth_info)
-    msg = "Image {} is successfully modified".format(image)
+    msg = "Image {} is successfully unset".format(image)
     return 0, msg
 
 

@@ -2,6 +2,7 @@ from utils.install_log import LOG
 import threading
 from helper import host_helper
 
+
 class InstallThread(threading.Thread):
     def __init__(self, stream, thread_name, hostname,  host_type, id):
         threading.Thread.__init__(self)

@@ -812,7 +812,7 @@ def get_any_keypair(auth_info=None, con_ssh=None):
     if key_name in table_parser.get_column(table_keypairs, 'Name'):
         LOG.debug("{} already exists. Return existing key.".format(key_name))
     else:
-        args_ = '--pub_key /home/wrsroot/.ssh/id_rsa.pub keypair-' + tenant
+        args_ = '--pub-key /home/wrsroot/.ssh/id_rsa.pub keypair-' + tenant
         table_ = table_parser.table(cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh))
         if key_name not in table_parser.get_column(table_, 'Name'):
             raise exceptions.CLIRejected("Failed to add {}".format(key_name))

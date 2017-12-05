@@ -1,4 +1,18 @@
-ISOPATH = "/tmp/bootimage.iso"
+import getpass
+from sys import platform
+
+user = getpass.getuser()
+
+if platform == 'win32' or platform == 'win64':
+    FILEPATH = 'C:\\Temp\\install_files\\'.format(user)
+    LOGPATH = 'C:\\Temp\\pybox_logs'
+    ISOPATH = "C:\\Temp\\bootimage.iso"
+    PORT = 10000
+else:
+    FILEPATH = '/tmp/install_files/'
+    LOGPATH = '/tmp/pybox_logs'
+    ISOPATH = "/tmp/bootimage.iso"
+
 
 class BuildServers:
     CGTS4 = {
@@ -24,6 +38,7 @@ class BuildServers:
         'name': 'yow-cgts1-lx.wrs.com',
         'ip': '128.224.145.95'
     }
+
 
 class Builds:
     R5 = {
@@ -52,6 +67,7 @@ class Builds:
         'guest': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
         'patches': '/folk/cgts/rel-ops/15.12/patches/'
     }
+
 
 class Licenses:
     R2 = {
@@ -88,10 +104,11 @@ class Lab:
         'password': 'Li69nux*',
     }
 
+
 class Files:
     R5={
         'setup': [
-            # Need to find a way to update based on build or use generic CGCS_DEV
+            # TODO Need to find a way to update based on build or use generic CGCS_DEV
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
@@ -102,7 +119,6 @@ class Files:
         ],
         'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/'
     }
-
     R4 = {
         'setup': [
             '/localdisk/designer/jenkins/TC_17.06_Pull/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
@@ -127,40 +143,3 @@ class Files:
         ],
         'config': "/localdisk/designer/jenkins/TS_15.12_Pull/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/system_config" #TODO
     }
-    FILENAMES = {
-        'R5':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules',
-                      'lab_setup-tenant2-resources.yaml',
-                      'lab_setup-tenant1-resources.yaml',
-                      'lab_setup-admin-resources.yaml'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'licence.lic'},
-        'R4':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'licence.lic'},
-        'R3':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'licence.lic'},
-        'R2':  {
-            'setup': ['lab_cleanup.sh',
-                      'lab_setup.sh',
-                      'lab_setup.conf',
-                      'iptables.rules'],
-            'config': 'TiS_config.ini_centos',
-            'guest': 'tis-centos-guest.img',
-            'licence': 'licence.lic'},
-        }

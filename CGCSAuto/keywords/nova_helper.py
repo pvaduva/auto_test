@@ -915,7 +915,7 @@ def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
     return _get_vm_volumes(table_)
 
 
-def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN, use_openstack_cmd=False):
     """
     Get vm nova show value for given field
     Args:
@@ -924,11 +924,16 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         strict (bool): whether to perform a strict search on given field name
         con_ssh (SSHClient):
         auth_info (dict):
+        use_openstack_cmd:
 
     Returns (str|list): value of specified field. Return list for multi-line value
 
     """
-    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    if use_openstack_cmd:
+        table_ = table_parser.table(cli.openstack('server show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    else:
+        table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 

@@ -65,7 +65,7 @@ class SSHClient:
 
     def __init__(self, host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
                  force_password=True, initial_prompt=CONTROLLER_PROMPT, timeout=60, session=None,
-                 searchwindownsize=None):
+                 searchwindownsize=None, port=None):
         """
         Initiate an object for connecting to remote host
         Args:
