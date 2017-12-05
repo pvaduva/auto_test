@@ -506,8 +506,6 @@ if __name__ == "__main__":
     if vboxoptions.install_lab and not vboxoptions.aio:
         LOG.info("Starting lab installation.")
         streams = test_install_nodes(cont0_stream, host_list=node_list)
-        if vboxoptions.install_patches:
-            install_lab.install_patches_on_nodes(cont0_stream, node_list)
     # runs lab_setup.sh
     LOG.info("Pausing to allow for lab_setup.sh to be run manually, press enter to continue.")
     input()
