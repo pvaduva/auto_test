@@ -18,12 +18,14 @@ def pytest_configure(config):
     use_usb = config.getoption('use_usb')
     backup_dest_path = config.getoption('backup_path')
     delete_backups = not config.getoption('keep_backups')
+    dest_labs = config.getoption('dest_labs')
+
 
     backup_dest = 'USB' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
-                               delete_backups=delete_backups)
+                               delete_backups=delete_backups, dest_labs=dest_labs)
 
     ProjVar.set_var(always_collect=True)
 

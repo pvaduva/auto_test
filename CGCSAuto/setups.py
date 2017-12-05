@@ -522,7 +522,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             raise exceptions.UpgradeError("The local linux VM does not have valid ip for external access: {} "
                                           .format(local_external_ip if local_external_ip else ''))
 
-        LOG.info("Locallinux VM external IP is {}".format(local_external_ip))
+        LOG.info("Local linux VM external IP is {}".format(local_external_ip))
         lab_to_install['external_ip'] = local_external_ip
 
         lab_to_install['external_port'] = 22266

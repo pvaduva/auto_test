@@ -323,7 +323,7 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True):
+    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None):
 
         if backup_dest.lower() == 'usb':
             if backup_dest_path is None or \
@@ -338,6 +338,7 @@ class BackupVars:
             'BACKUP_DEST': backup_dest.lower() if backup_dest else "usb",
             'BACKUP_DEST_PATH': backup_dest_path,
             'DELETE_BUCKUPS': delete_backups,
+            'DEST_LABS': dest_labs.split(',') if dest_labs else None,
             'BACKUP_DEST_SERVER': None,
         }
 

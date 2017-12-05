@@ -459,7 +459,9 @@ def pytest_addoption(parser):
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
-
+    parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
+                     action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
+                                           "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
 def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'

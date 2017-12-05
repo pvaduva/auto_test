@@ -22,6 +22,7 @@ class HostTimeout:
     BACKUP_COPY_USB = 600
     INSTALL_CLONE = 3600
     INSTALL_CLONE_STATUS = 60
+    INSTALL_CONTROLLER = 2400
 
 
 class VMTimeout:

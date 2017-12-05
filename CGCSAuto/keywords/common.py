@@ -6,15 +6,16 @@ import os
 import pexpect
 import time
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 
 from consts.cgcs import Prompt
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient
+from utils.ssh import ControllerClient, NATBoxClient, SSHClient
 from consts.filepaths import WRSROOT_HOME
-from keywords import system_helper
+from keywords import system_helper, security_helper
 
 
 def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120, con_ssh=None):
@@ -230,6 +231,51 @@ def get_tenant_name(auth_info=None):
     if auth_info is None:
         auth_info = Tenant.get_primary()
     return auth_info['tenant']
+
+
+@contextmanager
+def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None):
+    """
+    ssh to a exterbal node from sshclient.
+
+    Args:
+        host (str|None): hostname or ip address of remote node to ssh to.
+        username (str):
+        password (str):
+        prompt (str):
+
+
+    Returns (SSHClient): ssh client of the host
+
+    Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
+                  remote_ssh.exec_cmd(cmd)
+
+    """
+
+    if not host:
+        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
+
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    default_user, default_password = security_helper.LinuxUser.get_current_user_password()
+    user = username if username else default_user
+    password = password if password else default_password
+    original_host = con_ssh.host
+    if not prompt:
+        prompt = '.*' + host + '\:~\$'
+
+    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
+    remote_ssh.connect()
+    current_host = remote_ssh.host
+    if not current_host == host:
+        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
+    try:
+        yield remote_ssh
+    finally:
+        if current_host != original_host:
+            remote_ssh.close()
+
 
 
 class Count:
