@@ -289,6 +289,8 @@ def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
     states = {}
     for field in fields:
         value = table_parser.get_value_two_col_table(table_, field=field)
+        if field == 'volume_image_metadata':
+            value = table_parser.convert_value_to_dict_cinder(value=value)
         states[field] = value
 
     return states
