@@ -346,7 +346,11 @@ def install_non_active_node(node_name, lab):
     LOG.info("Unlocking {} ...".format(node_name))
     rc, output = host_helper.unlock_host(node_name, available_only=False)
 
-    assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(node_name, rc, output)
+    assert rc == 0 or rc == 4, "Host {} failed to unlock: rc = {}, msg: {}".format(node_name, rc, output)
+
+    if rc == 4:
+        LOG.warn('{} now is in degraded status')
+
     LOG.info('{} is installed')
 
 
