@@ -232,47 +232,6 @@ def test_ceph_mon_process_kill(monitor):
     LOG.info('Old pid is {} and new pid is {}'.format(mon_pid, mon_pid2))
 
 
-# UNTESTED
-@mark.usefixtures('ceph_precheck')
-def _test_boot_many_small_volumes():
-    """
-    Storage robustness related tests
-
-    Args:
-        - Nothing
-
-    Setup:
-        - Requires a system wiht storage nodes
-
-    Test Steps:
-        0.  Delete any existing VMs
-        1.  Delete any remaining volumes
-        2.  Increase tenant quota for volumes
-        3.  Create many small volumes 
-        4.  Reboot storage host
-        5.  Delete many small volumes
-        6.  Check that ceph health remains ok
-        7.  Reboot storage host
-    """
-    max_volumes = "100"
-    max_vol_size = 1
-
-    LOG.tc_step("Delete any existing VMs")
-    vm_helper.delete_vms()
-
-    LOG.tc_step("Delete any existing volumes")
-    cinder_helper.delete_volumes()
-
-    max_volumes = "100"
-    LOG.tc_step("Increase volume quota to {}".format(max_volumes))
-    cinder_helper.update_quotas(volumes=max_volumes)
-
-    LOG.tc_step("Create volumes")
-
-    for vol in max_volumes:
-        cinder_helper.create_volume(name="vol_", size=max_vol_size)
-
-
 # Testd on PV0.  Ruentime: 1899.93 seconds.  Date: Aug 4, 2017.  Status: Pass
 @mark.usefixtures('ceph_precheck')
 @mark.domain_sanity
@@ -753,9 +712,9 @@ def test_storgroup_semantic_checks():
             assert osd_up, msg
 
 
-# Tested on PV0.  Fails due to product issue: CGTS-7694
+# Tested on PV0.  
 @mark.usefixtures('ceph_precheck')
-def _test_import_with_cache_raw():
+def test_import_with_cache_raw():
     """
     Verify that non-RAW format images, e.g. QCOW2, can be imported into glance
     using --cache-raw.
@@ -885,9 +844,8 @@ def _test_import_with_cache_raw():
         assert rbd_raw_img_id not in out, msg
 
 
-# Blocked due to product issue CGTS-7694
 @mark.usefixtures('ceph_precheck')
-def _test_import_raw_with_cache_raw():
+def test_import_raw_with_cache_raw():
     """
     Verify that RAW format images can be imported with --cache-raw but there is
     no corresponding _raw image in rbd.
@@ -1274,80 +1232,3 @@ def test_modify_ceph_pool_size():
     assert new_object_pool - moe <= ceph_object_pool <= new_object_pool + moe, "Object pool should be {} but is {}".format(new_object_pool, ceph_object_pool)
 
 
-# TODO: remove '_' before test name after this test is completed.
-@mark.usefixtures('ceph_precheck')
-def _test_modify_ceph_pool_size_neg():
-    """
-    Verify that the user can modify the size of the ceph images pool.
-
-    This is US68056_tc6_neg_modify_ceph_pool_size adapted from
-    us68056_glance_backend_to_storage_node.odt
-
-    Args:
-    - None
-
-    Setup:
-        - Requires a system with storage nodes
-
-    Test Steps:
-        1.  Determine the current size of the ceph image pool
-        2.  Fill up the images pool until you can't add anymore images
-        3.  Attempt to set the ceph pool size to less than the data in the
-        pool.  It should be rejected.
-        4.  Increase the pool size.
-        5.  Ensure you can import another image.
-    """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    LOG.tc_step('Query the size of the CEPH storage pools')
-    table_ = table_parser.table(cli.system('storage-backend-show ceph'))
-    glance_pool_gib = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
-    ephemeral_pool_gib = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
-
-    LOG.tc_step('Determine what qcow2 images we have available')
-    image_names = storage_helper.find_images(con_ssh)
-
-    if not image_names:
-        LOG.info('No qcow2 images were found on the system')
-        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        image_names = storage_helper.download_images(dload_type='ubuntu', img_dest=GuestImages.IMAGE_DIR, con_ssh=con_ssh)    # TODO for Yang: perhaps a session level fixture should be added
-
-    LOG.tc_step('Import qcow2 images into glance until pool is full')
-    source_img = GuestImages.IMAGE_DIR + "/" + image_names[0]
-    while True:
-        ret = glance_helper.create_image(source_image_file=source_img,
-                                         disk_format='qcow2',
-                                         container_format='bare',
-                                         cache_raw=True, wait=True)
-        ResourceCleanup.add('image', ret[1])
-        if ret[0] == 1:
-            break
-
-    LOG.tc_step('Attempt to reduce the quota to less than the data in pool')
-    glance = str(glance_pool_gib - 10)
-    eph = str(ephemeral_pool_gib + 10)
-    new_value = glance_pool_gib - 10
-    rtn_code, out = storage_helper.modify_storage_backend('ceph', glance=glance, ephemeral=eph)
-    msg = 'Unexpectedly changed glance storage pool quota from {} to {}'.format(glance_pool_gib,
-                                                                                new_value)
-    assert rtn_code != 0, msg
-
-    LOG.tc_step('Increase the pool quota and ensure you can import images again')
-    glance_args = 'glance_pool_gib=' + str(glance_pool_gib + 20)
-    eph_args = 'ephemeral_pool_gib=' + str(ephemeral_pool_gib - 20)
-    args = glance_args + " " + eph_args
-    new_value = glance_pool_gib + 20
-    rtn_code, out = storage_helper.modify_storage_backend('ceph', args)
-    msg = 'Unable to change pool quota from {} to {}'.format(glance_pool_gib,
-                                                             new_value)
-    assert rtn_code == 0, msg
-
-    LOG.tc_step('Import one more image')
-    ret = glance_helper.create_image(source_image_file=source_img,
-                                     disk_format='qcow2',
-                                     container_format='bare',
-                                     cache_raw=True, wait=True)
-    ResourceCleanup.add('image', ret[1])
-    msg = 'Was not able to import another image after increasing the quota'
-    assert ret[0] == 0, msg
