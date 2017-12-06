@@ -122,12 +122,18 @@ def get_guest_img(stream, remote_host=None, release='R5', remote_path=None,
         else:
             file_path = env.Builds.R2['guest']
     serial.send_bytes(stream, "mkdir /home/wrsroot/images")
-    local_path = local_path + 'tis-centos-guest.img'
+    if release != 'R2':
+        local_path = local_path + 'tis-centos-guest.img'
+    else:
+        local_path = local_path + 'cgcs-guest.img'
     if remote_host is not None and local_path == env.FILEPATH + '{}/'.format(release):
         sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
-    sftp_send(source=local_path, destination="/home/wrsroot/images/tis_centos_guest.img")
-    
-    
+    if release != 'R2':
+        sftp_send(source=local_path, destination="/home/wrsroot/images/tis_centos_guest.img")
+    else:
+        sftp_send(source=local_path, destination="/home/wrsroot/images/cgcs-guest.img")
+
+
 def get_patches(cont0_stream, local_path=None, remote_host=None, release = 'R5'):
     """
     Retrieves patches from remote_host or localhost if remote_host is None
@@ -373,13 +379,9 @@ def install_patches_before_config(stream):
     host_helper.check_password(stream)
     serial.send_bytes(stream, 'sudo sw-patch apply --all', timeout=240)
     host_helper.check_password(stream)
-    serial.send_bytes(stream, "sudo sw-patch install-local", timeout=HostTimeout.INSTALL_PATCHES)
+    serial.send_bytes(stream, "sudo sw-patch install-local", expect_prompt=False)
     host_helper.check_password(stream)
-    try:
-        serial.expect_bytes(stream, "installation is complete", timeout=HostTimeout.INSTALL_PATCHES)
-    except:
-        LOG.info("Patches were unalble to be installed.")
-        return
+    serial.expect_bytes(stream, 'reboot', timeout=HostTimeout.INSTALL_PATCHES)
     LOG.info("Rebooting controller-0")
     now = time.time()
     serial.send_bytes(stream, 'sudo reboot', expect_prompt=False)
