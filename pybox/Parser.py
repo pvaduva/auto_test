@@ -70,7 +70,8 @@ def handle_args():
           R5 - 17.07
         """,
         choices=['R2', 'R3', 'R4', 'R5'],
-        type=str)
+        type=str,
+        required=True)
 
     parser.add_argument("--buildserver", help=
         """

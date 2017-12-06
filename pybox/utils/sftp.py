@@ -23,16 +23,17 @@ def sftp_get(source, remote_host, destination):
     """
     username = getpass.getuser()
     if platform == 'win32' or platform == 'win64':
-        privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
+        #privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
+        pass
     else:
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
-    mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
+    #mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
 
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
 
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username, password="Oliverthekitty1")
     sftp_client = ssh_client.open_sftp()
     LOG.info("Sending file from {} to {}".format(source, destination))
     sftp_client.get(source, destination)
@@ -58,7 +59,7 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
 
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, password=password)
+    ssh_client.connect(remote_host, username=username, password=password, look_for_keys=False, allow_agent=False)
     sftp_client = ssh_client.open_sftp()
 
 
@@ -86,7 +87,7 @@ def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, password=password)
+    ssh_client.connect(remote_host, username=username, password=password, look_for_keys=False, allow_agent=False)
     sftp_client = ssh_client.open_sftp()
     path = ''
     for items in os.listdir(source):
@@ -120,14 +121,15 @@ def get_dir(source, remote_host, destination, patch=False, setup=False):
     """
     username = getpass.getuser()
     if platform == 'win32' or platform == 'win64':
-        privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
+        #privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
+        pass
     else:
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
-    mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
+    # mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username, password="Oliverthekitty1")
     sftp_client = ssh_client.open_sftp()
     LOG.info(sftp_client.listdir(source))
     path = ''
