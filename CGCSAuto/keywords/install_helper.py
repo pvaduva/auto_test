@@ -17,7 +17,7 @@ from keywords import system_helper, host_helper, vm_helper, patching_helper, cin
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread
 from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
-from utils.node import create_node_boot_dict, create_node_dict
+from utils.node import create_node_boot_dict, create_node_dict, Node
 from consts.auth import Tenant, CliAuth
 import setups
 import configparser
@@ -53,29 +53,32 @@ def download_upgrade_license(lab, server, license_path):
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     if 'vbox' in lab['name']:
-        external_ip = lab['external_ip']
-        external_port = lab['external_port']
-        temp_path = '/tmp'
-        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync("-L " + license_path, external_ip,
+                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                              pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            local_ip = lab['local_ip']
 
-        server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(temp_path, "upgrade_license.lic"),
-                              dest_user=lab['local_user'], dest_password=lab['local_password'],
-                              pre_opts=local_pre_opts)
+            server.ssh_conn.rsync("-L " + license_path, local_ip,
+                                  os.path.join(temp_path, "upgrade_license.lic"),
+                                  dest_user=lab['local_user'], dest_password=lab['local_password'],
+                                  pre_opts=local_pre_opts)
 
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                            dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
 
-        server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(temp_path, "upgrade_license.lic"),
-                              dest_user=lab['local_user'], dest_password=lab['local_password'],
-                              pre_opts=local_pre_opts)
-
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-                                        dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
-        # server.ssh_conn.rsync("-L " + license_path, external_ip,
-        #                       os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-        #                       pre_opts=pre_opts, ssh_port=external_port)
+            # server.ssh_conn.rsync("-L " + license_path, external_ip,
+            #                       os.path.join(temp_path, "upgrade_license.lic"),
+            #                       dest_user=lab['local_user'], dest_password=lab['local_password'],
+            #                       pre_opts=local_pre_opts)
+            #
+            # common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+            #                                 dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
     else:
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
                             os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
@@ -93,25 +96,27 @@ def download_upgrade_load(lab, server, load_path):
 
     if 'vbox' in lab['name']:
 
-        external_ip = lab['external_ip']
-        external_port = lab['external_port']
-        temp_path = '/tmp'
-        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-        server.ssh_conn.rsync("-L " + iso_file_path, external_ip,
-                              os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
-                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
-
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
-                                        dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
-
-        server.ssh_conn.rsync("-L " + iso_file_path,
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync(iso_file_path,
                           external_ip,
                           os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            local_ip = lab['local_ip']
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            server.ssh_conn.rsync(iso_file_path, local_ip,
+                                  os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
+                                  dest_password=lab['local_password'], pre_opts=local_pre_opts)
+
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
+                                            dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
+
     else:
-        server.ssh_conn.rsync("-L " + iso_file_path,
+        server.ssh_conn.rsync(iso_file_path,
                               lab['controller-0 ip'],
                               os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
-
 
 def get_mgmt_boot_device(node):
     boot_device = {}
@@ -226,43 +231,68 @@ def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
     return _telnet_conn
 
 
-def wipe_disk_hosts(hosts):
-
+def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
     lab = InstallVars.get_install_var("LAB")
-    output_dir = ProjVar.get_var('LOG_DIR')
+    install_output_dir = ProjVar.get_var('LOG_DIR')
+
     LOG.info("LAB info:  {}".format(lab))
     if len(hosts) < 1:
         err_msg = "The hosts list referred is empty: {}".format(hosts)
         LOG.info(err_msg)
         return
-    threads = []
-    nodes = []
-    for hostname in hosts:
-        node = lab[hostname]
-        if node is None:
-            err_msg = "Failed to get node object for hostname {} in the Install parameters".format(hostname)
-            LOG.error(err_msg)
-            raise exceptions.InvalidStructure(err_msg)
-        nodes.append(node)
 
-        LOG.info("Opening a vlm console for {}.....".format(hostname))
-        rc, output = local_host.reserve_vlm_console(node.barcode)
-        if rc != 0:
-            err_msg = "Failed to reserve vlm console for {}  barcode {}: {}"\
-                .format(node.name, node.barcode, output)
-            LOG.error(err_msg)
-            raise exceptions.InvalidStructure(err_msg)
+    if isinstance(hosts, str):
+        hosts = [hosts]
 
-        node_thread = threading.Thread(target=wipe_disk,
-                                       name=node.name,
-                                       args=(node, output_dir))
-        threads.append(node_thread)
-        LOG.info("Starting thread for {}".format(node_thread.name))
-        node_thread.start()
+    controller0_node = lab['controller-0']
+    if not controller0_node:
+        err_msg = "The controller-0 node object is missing: {}".format(lab)
+        LOG.info(err_msg)
+        return
 
-    for thread in threads:
-        thread.join()
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = open_telnet_session(controller0_node, install_output_dir)
+        controller0_node.telnet_conn.login()
+
+    if controller0_node.telnet_conn:
+        # Run the wipedisk_via_helper utility if the nodes are accessible
+        cmd = "test -f " + "/home/wrsroot/wipedisk_helper "
+        if controller0_node.telnet_conn.exec_cmd(cmd)[0] == 0:
+            cmd = "chmod 755 wipedisk_helper"
+            controller0_node.telnet_conn.exec_cmd(cmd)
+            for hostname in hosts:
+                cmd = "./wipedisk_helper {}".format(hostname)
+                if controller0_node.telnet_conn.exec_cmd(cmd)[0] == 0:
+                    LOG.info("All disks wiped for host {}".format(hostname))
+        else:
+            LOG.info("wipedisk_via_helper files are not on the load, will use  wipedisk command directly")
+            for hostname in hosts:
+                node_obj = lab[hostname]
+                if node_obj:
+
+                    prompt = '.*{}\:~\$ ' + '|' +  Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
+                else:
+                    prompt = Prompt.TIS_NODE_PROMPT_BASE.format(hostname)
+
+                with common.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
+                                               telnet_session=controller0_node.telnet_conn) as host_ssh:
+                    host_ssh.send("sudo wipedisk")
+                    prompts = [Prompt.PASSWORD_PROMPT, "\[y/n\]", "wipediskscompletely"]
+                    index = host_ssh.expect(prompts)
+
+                    if index == 0:
+                        host_ssh.send(HostLinuxCreds.get_password())
+                        prompts.remove(Prompt.PASSWORD_PROMPT)
+                        index = host_ssh.expect(prompts)
+
+                    host_ssh.send("y")
+                    index = host_ssh.expect("wipediskscompletely")
+                    host_ssh.send("wipediskscompletely")
+                    host_ssh.expect("The disk(s) have been wiped.")
+
+    else:
+        LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
 
 
 def wipe_disk(node, install_output_dir, close_telnet_conn=True):
@@ -443,15 +473,20 @@ def download_image(lab, server, guest_path):
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     if 'vbox' in lab['name']:
-        external_ip = lab['external_ip']
-        temp_path = '/tmp'
-        image_file = os.path.basename(guest_path)
-        local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-        server.ssh_conn.rsync(guest_path, external_ip, os.path.join(temp_path, image_file),
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync(guest_path, external_ip, TiSPath.IMAGES, pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            image_file = os.path.basename(guest_path)
+            local_ip = lab['local_ip']
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            server.ssh_conn.rsync(guest_path, local_ip, os.path.join(temp_path, image_file),
                               dest_user=lab['local_user'],
                               dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-        common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
                                         dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
@@ -497,6 +532,7 @@ def download_lab_config_files(lab, server, load_path):
             server.name, script_path)
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+
     server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)

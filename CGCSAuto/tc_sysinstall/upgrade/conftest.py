@@ -1,6 +1,6 @@
 import pytest
 import os
-from consts import build_server as build_server_consts
+import setups
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import install_helper,  patching_helper, upgrade_helper, common
@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import Prompt
+from consts.cgcs import Prompt, SUPPORTED_UPGRADES
 
 # Import test fixtures that are applicable to upgrade test
 from testfixtures.pre_checks_and_configs import *
@@ -16,76 +16,6 @@ from testfixtures.pre_checks_and_configs import *
 
 natbox_ssh = None
 con_ssh = None
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00'], ['16.10', '17.06'], ['17.06', '17.07']]
-
-########################
-# Command line options #
-########################
-
-
-def pytest_addoption(parser):
-    upgrade_version_help = "TiS next software version that the lab is upgraded to. " \
-                           "Valid options are: {}".format(' '.join(v[1] for v in SUPPORTED_UPGRADES))
-    build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
-                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
-    upgrade_build_dir_path = "The path to the upgrade software release build directory in build server." \
-                             " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
-                             " Otherwise the default  build dir path for the upgrade software " \
-                             "version will be used"
-
-    license_help = "The full path to the new release software license file in build-server. " \
-                   "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
-                   " Otherwise, default license for the upgrade release will be used"
-
-    patch_dir_help = "The path to the directory in build server where the patch files are located"
-
-    orchestration_help = "The point in upgrade procedure where we start to use orchestration. Possible options are:" \
-                         "  default - to start orchestration after controller-1 is upgraded; " \
-                         "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
-                         "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
-                         " The default is default. Applicable only for upgrades from R3."
-    apply_strategy_help = "How the orchestration strategy is applied:" \
-                          "  serial - apply orchestration strategy one node  at a time; " \
-                          "  parallel - apply orchestration strategy in parallel; " \
-                          "  ignore - do not apply the orchestration strategy; " \
-                          " If not specified,  the system will choose the option to apply the strategy. " \
-                          "Applicable only for upgrades from R3."
-    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
-                                " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
-
-    parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
-                     action='store', metavar='VERSION', required=True,  help=upgrade_version_help)
-    parser.addoption('--build-server', '--build_server',  dest='build_server',
-                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
-                     help=build_server_help)
-    parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
-                     action='store', metavar='DIR',  help=upgrade_build_dir_path)
-    parser.addoption('--license',  dest='upgrade_license', action='store',
-                     metavar='license full path', help=license_help)
-
-    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir',
-                     action='store', metavar='DIR',  help=patch_dir_help)
-
-    parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
-                     action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
-
-    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
-                     action='store',  help=max_parallel_compute_help)
-
-    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
-                     action='store', default='strict',  help=alarm_restriction_help)
 
 
 def pytest_configure(config):
@@ -100,11 +30,6 @@ def pytest_configure(config):
     compute_apply_strategy = config.getoption('compute_strategy')
     max_parallel_computes = config.getoption('max_parallel_computes')
     alarm_restrictions = config.getoption('alarm_restrictions')
-
-    if upgrade_version == "16.10":
-        orchestration_after = None
-
-    print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
 
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
@@ -123,7 +48,6 @@ def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_CREDENTIAL')))
 
     # check if all nodes are unlocked
     assert system_helper.are_hosts_unlocked(con_ssh), \
@@ -152,6 +76,16 @@ def pre_check_upgrade():
     # check if upgrade version is supported
     current_version = system_helper.get_system_software_version()
     upgrade_version = UpgradeVars.get_upgrade_var('upgrade_version')
+
+    if upgrade_version is None:
+        upgrade_version = [u[1] for u in SUPPORTED_UPGRADES if u[0] == current_version][0]
+        UpgradeVars.set_upgrade_var(upgrade_version=upgrade_version)
+ 
+    LOG.info("Current version = {}; Upgrade version = {}".format(current_version, upgrade_version))
+
+    if upgrade_version == "16.10":
+        UpgradeVars.set_upgrade_var(orchestration_after=None)
+
     assert [current_version, upgrade_version] in SUPPORTED_UPGRADES, "Upgrade from {} to {} is not supported"
 
 
@@ -383,21 +317,26 @@ def apply_patches(lab, server, patch_dir):
 
         dest_server = lab['controller-0 ip']
         ssh_port = None
+        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
         if 'vbox' in lab['name']:
-            dest_server = lab['external_ip']
-            ssh_port = lab['external_port']
-            temp_path = '/tmp/upgrade_patches/'
-            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server,
-                              temp_path, dest_user=lab['local_user'],
-                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+            if 'external_ip' in lab.keys():
+                dest_server = lab['external_ip']
+                ssh_port = lab['external_port']
+                server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, pre_opts=pre_opts,
+                                      ssh_port=ssh_port)
+            else:
+                local_ip = lab['local_ip']
+                temp_path = '/tmp/upgrade_patches/'
+                local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+                server.ssh_conn.rsync(patch_dir + "/*.patch", local_ip,
+                                  temp_path, dest_user=lab['local_user'],
+                                  dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(temp_path,
-                                        dest_path=patch_dest_dir, is_dir=True)
+                common.scp_to_active_controller(temp_path,
+                                            dest_path=patch_dest_dir, is_dir=True)
 
         else:
-            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
                                   pre_opts=pre_opts)
 

@@ -59,10 +59,10 @@ def pytest_configure(config):
     controller0_ceph_mon_device = config.getoption('ceph_mon_dev_controller_0')
     controller1_ceph_mon_device = config.getoption('ceph_mon_dev_controller_1')
     ceph_mon_gib = config.getoption('ceph_mon_gib')
-
     setups.set_install_params(lab=lab_arg, skip_labsetup=skip_labsetup, resume=resume_install,
                               installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
                               controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib)
+    print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
 #
 #
 # def pytest_unconfigure():
@@ -87,6 +87,7 @@ def setup_test_session(global_setup):
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
+    print("SysInstall test session ..." )
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
@@ -119,6 +120,7 @@ def reconnect_before_test():
     """
     Before each test function start, Reconnect to TIS via ssh if disconnection is detected
     """
+    print("SysInstall test reconnect before test ..." )
     con_ssh.flush()
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     if natbox_ssh and isinstance(natbox_ssh, SSHClient):
@@ -130,8 +132,13 @@ def pytest_collectstart():
     """
     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
     """
+    print("SysInstall collectstart ..." )
     global con_ssh
-    con_ssh = setups.setup_tis_ssh(ProjVar.get_var("LAB"))
+    lab = ProjVar.get_var("LAB")
+    if 'vbox' in  lab['short_name']:
+        con_ssh = setups.setup_vbox_tis_ssh(lab)
+    else:
+        con_ssh = setups.setup_tis_ssh(lab)
     ProjVar.set_var(con_ssh=con_ssh)
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
     # if setups.is_https(con_ssh):
@@ -144,5 +151,6 @@ def pytest_runtest_teardown(item):
     # print('')
     # message = 'Teardown started:'
     # testcase_log(message, item.nodeid, log_type='tc_teardown')
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    if not con_ssh._is_connected():
+        con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()

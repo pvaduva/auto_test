@@ -4,7 +4,7 @@ import time
 from utils.tis_log import LOG
 from keywords import install_helper, host_helper, system_helper
 from consts.proj_vars import InstallVars, ProjVar
-from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt
+from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, EventLogID
 from utils.ssh import ControllerClient
 from consts.filepaths import BuildServerPath
 from consts.build_server import Server, get_build_server_info
@@ -71,6 +71,8 @@ def test_install_cloned_image(install_clone_setup):
     lab_name = lab['name']
     LOG.info("Starting install-clone on AIO lab {} .... ".format(lab_name))
     LOG.tc_step("Booting controller-0 ... ")
+
+    install_helper.wipe_disk_hosts(hostnames,  close_telnet_conn=False)
 
     # power off hosts
     LOG.tc_step("Powring off system hosts ... ")
@@ -145,15 +147,17 @@ def test_install_cloned_image(install_clone_setup):
     install_helper.download_lab_config_files(lab, install_clone_setup['build_server'], load_path)
 
     LOG.tc_step ("Running lab cleanup to removed source attributes ....")
-    rc, output = install_helper.run_setup_script(script='lab_cleanup')
-    assert rc == 0, "Lab cleanup script run failed: {}".format(output)
+    install_helper.run_setup_script(script='lab_cleanup')
 
     LOG.tc_step ("Running lab setup script to upadate cloned system attributes ....")
     rc, output = install_helper.run_lab_setup()
     assert rc == 0, "Lab setup run failed: {}".format(output)
-    #
-    # LOG.info("Changing the system name ... ")
-    # install_helper.update_system_info_for_cloned_system()
+
+    time.sleep(30)
+    LOG.tc_step ("Checking config status of controller-0 and perform lock/unlock if necessary...")
+    if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
+        rc, output = host_helper.lock_unlock_controllers()
+        assert rc == 0, "Failed to lock/unlock controller: {}".format(output)
 
     LOG.tc_step("Verifying system health after restore ...")
     system_helper.wait_for_all_alarms_gone(timeout=300)
