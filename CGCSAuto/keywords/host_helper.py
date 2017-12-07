@@ -2197,7 +2197,7 @@ def __parse_total_cpus(output):
     # Final resource view: name=controller-0 phys_ram=44518MB used_ram=0MB phys_disk=141GB used_disk=1GB
     # free_disk=133GB total_vcpus=31 used_vcpus=0.0 pci_stats=[PciDevicePool(count=1,numa_node=0,product_id='0522',
     # tags={class_id='030000',configured='1',dev_type='type-PCI'},vendor_id='102b')]
-    total = round(float(re.findall('used_vcpus=(.*) ', last_line)[0]), 4)
+    total = round(float(re.findall('used_vcpus=([\d|.]*) ', last_line)[0]), 4)
     return total
 
 
