@@ -416,7 +416,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, no_simplex):
     ('win_2012', 3, 1024, 'dedicated', 'image'),
     ('win_2016', 4, 4096, 'dedicated', 'volume'),
     ('ge_edge', 1, 1024, 'shared', 'image'),
-    ('ge_edge', 4, 4096, 'dedicated', 'volume')
+    ('ge_edge', 4, 4096, 'dedicated', 'volume'),
 ])
 def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no_simplex):
     img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
