@@ -44,24 +44,34 @@ class Rest:
         self.retrieve_token('/auth/tokens')
 
     def generate_token_request(self, **kwargs):
+        """
+        TBD - should update this to allow for configurable 
+              json_string to be able to change any value
+              for truly flexible testing.
+        """
         json_string = ('{"auth":'
                        '{"identity":{"methods": ["password"],'
                        '"password": {"user": {"domain":'
                        '{"name": "Default"},"name":'
-                       '"admin","password":"Li69nux*"}}}}}')
+                       '"admin","password":"Li69nux*"}}},'
+                       '"scope":{"project": {"name":'
+                       '"admin","domain": {"name":"Default"}'
+                       '}}}}')
         self.token_payload = json.loads(json_string)
 
     def retrieve_token(self, endpoint, token_request=None):
         if token_request is None:
             token_request = json.dumps(self.token_payload)
         headers = {'Content-type': 'application/json'}
+        LOG.info('token retrieval: {}'.format(self.ksURL+endpoint))
         r = requests.post(self.ksURL+endpoint,
                           headers=headers,
-                          data=token_request, verify=True)
+                          data=token_request, verify=False)
         if r.status_code != 201:
             self.token = "THISTOKENDOESNOTEXIST"
         else:
             self.token = r.headers['X-Subject-Token']
+        LOG.info('token retrieval status: {} text: {}'.format(r.status_code,r.text))
         return(r.status_code, r.text)
 
     def auth_header_select(self, auth=True):
@@ -77,7 +87,7 @@ class Rest:
         LOG.info(message.format(self.baseURL, resource, headers))
         kpi = KPI()
         r = requests.get(self.baseURL + resource,
-                         headers=headers, verify=True)
+                         headers=headers, verify=False)
         delta = kpi.stop()
         return(r.status_code, r.json())
 

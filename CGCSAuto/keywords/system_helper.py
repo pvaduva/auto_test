@@ -2315,13 +2315,13 @@ def get_active_load_id(con_ssh=None, source_creden_=None):
     return table_parser.get_values(table_, 'id')
 
 
-def get_software_loads(rtn_vals=('sw_id', 'state', 'software_version'), sw_id=None, state=None, software_version=None,
+def get_software_loads(rtn_vals=('id', 'state', 'software_version'), sw_id=None, state=None, software_version=None,
                        strict=False, con_ssh=None, source_creden_=None):
 
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
 
     kwargs_dict = {
-        'sw_id': sw_id,
+        'id': sw_id,
         'state': state,
         'software_version': software_version,
     }

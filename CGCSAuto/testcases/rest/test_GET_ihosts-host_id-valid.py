@@ -2,21 +2,22 @@ import pytest
 from utils.tis_log import LOG
 from utils.rest import Rest
 from keywords import system_helper, host_helper
+import re
 
 
 @pytest.mark.parametrize(
     'path', [
-        ('/ihosts/{}/addresses'),
-        ('/ihosts/{}/idisks'),
-        ('/ihosts/{}/ilvgs'),
-        ('/ihosts/{}/imemories'),
-        ('/ihosts/{}/ipvs'),
-        ('/ihosts/{}/isensors'),
-        ('/ihosts/{}/isensorgroups'),
-        ('/ihosts/{}/istors'),
-        ('/ihosts/{}/pci_devices'),
-        ('/ihosts/{}/routes'),
-        ('/ihosts/{}'),
+        ('/ihosts/-/addresses'),
+        ('/ihosts/-/idisks'),
+        ('/ihosts/-/ilvgs'),
+        ('/ihosts/-/imemories'),
+        ('/ihosts/-/ipvs'),
+        ('/ihosts/-/isensors'),
+        ('/ihosts/-/isensorgroups'),
+        ('/ihosts/-/istors'),
+        ('/ihosts/-/pci_devices'),
+        ('/ihosts/-/routes'),
+        ('/ihosts/-'),
     ]
 )
 def test_GET_various_host_id_valid(path):
@@ -36,6 +37,7 @@ def test_GET_various_host_id_valid(path):
         n/a
     """
     r = Rest('sysinv')
+    path = re.sub("-", "{}", path)
     LOG.info(path)
     LOG.info(system_helper.get_hostnames())
     for host in system_helper.get_hostnames():
