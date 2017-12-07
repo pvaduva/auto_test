@@ -234,7 +234,8 @@ def get_tenant_name(auth_info=None):
 
 
 @contextmanager
-def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None):
+def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
+                       telnet_session=None):
     """
     ssh to a exterbal node from sshclient.
 
@@ -255,13 +256,25 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=
     if not host:
         raise exceptions.SSHException("Remote node hostname or ip address must be provided")
 
-    if not con_ssh:
+    if use_telnet and not telnet_session:
+        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+
+    if not con_ssh and not use_telnet:
         con_ssh = ControllerClient.get_active_controller()
 
-    default_user, default_password = security_helper.LinuxUser.get_current_user_password()
+    if not use_telnet:
+        default_user, default_password = security_helper.LinuxUser.get_current_user_password()
+    else:
+        default_user = HostLinuxCreds.get_user()
+        default_password = HostLinuxCreds.get_password()
+
     user = username if username else default_user
     password = password if password else default_password
-    original_host = con_ssh.host
+    if use_telnet:
+        original_host = telnet_session.exec_cmd('hostname')[1]
+    else:
+        original_host = con_ssh.host
+
     if not prompt:
         prompt = '.*' + host + '\:~\$'
 

@@ -41,7 +41,7 @@ PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 REGION_MAP = {'RegionOne': '',
               'RegionTwo': '-R2'}
 
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.00'], ['16.10', '17.06'], ['17.06', '17.07']]
+SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '17.07']]
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'

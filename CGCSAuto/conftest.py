@@ -475,7 +475,7 @@ def pytest_addoption(parser):
                              """
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
-                     action='store', metavar='VERSION',  default='17.06', help=upgrade_version_help)
+                     action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
     parser.addoption('--build-server', '--build_server',  dest='build_server',
                      action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
                      help=build_server_help)

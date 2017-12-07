@@ -1,6 +1,6 @@
 import pytest
 import os
-from consts import build_server as build_server_consts
+import setups
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import install_helper,  patching_helper, upgrade_helper, common
@@ -31,11 +31,6 @@ def pytest_configure(config):
     max_parallel_computes = config.getoption('max_parallel_computes')
     alarm_restrictions = config.getoption('alarm_restrictions')
 
-    if upgrade_version == "16.10":
-        orchestration_after = None
-
-    print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
-
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
                                  tis_build_dir=tis_build_dir,
@@ -53,7 +48,6 @@ def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-    print('precheck source_admin_value: ' + str(ProjVar.get_var('SOURCE_CREDENTIAL')))
 
     # check if all nodes are unlocked
     assert system_helper.are_hosts_unlocked(con_ssh), \
@@ -82,6 +76,16 @@ def pre_check_upgrade():
     # check if upgrade version is supported
     current_version = system_helper.get_system_software_version()
     upgrade_version = UpgradeVars.get_upgrade_var('upgrade_version')
+
+    if upgrade_version is None:
+        upgrade_version = [u[1] for u in SUPPORTED_UPGRADES if u[0] == current_version][0]
+        UpgradeVars.set_upgrade_var(upgrade_version=upgrade_version)
+ 
+    LOG.info("Current version = {}; Upgrade version = {}".format(current_version, upgrade_version))
+
+    if upgrade_version == "16.10":
+        UpgradeVars.set_upgrade_var(orchestration_after=None)
+
     assert [current_version, upgrade_version] in SUPPORTED_UPGRADES, "Upgrade from {} to {} is not supported"
 
 
@@ -313,21 +317,26 @@ def apply_patches(lab, server, patch_dir):
 
         dest_server = lab['controller-0 ip']
         ssh_port = None
+        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
         if 'vbox' in lab['name']:
-            dest_server = lab['external_ip']
-            ssh_port = lab['external_port']
-            temp_path = '/tmp/upgrade_patches/'
-            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server,
-                              temp_path, dest_user=lab['local_user'],
-                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+            if 'external_ip' in lab.keys():
+                dest_server = lab['external_ip']
+                ssh_port = lab['external_port']
+                server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, pre_opts=pre_opts,
+                                      ssh_port=ssh_port)
+            else:
+                local_ip = lab['local_ip']
+                temp_path = '/tmp/upgrade_patches/'
+                local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+                server.ssh_conn.rsync(patch_dir + "/*.patch", local_ip,
+                                  temp_path, dest_user=lab['local_user'],
+                                  dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(temp_path,
-                                        dest_path=patch_dest_dir, is_dir=True)
+                common.scp_to_active_controller(temp_path,
+                                            dest_path=patch_dest_dir, is_dir=True)
 
         else:
-            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
                                   pre_opts=pre_opts)
 

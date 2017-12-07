@@ -224,7 +224,7 @@ def get_natbox_dict(natboxname):
             return natbox
     else:
         if natboxname.startswith('128.224'):
-            NatBoxes.add_natbox(ip=natboxname)
+            return NatBoxes.add_natbox(ip=natboxname)
         else:
             raise ValueError("{} is not a valid input.".format(natboxname))
 
