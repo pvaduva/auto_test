@@ -99,14 +99,14 @@ def download_upgrade_load(lab, server, load_path):
         if 'external_ip' in lab.keys():
             external_ip = lab['external_ip']
             external_port = lab['external_port']
-            server.ssh_conn.rsync("-L " + iso_file_path,
+            server.ssh_conn.rsync(iso_file_path,
                           external_ip,
                           os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
             local_ip = lab['local_ip']
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
-            server.ssh_conn.rsync("-L " + iso_file_path, local_ip,
+            server.ssh_conn.rsync(iso_file_path, local_ip,
                                   os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
@@ -114,7 +114,7 @@ def download_upgrade_load(lab, server, load_path):
                                             dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
 
     else:
-        server.ssh_conn.rsync("-L " + iso_file_path,
+        server.ssh_conn.rsync(iso_file_path,
                               lab['controller-0 ip'],
                               os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
 
