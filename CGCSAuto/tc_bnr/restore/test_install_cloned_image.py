@@ -29,8 +29,12 @@ def install_clone_setup():
     controller_conn = None
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
     if local_host.ping_to_host(controller_node.host_ip):
-        controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
+        try:
+            controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                               initial_prompt=extra_controller_prompt,  fail_ok=True)
+        except:
+            LOG.info("SSH connection to {} not yet avaiable yet ..".format(controller_node.name))
+
     if controller_conn:
         LOG.info("Connection established with controller-0 ....")
         ControllerClient.set_active_controller(ssh_client=controller_conn)
@@ -65,6 +69,8 @@ def test_install_cloned_image(install_clone_setup):
     controller0 = 'controller-0'
 
     lab = InstallVars.get_install_var('LAB')
+    install_output_dir = ProjVar.get_var('LOG_DIR')
+
     controller0_node = lab['controller-0']
     hostnames = install_clone_setup['hostnames']
     system_mode = install_clone_setup['system_mode']
@@ -72,7 +78,21 @@ def test_install_cloned_image(install_clone_setup):
     LOG.info("Starting install-clone on AIO lab {} .... ".format(lab_name))
     LOG.tc_step("Booting controller-0 ... ")
 
-    install_helper.wipe_disk_hosts(hostnames,  close_telnet_conn=False)
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node, install_output_dir)
+        try:
+            controller0_node.telnet_conn.login()
+        except:
+            LOG.info("Telnet Login failed. Attempting to reset password")
+            try:
+                controller0_node.telnet_conn.login(reset=True)
+            except:
+                if controller0_node.telnet_conn:
+                    controller0_node.telnet_conn.close()
+                    controller0_node.telnet_conn = None
+
+    if controller0_node.telnet_conn:
+        install_helper.wipe_disk_hosts(hostnames,  close_telnet_conn=False)
 
     # power off hosts
     LOG.tc_step("Powring off system hosts ... ")

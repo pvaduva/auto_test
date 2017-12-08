@@ -666,7 +666,9 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         LOG.info(message)
         return -1, message
 
-    con_ssh = ControllerClient.get_active_controller()
+    if not use_telnet:
+        con_ssh = ControllerClient.get_active_controller()
+
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet,
                                           con_telnet=con_telnet)
 

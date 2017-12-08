@@ -252,8 +252,12 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
         return
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, install_output_dir)
-        controller0_node.telnet_conn.login()
+        try:
+            controller0_node.telnet_conn = open_telnet_session(controller0_node, install_output_dir)
+            controller0_node.telnet_conn.login()
+        except:
+            LOG.info("Telnet Login failed. skipping wipedisk")
+            return
 
     if controller0_node.telnet_conn:
         # Run the wipedisk_via_helper utility if the nodes are accessible
@@ -274,23 +278,33 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
                     prompt = '.*{}\:~\$ ' + '|' +  Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
                 else:
                     prompt = Prompt.TIS_NODE_PROMPT_BASE.format(hostname)
+                if hostname == controller0_node.name:
+                    hostname = node_obj.host_ip
 
-                with common.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
-                                               telnet_session=controller0_node.telnet_conn) as host_ssh:
-                    host_ssh.send("sudo wipedisk")
-                    prompts = [Prompt.PASSWORD_PROMPT, "\[y/n\]", "wipediskscompletely"]
-                    index = host_ssh.expect(prompts)
+                cmd = "ping -w {} -c 4 {}".format(HostTimeout.PING_TIMEOUT, hostname)
+                if (controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.PING_TIMEOUT +
+                                              HostTimeout.TIMEOUT_BUFFER)[0] != 0):
+                    LOG.info("Node {} not responding. Skipping wipedisk process".format(hostname))
 
-                    if index == 0:
-                        host_ssh.send(HostLinuxCreds.get_password())
-                        prompts.remove(Prompt.PASSWORD_PROMPT)
-                        index = host_ssh.expect(prompts)
+                else:
+                    try:
+                        with common.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
+                                                       telnet_session=controller0_node.telnet_conn) as host_ssh:
+                            host_ssh.send("sudo wipedisk")
+                            prompts = [Prompt.PASSWORD_PROMPT, "\[y/n\]", "wipediskscompletely"]
+                            index = host_ssh.expect(prompts)
 
-                    host_ssh.send("y")
-                    index = host_ssh.expect("wipediskscompletely")
-                    host_ssh.send("wipediskscompletely")
-                    host_ssh.expect("The disk(s) have been wiped.")
+                            if index == 0:
+                                host_ssh.send(HostLinuxCreds.get_password())
+                                prompts.remove(Prompt.PASSWORD_PROMPT)
+                                index = host_ssh.expect(prompts)
 
+                            host_ssh.send("y")
+                            index = host_ssh.expect("wipediskscompletely")
+                            host_ssh.send("wipediskscompletely")
+                            host_ssh.expect("The disk(s) have been wiped.")
+                    except:
+                        LOG.info("Unable to ssh to {}; Skipping wipedisk ..".format(hostname))
     else:
         LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
 
