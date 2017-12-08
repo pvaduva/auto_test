@@ -961,11 +961,11 @@ class Telnet:
                     if password and len(password) > 0:
                         self.get_read_until(PASSWORD_PROMPT, 30)
                         self.write(str.encode(password + '\r\n'))
-                        self.find_prompt(timeout=60)
+                        self.find_prompt(timeout=30)
                         self.write(str.encode('export TMOUT=0 \r\n'))
-                        self.find_prompt()
+                        self.find_prompt(timeout=30)
                         self.write(str.encode('\r\n'))
-                        self.find_prompt()
+                        self.find_prompt(timeout=30)
                     else:
                         self.write_line("")
                     break

@@ -4,7 +4,7 @@ import time
 from utils.tis_log import LOG
 from keywords import install_helper, host_helper, system_helper
 from consts.proj_vars import InstallVars, ProjVar
-from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt
+from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, EventLogID
 from utils.ssh import ControllerClient
 from consts.filepaths import BuildServerPath
 from consts.build_server import Server, get_build_server_info
@@ -29,8 +29,12 @@ def install_clone_setup():
     controller_conn = None
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
     if local_host.ping_to_host(controller_node.host_ip):
-        controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
+        try:
+            controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                               initial_prompt=extra_controller_prompt,  fail_ok=True)
+        except:
+            LOG.info("SSH connection to {} not yet avaiable yet ..".format(controller_node.name))
+
     if controller_conn:
         LOG.info("Connection established with controller-0 ....")
         ControllerClient.set_active_controller(ssh_client=controller_conn)
@@ -65,12 +69,30 @@ def test_install_cloned_image(install_clone_setup):
     controller0 = 'controller-0'
 
     lab = InstallVars.get_install_var('LAB')
+    install_output_dir = ProjVar.get_var('LOG_DIR')
+
     controller0_node = lab['controller-0']
     hostnames = install_clone_setup['hostnames']
     system_mode = install_clone_setup['system_mode']
     lab_name = lab['name']
     LOG.info("Starting install-clone on AIO lab {} .... ".format(lab_name))
     LOG.tc_step("Booting controller-0 ... ")
+
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node, install_output_dir)
+        try:
+            controller0_node.telnet_conn.login()
+        except:
+            LOG.info("Telnet Login failed. Attempting to reset password")
+            try:
+                controller0_node.telnet_conn.login(reset=True)
+            except:
+                if controller0_node.telnet_conn:
+                    controller0_node.telnet_conn.close()
+                    controller0_node.telnet_conn = None
+
+    if controller0_node.telnet_conn:
+        install_helper.wipe_disk_hosts(hostnames,  close_telnet_conn=False)
 
     # power off hosts
     LOG.tc_step("Powring off system hosts ... ")
@@ -145,15 +167,17 @@ def test_install_cloned_image(install_clone_setup):
     install_helper.download_lab_config_files(lab, install_clone_setup['build_server'], load_path)
 
     LOG.tc_step ("Running lab cleanup to removed source attributes ....")
-    rc, output = install_helper.run_setup_script(script='lab_cleanup')
-    assert rc == 0, "Lab cleanup script run failed: {}".format(output)
+    install_helper.run_setup_script(script='lab_cleanup')
 
     LOG.tc_step ("Running lab setup script to upadate cloned system attributes ....")
     rc, output = install_helper.run_lab_setup()
     assert rc == 0, "Lab setup run failed: {}".format(output)
-    #
-    # LOG.info("Changing the system name ... ")
-    # install_helper.update_system_info_for_cloned_system()
+
+    time.sleep(30)
+    LOG.tc_step ("Checking config status of controller-0 and perform lock/unlock if necessary...")
+    if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
+        rc, output = host_helper.lock_unlock_controllers()
+        assert rc == 0, "Failed to lock/unlock controller: {}".format(output)
 
     LOG.tc_step("Verifying system health after restore ...")
     system_helper.wait_for_all_alarms_gone(timeout=300)

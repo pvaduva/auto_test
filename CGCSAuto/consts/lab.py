@@ -465,6 +465,17 @@ class Labs:
         'tpm_installed': True,
     }
 
+    WP_01_02 = {
+        'short_name': 'wp_01_02',
+        'name': 'yow-cgcs-wolfpass-01_02',
+        'floating ip': '128.224.150.254',
+        'controller-0 ip': '128.224.150.155',
+        'controller-1 ip': '128.224.150.198',
+        'controller_nodes': [62031, 29957],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
@@ -493,12 +504,23 @@ class Labs:
         'controller-1 ip': '10.10.10.7',
         'controller_nodes': [0, 1],
         'compute_nodes': [0, 1],
-		'storage_nodes': [0, 1]
+        'storage_nodes': [0, 1]
     }
 
     VBOX_3 = {
         'short_name': 'vbox_3',
         'name': 'yow-cgcs-vbox-3',
+        'floating ip': '10.10.10.5',
+        'controller-0 ip': '10.10.10.6',
+        'controller-1 ip': '10.10.10.7',
+        'controller_nodes': [0, 1],
+        'compute_nodes': [0, 1],
+        'storage_nodes': [0, 1]
+    }
+
+    VBOX_4 = {
+        'short_name': 'vbox_4',
+        'name': 'yow-cgcs-vbox-4',
         'floating ip': '10.10.10.8',
         'controller-0 ip': '10.10.10.9',
         'controller-1 ip': '10.10.10.10',

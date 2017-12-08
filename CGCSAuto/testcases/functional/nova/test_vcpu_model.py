@@ -1,14 +1,13 @@
 import re
-from pytest import fixture, mark, skip
+from pytest import mark, skip
 
 from utils.tis_log import LOG
-from consts.cgcs import VMStatus
 from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
 from consts.cli_errs import VCPUSchedulerErr
+from consts.reasons import SkipStorageBacking
 
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
+from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.parametrize(('flv_model', 'img_model', 'boot_source', 'error'), [
@@ -18,7 +17,9 @@ from testfixtures.recover_hosts import HostsToRecover
     ('SandyBridge', 'Passthrough', 'volume', 'error'),
     ('Passthrough', 'Haswell', 'image', 'error'),
     ('Passthrough', 'Passthrough', 'image', None),
-    ('SandyBridge', 'SandyBridge', 'volume', None)
+    ('SandyBridge', 'SandyBridge', 'volume', None),
+    ('Skylake-Client', 'Skylake-Client', 'volume', None),
+    ('Skylake-Server', 'Skylake-Client', 'volume', 'error')
 ])
 def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
     """
@@ -52,7 +53,7 @@ def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
         check_vm_cpu_model(vm_id=vm, vcpu_model=flv_model)
 
 
-def _boot_vm_vcpu_model(flv_model, img_model, boot_source, avail_zone=None, vm_host=None):
+def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', avail_zone=None, vm_host=None):
     LOG.tc_step("Attempt to launch vm from {} with image vcpu model metadata: {}; flavor vcpu model extra spec: {}".
                 format(boot_source, img_model, flv_model))
 
@@ -79,7 +80,6 @@ def _boot_vm_vcpu_model(flv_model, img_model, boot_source, avail_zone=None, vm_h
     return code, vm, msg
 
 
-# TC5141
 @mark.p2
 @mark.parametrize(('vcpu_model', 'vcpu_source', 'boot_source'), [
     ('Conroe', 'flavor', 'volume'),
@@ -94,6 +94,8 @@ def _boot_vm_vcpu_model(flv_model, img_model, boot_source, avail_zone=None, vm_h
     ('Passthrough', 'image', 'image'),
     ('Passthrough', 'image', 'volume'),
     ('SandyBridge', 'image', 'volume'),
+    ('Skylake-Client', 'flavor', 'image'),
+    ('Skylake-Server', 'image', 'volume'),
     (None, None, 'volume')  # TC5065 + TC5145
 ])
 def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
@@ -147,6 +149,7 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model, expt_arch=expt_arch)
 
+    # TC5141
     LOG.tc_step("Stop and then restart vm and check if it retains its vcpu model")
     vm_helper.stop_vms(vm)
     vm_helper.start_vms(vm)
@@ -158,8 +161,8 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
     check_vm_cpu_model(vm, vcpu_model, expt_arch=expt_arch)
 
     LOG.tc_step("Cold migrate vm and check {} vcpu model".format(vcpu_model))
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     vm_helper.cold_migrate_vm(vm_id=vm)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     check_vm_cpu_model(vm, vcpu_model, expt_arch=expt_arch)
 
 
@@ -279,6 +282,8 @@ def _create_flavor_vcpu_model(vcpu_model, root_disk_size=None):
 @mark.parametrize(('vcpu_model', 'thread_policy'), [
     ('Penryn', 'isolate'),
     ('Passthrough', 'require'),
+    ('Skylake-Client', 'isolate'),
+    ('Skylake-Server', 'require')
 ])
 def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy):
     """
@@ -337,16 +342,18 @@ def test_vcpu_model_evacuation(add_admin_role_func):
             - Remove admin role from primary tenant (module)
     """
 
-    if len(host_helper.get_up_hypervisors()) < 2:
-        skip('Less than 2 computes hosts available')
+    backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    if len(hosts) < 2:
+        skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format('same'))
 
-    working_vcpu_model_list = ["Skylake-Client", "Broadwell", "Broadwell-noTSX", "Haswell", "IvyBridge", "SandyBridge",
-                              "Westmere", "Nehalem", "Penryn", "Conroe"]
+    working_vcpu_model_list = ['Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX', 'Haswell',
+                               'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe']
     vm_dict = {}
 
     LOG.tc_step("Find the newest vm that will be supported by at least 2 hosts and create vm")
     while working_vcpu_model_list:
         vcpu_model = working_vcpu_model_list[0]
+        del working_vcpu_model_list[0]
         code, vm, msg = _boot_vm_vcpu_model(vcpu_model, None, "volume", avail_zone='nova')
 
         # if _boot_vm is unsuccessful
@@ -357,51 +364,47 @@ def test_vcpu_model_evacuation(add_admin_role_func):
             expt_fault = VCPUSchedulerErr.CPU_MODEL_UNAVAIL
             res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR')
             err = nova_helper.get_vm_nova_show_value(vm, field='fault')
-            del working_vcpu_model_list[0]
 
             assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)
             assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}" \
                 .format(expt_fault, err)
             vm_helper.delete_vms(vm)
+            continue
 
-        else:
-            LOG.tc_step("Ping vm from NatBox after successful creation")
-            vm_helper.wait_for_vm_pingable_from_natbox(vm)
-            check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
+        LOG.tc_step("Ping vm from NatBox after successful creation")
+        vm_helper.wait_for_vm_pingable_from_natbox(vm)
+        check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
 
-            LOG.tc_step("Perform a live migration to see if another host can support the CPU model")
-            exit_code = vm_helper.live_migrate_vm(vm)[0]
+        LOG.tc_step("Perform a live migration to see if another host can support the CPU model")
+        exit_code = vm_helper.live_migrate_vm(vm)[0]
+        target_host = nova_helper.get_vm_host(vm)
+
+        if exit_code == 0:
+            LOG.info("Live migrate succeeded. At least two hosts support vcpu model {}".format(vcpu_model))
+            vm_helper.wait_for_vm_pingable_from_natbox(vm, timeout=30)
             target_host = nova_helper.get_vm_host(vm)
+            vm_dict[vm] = vcpu_model
+            break
+        elif exit_code in [1, 2]:
+            LOG.info("Only {} support vcpu model {}".format(target_host, vcpu_model))
+            vm_helper.delete_vms(vm)
+            continue
+        else:
+            assert False, "Live migrate failed for reasons not related to vCPU support"
 
-            LOG.tc_step("Check if migration is blocked or if live migrate fails")
-
-            if exit_code == 0:
-                LOG.tc_step("Ping vm from NatBox after successful live migration")
-                vm_helper.wait_for_vm_pingable_from_natbox(vm, timeout=30)
-                target_host = nova_helper.get_vm_host(vm)
-                vm_dict[vm] = vcpu_model
-                del working_vcpu_model_list[0]
-                break
-            elif exit_code in [1, 2]:
-                del working_vcpu_model_list[0]
-                vm_helper.delete_vms(vm)
-            else:
-                assert False, "Live migrate failed for reasons not related to vCPU support"
-
-    assert vm_dict, "None of the tested vCPU models are supported by the hosts"
+    else:
+        assert False, "No valid vcpu model found that's supported by two hypervisors"
 
     LOG.tc_step("Create remaining vms")
     vm_count = 1
-    boot_source = 'image' # Second non-passthrough vm will boot from image
+    boot_source = 'image'   # Second non-passthrough vm will boot from image
 
     for cpu in working_vcpu_model_list:
         LOG.tc_step("creating vm for {}, {}".format(cpu, boot_source))
-        if boot_source == 'volume':
-            vm = _boot_vm_vcpu_model(cpu, None, boot_source, avail_zone='nova', vm_host=target_host)[1]
-            boot_source = 'image'
-        else:
-            vm = _boot_vm_vcpu_model(cpu, cpu, boot_source, avail_zone='nova', vm_host=target_host)[1]
-            boot_source = 'volume'
+        for boot_source_ in ('volume', 'image'):
+            cpu_img = cpu if boot_source_ == 'image' else None
+            vm = _boot_vm_vcpu_model(flv_model=cpu, img_model=cpu_img, boot_source=boot_source, avail_zone='nova',
+                                     vm_host=target_host)[1]
 
         check_vm_cpu_model(vm_id=vm, vcpu_model=cpu)
         vm_helper.wait_for_vm_pingable_from_natbox(vm)

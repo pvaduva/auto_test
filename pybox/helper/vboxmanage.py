@@ -147,7 +147,7 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
             cmd.extend(['{}'.format(env.PORT)])
             env.PORT += 1
         else:
-            cmd.extend(['{}\{}'.format(uartpath, hostname)])
+            cmd.extend(['{}{}'.format(uartpath, hostname)])
     if nicbootprio2:
         cmd.extend(['--nicbootprio2'])
         cmd.extend(['{}'.format(nicbootprio2)])

@@ -19,8 +19,8 @@ def connect(hostname, port=10000):
 
     # Need to power on host before we can connect
     vboxmanage.vboxmanage_startvm(hostname)
-    socketname = "{}".format(hostname)
-    LOG.info("Connecting to {}".format(socketname))
+    socketname = "/tmp/{}".format(hostname)
+    LOG.info("Connecting to {}".format(hostname))
     if platform == 'win32' or platform == 'win64':
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
     else:
@@ -34,7 +34,7 @@ def connect(hostname, port=10000):
     except:
         LOG.info("Connection failed")
         pass
-        disconnect(sock)
+        #disconnect(sock)
         sock = None
     sock.setblocking(0)
 
