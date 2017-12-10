@@ -141,6 +141,13 @@ def get_valid_password(user_name=None):
         if len(password) < total_length:
             password += ''.join(random.choice(alphabet) for _ in range(total_length - len(password)+1))
 
+        # password = password.replace('\\', ',')
+        # password = password.replace('`', ':')
+        # password = password.replace('-', '<')
+        # password = password.replace('!', '@')
+        password = re.sub('.{', '{{', password)
+        password = re.sub('.}', '}}', password)
+
         if not is_last_used(password, user_name=user_name) and password not in frequently_used_words:
             break
 

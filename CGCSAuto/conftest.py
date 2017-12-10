@@ -452,8 +452,6 @@ def pytest_addoption(parser):
                    "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
                    " Otherwise, default license for the upgrade release will be used"
 
-    patch_dir_help = "The path to the directory in build server where the patch files are located"
-
     orchestration_help = "The point in upgrade procedure where we start to use orchestration. Possible options are:" \
                          "  default - to start orchestration after controller-1 is upgraded; " \
                          "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
@@ -484,9 +482,6 @@ def pytest_addoption(parser):
     parser.addoption('--license',  dest='upgrade_license', action='store',
                      metavar='license full path', help=license_help)
 
-    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir',
-                     action='store', metavar='DIR',  help=patch_dir_help)
-
     parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
                      action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
 
@@ -501,6 +496,31 @@ def pytest_addoption(parser):
 
     parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
                      action='store', default='strict',  help=alarm_restriction_help)
+
+    ####################
+    # Patching options #
+    ####################
+    patch_build_server_help = "TiS Patch build server host name from where the upgrade release software is " \
+                              "downloaded. Use default build server when unspecified"
+
+    patch_dir_help = "Directory or file on the Build Server where the patch files located. Because the version must " \
+                     "match that of the system software on the target lab, hence by default, we will deduce " \
+                     "the location of the patch files and their version, unless users specify an absolute path " \
+                     "containing valid patch files. This directory is usually a symbolic link in the load-build " \
+                     "directory."
+
+    patch_base_dir_help = "Directory on the Build Server under which the patch files are located. By default, " \
+                          "it is: {}".format('/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build')
+
+    parser.addoption('--patch-build-server', '--patch_build_server',  dest='patch_build_server',
+                     action='store', metavar='SERVER', default=None,
+                     help=patch_build_server_help)
+
+    parser.addoption('--patch-dir', '--patch_dir',  dest='patch_dir', default=None,
+                     action='store', metavar='DIR',  help=patch_dir_help)
+
+    parser.addoption('--patch-base-dir', '--patch_base_dir',  dest='patch_base_dir', default=None,
+                     action='store', metavar='BASEDIR',  help=patch_base_dir_help)
 
     ###############################
     #  Backup and Restore options #
@@ -529,9 +549,12 @@ def pytest_addoption(parser):
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
+    # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
+
+
 def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
