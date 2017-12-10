@@ -228,7 +228,8 @@ def invoketeardown(request):
 
 
 @mark.p1
-def test_ping_between_vms_using_hostnames():
+# Exclude for now until we improve robustness for test teardown. The impact is big if teardown is interrupted.
+def _test_ping_between_vms_using_hostnames():
     """
     This test includes a positive test and a negative test.
 
