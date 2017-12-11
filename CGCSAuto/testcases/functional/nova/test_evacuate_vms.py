@@ -40,6 +40,17 @@ def touch_files_under_vm_disks(vm_id, ephemeral, swap, vm_type, disks):
 
 
 def check_vm_numa_topology(vm_id, numa_nodes, numa_node0, numa_node1):
+    """
+
+    Args:
+        vm_id:
+        numa_nodes (None|int):
+        numa_node0 (None|int):
+        numa_node1 (None|int):
+
+    Returns:
+
+    """
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
     actual_node_vals = vm_helper.get_vm_host_and_numa_nodes(vm_id)[1]
     if not numa_nodes:
@@ -47,9 +58,9 @@ def check_vm_numa_topology(vm_id, numa_nodes, numa_node0, numa_node1):
     else:
         nodes = numa_nodes
 
-    if nodes == 2 and numa_node0 == None and numa_node1 == None:
+    if nodes == 2 and numa_node0 is None and numa_node1 is None:
         expected_node_vals = [0, 1]
-    elif nodes == 1 and numa_node0 == None:
+    elif nodes == 1 and numa_node0 is None:
         expected_node_vals = [0]
     else:
         expected_node_vals = [int(val) for val in [numa_node0, numa_node1] if val is not None]
@@ -113,17 +124,17 @@ class TestDefaultGuest:
         LOG.tc_step("Create a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor_1, scope='class')
+        ResourceCleanup.add('flavor', flavor_1, scope='function')
 
         LOG.tc_step("Create another flavor with ephemeral and swap disks")
         flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing,
                                              check_storage_backing=False)[1]
-        ResourceCleanup.add('flavor', flavor_2, scope='class')
+        ResourceCleanup.add('flavor', flavor_2, scope='function')
 
         LOG.tc_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
         vm1_name = "vol_root"
         vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', avail_zone='nova', vm_host=target_host,
-                                cleanup='class')[1]
+                                cleanup='function')[1]
 
         vms_info = {vm1: {'ephemeral': 0,
                           'swap': 0,
@@ -134,7 +145,7 @@ class TestDefaultGuest:
         LOG.tc_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_ephemswap"
         vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', avail_zone='nova', vm_host=target_host,
-                                cleanup='class')[1]
+                                cleanup='function')[1]
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
         vms_info[vm2] = {'ephemeral': 1,
@@ -145,7 +156,7 @@ class TestDefaultGuest:
         LOG.tc_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
         vm3_name = "image_root"
         vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', avail_zone='nova', vm_host=target_host,
-                                cleanup='class')[1]
+                                cleanup='function')[1]
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
         vms_info[vm3] = {'ephemeral': 0,
@@ -157,10 +168,10 @@ class TestDefaultGuest:
                     "pingable from NatBox")
         vm4_name = 'image_root_attachvol'
         vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', avail_zone='nova', vm_host=target_host,
-                                cleanup='class')[1]
+                                cleanup='function')[1]
 
         vol = cinder_helper.create_volume(bootable=False)[1]
-        ResourceCleanup.add('volume', vol, scope='class')
+        ResourceCleanup.add('volume', vol, scope='function')
         vm_helper.attach_vol_to_vm(vm4, vol_id=vol, mount=False)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
@@ -172,7 +183,7 @@ class TestDefaultGuest:
         LOG.tc_step("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
         vm5_name = 'image_ephemswap'
         vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', avail_zone='nova', vm_host=target_host,
-                                cleanup='class')[1]
+                                cleanup='function')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm5)
         vms_info[vm5] = {'ephemeral': 1,
                          'swap': 512,
@@ -233,7 +244,6 @@ class TestDefaultGuest:
         for host in hosts:
             numa_num = len(host_helper.get_host_procs(host))
             if numa_num > 1:
-                target_host = host
                 acceptable_hosts.append(host)
                 if len(acceptable_hosts) == 2:
                     break
