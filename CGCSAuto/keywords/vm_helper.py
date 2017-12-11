@@ -1798,7 +1798,7 @@ class VMInfo:
         self.con_ssh = con_ssh
         self.auth_info = auth_info
         self.initial_table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=self.auth_info,
-                                                          timeout=5))
+                                                          timeout=60))
         self.table_ = self.initial_table_
         self.name = table_parser.get_value_two_col_table(self.initial_table_, 'name', strict=True)
         self.tenant_id = table_parser.get_value_two_col_table(self.initial_table_, 'tenant_id')
@@ -1809,7 +1809,7 @@ class VMInfo:
 
     def refresh_table(self):
         self.table_ = table_parser.table(cli.nova('show', self.vm_id, ssh_client=self.con_ssh,
-                                                  auth_info=self.auth_info))
+                                                  auth_info=self.auth_info, timeout=60))
 
     def __get_nics(self):
         raw_nics = table_parser.get_value_two_col_table(self.initial_table_, 'wrs-if:nics')
