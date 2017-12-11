@@ -3164,3 +3164,61 @@ def get_servicegroups_list_table(header='uuid', uuid=None,
             kwargs[key] = value
     return table_parser.get_values(table_, header, strict = strict,
                                    regex = regex, **kwargs)
+
+def create_snmp_comm_string(comm_string=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get system host-disk-list <host> table
+    Args:
+        comm_string (str): Community string to create
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+
+    """
+    args = ''
+    args += '-c ' + comm_string
+
+    out = cli.system('snmp-comm-add', args, ssh_client=con_ssh, auth_info=auth_info)
+
+    return out
+
+
+def get_snmp_comm_string(con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get system host-disk-list <host> table
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict):
+
+    """
+
+    table_ = table_parser.table(cli.system('snmp-comm-list', ssh_client=con_ssh, auth_info=auth_info))
+    comm_strings = table_parser.get_values(table_, 'snmp community', strict=True)
+
+    return comm_strings
+
+
+def delete_snmp_comm_string(comm_string, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get system host-disk-list <host> table
+    Args:
+        comm_string (str): Community string to create
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (dict):
+
+    """
+    args = ''
+    args += ' ' + comm_string
+    code = 0
+
+    out = cli.system('snmp-comm-delete', args, ssh_client=con_ssh, auth_info=auth_info)
+
+    if re.search("Deleting", out):
+        code = 1
+
+    return code

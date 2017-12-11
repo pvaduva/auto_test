@@ -1772,3 +1772,28 @@ def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     LOG.info("Listing migration history...")
     cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)
+
+
+def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    nova migration-list to collect migration history of each vm
+    Args:
+        hosts: one or more compute nodes
+        cpu_models: cpu models to match
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): List of matching hosts
+
+    """
+    field = 'cpu_info_model'
+    return_hosts = []
+    for host in hosts:
+        LOG.info("Getting cpu model info...")
+        table_ = table_parser.table(cli.nova('hypervisor-show', host, ssh_client=con_ssh,
+                                             auth_info=auth_info))
+        host_cpu_model = table_parser.get_value_two_col_table(table_, field, strict=True, merge_lines=True)
+        if host_cpu_model in cpu_models:
+            return_hosts.append(host)
+
+    return return_hosts

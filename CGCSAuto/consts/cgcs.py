@@ -238,6 +238,10 @@ class FlavorSpec:
     CPU_REALTIME_MASK = 'hw:cpu_realtime_mask'
     HPET_TIMER = 'sw:wrs:guest:hpet'
     NESTED_VMX = 'hw:wrs:nested_vmx'
+    NUMA0_CACHE_CPUS = 'hw:cache_vcpus.0'
+    NUMA1_CACHE_CPUS = 'hw:cache_vcpus.1'
+    NUMA0_L3_CACHE = 'hw:cache_l3.0'
+    NUMA1_L3_CACHE = 'hw:cache_l3.1'
 
 
 class ImageMetadata:
