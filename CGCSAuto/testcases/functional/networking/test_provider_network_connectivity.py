@@ -281,6 +281,7 @@ def test_providernet_connectivity_reboot():
         HostsToRecover.add(master_compute)
         host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
 
+        network_helper.schedule_providernet_connectivity_test()
         LOG.tc_step("Verify the providernet connectivity test does not list PASS for any host")
         cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
         connectivity_table = table_parser.table(cmd)
@@ -290,13 +291,15 @@ def test_providernet_connectivity_reboot():
     host_helper.wait_for_hosts_ready(hypervisors)
 
     LOG.tc_step("Verify all the providernet connectivity tests PASS")
-    end_time = time.time() + 120
+    end_time = time.time() + 60
     while time.time() < end_time:
+        network_helper.schedule_providernet_connectivity_test()
         cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
         connectivity_table = table_parser.table(cmd)
         post_passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
         if len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values']):
             break
+
     assert len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values'])
 
 

@@ -92,7 +92,7 @@ class LiveMigErr:
 class NetworkingErr:
     INVALID_VXLAN_VNI_RANGE = "exceeds 16777215"
     INVALID_MULTICAST_IP_ADDRESS = "is not a valid multicast IP address."
-    INVALID_VXLAN_PROVISION_PORTS = "is not in [4789, 8472]."
+    INVALID_VXLAN_PROVISION_PORTS = "Invalid input for port"
     VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attribute missing"
     VXLAN_TTL_RANGE_TOO_LARGE = "is too large - must be no larger than '255'."
     VXLAN_TTL_RANGE_TOO_SMALL = "is too small - must be at least '1'."
