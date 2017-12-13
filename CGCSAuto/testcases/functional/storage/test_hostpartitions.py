@@ -903,3 +903,42 @@ def test_create_host_partition_on_storage():
         for uuid in free_disks:
             rc, out = partition_helper.create_partition(host, uuid, free_disks[uuid], fail_ok=True)
             assert rc != 0, "Partition creation was successful"
+
+
+def test_host_disk_wipe_rootfs():
+    """
+    This test attempts to run system host-disk-wipe on a node using the rootfs
+    disk.  Command format is:
+
+    system host-disk-wipe [--confirm] <hostname or id> <disk uuid>
+
+    Note, host-disk-wipe is only applicable to controller and compute nodes. It
+    cannot be used on the rootfs disk.  It cannot be used for a disk that is
+    used by a PV or has partitions used by a PV.
+
+    Arguments:
+    - None
+
+    Test Steps:
+    1.  Determine which is the rootfs disk
+    2.  Attempt to wipe the disk
+    3.  Expect it to fail for every node
+
+    Assumptions:
+    - None
+    """
+
+
+    computes = system_helper.get_hostnames(personality="compute")
+    storage = system_helper.get_hostnames(personality="storage")
+    hosts = system_helper.get_controllers() + computes + storage
+
+    LOG.tc_step("Gather rootfs disks")
+    rootfs = partition_helper.get_rootfs(hosts)
+
+    for host in rootfs:
+        uuid = rootfs[host]
+        LOG.tc_step("Attempting to wipe {} from {}".format(uuid[0], host))
+        cmd = 'host-disk-wipe --confirm {} {}'.format(host, uuid[0])
+        rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
+        assert rc != 0, "Expected wipe disk to fail but instead succeeded"
