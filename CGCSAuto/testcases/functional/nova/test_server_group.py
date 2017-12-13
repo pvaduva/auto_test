@@ -32,6 +32,8 @@ def check_system(add_cgcsauto_zone, add_admin_role_module, request):
     LOG.fixture_step("Add hosts to cgcsauto aggregate: {}".format(hosts_to_add))
     nova_helper.add_hosts_to_aggregate('cgcsauto', hosts_to_add)
 
+    vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
+
     def remove_():
         LOG.fixture_step("Remove hosts from cgcsauto aggregate: {}".format(hosts_to_add))
         nova_helper.remove_hosts_from_aggregate('cgcsauto', hosts_to_add)
@@ -319,6 +321,7 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
     if min_count > group_size:
         LOG.tc_step("Check vms failed to boot when min_count > group_size")
         assert 1 == code, msg
+        assert max_count == len(vms)
 
         expt_err = SrvGrpErr.EXCEEDS_GRP_SIZE.format(srv_grp_id, group_size)
         for vm in vms:
