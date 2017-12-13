@@ -229,7 +229,7 @@ def alarm_list(header='State', con_ssh=None, auth_info=Tenant.ADMIN):
     return values
 
 
-def get_events(event_type, limit=None, header='message_id', con_ssh=None, auth_info=Tenant.ADMIN,
+def get_events(event_type, limit=None, header='message_id', con_ssh=None, auth_info=None,
                **filters):
     """
 

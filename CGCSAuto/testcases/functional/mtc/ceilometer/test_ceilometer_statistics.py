@@ -5,6 +5,7 @@
 # of an applicable Wind River license agreement.
 
 import time
+import random
 from datetime import datetime, timedelta
 from pytest import mark, skip, fixture
 
@@ -42,6 +43,20 @@ def test_statistics_for_one_meter(meter):
         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
+def check_event_in_tenant_or_admin(resource_id, event_type):
+    for auth_ in (None, Tenant.ADMIN):
+        traits = ceilometer_helper.get_events(event_type=event_type, header='traits:value', auth_info=auth_)
+        for trait in traits:
+            if resource_id in trait:
+                LOG.info("Resource found in ceilometer events using auth: {}".format(auth_))
+                break
+        else:
+            continue
+        break
+    else:
+        assert False, "{} event for resource {} was not found under admin or tenant".format(event_type, resource_id)
+
+
 @mark.sanity
 # Hardcode the parameter even though unused so sanity test name can show the meters tested
 @mark.parametrize('meters', [
@@ -63,17 +78,16 @@ def test_ceilometer_meters_exist(meters):
 
     # Check meter for routers
     LOG.tc_step("Check number of 'router.create.end' events is at least the number of existing routers")
-    routers = network_helper.get_routers(auth_info=Tenant.ADMIN)
-    created_routers_in_meters = ceilometer_helper.get_events(event_type='router.create.end')
-
-    assert len(routers) <= len(created_routers_in_meters), "router.create meters do not exist for all existing routers"
+    routers = network_helper.get_routers()
+    router_id = routers[0]
+    check_event_in_tenant_or_admin(resource_id=router_id, event_type='router.create.end')
 
     # Check meter for subnets
     LOG.tc_step("Check number of 'subnet.create' meters is at least the number of existing subnets")
-    subnets = network_helper.get_subnets(auth_info=Tenant.ADMIN)
-    created_subnets_in_meters = ceilometer_helper.get_events(event_type='subnet.create.end')
-
-    assert len(subnets) <= len(created_subnets_in_meters), "subnet.create meters do not exist for all existing subnets"
+    subnets = network_helper.get_subnets(name=Tenant.get_primary().get('tenant'), strict=False)
+    subnet = random.choice(subnets)
+    LOG.info("Subnet to check in ceilometer event list: {}".format(subnet))
+    check_event_in_tenant_or_admin(resource_id=subnet, event_type='subnet.create.end')
 
     # Check meter for image
     LOG.tc_step('Check meters for image')
