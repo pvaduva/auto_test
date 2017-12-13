@@ -319,7 +319,6 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
     if min_count > group_size:
         LOG.tc_step("Check vms failed to boot when min_count > group_size")
         assert 1 == code, msg
-        assert max_count == len(vms)
 
         expt_err = SrvGrpErr.EXCEEDS_GRP_SIZE.format(srv_grp_id, group_size)
         for vm in vms:
