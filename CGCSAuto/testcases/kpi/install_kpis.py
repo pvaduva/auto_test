@@ -54,7 +54,7 @@ def test_drbd_kpi(collect_kpi):
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, python_pattern=python_pattern,
-                              lab_name=lab_name,
+                              lab_name=lab_name, unit=DRBDSync.UNIT,
                               average_for_all=True, end_pattern=end_pattern, uptime=15)
 
 

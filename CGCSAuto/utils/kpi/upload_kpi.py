@@ -8,6 +8,7 @@ KPI_DB = 'tis-lab-auto-test-kpis.cumulus.wrs.com'
 KPI_USER = 'cumulus'
 KPI_PASSWD = 'kumuluz'
 DB_NAME = 'kpihistory'
+# DB_NAME = 'testdb'    # test database
 
 
 def upload_kpi(kpi_file, host=KPI_DB, port=8086, user=KPI_USER,
@@ -47,15 +48,27 @@ def upload_kpi(kpi_file, host=KPI_DB, port=8086, user=KPI_USER,
             'time': '{}Z'.format(kpi_dict.get('timestamp').strip().replace(' ', 'T')),
             'tags': {
                 'lab': kpi_dict.get('lab'),
-                'build_id': kpi_dict.get('build_id', '')
+                'build_id': kpi_dict.get('build_id', ''),
+                'sw_version':  kpi_dict.get('sw_version', ''),
+                'baseline': 'false'
             },
             'fields': {
                 'value': vals[0],
-                'lab_config': kpi_dict.get('lab_config', ''),
+                'unit': kpi_dict.get('unit', '')
             },
         }
 
+        # Add patch tag when avail
+        patch = kpi_dict.get('patch', None)
+        if patch:
+            upload_dict['tags'].update({'patch': patch})
+
+        # Add extra fields when avail
         extra_fields = {}
+
+        if kpi_dict.get('lab_config', None):
+            extra_fields.update({'lab_config': kpi_dict.get('lab_config')})
+
         if 'drbd_sync' in kpi_name.lower():
             extra_fields.update({'value_min': vals[1], 'value_max': vals[2]})
 

@@ -15,7 +15,7 @@ from keywords import host_helper, common
 def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None,
                start_path=None, extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
                con_ssh=None, sudo=False, topdown=False, init_time=None, build_id=None, start_host=None,
-               uptime=5, start_pattern_init=False):
+               uptime=5, start_pattern_init=False, sw_version=None, patch=None, unit=None):
     """
     Record kpi in ini format in given file
     Args:
@@ -45,7 +45,9 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         uptime (int|str): get load average for the previous <uptime> minutes via 'uptime' cmd
         start_pattern_init (bool): when set, use the timestamp of the start
         pattern as the init time for the end pattern
-
+        sw_version (str): e.g., 17.07
+        patch (str): patch name
+        unit (str): unit for the kpi value if not seconds
     Returns:
 
     """
@@ -82,8 +84,26 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
                 build_id = lab_info.get_build_id(labname=lab['name'], con_ssh=con_ssh)
         kpi_dict.update({'build_id': build_id})
 
+        if not sw_version:
+            sw_version = ProjVar.get_var('SW_VERSION')
+            if not sw_version:
+                sw_version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
+            if isinstance(sw_version, list):
+                sw_version = ', '.join(sw_version)
+        kpi_dict.update({'sw_version': sw_version})
+
+        if not patch:
+            patch = ProjVar.get_var('PATCH')
+            if patch:
+                patch = '\n'.join(patch)
+                kpi_dict.update({'patch': patch})
+
         load_average = get_load_average(ssh_client=con_ssh, uptime=uptime)
         kpi_dict.update({'load_average': load_average})
+
+        if not unit:
+            unit = 'Time(s)'
+        kpi_dict.update({'unit': unit})
 
         if host:
             kpi_dict['host'] = host
