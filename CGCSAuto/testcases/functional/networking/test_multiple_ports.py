@@ -242,6 +242,16 @@ class TestMutiPortsPCI:
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
+
+        # Exclude network on first segment
+        # The switch is setup with untagged frames for the first segment within the range.
+        # This is suitable for PCI passthrough, but would not work for SRIOV
+        pnet_name = network_helper.get_net_info(net_id=avail_nets[0], field='provider:physical_network')
+        first_seg = network_helper.get_first_segment_of_providernet(pnet_name, pnet_val='name')
+        untagged_net = network_helper.get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name')
+        if untagged_net in avail_nets:
+            avail_nets.remove(untagged_net)
+
         LOG.info("Networks available for pcipt and sriov: {}".format(avail_nets))
 
         internal_net_name = None
