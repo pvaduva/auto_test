@@ -80,7 +80,8 @@ def pre_check_upgrade():
     if upgrade_version is None:
         upgrade_version = [u[1] for u in SUPPORTED_UPGRADES if u[0] == current_version][0]
         UpgradeVars.set_upgrade_var(upgrade_version=upgrade_version)
- 
+        UpgradeVars.set_upgrade_var(tis_build_dir=BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version])
+        UpgradeVars.set_upgrade_var(patch_dir=BuildServerPath.PATCH_DIR_PATHS[upgrade_version])
     LOG.info("Current version = {}; Upgrade version = {}".format(current_version, upgrade_version))
 
     if upgrade_version == "16.10":
