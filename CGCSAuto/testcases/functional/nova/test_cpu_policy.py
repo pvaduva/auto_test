@@ -1,6 +1,5 @@
 from pytest import mark, fixture, skip
 
-from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages

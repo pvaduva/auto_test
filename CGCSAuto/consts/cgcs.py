@@ -43,6 +43,7 @@ REGION_MAP = {'RegionOne': '',
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '17.07']]
 
+
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
     IMAGE_DIR_REMOTE = '/sandbox/images'
@@ -477,3 +478,8 @@ class BackupRestore:
     USB_MOUNT_POINT = '/media/wrsroot'
     USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
     LOCAL_BACKUP_PATH = '/sandbox/backups'
+
+
+class CpuModel:
+    CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX',
+                  'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')

@@ -396,7 +396,11 @@ def table_segment_id_filter(table_, value):
     return new_table
 
 
-def test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
+# Invalid test. Update needed. CGTS-8520
+# 1. Need to create new providernet so it's not associated to any networks
+# 2. Should schedule the connectivity test after mtu change, otherwise it's likely still displaying the result
+# from previous audit
+def _test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
     """
         US75531 - Providernet Connectivity Test with different MTU size
 
