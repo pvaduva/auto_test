@@ -14,9 +14,12 @@ class VCPUSchedulerErr:
 
 
 class NumaErr:
-    NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
+    GENERAL_ERR_PIKE = 'Requested instance NUMA topology cannot fit the given host NUMA topology'
+    # NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
+    NUMA_AFFINITY_MISMATCH = GENERAL_ERR_PIKE
     NUMA_NODE_EXCLUDED = "NUMA: {} excluded"
-    UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+    # UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+    UNINITIALIZED = GENERAL_ERR_PIKE
     FLV_UNDEVISIBLE = 'ERROR (Conflict): flavor vcpus not evenly divisible by the specified hw:numa_nodes value'
     FLV_CPU_OR_MEM_UNSPECIFIED = 'ERROR (Conflict): CPU and memory allocation must be provided for all NUMA nodes'
     INSUFFICIENT_CORES = 'Not enough free cores to schedule the instance'

@@ -366,20 +366,21 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy, cpu_models_supp
 # TC5140
 def test_vcpu_model_evacuation(add_admin_role_func, cpu_models_supported):
     """
-    Launches a set of vms with different cpu models and tests for the their successful evacuation. Tests TC5140.
+    Launch a set of vms with different cpu models and evacuate.
 
     Skip if:
-        - lab has < 2 hosts
+        - Less than two hypervisors available for evacuation
+
+    Setups:
+        - Add admin role to tenant under test (in order to launch vm onto specific host)
 
     Test Steps:
-        - Boots a set of 4 vms on a host with named cpu models and varying boot sources and check that their models
-        are correct
-            - 3 of them will have the four latest supported named models and one of them with be a Passthrough model
-            - In the event that the host supports less than 4 models, the test will proceed with a lower number of vms
-            as long as at least one vcpu model is supported
-        - Reboot the host hosting all of the vms to trigger an evacuation
+        - Boot 4 vms from image or volume onto the same host with different cpu models set in flavor or image metadata
+            - 3 of them will have the 3 latest supported vcpu models
+            - 1 of them with Passthrough model
+        - Reboot -f the vms host all to trigger an evacuation
         - Ensure evacuation for all vms is successful (vm host changed, active state, pingable from NatBox)
-        - Following the evacuation, check to make sure that all of the VMs retained their correct cpu models
+        - Check VMs retained their correct cpu models
 
     Teardown:
             - Delete created vms
@@ -444,7 +445,7 @@ def test_vcpu_model_evacuation(add_admin_role_func, cpu_models_supported):
 # TC6569
 def test_vmx_setting():
     """
-    Test that vmx feature can be set in guest VM. Tests TC6569.
+    Test that vmx feature can be set in guest VM.
 
     Test Steps:
        - Create a flavor with extra specs hw:wrs:nested_vmx=True and hw:cpu_model=<a cpu model supported by the host>
