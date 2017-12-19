@@ -60,7 +60,7 @@ def test_token_expiry(service_params):
     LOG.info("Expect expiry time to be {}. Token expiry time is {}. Difference is {}."
              .format(token_expire_time, expt_datetime, time_diff))
     assert -150 < time_diff < 150, "Token expiry time is {}, but token expired {} seconds after expected time.".\
-        format(default_exp_time, time_diff)
+        format(expt_time, time_diff)
 
     for expire_time in expire_times:
         if expire_time > 14400 or expire_time < 3600:
