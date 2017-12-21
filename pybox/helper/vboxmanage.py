@@ -23,7 +23,6 @@ def vboxmanage_extpack(action="install"):
     """
     This allows you to install, uninstall the vbox extensions"
     """
-
     output = vboxmanage_version()
     version = re.match(b'(.*)r', output)
     version_path = version.group(1).decode('utf-8')
@@ -31,11 +30,12 @@ def vboxmanage_extpack(action="install"):
     LOG.info("Downloading extension pack")
     filename = 'Oracle_VM_VirtualBox_Extension_Pack-{}.vbox-extpack'.format(version_path)
     cmd = 'http://download.virtualbox.org/virtualbox/{}/{}'.format(version_path, filename)
-    result = subprocess.check_output(['wget', cmd, '-P', '/tmp'], stderr = subprocess.STDOUT)
+    result = subprocess.check_output(['wget', cmd, '-P', '/tmp'], stderr=subprocess.STDOUT)
     LOG.info(result)
 
     LOG.info("Installing extension pack")
-    result = subprocess.check_output(['vboxmanage', 'extpack', 'install', '/tmp/' + filename, '--replace'], stderr = subprocess.STDOUT)
+    result = subprocess.check_output(['vboxmanage', 'extpack', 'install', '/tmp/' + filename, '--replace'],
+                                     stderr=subprocess.STDOUT)
     LOG.info(result)
 
 
@@ -69,7 +69,8 @@ def vboxmanage_createvm(hostname=None):
 
     assert hostname, "Hostname is required"
     LOG.info("Creating VM {}".format(hostname))
-    result = subprocess.check_output(['vboxmanage', 'createvm', '--name', hostname, '--register', '--ostype', 'Linux_64'], stderr=subprocess.STDOUT)
+    result = subprocess.check_output(['vboxmanage', 'createvm', '--name', hostname, '--register', '--ostype',
+                                      'Linux_64'], stderr=subprocess.STDOUT)
 
 
 def vboxmanage_deletevms(hosts=None):
@@ -82,7 +83,8 @@ def vboxmanage_deletevms(hosts=None):
     if len(hosts) != 0:
         for hostname in hosts:
             LOG.info("Deleting VM {}".format(hostname))
-            result = subprocess.check_output(['vboxmanage', 'unregistervm', hostname.decode('utf-8'), '--delete'], stderr=subprocess.STDOUT)
+            result = subprocess.check_output(['vboxmanage', 'unregistervm', hostname.decode('utf-8'), '--delete'],
+                                             stderr=subprocess.STDOUT)
 
     vms_list = vboxmanage_list("vms")
     for items in hosts:
@@ -103,7 +105,8 @@ def vboxmanage_hostonlyifcreate(name="vboxnet0", ip=None, netmask=None):
     result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'create'], stderr=subprocess.STDOUT)
 
     LOG.info("Provisioning {} with IP {} and Netmask {}".format(name, ip, netmask))
-    result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'ipconfig', name, '--ip', ip, '--netmask', netmask], stderr=subprocess.STDOUT)
+    result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'ipconfig', name, '--ip', ip, '--netmask',
+                                      netmask], stderr=subprocess.STDOUT)
 
 
 def vboxmanage_hostonlyifdelete(name="vboxnet0"):
@@ -116,14 +119,15 @@ def vboxmanage_hostonlyifdelete(name="vboxnet0"):
     result = subprocess.check_output(['vboxmanage', 'hostonlyif', 'remove', name], stderr=subprocess.STDOUT)
 
 
-def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype=None, nicpromisc=None, nicnum=None, intnet=None, hostonlyadapter=None, uartbase=None, uartport=None, uartmode=None, uartpath=None, nicbootprio2=1):
+def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype=None, nicpromisc=None, nicnum=None,
+                        intnet=None, hostonlyadapter=None, uartbase=None, uartport=None,
+                        uartmode=None, uartpath=None, nicbootprio2=1):
     """
     This modifies a VM with a specified name.
     """
 
     assert hostname, "Hostname is required"
     # Add more semantic checks
-
     cmd = ['vboxmanage', 'modifyvm', hostname]
     if cpus:
         cmd.extend(['--cpus', cpus])
@@ -147,7 +151,10 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
             cmd.extend(['{}'.format(env.PORT)])
             env.PORT += 1
         else:
-            cmd.extend(['{}{}'.format(uartpath, hostname)])
+            if hostname == 'controller-0':
+                cmd.extend(['{}controller0_serial'.format(uartpath)])
+            else:
+                cmd.extend(['{}{}'.format(uartpath, hostname)])
     if nicbootprio2:
         cmd.extend(['--nicbootprio2'])
         cmd.extend(['{}'.format(nicbootprio2)])
@@ -167,10 +174,12 @@ def vboxmanage_storagectl(hostname=None, storectl="ide"):
     assert hostname, "Hostname is required"
     assert storectl, "Type of storage controller is required"
     LOG.info("Creating {} storage controller on VM {}".format(storectl, hostname))
-    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl], stderr=subprocess.STDOUT)
+    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl],
+                                     stderr=subprocess.STDOUT)
 
 
-def vboxmanage_storageattach(hostname="controller-0", storectl="ide", storetype="hdd", disk=None, port_num="0", device_num="0"):
+def vboxmanage_storageattach(hostname="controller-0", storectl="ide", storetype="hdd", disk=None, port_num="0",
+                             device_num="0"):
     """
     This attaches a disk to a controller.
     """
@@ -180,7 +189,9 @@ def vboxmanage_storageattach(hostname="controller-0", storectl="ide", storetype=
     assert storectl, "Name of storage controller is required"
     assert storetype, "Type of storage controller is required"
     LOG.info("Attaching {} storage to storage controller {} on VM {}".format(storetype, storectl, hostname))
-    result = subprocess.check_output(['vboxmanage', 'storageattach', hostname, '--storagectl', storectl, '--medium', disk, '--type', storetype, '--port', port_num, '--device', device_num], stderr=subprocess.STDOUT)
+    result = subprocess.check_output(['vboxmanage', 'storageattach', hostname, '--storagectl', storectl,
+                                      '--medium', disk, '--type', storetype, '--port', port_num, '--device',
+                                      device_num], stderr=subprocess.STDOUT)
     return result
 
 
@@ -210,7 +221,9 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
         else:
             file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} on VM {} on device {} port {}".format(file_name, hostname, device_num, port_num))
-        result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename', file_name, '--format', 'vdi', '--variant', 'standard'], stderr=subprocess.STDOUT)
+        result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',
+                                          file_name, '--format', 'vdi', '--variant', 'standard'],
+                                         stderr=subprocess.STDOUT)
         vboxmanage_storageattach(hostname, "ide", "hdd", file_name + ".vdi", str(port_num), str(device_num))
         disk_count = disk_count + 1
 
@@ -243,6 +256,6 @@ def vboxmanage_controlvms(hosts=None, action=None):
     assert action, "Need to provide an action to execute"
  
     for host in hosts:
-        LOG.info("Executing {} action on VM {}".format(action, host))
+        LOG.info("Executing {} action on VM {}".format(action, host.decode('utf-8')))
         result = subprocess.call(["vboxmanage", "controlvm", host.decode('utf-8'), action], stderr=subprocess.STDOUT)
     time.sleep(1)

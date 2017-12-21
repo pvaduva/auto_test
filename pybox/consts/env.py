@@ -4,14 +4,14 @@ from sys import platform
 user = getpass.getuser()
 
 if platform == 'win32' or platform == 'win64':
-    FILEPATH = 'C:\\Temp\\install_files\\'.format(user)
+    FILEPATH = 'C:\\Temp\\install_files\\'
     LOGPATH = 'C:\\Temp\\pybox_logs'
-    ISOPATH = "C:\\Temp\\bootimage.iso"
+    ISOPATH = "C:\\Temp\\install_files\\{}\\bootimage.iso"
     PORT = 10000
 else:
     FILEPATH = '/tmp/install_files/'
     LOGPATH = '/tmp/pybox_logs'
-    ISOPATH = "/tmp/bootimage.iso"
+    ISOPATH = "/tmp/install_files/{}/bootimage.iso"
 
 
 class BuildServers:
@@ -51,21 +51,21 @@ class Builds:
         'release': 'R4',
         'iso': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_bootimage.iso',
         'guest': '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_tis-centos-guest.img',
-        'patches': '/folk/cgts/rel-ops/17.06/patches/'
+        'patches': ['/folk/cgts/patches-to-verify/17.06/', '/folk/cgts/rel-ops/17.06/patches/']
     }
 
     R3 = {
         'release': 'R3',
         'iso': '/localdisk/loadbuild/jenkins/TS_16.10_Host/respun-GA/export/bootimage.iso', 
         'guest': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img', 
-        'patches': '/folk/cgts/rel-ops/16.10/patches/'
+        'patches': ['/folk/cgts/patches-to-verify/16.10/', '/folk/cgts/rel-ops/16.10/patches/']
     }
 
     R2 = {
         'release': 'R2',
         'iso': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_bootimage.iso',
         'guest': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
-        'patches': '/folk/cgts/rel-ops/15.12/patches/'
+        'patches': ['/folk/cgts/patches-to-verify/15.12/', '/folk/cgts/rel-ops/15.12/patches/']
     }
 
 
@@ -109,15 +109,15 @@ class Files:
     R5={
         'setup': [
             # TODO Need to find a way to update based on build or use generic CGCS_DEV
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
         ],
-        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0031/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/'
+        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
     }
     R4 = {
         'setup': [
@@ -125,7 +125,7 @@ class Files:
             '/localdisk/designer/jenkins/TC_17.06_Pull/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
             '/localdisk/designer/jenkins/TC_17.06_Pull/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf'
         ],
-        'config': "/localdisk/designer/jenkins/CGCS_4.0_Centos_Pull_CGCS_DEV_0027/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/system_config.centos" #TODO Check if correct for this and below releases
+        'config': "/localdisk/designer/jenkins/CGCS_4.0_Centos_Pull_CGCS_DEV_0027/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/system_config.centos"
     }
     R3 = {
         'setup': [
@@ -141,5 +141,5 @@ class Files:
             '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/export/lab/scripts/lab_cleanup.sh',
             '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/export/lab/yow/cgcs-vbox/lab_setup.conf'
         ],
-        'config': "/localdisk/designer/jenkins/TS_15.12_Pull/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/system_config" #TODO
+        'config': "/localdisk/designer/jenkins/TS_15.12_Pull/wrlinux-x/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/system_config"
     }
