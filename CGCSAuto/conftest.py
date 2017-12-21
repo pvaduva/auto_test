@@ -559,12 +559,12 @@ def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
-    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(filename)-10s %(funcName)-10s:: %(message)s'"
-    logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
+    formatter = '[%(asctime)s] %(lineno)-5d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s'
+    logging.basicConfig(level=logging.NOTSET, format=formatter, filename=file_name, filemode='w')
 
     # logger for stream output
     stream_hdler = logging.StreamHandler()
-    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s')
+    formatter_stream = logging.Formatter(formatter)
     stream_hdler.setFormatter(formatter_stream)
     stream_hdler.setLevel(logging.INFO)
     LOG.addHandler(stream_hdler)
@@ -657,13 +657,6 @@ def pytest_unconfigure(config):
         except:
             LOG.warning("'collect all' failed.")
 
-    # if ProjVar.get_var('KEYSTONE_DEBUG'):
-    #     try:
-    #         setups.enable_disable_keystone_debug(enable=False, con_ssh=con_ssh)
-    #     except:
-    #         LOG.warning("Disable keystone debug failed")
-
-    # close ssh session
     try:
         con_ssh.close()
     except:

@@ -454,7 +454,7 @@ class SSHClient:
                             format(cmd, exit_code, cmd_output))
         else:
             exit_code = -1
-            LOG.info("Actual exit code for following cmd is unknown: {}".format(cmd))
+            LOG.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
 
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output

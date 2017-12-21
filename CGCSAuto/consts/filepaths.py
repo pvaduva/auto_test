@@ -35,7 +35,6 @@ class TestServerPath:
     CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
 
 
-
 class PrivKeyPath:
     OPT_PLATFORM = '/opt/platform/id_rsa'
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
