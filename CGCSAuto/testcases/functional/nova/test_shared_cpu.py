@@ -38,7 +38,7 @@ def check_disabled_shared_vcpu(vm):
 
 def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='dedicated',
                          numa_nodes=1, node0=None, node1=None, shared_vcpu=None):
-    flavor_id = nova_helper.create_flavor(vcpus=vcpus, storage_backing=storage_backing)[1]
+    flavor_id = nova_helper.create_flavor(name='shared_core', vcpus=vcpus, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='function')
 
     LOG.tc_step("Add specific cpu_policy, number_of_numa_nodes, numa_node0, and shared_vcpu to flavor extra specs")

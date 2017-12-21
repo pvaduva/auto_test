@@ -3,7 +3,7 @@ from optparse import OptionParser
 
 
 def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=None, stop_on_failure=False,
-                 reporttag=None, resultlog=None, sessiondir=None):
+                 reporttag=None, resultlog=None, sessiondir=None, collectall=False):
     if file_path:
         test_cases = _get_tests_from_file(file_path=file_path)
         if not test_cases:
@@ -24,6 +24,8 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
     params = ['--lab={}'.format(lab), repeat_param]
     if reporttag:
         params.append('--report_tag={}'.format(reporttag))
+    if collectall:
+        params.append('--collectall')
     if sessiondir:
         params.append('--sessiondir={}'.format(sessiondir))
     elif resultlog:
@@ -63,6 +65,7 @@ if __name__ == '__main__':
     parser.add_option('--sessiondir', action='store', dest='sessiondir', help='Automation session log dir')
     parser.add_option('--resultlog', action='store', dest='resultlog', help='Automation logs root dir. e.g., /home')
     parser.add_option('--reporttag', action='store', dest='reporttag', help='report tag')
+    parser.add_option('--collectall', action='store_true', dest='collectall', help='collect logs on system')
 
     options, args = parser.parse_args()
 
@@ -74,7 +77,8 @@ if __name__ == '__main__':
 
     f_path = options.file_path
     kwargs = dict(lab=lab_, stop_on_failure=options.stop, count=options.count, cgcsauto_path=options.cgcsauto,
-                  sessiondir=options.sessiondir, resultlog=options.resultlog, reporttag=options.reporttag)
+                  sessiondir=options.sessiondir, resultlog=options.resultlog, reporttag=options.reporttag,
+                  collectall=options.collectall)
     if not f_path:
         test = options.testcase
         if not test:
