@@ -466,7 +466,7 @@ class Labs:
     }
 
     WP_01_02 = {
-        'short_name': 'wp_01_02',
+        'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
         'floating ip': '128.224.150.254',
         'controller-0 ip': '128.224.150.155',

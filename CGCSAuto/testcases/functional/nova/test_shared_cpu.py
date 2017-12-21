@@ -475,23 +475,24 @@ class TestSharedCpuEnabled:
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
 
         """
-        _flv_args = {'vcpus': 2, 'storage_backing': add_shared_cpu, 'shared_vcpu': 1}
         flv1_args = {
             'numa_nodes': 1,
             'node0': 0,
-        }.update(_flv_args)
-
+        }
         flv2_args = {
             'numa_nodes': 1,
             'node0': 1,
-        }.update(_flv_args)
-
+        }
         flv3_args = {
             'vcpus': 4,
             'numa_nodes': 2,
             'node0': 1,
             'node1': 0
-        }.update(_flv_args)
+        }
+        _flv_args = {'vcpus': 2, 'storage_backing': add_shared_cpu, 'shared_vcpu': 1}
+        flv1_args.update(_flv_args)
+        flv2_args.update(_flv_args)
+        flv3_args.update(_flv_args)
 
         target_host = None
         vms = {}

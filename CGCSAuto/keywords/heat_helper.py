@@ -33,7 +33,7 @@ def _wait_for_heat_stack_deleted(stack_name=None, timeout=120, check_interval=3,
     return False
 
 
-def wait_for_heat_state(stack_name=None, state=None, timeout=120, check_interval=3, con_ssh=None, auth_info=None):
+def wait_for_heat_state(stack_name=None, state=None, timeout=300, check_interval=3, con_ssh=None, auth_info=None):
     """
     This will wait for the desired state of the heat stack or timeout
     Args:
