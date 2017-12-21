@@ -100,9 +100,5 @@ class SwactUncontrolled:
     END = 'Swact has completed successfully'
 
 
-class LiveMigratePing:
-    NAME = 'live_migrate_ping_loss_{}'
-
-
-class LiveMigrateNova:
-    NAME = 'live_migrate_nova_{}'
+class LiveMigrate:
+    NAME = 'live_migrate_{}'

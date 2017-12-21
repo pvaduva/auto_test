@@ -1,12 +1,10 @@
-import time
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from utils.multi_thread import MThread, Events
 from utils.kpi import kpi_log_parser
 
-from consts.cgcs import FlavorSpec, EventLogID, GuestImages
-from consts.kpi_vars import LiveMigrateNova, LiveMigratePing
+from consts.cgcs import FlavorSpec, EventLogID
+from consts.kpi_vars import LiveMigrate
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -485,6 +483,15 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
     'dpdk'
 ])
 def test_kpi_live_migrate(vm_type, collect_kpi):
+    """
+    Collect live migration ping loss duration KPI
+    Args:
+        vm_type (str):
+        collect_kpi: kpi fixture
+
+    Returns:
+
+    """
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
 
@@ -498,5 +505,5 @@ def test_kpi_live_migrate(vm_type, collect_kpi):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
     duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.05, operation, vm_id)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigratePing.NAME.format(vm_type),
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
                               kpi_val=duration, uptime=5, unit='Time(ms)')
