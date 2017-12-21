@@ -6,11 +6,12 @@ from collections import Counter
 
 from consts.auth import Tenant
 from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE
+from consts.filepaths import UserData, TiSPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
-from utils.ssh import NATBoxClient
+from utils.ssh import NATBoxClient, ControllerClient
 from utils.tis_log import LOG
 
 
@@ -3883,3 +3884,108 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
             raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
                                           "seconds after running 'neutron providernet-connectivity-test-schedule'".
                                           format(audit_id, timeout))
+
+
+def get_dpdk_user_data(con_ssh=None):
+    """
+    copy the cloud-config userdata to TiS server.
+    This userdata adds wrsroot/li69nux user to guest
+
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (str): TiS filepath of the userdata
+
+    """
+    file_dir = TiSPath.USERDATA
+    file_name = UserData.DPDK_USER_DATA
+    file_path = file_dir + file_name
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {};touch {}'.format(file_dir, file_path)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    content = "#wrs-config\nFUNCTIONS=hugepages,avr\n"
+    con_ssh.exec_cmd('echo "{}" >> {}'.format(content, file_path), fail_ok=False)
+    output = con_ssh.exec_cmd('cat {}'.format(file_path))[1]
+    assert output in content
+
+    return file_path
+
+
+def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=False, start_event=None,
+                              single_ping_timeout=1, cumulative=False):
+    """
+    Get ping failure duration in milliseconds
+    Args:
+        server (str): destination ip
+        ssh_client (SSHClient): where the ping cmd sent from
+        timeout (int): Max time to ping and gather ping loss duration before
+        ipv6 (bool): whether to use ping IPv6 address
+        start_event
+        end_event: an event that signals the end of the ping
+        single_ping_timeout (int): timeout for each ping
+        cumulative (bool): Whether to accumulate the total loss time before end_event set
+
+    Returns (int): ping failure duration in milliseconds. 0 if ping did not fail.
+
+    """
+    optional_args = ''
+    if ipv6:
+        optional_args += '6'
+
+    grep_str = 'bytes from'
+    cmd = 'timeout {} ping{} -c 1 {} -D | grep --color=never "{}"'.format(single_ping_timeout, optional_args,
+                                                                          server, grep_str)
+
+    end_time = time.time() + timeout
+    prev_succ = ''
+    disconnected = False
+    duration = 0
+    while time.time() < end_time:
+        output = ssh_client.exec_cmd(cmd=cmd, get_exit_code=False)[1]
+        if disconnected:
+            if grep_str in output:
+                LOG.info("Ping to {} resumed.".format(server))
+                post_succ = output
+                tmp_duration = _parse_ping_timestamp(post_succ) - _parse_ping_timestamp(prev_succ)
+                LOG.info("Last ping loss duration: {}".format(tmp_duration))
+                if cumulative:
+                    duration += tmp_duration
+                    LOG.info("Total duration for ping to {} failure: {}".format(server, duration))
+                elif tmp_duration > duration:
+                    duration = tmp_duration
+                # reset
+                prev_succ = output
+                disconnected = False
+        else:
+            if grep_str in output:
+                if (not prev_succ) and start_event:
+                    LOG.info("Ping to {} succeeded".format(server))
+                    # Signal to other thread indicating ping started
+                    start_event.set()
+                prev_succ = output
+            else:
+                if not prev_succ:
+                    LOG.warning("Ping has not been successful since start")
+                    continue
+                disconnected = True
+                LOG.info("Ping to {} lost".format(server))
+
+        if end_event.is_set():
+            return duration
+
+    LOG.warning("End event is not set before timeout.")
+    return duration
+
+
+def _parse_ping_timestamp(output):
+    timestamp = math.ceil(float(re.findall('\[(.*)\]', output)[0]) * 1000)
+    return timestamp

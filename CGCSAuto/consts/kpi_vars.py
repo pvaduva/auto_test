@@ -98,3 +98,11 @@ class SwactUncontrolled:
     START = 'sudo reboot -f'
     LOG_PATH = '/var/log/sm.log'
     END = 'Swact has completed successfully'
+
+
+class LiveMigratePing:
+    NAME = 'live_migrate_ping_loss_{}'
+
+
+class LiveMigrateNova:
+    NAME = 'live_migrate_nova_{}'

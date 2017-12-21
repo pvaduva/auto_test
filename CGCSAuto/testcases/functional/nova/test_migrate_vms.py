@@ -1,9 +1,12 @@
-import re
+import time
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
+from utils.multi_thread import MThread, Events
+from utils.kpi import kpi_log_parser
 
 from consts.cgcs import FlavorSpec, EventLogID, GuestImages
+from consts.kpi_vars import LiveMigrateNova, LiveMigratePing
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -473,3 +476,27 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
     vm_host_cold_mig = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_cold_mig],
                                       vm_host=vm_host_cold_mig, cpu_pol=cpu_pol, guest=guest_os)
+
+
+@mark.kpi
+@mark.parametrize('vm_type', [
+    'virtio',
+    'avp',
+    'dpdk'
+])
+def test_kpi_live_migrate(vm_type, collect_kpi):
+    if not collect_kpi:
+        skip("KPI only test. Skip due to kpi collection is not enabled.")
+
+    LOG.tc_step("Launch a {} vm".format(vm_type))
+    vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True)
+    vm_id = vms[0]
+
+    def operation(vm_id_):
+        code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
+        assert 0 == code, "Live migration is not supported. {}".format(msg)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+
+    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.05, operation, vm_id)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigratePing.NAME.format(vm_type),
+                              kpi_val=duration, uptime=5, unit='Time(ms)')

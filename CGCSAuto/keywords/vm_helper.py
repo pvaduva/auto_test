@@ -10,6 +10,7 @@ from pexpect import TIMEOUT as ExpectTimeout
 from utils import exceptions, cli, table_parser, multi_thread
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
+from utils.multi_thread import MThread, Events
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
@@ -910,7 +911,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         destination_host (str): such as compute-0, compute-1
         con_ssh (SSHClient):
         block_migrate (bool): whether to add '--block-migrate' to command
-        force (str): force live migrate
+        force (None|bool): force live migrate
         fail_ok (bool): if fail_ok, return a numerical number to indicate the execution status
                 One exception is if the live-migration command exit_code > 1, which indicating the command itself may
                 be incorrect. In this case CLICommandFailed exception will be thrown regardless of the fail_ok flag.
@@ -1367,30 +1368,7 @@ def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
                         fail_ok=fail_ok)
 
 
-def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
-              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False,
-              sep_file=None):
-    """
-
-    Args:
-        vm_ids (list|str): list of vms to ping
-        ssh_client (SSHClient): ping from this ssh client. Usually a natbox' ssh client or another vm's ssh client
-        con_ssh (SSHClient): active controller ssh client to run cli command to get all the management ips
-        num_pings (int): number of pings to send
-        timeout (int): timeout waiting for response of ping messages in seconds
-        fail_ok (bool): Whether it's okay to have 100% packet loss rate.
-        use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
-        sep_file (str|None)
-
-    Returns (tuple): (res (bool), packet_loss_dict (dict))
-        Packet loss rate dictionary format:
-        {
-         ip1: packet_loss_percentile1,
-         ip2: packet_loss_percentile2,
-         ...
-        }
-
-    """
+def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshell=False):
     if isinstance(net_types, str):
         net_types = [net_types]
 
@@ -1432,13 +1410,36 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not internal_ips:
             raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
-        # vlan subnets removed for US102722
-        # if vlan_zero_only:
-        #    internal_ips = network_helper.filter_ips_with_subnet_vlan_id(internal_ips, vlan_id=0, con_ssh=con_ssh)
-        #    if not internal_ips:
-        #        raise exceptions.VMNetworkError("Internal net ip with subnet vlan id 0 is not found for vms {}".
-        #                                        format(vm_ids))
         vms_ips += internal_ips
+
+    return vms_ips, vshell_ips
+
+
+def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
+              net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False,
+              sep_file=None):
+    """
+
+    Args:
+        vm_ids (list|str): list of vms to ping
+        ssh_client (SSHClient): ping from this ssh client. Usually a natbox' ssh client or another vm's ssh client
+        con_ssh (SSHClient): active controller ssh client to run cli command to get all the management ips
+        num_pings (int): number of pings to send
+        timeout (int): timeout waiting for response of ping messages in seconds
+        fail_ok (bool): Whether it's okay to have 100% packet loss rate.
+        use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
+        sep_file (str|None)
+
+    Returns (tuple): (res (bool), packet_loss_dict (dict))
+        Packet loss rate dictionary format:
+        {
+         ip1: packet_loss_percentile1,
+         ip2: packet_loss_percentile2,
+         ...
+        }
+
+    """
+    vms_ips, vshell_ips = _get_vms_ips(vm_ids=vm_ids, net_types=net_types, con_ssh=con_ssh, vshell=vshell)
 
     res_bool = False
     res_dict = {}
@@ -3852,3 +3853,145 @@ def ensure_vms_quotas(vms_num=10, cores_num=None, vols_num=None, tenant=None, co
 
     if vms_num is not None or cores_num is not None:
         nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)
+
+
+def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source=None, guest_os=None,
+               avail_zone=None, target_host=None, ping_vms=False, con_ssh=None, auth_info=None, cleanup='function'):
+
+    """
+
+    Args:
+        vm_type:
+        count:
+        nics:
+        flavor:
+        image:
+        boot_source:
+        guest_os
+        avail_zone:
+        target_host:
+        con_ssh:
+        auth_info:
+        cleanup
+
+    Returns:
+
+    """
+
+    if not flavor:
+        flavor_id = nova_helper.create_flavor(name=vm_type)[1]
+        if cleanup:
+            ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+
+        if vm_type in ['vswitch', 'dpdk', 'vhost']:
+            extra_specs.update({FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.MEM_PAGE_SIZE: '2048'})
+
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+
+    resource_id = None
+    if image:
+        boot_source = boot_source if boot_source else 'volume'
+        if boot_source == 'volume':
+            resource_id = cinder_helper.create_volume(name=vm_type, image_id=image, guest_image=guest_os)[1]
+            if cleanup:
+                ResourceCleanup.add('volume', resource_id, scope=cleanup)
+        else:
+            resource_id = image
+
+    if not nics:
+        if vm_type in ['pci-sriov', 'pci-passthrough']:
+            raise NotImplemented("nics has to be provided for pci-sriov and pci-passthrough")
+
+        if vm_type in ['vswitch', 'dpdk', 'vhost']:
+            vif_model = 'avp'
+        else:
+            vif_model = vm_type
+
+        mgmt_net_id = network_helper.get_mgmt_net_id()
+        tenant_net_id = network_helper.get_tenant_net_id()
+        internal_net_id = network_helper.get_internal_net_id()
+
+        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                {'net-id': tenant_net_id, 'vif-model': vif_model},
+                {'net-id': internal_net_id, 'vif-model': vif_model}]
+
+    user_data = None
+    if vm_type in ['vswitch', 'dpdk', 'vhost']:
+        user_data = network_helper.get_dpdk_user_data(con_ssh=con_ssh)
+
+    vms = []
+    for i in range(count):
+        vm_id = boot_vm(name="{}-{}".format(vm_type, i), flavor=flavor, source=boot_source, source_id=resource_id,
+                        nics=nics, guest_os=guest_os, avail_zone=avail_zone, vm_host=target_host, user_data=user_data,
+                        auth_info=auth_info, con_ssh=con_ssh, cleanup=cleanup)[1]
+        vms.append(vm_id)
+
+        if ping_vms:
+            wait_for_vm_pingable_from_natbox(vm_id=vm_id, con_ssh=con_ssh)
+    return vms, nics
+
+
+def get_ping_loss_duration_between_vms(from_vm, to_vm, net_type='data', timeout=600, ipv6=False, start_event=None,
+                                       end_event=None, con_ssh=None, single_ping_timeout=1):
+    """
+    Get ping loss duration in milliseconds from one vm to another
+    Args:
+        from_vm (str): id of the ping source vm
+        to_vm (str): id of the ping destination vm
+        net_type (str): e.g., data, internal, mgmt
+        timeout (int): max time to wait for ping loss before force end it
+        ipv6 (bool): whether to use ping -6 for ipv6 address
+        start_event (Event): set given event to signal ping has started
+        end_event (Event): stop ping loss detection if given event is set
+        con_ssh (SSHClient):
+        single_ping_timeout (int|float): timeout of ping cmd in seconds
+
+    Returns (int): milliseconds of ping loss duration
+
+    """
+
+    to_vm_ip = _get_vms_ips(vm_ids=to_vm, net_types=net_type, con_ssh=con_ssh)[0][0]
+    with ssh_to_vm_from_natbox(vm_id=from_vm, con_ssh=con_ssh) as from_vm_ssh:
+        duration = network_helper.get_ping_failure_duration(server=to_vm_ip, ssh_client=from_vm_ssh, timeout=timeout,
+                                                            ipv6=ipv6, start_event=start_event, end_event=end_event,
+                                                            single_ping_timeout=single_ping_timeout)
+        return duration
+
+
+def get_ping_loss_duration_from_natbox(vm_id, timeout=900, start_event=None, end_event=None, con_ssh=None,
+                                       single_ping_timeout=1):
+
+    vm_ip = _get_vms_ips(vm_ids=vm_id, net_types='mgmt', con_ssh=con_ssh)[0][0]
+    natbox_client = NATBoxClient.get_natbox_client()
+    duration = network_helper.get_ping_failure_duration(server=vm_ip, ssh_client=natbox_client, timeout=timeout,
+                                                        start_event=start_event, end_event=end_event,
+                                                        single_ping_timeout=single_ping_timeout)
+    return duration
+
+
+def get_ping_loss_duration_on_operation(vm_id, timeout, single_ping_timeout, oper_func, *func_args, **func_kwargs):
+    LOG.tc_step("Start pinging vm {} from NatBox on a new thread".format(vm_id))
+    start_event = Events("Ping started")
+    end_event = Events("Operation completed")
+    ping_thread = MThread(get_ping_loss_duration_from_natbox, vm_id=vm_id, timeout=timeout,
+                          start_event=start_event, end_event=end_event, single_ping_timeout=single_ping_timeout)
+    ping_thread.start_thread(timeout=timeout+30)
+
+    try:
+        if start_event.wait_for_event(timeout=60):
+            LOG.tc_step("Perform operation on vm and ensure it's reachable after that")
+            oper_func(*func_args, **func_kwargs)
+            # Operation completed. Set end flag so ping thread can end properly
+            time.sleep(3)
+            end_event.set()
+            # Expect ping thread to end in less than 1 minute after live-migration complete
+            duration = ping_thread.get_output(timeout=60)
+            # assert duration, "No ping loss detected"
+            if duration == 0:
+                LOG.warning("No ping loss detected")
+            return duration
+
+        assert False, "Ping failed since start"
+    finally:
+        ping_thread.wait_for_thread_end(timeout=5)
