@@ -3877,7 +3877,7 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
         LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
         end_time = time.time() + timeout
         while time.time() < end_time:
-            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
+            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh) is not None:
                 LOG.info("providernet connectivity test scheduled successfully.")
                 return audit_id
         else:

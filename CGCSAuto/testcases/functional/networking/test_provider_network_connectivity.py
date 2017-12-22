@@ -260,32 +260,29 @@ def test_providernet_connectivity_reboot():
         slave_computes = hypervisors[1:]
 
     LOG.tc_step("Count pre-passed providernet tests")
-    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-    connectivity_table = table_parser.table(cmd)
-    pre_passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
+    pre_passed = network_helper.get_providernet_connectivity_test_results(rtn_val='segmentation_ids', status='PASS')
 
     LOG.tc_step("Reboot hosts: {}".format(slave_computes))
     HostsToRecover.add(slave_computes)
     host_helper.reboot_hosts(slave_computes, wait_for_reboot_finish=False)
 
-    if not small_footprint:
-        LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        connectivity_table = table_parser.table(cmd)
-        passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
-        hosts_passed = table_parser.get_column(passed_connectivity_tests, 'host_name')
-        for test_host in hosts_passed:
-            assert test_host == master_compute, "Host: {} did not reboot".format(test_host)
+    LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
+    audit_id = network_helper.schedule_providernet_connectivity_test()
+    slave_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id, host_name=slave_computes)
+    assert not slave_status, "Connectivity test still list results for rebooting computes"
+    master_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
+                                                                             host_name=master_compute)
+    assert set(master_status) == {'UNKNOWN'}, "Master host is not in Unknown state after other computes reboot"
 
-        LOG.tc_step("Reboot host: {}".format(master_compute))
+    if not small_footprint:
+        LOG.tc_step("Reboot the last compute host: {}".format(master_compute))
         HostsToRecover.add(master_compute)
         host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
 
         network_helper.schedule_providernet_connectivity_test()
         LOG.tc_step("Verify the providernet connectivity test does not list PASS for any host")
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        connectivity_table = table_parser.table(cmd)
-        assert connectivity_table == {'headers': [], 'values': []}, "Atleast one compute is not rebooting"
+        status = network_helper.get_providernet_connectivity_test_results()
+        assert not status, "At least one compute is not rebooting"
 
     LOG.tc_step("Wait for {} to be available".format(hypervisors))
     host_helper.wait_for_hosts_ready(hypervisors)
@@ -294,13 +291,12 @@ def test_providernet_connectivity_reboot():
     end_time = time.time() + 60
     while time.time() < end_time:
         network_helper.schedule_providernet_connectivity_test()
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        connectivity_table = table_parser.table(cmd)
-        post_passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
-        if len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values']):
+        post_passed = network_helper.get_providernet_connectivity_test_results(rtn_val='segmentation_ids',
+                                                                               status='PASS')
+        if sorted(pre_passed) == sorted(post_passed):
             break
 
-    assert len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values'])
+    assert sorted(pre_passed) == sorted(post_passed), "Passed segments before the after host reboots are different"
 
 
 def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
