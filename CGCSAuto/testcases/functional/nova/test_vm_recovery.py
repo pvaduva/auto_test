@@ -1,13 +1,12 @@
-import re
 import time
 
 from pytest import mark, fixture
 
-from utils import table_parser, exceptions
+from utils import exceptions
 from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
-from consts.kpi_vars import VMRecovery
+from consts.kpi_vars import VMRecoveryNova, VMRecoveryNetworking
 from consts.feature_marks import Features
 from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
@@ -347,30 +346,42 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
     target_host = nova_helper.get_vm_host(vm_id)
 
-    LOG.tc_step("Kill the kvm processes on vm host: {}".format(target_host))
-    with host_helper.ssh_to_host(target_host) as host_ssh:
+    if collect_kpi:
+        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.05, kill_kvm_and_recover, vm_id,
+                                                                 target_host)
+        assert duration > 0, "No ping loss detected during vm recovery after killing kvm"
+
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VMRecoveryNetworking.NAME,
+                                  kpi_val=duration/1000, uptime=5)
+
+        if collect_kpi:
+            kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
+                                      log_path=VMRecoveryNova.LOG_PATH, end_pattern=VMRecoveryNova.END.format(vm_id),
+                                      start_pattern=VMRecoveryNova.START.format(vm_id))
+    else:
+        kill_kvm_and_recover(vm_id, target_host_=target_host)
+
+
+def kill_kvm_and_recover(vm_id_, target_host_):
+
+    LOG.tc_step("Kill the kvm processes on vm host: {}".format(target_host_))
+    with host_helper.ssh_to_host(target_host_) as host_ssh:
         exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL qemu-kvm')
         if not exit_code == 0:
             raise exceptions.SSHExecCommandFailed("Failed to kill host kvm processes. Details: {}".format(output))
 
     LOG.tc_step("Verify vm failed via event log")
     system_helper.wait_for_events(30, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.VM_FAILED})
+                                  **{'Entity Instance ID': vm_id_, 'Event Log ID': EventLogID.VM_FAILED})
 
     LOG.tc_step("Verify vm auto rebooted to recover via event log, and reached Active state")
     system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
+                                  **{'Entity Instance ID': vm_id_, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
     LOG.tc_step("Wait for VM reach active state")
-    vm_helper.wait_for_vm_values(vm_id, timeout=30, status=VMStatus.ACTIVE)
+    vm_helper.wait_for_vm_values(vm_id_, timeout=30, status=VMStatus.ACTIVE)
 
     LOG.tc_step("Ensure VM is still pingable after auto recovery")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
-    if collect_kpi:
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
-                                  log_path=VMRecovery.LOG_PATH, end_pattern=VMRecovery.END.format(vm_id),
-                                  start_pattern=VMRecovery.START.format(vm_id))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)

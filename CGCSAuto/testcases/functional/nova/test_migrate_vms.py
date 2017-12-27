@@ -504,6 +504,7 @@ def test_kpi_live_migrate(vm_type, collect_kpi):
         assert 0 == code, "Live migration is not supported. {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.05, operation, vm_id)
+    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation, vm_id)
+    assert duration > 0, "No ping loss detected during live migration for {} vm".format(vm_type)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
                               kpi_val=duration, uptime=5, unit='Time(ms)')

@@ -9,11 +9,15 @@ class DRBDSync:
     UNIT = 'Rate(K/s)'
 
 
-class VMRecovery:
+class VMRecoveryNova:
     NAME = 'vm_recovery'
     LOG_PATH = '/var/log/nova/nova-compute.log'
     START = '{}.* VM Crashed.*Lifecycle Event'
     END = '{}.* VM Started.*Lifecycle Event'
+
+
+class VMRecoveryNetworking:
+    NAME = 'vm_recovery_networking'
 
 
 class ConfigController:
@@ -102,3 +106,7 @@ class SwactUncontrolled:
 
 class LiveMigrate:
     NAME = 'live_migrate_{}'
+
+
+class Evacuate:
+    NAME = 'evacuate_{}_{}_router'

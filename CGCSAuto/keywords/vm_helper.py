@@ -638,6 +638,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
 
     host_str = ':{}'.format(vm_host) if vm_host else ''
+    if vm_host and not avail_zone:
+        avail_zone = 'nova'
     host_zone = '{}{}'.format(avail_zone, host_str) if avail_zone else None
 
     if user_data is None and guest_os and not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
@@ -3933,7 +3935,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
 
 
 def get_ping_loss_duration_between_vms(from_vm, to_vm, net_type='data', timeout=600, ipv6=False, start_event=None,
-                                       end_event=None, con_ssh=None, single_ping_timeout=1):
+                                       end_event=None, con_ssh=None, ping_interval=1):
     """
     Get ping loss duration in milliseconds from one vm to another
     Args:
@@ -3945,7 +3947,7 @@ def get_ping_loss_duration_between_vms(from_vm, to_vm, net_type='data', timeout=
         start_event (Event): set given event to signal ping has started
         end_event (Event): stop ping loss detection if given event is set
         con_ssh (SSHClient):
-        single_ping_timeout (int|float): timeout of ping cmd in seconds
+        ping_interval (int|float): timeout of ping cmd in seconds
 
     Returns (int): milliseconds of ping loss duration
 
@@ -3955,27 +3957,27 @@ def get_ping_loss_duration_between_vms(from_vm, to_vm, net_type='data', timeout=
     with ssh_to_vm_from_natbox(vm_id=from_vm, con_ssh=con_ssh) as from_vm_ssh:
         duration = network_helper.get_ping_failure_duration(server=to_vm_ip, ssh_client=from_vm_ssh, timeout=timeout,
                                                             ipv6=ipv6, start_event=start_event, end_event=end_event,
-                                                            single_ping_timeout=single_ping_timeout)
+                                                            ping_interval=ping_interval)
         return duration
 
 
 def get_ping_loss_duration_from_natbox(vm_id, timeout=900, start_event=None, end_event=None, con_ssh=None,
-                                       single_ping_timeout=1):
+                                       ping_interval=0.5):
 
     vm_ip = _get_vms_ips(vm_ids=vm_id, net_types='mgmt', con_ssh=con_ssh)[0][0]
     natbox_client = NATBoxClient.get_natbox_client()
     duration = network_helper.get_ping_failure_duration(server=vm_ip, ssh_client=natbox_client, timeout=timeout,
                                                         start_event=start_event, end_event=end_event,
-                                                        single_ping_timeout=single_ping_timeout)
+                                                        ping_interval=ping_interval)
     return duration
 
 
-def get_ping_loss_duration_on_operation(vm_id, timeout, single_ping_timeout, oper_func, *func_args, **func_kwargs):
+def get_ping_loss_duration_on_operation(vm_id, timeout, ping_interval, oper_func, *func_args, **func_kwargs):
     LOG.tc_step("Start pinging vm {} from NatBox on a new thread".format(vm_id))
     start_event = Events("Ping started")
     end_event = Events("Operation completed")
     ping_thread = MThread(get_ping_loss_duration_from_natbox, vm_id=vm_id, timeout=timeout,
-                          start_event=start_event, end_event=end_event, single_ping_timeout=single_ping_timeout)
+                          start_event=start_event, end_event=end_event, ping_interval=ping_interval)
     ping_thread.start_thread(timeout=timeout+30)
 
     try:

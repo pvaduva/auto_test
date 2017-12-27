@@ -3921,7 +3921,7 @@ def get_dpdk_user_data(con_ssh=None):
 
 
 def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=False, start_event=None,
-                              single_ping_timeout=1, cumulative=False):
+                              ping_interval=0.2, single_ping_timeout=1, cumulative=False, init_timeout=60):
     """
     Get ping failure duration in milliseconds
     Args:
@@ -3931,8 +3931,10 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
         ipv6 (bool): whether to use ping IPv6 address
         start_event
         end_event: an event that signals the end of the ping
-        single_ping_timeout (int): timeout for each ping
+        ping_interval (int|float): interval between two pings in seconds
+        single_ping_timeout (int): timeout for ping reply in seconds. Minimum is 1 second.
         cumulative (bool): Whether to accumulate the total loss time before end_event set
+        init_timeout (int): Max time to wait before vm pingable
 
     Returns (int): ping failure duration in milliseconds. 0 if ping did not fail.
 
@@ -3941,48 +3943,66 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
     if ipv6:
         optional_args += '6'
 
-    grep_str = 'bytes from'
-    cmd = 'timeout {} ping{} -c 1 {} -D | grep --color=never "{}"'.format(single_ping_timeout, optional_args,
-                                                                          server, grep_str)
+    grep_str = 'no answer yet'
+    cmd = 'ping{} -i {} -W {} -D -O {} | grep -B 1 -A 1 --color=never "{}"'.format(
+            optional_args, ping_interval, single_ping_timeout, server, grep_str)
 
-    end_time = time.time() + timeout
-    prev_succ = ''
-    disconnected = False
-    duration = 0
+    start_time = time.time()
+    ping_init_end_time = start_time + init_timeout
+    prompts = [ssh_client.prompt, grep_str]
+    while time.time() < ping_init_end_time:
+        ssh_client.send_sudo(cmd=cmd)
+        index = ssh_client.expect(prompts, timeout=10, searchwindowsize=100, fail_ok=True)
+        if index == 1:
+            continue
+        elif index == 0:
+            raise exceptions.CommonError("Continuous ping cmd interrupted")
+
+        LOG.info("Ping to {} succeeded".format(server))
+        start_event.set()
+        break
+    else:
+        raise exceptions.VMNetworkError("VM is not reachable within {} seconds".format(init_timeout))
+
+    end_time = start_time + timeout
     while time.time() < end_time:
-        output = ssh_client.exec_cmd(cmd=cmd, get_exit_code=False)[1]
-        if disconnected:
-            if grep_str in output:
-                LOG.info("Ping to {} resumed.".format(server))
-                post_succ = output
+        if end_event.is_set():
+            LOG.info("End event set. Stop continuous ping and process results")
+            break
+
+    #  End ping upon end_event set or timeout reaches
+    ssh_client.send_control()
+    try:
+        ssh_client.expect(fail_ok=False)
+    except:
+        ssh_client.send_control()
+        ssh_client.expect(fail_ok=False)
+
+    # Process ping output to get the ping loss duration
+    output = ssh_client.process_cmd_result(cmd='sudo {}'.format(cmd), get_exit_code=False)[1]
+    lines = output.splitlines()
+    prev_succ = ''
+    duration = 0
+    count = 0
+    prev_line = ''
+    succ_str = 'bytes from'
+    for line in lines:
+        if succ_str in line:
+            if prev_succ and (succ_str not in prev_line):
+                # Ping resumed after serious of lost ping
+                count += 1
+                post_succ = line
                 tmp_duration = _parse_ping_timestamp(post_succ) - _parse_ping_timestamp(prev_succ)
-                LOG.info("Last ping loss duration: {}".format(tmp_duration))
+                LOG.info("Count {} ping loss duration: {}".format(count, tmp_duration))
                 if cumulative:
                     duration += tmp_duration
-                    LOG.info("Total duration for ping to {} failure: {}".format(server, duration))
                 elif tmp_duration > duration:
                     duration = tmp_duration
-                # reset
-                prev_succ = output
-                disconnected = False
-        else:
-            if grep_str in output:
-                if (not prev_succ) and start_event:
-                    LOG.info("Ping to {} succeeded".format(server))
-                    # Signal to other thread indicating ping started
-                    start_event.set()
-                prev_succ = output
-            else:
-                if not prev_succ:
-                    LOG.warning("Ping has not been successful since start")
-                    continue
-                disconnected = True
-                LOG.info("Ping to {} lost".format(server))
+            prev_succ = line
 
-        if end_event.is_set():
-            return duration
+        prev_line = line
 
-    LOG.warning("End event is not set before timeout.")
+    LOG.info("Final ping loss duration: {}".format(duration))
     return duration
 
 

@@ -281,6 +281,15 @@ class SSHClient:
 
         return str(rtn)
 
+    def send_sudo(self, cmd='', reconnect=False, expt_pswd_timeout=60, reconnect_timeout=300, flush=False):
+        cmd = 'sudo ' + cmd
+        self.send(cmd, reconnect=reconnect, reconnect_timeout=reconnect_timeout, flush=flush)
+        pw_prompt = Prompt.PASSWORD_PROMPT
+
+        index = self.expect(pw_prompt, timeout=expt_pswd_timeout, searchwindowsize=100, fail_ok=True)
+        if index == 0:
+            self.send(self.password)
+
     def flush(self, timeout=3):
         """
         flush before sending the next command.
