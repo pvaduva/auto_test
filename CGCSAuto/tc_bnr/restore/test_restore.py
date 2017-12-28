@@ -244,7 +244,9 @@ def restore_setup(pre_restore_checkup):
     controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) \
                         + '|' + Prompt.CONTROLLER_0 \
                         + '|{}'.format(node_name_in_ini) \
-                        + '|{}'.format(normalized_name)
+                        + '|{}'.format(normalized_name) \
+                        + '|localhost:~\$'
+                        # CONTROLLER_0 = '.*controller\-0\:~\$ '
 
     controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                                        initial_prompt=controller_prompt)

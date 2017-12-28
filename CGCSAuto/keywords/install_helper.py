@@ -1318,7 +1318,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
                 LOG.info('No need to do compute-config-complete, which is a new behavior after 2017-11-27.')
                 LOG.info('Instead, we will have to wait the node self-boot and boot up to ready states.')
 
-            connection.find_prompt(prompt='controller\-[01] login:')
+            connection.find_prompt(prompt='controller\-[01] login:', timeout=HostTimeout.REBOOT)
 
             LOG.info('Find login prompt, try to login')
             connection.login()
@@ -1366,12 +1366,23 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
             os.environ["TERM"] = "xterm"
 
             LOG.info('re-run cli:{}'.format(cmd))
-            rc, output = connection.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
 
-            if "System restore complete" in output:
-                msg = "System restore completed successfully"
-                LOG.info(msg)
-                return 0, msg, compute_configured
+            rc, output = connection.exec_cmd(cmd, alt_prompt=' login: ',
+                                             timeout=HostTimeout.SYSTEM_RESTORE, will_reboot=True)
+            LOG.debug('rc:{}, output:{}'.format(rc, output))
+
+        if "System restore complete" in output:
+            msg = "System restore completed successfully"
+            LOG.info(msg)
+            return 0, msg, compute_configured
+
+        else: # elif ' login: ' in output:
+            # Again?! The system behaviors changed without any clue?
+            msg = "system behaviors changed again without notice again"
+            LOG.warn(msg)
+            LOG.info('re-login')
+            connection.login()
+            os.environ["TERM"] = "xterm"
 
     else:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
