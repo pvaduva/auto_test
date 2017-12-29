@@ -20,6 +20,8 @@ class ProjVar:
                   'LAB': None,
                   'ALWAYS_COLLECT': False,
                   'REGION': 'RegionOne',
+                  'COLLECT_TELNET': False,
+                  'TELNET_THREADS': None,
                   }
 
     @classmethod

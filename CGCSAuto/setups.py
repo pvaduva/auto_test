@@ -2,11 +2,14 @@ import re
 import time
 import os
 import configparser
+import threading
+from multiprocessing import Process
 
 import setup_consts
 from utils import exceptions, lab_info
 from utils.tis_log import LOG
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
+from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
+    TelnetClient, TELNET_LOGIN_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
 from utils.local_host import *
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
@@ -45,11 +48,10 @@ def setup_vbox_tis_ssh(lab):
             con_ssh.disconnect()
 
         con_ssh = SSHClient(lab['external_ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
-                        CONTROLLER_PROMPT, port=lab['external_port'])
+                            CONTROLLER_PROMPT, port=lab['external_port'])
         con_ssh.connect(retry=True, retry_timeout=30)
         ControllerClient.set_active_controller(con_ssh)
-# if 'auth_url' in lab:
-    #     Tenant._set_url(lab['auth_url'])
+
     else:
         con_ssh = setup_tis_ssh(lab)
 
@@ -391,8 +393,8 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
         installconf.read(installconf_path)
 
         # Parse lab info
-        lab_info = installconf['LAB']
-        lab_name = lab_info['LAB_NAME']
+        lab_info_ = installconf['LAB']
+        lab_name = lab_info_['LAB_NAME']
         if not lab_name:
             raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                              "has to be provided")
@@ -404,6 +406,61 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
     if lab_dict is None:
         lab_dict = get_lab_dict(lab_arg)
     return lab_dict
+
+
+def is_vbox():
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    return nat_name == 'localhost' or nat_name.startswith('128.224.')
+
+
+def get_nodes_info():
+    if is_vbox():
+        return
+
+    lab = ProjVar.get_var('LAB')
+    nodes_info = create_node_dict(lab['controller_nodes'], 'controller')
+    nodes_info.update(create_node_dict(lab.get('compute_nodes', None), 'compute'))
+    nodes_info.update(create_node_dict(lab.get('storage_nodes', None), 'storage'))
+
+    LOG.debug("Nodes info: \n{}".format(nodes_info))
+    return nodes_info
+
+
+def collect_telnet_logs_for_nodes(end_event):
+    nodes_info = get_nodes_info()
+    node_threads = []
+    kwargs = {'prompt': '{}|:~\$'.format(TELNET_LOGIN_PROMPT), 'end_event': end_event}
+    for node_name in nodes_info:
+        kwargs['hostname'] = node_name
+        kwargs['telnet_ip'] = nodes_info[node_name].telnet_ip
+        kwargs['telnet_port'] = nodes_info[node_name].telnet_port
+        node_thread = threading.Thread(name='Telnet-{}'.format(node_name), target=_collect_telnet_logs, kwargs=kwargs)
+        node_thread.start()
+        node_threads.append(node_thread)
+
+    return node_threads
+
+
+def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, timeout=None, collect_interval=60):
+    node_telnet = TelnetClient(host=telnet_ip, prompt=prompt, port=telnet_port, hostname=hostname)
+    node_telnet.send()
+    time.sleep(3)
+    node_telnet.flush()
+    if not timeout:
+        timeout = 3600 * 48
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if end_event.is_set():
+            break
+        try:
+            # Read out everything in output buffer every minute
+            node_telnet.connect(login=False)
+            time.sleep(collect_interval)
+            node_telnet.flush()
+        except Exception as e:
+            node_telnet.logger.error('Failed to collect telnet log. {}'.format(e))
+    else:
+        node_telnet.logger.warning('Collect telnet log timed out')
 
 
 def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
@@ -431,7 +488,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
-    if installconf_path:
+    if not installconf_path:
+
         installconf = configparser.ConfigParser()
         installconf.read(installconf_path)
 
@@ -456,7 +514,6 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             float_ip = lab_info['FLOATING_IP']
             if float_ip:
                 lab_to_install['floating ip'] = float_ip
-
 
         else:
             raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf "
@@ -532,7 +589,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
 
     if 'compute_nodes' in lab_to_install:
 
-        lab_to_install.update( create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
+        lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
     if 'storage_nodes' in lab_to_install:
         lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
 
@@ -557,7 +614,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
                 lab_to_install['external_port'] = external_port
             else:
                 raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
-                                          .format(external_ip ))
+                                              .format(external_ip))
         username = getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:
@@ -567,7 +624,6 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
 
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
-
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,

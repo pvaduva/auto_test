@@ -510,17 +510,6 @@ class Labs:
     VBOX_3 = {
         'short_name': 'vbox_3',
         'name': 'yow-cgcs-vbox-3',
-        'floating ip': '10.10.10.5',
-        'controller-0 ip': '10.10.10.6',
-        'controller-1 ip': '10.10.10.7',
-        'controller_nodes': [0, 1],
-        'compute_nodes': [0, 1],
-        'storage_nodes': [0, 1]
-    }
-
-    VBOX_4 = {
-        'short_name': 'vbox_4',
-        'name': 'yow-cgcs-vbox-4',
         'floating ip': '10.10.10.8',
         'controller-0 ip': '10.10.10.9',
         'controller-1 ip': '10.10.10.10',
