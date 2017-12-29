@@ -97,12 +97,13 @@ def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
     NATBoxClient.set_natbox_client(natbox_ip)
     nat_ssh = NATBoxClient.get_natbox_client()
     nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
+    ProjVar.set_var(natbox_ssh=nat_ssh)
 
-    __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh=con_ssh)
+    __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
     return nat_ssh
 
 
-def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
+def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -169,21 +170,27 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
     # ssh private key should now exist under keyfile_path
     con_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
 
-    natbox_client = NATBoxClient.get_natbox_client()
     tis_ip = ProjVar.get_var('LAB').get('floating ip')
-    cmd_3 = 'scp {}@{}:{} {}'.format(HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
-    natbox_client.send(cmd_3)
-    rtn_3_index = natbox_client.expect([natbox_client.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
-    if rtn_3_index == 2:
-        natbox_client.send('yes')
-        natbox_client.expect(Prompt.PASSWORD_PROMPT)
-    elif rtn_3_index == 1:
-        natbox_client.send(HostLinuxCreds.get_password())
-        natbox_client.expect(timeout=30)
-    if not natbox_client.get_exit_code() == 0:
-        raise exceptions.CommonError("Failed to copy keyfile to NatBox")
+    for i in range(10):
+        try:
+            nat_ssh.flush()
+            cmd_3 = 'scp -v {}@{}:{} {}'.format(HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
+            nat_ssh.send(cmd_3)
+            rtn_3_index = nat_ssh.expect([nat_ssh.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
+            if rtn_3_index == 2:
+                nat_ssh.send('yes')
+                nat_ssh.expect(Prompt.PASSWORD_PROMPT)
+            elif rtn_3_index == 1:
+                nat_ssh.send(HostLinuxCreds.get_password())
+                nat_ssh.expect(timeout=30)
+            if nat_ssh.get_exit_code() == 0:
+                LOG.info("key file is successfully copied from controller to NATBox")
+                return
+        except Exception as e:
+            LOG.warning(e.__str__())
+            time.sleep(10)
 
-    LOG.info("key file is successfully copied from controller to NATBox")
+    raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
 
 def boot_vms(is_boot):

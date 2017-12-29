@@ -27,7 +27,6 @@ def setup_test_session(global_setup):
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
-    ProjVar.set_var(natbox_ssh=natbox_ssh)
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
