@@ -3,6 +3,7 @@ import time
 import os
 import configparser
 import threading
+import pexpect
 from multiprocessing import Process
 
 import setup_consts
@@ -174,7 +175,8 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     for i in range(10):
         try:
             nat_ssh.flush()
-            cmd_3 = 'scp -v {}@{}:{} {}'.format(HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
+            cmd_3 = 'scp -v -o ConnectTimeout=30 {}@{}:{} {}'.format(
+                    HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
             nat_ssh.send(cmd_3)
             rtn_3_index = nat_ssh.expect([nat_ssh.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
             if rtn_3_index == 2:
@@ -186,6 +188,11 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
             if nat_ssh.get_exit_code() == 0:
                 LOG.info("key file is successfully copied from controller to NATBox")
                 return
+        except pexpect.TIMEOUT as e:
+            LOG.warning(e.__str__())
+            nat_ssh.send_control()
+            nat_ssh.expect()
+
         except Exception as e:
             LOG.warning(e.__str__())
             time.sleep(10)
