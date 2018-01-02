@@ -3858,7 +3858,7 @@ def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, hos
 
 
 def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=300,
-                                           auth_info=Tenant.ADMIN, con_ssh=None):
+                                           fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     args = []
     if host:
         args.append('--host {}'.format(host))
@@ -3877,10 +3877,12 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
         LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
         end_time = time.time() + timeout
         while time.time() < end_time:
-            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh) is not None:
+            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
                 LOG.info("providernet connectivity test scheduled successfully.")
-                return audit_id
+                return 0, audit_id
         else:
+            if fail_ok:
+                return 1, "Failed to find results with scheduled UUID"
             raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
                                           "seconds after running 'neutron providernet-connectivity-test-schedule'".
                                           format(audit_id, timeout))

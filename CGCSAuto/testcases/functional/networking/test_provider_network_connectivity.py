@@ -267,7 +267,7 @@ def test_providernet_connectivity_reboot():
     host_helper.reboot_hosts(slave_computes, wait_for_reboot_finish=False)
 
     LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
-    audit_id = network_helper.schedule_providernet_connectivity_test()
+    audit_id = network_helper.schedule_providernet_connectivity_test()[1]
     slave_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id, host_name=slave_computes)
     assert not slave_status, "Connectivity test still list results for rebooting computes"
     master_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
@@ -279,7 +279,8 @@ def test_providernet_connectivity_reboot():
         HostsToRecover.add(master_compute)
         host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
 
-        network_helper.schedule_providernet_connectivity_test()
+        res = network_helper.schedule_providernet_connectivity_test(timeout=45, fail_ok=True)[0]
+        assert res == 1, "Still finding results when all hypervisors are rebooting"
         LOG.tc_step("Verify the providernet connectivity test does not list PASS for any host")
         status = network_helper.get_providernet_connectivity_test_results()
         assert not status, "At least one compute is not rebooting"

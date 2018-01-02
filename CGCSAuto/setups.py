@@ -502,7 +502,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
-    if not installconf_path:
+    if installconf_path:
 
         installconf = configparser.ConfigParser()
         installconf.read(installconf_path)
