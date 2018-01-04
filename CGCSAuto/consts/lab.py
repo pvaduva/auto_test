@@ -194,6 +194,17 @@ class Labs:
         'tpm_installed': True,
     }
     
+    R430_3_4 = {
+        'short_name': 'r430_3_4',
+        'name': 'yow-cgcs-r430-3_4',
+        'floating ip': '128.224.150.11 ',
+        'controller-0 ip': '128.224.150.8',
+        'controller-1 ip': '128.224.150.9',
+        'controller_nodes': [32077, 71451],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+    }
+
     SM_1 = {
         'short_name': 'sm_1',
         'name': 'yow-cgcs-supermicro-1',
