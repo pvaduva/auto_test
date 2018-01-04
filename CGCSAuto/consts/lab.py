@@ -185,7 +185,7 @@ class Labs:
     R430_1_2 = {
         'short_name': 'r430_1_2',
         'name': 'yow-cgcs-r430-1_2',
-        'floating ip': '128.224.150.49 ',
+        'floating ip': '128.224.150.49',
         'controller-0 ip': '128.224.150.48',
         'controller-1 ip': '128.224.150.52',
         'controller_nodes': [23512, 23513],
@@ -197,7 +197,7 @@ class Labs:
     R430_3_4 = {
         'short_name': 'r430_3_4',
         'name': 'yow-cgcs-r430-3_4',
-        'floating ip': '128.224.150.11 ',
+        'floating ip': '128.224.150.11',
         'controller-0 ip': '128.224.150.8',
         'controller-1 ip': '128.224.150.9',
         'controller_nodes': [32077, 71451],
