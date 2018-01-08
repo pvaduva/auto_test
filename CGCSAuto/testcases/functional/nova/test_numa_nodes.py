@@ -344,10 +344,8 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
     vm_id = vm_helper.boot_vm(flavor=flavor, cleanup='function')[1]
 
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
-    # con_ssh = ControllerClient.get_active_controller()
     nova_tab, libvirt_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
-    # nova_tab, libvirt_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
-    #                                                              expect_timeout=30)[1], combine_multiline_entry=False)
+
     # Filter out the line for vm under test
     nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
     libvirt_tab = table_parser.filter_table(libvirt_tab, uuid=vm_id)

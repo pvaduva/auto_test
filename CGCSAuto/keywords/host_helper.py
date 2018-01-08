@@ -1855,7 +1855,7 @@ def get_host_threads_count(host, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    code, output = con_ssh.exec_cmd('''vm-topology -s topology | grep --color='never' "{}.*Threads/Core="'''.
+    code, output = con_ssh.exec_sudo_cmd('''vm-topology --show topology | grep --color='never' "{}.*Threads/Core="'''.
                                     format(host))
     if code != 0:
         raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
@@ -2406,7 +2406,8 @@ def get_logcore_siblings(host, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    host_topology = con_ssh.exec_cmd("vm-topology -s topology | awk '/{}/, /^[ ]*$/'".format(host), fail_ok=False)[1]
+    host_topology = con_ssh.exec_sudo_cmd("vm-topology --show topology | awk '/{}/, /^[ ]*$/'".format(host),
+                                          fail_ok=False)[1]
     table_ = table_parser.table(host_topology)
 
     siblings_tab = table_parser.filter_table(table_, cpu_id='sibling_id')

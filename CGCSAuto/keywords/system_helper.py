@@ -1103,7 +1103,7 @@ def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False, 
 
     show_args = ','.join(table_names)
 
-    tables_ = table_parser.tables(con_ssh.exec_cmd('vm-topology -s {}'.format(show_args), expect_timeout=30)[1],
+    tables_ = table_parser.tables(con_ssh.exec_sudo_cmd('vm-topology --show {}'.format(show_args), expect_timeout=30)[1],
                                   combine_multiline_entry=combine_multiline)
 
     if exclude_one_col_table:

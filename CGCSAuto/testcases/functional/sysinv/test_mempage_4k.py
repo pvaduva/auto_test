@@ -163,7 +163,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 def __check_pagesize(vm_id):
     LOG.tc_step("Check pagesize is 4k for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
-    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers', expect_timeout=30)[1],
+    nova_tab = table_parser.tables(con_ssh.exec_sudo_cmd('vm-topology --show servers', expect_timeout=30)[1],
                                    combine_multiline_entry=False)[0]
 
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]

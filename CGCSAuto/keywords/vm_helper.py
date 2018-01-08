@@ -2610,7 +2610,7 @@ def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retri
 
 def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
     """
-    Get instance_topology from 'vm-topology -s servers'
+    Get instance_topology from 'vm-topology --show servers'
 
     Args:
         vm_id (str):
