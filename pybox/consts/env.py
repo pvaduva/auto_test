@@ -71,12 +71,12 @@ class Builds:
 
 class Licenses:
     R2 = {
-        'AIO': '/folk/cgts/lab/licenses/wrslicense-CPE-15.12-full-jan2018.lic',
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-15.12-full-jan2018.lic',
         'Standard': '/folk/cgts/lab/licenses/wrslicense-15.12-full-jan2018.lic'
     }
 
     R3 = {
-        'AIO': '/folk/cgts/lab/licenses/wrslicense-CPE-16.10-full-jan2018.lic',
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-16.10-full-jan2018.lic',
         'Standard': '/folk/cgts/lab/licenses/wrslicense-16.10-full-jan2018.lic'
     }
 
