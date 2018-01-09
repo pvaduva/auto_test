@@ -180,7 +180,7 @@ class Prompt:
 
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
-    PASSWORD_PROMPT = '.*assword\:\n|assword for .*:\n'
+    PASSWORD_PROMPT = '.*assword\:[ ]?$|assword for .*:[ ]?$'
     LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
