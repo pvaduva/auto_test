@@ -568,7 +568,8 @@ def config_logger(log_dir):
     tis_formatter = logging.Formatter(log_format)
     LOG.setLevel(logging.NOTSET)
 
-    logging.basicConfig(level=logging.NOTSET, format=log_format, filename='/tmp/log', filemode='w')
+    tmp_path = os.path.join(os.path.expanduser('~'), '.tmp_log')
+    logging.basicConfig(level=logging.NOTSET, format=log_format, filename=tmp_path, filemode='w')
 
     # file handler:
     file_handler = logging.FileHandler(file_name)
