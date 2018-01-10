@@ -89,8 +89,16 @@ def vif_model_check(request):
     else:
         seg_id = None
 
-    nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                    {'net-id': pci_net_id, 'vif-model': vif_model}]
+    if vif_model == 'pci-sriov':
+        port_id = network_helper.create_port(net_id= pci_net_id, vnic_type='direct')[1]
+        nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                        {'port-id': port_id, 'vif-model': vif_model}]
+    else:
+        nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                        {'net-id': pci_net_id, 'vif-model': vif_model}]
+
+    #nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    #                {'net-id': pci_net_id, 'vif-model': vif_model}]
     if extra_pcipt_net:
         nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
         extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id', strict=False,
