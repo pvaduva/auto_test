@@ -510,7 +510,10 @@ if __name__ == "__main__":
             remote_server = item['ip']
     if vboxoptions.buildserver is None:
         remote_server = None
-    host_type = "AIO-DX" if vboxoptions.aio else host_type = "Standard"
+    if vboxoptions.aio:
+       host_type = "AIO-DX"
+    else:
+       host_type = "Standard"
     if vboxoptions.setup_files:
         install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files)
     elif vboxoptions.get_setup:
