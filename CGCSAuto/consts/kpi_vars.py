@@ -29,6 +29,7 @@ class ConfigController:
 
 class HostLock:
     NAME = '{}_lock'
+    WITH_VM = 'host_lock_with_vms_{}'
     LOG_PATH = '/var/log/fm-event.log'
     END = '200.001.*{} was administratively locked to take it out-of-service.*set'
     START = 'system.*host-lock.*{}'
