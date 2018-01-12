@@ -868,7 +868,7 @@ def kill_sm_process_and_verify_impact(
     if total_retries < 1 or retries < 1:
         LOG.error('retries/total-retries < 1? retires:{}, total retries:{}'.format(retries, total_retries))
         return None
-
+    count = 0
     for i in range(1, total_retries+1):
         LOG.info('retry:{:02d} kill the process:{} and verify impact:{}'.format(i, name, impact))
 
@@ -877,7 +877,7 @@ def kill_sm_process_and_verify_impact(
 
         timeout = time.time() + action_timeout * (retries/2 if retries > 2 else 1)
 
-        count = 0
+        #count = 0
         while time.time() < timeout:
             count += 1
 
