@@ -61,5 +61,3 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
-
-    network_helper.schedule_providernet_connectivity_test()

@@ -4,7 +4,7 @@ from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper, host_helper, common
+from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, network_helper
 
 
 ########################
@@ -57,9 +57,14 @@ def __verify_alarms(request, scope):
 
         for item in after_alarms:
             if item not in before_alarms:
-                # NTP alarm handling
                 alarm_id, entity_id = item
-                if alarm_id == EventLogID.NTP_ALARM:
+
+                if alarm_id == EventLogID.PROVIDER_NETWORK_FAILURE:
+                    # Providernet connectivity alarm handling
+                    LOG.fixture_step("Providernet connectivity alarm found, schedule providernet connectivity test")
+                    network_helper.schedule_providernet_connectivity_test()
+                elif alarm_id == EventLogID.NTP_ALARM:
+                    # NTP alarm handling
                     LOG.fixture_step("NTP alarm found, checking ntpq stats")
                     host = entity_id.split('host=')[1].split('.ntp')[0]
                     host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
