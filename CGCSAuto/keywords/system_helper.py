@@ -1333,17 +1333,17 @@ def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_
             avail_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_avail(MiB)')]
 
             for i in range(len(total_mems)):
-                if total_mems[i] <= avail_mems[i]:
+                if total_mems[i] < avail_mems[i]:
                     break
             else:
-                LOG.debug("mem_total is larger than mem_avail")
+                LOG.debug("mem_total >= mem_avail")
                 break
 
-            LOG.info("mem_total is no larger than mem_avail, wait for mem_avail to update")
-            time.sleep(5)
+            time.sleep(30)
+            LOG.info("mem_total is smaller than mem_avail, wait for mem_avail to update")
             table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
         else:
-            raise SystemError("mem_total is no larger than mem_avail in 4 minutes")
+            raise exceptions.SysinvError("mem_total is smaller than mem_avail in 4 minutes")
 
     res = []
     for header in headers:

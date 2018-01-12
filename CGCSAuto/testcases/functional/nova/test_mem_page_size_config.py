@@ -3,6 +3,7 @@
 ##########################################################################
 
 import re
+import time
 
 from pytest import fixture, mark, skip
 
@@ -117,11 +118,38 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
 
     if host0_proc0_mod or host0_proc1_mod:
         config_host_module(host=hosts[0], modify_func=_modify, revert_func=_revert)
+        LOG.fixture_step("Check 1g page numbers for {} are modified successfully".format(hosts[0]))
+        if host0_proc0_mod:
+            _wait_for_1g_page_update(host=hosts[0], proc_id=0, expt_1g=0)
+        if host0_proc1_mod:
+            _wait_for_1g_page_update(host=hosts[0], proc_id=1, expt_1g=2)
 
     if host1_proc1_mod or host1_proc0_mod:
         config_host_module(host=hosts[1], modify_func=_modify, revert_func=_revert)
+        LOG.fixture_step("Check 1g page numbers for {} are modified successfully".format(hosts[1]))
+        if host1_proc0_mod:
+            _wait_for_1g_page_update(host=hosts[1], proc_id=0, expt_1g=0)
+        if host1_proc1_mod:
+            _wait_for_1g_page_update(host=hosts[1], proc_id=1, expt_1g=0)
 
     return hosts, storage_backing
+
+
+def _wait_for_1g_page_update(host, proc_id, expt_1g, timeout=300, fail_ok=False):
+    header = ['vm_hp_total_1G']
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        actual_1g = int(system_helper.get_host_mem_values(host, header, proc_id=proc_id)[0])
+        if expt_1g == actual_1g:
+            LOG.info("1g page number for {} proc{} is {} as expected".format(host, proc_id, expt_1g))
+            return True
+        time.sleep(15)
+
+    err = "1g page number for {} proc{} is {}, while expect: {}".format(host, proc_id, actual_1g, expt_1g)
+    if fail_ok:
+        LOG.warning(err)
+    else:
+        assert expt_1g == actual_1g, err
 
 
 @fixture(scope='function', autouse=True)
@@ -254,17 +282,17 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
         - Add two hypervisors to the host aggregate
         - Host-0 configuration:
             - Processor-0:
-                - Not enough 1g pages to boot vm that requires 2g
-                - Not enough 4k pages to boot vm that requires 2g
+                - Insufficient 1g pages to boot vm that requires 2g
+                - Insufficient 4k pages to boot vm that requires 2g
             - Processor-1:
                 - Sufficient 1g pages to boot vm that requires 2g
-                - Not enough 4k pages to boot vm that requires 2g
+                - Insufficient 4k pages to boot vm that requires 2g
         - Host-1 configuration:
             - Processor-0:
-                - Not enough 1g pages to boot vm that requires 2g
-                - Not enough 4k pages to boot vm that requires 2g
+                - Insufficient 1g pages to boot vm that requires 2g
+                - Insufficient 4k pages to boot vm that requires 2g
             - Processor-1:
-                - Not enough 1g pages to boot vm that requires 2g
+                - Insufficient 1g pages to boot vm that requires 2g
                 - Sufficient 4k pages to boot vm that requires 2g
         - Configure a compute to have 4 1G hugepages (module)
         - Create a flavor with 2G RAM (module)
