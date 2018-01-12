@@ -2,10 +2,12 @@ import time
 from pytest import fixture, skip
 
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType
 from consts.cgcs import EventLogID, HostAvailabilityState
+from consts.filepaths import WRSROOT_HOME, HeatTemplate
 from keywords import system_helper, host_helper, keystone_helper, security_helper
 
 
@@ -112,3 +114,11 @@ def collect_kpi(request):
     collect_kpi_ = ProjVar.get_var('COLLECT_KPI') and bool(request.node.get_marker('kpi'))
     log_path = ProjVar.get_var('KPI_PATH') if collect_kpi_ else None
     return log_path
+
+
+@fixture(scope='session')
+def heat_files_check():
+    con_ssh = ControllerClient.get_active_controller()
+    heat_dir = HeatTemplate.HEAT_DIR
+    if not con_ssh.file_exists(heat_dir):
+        skip("HEAT templates directory not found. Expected heat dir: {}".format(heat_dir))

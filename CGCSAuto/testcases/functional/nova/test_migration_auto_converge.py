@@ -35,7 +35,7 @@ def _get_stress_ng_heat(con_ssh=None):
     source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
 
     dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                dest_name=file_name, con_ssh=con_ssh)
+                                                                 dest_name=file_name, con_ssh=con_ssh)
 
     if dest_path is None:
         raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))

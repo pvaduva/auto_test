@@ -27,6 +27,7 @@ class UserData:
 
 class HeatTemplate:
     STRESS_NG = 'stress_ng.yaml'
+    HEAT_DIR = '{}heat/hot/'.format(WRSROOT_HOME)
 
 
 class TestServerPath:
