@@ -29,7 +29,7 @@ def skip_test_if_less_than_two_hosts():
 class TestTisGuest:
 
     @fixture(scope='class')
-    def vms_(self):
+    def vms_(self, add_admin_role_class):
 
         LOG.fixture_step("Create a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.create_flavor('flv_nolocaldisk')[1]
@@ -44,77 +44,48 @@ class TestTisGuest:
         vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
 
+        vm_host = nova_helper.get_vm_host(vm_id=vm1)
+
         LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_local"
-        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', cleanup='class')[1]
+        vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, source='volume', cleanup='class', avail_zone='nova',
+                                vm_host=vm_host)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm2)
 
         LOG.fixture_step("Boot vm3 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm3_name = "image_novol"
-        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', cleanup='class')[1]
+        vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, source='image', cleanup='class', avail_zone='nova',
+                                vm_host=vm_host)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm3)
 
         LOG.fixture_step("Boot vm4 from image with flavor flv_nolocaldisk and wait for it pingable from NatBox")
         vm4_name = 'image_vol'
-        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', cleanup='class')[1]
+        vm4 = vm_helper.boot_vm(vm4_name, flavor_1, source='image', cleanup='class', avail_zone='nova',
+                                vm_host=vm_host)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm4)
 
-        return [vm1, vm2, vm3, vm4]
+        LOG.fixture_step("Attach volume to vm4 which was booted from image: {}.".format(vm4))
+        vm_helper.attach_vol_to_vm(vm4)
+
+        return [vm1, vm2, vm3, vm4], vm_host
 
     @mark.trylast
     @mark.sanity
     @mark.cpe_sanity
     def test_evacuate_vms(self, vms_):
-        vm1, vm2, vm3, vm4 = vms_
-
-        # vm2 cannot be live migrated so choose its host as target host
-        target_host = nova_helper.get_vm_host(vm2)
-        # todo: vm3 and vm4 can not be live migrated. they should be launched on target
-        vms_to_mig = [vm1]
-
-        LOG.tc_step("Live migrate vm1 to vm2 host {} if not already on it".format(target_host))
-
-        for vm in vms_to_mig:
-            if nova_helper.get_vm_host(vm) != target_host:
-                vm_helper.live_migrate_vm(vm, destination_host=target_host)
-
-        LOG.tc_step("Attach volume to vm4 which was booted from image: {}.".format(vm4))
-        vm_helper.attach_vol_to_vm(vm4)
+        vms, target_host = vms_
 
         pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
         up_hypervisors = host_helper.get_up_hypervisors()
         pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_alive(up_hypervisors, timeout=20,
                                                                                 fail_ok=True)
 
-        LOG.tc_step("Reboot target host {}".format(target_host))
-        host_helper.reboot_hosts(target_host, wait_for_reboot_finish=False)
-        HostsToRecover.add(target_host)
-
-        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vms_values(vms_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-        LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms_, values=VMStatus.ACTIVE, timeout=600)
-
-        vms_host_err = []
-        for vm in vms_:
-            if nova_helper.get_vm_host(vm) == target_host:
-                vms_host_err.append(vm)
-
-        assert not vms_host_err, "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
-                                 format(target_host, vms_host_err, inactive_vms)
-
-        assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-
-        LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-        vm_helper.ping_vms_from_natbox(vms_)
-
-        LOG.tc_step("Wait for {} to finish rebooting".format(target_host))
-        host_helper.wait_for_hosts_ready(target_host)
+        LOG.tc_step("reboot -f on vms host, ensure vms are successfully evacuated and host is recovered after reboot")
+        vm_helper.evacuate_vms(host=target_host, vms_to_check=vms, wait_for_host_up=True, ping_vms=True)
 
         LOG.tc_step("Check rebooted host can still host vm")
-        vm_helper.live_migrate_vm(vm1, destination_host=target_host)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm1)
+        vm_helper.live_migrate_vm(vms[0], destination_host=target_host)
+        vm_helper.wait_for_vm_pingable_from_natbox(vms[0])
 
         LOG.tc_step("Check system services and neutron agents after {} reboot".format(target_host))
         post_res_sys, post_msg_sys = system_helper.wait_for_services_enable(fail_ok=True)

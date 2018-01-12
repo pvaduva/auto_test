@@ -1154,7 +1154,7 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
     con_ssh.connect(retry=True, retry_timeout=swact_complete_timeout-30)
 
     # Give it sometime before openstack cmds enables on after host
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False)
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, fail_ok=False, timeout=swact_complete_timeout)
 
     after_host = system_helper.get_active_controller_name()
     LOG.info("Host before swacting: {}, host after swacting: {}".format(before_host, after_host))
@@ -3262,48 +3262,51 @@ def get_host_co_processor_pci_list(hostname):
         LOG.info("Getting the Co-processor pci list for host {}".format(hostname))
         cmd = " lspci -nnm | grep Co-processor | awk ' !/Virtual/'"
         rc, output = host_ssh.exec_cmd(cmd)
-        if rc == 0:
-            for pci_line in output.splitlines():
-                pci_attributes = pci_line.split('"')
-                while ' ' in pci_attributes:
-                    pci_attributes.remove(' ')
-                while '' in pci_attributes:
-                    pci_attributes.remove('')
+        if rc != 0:
+            return host_pci_info
 
-                pci_address = ("0000:{}".format(pci_attributes[0])).strip()
-                pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
-                class_id = re.findall("Co-processor\s\[(.*)\]", pci_attributes[1])[0]
-                # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
-                num_zero = 6 - len(class_id)
-                if num_zero > 0:
-                    class_id += ''.join(['0']*num_zero)
-                vendor_name = pci_attributes[2].split(' [')[0]
-                LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
-                vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
-                device_name = pci_attributes[3].split(' [')[0]
-                device_id = pci_attributes[3].split(' [')[1].replace(']', '')
-                pci_info = {'pci_address': pci_address,
-                            'pci_name': pci_name,
-                            'vendor_name': vendor_name,
-                            'vendor_id': vendor_id,
-                            'device_id': device_id,
-                            'class_id': class_id,
-                            'pci-alias': 'qat-vf',
-                            }
-                cmd2 = " lspci -nnm | grep Co-processor | grep \"{}\" | awk 'NR == 1'".format(device_name)
-                rc, vf_line = host_ssh.exec_cmd(cmd2)
+        for pci_line in output.splitlines():
+            pci_attributes = pci_line.split('"')
+            while ' ' in pci_attributes:
+                pci_attributes.remove(' ')
+            while '' in pci_attributes:
+                pci_attributes.remove('')
 
-                if rc == 0:
-                    vf_line_attr = vf_line.split('"')
-                    while ' ' in vf_line_attr:
-                        vf_line_attr.remove(' ')
-                    while '' in vf_line_attr:
-                        vf_line_attr.remove('')
-                    vf_device_id = vf_line_attr[3].split(' [')[1].replace(']', '')
-                    pci_info['vf_device_id'] = vf_device_id
+            pci_address = ("0000:{}".format(pci_attributes[0])).strip()
+            pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
+            class_id = re.findall("Co-processor\s\[(.*)\]", pci_attributes[1])[0]
+            # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
+            num_zero = 6 - len(class_id)
+            if num_zero > 0:
+                class_id += ''.join(['0']*num_zero)
+            vendor_name = pci_attributes[2].split(' [')[0]
+            LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
+            vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
+            pci_alias = pci_attributes[3].split(' ')[0]
+            device_name = pci_attributes[3].split(' [')[0]
+            device_id = pci_attributes[3].split(' [')[1].replace(']', '')
+            pci_info = {'pci_address': pci_address,
+                        'pci_name': pci_name,
+                        'vendor_name': vendor_name,
+                        'vendor_id': vendor_id,
+                        'device_id': device_id,
+                        'class_id': class_id,
+                        'pci-alias': 'qat-{}-vf'.format(pci_alias.lower()),
+                        }
+            cmd2 = " lspci -nnm | grep Co-processor | grep \"{}\" | awk 'NR == 1'".format(device_name)
+            rc, vf_line = host_ssh.exec_cmd(cmd2)
 
-                host_pci_info.append(pci_info)
-                LOG.info("The Co-processor pci list for host {}: {}".format(hostname, pci_info))
+            if rc == 0:
+                vf_line_attr = vf_line.split('"')
+                while ' ' in vf_line_attr:
+                    vf_line_attr.remove(' ')
+                while '' in vf_line_attr:
+                    vf_line_attr.remove('')
+                vf_device_id = vf_line_attr[3].split(' [')[1].replace(']', '')
+                pci_info['vf_device_id'] = vf_device_id
+
+            host_pci_info.append(pci_info)
+            LOG.info("The Co-processor pci list for host {}: {}".format(hostname, pci_info))
 
     return host_pci_info
 

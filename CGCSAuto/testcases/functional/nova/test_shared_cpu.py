@@ -22,6 +22,9 @@ def check_shared_vcpu(vm, numa_node0, numa_nodes):
     host = nova_helper.get_vm_host(vm_id=vm)
     host_shared_vcpu_dict = host_helper.get_host_cpu_cores_for_function(host, function='Shared', thread=None)
     LOG.info("dict: {}".format(host_shared_vcpu_dict))
+    if numa_nodes is None:
+        numa_nodes = 1
+
     if numa_nodes == 1:
         host_shared_vcpu = host_shared_vcpu_dict[numa_node0]
     else:
@@ -37,12 +40,14 @@ def check_disabled_shared_vcpu(vm):
 
 
 def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='dedicated',
-                         numa_nodes=1, node0=None, node1=None, shared_vcpu=None):
+                         numa_nodes=None, node0=None, node1=None, shared_vcpu=None):
     flavor_id = nova_helper.create_flavor(name='shared_core', vcpus=vcpus, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='function')
 
     LOG.tc_step("Add specific cpu_policy, number_of_numa_nodes, numa_node0, and shared_vcpu to flavor extra specs")
-    extra_specs = {FlavorSpec.CPU_POLICY: cpu_policy, FlavorSpec.NUMA_NODES: numa_nodes}
+    extra_specs = {FlavorSpec.CPU_POLICY: cpu_policy}
+    if numa_nodes is not None:
+        extra_specs[FlavorSpec.NUMA_NODES] = numa_nodes
     if node0 is not None:
         extra_specs[FlavorSpec.NUMA_0] = node0
     if node1 is not None:
@@ -313,10 +318,11 @@ class TestSharedCpuEnabled:
         return storage_backing
 
     # TC2920, TC2921
-    @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
-        mark.domain_sanity((2, 1, 1, 1)),
+    @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'error'), [
+        mark.domain_sanity((2, 1, 1, 1, None)),
+        (2, 2, None, 1, 'error')
     ])
-    def test_launch_vm_with_shared_cpu(self, vcpus, numa_nodes, numa_node0, shared_vcpu, add_shared_cpu):
+    def test_launch_vm_with_shared_cpu(self, vcpus, numa_nodes, numa_node0, shared_vcpu, error, add_shared_cpu):
         """
         Test boot vm cli returns error when system does not meet the shared cpu requirement(s) in given flavor
 
@@ -325,6 +331,7 @@ class TestSharedCpuEnabled:
             numa_nodes (int): number of numa nodes to set in flavor extra specs
             numa_node0 (int): value for numa_node.0
             shared_vcpu (int):
+            error
             add_shared_cpu
 
         Setup:
@@ -352,10 +359,16 @@ class TestSharedCpuEnabled:
         flavor = create_shared_flavor(vcpus, storage_backing=add_shared_cpu, numa_nodes=numa_nodes, node0=numa_node0,
                                       shared_vcpu=shared_vcpu)
 
-        LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
+        LOG.tc_step("Boot a vm with above flavor")
         code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True,
                                                         cleanup='function')
 
+        if error:
+            LOG.tc_step("Check vm boot fail")
+            assert 1 == code, "Expect error vm. Actual result: {}".format(output)
+            return
+
+        LOG.tc_step("Check vm booted successfully and shared cpu indicated in vm-topology")
         assert 0 == code, "Boot vm failed. Details: {}".format(output)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -460,11 +473,9 @@ class TestSharedCpuEnabled:
                 'system host-cpu-modify -f shared p0=1,p1=1 <hostname>' (module)
 
         Test Steps:
-            - Create 3 flavors as follows:
+            - Create 2 flavors as follows:
                 - flavor1 has 2 vcpus, dedicated cpu policy, 1 numa node, numa_0 is set to 0 and 1 shared vcpu
                 - flavor2 has 2 vcpus, dedicated cpu policy, 1 numa node, numa_0 is set to 1 and 1 shared vcpu
-                - flavor3 has 4 vcpus, dedicated cpu policy, 1 numa node, numa_0 is set to 1, numa1 is set to 0 and
-                    1 shared vcpu
             - Boot a vm for each of the created flavors
             - Ensure all vms are booted successfully and validate the shared vcpus
             - Evacuate the vms
@@ -480,23 +491,16 @@ class TestSharedCpuEnabled:
             'node0': 0,
         }
         flv2_args = {
-            'numa_nodes': 1,
             'node0': 1,
         }
-        flv3_args = {
-            'vcpus': 4,
-            'numa_nodes': 2,
-            'node0': 1,
-            'node1': 0
-        }
+
         _flv_args = {'vcpus': 2, 'storage_backing': add_shared_cpu, 'shared_vcpu': 1}
         flv1_args.update(_flv_args)
         flv2_args.update(_flv_args)
-        flv3_args.update(_flv_args)
 
         target_host = None
         vms = {}
-        for flv_arg in (flv1_args, flv2_args, flv3_args):
+        for flv_arg in (flv1_args, flv2_args):
             LOG.tc_step("Create a flavor with following specs and launch a vm with this flavor: {}".format(flv_arg))
             flv_id = create_shared_flavor(**flv_arg)
             vm_id = vm_helper.boot_vm(name='shared_cpu', flavor=flv_id, fail_ok=False, avail_zone='nova',
@@ -504,7 +508,8 @@ class TestSharedCpuEnabled:
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
             LOG.tc_step("Check vm {} numa node setting via vm-topology".format(vm_id))
-            check_shared_vcpu(vm=vm_id, numa_node0=flv_arg['node0'], numa_nodes=flv_arg['numa_nodes'])
+            check_shared_vcpu(vm=vm_id, numa_node0=flv_arg.get('node0', None),
+                              numa_nodes=flv_arg.get('numa_nodes', None))
             vms[vm_id] = flv_arg
             if not target_host:
                 target_host = nova_helper.get_vm_host(vm_id)
@@ -514,7 +519,8 @@ class TestSharedCpuEnabled:
 
         LOG.tc_step("Check shared vcpus and numa settings for vms after evacuation")
         for vm_, flv_arg_ in vms.items():
-            check_shared_vcpu(vm=vm_, numa_node0=flv_arg_['node0'], numa_nodes=flv_arg_['numa_nodes'])
+            check_shared_vcpu(vm=vm_, numa_node0=flv_arg_.get('node0', None),
+                              numa_nodes=flv_arg_.get('numa_nodes', None))
 
 
 class TestMixSharedCpu:

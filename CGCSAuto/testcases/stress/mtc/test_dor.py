@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from utils import local_host
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
-from keywords import system_helper, vlm_helper, host_helper, vm_helper
+from keywords import system_helper, vlm_helper, host_helper, vm_helper, network_helper
 from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
@@ -61,3 +61,5 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+    network_helper.schedule_providernet_connectivity_test()
