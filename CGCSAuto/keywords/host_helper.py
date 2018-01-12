@@ -1984,30 +1984,35 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
             inst_backing = 'image'
         elif 'lvm' in inst_backing:
             inst_backing = 'lvm'
-            # if inst_lv_size is None:
-            #     raise ValueError("Instance local volume size has to be provided when instance backing is 'lvm'")
+            if inst_lv_size is None and lvm == 'nova-local':
+                lvg_tab = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvm), ssh_client=con_ssh))
+                lvm_vg_size = float(table_parser.get_value_two_col_table(lvg_tab, 'lvm_vg_size'))
+                inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
+                if inst_lv_size < 5120:        # cannot be smaller than 5g
+                    inst_lv_size = None
         elif 'remote' in inst_backing:
             inst_backing = 'remote'
         else:
             raise ValueError("Invalid instance backing provided. Choose from: image, lvm, remote.")
 
-    def check_host_config(lvg_tab=None):
+    def check_host_config(lvg_tab_=None):
         err_msg = ''
-        if lvg_tab is None:
-            lvg_tab = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvm), ssh_client=con_ssh))
+        if lvg_tab_ is None:
+            lvg_tab_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvm), ssh_client=con_ssh))
 
         if inst_backing is not None:
-            post_inst_backing = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))['instance_backing']
+            post_inst_backing = eval(table_parser.get_value_two_col_table(lvg_tab_, 'parameters'))['instance_backing']
             if inst_backing != post_inst_backing:
                 err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
 
         if inst_lv_size is not None:
-            post_inst_lv_size = int(table_parser.get_value_two_col_table(lvg_tab, 'lvm_vg_size'))
-            if int(inst_lv_size) != post_inst_lv_size:
+            params = eval(table_parser.get_value_two_col_table(lvg_tab_, 'parameters'))
+            post_inst_lv_size = int(params.get('instances_lv_size_mib', 0))
+            if int(inst_lv_size) != int(post_inst_lv_size):
                 err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
 
         if concurrent_ops is not None:
-            post_concurrent_ops = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))[
+            post_concurrent_ops = eval(table_parser.get_value_two_col_table(lvg_tab_, 'parameters'))[
                 'concurrent_disk_operations']
 
             if int(concurrent_ops) != post_concurrent_ops:
@@ -2044,30 +2049,6 @@ def modify_host_lvg(host, lvm='nova-local', inst_backing=None, inst_lv_size=None
     LOG.info("Modifying host-lvg for {} with params: {}".format(host, args))
     code, output = cli.system('host-lvg-modify', args, fail_ok=fail_ok, rtn_list=True, auth_info=auth_info,
                               ssh_client=con_ssh)
-
-    def check_host_config(lvg_tab=None):
-        err_msg = ''
-        if lvg_tab is None:
-            lvg_tab = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvm), ssh_client=con_ssh))
-
-        if inst_backing is not None:
-            post_inst_backing = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))['instance_backing']
-            if inst_backing != post_inst_backing:
-                err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
-
-        if inst_lv_size is not None:
-            post_inst_lv_size = int(table_parser.get_value_two_col_table(lvg_tab, 'lvm_vg_size'))
-            if int(inst_lv_size) != post_inst_lv_size:
-                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
-
-        if concurrent_ops is not None:
-            post_concurrent_ops = eval(table_parser.get_value_two_col_table(lvg_tab, 'parameters'))[
-                'concurrent_disk_operations']
-
-            if int(concurrent_ops) != post_concurrent_ops:
-                err_msg += "Concurrent disk operations is {} instead of {}".format(post_concurrent_ops,
-                                                                                   concurrent_ops)
-        return err_msg
 
     err = ''
     rtn_code = 0
@@ -2255,9 +2236,9 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_
         if expt_cpus is not None:
             if allocated_cpus == expt_cpus:
                 return expt_cpus
-
         elif allocated_cpus != prev_cpus:
             return allocated_cpus
+        time.sleep(5)
     else:
         msg = "Total allocated vcpus is not updated within timeout in nova-compute.log"
         if fail_ok:
