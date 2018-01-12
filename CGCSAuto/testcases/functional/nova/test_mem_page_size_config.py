@@ -145,7 +145,7 @@ def _wait_for_1g_page_update(host, proc_id, expt_1g, timeout=300, fail_ok=False)
             return True
         time.sleep(15)
 
-    err = "1g page number for {} proc{} is {}, while expect: {}".format(host, proc_id, actual_1g, expt_1g)
+    err = "1g page number for {} proc{} is {}, while {} is expected".format(host, proc_id, actual_1g, expt_1g)
     if fail_ok:
         LOG.warning(err)
     else:
