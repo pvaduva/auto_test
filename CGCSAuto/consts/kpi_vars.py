@@ -27,6 +27,14 @@ class ConfigController:
     END = 'controller-0'
 
 
+class SystemInstall:
+    NAME = 'system_install'
+    LOG_PATH = '/var/log/bash.log'
+    START = 'setting system clock to'
+    START_PATH = '/var/log/anaconda/journal.log'
+    END = '/etc/build.info'
+
+
 class HostLock:
     NAME = '{}_lock'
     WITH_VM = 'host_lock_with_vms_{}'

@@ -5,7 +5,7 @@ This is for gathering key performance metrics related to installation.
 from pytest import fixture, skip, mark
 from utils.kpi import kpi_log_parser
 from consts.proj_vars import ProjVar
-from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks
+from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall
 from keywords import system_helper, host_helper, cinder_helper, glance_helper
 from utils.ssh import ControllerClient
 
@@ -125,3 +125,30 @@ def test_heat_kpi(collect_kpi):
                               start_pattern=start_pattern,
                               end_pattern=end_pattern, sudo=True, topdown=True,
                               start_pattern_init=True, uptime=15)
+
+
+@mark.kpi
+def test_system_install_kpi(collect_kpi):
+    """
+    This is the time to install the full system from beginning to end.
+
+    Caveat is that it is designed to work with auto-install due to the way the
+    end_pattern is constructed.
+    """
+
+    if not collect_kpi:
+        skip("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = ProjVar.get_var("LAB_NAME")
+    host = "controller-0"
+    kpi_name = SystemInstall.NAME
+    log_path = SystemInstall.LOG_PATH
+    start_pattern = SystemInstall.START
+    start_path = SystemInstall.START_PATH
+    end_pattern = SystemInstall.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, 
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern,
+                              end_pattern=end_pattern, start_path=start_path,
+                              sudo=True, topdown=True, start_pattern_init=True)
