@@ -5,7 +5,7 @@ This is for gathering key performance metrics related to installation.
 from pytest import fixture, skip, mark
 from utils.kpi import kpi_log_parser
 from consts.proj_vars import ProjVar
-from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall
+from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, NodeInstall
 from keywords import system_helper, host_helper, cinder_helper, glance_helper
 from utils.ssh import ControllerClient
 
@@ -152,3 +152,32 @@ def test_system_install_kpi(collect_kpi):
                               start_pattern=start_pattern,
                               end_pattern=end_pattern, start_path=start_path,
                               sudo=True, topdown=True, start_pattern_init=True)
+
+
+@mark.kpi
+def test_node_install_kpi(collect_kpi):
+    """
+    This test measures the install time for each node in the system.
+    """
+
+    if not collect_kpi:
+        skip("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = ProjVar.get_var("LAB_NAME")
+    hosts = system_helper.get_hostnames()
+    print("System has hosts: {}".format(hosts))
+
+    for host in hosts:
+        kpi_name = NodeInstall.NAME.format(host)
+        log_path = NodeInstall.LOG_PATH
+        start_pattern = NodeInstall.START
+        start_path = NodeInstall.START_PATH
+        end_pattern = NodeInstall.END
+
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, 
+                                log_path=log_path, lab_name=lab_name, host=host,
+                                start_pattern=start_pattern,
+                                end_pattern=end_pattern, start_path=start_path,
+                                sudo=True, topdown=True, start_pattern_init=True)
+
+

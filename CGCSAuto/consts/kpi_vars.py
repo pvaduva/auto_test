@@ -35,6 +35,14 @@ class SystemInstall:
     END = '/etc/build.info'
 
 
+class NodeInstall:
+    NAME = '{}_install'
+    LOG_PATH = '/var/log/mtclogd.log'
+    START = 'setting system clock to'
+    START_PATH = '/var/log/anaconda/journal.log'
+    END = 'initial_config_complete'
+
+
 class HostLock:
     NAME = '{}_lock'
     WITH_VM = 'host_lock_with_vms_{}'
