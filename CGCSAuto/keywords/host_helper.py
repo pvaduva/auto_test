@@ -497,17 +497,20 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             LOG.info("Host already locked. Do nothing.")
             return -1, "Host already locked. Do nothing."
 
+    is_aio_dup = system_helper.is_two_node_cpe(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+
     if swact:
         if is_active_controller(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
                 and len(system_helper.get_controllers()) > 1:
             LOG.info("{} is active controller, swact first before attempt to lock.")
             swact_host(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+            if is_aio_dup:
+                time.sleep(90)
 
-    if check_cpe_alarm and system_helper.is_two_node_cpe(con_ssh=con_ssh, use_telnet=use_telnet,
-                                                         con_telnet=con_telnet):
+    if check_cpe_alarm and is_aio_dup:
         LOG.info("For AIO-duplex, wait for cpu usage high alarm gone on active controller")
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh, use_telnet=use_telnet,
-                                                         con_telnet=con_telnet)
+                                                              con_telnet=con_telnet)
         entity_id = 'host={}'.format(active_con)
         system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, entity_id)], check_interval=10,
                                            fail_ok=fail_ok, con_ssh=con_ssh, timeout=300, use_telnet=use_telnet,
