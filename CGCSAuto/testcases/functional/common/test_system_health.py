@@ -3,7 +3,7 @@ from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from consts.cgcs import EventLogID
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, network_helper
 
 
 # Do not check alarms for test in this module, which are read only tests.
@@ -51,9 +51,13 @@ def test_system_alarms(pre_alarms_session):
     new_alarms = []
     for alarm in post_alarms:
         if alarm not in pre_alarms_session:
-            # NTP alarm handling
             alarm_id, entity_id = alarm.split('::::')
-            if alarm_id == EventLogID.NTP_ALARM:
+            if alarm_id == EventLogID.PROVIDER_NETWORK_FAILURE:
+                # Providernet connectivity alarm handling
+                LOG.fixture_step("Providernet connectivity alarm found, schedule providernet connectivity test")
+                network_helper.schedule_providernet_connectivity_test()
+            elif alarm_id == EventLogID.NTP_ALARM:
+                # NTP alarm handling
                 LOG.fixture_step("NTP alarm found, checking ntpq stats")
                 host = entity_id.split('host=')[1].split('.ntp')[0]
                 host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
