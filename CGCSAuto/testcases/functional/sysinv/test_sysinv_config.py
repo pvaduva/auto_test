@@ -175,15 +175,16 @@ class TestRetentionPeriod:
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
         code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.ADMIN,
                                                        period=new_retention_period, name=name, check_first=False)
+
+        LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
+        time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
+
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
             assert 1 == code, msg
             return  # we're done here when expecting failing
         else:
             assert 0 == code, 'Failed to change Retention Period to {}'.format(new_retention_period)
-
-        LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
-        time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
 
         LOG.tc_step('Verify the new value is saved into correct file:{}'.format(self.PM_SETTING_FILE))
         controller_ssh = ControllerClient.get_active_controller()

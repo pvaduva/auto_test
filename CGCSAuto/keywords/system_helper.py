@@ -981,10 +981,12 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
             return -1, msg
 
     section = 'database'
-    if name in ('metering_time_to_live', 'event_time_to_live'):
+    if name in ('metering_time_to_live'):
         service = 'ceilometer'
     elif name == 'alarm_history_time_to_live':
         service = 'aodh'
+    elif name == 'event_time_to_live':
+        service = 'panko'
     else:
         raise ValueError("Unknown name: {}".format(name))
 
