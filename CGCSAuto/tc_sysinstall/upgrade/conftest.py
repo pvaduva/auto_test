@@ -388,5 +388,5 @@ def check_controller_filesystem(con_ssh=None):
             else:
                 entity_id = 'host=controller-0.filesystem=/'
                 system_helper.wait_for_alarms_gone([(EventLogID.FS_THRESHOLD_EXCEEDED, entity_id)], check_interval=10,
-                                           fail_ok=True, timeout=180)
+                                                   fail_ok=True, timeout=180)
 

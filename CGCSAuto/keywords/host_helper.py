@@ -512,7 +512,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh, use_telnet=use_telnet,
                                                               con_telnet=con_telnet)
         entity_id = 'host={}'.format(active_con)
-        system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, entity_id)], check_interval=10,
+        system_helper.wait_for_alarms_gone([(EventLogID.CPU_USAGE_HIGH, entity_id)], check_interval=45,
                                            fail_ok=fail_ok, con_ssh=con_ssh, timeout=300, use_telnet=use_telnet,
                                            con_telnet=con_telnet)
 

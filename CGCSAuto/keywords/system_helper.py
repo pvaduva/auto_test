@@ -690,7 +690,6 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        #alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
         alarms_tab = table_parser.table(cli.system(alarmcmd, ssh_client=con_ssh, auth_info=auth_info,
                                                    use_telnet=use_telnet, con_telnet=con_telnet))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
@@ -795,7 +794,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (tuple): (res(bool), remaining_alarms(tuple))
+    Returns (tuple): (res(bool), remaining_alarms(list of tuple))
 
     """
     pre_alarms = list(alarms)   # Don't update the original list
@@ -803,8 +802,8 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
     alarms_to_check = pre_alarms.copy()
 
     alarms_cleared = []
-    end_time = time.time() + timeout
-    while time.time() < end_time:
+
+    def _update_alarms(alarms_to_check_, alarms_cleared_):
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info,
                                               use_telnet=use_telnet, con_telnet=con_telnet)
         current_alarms = _get_alarms(current_alarms_tab)
@@ -812,16 +811,22 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         for alarm in pre_alarms:
             if alarm not in current_alarms:
                 LOG.info("Removing alarm {} from current alarms_and_events list: {}".format(alarm, alarms_to_check))
-                alarms_to_check.remove(alarm)
-                alarms_cleared.append(alarm)
+                alarms_to_check_.remove(alarm)
+                alarms_cleared_.append(alarm)
 
+    _update_alarms(alarms_to_check_=alarms_to_check, alarms_cleared_=alarms_cleared)
+    if not alarms_to_check:
+        LOG.info("Following alarms_and_events cleared: {}".format(alarms_cleared))
+        return True, []
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        pre_alarms = alarms_to_check.copy()
+        time.sleep(check_interval)
+        _update_alarms(alarms_to_check_=alarms_to_check, alarms_cleared_=alarms_cleared)
         if not alarms_to_check:
             LOG.info("Following alarms_and_events cleared: {}".format(alarms_cleared))
             return True, []
-
-        pre_alarms = alarms_to_check.copy()
-        time.sleep(check_interval)
-
     else:
         err_msg = "Following alarms_and_events did not clear within {} seconds: {}".format(timeout, alarms_to_check)
         if fail_ok:
@@ -830,8 +835,9 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         else:
             raise exceptions.TimeoutException(err_msg)
 
+
 def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
+                             auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
     """
     Wait for all alarms_and_events to be cleared from system alarm-list
     Args:

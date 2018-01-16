@@ -10,7 +10,7 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
-from consts.cgcs import MELLANOX_DEVICE, GuestImages
+from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from testfixtures.resource_mgmt import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
@@ -739,3 +739,38 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     actual_size = int(int(partition.split()[-2].strip())/1024) if partition else 0
     expt_size = int(expt_size)
     assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
+
+
+def check_alarms(before_alarms, timeout=300):
+    after_alarms = system_helper.get_alarms()
+    new_alarms = []
+    check_interval = 5
+    schedule_conn_test = False
+    for item in after_alarms:
+        if item not in before_alarms:
+            alarm_id, entity_id = item
+
+            if alarm_id == EventLogID.PROVIDER_NETWORK_FAILURE:
+                # Providernet connectivity alarm handling
+                schedule_conn_test = True
+            elif alarm_id == EventLogID.CPU_USAGE_HIGH:
+                check_interval = 45
+            elif alarm_id == EventLogID.NTP_ALARM:
+                # NTP alarm handling
+                LOG.info("NTP alarm found, checking ntpq stats")
+                host = entity_id.split('host=')[1].split('.ntp')[0]
+                host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
+                continue
+
+            new_alarms.append(item)
+
+    if schedule_conn_test:
+        LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
+        network_helper.schedule_providernet_connectivity_test()
+
+    if new_alarms:
+        LOG.info("New alarms detected. Waiting for new alarms to clear.")
+        res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=timeout,
+                                                                   check_interval=check_interval)
+        assert res, "New alarm(s) found and did not clear within {} seconds. " \
+                    "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
