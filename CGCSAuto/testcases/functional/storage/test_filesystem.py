@@ -321,6 +321,10 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     hosts = system_helper.get_controllers()
     for host in hosts:
+       system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                     entity_id="host={}".format(host))
+
+    for host in hosts:
        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                          entity_id="host={}".format(host),
                                          timeout=600)
