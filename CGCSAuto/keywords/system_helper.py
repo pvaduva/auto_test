@@ -1827,7 +1827,7 @@ def get_service_parameter_values(rtn_value='value', service=None, section=None, 
 
 
 def create_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
-                             check_first=True, modify_existing=True):
+                             check_first=True, modify_existing=True, verify=True):
     """
     Add service-parameter
     system service-parameter-add (service) (section) (name)=(value)
@@ -1840,6 +1840,8 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
         fail_ok:
         check_first (bool): Check if the service parameter exists before
         modify_existing (bool): Whether to modify the service parameter if it already exists
+        verify: this enables to skip the verification. sometimes not all values are displayed in the
+                 service-parameter-list, ex password
 
     Returns (tuple): (rtn_code, err_msg or param_uuid)
 
@@ -1851,7 +1853,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
             LOG.info(msg)
             if modify_existing:
                 return modify_service_parameter(service, section, name, value,
-                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False)
+                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False, verify=verify)
             return -1, msg
 
     LOG.info("Creating service parameter")
@@ -1863,11 +1865,13 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
     LOG.info("Verifying the service parameter value")
     val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
-    if val != value:
-        msg = 'The service parameter was not added with the correct value'
-        if fail_ok:
-            return 2, msg
-        raise exceptions.SysinvError(msg)
+    value = value.strip('\"')
+    if verify:
+        if val != value:
+            msg = 'The service parameter was not added with the correct value {} to {}'.format(val,value)
+            if fail_ok:
+                return 2, msg
+            raise exceptions.SysinvError(msg)
     LOG.info("Service parameter was added with the correct value")
     uuid = get_service_parameter_values(rtn_value='uuid', service=service, section=section, name=name,
                                         con_ssh=con_ssh)[0]
@@ -1876,7 +1880,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
 
 def modify_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
-                             check_first=True, create=True):
+                             check_first=True, create=True, verify=True):
     """
     Modify a service parameter
     Args:
@@ -1888,6 +1892,8 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
         fail_ok:
         check_first (bool): Check if the parameter exists first
         create (bool): Whether to create the parameter if it does not exist
+        verify: this enables to skip the verification. sometimes not all values are displayed in the
+                 service-parameter-list, ex password
 
     Returns (tuple): (rtn_code, message)
 
@@ -1914,11 +1920,13 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
     LOG.info("Verifying the service parameter value")
     val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
-    if val != value:
-        msg = 'The service parameter was not modified to the correct value'
-        if fail_ok:
-            return 2, msg
-        raise exceptions.SysinvError(msg)
+    value = value.strip('\"')
+    if verify:
+        if val != value:
+            msg = 'The service parameter was not modified to the correct value'
+            if fail_ok:
+                return 2, msg
+            raise exceptions.SysinvError(msg)
     msg = "Service parameter modified to {}".format(val)
     LOG.info(msg)
     return 0, msg

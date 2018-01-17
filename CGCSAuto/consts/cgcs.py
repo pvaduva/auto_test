@@ -483,3 +483,9 @@ class BackupRestore:
 class CpuModel:
     CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX',
                   'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')
+
+class ExtLdap:
+    LDAP_SERVER = 'ldap://128.224.186.62'
+    LDAP_DC = 'dc=tis,dc=wrs,dc=com'
+    LDAP_DRIVER = 'ldap'
+    LDAP_USER = 'cn=admin,dc=tis,dc=wrs,dc=com" password="admin'
