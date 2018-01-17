@@ -155,6 +155,10 @@ class TestEvacKPI:
 
     @fixture(scope='class')
     def get_hosts(self, add_admin_role_class, request):
+        # is_aio = system_helper.is_small_footprint()
+        # if is_aio:
+        #     skip("Evacuation KPI test unsuitable for AIO system")
+
         hosts = host_helper.get_hosts_by_storage_aggregate()
         if len(hosts) < 2 or len(hosts) > 4:
             skip("Lab not suitable for this test. Too many or too few hosts with local_image backing")
@@ -196,11 +200,11 @@ class TestEvacKPI:
         vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, avail_zone='nova',
                                          target_host=target_host)
         vm_id = vms[0]
-
         vm_host = nova_helper.get_vm_host(vm_id=vm_id)
         router_host = network_helper.get_router_info(field='wrs-net:host')
         assert target_host == vm_host, "VM is not launched on target host"
         assert target_host != router_host, "Router is on same host with vm"
+        time.sleep(30)
 
         def operation(vm_id_, host_, post_host_):
             vm_helper.evacuate_vms(host=host_, vms_to_check=vm_id_, ping_vms=True, post_host=post_host_)

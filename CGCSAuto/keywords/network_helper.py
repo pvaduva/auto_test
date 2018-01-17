@@ -3945,13 +3945,13 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
     if ipv6:
         optional_args += '6'
 
-    grep_str = 'no answer yet'
+    fail_str = 'no answer yet'
     cmd = 'ping{} -i {} -W {} -D -O {} | grep -B 1 -A 1 --color=never "{}"'.format(
-            optional_args, ping_interval, single_ping_timeout, server, grep_str)
+            optional_args, ping_interval, single_ping_timeout, server, fail_str)
 
     start_time = time.time()
     ping_init_end_time = start_time + init_timeout
-    prompts = [ssh_client.prompt, grep_str]
+    prompts = [ssh_client.prompt, fail_str]
     while time.time() < ping_init_end_time:
         ssh_client.send_sudo(cmd=cmd)
         index = ssh_client.expect(prompts, timeout=10, searchwindowsize=100, fail_ok=True)
@@ -3988,9 +3988,10 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
     count = 0
     prev_line = ''
     succ_str = 'bytes from'
+    post_succ = ''
     for line in lines:
         if succ_str in line:
-            if prev_succ and (succ_str not in prev_line):
+            if prev_succ and (fail_str in prev_line):
                 # Ping resumed after serious of lost ping
                 count += 1
                 post_succ = line
@@ -4004,7 +4005,11 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
 
         prev_line = line
 
-    LOG.info("Final ping loss duration: {}".format(duration))
+    if not post_succ:
+        LOG.warning("Ping did not resume within {} seconds".format(timeout))
+        duration = -1
+    else:
+        LOG.info("Final ping loss duration: {}".format(duration))
     return duration
 
 

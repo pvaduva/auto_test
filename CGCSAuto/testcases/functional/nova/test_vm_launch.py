@@ -1,12 +1,11 @@
+import time
 from pytest import mark, skip, fixture
 
-from keywords import cinder_helper, common, storage_helper, host_helper, nova_helper, vm_helper
-from consts.kpi_vars import KPI_DATE_FORMAT, VmStartup
+from keywords import host_helper, nova_helper, vm_helper
+from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate
 from consts.reasons import SkipStorageBacking
 from consts.cgcs import FlavorSpec
-from consts.auth import Tenant
 
-from utils import table_parser, cli
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
 from testfixtures.resource_mgmt import ResourceCleanup
@@ -25,7 +24,7 @@ def hosts_per_backing():
     'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch(collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
@@ -43,16 +42,18 @@ def test_kpi_vm_launch(collect_kpi, hosts_per_backing, boot_from):
         skip("KPI only test. Skip due to kpi collection is not enabled.")
 
     if boot_from != 'volume':
+        storage_backing = boot_from
         if not hosts_per_backing.get(boot_from):
             skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(boot_from))
-        LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage backing".format(boot_from))
+        LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage".format(storage_backing))
         boot_source = 'image'
-        flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=boot_from,
+        flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing,
                                            check_storage_backing=False)[1]
     else:
-        LOG.tc_step("Create a flavor with 2 vcpus, and dedicated cpu policy")
         boot_source = 'volume'
-        flavor = nova_helper.create_flavor(vcpus=2)[1]
+        storage_backing = nova_helper.get_storage_backing_with_max_hosts()[0]
+        LOG.tc_step("Create a flavor with 2 vcpus, and dedicated cpu policy and {} storage".format(storage_backing))
+        flavor = nova_helper.create_flavor(vcpus=2, storage_backing=storage_backing)[1]
 
     ResourceCleanup.add('flavor', flavor)
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
@@ -63,6 +64,34 @@ def test_kpi_vm_launch(collect_kpi, hosts_per_backing, boot_from):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VmStartup.NAME.format(boot_from),
                               log_path=VmStartup.LOG_PATH, end_pattern=VmStartup.END.format(vm_id),
                               start_pattern=VmStartup.START.format(vm_id), uptime=1)
+
+    if len(hosts_per_backing.get(storage_backing)) < 2:
+        skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
+
+    def operation_live(vm_id_):
+        code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
+        assert 0 == code, msg
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+
+    LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+    time.sleep(30)
+    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
+    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
+                              kpi_val=duration, uptime=1, unit='Time(ms)')
+
+    def operation_cold(vm_id_):
+        code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
+        assert 0 == code, msg
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+
+    LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
+    time.sleep(30)
+    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_cold, vm_id)
+    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
+                              kpi_val=duration, uptime=5, unit='Time(ms)')
 
 
 def check_for_qemu_process(host_ssh):
@@ -107,8 +136,9 @@ def test_check_vm_disk_on_lvm_compute():
                 - Run ps aux and confirm that there is a qemu process
                 - Run sudo lvs and confirm the existence of a thin pool
                 - Run sudo lvs and confirm the existence of a volume for the vm
-            - Ensure that the "free" space shown for the hypervisor (obtained by running "nova hypervisor-show
-            <compute node>" and then checking the "free_disk_gb" field) reflects the space available within the thin pool
+            - Ensure that the "free" space shown for the hypervisor (obtained by running
+                "nova hypervisor-show <compute node>" and then checking the "free_disk_gb" field)
+                reflects the space available within the thin pool
             - Delete the instance and ensure that space is returned to the hypervisor
 
         Test Teardown:
@@ -145,10 +175,11 @@ def test_check_vm_disk_on_lvm_compute():
     LOG.tc_step("Calculate compute free disk space and ensure that it reflects thin pool")
     expected_space_left = int(thin_pool_size - vm_volume_size)
     free_disk_space = get_compute_free_disk_gb(vm_host)
-    assert expected_space_left - 1 <= free_disk_space <= expected_space_left + 1, 'Hypervisor-show does not reflect space within thin pool'
+    assert expected_space_left - 1 <= free_disk_space <= expected_space_left + 1, \
+        'Hypervisor-show does not reflect space within thin pool'
 
     LOG.tc_step("Calculate free space following vm deletion (ensure volume space is returned)")
     vm_helper.delete_vms(vm)
     free_disk_space = get_compute_free_disk_gb(vm_host)
-    assert int(thin_pool_size) == free_disk_space, 'Space is not properly returned to the hypervisor or hypervisor ' \
-                                                   'info does not properly reflect it'
+    assert int(thin_pool_size) == free_disk_space, \
+        'Space is not properly returned to the hypervisor or hypervisor info does not properly reflect it'

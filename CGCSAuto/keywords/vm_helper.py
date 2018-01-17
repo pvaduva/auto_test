@@ -3892,8 +3892,8 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     resource_id = None
+    boot_source = boot_source if boot_source else 'volume'
     if image:
-        boot_source = boot_source if boot_source else 'volume'
         if boot_source == 'volume':
             resource_id = cinder_helper.create_volume(name=vm_type, image_id=image, guest_image=guest_os)[1]
             if cleanup:

@@ -1,3 +1,4 @@
+import time
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
@@ -480,7 +481,7 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
 @mark.parametrize('vm_type', [
     'virtio',
     'avp',
-    'dpdk'
+    'dpdk',
 ])
 def test_kpi_live_migrate(vm_type, collect_kpi):
     """
@@ -498,6 +499,7 @@ def test_kpi_live_migrate(vm_type, collect_kpi):
     LOG.tc_step("Launch a {} vm".format(vm_type))
     vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True)
     vm_id = vms[0]
+    time.sleep(30)
 
     def operation(vm_id_):
         code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)

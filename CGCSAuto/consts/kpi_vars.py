@@ -125,5 +125,9 @@ class LiveMigrate:
     NAME = 'live_migrate_{}'
 
 
+class ColdMigrate:
+    NAME = 'cold_migrate_{}'
+
+
 class Evacuate:
     NAME = 'evacuate_{}_{}_router'

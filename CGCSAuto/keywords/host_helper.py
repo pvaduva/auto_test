@@ -3453,7 +3453,7 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
             return True
 
         LOG.info("NTPQ status: {}; NTP alarms: {}".format(msg, ntp_alarms))
-        time.sleep(10)
+        time.sleep(30)
 
     err_msg = "Timed out waiting for NTP alarm to be in sync with ntpq output. NTPQ status: {}; NTP alarms: {}".\
         format(msg, ntp_alarms)
