@@ -169,7 +169,16 @@ def get_candidate_patches(expected_states=None,
                     patch_ids += patches_for_filter
 
         if include_patches_apply_to_all:
-            patch_ids += [p for p in all_patches if 'ALL' in p]
+            extra_filtering = ''
+            if 'INSVC' in id_filters:
+                extra_filtering = 'INSVC'
+            elif 'RR' in id_filters:
+                extra_filtering = 'RR'
+
+            if extra_filtering:
+                patch_ids += [p for p in all_patches if ('ALL' in p and extra_filtering in p) ]
+            else:
+                patch_ids += [p for p in all_patches if 'ALL' in p]
 
         patch_ids = list(set(patch_ids))
 
