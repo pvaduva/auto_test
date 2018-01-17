@@ -163,7 +163,7 @@ class Labs:
 
     R720_1_2 = {
         'short_name': 'r720_1_2',
-        'name': 'yow-cgcs-r720-1-2',
+        'name': 'yow-cgcs-r720-1_2',
         'floating ip': '128.224.150.141',
         'controller-0 ip': '128.224.150.130',
         'controller-1 ip': '128.224.150.106',
