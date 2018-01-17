@@ -627,7 +627,7 @@ def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_
     args_ = ' '.join(snapshots_to_del)
 
     if force:
-        args_ = '--force {}'.format(force) + args_
+        args_ = '--force {} {}'.format(force, args_)
 
     code, output = cli.cinder('snapshot-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                               rtn_list=True)
