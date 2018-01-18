@@ -1649,7 +1649,7 @@ def bulkAddHosts():
         wr_exit()._exit(1, msg)
 
 
-def run_labsetup():
+def run_labsetup(fail_ok=False):
     cmd = './lab_setup.sh'
     cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
     log.info("Running cmd: {}".format(cmd))
@@ -1670,12 +1670,15 @@ def run_labsetup():
     rc = controller0.ssh_conn.get_rc()
 
     installer_exit = wr_exit()
+
     if rc != "0":
-        msg = "lab_setup returned non-zero exit code but continuing anyways."
-        log.info(msg)
-        #msg = "lab_setup failed"
-        #log.error(msg)
-        #installer_exit._exit(1, msg)
+        if fail_ok:
+            msg = "lab_setup returned non-zero exit code but continuing anyways."
+            log.info(msg)
+        else:
+            msg = "lab_setup returned non-zero exit code, exiting install."
+            log.error(msg)
+            installer_exit._exit(1, msg)
 
     return
 
@@ -2463,7 +2466,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
         # Run lab_setup again to setup controller-1 interfaces
-            run_labsetup()
+            run_labsetup(fail_ok=True)
 
             log.info("Waiting for controller0 come online")
             wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
