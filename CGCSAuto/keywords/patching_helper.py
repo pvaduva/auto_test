@@ -870,7 +870,7 @@ def get_expected_hosts_states(action, patch_ids=None, pre_hosts_states=None, pre
 def apply_patches(con_ssh=None, patch_ids=None, apply_all=False, fail_if_patched=True):
     if patch_ids is None or apply_all:
         args = ' --all'
-    elif any(patch_id.toupper() == 'ALL' for patch_id in patch_ids):
+    elif any(patch_id.upper() == 'ALL' for patch_id in patch_ids):
         args = ' --all'
     else:
         args = ' '.join(patch_ids)

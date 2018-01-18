@@ -167,7 +167,8 @@ class Labs:
         'floating ip': '128.224.150.141',
         'controller-0 ip': '128.224.150.130',
         'controller-1 ip': '128.224.150.106',
-        'controller_nodes': [22351, 22352],
+        # 'controller_nodes': [22351, 22352],
+        'controller_nodes': [22352, 22351],
         'system_type': 'CPE',
         'system_mode': 'duplex',
     }
