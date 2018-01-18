@@ -519,43 +519,52 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
     """
     if not patch_dir or not is_dir(dirname=patch_dir, con_ssh=con_ssh):
         LOG.info('Not a directory:{}'.format(patch_dir))
-        return [], []
+        return -2, []
 
-    expected_patch_ids = get_patch_ids_from_dir(patch_dir=patch_dir, con_ssh=con_ssh)
-    assert check_patches_version(expected_patch_ids, con_ssh=con_ssh), \
+    patch_ids_in_dir = get_patch_ids_from_dir(patch_dir=patch_dir, con_ssh=con_ssh)
+    if not patch_ids_in_dir:
+        LOG.info("No patch found in directory: {}".format(patch_dir))
+        return -2, []
+
+    assert check_patches_version(patch_ids_in_dir, con_ssh=con_ssh), \
         'Mismatched versions between patch files and system image load'
     patch_states = get_patches_states(con_ssh=con_ssh)[1]
 
-    # if len(set(expected_patch_ids).intersection(set(patch_states.keys()))) > 0:
-    if len(set(expected_patch_ids) and set(patch_states.keys())) > 0:
-        LOG.warn('Some patches already uploaded into the system, \n\nto upload:\n{}, \nexisting:\n{}'.format(
-            expected_patch_ids, list(patch_states.keys())
-        ))
+    patches_to_upload = list(set(patch_ids_in_dir) - set(patch_states.keys()))
 
-    if not (set(expected_patch_ids) ^ set(patch_states.keys())):
-        LOG.warn('All patches are already in the system, skip the rest of the test')
-        return [], patch_states
+    patches_to_skip = list(set(patch_ids_in_dir) & set(patch_states.keys()))
+    if len(patches_to_upload) < len(patch_ids_in_dir):
+        LOG.warn('Some patches already in system: {}'.format(patches_to_skip))
 
+    LOG.info('Patches to upload: {}'.format(patches_to_upload))
+    patches_uploaded = []
+    for p in patches_to_skip:
+        if patch_states[p]['state'].lower() == 'available':
+            patches_uploaded.append(p)
+
+    if not patches_to_upload:
+        LOG.info("All patches in dir already in system. Patches in Available state: {}".format(patches_uploaded))
+        return -1, patches_uploaded
     # time_before = datetime.now()
     time_before = lab_time_now()[0]
 
     run_patch_cmd('upload-dir', args=patch_dir, con_ssh=con_ssh)
 
     code, expected_patches = check_patches_uploaded(
-        expected_patch_ids, prev_patch_states=patch_states, con_ssh=con_ssh)
+        patches_to_upload, prev_patch_states=patch_states, con_ssh=con_ssh)
     assert 0 == code, \
-        'Failed to confirm all patches were actually uploaded, checked patch ids:{}'.format(expected_patch_ids)
+        'Failed to confirm all patches were actually uploaded, checked patch ids:{}'.format(patches_to_upload)
 
     all_found, patches_found = check_log_records(action='upload',
-                                                 expected_patches=expected_patch_ids,
+                                                 expected_patches=patches_to_upload,
                                                  start_time=time_before,
                                                  con_ssh=con_ssh)
     assert all_found, \
         'Not all patch upload log entries found in log file, found for:\n"{}", while expecting:\n"{}"\n'.format(
-            patches_found, expected_patch_ids)
+            patches_found, patches_to_upload)
     LOG.info('Log entries were found for all patches:"{}"'.format(patches_found))
 
-    return expected_patch_ids, patch_states
+    return 0, patches_to_upload + patches_uploaded
 
 
 def wait_for_hosts_states(expected_states=None, con_ssh=None):
@@ -1173,7 +1182,6 @@ def wait_patch_states(patch_ids, expected_states=('Available',), con_ssh=None, f
         return -1, 'No patches to check?'
 
     cur_patch_states = get_patches_states(con_ssh=con_ssh)[1]
-
     for patch_id in patch_ids:
         if patch_id in cur_patch_states:
             state = cur_patch_states[patch_id]['state']

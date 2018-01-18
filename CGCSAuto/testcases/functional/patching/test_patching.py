@@ -186,7 +186,7 @@ def get_candidate_patches(expected_states=None,
             LOG.info('No patches for type:{}'.format(patch_type))
             if upload_if_needed and 'Available' in expected_states:
                 LOG.info('No patches in Available state for type:{}, will download patch files'.format(patch_type))
-                _test_upload_patches_from_dir(con_ssh=con_ssh, reuse_local_patches=False)
+                _upload_patches_from_dir(con_ssh=con_ssh, reuse_local_patches=False)
             else:
                 return [], False
 
@@ -459,7 +459,7 @@ def check_if_ready_for_patching():
         'There are active alarms:{}, skip patch testing'
 
 
-def _test_upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patches=True):
+def _upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patches=True):
     """Test upload patch files from the specified directory on the specified remote server
 
     Args:
@@ -469,14 +469,13 @@ def _test_upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patc
     US99792 Update patching to use matching test patch for specific load by default
     """
 
-    LOG.tc_step('Check if to use local patch files and they exist\n')
+    LOG.info('Check if to use local patch files and they exist\n')
     if reuse_local_patches:
         patch_dir = download_patch_files(con_ssh=con_ssh, single_file_ok=True)
         LOG.info('-Patch files are downloaded to directory:{} on the active controller'.format(patch_dir))
 
-    LOG.tc_step('Upload the directory{}'.format(patch_dir))
-    patch_ids = patching_helper.upload_patch_dir(patch_dir=patch_dir, con_ssh=con_ssh)[0]
-    LOG.info('-Patches are uploaded to system:{}'.format(patch_ids))
+    LOG.info('Upload the directory{}'.format(patch_dir))
+    patch_ids = patching_helper.upload_patch_dir(patch_dir=patch_dir, con_ssh=con_ssh)[1]
 
     return patch_ids
 
@@ -682,13 +681,8 @@ def test_upload_patch_files(patch_types, download_if_not_found=True, con_ssh=Non
         LOG.info('No patch files uploaded for: "{}"'.format(patch_types))
 
 
-def test_install_patch_dir_file(con_ssh=None):
+def test_install_patch_dir_file():
     """Test install patches from the specified directory on the specified server.
-
-    Args:
-        con_ssh:
-
-    Returns:
 
     Test Steps:
         1   Upload the patch files into the patching system on the lab
@@ -701,12 +695,70 @@ def test_install_patch_dir_file(con_ssh=None):
 
     """
 
-    patch_ids = _test_upload_patches_from_dir(con_ssh=con_ssh)
+    patch_ids = _upload_patches_from_dir()
 
-    applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True, con_ssh=con_ssh)
+    applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True)
 
     if applied_patches:
-        _test_install_impacted_hosts(applied_patches, con_ssh=con_ssh)
+        _test_install_impacted_hosts(applied_patches)
+
+
+class TestPatches:
+    @fixture(scope='class')
+    def upload_test_patches(self, request):
+        LOG.fixture_step("Upload test patches to system")
+        patch_ids = _upload_patches_from_dir()
+        if not patch_ids:
+            skip("No patches to upload")
+
+        def remove_test_patches():
+            LOG.fixture_step("Delete test patches from system")
+            remove_patches(patch_ids=patch_ids)
+            patching_helper.delete_patches(patch_ids=patch_ids)
+        request.addfinalizer(remove_test_patches)
+
+        return patch_ids
+
+    @mark.kpi
+    @mark.parametrize('patch', [
+        'INSVC_ALLNODES',
+        'RR_ALLNODES',
+        'other'
+    ])
+    def test_patching(self, upload_test_patches, patch):
+        """Test install test patches from build server.
+
+        Test Steps:
+            1   Upload the patch files into the patching system on the lab
+                - download patch files first from the specified directory on the specified server.
+                The directory and server are specified using py.test command line options.
+
+            2   Apply all the patches uploaded
+
+            3   Do host-install on all the hosts impacted
+
+        """
+
+        all_patches = upload_test_patches
+        patch_ids = []
+
+        if patch != 'other':
+            for patch_id in all_patches:
+                if patch in patch_id:
+                    patch_ids.append(patch)
+        else:
+            for patch_id in all_patches:
+                if 'INSVC_ALLNODES' not in patch_ids and 'RR_ALLNODES' not in patch_ids:
+                    patch_ids.append(patch_id)
+
+        LOG.tc_step("Apply patch(es): {}".format(patch_ids))
+        applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True)
+        if applied_patches:
+            LOG.tc_step("Install patch(es): {}".format(patch_ids))
+            _test_install_impacted_hosts(applied_patches)
+
+        LOG.tc_step("Remove patch(es): {}".format(patch_ids))
+        remove_patches(patch_ids=patch_ids)
 
 
 @mark.parametrize('patch_type', [
