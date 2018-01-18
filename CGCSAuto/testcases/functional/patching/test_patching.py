@@ -480,7 +480,7 @@ def _upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patches=T
     return patch_ids
 
 
-def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=True, fail_if_patched=True):
+def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=False, fail_if_patched=True):
     if not patch_ids:
         return []
 
@@ -499,7 +499,7 @@ def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=True, fail_if_pa
     LOG.tc_step('Install impacted hosts after applied patch, IDs:{}'.format(patch_ids))
     states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
 
-    install_impacted_hosts(patch_ids, current_states=states, con_ssh=con_ssh, remove=False)
+    # install_impacted_hosts(patch_ids, current_states=states, con_ssh=con_ssh, remove=False)
 
     LOG.info('OK, patches are applied:{}, impacted host installed'.format(applied_patches))
     return applied_patches
@@ -697,7 +697,7 @@ def test_install_patch_dir_file():
 
     patch_ids = _upload_patches_from_dir()
 
-    applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True)
+    applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=False, fail_if_patched=True)
 
     if applied_patches:
         _test_install_impacted_hosts(applied_patches)
@@ -752,7 +752,7 @@ class TestPatches:
                     patch_ids.append(patch_id)
 
         LOG.tc_step("Apply patch(es): {}".format(patch_ids))
-        applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=True, fail_if_patched=True)
+        applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=False, fail_if_patched=True)
         if applied_patches:
             LOG.tc_step("Install patch(es): {}".format(patch_ids))
             _test_install_impacted_hosts(applied_patches)
