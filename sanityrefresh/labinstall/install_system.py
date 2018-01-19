@@ -2438,7 +2438,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         # lab_setup.sh only be ran when hosts are online
         # TODO: below is a hack that ignores lab_setup failure - this makes the new istalls...
-        run_labsetup()
+        run_labsetup(fail_ok=True)
         set_install_step_complete(lab_install_step)
 
     # Lab-install -  Bulk hosts add- applicable all lab types
