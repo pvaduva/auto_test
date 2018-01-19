@@ -1004,7 +1004,12 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', upgrade=False, usb=False,
+    def install(self, node, boot_device_dict,
+                host_os='centos',
+                upgrade=False,
+                usb=False,
+                small_footprint=False,
+                low_latency=False,
                 clone_install=False):
         boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
 
@@ -1166,6 +1171,7 @@ class Telnet:
                     # 2) CentOS Serial Controller Install
                     # 3) WRL Serial CPE Install
                     # 4) CentOS Serial CPE Install
+                    # 6) CentOS Serial CPE Install (low latency)
                     LOG.info("Enter option for {} Controller Install".format(host_os))
                     if host_os == 'wrlinux':
                         #selection_menu_option = '1'
@@ -1176,7 +1182,10 @@ class Telnet:
 
                     else:
                         if small_footprint:
-                            selection_menu_option = '4'
+                            if low_latency:
+                                selection_menu_option = '6'
+                            else:
+                                selection_menu_option = '4'
                         else:
                             selection_menu_option = '2'
 

@@ -304,7 +304,14 @@ class RestoreVars:
             'BACKUP_BUILDS_DIR': backup_builds_dir if backup_builds_dir
             else os.path.basename(BuildServerPath.DEFAULT_HOST_BUILDS_DIR),
             'BACKUP_SRC_SERVER': None,
+            'SKIP_SETUP_FEED': False,
+            'SKIP_REINSTALL': False,
+            'LOW_LATENCY': False,
         }
+
+    @classmethod
+    def get_restore_vars(cls):
+        return dict(cls.__var_dict)
 
     @classmethod
     def get_restore_var(cls, var_name):

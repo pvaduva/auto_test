@@ -554,6 +554,15 @@ def pytest_addoption(parser):
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
+    parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
+                     action='store_true', help="Reuse the existing feed on the pxeboot server (tuxlab1/2) instead of "
+                                          "setup feed from scratch")
+    parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
+                     action='store_true', help="Reuse the lab in states without reinstall it. "
+                                                "This will be helpful if the lab was/will be in customized way.")
+    parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
+                     action='store_true', help="Restore a low-latency lab")
+
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "

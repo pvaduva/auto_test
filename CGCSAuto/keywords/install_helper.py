@@ -172,8 +172,15 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
             raise exceptions.InvalidStructure(err_msg)
 
 
-def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
-                          close_telnet_conn=True, small_footprint=False, clone_install=False, log_file_prefix=''):
+def bring_node_console_up(node, boot_device, install_output_dir,
+                          boot_usb=False,
+                          low_latency=False,
+                          upgrade=False,
+                          vlm_power_on=False,
+                          close_telnet_conn=True,
+                          small_footprint=False,
+                          clone_install=False,
+                          log_file_prefix=''):
     """
     Initiate the boot and installation operation.
     Args:
@@ -203,7 +210,11 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint,
+    node.telnet_conn.install(node, boot_device,
+                             usb=boot_usb,
+                             upgrade=upgrade,
+                             small_footprint=small_footprint,
+                             low_latency=low_latency,
                              clone_install=clone_install)
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -2178,7 +2189,7 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, lowlat=False,
+def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
                     small_footprint=False,  clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
@@ -2218,8 +2229,13 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True,
-                           close_telnet_conn=False, small_footprint=small_footprint, clone_install=clone_install)
+    bring_node_console_up(controller0, boot_interfaces, install_output_dir,
+                          boot_usb=boot_usb,
+                          small_footprint=small_footprint,
+                          low_latency=low_latency,
+                          vlm_power_on=True,
+                          close_telnet_conn=False,
+                          clone_install=clone_install)
 
     LOG.info("Initial login and password set for " + controller0.name)
     reset = True
