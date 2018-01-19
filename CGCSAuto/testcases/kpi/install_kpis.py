@@ -208,8 +208,8 @@ def test_idle_kpi(collect_kpi):
         cpu_arg += ','.join([str(val) for val in platform_cpus])
 
     LOG.tc_step("Sleep for 5 minutes, then monitor for cpu and memory usage every 10 seconds for 5 minutes")
-    # time.sleep(300)
-    output = con_ssh.exec_cmd('sar -u{} 1 3 -r | grep --color=never "Average"'.format(cpu_arg),
+    time.sleep(300)
+    output = con_ssh.exec_cmd('sar -u{} 10 30 -r | grep --color=never "Average"'.format(cpu_arg),
                               expect_timeout=600, fail_ok=False)[1]
 
     # Sample output:
