@@ -1308,7 +1308,6 @@ def host_install(host, reboot_required=True, fail_if_locked=True,
 
 def remove_patches(patch_ids='', con_ssh=None):
     _, pre_patches_states = get_patches_states(con_ssh=con_ssh)
-
     expected_states = get_expected_patch_states(action='REMOVE',
                                                 patch_ids=patch_ids,
                                                 pre_patches_states=pre_patches_states,

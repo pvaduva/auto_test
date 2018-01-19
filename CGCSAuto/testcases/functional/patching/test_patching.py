@@ -287,15 +287,24 @@ def remove_patches(patch_ids, con_ssh=None):
 
     """
 
-    patches = ' '.join(patch_ids)
+    if isinstance(patch_ids, str):
+        patch_ids = [patch_ids]
+    patches_to_remove = list(patch_ids)
+
+    pre_patches_states = patching_helper.get_patches_states()[1]
+    for patch_id in patch_ids:
+        if pre_patches_states[patch_id]['state'] == 'Available':
+            patches_to_remove.remove(patch_id)
+
+    patches = ' '.join(patches_to_remove)
     LOG.info('OK, will remove patches:{}'.format(patches))
 
-    LOG.tc_step('Remove the patches:{}'.format(patches))
+    LOG.info('Remove the patches:{}'.format(patches))
     patch_ids_removed = patching_helper.remove_patches(patch_ids=patches, con_ssh=con_ssh)
 
     LOG.info('OK, removed patches: "{}"'.format(patch_ids_removed))
 
-    LOG.tc_step('Install impacted hosts after removing patch IDs:{}'.format(patch_ids_removed))
+    LOG.info('Install impacted hosts after removing patch IDs:{}'.format(patch_ids_removed))
     states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
 
     install_impacted_hosts(patch_ids_removed, current_states=states, con_ssh=con_ssh, remove=True)
@@ -480,7 +489,7 @@ def _upload_patches_from_dir(patch_dir=None, con_ssh=None, reuse_local_patches=T
     return patch_ids
 
 
-def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=False, fail_if_patched=True):
+def _apply_patches(patch_ids=None, con_ssh=None, apply_all=False, fail_if_patched=True):
     if not patch_ids:
         return []
 
@@ -491,12 +500,12 @@ def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=False, fail_if_p
     msg += ' patches'
     msg += '' if apply_all else ' :{}'.format(patch_ids)
 
-    LOG.tc_step(msg)
+    LOG.info(msg)
 
     applied_patches = patching_helper.apply_patches(
         patch_ids=patch_ids, apply_all=apply_all, fail_if_patched=fail_if_patched, con_ssh=con_ssh)
 
-    LOG.tc_step('Install impacted hosts after applied patch, IDs:{}'.format(patch_ids))
+    LOG.info('Install impacted hosts after applied patch, IDs:{}'.format(patch_ids))
     states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
 
     # install_impacted_hosts(patch_ids, current_states=states, con_ssh=con_ssh, remove=False)
@@ -505,12 +514,12 @@ def _test_apply_patches(patch_ids=None, con_ssh=None, apply_all=False, fail_if_p
     return applied_patches
 
 
-def _test_install_impacted_hosts(applied_patches, con_ssh=None):
+def _install_impacted_hosts(applied_patches, con_ssh=None):
 
-    LOG.tc_step('Get the current states of the patches and hosts')
+    LOG.info('Get the current states of the patches and hosts')
     states = patching_helper.get_system_patching_states(con_ssh=con_ssh, fail_ok=False)
 
-    LOG.tc_step('Check the current states of hosts')
+    LOG.info('Check the current states of hosts')
     all_hosts = states['host_states'].keys()
     hosts_need_install = [h for h in all_hosts if not states['host_states'][h]['patch-current']]
 
@@ -524,7 +533,7 @@ def _test_install_impacted_hosts(applied_patches, con_ssh=None):
         if not applied_patches:
             LOG.warn('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
 
-        LOG.tc_step('Install impacted hosts')
+        LOG.info('Install impacted hosts')
         install_impacted_hosts(applied_patches, current_states=states, con_ssh=con_ssh)
 
         LOG.info('OK, hosts are installed')
@@ -566,7 +575,7 @@ def test_install_impacted_hosts(con_ssh=None):
                                                                             including_logs=False, con_ssh=con_ssh)
     previous_time = patching_helper.lab_time_now()[0]
 
-    _test_install_impacted_hosts(partial_applied_patches, con_ssh=con_ssh)
+    _install_impacted_hosts(partial_applied_patches, con_ssh=con_ssh)
 
     if pre_controller_states:
         patching_helper.check_active_controller_state(action='APPLY',
@@ -628,7 +637,7 @@ def test_apply_patches(patch_type, con_ssh=None):
     LOG.info('OK, found patches to apply:{}{}'.format(patches_to_apply, ' apply all' if apply_all else ''))
 
     LOG.tc_step('Applying patches:{}'.format(patches_to_apply))
-    _test_apply_patches(patch_ids=patches_to_apply, apply_all=apply_all, fail_if_patched=True, con_ssh=con_ssh)
+    _apply_patches(patch_ids=patches_to_apply, apply_all=apply_all, fail_if_patched=True, con_ssh=con_ssh)
 
     LOG.info('OK, successfully applied and installed {} type patches:{}'.format(patch_type, patches_to_apply))
 
@@ -697,10 +706,10 @@ def test_install_patch_dir_file():
 
     patch_ids = _upload_patches_from_dir()
 
-    applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=False, fail_if_patched=True)
+    applied_patches = _apply_patches(patch_ids=patch_ids, apply_all=False, fail_if_patched=True)
 
     if applied_patches:
-        _test_install_impacted_hosts(applied_patches)
+        _install_impacted_hosts(applied_patches)
 
 
 class TestPatches:
@@ -745,17 +754,19 @@ class TestPatches:
         if patch != 'other':
             for patch_id in all_patches:
                 if patch in patch_id:
-                    patch_ids.append(patch)
+                    patch_ids.append(patch_id)
         else:
             for patch_id in all_patches:
-                if 'INSVC_ALLNODES' not in patch_ids and 'RR_ALLNODES' not in patch_ids:
+                if 'INSVC_ALLNODES' not in patch_id and 'RR_ALLNODES' not in patch_id:
                     patch_ids.append(patch_id)
+        if not patch_ids:
+            skip("Requested patch(es) {} not found.".format(patch))
 
         LOG.tc_step("Apply patch(es): {}".format(patch_ids))
-        applied_patches = _test_apply_patches(patch_ids=patch_ids, apply_all=False, fail_if_patched=True)
+        applied_patches = _apply_patches(patch_ids=patch_ids, apply_all=False, fail_if_patched=True)
         if applied_patches:
             LOG.tc_step("Install patch(es): {}".format(patch_ids))
-            _test_install_impacted_hosts(applied_patches)
+            _install_impacted_hosts(applied_patches)
 
         LOG.tc_step("Remove patch(es): {}".format(patch_ids))
         remove_patches(patch_ids=patch_ids)
@@ -805,7 +816,6 @@ def test_remove_patches(patch_type, con_ssh=None):
     LOG.info('OK, found patches ready to remove: {} for type: {}'.format(to_remove_list, patch_type))
 
     LOG.tc_step('Removing patches:{}'.format(to_remove_list))
-
     actual_removed = remove_patches(to_remove_list, con_ssh=con_ssh)
 
     LOG.tc_step('Successfully removed patches:{}'.format(actual_removed))

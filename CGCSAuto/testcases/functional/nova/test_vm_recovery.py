@@ -20,7 +20,7 @@ from testfixtures.fixture_resources import ResourceCleanup
     # mark.p3(('true', 'qcow2', 'bare')),   # default guest image is in raw format. This test now fails in pike.
     mark.p3(('False', 'raw', 'bare')),
 ])
-def test_image_metadata_in_volume(auto_recovery, disk_format, container_format):
+def test_autorecovery_image_metadata_in_volume(auto_recovery, disk_format, container_format):
     """
     Create image with given metadata/property.
 
