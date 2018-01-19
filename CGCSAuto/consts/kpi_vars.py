@@ -131,3 +131,8 @@ class ColdMigrate:
 
 class Evacuate:
     NAME = 'evacuate_{}_{}_router'
+
+
+class Idle:
+    NAME_CPU = 'idle_platform_cpu'
+    NAME_MEM = 'idle_mem_usage'

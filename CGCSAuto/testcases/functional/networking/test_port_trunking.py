@@ -169,8 +169,7 @@ def test_port_trunking(vif_model):
     # unset the subport on trunk_1 and try the ping (it will fail)
     LOG.tc_step(" Removing a subport from trunk and ping on vlan interface inside guest")
     ret_code_10 = network_helper.remove_trunk_subports(trunk1_id, sub_ports=[t1_sub_port1_id])[0]
-    if ret_code_10:
-        assert ret_code_10 == 0, "Subports not removed as expected."
+    assert ret_code_10 == 0, "Subports not removed as expected."
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
         LOG.tc_step("Ping on vlan interface from guest")
