@@ -581,7 +581,17 @@ def test_restore(restore_setup):
     con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
 
     LOG.tc_step("Waiting until all alarms are cleared ....")
-    system_helper.wait_for_all_alarms_gone(timeout=300)
+    timeout = 300
+    healthy, alarms = system_helper.wait_for_all_alarms_gone(timeout=timeout, fail_ok=True)
+    if not healthy:
+        LOG.warn('Alarms exist: {}, after waiting {} seconds'.format(alarms, timeout))
+        rc, message = con_ssh.exec_sudo_cmd('drbd-overview')
+
+        if rc != 0 or (r'[===>' not in message and r'] sync\'ed: ' not in message):
+            LOG.warn('Failed to get drbd-overview information')
+
+        LOG.info('Wait for the system to be ready in {} seconds'.format(HostTimeout.REBOOT))
+        system_helper.wait_for_all_alarms_gone(timeout=HostTimeout.REBOOT, fail_ok=False)
 
     LOG.tc_step("Verifying system health after restore ...")
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)
