@@ -7,9 +7,9 @@ from contextlib import contextmanager
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
-from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
+from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperationalState, EventLogID
+    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperState, EventLogID
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
@@ -435,7 +435,7 @@ def power_on_host(hosts, wait_for_hosts_state_=True):
 
 
 # TODO: To be replaced by function in vlm_helper
-def wait_for_hosts_state(hosts, state=HostAvailabilityState.ONLINE):
+def wait_for_hosts_state(hosts, state=HostAvailState.ONLINE):
 
     if len(hosts) > 0:
         locked_hosts_in_states = host_helper.wait_for_hosts_states(hosts, availability=[state])

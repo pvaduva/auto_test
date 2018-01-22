@@ -18,7 +18,7 @@ from pytest import mark, skip, fixture
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 
-from consts.cgcs import EventLogID, HostTask
+from consts.cgcs import EventLogID, HostTask, HostAdminState, HostAvailState, HostOperState
 from consts.timeout import HostTimeout
 from keywords import system_helper, host_helper, bmc_helper, common
 from testfixtures.recover_hosts import HostsToRecover
@@ -54,8 +54,8 @@ def sensor_data_fit(request):
 
     def _revert():
         LOG.fixture_step("(module) rm /var/run/fit/sensor_data")
-        con_ssh = ControllerClient.get_active_controller()
-        con_ssh.exec_sudo_cmd('rm /var/run/fit/sensor_data', fail_ok=False)
+        con_ssh_ = ControllerClient.get_active_controller()
+        con_ssh_.exec_sudo_cmd('rm /var/run/fit/sensor_data', fail_ok=False)
     request.addfinalizer(_revert)
     
     return bmc_hosts
@@ -201,12 +201,12 @@ def test_sensorgroup_action_taken(host,
                       ('compute-0', 'action_critical', 'reset', 'offline', 'yes_alarm', 'nr', 'unsuppressed'),
                   ])
 def test_sensorgroup_power_cycle(host,
-                                  eventlevel,
-                                  action,
-                                  expected_host_state,
-                                  expected_alarm_state,
-                                  event_type,
-                                  suppressionlevel, sensor_data_fit):
+                                 eventlevel,
+                                 action,
+                                 expected_host_state,
+                                 expected_alarm_state,
+                                 event_type,
+                                 suppressionlevel, sensor_data_fit):
     """
     Verify that the sensorgroup action taken for an event is valid.
 
@@ -287,8 +287,21 @@ def test_sensorgroup_power_cycle(host,
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=host, strict=False,
                                           timeout=60)
         wait_time = 3000 if action == 'power-cycle' else HostTimeout.REBOOT
-        host_helper.wait_for_host_states(host, fail_ok=False, timeout=wait_time, availability='available')
+        expt_states = {'availability': 'available'}
+        strict = True
+        if action == 'power-cycle' and i == 3:
+            wait_time = 1200
+            strict = False
+            expt_states = {'availability': HostAvailState.POWER_OFF,
+                           'operational': HostOperState.DISABLED,
+                           'administrative': HostAdminState.UNLOCKED,
+                           'task': HostTask.POWER_DOWN}
 
+        host_helper.wait_for_host_states(host, fail_ok=False, timeout=wait_time, strict=strict, **expt_states)
+
+    LOG.tc_step("Power on {} after test ends".format(host))
+    host_helper.lock_host(host=host)
+    host_helper.power_on_host(host=host)
     HOST = ''
 
 

@@ -5,7 +5,7 @@ import time
 from utils.tis_log import LOG
 from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
-from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
+from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
 from utils.ssh import ControllerClient
 from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
@@ -320,7 +320,7 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
     LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
 
     base_cmd = 'host-lock'
-    locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailabilityState.OFFLINE}
+    locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailState.OFFLINE}
 
     for tried in range(1, max_tries+1):
         hosts = [h for h in host_helper.get_hosts(con_ssh=con_ssh, administrative='unlocked') if h != 'controller-0']
@@ -357,8 +357,8 @@ def install_non_active_node(node_name, lab):
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(node_name))
     host_helper.wait_for_hosts_states(node_name, administrative=HostAdminState.LOCKED,
-                                      operational=HostOperationalState.DISABLED,
-                                      availability=HostAvailabilityState.ONLINE)
+                                      operational=HostOperState.DISABLED,
+                                      availability=HostAvailState.ONLINE)
 
     LOG.info("Unlocking {} ...".format(node_name))
     rc, output = host_helper.unlock_host(node_name, available_only=False)
@@ -459,9 +459,9 @@ def test_restore(restore_setup):
     time.sleep(60)
 
     timeout = HostTimeout.REBOOT + 60
-    availability = HostAvailabilityState.AVAILABLE
+    availability = HostAvailState.AVAILABLE
     is_available = host_helper.wait_for_hosts_states(controller0,
-                                                     availability=HostAvailabilityState.AVAILABLE,
+                                                     availability=HostAvailState.AVAILABLE,
                                                      fail_ok=True,
                                                      timeout=timeout)
     if not is_available:
@@ -469,11 +469,11 @@ def test_restore(restore_setup):
         LOG.info('Check if drbd is still synchronizing data')
         con_ssh.exec_sudo_cmd('drbd-overview')
         is_degraded = host_helper.wait_for_hosts_states(controller0,
-                                                     availability=HostAvailabilityState.DEGRADED,
+                                                     availability=HostAvailState.DEGRADED,
                                                      fail_ok=True,
                                                      timeout=300)
         if is_degraded:
-            LOG.warn('Node: {} is degraded: {}'.format(controller0, HostAvailabilityState.DEGRADED))
+            LOG.warn('Node: {} is degraded: {}'.format(controller0, HostAvailState.DEGRADED))
             con_ssh.exec_sudo_cmd('drbd-overview')
         else:
             LOG.fatal('Node:{} is NOT in Available nor Degraded status')
@@ -542,8 +542,8 @@ def test_restore(restore_setup):
 
                 LOG.info("Verifying {} is Locked, Diabled and Online ...".format(storage_host))
                 host_helper.wait_for_hosts_states(storage_host, administrative=HostAdminState.LOCKED,
-                                                operational=HostOperationalState.DISABLED,
-                                                availability=HostAvailabilityState.ONLINE)
+                                                operational=HostOperState.DISABLED,
+                                                availability=HostAvailState.ONLINE)
 
                 LOG.info("Unlocking {} ...".format(storage_host))
                 rc, output = host_helper.unlock_host(storage_host, available_only=True)
@@ -569,8 +569,8 @@ def test_restore(restore_setup):
 
                 LOG.info("Verifying {} is Locked, Diabled and Online ...".format(compute_host))
                 host_helper.wait_for_hosts_states(compute_host, administrative=HostAdminState.LOCKED,
-                                                operational=HostOperationalState.DISABLED,
-                                                availability=HostAvailabilityState.ONLINE)
+                                                operational=HostOperState.DISABLED,
+                                                availability=HostAvailState.ONLINE)
                 LOG.info("Unlocking {} ...".format(compute_host))
                 rc, output = host_helper.unlock_host(compute_host, available_only=True)
                 assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(compute_host, rc, output)

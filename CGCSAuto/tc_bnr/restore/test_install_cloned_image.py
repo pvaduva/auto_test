@@ -4,7 +4,7 @@ import time
 from utils.tis_log import LOG
 from keywords import install_helper, host_helper, system_helper
 from consts.proj_vars import InstallVars, ProjVar
-from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, EventLogID
+from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, EventLogID
 from utils.ssh import ControllerClient
 from consts.filepaths import BuildServerPath
 from consts.build_server import Server, get_build_server_info
@@ -141,8 +141,8 @@ def test_install_cloned_image(install_clone_setup):
         host_helper.wait_for_hosts_states(controller1, check_interval=20, use_telnet=True,
                                           con_telnet=controller0_node.telnet_conn,
                                           administrative=HostAdminState.LOCKED,
-                                          operational=HostOperationalState.DISABLED,
-                                          availability=HostAvailabilityState.ONLINE)
+                                          operational=HostOperState.DISABLED,
+                                          availability=HostAvailState.ONLINE)
 
         LOG.info("Unlocking {} ...".format(controller1))
 

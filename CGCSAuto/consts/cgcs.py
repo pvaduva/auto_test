@@ -147,23 +147,26 @@ class HostAdminState:
     LOCKED = 'locked'
 
 
-class HostOperationalState:
+class HostOperState:
     ENABLED = 'enabled'
     DISABLED = 'disabled'
 
 
-class HostAvailabilityState:
+class HostAvailState:
     DEGRADED = 'degraded'
     OFFLINE = 'offline'
     ONLINE = 'online'
     AVAILABLE = 'available'
     FAILED = 'failed'
+    POWER_OFF = 'power-off'
 
 
 class HostTask:
     BOOTING = 'Booting'
     REBOOTING = 'Rebooting'
+    POWERING_ON = 'Powering-on'
     POWER_CYCLE = 'Critical Event Power-Cycle'
+    POWER_DOWN = 'Critical Event Power-Down'
 
 
 class Prompt:

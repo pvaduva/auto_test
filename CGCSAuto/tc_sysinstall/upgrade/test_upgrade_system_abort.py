@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from keywords import system_helper, host_helper, install_helper
 from consts.proj_vars import InstallVars
 from utils import table_parser
-from consts.cgcs import HostAvailabilityState, HostOperationalState
+from consts.cgcs import HostAvailState, HostOperState
 
 
 # def test_system_upgrade_controller_1(upgrade_setup, check_system_health_query_upgrade):
@@ -184,8 +184,8 @@ def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upg
     time.sleep(60)
     # Before Swacting ensure the controller-1 is in available state
     if not host_helper.wait_for_host_states("controller-1", timeout=360, fail_ok=True,
-                                            operational=HostOperationalState.ENABLED,
-                                            availability=HostAvailabilityState.AVAILABLE):
+                                            operational=HostOperState.ENABLED,
+                                            availability=HostAvailState.AVAILABLE):
         err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \
                   "within  the specified timeout"
         assert False, err_msg

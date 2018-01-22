@@ -7,7 +7,7 @@ from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
-from consts.cgcs import HostOperationalState, HostAvailabilityState, Prompt, HostAdminState
+from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
 from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import HostTimeout
 
@@ -68,7 +68,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     time.sleep(180)
 
     if not host_helper.wait_for_host_states(host, timeout=timeout, check_interval=60,
-                                            availability=HostAvailabilityState.ONLINE, con_ssh=con_ssh,
+                                            availability=HostAvailState.ONLINE, con_ssh=con_ssh,
                                             fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
         if fail_ok:
@@ -756,8 +756,8 @@ def upgrade_host_lock_unlock(host, con_ssh=None):
         time.sleep(60)
 
         if not host_helper.wait_for_host_states(host, timeout=360, fail_ok=True,
-                                                operational=HostOperationalState.ENABLED,
-                                                availability=HostAvailabilityState.AVAILABLE):
+                                                operational=HostOperState.ENABLED,
+                                                availability=HostAvailState.AVAILABLE):
             err_msg = " Swacting to standby is not possible because {} is not in available state " \
                   "within  the specified timeout".format(host)
             assert False, err_msg
