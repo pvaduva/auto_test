@@ -12,7 +12,7 @@ from pytest import skip
 from utils.tis_log import LOG
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
     glance_helper, storage_helper
 
