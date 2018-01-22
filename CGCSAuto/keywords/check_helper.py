@@ -748,7 +748,7 @@ def check_alarms(before_alarms, timeout=300):
     schedule_conn_test = False
     for item in after_alarms:
         if item not in before_alarms:
-            alarm_id, entity_id = item.split(':::')
+            alarm_id, entity_id = item.split('::::')
             if alarm_id == EventLogID.PROVIDER_NETWORK_FAILURE:
                 # Providernet connectivity alarm handling
                 schedule_conn_test = True
