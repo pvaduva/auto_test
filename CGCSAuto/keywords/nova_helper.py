@@ -8,7 +8,7 @@ from consts.auth import Tenant, Guest
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
-from testfixtures.resource_mgmt import ResourceCleanup
+# from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
@@ -308,7 +308,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
     if flavor_id == '':
         flavor_id = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh)[1]
-        ResourceCleanup.add('flavor', flavor_id, scope='session')
+        # ResourceCleanup.add('flavor', flavor_id, scope='session')
 
     return flavor_id
 
