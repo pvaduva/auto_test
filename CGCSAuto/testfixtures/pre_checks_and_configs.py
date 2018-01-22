@@ -57,7 +57,8 @@ def wait_for_con_drbd_sync_complete():
         assert False, "drbd sync alarm {} is not cleared within timeout".format(EventLogID.CON_DRBD_SYNC)
 
     LOG.fixture_step("Wait for {} becomes available in system host-list".format(host))
-    host_helper.wait_for_host_states(host, availability=HostAvailState.AVAILABLE, timeout=30, fail_ok=False)
+    host_helper.wait_for_host_states(host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False,
+                                     check_interval=10)
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
     host_helper.wait_for_sm_dump_desired_states(host, 'drbd-', strict=False, timeout=30, fail_ok=False)
