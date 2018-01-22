@@ -761,7 +761,7 @@ def check_alarms(before_alarms, timeout=300):
                 host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
                 continue
 
-            new_alarms.append(item)
+            new_alarms.append((alarm_id, entity_id))
 
     if schedule_conn_test:
         LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
