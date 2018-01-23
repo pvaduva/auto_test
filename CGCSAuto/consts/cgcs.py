@@ -492,3 +492,10 @@ class ExtLdap:
     LDAP_DC = 'dc=tis,dc=wrs,dc=com'
     LDAP_DRIVER = 'ldap'
     LDAP_USER = 'cn=admin,dc=tis,dc=wrs,dc=com" password="admin'
+
+
+class SpareIPs:
+    # spared 3 IPs for OAM changing TC
+    NEW_OAM_IP0 = "128.224.151.184"
+    NEW_OAM_IP1 = "128.224.151.185"
+    NEW_OAM_IP2 = "128.224.151.186"

@@ -3238,3 +3238,33 @@ def delete_snmp_comm_string(comm_string, con_ssh=None, auth_info=Tenant.ADMIN):
         code = 1
 
     return code
+
+
+def get_oam_ips():
+    LOG.info('In get_oam_ips.')
+    table_ = table_parser.table(cli.system('oam-show'))
+    oam_properties = table_parser.get_column(table_, 'Property')
+    oam_values = table_parser.get_column(table_, 'Value')
+
+    all_oam_ips_dict = {}
+    for i in range(len(oam_properties)):
+        oam_property = oam_properties[i]
+        if oam_property == "oam_c0_ip":
+            all_oam_ips_dict['oam_c0_ip'] = oam_values[i]
+        if oam_property == "oam_c1_ip":
+            all_oam_ips_dict['oam_c1_ip'] = oam_values[i]
+        if oam_property == "oam_floating_ip":
+            all_oam_ips_dict['oam_floating_ip'] = oam_values[i]
+
+    return all_oam_ips_dict
+
+
+def modify_oam_ips(arg_str, fail_ok=False):
+    cmd = "oam-modify" + arg_str
+    LOG.info('In modify_oam_ips. cmd:{}'.format(cmd))
+    code, output = cli.system(cmd, rtn_list=True, fail_ok=False)
+    if code != 0:
+        assert output
+    msg = "OAM modified successfully."
+    return 0, msg
+                          

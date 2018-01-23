@@ -897,6 +897,13 @@ class SSHClient:
                 self.exec_cmd('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
                 self.exec_cmd("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
+    def get_host(self):
+        return self.host
+
+    def update_host(self, new_host):
+        self.host = new_host
+
+
 
 class SSHFromSSH(SSHClient):
     """
