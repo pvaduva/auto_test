@@ -198,7 +198,8 @@ def _modify_firewall_rules(firewall_rules_path):
     system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=120,
                                   **{'Entity Instance ID': 'host=controller-0',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=120,
+    # Extend timeout for controller-1 config-out-date clear to 5min due to CGTS-8497
+    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=300,
                                   **{'Entity Instance ID': 'host=controller-1',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
     # Ensures iptables has enough time to populate the list with new ports
