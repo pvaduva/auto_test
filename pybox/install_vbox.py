@@ -515,13 +515,13 @@ if __name__ == "__main__":
     else:
        host_type = "Standard"
     if vboxoptions.setup_files:
-        install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files)
+        install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, host_type=host_type)
     elif vboxoptions.get_setup:
-        install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release)
+        install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type=host_type)
     if vboxoptions.patch_dir:
-        install_lab.get_patches(cont0_stream, vboxoptions.patch_dir, release=vboxoptions.release, host_type = host_type)
+        install_lab.get_patches(cont0_stream, vboxoptions.patch_dir, release=vboxoptions.release)
     elif vboxoptions.get_patches:
-        install_lab.get_patches(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type = host_type)
+        install_lab.get_patches(cont0_stream, remote_host=remote_server, release=vboxoptions.release)
     if vboxoptions.config_file:
         sftp_send(vboxoptions.config_file, destination="/home/wrsroot/TiS_config.ini_centos")
     elif vboxoptions.get_config:
