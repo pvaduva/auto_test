@@ -7,6 +7,12 @@ from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
+@fixture(autouse=True)
+def list_nova_device():
+    # run nova device-list for debugging purpose.
+    network_helper.get_pci_device_list_values()
+
+
 @fixture(scope='module', autouse=True)
 def hosts_pci_device_list():
     """

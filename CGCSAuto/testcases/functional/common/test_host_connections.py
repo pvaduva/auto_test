@@ -4,7 +4,7 @@ from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 
-from consts.cgcs import HostAvailabilityState
+from consts.cgcs import HostAvailState
 from keywords import system_helper, network_helper, host_helper
 
 
@@ -33,7 +33,7 @@ def test_ping_hosts():
 @mark.cpe_sanity
 @mark.sx_sanity
 def test_ssh_to_hosts():
-    hosts_to_ssh = host_helper.get_hosts(availability=[HostAvailabilityState.AVAILABLE, HostAvailabilityState.ONLINE])
+    hosts_to_ssh = host_helper.get_hosts(availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE])
     failed_list = []
     for hostname in hosts_to_ssh:
         LOG.tc_step("Attempt SSH to {}".format(hostname))

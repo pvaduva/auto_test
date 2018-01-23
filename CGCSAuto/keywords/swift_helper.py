@@ -308,7 +308,7 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
     public_url = get_swift_public_url()
     token = html_helper.get_user_token()
 
-    cmd = 'curl -i {}/'.format(public_url)
+    cmd = 'curl --insecure -i {}/'.format(public_url)
     if object_:
         cmd += "{}/{} -X COPY -H \"X-Auth-Token: {}\"".format(container, object_, token)
     else:
@@ -330,6 +330,8 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
             cmd += "  -H \"{}: {}\"".format(k, v)
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
+
+    cmd += " --insecure"
 
     rc, out = con_ssh.exec_cmd(cmd)
     if rc == 0:

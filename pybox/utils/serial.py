@@ -19,7 +19,10 @@ def connect(hostname, port=10000):
 
     # Need to power on host before we can connect
     vboxmanage.vboxmanage_startvm(hostname)
-    socketname = "/tmp/{}".format(hostname)
+    if hostname == 'controller-0':
+        socketname = '/tmp/controller0_serial'
+    else:
+        socketname = "/tmp/{}".format(hostname)
     LOG.info("Connecting to {}".format(hostname))
     if platform == 'win32' or platform == 'win64':
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
@@ -34,7 +37,7 @@ def connect(hostname, port=10000):
     except:
         LOG.info("Connection failed")
         pass
-        #disconnect(sock)
+        # disconnect(sock)
         sock = None
     sock.setblocking(0)
 
@@ -45,7 +48,7 @@ def disconnect(sock):
     """
     Disconnect a local doamin socket.
 
-    Arguemnts:
+    Arguments:
     - Requires socket
     """
 
@@ -55,7 +58,7 @@ def disconnect(sock):
     sock.close()
 
 
-def expect_bytes(stream, text, timeout=120, fail_ok=False):
+def expect_bytes(stream, text, timeout=180, fail_ok=False):
     """
     Wait for user specified text from stream.
     """
@@ -66,19 +69,22 @@ def expect_bytes(stream, text, timeout=120, fail_ok=False):
         LOG.info("Expecting text within {} minutes: {}".format((timeout/60), text))
     try:
         stream.expect_bytes("{}".format(text).encode('utf-8'), timeout=timeout)
-    except:
+    except streamexpect.ExpectTimeout:
         if fail_ok:
             return -1
         else:
             LOG.error("Did not find expected text")
             # disconnect(stream)
             raise
+    except Exception as e:
+            LOG.info("Connection failed with {}.".format(e))
+            raise
 
     LOG.info("Found expected text: {}".format(text))
     return 0
 
 
-def send_bytes(stream, text, fail_ok=False, expect_prompt=True, prompt=None, timeout=120, send=True):
+def send_bytes(stream, text, fail_ok=False, expect_prompt=True, prompt=None, timeout=180, send=True):
     """
     Send user specified text to stream.
     """
@@ -91,18 +97,22 @@ def send_bytes(stream, text, fail_ok=False, expect_prompt=True, prompt=None, tim
         if expect_prompt:
             time.sleep(4)
             if prompt:
-                expect_bytes(stream, prompt, timeout=timeout)
+                return expect_bytes(stream, prompt, timeout=timeout, fail_ok=fail_ok)
             else:
                 rc = expect_bytes(stream, "~$", timeout=timeout, fail_ok=True)
                 if rc != 0:
                     send_bytes(stream, '\n', expect_prompt=False)
                     expect_bytes(stream, 'keystone', timeout=timeout)
-    except:
+    except streamexpect.ExpectTimeout:
         if fail_ok:
             return -1
         else:
-            LOG.error("Failed to send text")
+            LOG.error("Failed to send text, logging out.")
             # disconnect(stream)
+            stream.sendall("exit".encode('utf-8'))
             raise
+    except Exception as e:
+        LOG.info("Connection failed with {}.".format(e))
+        raise
 
     return 0 

@@ -9,11 +9,15 @@ class DRBDSync:
     UNIT = 'Rate(K/s)'
 
 
-class VMRecovery:
+class VMRecoveryNova:
     NAME = 'vm_recovery'
     LOG_PATH = '/var/log/nova/nova-compute.log'
     START = '{}.* VM Crashed.*Lifecycle Event'
     END = '{}.* VM Started.*Lifecycle Event'
+
+
+class VMRecoveryNetworking:
+    NAME = 'vm_recovery_networking'
 
 
 class ConfigController:
@@ -23,8 +27,25 @@ class ConfigController:
     END = 'controller-0'
 
 
+class SystemInstall:
+    NAME = 'system_install'
+    LOG_PATH = '/var/log/bash.log'
+    START = 'setting system clock to'
+    START_PATH = '/var/log/anaconda/journal.log'
+    END = '/etc/build.info'
+
+
+class NodeInstall:
+    NAME = '{}_install'
+    LOG_PATH = '/var/log/mtclogd.log'
+    START = 'setting system clock to'
+    START_PATH = '/var/log/anaconda/journal.log'
+    END = 'initial_config_complete'
+
+
 class HostLock:
     NAME = '{}_lock'
+    WITH_VM = 'host_lock_with_vms_{}'
     LOG_PATH = '/var/log/fm-event.log'
     END = '200.001.*{} was administratively locked to take it out-of-service.*set'
     START = 'system.*host-lock.*{}'
@@ -98,3 +119,20 @@ class SwactUncontrolled:
     START = 'sudo reboot -f'
     LOG_PATH = '/var/log/sm.log'
     END = 'Swact has completed successfully'
+
+
+class LiveMigrate:
+    NAME = 'live_migrate_{}'
+
+
+class ColdMigrate:
+    NAME = 'cold_migrate_{}'
+
+
+class Evacuate:
+    NAME = 'evacuate_{}_{}_router'
+
+
+class Idle:
+    NAME_CPU = 'idle_platform_cpu'
+    NAME_MEM = 'idle_mem_usage'

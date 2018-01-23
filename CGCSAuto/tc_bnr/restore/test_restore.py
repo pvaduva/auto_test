@@ -3,14 +3,15 @@ import os
 import re
 import time
 from utils.tis_log import LOG
-from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common, vm_helper
+from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
-from consts.cgcs import HostAvailabilityState, HostOperationalState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
+from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
 from utils.ssh import ControllerClient
 from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from consts.timeout import HostTimeout
 from utils import node
 from utils import cli
 from setups import collect_tis_logs
@@ -188,66 +189,82 @@ def pre_restore_checkup():
 @pytest.fixture(scope='session')
 def restore_setup(pre_restore_checkup):
 
+    LOG.debug('Restore with settings:\n{}'.format(RestoreVars.get_restore_vars()))
     lab = InstallVars.get_install_var('LAB')
     LOG.info("Lab info; {}".format(lab))
     hostnames = [ k for k, v in lab.items() if  isinstance(v, node.Node)]
     LOG.info("Lab hosts; {}".format(hostnames))
-    bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
+
     backup_build_id = RestoreVars.get_restore_var("BACKUP_BUILD_ID")
     output_dir = ProjVar.get_var('LOG_DIR')
-
-    LOG.info("Connecting to Build Server {} ....".format(bld_server['name']))
-    bld_server_attr = dict()
-    bld_server_attr['name'] = bld_server['name']
-    bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, bld_server['name'])
-
-    bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=SvcCgcsAuto.USER,
-                                password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
-
-    bld_server_conn.exec_cmd("bash")
-    bld_server_conn.set_prompt(bld_server_attr['prompt'])
-    bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
-    bld_server_attr['ssh_conn'] = bld_server_conn
-    bld_server_obj = Server(**bld_server_attr)
-
-    # If controller is accessible, check if USB with backup files is avaialble
     controller_node = lab['controller-0']
 
-    load_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, RestoreVars.get_restore_var("BACKUP_BUILDS_DIR"),
-                             backup_build_id)
+    extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    if RestoreVars.get_restore_var('skip_reinstall'):
+        LOG.info('Skip reinstall as instructed')
+        LOG.info('Connect to controller-0 now')
+        controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
+                                                                  initial_prompt=extra_controller_prompt, fail_ok=True)
+        bld_server_obj = None
+    else:
+        bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
 
-    InstallVars.set_install_var(tis_build_dir=load_path)
+        LOG.info("Connecting to Build Server {} ....".format(bld_server['name']))
+        bld_server_attr = dict()
+        bld_server_attr['name'] = bld_server['name']
+        bld_server_attr['server_ip'] = bld_server['ip']
+        bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, bld_server['name'])
 
-    # set up feed for controller
-    LOG.fixture_step("Setting install feed in tuxlab for controller-0 ... ")
-    if not 'vbox' in lab['name']:
-        assert install_helper.set_network_boot_feed(bld_server_conn, load_path), "Fail to set up feed for controller"
+        bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=SvcCgcsAuto.USER,
+                                    password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
 
-    # power off hosts
-    LOG.fixture_step("Powring off system hosts ... ")
-    install_helper.power_off_host(hostnames)
+        bld_server_conn.exec_cmd("bash")
+        bld_server_conn.set_prompt(bld_server_attr['prompt'])
+        bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
+        bld_server_attr['ssh_conn'] = bld_server_conn
+        bld_server_obj = Server(**bld_server_attr)
 
-    LOG.fixture_step("Booting controller-0 ... ")
-    # is_cpe = (lab['system_type'] == 'CPE')
-    is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
+        # If controller is accessible, check if USB with backup files is avaialble
 
-    # install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
-    install_helper.boot_controller(small_footprint=is_cpe, system_restore=True)
+        load_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, RestoreVars.get_restore_var("BACKUP_BUILDS_DIR"),
+                                 backup_build_id)
 
-    # establish ssh connection with controller
-    LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
+        InstallVars.set_install_var(tis_build_dir=load_path)
 
-    node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
-    normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
+        # set up feed for controller
+        LOG.fixture_step("Setting install feed in tuxlab for controller-0 ... ")
+        if not 'vbox' in lab['name'] and not RestoreVars.get_restore_var('skip_setup_feed'):
+            assert install_helper.set_network_boot_feed(bld_server_conn, load_path), "Fail to set up feed for controller"
 
-    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) \
-                        + '|' + Prompt.CONTROLLER_0 \
-                        + '|{}'.format(node_name_in_ini) \
-                        + '|{}'.format(normalized_name)
+        # power off hosts
+        LOG.fixture_step("Powring off system hosts ... ")
+        install_helper.power_off_host(hostnames)
 
-    controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
-                                                                       initial_prompt=controller_prompt)
+        LOG.fixture_step("Booting controller-0 ... ")
+        # is_cpe = (lab['system_type'] == 'CPE')
+        is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
+        low_latency = RestoreVars.get_restore_var('low_latency')
+
+        # install_helper.boot_controller(bld_server_conn, load_path, small_footprint=is_cpe, system_restore=True)
+        os.environ['XTERM'] = 'xterm'
+        install_helper.boot_controller(small_footprint=is_cpe, system_restore=True, low_latency=low_latency)
+
+        # establish ssh connection with controller
+        LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
+
+        node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
+        normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
+
+        controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) \
+                            + '|' + Prompt.CONTROLLER_0 \
+                            + '|{}'.format(node_name_in_ini) \
+                            + '|{}'.format(normalized_name) \
+                            + '|localhost:~\$'
+                            # CONTROLLER_0 = '.*controller\-0\:~\$ '
+
+        controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
+                                                                           initial_prompt=controller_prompt)
+    LOG.info('Deploy ssh key')
     controller_node.ssh_conn.deploy_ssh_key()
 
     ControllerClient.set_active_controller(ssh_client=controller_node.ssh_conn)
@@ -303,7 +320,7 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
     LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
 
     base_cmd = 'host-lock'
-    locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailabilityState.OFFLINE}
+    locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailState.OFFLINE}
 
     for tried in range(1, max_tries+1):
         hosts = [h for h in host_helper.get_hosts(con_ssh=con_ssh, administrative='unlocked') if h != 'controller-0']
@@ -340,8 +357,8 @@ def install_non_active_node(node_name, lab):
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(node_name))
     host_helper.wait_for_hosts_states(node_name, administrative=HostAdminState.LOCKED,
-                                      operational=HostOperationalState.DISABLED,
-                                      availability=HostAvailabilityState.ONLINE)
+                                      operational=HostOperState.DISABLED,
+                                      availability=HostAvailState.ONLINE)
 
     LOG.info("Unlocking {} ...".format(node_name))
     rc, output = host_helper.unlock_host(node_name, available_only=False)
@@ -441,7 +458,27 @@ def test_restore(restore_setup):
     LOG.debug('Wait for system ready in 60 seconds')
     time.sleep(60)
 
-    host_helper.wait_for_hosts_states(controller0, availability=HostAvailabilityState.AVAILABLE, fail_ok=False)
+    timeout = HostTimeout.REBOOT + 60
+    availability = HostAvailState.AVAILABLE
+    is_available = host_helper.wait_for_hosts_states(controller0,
+                                                     availability=HostAvailState.AVAILABLE,
+                                                     fail_ok=True,
+                                                     timeout=timeout)
+    if not is_available:
+        LOG.warn('After {} seconds, the first node:{} does NOT reach {}'.format(timeout, controller0, availability))
+        LOG.info('Check if drbd is still synchronizing data')
+        con_ssh.exec_sudo_cmd('drbd-overview')
+        is_degraded = host_helper.wait_for_hosts_states(controller0,
+                                                     availability=HostAvailState.DEGRADED,
+                                                     fail_ok=True,
+                                                     timeout=300)
+        if is_degraded:
+            LOG.warn('Node: {} is degraded: {}'.format(controller0, HostAvailState.DEGRADED))
+            con_ssh.exec_sudo_cmd('drbd-overview')
+        else:
+            LOG.fatal('Node:{} is NOT in Available nor Degraded status')
+            # the customer doc does have wording regarding this situation, continue
+            # assert False, 'Node:{} is NOT in Available nor Degraded status'
 
     # delete the system backup files from wrsroot home
     LOG.tc_step("Copying backup files to /opt/backups ... ")
@@ -505,8 +542,8 @@ def test_restore(restore_setup):
 
                 LOG.info("Verifying {} is Locked, Diabled and Online ...".format(storage_host))
                 host_helper.wait_for_hosts_states(storage_host, administrative=HostAdminState.LOCKED,
-                                                operational=HostOperationalState.DISABLED,
-                                                availability=HostAvailabilityState.ONLINE)
+                                                operational=HostOperState.DISABLED,
+                                                availability=HostAvailState.ONLINE)
 
                 LOG.info("Unlocking {} ...".format(storage_host))
                 rc, output = host_helper.unlock_host(storage_host, available_only=True)
@@ -532,8 +569,8 @@ def test_restore(restore_setup):
 
                 LOG.info("Verifying {} is Locked, Diabled and Online ...".format(compute_host))
                 host_helper.wait_for_hosts_states(compute_host, administrative=HostAdminState.LOCKED,
-                                                operational=HostOperationalState.DISABLED,
-                                                availability=HostAvailabilityState.ONLINE)
+                                                operational=HostOperState.DISABLED,
+                                                availability=HostAvailState.ONLINE)
                 LOG.info("Unlocking {} ...".format(compute_host))
                 rc, output = host_helper.unlock_host(compute_host, available_only=True)
                 assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(compute_host, rc, output)
@@ -544,7 +581,17 @@ def test_restore(restore_setup):
     con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
 
     LOG.tc_step("Waiting until all alarms are cleared ....")
-    system_helper.wait_for_all_alarms_gone(timeout=300)
+    timeout = 300
+    healthy, alarms = system_helper.wait_for_all_alarms_gone(timeout=timeout, fail_ok=True)
+    if not healthy:
+        LOG.warn('Alarms exist: {}, after waiting {} seconds'.format(alarms, timeout))
+        rc, message = con_ssh.exec_sudo_cmd('drbd-overview')
+
+        if rc != 0 or (r'[===>' not in message and r'] sync\'ed: ' not in message):
+            LOG.warn('Failed to get drbd-overview information')
+
+        LOG.info('Wait for the system to be ready in {} seconds'.format(HostTimeout.REBOOT))
+        system_helper.wait_for_all_alarms_gone(timeout=HostTimeout.REBOOT, fail_ok=False)
 
     LOG.tc_step("Verifying system health after restore ...")
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)

@@ -5,7 +5,7 @@ import configparser
 import copy
 
 NODE_INFO_PATH = "sanityrefresh/labinstall/node_info"
-LAB_SETTINGS_PATH= "sanityrefresh/labinstall/lab_settings"
+LAB_SETTINGS_PATH = "sanityrefresh/labinstall/lab_settings"
 CFG_BOOT_INTERFACES_NAME = "boot_interfaces"
 
 VBOX_BOOT_INTERFACES = {
@@ -14,6 +14,7 @@ VBOX_BOOT_INTERFACES = {
     'compute-0': '0800',
     'compute-1': '0800'
 }
+
 
 def create_node_boot_dict(labname):
 
@@ -34,30 +35,41 @@ def create_node_boot_dict(labname):
 
 
 def create_node_dict(nodes, personality, vbox=False):
-    """Read .ini file for each node and create Host object for the node.
+    """
+    Read .ini file for each node and create Node object for the node.
 
     The data in the .ini file is read into a dictionary which is used to
     create a Host object for the node.
 
-    Return dictionary of node names mapped to their respective Host objects.
+    Args:
+        nodes (list|tuple):
+        personality:
+        vbox:
+
+    Returns (dict): dictionary of node names mapped to their respective Host objects.
+
     """
     node_dict = {}
+    if not nodes:
+        return node_dict
+
     i = 0
 
+    if isinstance(nodes, (str, int)):
+        nodes = [nodes]
     for node in nodes:
         node_info_dict = {}
         if not vbox:
             config = configparser.ConfigParser()
+            local_path = os.path.dirname(__file__)
+            node_filepath = os.path.join(local_path, '..', '..',
+                                         NODE_INFO_PATH, '%s.ini' % node)
             try:
-                local_path = os.path.dirname(__file__)
-                node_filepath = os.path.join(local_path, '..', '..',
-                                             NODE_INFO_PATH, '%s.ini' % node)
                 node_file = open(node_filepath, 'r')
                 config.read_file(node_file)
             except Exception as e:
                 raise ValueError('Failed to read \"{}\": '.format(node_filepath) + str(e))
 
-            #node_info_dict = {}
             for section in config.sections():
                 for opt in config.items(section):
                     key, value = opt
@@ -67,7 +79,7 @@ def create_node_dict(nodes, personality, vbox=False):
         node_info_dict['name'] = name
         node_info_dict['personality'] = personality
         node_info_dict['barcode'] = node
-        node_dict[name]=Node(**node_info_dict)
+        node_dict[name] = Node(**node_info_dict)
         i += 1
 
     return node_dict
@@ -86,8 +98,12 @@ class Node(object):
 
         self.telnet_negotiate = False
         self.telnet_vt100query = False
+        self.telnet_ip = None
+        self.telnet_port = None
         self.telnet_conn = None
         self.telnet_login_prompt = None
+        self.host_name = None
+        self.host_ip = None
         self.ssh_conn = None
         self.administrative = None
         self.operational = None
@@ -111,10 +127,8 @@ class Node(object):
     def __str__(self):
         return str(vars(self))
 
+
 class Controller(Node):
-    """Controller representation.
-
-    """
-    def  __init__(*initial_data, **kwargs):
-        super().__init__(*initial_data, **kwargs)
-
+    """Controller representation."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)

@@ -78,7 +78,6 @@ def _ping6_vms(ssh_client, ipv6_addr, num_pings=5, timeout=60, fail_ok=False,):
 
     code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=fail_ok)
     if code != 0:
-        packet_loss_rate = 100
         return 1
     else:
         packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
@@ -93,13 +92,12 @@ def _ping6_vms(ssh_client, ipv6_addr, num_pings=5, timeout=60, fail_ok=False,):
                 return 0
 
 
-
-@mark.parametrize(('guest_os','vif_model'), [
-mark.p1((('tis-centos-guest','avp'))),
-mark.p2((('tis-centos-guest','virtio'))),
-mark.p2((('tis-centos-guest','e1000')))
+@mark.parametrize('vif_model', [
+    mark.p1('avp'),
+    mark.p2('virtio'),
+    mark.p2('e1000')
 ])
-def test_ipv6_subnet(guest_os, vif_model):
+def test_ipv6_subnet(vif_model):
     """
     Ipv6 Subnet feature test cases
 
@@ -119,7 +117,7 @@ def test_ipv6_subnet(guest_os, vif_model):
     network_names = ['network11']
     net_ids = []
     sub_nets = ["fd00:0:0:21::/64"]
-    gateway_ipv6="fd00:0:0:21::1"
+    gateway_ipv6 = "fd00:0:0:21::1"
     subnet_ids = []
 
     dns_server = "2001:4860:4860::8888"
@@ -130,15 +128,16 @@ def test_ipv6_subnet(guest_os, vif_model):
         ResourceCleanup.add('network', net_ids[-1])
 
     LOG.tc_step("Create IPV6 Subnet on the Network Created")
-    for sub, network in zip(sub_nets,net_ids):
-        subnet_ids.append(network_helper.create_subnet(net_id=network,ip_version=6, dns_servers=dns_server,
-                                                       cidr=sub,no_gateway=True)[1])
+    for sub, network in zip(sub_nets, net_ids):
+        subnet_ids.append(network_helper.create_subnet(net_id=network, ip_version=6, dns_servers=dns_server,
+                                                       cidr=sub, no_gateway=True)[1])
         ResourceCleanup.add('subnet', subnet_ids[-1])
 
     LOG.tc_step("Boot a VM with mgmt net and Network with IPV6 subnet")
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
-    nics.append({'net-id': net_ids[0], 'vif-model': vif_model})
+    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+            {'net-id': net_ids[0], 'vif-model': vif_model}]
+
     LOG.tc_step("Boot a vm with created nets")
     vm_id = vm_helper.boot_vm(name='vm-with-ipv6-nic', nics=nics, cleanup='function')[1]
     LOG.tc_step("Setup interface script inside guest and restart network")
@@ -153,16 +152,15 @@ def test_ipv6_subnet(guest_os, vif_model):
         ip_addr = _get_ipv6_for_eth(eth_name='eth1', ssh_client=vm_ssh)
 
         if ip_addr is '':
-            LOG.info ('Ip addr is not assigned')
+            LOG.info('Ip addr is not assigned')
             assert ip_addr != '', "Failed to assign ip"
         else:
-            LOG.info ("Got Ipv6 address:{}".format(ip_addr))
+            LOG.info("Got Ipv6 address:{}".format(ip_addr))
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id2) as vm_ssh:
         LOG.tc_step("ping b/w vms on the ipv6 net")
-        ping = _ping6_vms(ssh_client=vm_ssh,ipv6_addr=ip_addr)
+        ping = _ping6_vms(ssh_client=vm_ssh, ipv6_addr=ip_addr)
         assert ping == 0, "Ping between VMs failed"
         LOG.tc_step("ping Default Gateway from vms on the ipv6 net")
         ping = _ping6_vms(ssh_client=vm_ssh, ipv6_addr=gateway_ipv6)
-        assert ping == 0, "Ping to deafult router failed"
-
+        assert ping == 0, "Ping to default router failed"

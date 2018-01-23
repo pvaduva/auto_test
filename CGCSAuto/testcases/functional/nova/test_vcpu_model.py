@@ -156,7 +156,7 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source, cpu_models_supporte
     img_model = vcpu_model if vcpu_source == 'image' else None
     code, vm, msg = _boot_vm_vcpu_model(flv_model=flv_model, img_model=img_model, boot_source=boot_source)
 
-    is_supported = (vcpu_model == 'Passthrough') or (vcpu_model in all_cpu_models_supported)
+    is_supported = (not vcpu_model) or (vcpu_model == 'Passthrough') or (vcpu_model in all_cpu_models_supported)
     if not is_supported:
         LOG.tc_step("Check vm in error state due to vcpu model unsupported by hosts.")
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
@@ -180,7 +180,7 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source, cpu_models_supporte
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model, expt_arch=expt_arch)
 
-    multi_hosts_supported = (vcpu_model in cpu_models_multi_host) or \
+    multi_hosts_supported = (not vcpu_model) or (vcpu_model in cpu_models_multi_host) or \
                             (vcpu_model == 'Passthrough' and cpu_models_multi_host)
     # TC5141
     LOG.tc_step("Stop and then restart vm and check if it retains its vcpu model")

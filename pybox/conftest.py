@@ -40,7 +40,7 @@ def pytest_addoption(parser):
         """,
         action='store_true')
 
-    parser.addoption("--useexistingvms", help=
+    parser.addoption("--useexistinglab", help=
         """
         If present, don't create new VMs, use the existing ones.
         """,

@@ -7,6 +7,7 @@ from optparse import OptionParser
 from consts.auth import HostLinuxCreds, Tenant
 from consts.proj_vars import ProjVar
 from consts.cgcs import TIMESTAMP_PATTERN
+from consts.kpi_vars import KPI_DATE_FORMAT
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 from utils import lab_info
 from keywords import host_helper, common
@@ -15,7 +16,8 @@ from keywords import host_helper, common
 def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None,
                start_path=None, extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
                con_ssh=None, sudo=False, topdown=False, init_time=None, build_id=None, start_host=None,
-               uptime=5, start_pattern_init=False, sw_version=None, patch=None, unit=None):
+               uptime=5, start_pattern_init=False, sw_version=None, patch=None, unit=None, kpi_val=None):
+
     """
     Record kpi in ini format in given file
     Args:
@@ -47,7 +49,7 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         pattern as the init time for the end pattern
         sw_version (str): e.g., 17.07
         patch (str): patch name
-        unit (str): unit for the kpi value if not seconds
+        unit (str): unit for the kpi value if not 'Time(s)'
     Returns:
 
     """
@@ -110,19 +112,22 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         if log_path:
             kpi_dict['log_path'] = log_path
 
-        if start_pattern:
-            kpi_val, time_stamp, count = get_duration(start_pattern=start_pattern, start_path=start_path,
-                                                      end_pattern=end_pattern, log_path=log_path,
-                                                      host=host, sudo=sudo, topdown=topdown,
-                                                      extended_regex=extended_regex,
-                                                      average_for_all=average_for_all,
-                                                      init_time=init_time, start_host=start_host,
-                                                      start_pattern_init=start_pattern_init, con_ssh=con_ssh)
+        if kpi_val is not None:
+            time_stamp = common.get_date_in_format(ssh_client=con_ssh, date_format=KPI_DATE_FORMAT)
         else:
-            kpi_val, time_stamp, count = get_match(pattern=end_pattern, log_path=log_path, host=host,
-                                                   extended_regex=extended_regex, python_pattern=python_pattern,
-                                                   average_for_all=average_for_all, sudo=sudo, topdown=topdown,
-                                                   init_time=init_time, con_ssh=con_ssh)
+            if start_pattern:
+                kpi_val, time_stamp, count = get_duration(start_pattern=start_pattern, start_path=start_path,
+                                                          end_pattern=end_pattern, log_path=log_path,
+                                                          host=host, sudo=sudo, topdown=topdown,
+                                                          extended_regex=extended_regex,
+                                                          average_for_all=average_for_all,
+                                                          init_time=init_time, start_host=start_host,
+                                                          start_pattern_init=start_pattern_init, con_ssh=con_ssh)
+            else:
+                kpi_val, time_stamp, count = get_match(pattern=end_pattern, log_path=log_path, host=host,
+                                                       extended_regex=extended_regex, python_pattern=python_pattern,
+                                                       average_for_all=average_for_all, sudo=sudo, topdown=topdown,
+                                                       init_time=init_time, con_ssh=con_ssh)
 
         kpi_dict.update({'timestamp': time_stamp, 'value': kpi_val})
 

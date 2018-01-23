@@ -8,6 +8,7 @@ from consts.auth import Tenant, Guest
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
@@ -128,10 +129,9 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
             max_num = hosts_num
 
     if max_num > 0:
-        LOG.info("{} backing has most hosts in aggregate: {}".format(storage_backing_spec,
-                                                                     hosts_by_backing[storage_backing_spec]))
+        LOG.info("{} aggregate has most hosts: {}".format(storage_backing_spec, hosts_by_backing[storage_backing_spec]))
     elif max_num == 0 and not rtn_down_hosts:
-        LOG.warning("No host in host-aggregate. Return preferred storage backing")
+        LOG.warning("No host in storage aggregate. Return preferred storage backing")
 
     else:
         image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
@@ -308,6 +308,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
     if flavor_id == '':
         flavor_id = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh)[1]
+        ResourceCleanup.add('flavor', flavor_id, scope='session')
 
     return flavor_id
 
@@ -934,7 +935,10 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
     else:
         table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
 
-    return table_parser.get_value_two_col_table(table_, field, strict)
+    merge = False
+    if field in ['fault']:
+        merge = True
+    return table_parser.get_value_two_col_table(table_, field, strict, merge_lines=merge)
 
 
 def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):

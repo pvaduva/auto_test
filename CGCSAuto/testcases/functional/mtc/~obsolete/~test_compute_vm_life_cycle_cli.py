@@ -10,7 +10,7 @@ from utils.tis_log import LOG
 from utils import cli, exceptions
 from utils import table_parser
 from consts.auth import Tenant
-from consts.cgcs import HostAvailabilityState
+from consts.cgcs import HostAvailState
 from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -58,8 +58,8 @@ def launch_instance_on_compute(network_name=None,
     host_helper.unlock_host(host_name)
     _lock_unlock_computes_except_one(host_name, action='lock')
 
-    assert host_name in host_helper.get_hosts(availability=[HostAvailabilityState.AVAILABLE,
-                                                            HostAvailabilityState.DEGRADED])
+    assert host_name in host_helper.get_hosts(availability=[HostAvailState.AVAILABLE,
+                                                            HostAvailState.DEGRADED])
 
     lvm_hosts = host_helper.get_hosts_by_storage_aggregate('local_lvm')
     remote_hosts = host_helper.get_hosts_by_storage_aggregate('remote')

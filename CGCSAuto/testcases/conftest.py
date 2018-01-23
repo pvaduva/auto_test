@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from threading import Event
 
 import setups
 from consts.auth import CliAuth, Tenant
@@ -26,7 +27,6 @@ def setup_test_session(global_setup):
 
     global natbox_ssh
     natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
-    ProjVar.set_var(natbox_ssh=natbox_ssh)
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
@@ -40,7 +40,13 @@ def setup_test_session(global_setup):
 
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     natbox_ssh.flush()
-    natbox_ssh.connect(retry=False)
+    natbox_ssh.connect(retry=True)
+
+    if ProjVar.get_var('COLLECT_TELNET'):
+
+        end_event = Event()
+        threads = setups.collect_telnet_logs_for_nodes(end_event=end_event)
+        ProjVar.set_var(TELNET_THREADS=(threads, end_event))
 
 
 def pytest_collectstart():
@@ -57,7 +63,6 @@ def pytest_collectstart():
             CliAuth.set_vars(HTTPS=True)
         Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
         setups.set_region(region=None)
-        print("ollect {} region")
         initialized = True
 
 

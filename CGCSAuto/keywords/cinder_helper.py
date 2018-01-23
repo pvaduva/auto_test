@@ -241,7 +241,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
 
     subcmd = ' '.join([subcmd, source_arg, str(size)])
     LOG.info("Creating Volume {}...".format(name))
-    LOG.info("cinder create {}".format(subcmd))
+    # LOG.info("cinder create {}".format(subcmd))
     exit_code, cmd_output = cli.cinder('create', subcmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                        rtn_list=True)
     if exit_code == 1:
@@ -627,7 +627,7 @@ def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_
     args_ = ' '.join(snapshots_to_del)
 
     if force:
-        args_ = '--force {}'.format(force) + args_
+        args_ = '--force {} {}'.format(force, args_)
 
     code, output = cli.cinder('snapshot-delete', args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                               rtn_list=True)

@@ -4,7 +4,7 @@ from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
-from keywords import system_helper, vm_helper, nova_helper, cinder_helper, storage_helper, host_helper, common
+from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper
 
 
 ########################
@@ -46,34 +46,12 @@ def check_alarms_session(request):
 
 def __verify_alarms(request, scope):
     LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
-    before_tab = system_helper.get_alarms_table()
-    before_alarms = system_helper._get_alarms(before_tab)
+    before_alarms = system_helper.get_alarms()
 
     def verify_alarms():
         LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
-        after_tab = system_helper.get_alarms_table()
-        after_alarms = system_helper._get_alarms(after_tab)
-        new_alarms = []
-
-        for item in after_alarms:
-            if item not in before_alarms:
-                # NTP alarm handling
-                alarm_id, entity_id = item
-                if alarm_id == EventLogID.NTP_ALARM:
-                    LOG.fixture_step("NTP alarm found, checking ntpq stats")
-                    host = entity_id.split('host=')[1].split('.ntp')[0]
-                    host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
-                    continue
-
-                new_alarms.append(item)
-
-        if new_alarms:
-            LOG.fixture_step("New alarms detected. Waiting for new alarms to clear.")
-            res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=300)
-            assert res, "New alarm(s) found and did not clear within 5 minutes. " \
-                        "Alarm IDs and Entity IDs: {}".format(remaining_alarms)
-
-        LOG.fixture_step("({}) System alarms verified.".format(scope))
+        check_helper.check_alarms(before_alarms=before_alarms)
+        LOG.info("({}) System alarms verified.".format(scope))
 
     request.addfinalizer(verify_alarms)
     return

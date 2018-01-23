@@ -24,7 +24,7 @@ def sftp_get(source, remote_host, destination):
     username = getpass.getuser()
     if platform == 'win32' or platform == 'win64':
         privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
-
+        pass
     else:
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
     mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)

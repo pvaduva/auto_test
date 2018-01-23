@@ -27,13 +27,13 @@ class UserData:
 
 class HeatTemplate:
     STRESS_NG = 'stress_ng.yaml'
+    HEAT_DIR = '{}heat/hot/'.format(WRSROOT_HOME)
 
 
 class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
     TEST_SCRIPT = '/home/svc-cgcsauto/test_scripts/'
     CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
-
 
 
 class PrivKeyPath:

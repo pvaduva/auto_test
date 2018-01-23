@@ -690,7 +690,6 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        #alarms_tab = table_parser.table(cli.system('alarm-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
         alarms_tab = table_parser.table(cli.system(alarmcmd, ssh_client=con_ssh, auth_info=auth_info,
                                                    use_telnet=use_telnet, con_telnet=con_telnet))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
@@ -795,7 +794,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (tuple): (res(bool), remaining_alarms(tuple))
+    Returns (tuple): (res(bool), remaining_alarms(list of tuple))
 
     """
     pre_alarms = list(alarms)   # Don't update the original list
@@ -803,8 +802,8 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
     alarms_to_check = pre_alarms.copy()
 
     alarms_cleared = []
-    end_time = time.time() + timeout
-    while time.time() < end_time:
+
+    def _update_alarms(alarms_to_check_, alarms_cleared_):
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info,
                                               use_telnet=use_telnet, con_telnet=con_telnet)
         current_alarms = _get_alarms(current_alarms_tab)
@@ -812,16 +811,22 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         for alarm in pre_alarms:
             if alarm not in current_alarms:
                 LOG.info("Removing alarm {} from current alarms_and_events list: {}".format(alarm, alarms_to_check))
-                alarms_to_check.remove(alarm)
-                alarms_cleared.append(alarm)
+                alarms_to_check_.remove(alarm)
+                alarms_cleared_.append(alarm)
 
+    _update_alarms(alarms_to_check_=alarms_to_check, alarms_cleared_=alarms_cleared)
+    if not alarms_to_check:
+        LOG.info("Following alarms_and_events cleared: {}".format(alarms_cleared))
+        return True, []
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        pre_alarms = alarms_to_check.copy()
+        time.sleep(check_interval)
+        _update_alarms(alarms_to_check_=alarms_to_check, alarms_cleared_=alarms_cleared)
         if not alarms_to_check:
             LOG.info("Following alarms_and_events cleared: {}".format(alarms_cleared))
             return True, []
-
-        pre_alarms = alarms_to_check.copy()
-        time.sleep(check_interval)
-
     else:
         err_msg = "Following alarms_and_events did not clear within {} seconds: {}".format(timeout, alarms_to_check)
         if fail_ok:
@@ -830,8 +835,9 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         else:
             raise exceptions.TimeoutException(err_msg)
 
+
 def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
+                             auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
     """
     Wait for all alarms_and_events to be cleared from system alarm-list
     Args:
@@ -981,10 +987,12 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
             return -1, msg
 
     section = 'database'
-    if name in ('metering_time_to_live', 'event_time_to_live'):
+    if name in ('metering_time_to_live'):
         service = 'ceilometer'
     elif name == 'alarm_history_time_to_live':
         service = 'aodh'
+    elif name == 'event_time_to_live':
+        service = 'panko'
     else:
         raise ValueError("Unknown name: {}".format(name))
 
@@ -1103,7 +1111,7 @@ def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False, 
 
     show_args = ','.join(table_names)
 
-    tables_ = table_parser.tables(con_ssh.exec_cmd('vm-topology -s {}'.format(show_args), expect_timeout=30)[1],
+    tables_ = table_parser.tables(con_ssh.exec_sudo_cmd('vm-topology --show {}'.format(show_args), expect_timeout=30)[1],
                                   combine_multiline_entry=combine_multiline)
 
     if exclude_one_col_table:
@@ -1327,7 +1335,7 @@ def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_
     table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
 
     if wait_for_avail_update:
-        end_time = time.time() + 240
+        end_time = time.time() + 300
         while time.time() < end_time:
             total_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_total(MiB)')]
             avail_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_avail(MiB)')]
@@ -1340,10 +1348,10 @@ def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_
                 break
 
             LOG.info("mem_total is no larger than mem_avail, wait for mem_avail to update")
-            time.sleep(5)
+            time.sleep(30)
             table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
         else:
-            raise SystemError("mem_total is no larger than mem_avail in 4 minutes")
+            raise exceptions.SysinvError("mem_total is smaller than mem_avail in 5 minutes")
 
     res = []
     for header in headers:
@@ -1819,7 +1827,7 @@ def get_service_parameter_values(rtn_value='value', service=None, section=None, 
 
 
 def create_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
-                             check_first=True, modify_existing=True):
+                             check_first=True, modify_existing=True, verify=True):
     """
     Add service-parameter
     system service-parameter-add (service) (section) (name)=(value)
@@ -1832,6 +1840,8 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
         fail_ok:
         check_first (bool): Check if the service parameter exists before
         modify_existing (bool): Whether to modify the service parameter if it already exists
+        verify: this enables to skip the verification. sometimes not all values are displayed in the
+                 service-parameter-list, ex password
 
     Returns (tuple): (rtn_code, err_msg or param_uuid)
 
@@ -1843,7 +1853,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
             LOG.info(msg)
             if modify_existing:
                 return modify_service_parameter(service, section, name, value,
-                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False)
+                                                con_ssh=con_ssh, fail_ok=fail_ok, check_first=False, verify=verify)
             return -1, msg
 
     LOG.info("Creating service parameter")
@@ -1855,11 +1865,13 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
     LOG.info("Verifying the service parameter value")
     val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
-    if val != value:
-        msg = 'The service parameter was not added with the correct value'
-        if fail_ok:
-            return 2, msg
-        raise exceptions.SysinvError(msg)
+    value = value.strip('\"')
+    if verify:
+        if val != value:
+            msg = 'The service parameter was not added with the correct value {} to {}'.format(val,value)
+            if fail_ok:
+                return 2, msg
+            raise exceptions.SysinvError(msg)
     LOG.info("Service parameter was added with the correct value")
     uuid = get_service_parameter_values(rtn_value='uuid', service=service, section=section, name=name,
                                         con_ssh=con_ssh)[0]
@@ -1868,7 +1880,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
 
 def modify_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
-                             check_first=True, create=True):
+                             check_first=True, create=True, verify=True):
     """
     Modify a service parameter
     Args:
@@ -1880,6 +1892,8 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
         fail_ok:
         check_first (bool): Check if the parameter exists first
         create (bool): Whether to create the parameter if it does not exist
+        verify: this enables to skip the verification. sometimes not all values are displayed in the
+                 service-parameter-list, ex password
 
     Returns (tuple): (rtn_code, message)
 
@@ -1906,11 +1920,13 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
     LOG.info("Verifying the service parameter value")
     val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)[0]
-    if val != value:
-        msg = 'The service parameter was not modified to the correct value'
-        if fail_ok:
-            return 2, msg
-        raise exceptions.SysinvError(msg)
+    value = value.strip('\"')
+    if verify:
+        if val != value:
+            msg = 'The service parameter was not modified to the correct value'
+            if fail_ok:
+                return 2, msg
+            raise exceptions.SysinvError(msg)
     msg = "Service parameter modified to {}".format(val)
     LOG.info(msg)
     return 0, msg

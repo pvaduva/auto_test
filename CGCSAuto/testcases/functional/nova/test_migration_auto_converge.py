@@ -6,6 +6,7 @@ from utils.ssh import ControllerClient
 from utils import exceptions
 import re, time
 
+
 def _get_stress_ng_heat(con_ssh=None):
     """
     copy the cloud-config userdata to TiS server.
@@ -34,7 +35,7 @@ def _get_stress_ng_heat(con_ssh=None):
     source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
 
     dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                dest_name=file_name, con_ssh=con_ssh)
+                                                                 dest_name=file_name, con_ssh=con_ssh)
 
     if dest_path is None:
         raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))
@@ -84,22 +85,18 @@ def test_migration_auto_converge():
     LOG.tc_step("Get the heat file name to use")
     heat_template = _get_stress_ng_heat()
 
-    stack_name = 'stress_ng'
-    vm_name = 'stress_ng'
-    cmd_list = ['-f %s ' % heat_template]
-
-    cmd_list.append("-P flavor=%s " % flavor_id)
-    cmd_list.append("-P name=%s " % vm_name)
-
-    cmd_list.append(" %s" % stack_name)
-    params_string = ''.join(cmd_list)
+    stack_name = vm_name = 'stress_ng'
+    cmd_list = ['-f %s' % heat_template,
+                "-P flavor=%s" % flavor_id,
+                "-P name=%s" % vm_name,
+                stack_name]
+    params_string = ' '.join(cmd_list)
 
     LOG.tc_step("Creating heat stack")
     code, msg = heat_helper.create_stack(stack_name=stack_name, params_string=params_string)
-    assert code == 0, "Failed to create heat stack"
-
-    # add the heat stack name for deleteion on failure
+    # add the heat stack name for deletion in teardown
     ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
+    assert code == 0, "Failed to create heat stack"
 
     LOG.info("Verifying server creation via heat")
     vm_id = nova_helper.get_vm_id_from_name(vm_name='stress_ng', strict=False)
@@ -121,4 +118,3 @@ def test_migration_auto_converge():
 
         LOG.tc_step("Ping vm from natbox")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-

@@ -14,21 +14,18 @@ def unlock_host(stream, hostname):
     Args:
         stream(stream): Stream to active controller
         hostname(str): Name of host to unlock
-    
+    Steps:
+        - Check that host is locked
+        - Unlock host
     """
     LOG.info("Unlocking {}".format(hostname))
     serial.send_bytes(stream, "system host-list | grep {}".format(hostname), expect_prompt=False)
     try:
-        serial.expect_bytes(stream, "unlocked")
-    except:
+        serial.expect_bytes(stream, "locked")
+    except streamexpect.ExpectTimeout:
         LOG.info("Host {} not locked".format(hostname))
         return 1
-    if 'compute' in hostname:
-        serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
-    elif 'controller' in hostname:
-        serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
-    elif 'storage' in hostname:
-        serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
+    serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
     LOG.info("{} is unlocked".format(hostname))
     
             
@@ -38,20 +35,18 @@ def lock_host(stream, hostname):
     Args:
         stream(stream): Stream to controller-0
         hostname(str): Name of host to lock
+    Steps:
+        - Check that host is unlocked
+        - Lock host
     """
     LOG.info("Locking {}".format(hostname))    
     serial.send_bytes(stream, "system host-list |grep {}".format(hostname), expect_prompt=False)
     try:
-        serial.expect_bytes(stream, "locked")
-    except:
+        serial.expect_bytes(stream, "unlocked")
+    except streamexpect.ExpectTimeout:
         LOG.info("Host {} not unlocked".format(hostname))
         return
-    if 'compute' in hostname:
-        serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
-    elif 'controller' in hostname:
-        serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
-    elif 'storage' in hostname:
-        serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
+    serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
     LOG.info("{} is locked".format(hostname))
 
 
@@ -134,9 +129,9 @@ def login(stream, timeout=600):
     rc = serial.expect_bytes(stream, "ogin:", fail_ok=True, timeout=timeout)
     if rc != 0:
         serial.send_bytes(stream, "\n", expect_prompt=False)
-        if serial.expect_bytes(stream, "~$", timeout=timeout, fail_ok=True) == -1:
+        if serial.expect_bytes(stream, "~$", timeout=10, fail_ok=True) == -1:
             serial.send_bytes(stream, '\n', expect_prompt=False)
-            serial.expect_bytes(stream, "keystone", timeout=timeout)
+            serial.expect_bytes(stream, "keystone", timeout=10)
     else:
         serial.send_bytes(stream, "wrsroot", expect_prompt=False)
         serial.expect_bytes(stream, "assword:")
@@ -150,11 +145,11 @@ def logout(stream):
     Args:
         stream(stream): stream to cont0
     """    
-    serial.send_bytes(stream, "logout", expect_prompt=False)
+    serial.send_bytes(stream, "exit", expect_prompt=False)
     time.sleep(5)
 
 
 def check_password(stream):
     ret = serial.expect_bytes(stream, 'assword', fail_ok=True, timeout=5)
     if ret == 0:    
-        serial.send_bytes(stream, 'Li69nux*')
+        serial.send_bytes(stream, 'Li69nux*', expect_prompt=False)

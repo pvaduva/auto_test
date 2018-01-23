@@ -29,10 +29,10 @@ FUNCTEST_LOCAL_DIR = "/home/opnfv/functest"
 
 # Create Functest dictionary with all suites requested by Greg Waines, with maximum expected time for completion
 
-FUNCTEST_TESTS_MAXDURATION = {"all": 28800, "connection_check": 300, "api_check": 900, "snaps_health_check": 900,
+FUNCTEST_TESTS_MAXDURATION = {"all": 28800, "connection_check": 900, "api_check": 1200, "snaps_health_check": 900,
                               "vping_ssh": 900, "tempest_smoke_serial": 3600,
-                              "rally_sanity": 1800, "refstack_defcore": 1800, "snaps_smoke": 1800,
-                              "tempest_full_parallel": 7200, "rally_full": 7200}
+                              "rally_sanity": 3600, "refstack_defcore": 3600, "snaps_smoke": 3600,
+                              "tempest_full_parallel": 14400, "rally_full": 14400}
 
 
 def build_functest_dict(functest_tuple):

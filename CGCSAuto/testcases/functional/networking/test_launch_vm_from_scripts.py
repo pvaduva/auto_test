@@ -16,6 +16,7 @@ def check_launch_script_exists():
             skip("Lab setup using heat. No VM launch script.")
 
 
+# Remove since all vm types are already covered by other tests.
 @mark.parametrize('vm_type', [
     'avp',
     'vhost',
@@ -24,7 +25,7 @@ def check_launch_script_exists():
     # 'pcipt', CGTS-7376
     'sriov'
 ])
-def test_vif_models(vm_type):
+def _test_vif_models(vm_type):
     """
     boot avp,e100 and virtio instance
     KNI is same as avp

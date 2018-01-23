@@ -42,20 +42,20 @@ def handle_args():
         """,
         action='store_true')
         
-    parser.add_argument("--createvms", help=
+    parser.add_argument("--createlab", help=
         """
-        If specified we will create and install new vms, otherwise the creation and install will be skipped. 
+        If specified we will create and install new vms for the lab, otherwise the creation and install will be skipped. 
         Should be omitted when the vms have already been created and installed.
         """,
         action='store_true')
         
-    parser.add_argument("--deletevms", help=
+    parser.add_argument("--deletelab", help=
         """
-        If present, delete existing VMs. 
+        If present, delete existing lab. 
         """,
         action='store_true')
 
-    parser.add_argument("--useexistingvms", help=
+    parser.add_argument("--useexistinglab", help=
         """
         If present, don't create new VMs, use the existing ones.
         """,
@@ -82,16 +82,6 @@ def handle_args():
           CGTS4 - yow-cgts4-lx
         """,
         choices=['CGTS1', 'CGTS2', 'CGTS3', 'CGTS4'],
-        type=str)
-
-    parser.add_argument("--iso-host", help=
-        """
-        Which host to get the ISO from:
-           localhost 
-           yow-cgts4-lx
-           yow-cgts3-lx
-           etc.
-        """,
         type=str)
 
     parser.add_argument("--securityprofile", help=
@@ -139,11 +129,15 @@ def handle_args():
         
     parser.add_argument("--config-file", help=
         """
-        If specified the config file (i.e. TiS_config.ini_centos, ...) will be retrieved from this location.
+        If specified the config file (i.e. TiS_config.ini_centos, ...) will be retrieved from this local location.
         e.g.  /folk/cgts/myousaf/TiS_config.ini_centos
         """,
         type=str)
-        
+    parser.add_argument("--get-config", help=
+        """
+        If specified the config file (i.e. TiS_config.ini_centos, ...) will be retrieved from the buildserver specified.
+        """,
+        action="store_true")
     parser.add_argument("--configure", help=
         """
         If specified we will configure controller-0 otherwise the configuration will have to be perfomed manually. 
@@ -186,6 +180,21 @@ def handle_args():
     parser.add_argument("--run-scripts", help=
         """
         If specified the lab_setup.sh iterations will be run.
+        """,
+        action='store_true')
+    parser.add_argument("--nessus", help=
+        """
+        Runs installer with the appropreate arguments for nessus scan setup. Currently requires files to be in the default folders.
+        """,
+        action='store_true')
+    parser.add_argument("--complete", help=
+        """
+        Runs installer with the appropreate arguments for end to end setup. Retrieves files from a buildserver which mus be specified.
+        """,
+        action='store_true')
+    parser.add_argument("--lvm", help=
+        """
+        Configures storage with lvm backend.
         """,
         action='store_true')
     return parser

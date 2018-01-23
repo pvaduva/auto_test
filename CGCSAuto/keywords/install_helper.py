@@ -7,9 +7,9 @@ from contextlib import contextmanager
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout
-from consts.cgcs import HostAvailabilityState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
+from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperationalState, EventLogID
+    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperState, EventLogID
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
@@ -172,8 +172,15 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
             raise exceptions.InvalidStructure(err_msg)
 
 
-def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False, upgrade=False,  vlm_power_on=False,
-                          close_telnet_conn=True, small_footprint=False, clone_install=False, log_file_prefix=''):
+def bring_node_console_up(node, boot_device, install_output_dir,
+                          boot_usb=False,
+                          low_latency=False,
+                          upgrade=False,
+                          vlm_power_on=False,
+                          close_telnet_conn=True,
+                          small_footprint=False,
+                          clone_install=False,
+                          log_file_prefix=''):
     """
     Initiate the boot and installation operation.
     Args:
@@ -203,7 +210,11 @@ def bring_node_console_up(node, boot_device, install_output_dir, boot_usb=False,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device, usb=boot_usb, upgrade=upgrade, small_footprint=small_footprint,
+    node.telnet_conn.install(node, boot_device,
+                             usb=boot_usb,
+                             upgrade=upgrade,
+                             small_footprint=small_footprint,
+                             low_latency=low_latency,
                              clone_install=clone_install)
     if close_telnet_conn:
         node.telnet_conn.close()
@@ -424,7 +435,7 @@ def power_on_host(hosts, wait_for_hosts_state_=True):
 
 
 # TODO: To be replaced by function in vlm_helper
-def wait_for_hosts_state(hosts, state=HostAvailabilityState.ONLINE):
+def wait_for_hosts_state(hosts, state=HostAvailState.ONLINE):
 
     if len(hosts) > 0:
         locked_hosts_in_states = host_helper.wait_for_hosts_states(hosts, availability=[state])
@@ -1318,7 +1329,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
                 LOG.info('No need to do compute-config-complete, which is a new behavior after 2017-11-27.')
                 LOG.info('Instead, we will have to wait the node self-boot and boot up to ready states.')
 
-            connection.find_prompt(prompt='controller\-[01] login:')
+            connection.find_prompt(prompt='controller\-[01] login:', timeout=HostTimeout.REBOOT)
 
             LOG.info('Find login prompt, try to login')
             connection.login()
@@ -1366,12 +1377,23 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
             os.environ["TERM"] = "xterm"
 
             LOG.info('re-run cli:{}'.format(cmd))
-            rc, output = connection.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
 
-            if "System restore complete" in output:
-                msg = "System restore completed successfully"
-                LOG.info(msg)
-                return 0, msg, compute_configured
+            rc, output = connection.exec_cmd(cmd, alt_prompt=' login: ',
+                                             timeout=HostTimeout.SYSTEM_RESTORE, will_reboot=True)
+            LOG.debug('rc:{}, output:{}'.format(rc, output))
+
+        if "System restore complete" in output:
+            msg = "System restore completed successfully"
+            LOG.info(msg)
+            return 0, msg, compute_configured
+
+        else: # elif ' login: ' in output:
+            # Again?! The system behaviors changed without any clue?
+            msg = "system behaviors changed again without notice again"
+            LOG.warn(msg)
+            LOG.info('re-login')
+            connection.login()
+            os.environ["TERM"] = "xterm"
 
     else:
         err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
@@ -2167,7 +2189,7 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, lowlat=False,
+def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
                     small_footprint=False,  clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
@@ -2207,8 +2229,13 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    bring_node_console_up(controller0, boot_interfaces, install_output_dir, boot_usb=boot_usb, vlm_power_on=True,
-                           close_telnet_conn=False, small_footprint=small_footprint, clone_install=clone_install)
+    bring_node_console_up(controller0, boot_interfaces, install_output_dir,
+                          boot_usb=boot_usb,
+                          small_footprint=small_footprint,
+                          low_latency=low_latency,
+                          vlm_power_on=True,
+                          close_telnet_conn=False,
+                          clone_install=clone_install)
 
     LOG.info("Initial login and password set for " + controller0.name)
     reset = True

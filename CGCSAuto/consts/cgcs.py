@@ -147,23 +147,26 @@ class HostAdminState:
     LOCKED = 'locked'
 
 
-class HostOperationalState:
+class HostOperState:
     ENABLED = 'enabled'
     DISABLED = 'disabled'
 
 
-class HostAvailabilityState:
+class HostAvailState:
     DEGRADED = 'degraded'
     OFFLINE = 'offline'
     ONLINE = 'online'
     AVAILABLE = 'available'
     FAILED = 'failed'
+    POWER_OFF = 'power-off'
 
 
 class HostTask:
     BOOTING = 'Booting'
     REBOOTING = 'Rebooting'
+    POWERING_ON = 'Powering-on'
     POWER_CYCLE = 'Critical Event Power-Cycle'
+    POWER_DOWN = 'Critical Event Power-Down'
 
 
 class Prompt:
@@ -180,7 +183,7 @@ class Prompt:
 
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
-    PASSWORD_PROMPT = '.*assword\:.*'
+    PASSWORD_PROMPT = '.*assword\:[ ]?$|assword for .*:[ ]?$'
     LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
@@ -483,3 +486,9 @@ class BackupRestore:
 class CpuModel:
     CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX',
                   'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')
+
+class ExtLdap:
+    LDAP_SERVER = 'ldap://128.224.186.62'
+    LDAP_DC = 'dc=tis,dc=wrs,dc=com'
+    LDAP_DRIVER = 'ldap'
+    LDAP_USER = 'cn=admin,dc=tis,dc=wrs,dc=com" password="admin'

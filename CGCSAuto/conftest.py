@@ -260,6 +260,7 @@ def pytest_configure(config):
     session_log_dir = config.getoption('sessiondir')
     no_cgcs = config.getoption('nocgcsdb')
     col_kpi = config.getoption('col_kpi')
+    telnet_log = config.getoption('telnetlog')
 
     # Test case params on installed system
     lab_arg = config.getoption('lab')
@@ -301,6 +302,8 @@ def pytest_configure(config):
         ProjVar.set_var(KEYSTONE_DEBUG=True)
     if col_kpi:
         ProjVar.set_var(COLLECT_KPI=True)
+    if telnet_log:
+        ProjVar.set_var(COLLECT_TELNET=True)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -383,6 +386,7 @@ def pytest_addoption(parser):
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
+    telnetlog_help = "Collect telnet logs throughout the session"
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -411,6 +415,7 @@ def pytest_addoption(parser):
     parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
+    parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
 
     ##################################
     # Lab install or upgrade options #
@@ -549,6 +554,15 @@ def pytest_addoption(parser):
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
+    parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
+                     action='store_true', help="Reuse the existing feed on the pxeboot server (tuxlab1/2) instead of "
+                                          "setup feed from scratch")
+    parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
+                     action='store_true', help="Reuse the lab in states without reinstall it. "
+                                                "This will be helpful if the lab was/will be in customized way.")
+    parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
+                     action='store_true', help="Restore a low-latency lab")
+
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
@@ -559,13 +573,22 @@ def config_logger(log_dir):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
-    formatter_file = "'[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(filename)-10s %(funcName)-10s:: %(message)s'"
-    logging.basicConfig(level=logging.NOTSET, format=formatter_file, filename=file_name, filemode='w')
+    log_format = '[%(asctime)s] %(lineno)-5d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s'
+    tis_formatter = logging.Formatter(log_format)
+    LOG.setLevel(logging.NOTSET)
+
+    tmp_path = os.path.join(os.path.expanduser('~'), '.tmp_log')
+    logging.basicConfig(level=logging.NOTSET, format=log_format, filename=tmp_path, filemode='w')
+
+    # file handler:
+    file_handler = logging.FileHandler(file_name)
+    file_handler.setFormatter(tis_formatter)
+    file_handler.setLevel(logging.DEBUG)
+    LOG.addHandler(file_handler)
 
     # logger for stream output
     stream_hdler = logging.StreamHandler()
-    formatter_stream = logging.Formatter('[%(asctime)s] %(lineno)-4d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s')
-    stream_hdler.setFormatter(formatter_stream)
+    stream_hdler.setFormatter(tis_formatter)
     stream_hdler.setLevel(logging.INFO)
     LOG.addHandler(stream_hdler)
 
@@ -657,13 +680,6 @@ def pytest_unconfigure(config):
         except:
             LOG.warning("'collect all' failed.")
 
-    # if ProjVar.get_var('KEYSTONE_DEBUG'):
-    #     try:
-    #         setups.enable_disable_keystone_debug(enable=False, con_ssh=con_ssh)
-    #     except:
-    #         LOG.warning("Disable keystone debug failed")
-
-    # close ssh session
     try:
         con_ssh.close()
     except:
@@ -810,7 +826,6 @@ def global_setup():
 
     if region:
         setups.set_region(region=region)
-        print("fdfhdfhdj {}".format(region))
 
 #####################################
 # End of fixture order manipulation #
@@ -818,6 +833,11 @@ def global_setup():
 
 
 def pytest_sessionfinish(session):
+    if ProjVar.get_var('TELNET_THREADS'):
+        threads, end_event = ProjVar.get_var('TELNET_THREADS')
+        end_event.set()
+        for thread in threads:
+            thread.join()
 
     if repeat_count > 0 and has_fail:
         # _thread.interrupt_main()

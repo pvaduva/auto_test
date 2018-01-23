@@ -2,19 +2,19 @@ import os
 import re
 import threading
 import time
-import subprocess
 import getpass
 import socket
+from telnetlib import Telnet
 from contextlib import contextmanager
 
 import pexpect
 from pexpect import pxssh
 
 from utils import exceptions, local_host
-from utils.tis_log import LOG
+from utils.tis_log import LOG, get_tis_logger
 
 from consts.auth import Guest, HostLinuxCreds
-from consts.cgcs import Prompt, DATE_OUTPUT, GuestImages
+from consts.cgcs import Prompt, DATE_OUTPUT
 from consts.proj_vars import ProjVar
 from consts.lab import Labs, NatBoxes
 
@@ -83,12 +83,12 @@ class SSHClient:
         self.initial_prompt = initial_prompt
         self.prompt = initial_prompt
         self._session = session
-        # self.cmd_sent = ''
-        # self.cmd_output = ''
+        self.cmd_sent = ''
+        self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
         self.searchwindowsize = searchwindownsize
-        # self.logpath = None
+        self.logpath = None
         self.port = port
 
     def _get_logpath(self):
@@ -259,11 +259,14 @@ class SSHClient:
         """
         if flush:
             self.flush()
-        cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
-        if cmd_for_exitcode:
-            LOG.debug("Sending \'{}\'".format(cmd))
-        else:
-            LOG.debug("Sending: \'{}\'".format(cmd))
+
+        LOG.debug("Sending \'{}\'".format(cmd))
+        # cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
+        # is_read_only_cmd = (not cmd) or re.search('show|list|cat', cmd)
+        # if cmd_for_exitcode or is_read_only_cmd:
+        #     LOG.debug("Sending \'{}\'".format(cmd))
+        # else:
+        #     LOG.info("Sending: \'{}\'".format(cmd))
         try:
             rtn = self._session.sendline(cmd)
         # TODO: use specific exception to catch unexpected disconnection with remote host such as swact
@@ -280,6 +283,15 @@ class SSHClient:
         self.cmd_sent = cmd
 
         return str(rtn)
+
+    def send_sudo(self, cmd='', reconnect=False, expt_pswd_timeout=60, reconnect_timeout=300, flush=False):
+        cmd = 'sudo ' + cmd
+        self.send(cmd, reconnect=reconnect, reconnect_timeout=reconnect_timeout, flush=flush)
+        pw_prompt = Prompt.PASSWORD_PROMPT
+
+        index = self.expect(pw_prompt, timeout=expt_pswd_timeout, searchwindowsize=100, fail_ok=True)
+        if index == 0:
+            self.send(self.password)
 
     def flush(self, timeout=3):
         """
@@ -398,9 +410,13 @@ class SSHClient:
             err_only: if true, stdout will not be included in output
             rm_date (bool): weather to remove date output from cmd output before returning
             fail_ok (bool): whether to raise exception when non-zero exit-code is returned
+            get_exit_code
+            blob
+            force_end
             searchwindowsize (int): max chars to look for match from the end of the output.
                 Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
                     to speed up the search, and to avoid matching in the middle of the output.
+            prefix_space
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -454,7 +470,7 @@ class SSHClient:
                             format(cmd, exit_code, cmd_output))
         else:
             exit_code = -1
-            LOG.info("Actual exit code for following cmd is unknown: {}".format(cmd))
+            LOG.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
 
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output
@@ -483,8 +499,8 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None, pre_opts=None,
-              timeout=60, fail_ok=False):
+    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None,
+              pre_opts=None, timeout=60, fail_ok=False):
 
         dest_user = dest_user or HostLinuxCreds.get_user()
         dest_password = dest_password or HostLinuxCreds.get_password()
@@ -615,8 +631,7 @@ class SSHClient:
             else:
                 raise exceptions.SSHException(msg)
 
-    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600,
-                     cleanup=True):
+    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True):
         source = source_path
         if source_ip:
             source = '{}:{}'.format(source_ip, source)
@@ -704,6 +719,7 @@ class SSHClient:
             expect_timeout (int): timeout waiting for command to return
             rm_date (bool): whether to remove date info at the end of the output
             fail_ok (bool): whether to raise exception when non-zero exit code is returned
+            get_exit_code
             searchwindowsize (int): max chars to look for match from the end of the output.
                 Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
                     to speed up the search, and to avoid matching in the middle of the output.
@@ -769,6 +785,7 @@ class SSHClient:
             check_interval (int): how long to wait to execute the cmd again in seconds.
             disappear (bool): whether to wait for content appear or disappear
             non_zero_rtn_ok (bool): whether it's okay for cmd to have none-zero return code. Raise exception if False.
+            blob (str): string to wait for
 
         Returns (bool): True if content appears in cmd output within max wait time.
 
@@ -1088,7 +1105,8 @@ class VMSSHClient(SSHFromSSH):
 
 
 class FloatingClient(SSHClient):
-    def __init__(self, floating_ip, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, floating_ip, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
+                 initial_prompt=CONTROLLER_PROMPT):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]
@@ -1241,7 +1259,7 @@ class LocalHostClient(SSHClient):
             # pxssh has a bug where the TIMEOUT exception during pxssh.login is completely eaten. i.e., it will still
             # pretend login passed even if timeout exception was thrown. So below exceptions are unlikely to be received
             # at all. But leave as is in case pxssh fix it in future releases.
-            except (OSError, pexpect.TIMEOUT, pexpect.EOF) as e:
+            except (OSError, pexpect.TIMEOUT, pexpect.EOF):
                 # fail login if retry=False
                 # LOG.debug("Reset session.after upon ssh error")
                 # self._session.after = ''
@@ -1425,7 +1443,250 @@ def ssh_to_controller0(ssh_client=None):
     if ssh_client.get_hostname() == 'controller-0':
         LOG.info("Already on controller-0. Do nothing.")
         return ssh_client
-    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
-                           initial_prompt=Prompt.CONTROLLER_0)
+    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.get_user(),
+                           password=HostLinuxCreds.get_password(), initial_prompt=Prompt.CONTROLLER_0)
     con_0_ssh.connect()
     return con_0_ssh
+
+
+def telnet_logger(host):
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if log_dir:
+        log_dir = '{}/telnet'.format(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
+        logpath = log_dir + '/telnet_' + host + ".log"
+    else:
+        logpath = None
+
+    logger = get_tis_logger(logger_name='telnet_{}'.format(host), log_path=logpath)
+
+    return logger
+
+TELNET_REGEX = '(.*-[\d]+)[ login:|:~\$]'
+TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
+
+
+class TelnetClient (Telnet):
+
+    def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
+                 password=HostLinuxCreds.get_password()):
+
+        super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
+
+        if not prompt and not hostname:
+            prompt = ':~\$ '
+            self.send()
+            index = self.expect(TELNET_REGEX, fail_ok=True)
+            if index == 0:
+                hostname = self.cmd_output
+        elif not prompt:
+            prompt = '{}:~\$ '.format(hostname)
+        elif not hostname:
+            found = re.findall(TELNET_REGEX, prompt)
+            if found:
+                hostname = found[0]
+        self.logger = telnet_logger(hostname) if hostname else telnet_logger(host)
+        self.hostname = hostname
+        self.prompt = prompt
+        self.cmd_output = ''
+        self.cmd_sent = ''
+        self.user = user
+        self.password = password
+        self.logger.info('Telnet connection to {}:{} ({}) is established'.format(host, port, hostname))
+
+    def connect(self, timeout=None, login=True, login_timeout=10, fail_ok=False):
+        timeout_arg = {'timeout': timeout} if timeout else {}
+        if self.eof:
+            self.logger.info("Re-open telnet connection to {}:{}".format(self.host, self.port))
+            self.open(host=self.host, port=self.port, **timeout_arg)
+
+        if login:
+            self.login(fail_ok=fail_ok, expect_prompt_timeout=login_timeout)
+        return self.sock
+
+    def login(self, expect_prompt_timeout=3, fail_ok=False):
+        self.send()
+        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
+        self.flush()
+        code = 0
+        if index == 0:
+            self.send(self.user)
+            self.expect(PASSWORD_PROMPT)
+            self.send(self.password)
+            self.expect()
+        elif index < 0:
+            self.logger.warning("System is not in login page and default prompt is not found either")
+            code = 1
+        return code
+
+    def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
+        if reconnect:
+            self.connect(timeout=reconnect_timeout)
+        if flush:
+            self.flush()
+
+        cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
+        is_read_only_cmd = (not cmd) or re.search('show|list|cat', cmd)
+        if cmd_for_exitcode or is_read_only_cmd:
+            self.logger.debug("Send: {}".format(cmd))
+        else:
+            self.logger.info("Send: {}".format(cmd))
+
+        self.cmd_sent = cmd
+        if not cmd.endswith('\n'):
+            cmd = '{}\n'.format(cmd)
+        # self.set_debuglevel(2)
+        self.write(cmd.encode())
+
+    def send_control(self, char='c'):
+        if char != 'c':
+            raise NotImplemented("Only ctrl+c is supported")
+        self.logger.info("Send: ctrl+{}".format(char))
+        self.write(b'\x03')
+
+    def _process_output(self, output, rm_date=False):
+        if isinstance(output, bytes):
+            output = output.decode(errors='ignore')
+        if not self.cmd_sent == '':
+            output_list = output.split('\r\n')
+            output_list[0] = ''  # do not display the sent command
+
+            if rm_date:  # remove date output if any
+                if re.search(DATE_OUTPUT, output_list[-1]):
+                    output_list = output_list[:-1]
+
+            output = '\n'.join(output_list)
+        self.cmd_sent = ''  # Make sure sent line is only removed once
+
+        self.cmd_output = output
+        return output
+
+    def expect(self, blob_list=None, timeout=None, fail_ok=False, rm_date=False, searchwindowsize=None):
+        if timeout is None:
+            timeout = self.timeout
+        if not blob_list:
+            blob_list = self.prompt
+        if isinstance(blob_list, (str, bytes)):
+            blob_list = [blob_list]
+
+        blobs = []
+        for blob in blob_list:
+            if isinstance(blob, str):
+                blob = blob.encode()
+            blobs.append(blob)
+
+        try:
+            index, re_obj, matched_text = Telnet.expect(self, list=blobs, timeout=timeout)
+            # Reformat the output
+            output = self._process_output(output=matched_text, rm_date=rm_date)
+            if index >= 0:
+                # Match found
+                self.logger.debug("Found: {}".format(output))
+                return index
+
+            # Error handling
+            self.logger.debug("No match found for: {}. Actual output: {}".format(blob_list, output))
+            if self.eof:
+                err_msg = 'EOF encountered before {} appear. '.format(blob_list)
+                index = -1
+            else:
+                err_msg = "Timed out waiting for {} to appear. ".format(blob_list)
+                index = -2
+
+        except EOFError:
+            err_msg = 'EOF encountered and before receiving anything. '
+            index = -1
+
+        if fail_ok:
+            self.logger.warning(err_msg)
+            return index
+
+        if index == -1:
+            raise exceptions.TelnetEOF(err_msg)
+        elif index == -2:
+            raise exceptions.TelnetTimeout(err_msg)
+        else:
+            raise exceptions.TelnetException("Unknown error! Please update telnet expect method")
+
+    def flush(self):
+        buffer = self.read_very_eager()
+        if buffer:
+            self.logger.debug("Flushed: \n{}".format(buffer.decode(errors='ignore')))
+        return buffer
+
+    def exec_cmd(self, cmd, expect_timeout=None, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=False,
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
+        if blob is None:
+            blob = self.prompt
+        if expect_timeout is None:
+            expect_timeout = self.timeout
+
+        self.logger.debug("Executing command...")
+        self.send(cmd, reconnect, reconnect_timeout)
+        try:
+            self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
+        except pexpect.TIMEOUT as e:
+            self.send_control()
+            self.flush()
+            if fail_ok:
+                self.logger.warning(e)
+            else:
+                raise
+
+        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+
+        self.__force_end(force_end)
+
+        if code > 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
+
+        return code, output
+
+    def msg(self, msg, *args):
+        return
+
+    def _process_exec_result(self, cmd, rm_date=False, get_exit_code=True):
+
+        cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
+        # LOG.info("cmd output list: {}".format(cmd_output_list))
+        # cmd_output_list[0] = ''                                       # exclude command, already done in expect
+
+        if rm_date:  # remove date output if any
+            if re.search(DATE_OUTPUT, cmd_output_list[-1]):
+                cmd_output_list = cmd_output_list[:-1]
+
+        cmd_output = '\n'.join(cmd_output_list)
+
+        if get_exit_code:
+            exit_code = self.get_exit_code()
+            if exit_code != 0:
+                self.logger.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
+                                    format(cmd, exit_code, cmd_output))
+        else:
+            exit_code = -1
+            self.logger.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
+
+        cmd_output = cmd_output.strip()
+        return exit_code, cmd_output
+
+    def get_exit_code(self):
+        self.send(EXIT_CODE_CMD)
+        self.expect(timeout=10)
+        matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
+        return int(matches[-1])
+
+    def __force_end(self, force):
+        if force:
+            self.flush()
+            self.send_control('c')
+            self.flush()
+
+    def set_prompt(self, prompt):
+        self.prompt = prompt
+
+    def get_hostname(self):
+        return self.exec_cmd('hostname')[1].splitlines()[0]
+
+    def close(self):
+        super().close()
+        self.logger.info("Telnet connection closed")

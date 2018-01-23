@@ -8,21 +8,24 @@ from utils.tis_log import LOG
 @fixture(scope='module')
 def service_params(request):
     """
-    Delete service parameter created in these tests
+    Reset service parameter created in these tests to default value.
     """
     service = 'identity'
     section = 'config'
     name = 'token_expiration'
+    exp_time = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
+                                                          name=name)[0]
 
     def cleanup():
-        LOG.fixture_step("Deleting service parameter {} {} {}".format(service, section, name))
-        uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section=section, name=name)
-        if isinstance(uuid, list):
-            uuid = uuid[0]
-        res, out = system_helper.delete_service_parameter(uuid)
-        if res == 0:
-            LOG.info("Service parameter {} {} {} deleted".format(service, section, name))
-            system_helper.apply_service_parameters(service=service, wait_for_config=True)
+        LOG.fixture_step("Verifying service parameter {} {} {} is at default value".format(service, section, name))
+        res = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
+                                                         name=name)[0]
+        if res != exp_time:
+            LOG.fixture_step("Resetting service parameter {} {} {} to default of {}".format(service, section, name, exp_time))
+            res, out = system_helper.modify_service_parameter(service, section, name, str(exp_time))
+            if res == 0:
+                LOG.info("Service parameter {} {} {} reset to default.".format(service, section, name))
+                system_helper.apply_service_parameters(service=service, wait_for_config=True)
 
     request.addfinalizer(cleanup)
     return service, section, name
@@ -34,30 +37,30 @@ def test_token_expiry(service_params):
     Verify that token expiry time can be changed using service parameters
 
     Test Steps:
+        - Verify that the token expiration is set by default.
         - Set token expiry length to set values
         - Verify that the length is rejected if it is not between 1 and 4 hours
         - Create a token and ensure it expires after the expected expiry time
 
 
     """
-    expire_times = [6000, 3600, 7200, 3000, 15500]
+    expire_times = [6000, 7200, 3000, 15500, 3600]
     service, section, name = service_params
-
-    expire_time = expire_times.pop(0)
-    LOG.tc_step("Set token expiration service parameter to {}".format(expire_time))
-    system_helper.create_service_parameter(service, section, name, str(expire_time))
-    system_helper.apply_service_parameters(service, wait_for_config=True)
+    LOG.tc_step("Verify that token_expiration parameter is defined")
+    default_exp_time = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
+                                                                  name=name)[0]
+    assert int(default_exp_time) == 3600, "Default token_expiration value not 3600, actually {}".format(default_exp_time)
 
     LOG.tc_step("Verify that tokens now expire after expected time")
     token_expire_time = html_helper.get_user_token(rtn_value='expires')
-    expt_time = time.time() + expire_time
+    expt_time = time.time() + int(default_exp_time)
     expt_datetime = datetime.datetime.utcfromtimestamp(expt_time).isoformat()
     time_diff = common.get_timedelta_for_isotimes(expt_datetime, token_expire_time).total_seconds()
 
     LOG.info("Expect expiry time to be {}. Token expiry time is {}. Difference is {}."
              .format(token_expire_time, expt_datetime, time_diff))
     assert -150 < time_diff < 150, "Token expiry time is {}, but token expired {} seconds after expected time.".\
-        format(expire_time, time_diff)
+        format(expt_time, time_diff)
 
     for expire_time in expire_times:
         if expire_time > 14400 or expire_time < 3600:

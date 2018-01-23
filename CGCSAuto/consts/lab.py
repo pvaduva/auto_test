@@ -127,8 +127,8 @@ class Labs:
         'controller-1 ip': '128.224.150.28',
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
         'controller_nodes': [22715, 22716],
-        'compute_nodes': [22719, 22720, 22721, 22722, 23915, 23916],
-        'storage_nodes': [22717, 22718, 23954, 23955],
+        'compute_nodes': [22719, 22720, 23915, 22722],
+        'storage_nodes': [23954, 23955, 23916, 22717, 22718, 22721],
     }
 
     PV1 = {
@@ -163,11 +163,12 @@ class Labs:
 
     R720_1_2 = {
         'short_name': 'r720_1_2',
-        'name': 'yow-cgcs-r720-1-2',
+        'name': 'yow-cgcs-r720-1_2',
         'floating ip': '128.224.150.141',
         'controller-0 ip': '128.224.150.130',
         'controller-1 ip': '128.224.150.106',
-        'controller_nodes': [22351, 22352],
+        # 'controller_nodes': [22351, 22352],
+        'controller_nodes': [22352, 22351],
         'system_type': 'CPE',
         'system_mode': 'duplex',
     }
@@ -185,7 +186,7 @@ class Labs:
     R430_1_2 = {
         'short_name': 'r430_1_2',
         'name': 'yow-cgcs-r430-1_2',
-        'floating ip': '128.224.150.49 ',
+        'floating ip': '128.224.150.49',
         'controller-0 ip': '128.224.150.48',
         'controller-1 ip': '128.224.150.52',
         'controller_nodes': [23512, 23513],
@@ -194,6 +195,17 @@ class Labs:
         'tpm_installed': True,
     }
     
+    R430_3_4 = {
+        'short_name': 'r430_3_4',
+        'name': 'yow-cgcs-r430-3_4',
+        'floating ip': '128.224.150.11',
+        'controller-0 ip': '128.224.150.8',
+        'controller-1 ip': '128.224.150.9',
+        'controller_nodes': [32077, 71451],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+    }
+
     SM_1 = {
         'short_name': 'sm_1',
         'name': 'yow-cgcs-supermicro-1',
@@ -466,7 +478,7 @@ class Labs:
     }
 
     WP_01_02 = {
-        'short_name': 'wp_01_02',
+        'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
         'floating ip': '128.224.150.254',
         'controller-0 ip': '128.224.150.155',
@@ -510,17 +522,6 @@ class Labs:
     VBOX_3 = {
         'short_name': 'vbox_3',
         'name': 'yow-cgcs-vbox-3',
-        'floating ip': '10.10.10.5',
-        'controller-0 ip': '10.10.10.6',
-        'controller-1 ip': '10.10.10.7',
-        'controller_nodes': [0, 1],
-        'compute_nodes': [0, 1],
-        'storage_nodes': [0, 1]
-    }
-
-    VBOX_4 = {
-        'short_name': 'vbox_4',
-        'name': 'yow-cgcs-vbox-4',
         'floating ip': '10.10.10.8',
         'controller-0 ip': '10.10.10.9',
         'controller-1 ip': '10.10.10.10',

@@ -6,7 +6,7 @@ import time
 from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailabilityState
+from consts.cgcs import EventLogID, HostAvailState
 from keywords import host_helper, system_helper, local_storage_helper, install_helper, filesystem_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
@@ -321,6 +321,10 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     hosts = system_helper.get_controllers()
     for host in hosts:
+       system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                     entity_id="host={}".format(host))
+
+    for host in hosts:
        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
                                          entity_id="host={}".format(host),
                                          timeout=600)
@@ -409,7 +413,7 @@ def _test_modify_drdb():
                                          entity_id="host={}".format(host),
                                          timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
-    host_helper.wait_for_host_states(standby_cont, availability=HostAvailabilityState.AVAILABLE)
+    host_helper.wait_for_host_states(standby_cont, availability=HostAvailState.AVAILABLE)
     host_helper.swact_host()
 
     act_cont = system_helper.get_active_controller_name()

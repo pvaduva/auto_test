@@ -65,6 +65,8 @@ sys.path.append('../sanityrefresh/labinstall')
 from constants import *
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
+from consts.timeout import HostTimeout
+
 
 __all__ = ["Telnet"]
 
@@ -818,7 +820,8 @@ class Telnet:
 
         return output
 
-    def exec_cmd(self, cmd, extra_expects=None, timeout=TELNET_EXPECT_TIMEOUT, show_output=True, alt_prompt=None):
+    def exec_cmd(self, cmd, extra_expects=None, timeout=TELNET_EXPECT_TIMEOUT,
+                 show_output=True, alt_prompt=None, will_reboot=False):
         LOG.info('executing: {}'.format(cmd))
         self.write_line(cmd)
         expected = []
@@ -827,10 +830,15 @@ class Telnet:
 
         expected.append(str.encode(PROMPT))
 
+        if alt_prompt is not None:
+            expected.append(str.encode(alt_prompt))
+
+        timeout = HostTimeout.REBOOT if will_reboot else timeout
+
         try:
             index, matched, output = self.expect(expected, timeout=timeout)
             output = '\n'.join(output.decode('utf-8', 'ignore').splitlines())
-            LOG.debug('index:{}, output:{}'.format(index, output))
+            LOG.debug('index:{}, output:{}, expected:{}'.format(index, output, expected))
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
             raise exceptions.TelnetException(msg)
@@ -857,14 +865,14 @@ class Telnet:
             rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
             LOG.info("Return code: " + rc)
         else:
-            msg = "Timeout occurred: Failed to find return code"
+            msg = "Timeout occurred: Failed to find return code, index={}".format(index)
             LOG.error(msg)
             raise exceptions.TelnetException(msg)
 
-        if alt_prompt:
-            LOG.info('wait for special prompt:{}'.format(alt_prompt))
-            self.find_prompt(prompt=alt_prompt, timeout=timeout)
-        else:
+        if not alt_prompt:
+            # LOG.info('wait for special prompt:{}'.format(alt_prompt))
+            # self.find_prompt(prompt=alt_prompt, timeout=timeout)
+        # else:
             self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
 
         return int(rc), output
@@ -996,7 +1004,12 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', upgrade=False, usb=False,
+    def install(self, node, boot_device_dict,
+                host_os='centos',
+                upgrade=False,
+                usb=False,
+                small_footprint=False,
+                low_latency=False,
                 clone_install=False):
         boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
 
@@ -1158,6 +1171,7 @@ class Telnet:
                     # 2) CentOS Serial Controller Install
                     # 3) WRL Serial CPE Install
                     # 4) CentOS Serial CPE Install
+                    # 6) CentOS Serial CPE Install (low latency)
                     LOG.info("Enter option for {} Controller Install".format(host_os))
                     if host_os == 'wrlinux':
                         #selection_menu_option = '1'
@@ -1168,7 +1182,10 @@ class Telnet:
 
                     else:
                         if small_footprint:
-                            selection_menu_option = '4'
+                            if low_latency:
+                                selection_menu_option = '6'
+                            else:
+                                selection_menu_option = '4'
                         else:
                             selection_menu_option = '2'
 
