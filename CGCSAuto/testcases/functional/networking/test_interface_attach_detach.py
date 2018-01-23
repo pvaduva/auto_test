@@ -37,6 +37,7 @@ def base_vm():
     return vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id
 
 
+@mark.nics
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
     ('tis-centos-guest', 'net_id', [('virtio', 15)]),
     # ('tis-centos-guest', 'net_id', [('avp', 15)]),
@@ -44,6 +45,7 @@ def base_vm():
     ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
     # ('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
     ('vxworks', 'net_id', [('e1000', 0)])
+    #('tis-centos-guest', 'net_id', [('rtl8139', 1), ('e1000', 1)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(base_vm, guest_os, if_attach_arg, vifs):
     """

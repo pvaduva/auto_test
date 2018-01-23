@@ -1,4 +1,4 @@
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 
@@ -165,6 +165,7 @@ class TestSriov:
 
         return net_type, pci_net, pci_hosts, pnet_id, nics, initial_host, other_host, vfs_use_init, vm_num, vm_vcpus
 
+    @mark.nics
     def test_sriov_robustness(self, sriov_prep, add_admin_role_func):
         """
         Exhaust all CPUs on one compute by spawning VMs with 2 SR-IOV interface
@@ -286,6 +287,7 @@ class TestPcipt:
 
         return net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id, vm_num, vm_vcpus, pfs_use_init
 
+    @mark.nics
     def test_pcipt_robustness(self, pcipt_prep):
         """
         TC3_robustness: PCI-passthrough by locking and rebooting pci_vm host

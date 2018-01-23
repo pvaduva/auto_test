@@ -88,6 +88,7 @@ def launch_vm(vm_type, num_vcpu, host=None):
     return vm_id
 
 
+@mark.nics
 @mark.parametrize(('vm_type', 'num_vcpu'), [
     ('dpdk', 2),
     ('vhost', 2),
@@ -120,6 +121,7 @@ def test_dpdk_vm_nova_actions(vm_type, num_vcpu):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
+@mark.nics
 def test_evacuate_dpdk_and_vhost_vms(add_admin_role_func):
     """
     Skip:
