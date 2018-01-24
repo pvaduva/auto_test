@@ -465,6 +465,7 @@ if __name__ == "__main__":
         vboxoptions.createlab = True
         vboxoptions.setup_files = env.FILEPATH + vboxoptions.release
         vboxoptions.buildserver = 'CGTS4'
+        vboxoptions.configure = True
     elif vboxoptions.complete:
         assert vboxoptions.buildserver, "Buildserver must be specified."
         vboxoptions.install_lab = True
@@ -534,8 +535,12 @@ if __name__ == "__main__":
                  " now. Press enter to continue.")
         input()
     if vboxoptions.configure:
+        if vboxoptions.enablehttps:
+            config_file = '/home/wrsroot/TiS_config.ini_centos_https'
+        else:
+            config_file = '/home/wrsroot/TiS_config.ini_centos_http'
         remote_host = vboxoptions.buildserver
-        ret = install_lab.config_controller(cont0_stream, config_file='/home/wrsroot/TiS_config.ini_centos',
+        ret = install_lab.config_controller(cont0_stream, config_file=config_file,
                                             release=vboxoptions.release, remote_host=remote_server)
         if ret == 1:
             LOG.info("Pausing to allow for manual configuration. Press enter to continue.")

@@ -46,6 +46,12 @@ def pytest_addoption(parser):
         """,
         action='store_true')
 
+    parser.addoption("--enablehttps", help=
+        """
+        If present, use https system config file else use http config file
+        """,
+        action='store_true')
+
     parser.addoption("--release", help=
         """
         Which release to install:

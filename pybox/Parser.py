@@ -61,6 +61,12 @@ def handle_args():
         """,
         action='store_true')
 
+    parser.add_argument("--enablehttps", help=
+        """
+        If present, use https system config file else use http config file
+        """,
+        action='store_true')
+
     parser.add_argument("--release", help=
         """
         Which release to install:
@@ -72,6 +78,7 @@ def handle_args():
         choices=['R2', 'R3', 'R4', 'R5'],
         type=str,
         required=True)
+
 
     parser.add_argument("--buildserver", help=
         """
