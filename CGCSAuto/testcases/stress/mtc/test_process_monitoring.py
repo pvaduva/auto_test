@@ -380,7 +380,7 @@ class MonitoredProcess:
 
         self.lab_type = kwargs.get('lab_type', 'any')
         self.conf_file = kwargs.get('conf_file', None)
-        self.override = kwargs.get('override', True)
+        self.override = kwargs.get('override', False)
 
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
@@ -401,13 +401,15 @@ class MonitoredProcess:
             self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(self.name)
 
         elif not os.path.abspath(self.pid_file):
-            self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(os.path.basename(os.path.split(self.pid_file))[0])
+            self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(os.path.splitext(os.path.basename(self.pid_file))[0])
 
         self.update_process_info()
 
         self.check_process_settings()
 
     def check_process_settings(self):
+        LOG.debug('retries:{}, debounce:{}, interval:{}, process_type:{}, \npid_file:{}'.format(
+            self.retries, self.debounce, self.interval, self.process_type, self.pid_file))
         pass
 
     def is_supported_lab(self):
@@ -465,13 +467,15 @@ class MonitoredProcess:
             for k, v in settings.items():
                 setattr(self, k, v)
 
-            if 'restarts' in settings and not self.override:
+            # if 'restarts' in settings and not self.override:
+            if 'restarts' in settings:
                 self.retries = int(settings['restarts'].strip())
+                LOG.debug('retries (Not override):{}'.format(self.retries))
             else:
                 self.retries = getattr(self, 'retries', None)
                 if self.retries is None:
                     self.retries = 3
-            self.retries += 1
+                LOG.debug('retries:{}'.format(self.retries))
 
             self.interval = getattr(self, 'interval', None)
             if self.interval is None:
@@ -751,21 +755,22 @@ class MonitoredProcess:
 
         quorum = int(getattr(self, 'quorum', 0))
         if quorum > 0:
-            retries = retries * 2 + 1
+            retries = retries + 1 + 1
             mode = getattr(self, 'mode', 'passive')
             if 'active' == mode:
                 wait_after_each_kill += 5
-            else:
-                retries += 1
+            # have to kill 1 more time for mtcClient
+            retries += 1
 
-        LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
+        LOG.info('retries={}, interval={}, debounce={}, wait_each_kill={}'.format(
+            retries, interval, debounce, wait_after_each_kill))
 
         cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=\$(cat {} 2>/dev/null); date;
                 if [ "x\$pid" = "x" -o "\$pid" = "\$last_pid" ]; then echo "stale or empty PID:\$pid, last_pid=\$last_pid";
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
-                    retries+2, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+                    retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 

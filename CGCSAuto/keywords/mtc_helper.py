@@ -124,6 +124,7 @@ def get_pmon_process_info(name, host, conf_file=None, con_ssh=None):
 
     settings['interval'] = int(settings.get('interval', 5))
     settings['debounce'] = int(settings.get('debounce', 20))
+    LOG.debug('process settings:{}'.format(settings))
     return settings
 
 
