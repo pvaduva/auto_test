@@ -2268,7 +2268,7 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_cred
         rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
                                 source_creden_=source_creden_)
     else:
-        rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
+        rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True,
                             source_creden_=source_creden_)
     if rc == 0:
         table_ = table_parser.table(output)
