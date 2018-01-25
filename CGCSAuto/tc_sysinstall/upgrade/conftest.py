@@ -153,7 +153,7 @@ def upgrade_setup(pre_check_upgrade):
     if not system_helper.get_imported_load_version():
         LOG.tc_step("Downloading the {} target release  load iso image file {}:{}"
                     .format(upgrade_version, bld_server_obj.name, load_path))
-        install_helper.download_upgrade_load(lab, bld_server_obj, load_path)
+        install_helper.download_upgrade_load(lab, bld_server_obj, load_path,upgrade_ver=upgrade_version)
         upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
 
         cmd = "test -e {}".format(upgrade_load_path)
@@ -161,7 +161,7 @@ def upgrade_setup(pre_check_upgrade):
             .format(upgrade_load_path)
         LOG.info("Target release load {} download complete.".format(upgrade_load_path))
         LOG.tc_step("Importing Target release  load iso file from".format(upgrade_load_path))
-        system_helper.import_load(upgrade_load_path)
+        system_helper.import_load(upgrade_load_path,upgrade_ver=upgrade_version)
 
         # download and apply patches if patches are available in patch directory
         if patch_dir and upgrade_version != "17.07":

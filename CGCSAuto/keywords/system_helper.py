@@ -2262,9 +2262,14 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
 
-def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None):
-    rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True, source_creden_=source_creden_)
-
+def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None,upgrade_ver=None):
+    if upgrade_ver=='17.07':
+        load_path = '/home/wrsroot/bootimage.sig'
+        rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
+                                source_creden_=source_creden_)
+    else:
+        rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
+                            source_creden_=source_creden_)
     if rc == 0:
         table_ = table_parser.table(output)
         id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()

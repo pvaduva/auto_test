@@ -24,6 +24,7 @@ import configparser
 
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
+UPGRADE_LOAD_SIG_FILE = "bootimage.sig"
 BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
@@ -85,13 +86,14 @@ def download_upgrade_license(lab, server, license_path):
                             pre_opts=pre_opts)
 
 
-def download_upgrade_load(lab, server, load_path):
+def download_upgrade_load(lab, server, load_path, upgrade_ver):
 
     # Download licens efile
     cmd = "test -e " + load_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Upgrade build iso file not found in {}:{}'.format(
             server.name, load_path)
     iso_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_ISO_FILE)
+    sig_file_path = os.path.join(load_path, "export", UPGRADE_LOAD_SIG_FILE)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     if 'vbox' in lab['name']:
@@ -109,7 +111,6 @@ def download_upgrade_load(lab, server, load_path):
             server.ssh_conn.rsync(iso_file_path, local_ip,
                                   os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
-
             common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
                                             dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
 
@@ -117,6 +118,10 @@ def download_upgrade_load(lab, server, load_path):
         server.ssh_conn.rsync(iso_file_path,
                               lab['controller-0 ip'],
                               os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
+        if upgrade_ver == '17.07':
+           server.ssh_conn.rsync(sig_file_path,
+                               lab['controller-0 ip'],
+                               os.path.join(WRSROOT_HOME, "bootimage.sig"), pre_opts=pre_opts)
 
 def get_mgmt_boot_device(node):
     boot_device = {}
