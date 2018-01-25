@@ -7,7 +7,7 @@ from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailState
-from keywords import host_helper, system_helper, local_storage_helper, install_helper, filesystem_helper
+from keywords import host_helper, system_helper, local_storage_helper, install_helper, filesystem_helper, common
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -308,7 +308,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     DISABLE until CGTS-8424 is fixed.
     """
 
-
+    start_time = common.get_date_in_format()
     drbdfs_val = {}
     fs = "backup"
     LOG.tc_step("Increase the backup size before proceeding with rest of test")
@@ -321,13 +321,13 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     hosts = system_helper.get_controllers()
     for host in hosts:
-       system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                     entity_id="host={}".format(host))
+        system_helper.wait_for_events(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, start=start_time,
+                                      entity_id="host={}".format(host), **{'state': 'set'})
 
     for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host),
-                                         timeout=600)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host),
+                                          timeout=600)
 
     LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
     filesystem_helper.check_controllerfs(**drbdfs_val)
@@ -404,14 +404,13 @@ def _test_modify_drdb():
     cgcs_free_space = math.trunc(backup_freespace / 2)
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
-    rc, out = con_ssh.exec_cmd(cmd)
-
+    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     hosts = system_helper.get_controllers()
     for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host),
-                                         timeout=600)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host),
+                                          timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
     host_helper.wait_for_host_states(standby_cont, availability=HostAvailState.AVAILABLE)
     host_helper.swact_host()

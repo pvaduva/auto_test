@@ -578,6 +578,11 @@ def config_logger(log_dir):
     LOG.setLevel(logging.NOTSET)
 
     tmp_path = os.path.join(os.path.expanduser('~'), '.tmp_log')
+    # clear the tmp log with best effort so it wont keep growing
+    try:
+        os.remove(tmp_path)
+    except:
+        pass
     logging.basicConfig(level=logging.NOTSET, format=log_format, filename=tmp_path, filemode='w')
 
     # file handler:

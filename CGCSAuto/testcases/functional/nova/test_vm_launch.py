@@ -108,7 +108,8 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
     raw_thin_pool_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
     assert raw_thin_pool_output, "thin pool volume not found"
-    raw_lvs_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".format(excluded_vm))[1]
+    raw_lvs_output = host_ssh.exec_sudo_cmd(
+            "lvs --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".format(excluded_vm))[1]
 
     if raw_lvs_output:
         lvs_in_pool = raw_lvs_output.split('\n')
@@ -122,7 +123,8 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
 
 # TC5080
-def test_check_vm_disk_on_lvm_compute():
+@mark.parametrize('storage', ['local_lvm'])
+def test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
     """
         Tests that existence of volumes are properly reported for lvm-backed vms.
@@ -146,13 +148,12 @@ def test_check_vm_disk_on_lvm_compute():
 
     """
 
-    lvm_hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing='local_lvm')
-    LOG.info("lvm hosts: {}".format(lvm_hosts))
-    if not lvm_hosts:
-        skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format("local_lvm"))
+    hosts_with_backing = hosts_per_backing.get(storage, [])
+    if not hosts_with_backing:
+        skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(storage))
 
     LOG.tc_step("Create flavor and boot vm")
-    flavor = nova_helper.create_flavor(storage_backing='local_lvm')[1]
+    flavor = nova_helper.create_flavor(storage_backing=storage, check_storage_backing=False)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
     vm = vm_helper.boot_vm(source='image', flavor=flavor, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm)
