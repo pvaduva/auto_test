@@ -76,7 +76,6 @@ def get_vms_args():
 
 
 @fixture(scope='function')
-@mark.usefixtures('ubuntu14_image')
 def _vms(get_vms_args):
     flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models = get_vms_args
     vms = []
@@ -87,7 +86,7 @@ def _vms(get_vms_args):
                 {'net-id': internal_net_id, 'vif-model': vm_vif_models[vm]}]
 
         LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=flavor_id, source='volume', cleanup='function',
+        vm_id = vm_helper.boot_vm(vm, flavor=flavor_id, source='volume', cleanup='function',
                                   nics=nics, guest_os=GUEST_OS)[1]
 
         vms.append(vm_id)
@@ -181,13 +180,13 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
 
     LOG.tc_step("Testing non tcp packets  in  TCP protocol port forwarding rules ...")
 
-    vm_threads = [None] * VMS_COUNT
+    vm_threads = []
     index = 0
     for k, v in vm_tcp_pfs.items():
         greeting = "Hello {}".format(v['public_port'])
         ssh_public_port = vm_ssh_pfs[k]['public_port']
         thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting)
-        vm_threads[index] = thread_vm
+        vm_threads.append(thread_vm)
         index += 1
 
     LOG.info("Starting VM ssh session threads and NAT ssh session threads .... ")

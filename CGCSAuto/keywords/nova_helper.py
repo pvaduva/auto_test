@@ -28,6 +28,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         swap (int|None):
         is_public (bool):
         rxtx_factor (str):
+        guest_os (str|None): guest name such as 'tis-centos-guest' or None - default tis guest assumed
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):

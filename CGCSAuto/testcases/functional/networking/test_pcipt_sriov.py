@@ -474,11 +474,12 @@ class TestVmPCIOperations:
         if flavor_id:
             ResourceCleanup.add('flavor', flavor_id)
 
+            pci_alias_spec = '{}:{}'.format(self.pci_alias_names[0], self.pci_alias) if self.pci_alias else None
             LOG.tc_step('Set extra-specs to the flavor {}'.format(flavor_id))
             extra_specs = {
                 FlavorSpec.CPU_POLICY: 'dedicated',
                 FlavorSpec.PCI_NUMA_AFFINITY: self.pci_numa_affinity,
-                FlavorSpec.PCI_PASSTHROUGH_ALIAS: 'qat-vf:{}'.format(self.pci_alias) if self.pci_alias else None,
+                FlavorSpec.PCI_PASSTHROUGH_ALIAS: pci_alias_spec,
                 FlavorSpec.PCI_IRQ_AFFINITY_MASK: self.pci_irq_affinity_mask}
             extra_specs = {k: str(v) for k, v in extra_specs.items() if v is not None}
 
@@ -508,6 +509,9 @@ class TestVmPCIOperations:
 
         if min_vfs < requested_vfs:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
+
+        self.pci_alias_names = list(nova_pci_devices.keys())
+
 
     @mark.nics
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [

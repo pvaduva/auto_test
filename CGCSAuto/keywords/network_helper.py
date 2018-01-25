@@ -2041,7 +2041,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
                  <pci_alias2>: {...},
                  ...}
         Examples:
-            {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
+            {'qat-dh895xcc-vf': {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     """
     table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -2058,7 +2058,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
 
         table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True, lower_case=False)
         nova_pci_devices[alias] = table_dict
-        # {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
+        # {'qat-dh895xcc-vf': {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     LOG.info('nova_pci_deivces: {}'.format(nova_pci_devices))
 

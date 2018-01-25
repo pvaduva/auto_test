@@ -773,3 +773,46 @@ def check_alarms(before_alarms, timeout=300):
                                                                    check_interval=check_interval)
         assert res, "New alarm(s) found and did not clear within {} seconds. " \
                     "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
+
+
+def check_qat_service(vm_id, qat_devs, timeout=600):
+    """
+    Check qat device and service on given vm
+    Args:
+        vm_id (str):
+        qat_devs (dict): {<qat-dev1-name>: <number1>, <qat-dev2-name>: <number2>}
+            e.g., {'Intel Corporation DH895XCC Series QAT Virtual Function [8086:0443]' : 32}
+        timeout (int)
+
+    Returns:
+
+    """
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+        code, output = vm_ssh.exec_sudo_cmd('lspci -nn | grep --color=never QAT', fail_ok=True)
+        if not qat_devs:
+            LOG.tc_step("On vm, check no qat device exist")
+            assert 1 == code
+            return
+
+        LOG.tc_step("On vm, check qat devices exist, start qat_service and run cpa_sample_code test")
+        assert 0 == code, "No QAT device exists on vm {}".format(vm_id)
+        for dev, expt_count in qat_devs.items():
+            actual_count = 0
+            for line in output.splitlines():
+                if dev in line:
+                    actual_count += 1
+            assert expt_count == actual_count, "qat device count for {} is {} while expecting {}".format(
+                    dev, actual_count, expt_count)
+
+        check_status_cmd = "systemctl status qat_service | grep '' --color=never"
+        status = vm_ssh.exec_sudo_cmd(check_status_cmd)[1]
+        active_str = 'Active: active'
+        if active_str not in status:
+            LOG.info("Start qat service")
+            vm_ssh.exec_sudo_cmd('systemctl start qat_service', fail_ok=False)
+            status = vm_ssh.exec_sudo_cmd(check_status_cmd, fail_ok=False)[1]
+            assert active_str in status
+
+        LOG.info("Run cpa_sample_code on quickAssist hardware")
+        output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
+        assert 'error' not in output.lower(), "cpa_sample_code test failed"

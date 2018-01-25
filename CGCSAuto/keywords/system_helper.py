@@ -2508,7 +2508,7 @@ def get_host_device_list_values(host, field='name', con_ssh=None, auth_info=Tena
     Returns (list): output of system host-device-list <host> parsed by table_parser
 
     """
-    table_ = table_parser.table(cli.system('host-device-list', host, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('host-device-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
 
     return table_parser.get_values(table_, target_header=field, strict=strict, regex=regex, **kwargs)
 

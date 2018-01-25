@@ -148,9 +148,8 @@ def test_port_trunking(vif_model):
     LOG.tc_step("Boot a vm with created ports")
     vm2_id = vm_helper.boot_vm(name='vm-with-trunk2-port', nics=nics_2, cleanup='function')[1]
 
-    # Add the sub ports to the second truck
-    ret_code_20 = network_helper.add_trunk_subports(trunk2_id, sub_ports=t2_sub_ports)[0]
-    assert ret_code_20 == 0, "Subports not added as expected."
+    LOG.tc_step("Add the sub ports to the second truck")
+    network_helper.add_trunk_subports(trunk2_id, sub_ports=t2_sub_ports)
 
     LOG.tc_step("Setup Vlan interfaces inside guest")
     _bring_up_vlan_interface(vm2_id, 'eth1', [segment_1])
@@ -179,8 +178,7 @@ def test_port_trunking(vif_model):
     # set the subport on trunk_1 and try the ping (it will work)
     LOG.tc_step(" Add back the subport to trunk and ping on vlan interface inside guest")
     t1_sub_port = [{'port': t1_sub_port1_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1}]
-    ret_code_11 = network_helper.add_trunk_subports(trunk1_id, sub_ports=t1_sub_port)[0]
-    assert ret_code_11 == 0, "Subports not added as expected."
+    network_helper.add_trunk_subports(trunk1_id, sub_ports=t1_sub_port)
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
         LOG.tc_step("Ping on vlan interface from guest")
@@ -276,20 +274,17 @@ def test_port_trunking_basic():
     trunk1_id = network_helper.create_trunk(t1_parent_port_id, name='trunk-1', sub_ports=t1_sub_ports)[1]
     ResourceCleanup.add('trunk', trunk1_id)
 
-    # add a port with same segment id and verify it rejects it
+    LOG.tc_step("Attempt to add a port with same segment id and verify it's rejected")
     t1_sub_port2 = [{'port': t1_sub_port3_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1}]
     ret_code = network_helper.add_trunk_subports(trunk1_id, t1_sub_port2, fail_ok=True)[0]
-    if not ret_code:
-        assert ret_code == 1, "Subport addition with the same vlan id is not rejected."
+    assert ret_code == 1, "Subport addition with the same vlan id is not rejected."
 
-    # Add subport with out of range vlan id
+    LOG.tc_step("Attempt to add subport with out of range vlan id, and verify it's rejected")
     out_of_range_id = 5000
     t1_sub_port3 = [{'port': t1_sub_port3_id, 'segmentation-type': 'vlan', 'segmentation-id': out_of_range_id}]
     ret_code_2 = network_helper.add_trunk_subports(trunk1_id, t1_sub_port3, fail_ok=True)[0]
-    if not ret_code_2:
-        assert ret_code_2 == 1, "Subport addition with out of range vlan id is not rejected."
+    assert ret_code_2 == 1, "Subport addition with out of range vlan id is not rejected."
 
-    # Delete a port that is used by the trunk...the action should be rejected
+    LOG.tc_step("Attempt to delete a port that is used by the trunk, and verify it's rejected")
     ret_code_3 = network_helper.delete_port(port_id=t1_sub_port1_id, fail_ok=True)[0]
-    if not ret_code_3:
-        assert ret_code_3 == 1, "Port that is part of the trunk deletion is not rejected."
+    assert ret_code_3 == 1, "Port that is part of the trunk deletion is not rejected."

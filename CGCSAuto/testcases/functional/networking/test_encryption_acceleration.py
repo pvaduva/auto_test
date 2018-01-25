@@ -2,7 +2,7 @@ from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, DevClassIds
-from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper, cinder_helper
+from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper, cinder_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -14,12 +14,12 @@ def list_nova_device():
 
 
 @fixture(scope='module', autouse=True)
-def hosts_pci_device_list():
+def hosts_pci_device_info():
     """
     """
     # get lab host list
     hosts_device_info = {}
-    compute_hosts = system_helper.get_computes()
+    compute_hosts = host_helper.get_up_hypervisors()
     for host in compute_hosts:
         device_info = host_helper.get_host_co_processor_pci_list(host)
         if len(device_info) > 0:
@@ -28,31 +28,31 @@ def hosts_pci_device_list():
 
     if not hosts_device_info:
         skip("co-proccessor PCI device not found")
-
+    
     return hosts_device_info
 
 
 @fixture(scope='function')
-def enable_device_and_unlock_compute(request, hosts_pci_device_list):
+def enable_device_and_unlock_compute(request, hosts_pci_device_info):
     """
     """
     def teardown():
 
-        compute_hosts = system_helper.get_computes()
-        if not any(hosts_pci_device_list):
+        compute_hosts = host_helper.get_up_hypervisors()
+        if not any(hosts_pci_device_info):
             return
 
         for host in compute_hosts:
             if host_helper.is_host_locked(host):
-                status = system_helper.get_host_device_pci_status(host, hosts_pci_device_list[host][0]['pci_address'])
+                status = system_helper.get_host_device_pci_status(host, hosts_pci_device_info[host][0]['pci_address'])
                 if status == 'False':
-                    system_helper.modify_host_device_status(host, hosts_pci_device_list[host][0]['pci_address'], 'True')
+                    system_helper.modify_host_device_status(host, hosts_pci_device_info[host][0]['pci_address'], 'True')
                 host_helper.unlock_host(host)
             else:
-                status = system_helper.get_host_device_pci_status(host, hosts_pci_device_list[host][0]['pci_address'])
+                status = system_helper.get_host_device_pci_status(host, hosts_pci_device_info[host][0]['pci_address'])
                 if status == 'False':
                     host_helper.lock_host(host)
-                    system_helper.modify_host_device_status(host, hosts_pci_device_list[host][0]['pci_address'], 'True')
+                    system_helper.modify_host_device_status(host, hosts_pci_device_info[host][0]['pci_address'], 'True')
                     host_helper.unlock_host(host)
 
     request.addfinalizer(teardown)
@@ -60,10 +60,11 @@ def enable_device_and_unlock_compute(request, hosts_pci_device_list):
 
 
 @fixture(scope='module')
-def _flavors():
+def _flavors(hosts_pci_device_info):
     """
     Creates all flavors required for this test module
     """
+    pci_alias = list(hosts_pci_device_info.values())[0][0]['pci-alias']
     flavor_parms = {'flavor_qat_vf_1': [2, 1024, 2, 1],
                     'flavor_resize_qat_vf_1': [4, 2048, 2, 1],
                     'flavor_qat_vf_4': [2, 1024, 2, 4],
@@ -82,7 +83,7 @@ def _flavors():
         flavor_id = nova_helper.create_flavor(name=k, vcpus=v[0], ram=v[1], root_disk=v[2])[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
         if vf > 0:
-            extra_spec = {FlavorSpec.PCI_PASSTHROUGH_ALIAS: 'qat-vf:{}'.format(vf),
+            extra_spec = {FlavorSpec.PCI_PASSTHROUGH_ALIAS: '{}:{}'.format(pci_alias, vf),
                           FlavorSpec.NUMA_NODES: '2',
                           FlavorSpec.CPU_POLICY: 'dedicated'}
 
@@ -92,35 +93,35 @@ def _flavors():
     return flavors
 
 
-def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and_unlock_compute):
+def test_ea_host_device_sysinv_commands(hosts_pci_device_info, enable_device_and_unlock_compute):
     """
     Verify the system host device cli commands
     Args:
-        hosts_pci_device_list:
+        hosts_pci_device_info:
         enable_device_and_unlock_compute:
 
     Returns:
 
     """
-    hosts = list(hosts_pci_device_list.keys())
+    hosts = list(hosts_pci_device_info.keys())
     HostsToRecover.add(hosts)
 
     for host in hosts:
         LOG.tc_step("Verifying the system host-device-list include all pci devices for host{}.".format(host))
-        table_ = table_parser.table(cli.system('host-device-list', host))
-        check_device_list_against_pci_list(hosts_pci_device_list[host], table_)
+        table_ = table_parser.table(cli.system('host-device-list --nowrap', host))
+        check_device_list_against_pci_list(hosts_pci_device_info[host], table_)
         LOG.info("All devices are listed for host {}.".format(host))
 
         if not host_helper.is_host_locked(host):
             LOG.tc_step("Verifying  system host-device-modify fail for unlocked host.")
-            assert system_helper.modify_host_device_pci_name(host, hosts_pci_device_list[host][0]['pci_name'],
+            assert system_helper.modify_host_device_pci_name(host, hosts_pci_device_info[host][0]['pci_name'],
                                                              'new_pci_name', fail_ok=True)[0] == 1,\
                 "It is possible to modify host device name without host is being locked "
 
             host_helper.lock_host(host)
 
         LOG.tc_step("Verifying  system host-device-modify can  modify device name.")
-        device_address = hosts_pci_device_list[host][0]['pci_address']
+        device_address = hosts_pci_device_info[host][0]['pci_address']
         device_name = system_helper.get_host_device_pci_name(host, device_address)
         new_device_name = "{}_new".format(device_name)
         rc, msg = system_helper.modify_host_device_pci_name(host, device_name, new_device_name, fail_ok=True)
@@ -159,20 +160,19 @@ def test_ea_host_device_sysinv_commands(hosts_pci_device_list, enable_device_and
         host_helper.unlock_host(host)
 
 
-def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_and_unlock_compute):
+def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_info, enable_device_and_unlock_compute):
     """
     Verify guest can be launched with  one crypto VF, AVP, VIRTIO, and SRIOV interfaces.
     Verify device cannot be disabled while on use. ( mainly for labs with two computes)
     Args:
         _flavors:
-        hosts_pci_device_list:
+        hosts_pci_device_info:
         enable_device_and_unlock_compute:
 
     Returns:
 
     """
-    LOG.tc_step("Verifying  launching a VM with single crypto VF.....")
-
+    hosts = list(hosts_pci_device_info.keys())
     vm_name = 'vm_with_pci_device'
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
@@ -183,33 +183,50 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_list, enable_device_an
             {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]
 
     flavor_id = _flavors['flavor_qat_vf_1']
-    LOG.info("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
+    LOG.tc_step("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
     vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, nics=nics, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     LOG.info("VM {} booted successfully and become active with crypto VF".format(vm_name))
 
-    LOG.tc_step("Verifying device which is in use by VM cannot be disabled  .....")
     vm_host = nova_helper.get_vm_host(vm_id)
-    device_address = hosts_pci_device_list[vm_host][0]['pci_address']
+    device_address = hosts_pci_device_info[vm_host][0]['pci_address']
 
+    host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
+                                                              **{'class id': DevClassIds.QAT_VF})[0]
+    expt_qat_devs = {host_dev_name: 1}
+    check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
+
+    LOG.tc_step("Lock vm host {}, disable qat device on host, and unlock".format(vm_host))
     HostsToRecover.add(vm_host)
+
+    extra_str = ''
+    expt_code = 0
+    force = False
+    if len(hosts) < 2:
+        force = True
+        expt_code = 1
+        extra_str = 'not'
+
     LOG.info("VM {} host is {}; force lock to attempt disable device".format(vm_name, vm_host))
-    host_helper.lock_host(vm_host, force=True)
+    host_helper.lock_host(vm_host, force=force)
 
-    LOG.info("Host {} locked. Attempting to disable device on VM host {}".format(vm_host, vm_host))
-    rc, msg = system_helper.modify_host_device_status(vm_host, device_address, 'False', fail_ok=True)
-    assert rc == 0, "Unable to disable device {}  on {}".format(device_address, vm_host)
+    LOG.tc_step("Check qat device can{} be disabled".format(extra_str))
+    code, output = system_helper.modify_host_device_status(vm_host, device_address, 'False', fail_ok=True)
+    assert expt_code == code, output
 
-    LOG.info("Host {} unlocking...".format(vm_host))
-    host_helper.unlock_host(vm_host)
+    if len(hosts) > 1:
+        host_helper.unlock_host(vm_host)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
 
-    vm_name = 'vm_with_pci_device_2'
-    flavor_id = _flavors['flavor_qat_vf_1']
-    LOG.info("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
-    vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, nics=nics, cleanup='function')[1]
+        LOG.tc_step("Check new vm with qat-vf will not be scheduled on host with disabled qat device")
+        vm_name = 'vm_with_pci_device_2'
+        flavor_id = _flavors['flavor_qat_vf_1']
+        LOG.info("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
+        vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, nics=nics, cleanup='function')[1]
 
-    vm_host_2 = nova_helper.get_vm_host(vm_id)
-    assert vm_host_2 != vm_host, "Possible to launch VM {} on host {} with device disabled".format(vm_name, vm_host)
+        vm2_host = nova_helper.get_vm_host(vm_id)
+        assert vm2_host != vm_host, "Possible to launch VM {} on host {} with device disabled".format(vm_name, vm_host)
 
 
 def _perform_nova_actions(vms_dict, flavors, vfs=None):
@@ -241,7 +258,7 @@ def _perform_nova_actions(vms_dict, flavors, vfs=None):
 
 
 @mark.parametrize('vfs', [32, 33])
-def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
+def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
     """
     Verify guest can be launched with multiple crypto VFs, AVP, VIRTIO, and SRIOV interfaces.
     Verify max number of crypto VFs, verify beyond the limit (max is 32) and VM Maintenance
@@ -249,7 +266,7 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
     Args:
         vfs:
         _flavors:
-        hosts_pci_device_list:
+        hosts_pci_device_info:
 
     Returns:
 
@@ -279,7 +296,15 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_list):
     else:
         assert rc == 0, "VM is not successfully launched. Details: {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        vm_host = nova_helper.get_vm_host(vm_id)
+        host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
+                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+        expt_qat_devs = {host_dev_name: vfs}
+        # 32 qat-vfs takes more than 1 hour to run tests
+        # check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=1800)
+
         _perform_nova_actions(vms_dict={vm_name: vm_id}, flavors=_flavors, vfs=vfs)
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=5400)
 
 
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
@@ -314,38 +339,48 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
                  }
 
     vms = {}
+    vms_qat_devs = {}
 
-    for vm, param in vm_params.items():
+    for vm_name, param in vm_params.items():
 
-        LOG.tc_step("Boot vm {} with {} flavor".format(vm, param[0]))
-        vm_id = vm_helper.boot_vm('{}'.format(vm), flavor=param[0], nics=param[1], cleanup='function')[1]
+        LOG.tc_step("Boot vm {} with {} flavor".format(vm_name, param[0]))
+        vm_id = vm_helper.boot_vm('{}'.format(vm_name), flavor=param[0], nics=param[1], cleanup='function')[1]
 
         LOG.info("Verify  VM can be pinged from NAT box...")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id), "VM is not pingable."
-        vms[vm] = vm_id
+        vms[vm_name] = vm_id
+        vm_host = nova_helper.get_vm_host(vm_id)
+        host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
+                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+        expt_qat_devs = {} if '_no_crypto' in vm_name else {host_dev_name: 1}
+        vms_qat_devs[vm_id] = expt_qat_devs
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
 
     _perform_nova_actions(vms, flavors=_flavors, vfs=None)
 
+    for vm_id_, expt_qat_devs_ in vms_qat_devs.items():
+        check_helper.check_qat_service(vm_id_, qat_devs=expt_qat_devs_)
 
-def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
+
+def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
     """
     Verify maximum number of guests with Crypto VFs can be launched and
     stabilized
 
     Args:
         _flavors:
-        hosts_pci_device_list:
+        hosts_pci_device_info:
 
     Returns:
 
     """
 
-    LOG.info("Pci device  {}".format(hosts_pci_device_list))
+    LOG.info("Pci device  {}".format(hosts_pci_device_info))
 
     flavor_id = _flavors['flavor_qat_vf_4']
     # Assume we only have 1 coleto creek pci device on system
-    crypto_hosts = list(hosts_pci_device_list.keys())
-    vf_device_id = hosts_pci_device_list[crypto_hosts[0]][0]['vf_device_id']
+    crypto_hosts = list(hosts_pci_device_info.keys())
+    vf_device_id = hosts_pci_device_info[crypto_hosts[0]][0]['vf_device_id']
     LOG.info("Vf_device_id {}".format(vf_device_id))
     configured_vfs = network_helper.get_pci_device_configured_vfs_value(vf_device_id)
     used_vfs = network_helper.get_pci_device_used_vfs_value(vf_device_id)
@@ -380,6 +415,10 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
 
         LOG.tc_step("Checking if other host has room for cold migrate vm")
         vm_host = nova_helper.get_vm_host(vm_id_)
+        host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
+                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+        expt_qat_devs = {host_dev_name: 4}
+        check_helper.check_qat_service(vm_id=vm_id_, qat_devs=expt_qat_devs)
 
         for host_ in crypto_hosts:
             if host_ != vm_host:
@@ -423,6 +462,8 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_list):
         rc, msg = vm_helper.live_migrate_vm(vm_id=vm_id_, fail_ok=True)
         assert 6 == rc, "Expect live migration to fail on vm with pci alias device. Actual: {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)
+
+        check_helper.check_qat_service(vm_id=vm_id_, qat_devs=expt_qat_devs)
 
 
 def check_device_list_against_pci_list(lspci_list_info, sysinv_device_list_tab):
