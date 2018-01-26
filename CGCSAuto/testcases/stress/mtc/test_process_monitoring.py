@@ -755,12 +755,12 @@ class MonitoredProcess:
 
         quorum = int(getattr(self, 'quorum', 0))
         if quorum > 0:
-            retries = retries + 1 + 1
+            retries = retries + 1
             mode = getattr(self, 'mode', 'passive')
             if 'active' == mode:
                 wait_after_each_kill += 5
-            # have to kill 1 more time for mtcClient
 
+        # have to kill 1 more time for mtcClient
         retries += 2
 
         LOG.info('retries={}, interval={}, debounce={}, wait_each_kill={}'.format(
