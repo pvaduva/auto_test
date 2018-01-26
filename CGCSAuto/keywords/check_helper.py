@@ -788,14 +788,16 @@ def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
     Returns:
 
     """
+    if qat_devs:
+        LOG.tc_step("Check qat-vfs on vm {}".format(vm_id))
+    else:
+        LOG.tc_step("Check no qat device exist on vm {}".format(vm_id))
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
         code, output = vm_ssh.exec_sudo_cmd('lspci -nn | grep --color=never QAT', fail_ok=True)
         if not qat_devs:
-            LOG.tc_step("On vm, check no qat device exist")
             assert 1 == code
             return
 
-        LOG.tc_step("On vm, check qat devices exist, start qat_service and run cpa_sample_code test")
         assert 0 == code, "No QAT device exists on vm {}".format(vm_id)
         for dev, expt_count in qat_devs.items():
             actual_count = 0
@@ -812,7 +814,7 @@ def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
             LOG.info("Start qat service")
             vm_ssh.exec_sudo_cmd('systemctl start qat_service', fail_ok=False)
             status = vm_ssh.exec_sudo_cmd(check_status_cmd, fail_ok=False)[1]
-            assert active_str in status
+            assert active_str in status, "qat_service is not in active state"
 
         if run_cpa:
             LOG.info("Run cpa_sample_code on quickAssist hardware")
