@@ -28,7 +28,8 @@ def hosts_pci_device_info():
 
     if not hosts_device_info:
         skip("co-proccessor PCI device not found")
-    
+
+    vm_helper.ensure_vms_quotas(vms_num=20)
     return hosts_device_info
 
 
@@ -300,11 +301,11 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
                                                                   **{'class id': DevClassIds.QAT_VF})[0]
         expt_qat_devs = {host_dev_name: vfs}
-        # 32 qat-vfs takes more than 1 hour to run tests
-        # check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=1800)
+        # 32 qat-vfs takes more than 1.5 hours to run tests
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, run_cpa=False)
 
         _perform_nova_actions(vms_dict={vm_name: vm_id}, flavors=_flavors, vfs=vfs)
-        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=5400)
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=10800)
 
 
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):

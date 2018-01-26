@@ -775,14 +775,15 @@ def check_alarms(before_alarms, timeout=300):
                     "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
 
 
-def check_qat_service(vm_id, qat_devs, timeout=600):
+def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
     """
     Check qat device and service on given vm
     Args:
         vm_id (str):
         qat_devs (dict): {<qat-dev1-name>: <number1>, <qat-dev2-name>: <number2>}
             e.g., {'Intel Corporation DH895XCC Series QAT Virtual Function [8086:0443]' : 32}
-        timeout (int)
+        run_cpa (bool): whether to run cpa_sample_code in guest, it could take long time when there are many qat-vfs
+        timeout (int): timeout value to wait for cpa_sample_code to finish
 
     Returns:
 
@@ -813,6 +814,7 @@ def check_qat_service(vm_id, qat_devs, timeout=600):
             status = vm_ssh.exec_sudo_cmd(check_status_cmd, fail_ok=False)[1]
             assert active_str in status
 
-        LOG.info("Run cpa_sample_code on quickAssist hardware")
-        output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
-        assert 'error' not in output.lower(), "cpa_sample_code test failed"
+        if run_cpa:
+            LOG.info("Run cpa_sample_code on quickAssist hardware")
+            output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
+            assert 'error' not in output.lower(), "cpa_sample_code test failed"

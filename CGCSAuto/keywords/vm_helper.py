@@ -3444,6 +3444,8 @@ def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5
             raise
         finally:
             vm_ssh_.send_control('c')
+            time.sleep(1)
+            vm_ssh_.send_control('c')
 
     thread.set_end_func(_end_dd, vm_ssh)
 
