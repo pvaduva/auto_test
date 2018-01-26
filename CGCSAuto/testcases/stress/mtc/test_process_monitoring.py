@@ -760,7 +760,8 @@ class MonitoredProcess:
             if 'active' == mode:
                 wait_after_each_kill += 5
             # have to kill 1 more time for mtcClient
-            retries += 1
+
+        retries += 2
 
         LOG.info('retries={}, interval={}, debounce={}, wait_each_kill={}'.format(
             retries, interval, debounce, wait_after_each_kill))
