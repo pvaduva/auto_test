@@ -76,7 +76,7 @@ class SharedCPUErr:
 
 class ResizeVMErr:
     RESIZE_ERR = "Error resizing server"
-    SHARED_NOT_ENABLED = 'Shared not enabled for cell {}'
+    SHARED_NOT_ENABLED = 'Shared vCPU not enabled .*, required by instance cell {}'
 
 
 class ColdMigErr:
