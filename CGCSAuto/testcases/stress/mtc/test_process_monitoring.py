@@ -660,7 +660,7 @@ class MonitoredProcess:
         return matched_event
 
     def wait_for_pmon_process_events(self, service, host, target_status, expecting=True, severity='major',
-                                     last_events=None, process_type='pmon', timeout=60, interval=3, con_ssh=None):
+                                     last_events=None, process_type='pmon', timeout=300, interval=3, con_ssh=None):
 
         if process_type not in mtc_helper.KILL_PROC_EVENT_FORMAT:
             LOG.error('unknown type of process:{}'.format(process_type))
@@ -771,7 +771,8 @@ class MonitoredProcess:
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
-                    retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+                    retries+1, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 
