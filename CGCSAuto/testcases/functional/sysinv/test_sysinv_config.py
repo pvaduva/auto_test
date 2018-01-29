@@ -167,6 +167,8 @@ class TestRetentionPeriod:
                 on hardcoded values
         """
         name = 'event_time_to_live'
+        if name == 'event_time_to_live':
+            self.PM_SETTING_FILE = '/etc/panko/panko.conf'
         LOG.tc_step('Check if the modification attempt will fail based on the input value')
         if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
             expect_fail = True
