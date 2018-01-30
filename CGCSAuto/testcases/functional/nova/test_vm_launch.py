@@ -2,7 +2,7 @@ import time
 from pytest import mark, skip, fixture
 
 from keywords import host_helper, nova_helper, vm_helper
-from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate
+from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate, Rebuild
 from consts.reasons import SkipStorageBacking
 from consts.cgcs import FlavorSpec
 
@@ -24,7 +24,7 @@ def hosts_per_backing():
     'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
@@ -73,13 +73,15 @@ def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
         assert 0 == code, msg
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
-    time.sleep(30)
-    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
-    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
-                              kpi_val=duration, uptime=1, unit='Time(ms)')
+    if 'local_lvm' != boot_from:
+        # live migration unsupported for boot-from-image vm with local_lvm storage
+        LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+        time.sleep(30)
+        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
+        assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
+                                  kpi_val=duration, uptime=1, unit='Time(ms)')
 
     def operation_cold(vm_id_):
         code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
@@ -89,9 +91,25 @@ def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
     LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
     time.sleep(30)
     duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_cold, vm_id)
-    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+    assert duration > 0, "No ping loss detected during cold migration for {} vm".format(boot_from)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
-                              kpi_val=duration, uptime=5, unit='Time(ms)')
+                              kpi_val=duration, uptime=1, unit='Time(ms)')
+
+    if 'volume' == boot_from:
+        LOG.info("Skip rebuild test for vm booted from cinder volume")
+        return
+
+    def operation_rebuild(vm_id_):
+        code, msg = vm_helper.rebuild_vm(vm_id=vm_id_)
+        assert 0 == code, msg
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+
+    LOG.tc_step("Collect vm rebuild KPI for vm booted from {}".format(boot_from))
+    time.sleep(30)
+    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_rebuild, vm_id)
+    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Rebuild.NAME.format(boot_from),
+                              kpi_val=duration, uptime=1, unit='Time(ms)')
 
 
 def check_for_qemu_process(host_ssh):

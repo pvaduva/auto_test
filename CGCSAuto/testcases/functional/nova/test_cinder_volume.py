@@ -33,10 +33,12 @@ def test_kpi_cinder_volume_creation(collect_kpi):
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ImageDownload.NAME, host=None,
                               log_path=ImageDownload.LOG_PATH, end_pattern=ImageDownload.GREP_PATTERN,
-                              python_pattern=ImageDownload.PYTHON_PATTERN, init_time=init_time, uptime=1)
+                              python_pattern=ImageDownload.PYTHON_PATTERN, init_time=init_time, uptime=1,
+                              unit=ImageDownload.UNIT)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ImageConversion.NAME, host=None,
                               log_path=ImageConversion.LOG_PATH, end_pattern=ImageConversion.GREP_PATTERN,
-                              python_pattern=ImageConversion.PYTHON_PATTERN, init_time=init_time, uptime=1)
+                              python_pattern=ImageConversion.PYTHON_PATTERN, init_time=init_time, uptime=1,
+                              unit=ImageConversion.UNIT)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VolCreate.NAME, host=None,
                               log_path=VolCreate.LOG_PATH, end_pattern=vol_updated,
                               start_pattern=VolCreate.START, uptime=1)
