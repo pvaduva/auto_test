@@ -59,7 +59,9 @@ def test_firewall_rules_default():
         - Swact and repeat the above steps
     """
     # Cannot test connecting to the ports as they are in use.
-    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8774, 8776, 8777, 9292, 9696, 15491]
+
+    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8774, 8776, 8777, 8778, 9292, 9696, 15491]
+
     default_ports.append(443) if keystone_helper.is_https_lab() else default_ports.append(80)
 
     active_controller = system_helper.get_active_controller_name()
