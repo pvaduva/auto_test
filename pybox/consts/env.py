@@ -87,9 +87,9 @@ class Licenses:
     }
 
     R5 = {
-        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-R5-full-jan2018.lic',
-        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-AIO-DX-R5-full-jan2018.lic',
-        'Standard': '/folk/cgts/lab/licenses/wrslicense-R5-full-jan2018.lic'
+        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-18.03-full-dec2018.lic',
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-AIO-DX-18.03-full-dec2018.lic',
+        'Standard': '/folk/cgts/lab/licenses/wrslicense-18.03-full-dec2018.lic'
     }
 
 
