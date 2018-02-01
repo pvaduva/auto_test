@@ -164,7 +164,7 @@ def upgrade_setup(pre_check_upgrade):
         system_helper.import_load(upgrade_load_path,upgrade_ver=upgrade_version)
 
         # download and apply patches if patches are available in patch directory
-        if patch_dir and upgrade_version != "17.07":
+        if patch_dir and upgrade_version < "17.07":
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 

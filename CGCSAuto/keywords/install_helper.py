@@ -118,7 +118,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
         server.ssh_conn.rsync(iso_file_path,
                               lab['controller-0 ip'],
                               os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
-        if upgrade_ver == '17.07':
+        if upgrade_ver >= '17.07':
            server.ssh_conn.rsync(sig_file_path,
                                lab['controller-0 ip'],
                                os.path.join(WRSROOT_HOME, "bootimage.sig"), pre_opts=pre_opts)
