@@ -265,8 +265,8 @@ def get_storage_group(host):
     """
 
     host_table = table_parser.table(cli.system('host-show', host))
-    peers = table_parser.get_values(host_table, 'Value', Property='peers')
-    storage_group = re.search('(group-\d+)', peers[0])
+    peers = table_parser.get_value_two_col_table(host_table, 'peers', merge_lines=True)
+    storage_group = re.search('(group-\d+)', peers)
     msg = 'Unable to determine replication group for {}'.format(host)
     assert storage_group, msg
     storage_group = storage_group.group(0)

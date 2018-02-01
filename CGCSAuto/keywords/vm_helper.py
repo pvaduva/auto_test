@@ -3371,12 +3371,15 @@ def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
     return vm_ssh, thread
 
 
-def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5, end_now_flag=False, con_ssh=None):
+def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_timeout=None, write_interval=5,
+                con_ssh=None):
     """
     Continue to write in vm using dd
 
     Args:
         vm_id (str):
+        start_event (Events): set this event when write in vm starts
+        end_event (Events): if this event is set, end write right away
         expect_timeout (int):
         thread_timeout (int):
         write_interval (int): how frequent to write. Note: 5 seconds seem to be a good interval,
@@ -3401,6 +3404,8 @@ def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5
         assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
 
     """
+    if not start_event:
+        start_event = Events("Write in vm {} start".format(vm_id))
     write_cmd = "while (true) do date; dd if=/dev/urandom of=output.txt bs=1k count=1 conv=fsync || break; echo ; " \
                 "sleep {}; done 2>&1 | tee trace.txt".format(write_interval)
 
@@ -3409,33 +3414,24 @@ def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5
         with ssh_to_vm_from_natbox(vm_id_, con_ssh=con_ssh, close_ssh=False) as vm_ssh_:
             vm_ssh_.send(cmd=write_cmd)
 
-        LOG.info("Write_in_vm returns while writing continues")
-        return vm_ssh_
+        start_event.set()
+        LOG.info("Write_in_vm started")
 
-    thread = multi_thread.MThread(_keep_writing, vm_id)
-    thread_timeout = expect_timeout + 30 if thread_timeout is None else thread_timeout
-    thread.start_thread(timeout=thread_timeout, keep_alive=True)
-    # thread.wait_for_thread_end(timeout=thread_timeout)
-    thread.end_now = False
-    vm_ssh = thread.get_output(wait=True, timeout=60)
-
-    def _end_dd(vm_ssh_):
         LOG.info("Reading the dd output from vm {}".format(vm_id))
         thread.res = True
         try:
             while True:
                 expt_output = '1024 bytes'
-                index = vm_ssh.expect([expt_output, vm_ssh.prompt], timeout=expect_timeout, fail_ok=True,
-                                      searchwindowsize=100)
+                index = vm_ssh_.expect([expt_output, vm_ssh_.prompt], timeout=expect_timeout, fail_ok=True,
+                                       searchwindowsize=100)
                 if index != 0:
                     LOG.warning("write has stopped or expected output-'{}' is not found".format(expt_output))
                     thread.res = False
                     break
 
-                if end_now_flag:
-                    if thread.end_now is True:
-                        LOG.info("End thread now")
-                        break
+                if end_event.is_set():
+                    LOG.info("End thread now")
+                    break
 
                 LOG.info("Writing in vm continues...")
                 time.sleep(write_interval)
@@ -3444,12 +3440,16 @@ def write_in_vm(vm_id, expect_timeout=120, thread_timeout=None, write_interval=5
             raise
         finally:
             vm_ssh_.send_control('c')
-            time.sleep(1)
-            vm_ssh_.send_control('c')
 
-    thread.set_end_func(_end_dd, vm_ssh)
+        return vm_ssh_
 
-    return vm_ssh, thread
+    thread = multi_thread.MThread(_keep_writing, vm_id)
+    thread_timeout = expect_timeout + 30 if thread_timeout is None else thread_timeout
+    thread.start_thread(timeout=thread_timeout)
+
+    start_event.wait_for_event(timeout=thread_timeout)
+
+    return thread
 
 
 def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=None, fail_ok=False, auth_info=None,

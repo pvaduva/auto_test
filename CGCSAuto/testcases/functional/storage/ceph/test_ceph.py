@@ -11,6 +11,7 @@ from pytest import mark
 from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils.multi_thread import Events
 from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from consts.cgcs import EventLogID, GuestImages
@@ -281,88 +282,93 @@ def test_ceph_reboot_storage_node():
 
     vm_threads = []
     LOG.tc_step("SSH to VMs and write to disk")
-    for vm in vms:
-        vm_ssh, vm_thread = vm_helper.write_in_vm(vm, end_now_flag=True, expect_timeout=40)
-        vm_thread.end_now = False
-        vm_thread.end_thread()
-        vm_threads.append(vm_thread)
+    end_event = Events("End dd in vms")
 
-    storage_nodes = system_helper.get_storage_nodes(con_ssh)
+    try:
+        for vm in vms:
+            vm_thread = vm_helper.write_in_vm(vm, end_event=end_event, expect_timeout=40)
+            vm_threads.append(vm_thread)
 
-    for host in storage_nodes:
-        LOG.tc_step('Reboot {}'.format(host))
-        HostsToRecover.add(host, scope='function')
-        results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        host_helper.wait_for_host_states(host, availability='offline')
-        LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
+        storage_nodes = system_helper.get_storage_nodes(con_ssh)
 
-        LOG.tc_step('Check health of CEPH cluster')
-        end_time = time.time() + 10
-        while time.time() < end_time:
-            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-            if not ceph_healthy:
-                break
-        assert not ceph_healthy, msg
-        LOG.info(msg)
+        for host in storage_nodes:
+            LOG.tc_step('Reboot {}'.format(host))
+            HostsToRecover.add(host, scope='function')
+            results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
+            host_helper.wait_for_host_states(host, availability='offline')
+            LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
 
-        LOG.tc_step('Check that OSDs are down')
-        osd_list = storage_helper.get_osds(host, con_ssh)
-        all_osds_up = True
-        up_list = osd_list.copy()
-        end_time = time.time() + 60
-        while time.time() < end_time and all_osds_up:
-            for osd_id in osd_list:
-                osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-                if not osd_up:
-                    msg = 'OSD ID {} is down as expected'.format(osd_id)
+            LOG.tc_step('Check health of CEPH cluster')
+            end_time = time.time() + 10
+            while time.time() < end_time:
+                ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+                if not ceph_healthy:
+                    break
+            assert not ceph_healthy, msg
+            LOG.info(msg)
+
+            LOG.tc_step('Check that OSDs are down')
+            osd_list = storage_helper.get_osds(host, con_ssh)
+            all_osds_up = True
+            up_list = osd_list.copy()
+            end_time = time.time() + 60
+            while time.time() < end_time and all_osds_up:
+                for osd_id in osd_list:
+                    osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+                    if not osd_up:
+                        msg = 'OSD ID {} is down as expected'.format(osd_id)
+                        LOG.info(msg)
+                        up_list.remove(osd_id)
+                if len(up_list) > 0:
+                    osd_list = up_list.copy()
+                else:
+                    msg = ' All OSDs are down as expected'
                     LOG.info(msg)
-                    up_list.remove(osd_id)
-            if len(up_list) > 0:
-                osd_list = up_list.copy()
-            else:
-                msg = ' All OSDs are down as expected'
-                LOG.info(msg)
-                all_osds_up = False
+                    all_osds_up = False
 
-        assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
+            assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
 
-        host_helper.wait_for_host_states(host, availability='available')
+            host_helper.wait_for_host_states(host, availability='available')
 
-        LOG.tc_step('Check that OSDs are up')
-        osd_list = storage_helper.get_osds(host, con_ssh)
-        down_list = osd_list.copy()
-        all_osds_up = False
-        end_time = time.time() + 60
-        while time.time() < end_time and not all_osds_up:
-            for osd_id in osd_list:
-                osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-                if osd_up:
-                    msg = 'OSD ID {} is up as expected'.format(osd_id)
+            LOG.tc_step('Check that OSDs are up')
+            osd_list = storage_helper.get_osds(host, con_ssh)
+            down_list = osd_list.copy()
+            all_osds_up = False
+            end_time = time.time() + 60
+            while time.time() < end_time and not all_osds_up:
+                for osd_id in osd_list:
+                    osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+                    if osd_up:
+                        msg = 'OSD ID {} is up as expected'.format(osd_id)
+                        LOG.info(msg)
+                        down_list.remove(osd_id)
+                if len(down_list) > 0:
+                    osd_list = down_list.copy()
+                else:
+                    msg = ' All OSDs are up as expected'
                     LOG.info(msg)
-                    down_list.remove(osd_id)
-            if len(down_list) > 0:
-                osd_list = down_list.copy()
-            else:
-                msg = ' All OSDs are up as expected'
-                LOG.info(msg)
-                all_osds_up = True
+                    all_osds_up = True
 
-        assert all_osds_up, " One or more OSD(s) {}  is(are) down but should be up".format(down_list)
+            assert all_osds_up, " One or more OSD(s) {}  is(are) down but should be up".format(down_list)
 
-        LOG.tc_step('Check health of CEPH cluster')
-        end_time = time.time() + 40
-        while time.time() < end_time:
-            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-            if ceph_healthy is True:
-                break
+            LOG.tc_step('Check health of CEPH cluster')
+            end_time = time.time() + 40
+            while time.time() < end_time:
+                ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+                if ceph_healthy is True:
+                    break
 
-        assert ceph_healthy, msg
+            assert ceph_healthy, msg
 
-    for vm_thread in vm_threads:
-        vm_thread.end_now = True
-        vm_thread.wait_for_thread_end(timeout=20)
+        for vm_thread in vm_threads:
+            assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
 
-        assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
+    except:
+        raise
+    finally:
+        end_event.set()
+        for vm_thread in vm_threads:
+            vm_thread.wait_for_thread_end(timeout=20)
 
     LOG.tc_step("Delete existing VMs")
     vm_helper.delete_vms()
@@ -427,91 +433,95 @@ def test_lock_stor_check_osds_down(host):
 
     vm_threads = []
     LOG.tc_step("SSH to VMs and write to disk")
-    for vm in vms:
-        vm_ssh, vm_thread = vm_helper.write_in_vm(vm, end_now_flag=True, expect_timeout=40)
-        vm_thread.end_now = False
-        vm_thread.end_thread()
-        vm_threads.append(vm_thread)
+    end_event = Events("End dd in vms")
+    try:
+        for vm in vms:
+            vm_thread = vm_helper.write_in_vm(vm, end_event=end_event, expect_timeout=40)
+            vm_threads.append(vm_thread)
 
-    LOG.tc_step('Lock storage node {}'.format(host))
-    HostsToRecover.add(host)
-    host_helper.lock_host(host, check_first=False)
+        LOG.tc_step('Lock storage node {}'.format(host))
+        HostsToRecover.add(host)
+        host_helper.lock_host(host, check_first=False)
 
-    LOG.tc_step('Determine the storage group for host {}'.format(host))
-    storage_group, msg = storage_helper.get_storage_group(host)
-    LOG.info(msg)
-
-    LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, entity_id=host, strict=False)[0], \
-        "Alarm {} not raised".format(EventLogID.HOST_LOCK)
-
-    LOG.tc_step('Check health of CEPH cluster')
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert not ceph_healthy, msg
-    LOG.info(msg)
-
-    LOG.tc_step('Check that OSDs are down')
-    osd_list = storage_helper.get_osds(host, con_ssh)
-    for osd_id in osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} is up but should be down'.format(osd_id)
-        assert not osd_up, msg
-        msg = 'OSD ID {} is down as expected'.format(osd_id)
+        LOG.tc_step('Determine the storage group for host {}'.format(host))
+        storage_group, msg = storage_helper.get_storage_group(host)
         LOG.info(msg)
 
-    LOG.tc_step('Check that loss of replication alarm is raised')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR)[0], \
-        "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
+        LOG.tc_step('Check that host lock alarm is raised when {} is locked'.format(host))
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, entity_id=host, strict=False)[0], \
+            "Alarm {} not raised".format(EventLogID.HOST_LOCK)
 
-    LOG.tc_step('Check that ceph is in health warn')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
-        "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
-
-    # We're waiting 5 minutes for ceph rebalancing to be performed
-    # DO NOT REMOVE.  This is part of the test.
-    time.sleep(300)
-
-    LOG.tc_step('Unlock storage node')
-    rtn_code, out = host_helper.unlock_host(host)
-    assert rtn_code == 0, out
-
-    health = False
-    end_time = time.time() + 40
-    while time.time() < end_time:
-        health = storage_helper.is_ceph_healthy(con_ssh)
-        if health is True:
-            break
-    assert health, "Ceph did not become healthy"
-
-    LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
-    assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, entity_id=host, strict=False), \
-        "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
-
-    LOG.tc_step('Check that the replication group alarm is cleared')
-    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR), \
-        "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
-    LOG.tc_step('Check that the Storage Alarm Condition is cleared')
-    assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), \
-        "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
-
-    LOG.tc_step('Check OSDs are up after unlock')
-    for osd_id in osd_list:
-        osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
-        msg = 'OSD ID {} should be up but is not'.format(osd_id)
-        assert osd_up, msg
-
-    LOG.tc_step('Check health of CEPH cluster')
-    end_time = time.time() + 40
-    while time.time() < end_time:
+        LOG.tc_step('Check health of CEPH cluster')
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-        if ceph_healthy is True:
-            break
+        assert not ceph_healthy, msg
+        LOG.info(msg)
 
-    for vm_thread in vm_threads:
-        vm_thread.end_now = True
-        vm_thread.wait_for_thread_end(timeout=20)
+        LOG.tc_step('Check that OSDs are down')
+        osd_list = storage_helper.get_osds(host, con_ssh)
+        for osd_id in osd_list:
+            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+            msg = 'OSD ID {} is up but should be down'.format(osd_id)
+            assert not osd_up, msg
+            msg = 'OSD ID {} is down as expected'.format(osd_id)
+            LOG.info(msg)
 
-        assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
+        LOG.tc_step('Check that loss of replication alarm is raised')
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR)[0], \
+            "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
+
+        LOG.tc_step('Check that ceph is in health warn')
+        assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
+            "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
+
+        # We're waiting 5 minutes for ceph rebalancing to be performed
+        # DO NOT REMOVE.  This is part of the test.
+        time.sleep(300)
+
+        LOG.tc_step('Unlock storage node')
+        rtn_code, out = host_helper.unlock_host(host)
+        assert rtn_code == 0, out
+
+        health = False
+        end_time = time.time() + 40
+        while time.time() < end_time:
+            health = storage_helper.is_ceph_healthy(con_ssh)
+            if health is True:
+                break
+        assert health, "Ceph did not become healthy"
+
+        LOG.tc_step('Check that host lock alarm is cleared when {} is unlocked'.format(host))
+        assert system_helper.wait_for_alarm_gone(EventLogID.HOST_LOCK, entity_id=host, strict=False), \
+            "Alarm {} not cleared".format(EventLogID.HOST_LOCK)
+
+        LOG.tc_step('Check that the replication group alarm is cleared')
+        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_LOR), \
+            "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
+        LOG.tc_step('Check that the Storage Alarm Condition is cleared')
+        assert system_helper.wait_for_alarm_gone(EventLogID.STORAGE_ALARM_COND), \
+            "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
+
+        LOG.tc_step('Check OSDs are up after unlock')
+        for osd_id in osd_list:
+            osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
+            msg = 'OSD ID {} should be up but is not'.format(osd_id)
+            assert osd_up, msg
+
+        LOG.tc_step('Check health of CEPH cluster')
+        end_time = time.time() + 40
+        while time.time() < end_time:
+            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+            if ceph_healthy is True:
+                break
+
+        for vm_thread in vm_threads:
+            assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
+    except:
+        raise
+    finally:
+        # wait_for_thread_end needs to be called even if test failed in the middle, otherwise thread will not end
+        end_event.set()
+        for vm_thread in vm_threads:
+            vm_thread.wait_for_thread_end(timeout=20)
 
     LOG.tc_step("Delete existing VMs")
     vm_helper.delete_vms()

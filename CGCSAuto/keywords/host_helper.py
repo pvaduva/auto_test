@@ -1451,13 +1451,13 @@ def get_hosts_by_storage_aggregate(storage_backing='local_image', up_only=True, 
     if up_only:
         up_hypervisors = get_up_hypervisors(con_ssh=con_ssh)
         hosts = list(set(hosts) & set(up_hypervisors))
+        LOG.info("Up hypervisors with {} backing: {}".format(storage_backing, hosts))
 
-    LOG.info("Hosts with {} backing: {}".format(storage_backing, hosts))
     return hosts
 
 
 def get_hypervisors_with_storage_backing(storage_backing, con_ssh=None):
-    hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing, con_ssh=con_ssh)
+    hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing, con_ssh=con_ssh, up_only=False)
     up_hosts = get_up_hypervisors(con_ssh=con_ssh)
 
     candidate_hosts = tuple(set(hosts_with_backing) & set(up_hosts))
@@ -2120,7 +2120,8 @@ def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interva
 
     endtime = time.time() + timeout
     while time.time() < endtime:
-        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh)
+        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh,
+                                                            up_only=False)
         if host in hosts_with_backing:
             LOG.info("{} appeared in host-aggregate for {} backing".format(host, storage_backing))
             return True
@@ -3503,7 +3504,8 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
         candidate_hosts = hypervisors
 
     if candidate_hosts and storage_backing:
-        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh)
+        hosts_with_backing = get_hosts_by_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh,
+                                                            up_only=False)
         candidate_hosts = list(set(candidate_hosts) & set(hosts_with_backing))
 
     if hyperthreaded is not None and candidate_hosts:
