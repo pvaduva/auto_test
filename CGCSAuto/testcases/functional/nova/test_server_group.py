@@ -10,7 +10,7 @@ from consts.cgcs import FlavorSpec, ServerGroupMetadata
 from consts.reasons import SkipHypervisor
 from consts.cli_errs import SrvGrpErr
 from keywords import nova_helper, vm_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 MSG = 'HELLO SRV GRP MEMBERS!'
@@ -130,11 +130,8 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
                 format(flavor_id, srv_grp_id, vms_num))
 
     for i in range(vms_num):
-        code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
-                                                  avail_zone='cgcsauto', fail_ok=True)
-        ResourceCleanup.add(resource_type='vm', resource_id=vm_id, del_vm_vols=False)
-        ResourceCleanup.add('volume', vol)
-        assert 0 == code, "VM is not booted successfully. Details: {}".format(err)
+        vm_id = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
+                                  avail_zone='cgcsauto', fail_ok=False, cleanup='function')[1]
 
         LOG.tc_step("Check vm {} is in server group {}".format(vm_id, srv_grp_id))
         members = eval(nova_helper.get_server_groups_info(srv_grp_id, header='Members')[0])
@@ -174,6 +171,10 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     expt_err = "Instance group {} is not empty. Must delete all group members before deleting group.".format(srv_grp_id)
     assert expt_err in output, "Expect {} in error, actual error is {}".format(expt_err, output)
 
+    if srv_grp_msging:
+        for vm in members:
+            GuestLogs.add(vm)
+
     if srv_grp_msg_flv:
         LOG.tc_step("Check server group message can be sent/received among group members")
         check_server_group_messaging_enabled(vms=members, action='message')
@@ -183,6 +184,10 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     else:
         LOG.tc_step("Check server group message is not enabled")
         check_server_group_messaging_disabled(vms=members)
+
+    if srv_grp_msging:
+        for vm in members:
+            GuestLogs.remove(vm)
 
 
 def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):

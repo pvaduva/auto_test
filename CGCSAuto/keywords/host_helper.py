@@ -1326,36 +1326,6 @@ def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP, check_inte
             return False, hosts_to_check
         raise exceptions.HostTimeout(msg)
 
-# Obsolete in pike. Use wait_for_hypervisors_up instead
-# def wait_for_hosts_in_nova_compute(hosts, timeout=90, check_interval=3, fail_ok=False, auth_info=Tenant.ADMIN,
-#                                    con_ssh=None):
-#
-#     if isinstance(hosts, str):
-#         hosts = [hosts]
-#
-#     hosts_to_check = list(hosts)
-#     LOG.info("Waiting for {} to be shown in nova host-list...".format(hosts))
-#     end_time = time.time() + timeout
-#     while time.time() < end_time:
-#         hosts_in_nova = get_nova_hosts(con_ssh=con_ssh, auth_info=auth_info)
-#
-#         for host in hosts:
-#             if host in hosts_in_nova:
-#                 hosts_to_check.remove(host)
-#
-#         if not hosts_to_check:
-#             msg = "Host(s) {} appeared in nova host-list".format(hosts)
-#             LOG.info(msg)
-#             return True, hosts_to_check
-#
-#         time.sleep(check_interval)
-#     else:
-#         msg = "Host(s) {} did not shown in nova host-list within timeout".format(hosts_to_check)
-#         if fail_ok:
-#             LOG.warning(msg)
-#             return False, hosts_to_check
-#         raise exceptions.HostTimeout(msg)
-
 
 def wait_for_webservice_up(hosts, timeout=HostTimeout.WEB_SERVICE_UP, check_interval=3, fail_ok=False, con_ssh=None,
                            use_telnet=False, con_telnet=None):
@@ -1395,20 +1365,20 @@ def wait_for_webservice_up(hosts, timeout=HostTimeout.WEB_SERVICE_UP, check_inte
 
 
 def get_hosts_in_aggregate(aggregate, con_ssh=None):
-    aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
-    avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
-    if aggregate not in avail_aggregates:
-        LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
-        return []
-
-    software_version = system_helper.get_system_software_version()
-    # aggregate-details is deprecated in newton and removed in pike
-    if float(software_version) >= 17.07:
-        nova_aggregate_show_cmd = 'aggregate-show'
+    if 'image' in aggregate:
+        aggregate = 'local_storage_image_hosts'
+    elif 'lvm' in aggregate:
+        aggregate = 'local_storage_lvm_hosts'
+    elif 'remote' in aggregate:
+        aggregate = 'remote_storage_hosts'
     else:
-        nova_aggregate_show_cmd = 'aggregate-details'
-    table_ = table_parser.table(cli.nova(nova_aggregate_show_cmd, aggregate, ssh_client=con_ssh,
-                                         auth_info=Tenant.ADMIN))
+        aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+        avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
+        if aggregate not in avail_aggregates:
+            LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
+            return []
+
+    table_ = table_parser.table(cli.nova('aggregate-show', aggregate, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
     hosts = hosts.split(',')
     if len(hosts) == 0 or hosts == ['']:

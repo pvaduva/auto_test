@@ -1,5 +1,4 @@
 import re
-import time
 from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
@@ -8,7 +7,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CpuRtErr        # Do not remove this import. Used in eval()
 from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper, system_helper, \
     check_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_rt', 'rt_mask', 'shared_vcpu', 'expt_err'), [
@@ -303,6 +302,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
     expt_current_cpu = vcpus
     if min_vcpus is not None:
+        GuestLogs.add(vm_id)
         LOG.tc_step("Scale down cpu once")
         vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -331,3 +331,6 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
         if min_vcpus is not None:
             LOG.tc_step("Check vm vcpus are not changed after {}".format(actions))
             check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
+
+    if min_vcpus is not None:
+        GuestLogs.remove(vm_id)

@@ -11,7 +11,7 @@ from consts.feature_marks import Features
 from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper, common
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 # Note auto recovery metadata in image will not passed to vm if vm is booted from Volume
@@ -196,6 +196,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
                                   **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.HEARTBEAT_ENABLED})
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+    GuestLogs.add(vm_id)
 
     LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
     time.sleep(30)
@@ -228,6 +229,8 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
 
         LOG.tc_step("Ensure vm is still pingable after auto recovery")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+    GuestLogs.remove(vm_id)
 
 
 @mark.features(Features.HEARTBEAT)
@@ -271,6 +274,8 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
 
     LOG.tc_step("Boot a vm using flavor with auto recovery - False and guest heartbeat - {}".format(guest_heartbeat))
     vm_id = vm_helper.boot_vm(name='test_hb_no_ar', flavor=flavor_id, cleanup='function')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+    GuestLogs.add(vm_id)
 
     if heartbeat_enabled:
         step_str = ''
@@ -288,8 +293,6 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         assert EventLogID.HEARTBEAT_ENABLED == events_1[0], "VM {} heartbeat failed to establish".format(vm_id)
     else:
         assert not events_1, "Heartbeat event generated unexpectedly: {}".format(events_1)
-
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     LOG.tc_step("Wait for 30 seconds for vm initialization before touching file in /tmp")
     time.sleep(30)
@@ -310,11 +313,12 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
         assert EventLogID.HEARTBEAT_CHECK_FAILED in events_2, "VM heartbeat failure is not logged."
     else:
         assert not events_2, "VM heartbeat failure is logged while heartbeat is set to False."
+    GuestLogs.remove(vm_id)
 
 
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize('heartbeat', [
-    mark.p1(True),
+    # mark.p1(True),    # remove - covered by test_vm_with_health_check_failure
     mark.priorities('sanity', 'cpe_sanity', 'sx_sanity', 'kpi')(False)
 ])
 def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
@@ -365,23 +369,21 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
 
 
 def kill_kvm_and_recover(vm_id_, target_host_):
+    instance_name = nova_helper.get_vm_instance_name(vm_id_)
+    search_value = "qemu.*" + instance_name
+    LOG.info("Search parameter: {}".format(search_value))
+    kill_cmd = "kill -9 $(ps ax | grep %s | grep -v grep | awk '{print $1}')" % search_value
 
-    LOG.tc_step("Kill the kvm processes on vm host: {}".format(target_host_))
     with host_helper.ssh_to_host(target_host_) as host_ssh:
-        exit_code, output = host_ssh.exec_sudo_cmd('killall -s KILL qemu-kvm')
-        if not exit_code == 0:
-            raise exceptions.SSHExecCommandFailed("Failed to kill host kvm processes. Details: {}".format(output))
+        host_ssh.exec_sudo_cmd(kill_cmd, expect_timeout=900)
 
     LOG.tc_step("Verify vm failed via event log")
-    system_helper.wait_for_events(30, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': vm_id_, 'Event Log ID': EventLogID.VM_FAILED})
+    system_helper.wait_for_events(30, strict=False, fail_ok=False, entity_instance_id=vm_id_,
+                                  **{'Event Log ID': EventLogID.VM_FAILED})
 
-    LOG.tc_step("Verify vm auto rebooted to recover via event log, and reached Active state")
-    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False,
-                                  **{'Entity Instance ID': vm_id_, 'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
-
-    LOG.tc_step("Wait for VM reach active state")
+    LOG.tc_step("Verify vm is recovered on same host and is in good state")
+    system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, entity_instance_id=vm_id_,
+                                  **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
     vm_helper.wait_for_vm_values(vm_id_, timeout=30, status=VMStatus.ACTIVE)
-
-    LOG.tc_step("Ensure VM is still pingable after auto recovery")
+    assert target_host_ == nova_helper.get_vm_host(vm_id_)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)

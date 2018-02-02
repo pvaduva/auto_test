@@ -627,7 +627,8 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
     """
     table_ = table_.copy()
     if not kwargs:
-        raise ValueError("At least one header and value(s) pair needs to be specified via kwargs")
+        LOG.debug("No kwargs specified. Skip filtering")
+        return table_
 
     if not table_['headers']:
         LOG.warning("Empty table supplied")

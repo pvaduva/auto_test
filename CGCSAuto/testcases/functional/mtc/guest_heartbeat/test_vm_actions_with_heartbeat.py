@@ -7,11 +7,11 @@ from consts.reasons import SkipSysType
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from testfixtures.recover_hosts import HostsToRecover
 
 
-@fixture(scope='module', autouse=True)
+@fixture(scope='module')
 def heartbeat_flavors():
     """
     Create two flavors. One with heartbeat enabled, one with heartbeat disabled.
@@ -133,10 +133,11 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
 
     LOG.tc_step("Booting vm. heartbeat enabled: {}".format(hb_enabled))
     vm_id = vm_helper.boot_vm('hb_guest', flavor=heartbeat_flavors[hb_enabled], cleanup='function')[1]
-    # ResourceCleanup.add(resource_type='vm', resource_id=vm_id, scope='function')
+    GuestLogs.add(vm_id)
     events = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
-                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+                                           entity_instance_id=vm_id,
+                                           **{'Event Log ID': [EventLogID.HEARTBEAT_DISABLED,
+                                                               EventLogID.HEARTBEAT_ENABLED]})
 
     if hb_enabled == 'True':
         assert events, "VM heartbeat is not enabled."
@@ -174,3 +175,66 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
                 assert not heartbeat_proc_appear, "Heartbeat set to False, However, heartbeat process is running " \
                                                   "after {}.".format(action)
 
+    GuestLogs.remove(vm_id)
+
+
+@mark.p3
+def test_clean_vm_deletion_after_live_migration(heartbeat_flavors):
+    """
+    from us63135_tc6: validate_clean_VM_deletion_after_live_migration
+
+    Test Steps:
+        1) Log on to active controller, add flavor with extension with heartbeat enabled.
+        2) Instantiate a VM.
+        3) On controller console, live migrate the VM.
+        4) Delete the VM after migration completes.
+        5) Verify clean deletion by inspecting guestServer/guestAgent logs:
+           * On the compute node hosting the VM, inspect /var/log/guestServer.log
+           * On the active controller, inspect /var/log/guestAgent.log
+
+    Teardown:
+        -delete vm
+        -unlock locked host
+
+    """
+    heartbeat_flavors, is_simplex = heartbeat_flavors
+
+    if is_simplex:
+        skip("Not applicable to simplex system")
+
+    # use volume to boot a vm by default
+    vm_id = vm_helper.boot_vm(flavor=heartbeat_flavors['True'], cleanup='function')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+    GuestLogs.add(vm_id)
+    system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=False,
+                                  **{'Entity Instance ID': vm_id, 'Event Log ID': EventLogID.HEARTBEAT_ENABLED})
+
+    LOG.tc_step("Live migrate the VM")
+    vm_helper.live_migrate_vm(vm_id)
+
+    LOG.tc_step("Delete the vm")
+    # get new vm_host location after live migration
+    vm_host = nova_helper.get_vm_host(vm_id)
+    vm_helper.delete_vms(vm_id, stop_first=False)
+    GuestLogs.remove(vm_id)
+
+    # On the compute node hosting the VM, inspect /var/log/guestServer.log
+    # look for line : Info : c84d5215-3d9b-4176-9a60-cc2907d803af delete
+    guestserver_log = "Info : {} delete".format(vm_id)
+    LOG.tc_step("Check line '{}' in /var/log/guestServer.log on vm host".format(guestserver_log))
+
+    with host_helper.ssh_to_host(vm_host) as host_ssh:
+        compute_cmd = "cat /var/log/guestServer.log | grep '"+guestserver_log+"'"
+        code, compute_output = host_ssh.exec_cmd(cmd=compute_cmd)
+        assert code == 0, "Expected string is not found in /var/log/guestServer.log: {}".format(guestserver_log)
+
+    # On the active controller, inspect /var/log/guestAgent.log
+    # look for line : Info : compute-0 removed instance c84d5215-3d9b-4176-9a60-cc2907d803af
+    # the result should be different
+    guestagent_log = "{} removed instance {}".format(vm_host, vm_id)
+    LOG.tc_step("Check line '{}' in /var/log/guestAgent.log on active controller".format(guestagent_log))
+
+    con_ssh = ControllerClient.get_active_controller()
+    controller_cmd = "cat /var/log/guestAgent.log | grep '"+guestagent_log+"'"
+    code, controller_output = con_ssh.exec_cmd(cmd=controller_cmd)
+    assert code == 0, "Expected string is not found in /var/log/guestAgent.log: {}".format(guestagent_log)

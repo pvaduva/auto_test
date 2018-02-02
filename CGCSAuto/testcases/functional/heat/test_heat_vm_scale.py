@@ -132,7 +132,7 @@ def wait_for_scale_up_down_vm(vm_name=None, expected_count=0, time_out=900, chec
         LOG.info("length of vmid is {}".format(len(vm_ids)))
         if len(vm_ids) is expected_count:
             return True
-        val = ceilometer_helper.alarm_list()
+        ceilometer_helper.alarm_list()
         time.sleep(check_interval)
 
     msg = "Heat stack {} did not go to vm count {} within timeout".format(vm_name, expected_count)
@@ -354,7 +354,7 @@ def _test_heat_vm__action_scale_up_down(action):
         return 1, "Error:vm is not pingable from NAT Box"
 
     # swact here
-    if action=="swact_scale_up_down":
+    if action == "swact_scale_up_down":
         LOG.tc_step("Swact to standby controller before scale up/down")
         hostname = system_helper.get_active_controller_name()
         exit_code, output = host_helper.swact_host(hostname=hostname, swact_start_timeout=1, fail_ok=False)

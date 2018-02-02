@@ -6,7 +6,7 @@ from pytest import mark, fixture
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
 from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.tis_log import LOG
 
 
@@ -187,24 +187,24 @@ def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
     if not vm_id:
         assert "Error:vm was not created by stack"
 
+    GuestLogs.add(vm_id)
     # Verify Vcpus
     LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
-    expt_min_cpu =  min_vcpus
+    expt_min_cpu = min_vcpus
     expt_max_cpu = expt_current_cpu = vcpus
-    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
-        assert "Vcpu did not go to max number {} after initial boot".format(expt_max_cpu)
+    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
+        "Vcpu did not go to max number {} after initial boot".format(expt_max_cpu)
 
     # wait for scale down to min
     LOG.tc_step("Check vm vcpus gone to min vcpu")
     expt_min_cpu = expt_current_cpu= min_vcpus
     expt_max_cpu = vcpus
-    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
-        assert "Failed to go to min vcpu {} after inital boot".format(min_vcpus)
+    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
+        "Failed to go to min vcpu {} after inital boot".format(min_vcpus)
 
     # scale up now
     LOG.tc_step("Scaling up vcpu")
-    if not scale_up_vcpu(vm_name=vm_name):
-        assert "Failed to scale up vcpus"
+    assert scale_up_vcpu(vm_name=vm_name), "Failed to scale up vcpus"
 
     # check if vcpu has gone up by one
     expt_current_cpu += 1
@@ -214,12 +214,11 @@ def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
 
     # scale up to maximum
     for i in range (expt_current_cpu, vcpus):
-        if not scale_up_vcpu(vm_name=vm_name):
-            assert "Failed to scale up vcpus"
+        assert scale_up_vcpu(vm_name=vm_name), "Failed to scale up vcpus"
 
     expt_current_cpu = vcpus
-    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
-        assert "Failed to reach {} vcpus".format(expt_current_cpu)
+    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
+        "Failed to reach {} vcpus".format(expt_current_cpu)
 
     # scaling down to min
     scale_down_vcpu(vm_name=vm_name)
@@ -240,8 +239,8 @@ def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
         vm_helper.perform_action_on_vm(vm_id=vm_id,action='live_migrate')
 
     expt_current_cpu = min_vcpus
-    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
-        assert "Failed to reach {} vcpus".format(expt_current_cpu)
+    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
+        "Failed to reach {} vcpus".format(expt_current_cpu)
 
     # delete heat stack
     LOG.tc_step("Deleting heat stack{}".format(stack_name))
@@ -249,3 +248,4 @@ def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
     assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
     # can check vm is deleted
 
+    GuestLogs.remove(vm_id)

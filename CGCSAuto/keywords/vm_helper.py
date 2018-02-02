@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pexpect import TIMEOUT as ExpectTimeout
 
 from utils import exceptions, cli, table_parser, multi_thread
-from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
+from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, LocalHostClient
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
@@ -3999,3 +3999,23 @@ def get_ping_loss_duration_on_operation(vm_id, timeout, ping_interval, oper_func
         assert False, "Ping failed since start"
     finally:
         ping_thread.wait_for_thread_end(timeout=5)
+
+
+def collect_guest_logs(vm_id):
+    LOG.info("Attempt to collect guest logs with best effort")
+    log_names = ['messages', 'user.log']
+    try:
+        with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+            for log_name in log_names:
+                log_path = '/var/log/{}'.format(log_name)
+                if not vm_ssh.file_exists(log_path):
+                    continue
+
+                output = vm_ssh.exec_cmd('cat {}'.format(log_path), fail_ok=False)[1]
+                local_log_path = '{}/{}_{}'.format(ProjVar.get_var('GUEST_LOGS_DIR'), vm_id, log_name)
+                with open(local_log_path, mode='w') as f:
+                    f.write(output)
+                return
+
+    except exceptions as e:
+        LOG.warning("Failed to collect guest logs: {}".format(e))

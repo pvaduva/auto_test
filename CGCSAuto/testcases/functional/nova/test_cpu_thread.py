@@ -10,7 +10,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, check_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -596,6 +596,7 @@ class TestHTEnabled:
         LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         if min_vcpus:
+            GuestLogs.add(vm_id)
             vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
 
         vm_host = nova_helper.get_vm_host(vm_id)
@@ -667,6 +668,8 @@ class TestHTEnabled:
 
         LOG.tc_step("Check vm vcpus in nova show did not change")
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+        if min_vcpus:
+            GuestLogs.remove(vm_id)
 
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
         mark.p1((1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None)),

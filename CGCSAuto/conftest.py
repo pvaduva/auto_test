@@ -828,6 +828,7 @@ def __params_gen(index):
 def global_setup():
     os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
     os.makedirs(ProjVar.get_var('PING_FAILURE_DIR'), exist_ok=True)
+    os.makedirs(ProjVar.get_var('GUEST_LOGS_DIR'), exist_ok=True)
 
     if region:
         setups.set_region(region=region)

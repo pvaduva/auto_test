@@ -112,10 +112,14 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
 
     """
 
-    hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
-                        'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
-                        'remote': host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)
+    hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh, up_only=False),
+                        'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh,
+                                                                                up_only=False),
+                        'remote': host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh, up_only=False)
                         }
+
+    up_hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
+    up_hosts_by_backing = {storage: list(set(hosts) & set(up_hosts)) for storage, hosts in hosts_by_backing.items()}
 
     valid_backings = ['local_image', 'local_lvm', 'remote']
     valid_backings.remove(prefer)
@@ -124,39 +128,48 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     storage_backing_spec = prefer
     max_num = 0
     for backing in valid_backings:
-        hosts_num = len(hosts_by_backing[backing])
+        hosts_num = len(up_hosts_by_backing[backing])
         if hosts_num > max_num:
             storage_backing_spec = backing
             max_num = hosts_num
 
     if max_num > 0:
-        LOG.info("{} aggregate has most hosts: {}".format(storage_backing_spec, hosts_by_backing[storage_backing_spec]))
-    elif max_num == 0 and not rtn_down_hosts:
-        LOG.warning("No host in storage aggregate. Return preferred storage backing")
-
+        hosts_by_backing = up_hosts_by_backing
+        LOG.info("Storage aggregate {} has most up hosts: {}".format(storage_backing_spec,
+                                                                     hosts_by_backing[storage_backing_spec]))
+    elif not rtn_down_hosts:
+        LOG.warning("No up host in storage aggregate. Return preferred storage backing")
     else:
-        image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
-        down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
-        for down_host in down_hosts:
-            host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
-            if 'image' in host_instance_backing:
-                backing = 'local_image'
-                image_hosts_num += 1
-            elif 'lvm' in host_instance_backing:
-                backing = 'local_lvm'
-                lvm_hosts_num += 1
-            else:
-                backing = 'remote'
-                remote_hosts_num += 1
+        # image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
+        # down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
+        # for down_host in down_hosts:
+        #     host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
+        #     if 'image' in host_instance_backing:
+        #         backing = 'local_image'
+        #         image_hosts_num += 1
+        #     elif 'lvm' in host_instance_backing:
+        #         backing = 'local_lvm'
+        #         lvm_hosts_num += 1
+        #     else:
+        #         backing = 'remote'
+        #         remote_hosts_num += 1
+        #
+        #     hosts_by_backing[backing].append(down_host)
+        #
+        # hosts_nums = {'local_image': image_hosts_num, 'local_lvm': lvm_hosts_num, 'remote': remote_hosts_num}
+        # max_num = max(list(hosts_nums.values()))
+        # for backing in valid_backings:
+        #     if max_num == hosts_nums[backing]:
+        #         storage_backing_spec = backing
+        #         break
 
-            hosts_by_backing[backing].append(down_host)
-
-        hosts_nums = {'local_image': image_hosts_num, 'local_lvm': lvm_hosts_num, 'remote': remote_hosts_num}
-        max_num = max(list(hosts_nums.values()))
+        storage_backing_spec = prefer
+        max_num = 0
         for backing in valid_backings:
-            if max_num == hosts_nums[backing]:
+            hosts_num = len(hosts_by_backing[backing])
+            if hosts_num > max_num:
                 storage_backing_spec = backing
-                break
+                max_num = hosts_num
 
         LOG.warning("No up hosts in host-aggregate. Return {} storage backing based on instance backing for down hosts."
                     .format(storage_backing_spec))
