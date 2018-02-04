@@ -31,7 +31,7 @@ def get_out_of_date_alarms():
 
 
 @fixture(scope='module', autouse=True)
-def teardown(request, get_out_of_date_alarms):
+def revert_timezone(request, get_out_of_date_alarms):
     def _revert():
         LOG.fixture_step("Reverting timezone to UTC")
         cli.system('modify', '--timezone=UTC')

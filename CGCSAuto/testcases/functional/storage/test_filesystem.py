@@ -321,8 +321,8 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     hosts = system_helper.get_controllers()
     for host in hosts:
-        system_helper.wait_for_events(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, start=start_time,
-                                      entity_id="host={}".format(host), **{'state': 'set'})
+        system_helper.wait_for_events(event_log_id=EventLogID.CONFIG_OUT_OF_DATE, start=start_time,
+                                      entity_instance_id="host={}".format(host), strict=False, **{'state': 'set'})
 
     for host in hosts:
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
@@ -477,7 +477,7 @@ def _test_increase_cinder():
                                           entity_id="host={}".format(host))
 
     LOG.tc_step("Validate cinder size is increased")
-    table_= table_parser.table(cli.system("storage-backend-show lvm"))
+    table_ = table_parser.table(cli.system("storage-backend-show lvm-store"))
     cinder_gib2 = table_parser.get_value_two_col_table(table_, "cinder_gib")
     LOG.info("cinder is currently {}".format(cinder_gib2))
     assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"

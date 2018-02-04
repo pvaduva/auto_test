@@ -466,6 +466,7 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
         else:
             raise exceptions.TimeoutException(err_msg)
 
+
 def get_storage_backend_info(backend, fail_ok=False, con_ssh=None):
     """
     Get storage backend pool allocation info
@@ -479,7 +480,13 @@ def get_storage_backend_info(backend, fail_ok=False, con_ssh=None):
                     'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
 
     """
-    valid_backends = ['ceph', 'lvm']
+    # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
+    if 'ceph' in backend:
+        backend = 'ceph-store'
+    elif 'lvm' in backend:
+        backend = 'lvm-store'
+    elif 'file' in backend:
+        backend = 'file-store'
 
     args = backend
 

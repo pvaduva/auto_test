@@ -55,7 +55,7 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
 
     # Check if glance-image storage backing is present in system and skip if it is
     if 'ceph' in storage_helper.get_configured_system_storage_backend():
-        table_ = table_parser.table(cli.system('storage-backend-show ceph'))
+        table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
         glance_pool = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
         if glance_pool:
             skip("Skip lab with ceph-backed glance image storage")

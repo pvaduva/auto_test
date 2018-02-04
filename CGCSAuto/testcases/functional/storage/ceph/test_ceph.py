@@ -1136,7 +1136,7 @@ def test_modify_ceph_pool_size():
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Query the size of the CEPH storage pools')
-    table_ = table_parser.table(cli.system('storage-backend-show ceph'))
+    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
     glance_pool = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
     cinder_pool = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
     ephemeral_pool = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
@@ -1171,7 +1171,7 @@ def test_modify_ceph_pool_size():
     assert rc == 0, out
 
     LOG.info('Check the ceph images pool is set to the right value')
-    table_ = table_parser.table(cli.system('storage-backend-show ceph'))
+    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
     glance_pool2 = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
     cinder_pool2 = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
     ephemeral_pool2 = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
