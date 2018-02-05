@@ -476,7 +476,7 @@ def test_vlan_providernet_connectivity_delete_segment(create_delete_range):
     LOG.tc_step("Schedule providernet-connectivity-test and ensure newly created range to be listed in "
                 "providernet-connectivity-test-list")
 
-    kwargs = {'segmentation_ids': '{}-{}'.format(min_range, max_range)}
+    kwargs = {'segmentation_ids': '{}-{}'.format(min_range, max_range), 'status': ['PASS', 'FAIL']}
     network_helper.schedule_providernet_connectivity_test()
 
     res_for_seg = network_helper.get_providernet_connectivity_test_results(**kwargs)

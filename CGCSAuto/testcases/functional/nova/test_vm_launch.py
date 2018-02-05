@@ -127,7 +127,8 @@ def get_initial_pool_space(host_ssh, excluded_vm):
     raw_thin_pool_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
     assert raw_thin_pool_output, "thin pool volume not found"
     raw_lvs_output = host_ssh.exec_sudo_cmd(
-            "lvs --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".format(excluded_vm))[1]
+            "lvs --units g --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".
+                format(excluded_vm))[1]
 
     if raw_lvs_output:
         lvs_in_pool = raw_lvs_output.split('\n')
@@ -179,7 +180,7 @@ def test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
     with host_helper.ssh_to_host(vm_host) as compute_ssh:
         LOG.tc_step("Look for qemu process")
-        compute_ssh.exec_sudo_cmd(cmd="lvs")
+        compute_ssh.exec_sudo_cmd(cmd="lvs --units g")
         assert check_for_qemu_process(compute_ssh), "qemu process not found when calling ps"
 
         LOG.tc_step("Look for pool information")
@@ -187,7 +188,7 @@ def test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
         vm_vol_name = vm + '_disk'
         raw_vm_volume_output = \
-            compute_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name={}".format(vm_vol_name))[1]
+            compute_ssh.exec_sudo_cmd(cmd="lvs --units g --noheadings -o lv_size -S lv_name={}".format(vm_vol_name))[1]
         assert raw_vm_volume_output, "created vm volume not found"
         vm_volume_size = float(raw_vm_volume_output.strip('<g'))
 
