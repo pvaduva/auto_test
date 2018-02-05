@@ -101,7 +101,7 @@ class TestLocalStorage:
                     cli.system(cmd, fail_ok=False)
                     host_helper.unlock_host(host_to_revert)
 
-            except exceptions as e:
+            except Exception as e:
                 LOG.exception(e)
                 exceptions.append(e)
 

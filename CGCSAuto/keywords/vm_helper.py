@@ -4017,5 +4017,5 @@ def collect_guest_logs(vm_id):
                     f.write(output)
                 return
 
-    except exceptions as e:
+    except Exception as e:
         LOG.warning("Failed to collect guest logs: {}".format(e))
