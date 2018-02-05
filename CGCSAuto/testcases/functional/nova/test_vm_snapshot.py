@@ -54,16 +54,16 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
         skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(inst_backing))
 
     # Check if glance-image storage backing is present in system and skip if it is
-    if 'ceph' in storage_helper.get_configured_system_storage_backend():
-        table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
-        glance_pool = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
+    if 'ceph' in storage_helper.get_storage_backends():
+        glance_pool = storage_helper.get_storage_backend_show_vals(backend='ceph', fields=('glance_pool_gib', ))
         if glance_pool:
             skip("Skip lab with ceph-backed glance image storage")
 
     vm_host = host_list[0]
     snaptable_ = table_parser.table(cli.system("storage-usage-list", auth_info=Tenant.ADMIN))
 
-    snapshot_space = table_parser.get_values(snaptable_, "free capacity (Gib)", **{'service': 'glance', 'backend type': 'file'})[0]
+    snapshot_space = table_parser.get_values(snaptable_, "free capacity (Gib)",
+                                             **{'service': 'glance', 'backend type': 'file'})[0]
     snapshot_space_gb = int(float(snapshot_space))
     if snapshot_space_gb > 20:
         skip("Lab glance image directory too large for timely test execution")

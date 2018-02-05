@@ -1136,18 +1136,14 @@ def test_modify_ceph_pool_size():
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Query the size of the CEPH storage pools')
-    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
-    glance_pool = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
-    cinder_pool = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
-    ephemeral_pool = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
-    object_pool = int(table_parser.get_value_two_col_table(table_, 'object_pool_gib'))
-    ceph_total_space = int(table_parser.get_value_two_col_table(table_, 'ceph_total_space_gib'))
-    object_gateway = ast.literal_eval(table_parser.get_value_two_col_table(table_, 'object_gateway'))
-    LOG.tc_step("Current pool values: Glance {}, Cinder {}, Ephemeral {}, Object {}".
-                format(glance_pool, cinder_pool, ephemeral_pool, object_pool))
+    glance_pool, cinder_pool, ephemeral_pool, object_pool, ceph_total_space, object_gateway = \
+        storage_helper.get_storage_backend_show_vals(backend='ceph', fields=(
+            'glance_pool_gib', 'cinder_pool_gib', 'ephemeral_pool_gib', 'object_pool_gib',
+            'ceph_total_space_gib', 'object_gateway'))
 
-    #new_glance_pool = str(glance_pool + 10)
-    #new_ephemeral_pool = str(ephemeral_pool + 10)
+    LOG.info("Current pool values: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(glance_pool, cinder_pool,
+                                                                                         ephemeral_pool, object_pool))
+
     new_glance_pool = glance_pool + 10
     new_ephemeral_pool = ephemeral_pool + 10
 
@@ -1171,11 +1167,10 @@ def test_modify_ceph_pool_size():
     assert rc == 0, out
 
     LOG.info('Check the ceph images pool is set to the right value')
-    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
-    glance_pool2 = int(table_parser.get_value_two_col_table(table_, 'glance_pool_gib'))
-    cinder_pool2 = int(table_parser.get_value_two_col_table(table_, 'cinder_pool_gib'))
-    ephemeral_pool2 = int(table_parser.get_value_two_col_table(table_, 'ephemeral_pool_gib'))
-    object_pool2 = int(table_parser.get_value_two_col_table(table_, 'object_pool_gib'))
+    glance_pool2, cinder_pool2, ephemeral_pool2, object_pool2, ceph_total_space2, object_gateway2 = \
+        storage_helper.get_storage_backend_show_vals(backend='ceph', fields=(
+            'glance_pool_gib', 'cinder_pool_gib', 'ephemeral_pool_gib', 'object_pool_gib',
+            'ceph_total_space_gib', 'object_gateway'))
 
     assert glance_pool2 == new_glance_pool, "Glance pool should be {} but is {}".\
         format(new_glance_pool, glance_pool2)
@@ -1190,45 +1185,46 @@ def test_modify_ceph_pool_size():
 
     LOG.tc_step("Check ceph pool information")
     cmd = "ceph osd pool get-quota {}"
-    max_bytes_regex = "([0-9]*)(.B)$"
+    max_bytes_regex = "max bytes.*([0-9]*)(.B)$"
 
     newcmd = cmd.format('images')
     rc, out = con_ssh.exec_cmd(newcmd)
     max_bytes = re.search(max_bytes_regex, out)
-    if max_bytes:
-        ceph_glance_pool = int(max_bytes.group(1))
-        if max_bytes.group(2) == 'MB':
-            ceph_glance_pool = ceph_glance_pool / 1000
+    assert max_bytes
+    ceph_glance_pool = int(max_bytes.group(1))
+    if max_bytes.group(2) == 'MB':
+        ceph_glance_pool /= 1000
 
     newcmd = cmd.format('cinder-volumes')
     rc, out = con_ssh.exec_cmd(newcmd)
     max_bytes = re.search(max_bytes_regex, out)
-    if max_bytes:
-        ceph_cinder_pool = int(max_bytes.group(1))
-        if max_bytes.group(2) == 'MB':
-            ceph_cinder_pool = ceph_cinder_pool / 1000
+    assert max_bytes
+    ceph_cinder_pool = int(max_bytes.group(1))
+    if max_bytes.group(2) == 'MB':
+        ceph_cinder_pool /= 1000
 
     newcmd = cmd.format('ephemeral')
     rc, out = con_ssh.exec_cmd(newcmd)
     max_bytes = re.search(max_bytes_regex, out)
-    if max_bytes:
-        ceph_ephemeral_pool = int(max_bytes.group(1))
-        if max_bytes.group(2) == 'MB':
-            ceph_ephemeral_pool = ceph_ephemeral_pool / 1000
+    assert max_bytes
+    ceph_ephemeral_pool = int(max_bytes.group(1))
+    if max_bytes.group(2) == 'MB':
+        ceph_ephemeral_pool /= 1000
 
     if object_gateway:
         newcmd = cmd.format('default.rgw.buckets.data')
         rc, out = con_ssh.exec_cmd(newcmd)
         max_bytes = re.search(max_bytes_regex, out)
-        if max_bytes:
-            ceph_object_pool = int(max_bytes.group(1))
-            if max_bytes.group(2) == 'MB':
-                ceph_object_pool = ceph_object_pool / 1000
-
-        LOG.tc_step("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool, ceph_object_pool))
+        assert max_bytes
+        ceph_object_pool = int(max_bytes.group(1))
+        if max_bytes.group(2) == 'MB':
+            ceph_object_pool /= 1000
+        LOG.info("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(
+                ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool, ceph_object_pool))
     else:
         ceph_object_pool = 0
-        LOG.tc_step("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}".format(ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool))
+        LOG.info("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}".format(
+                ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool))
 
     # Set margin of error to some reasonable value to account for unit
     # conversion and rounding errors
@@ -1236,9 +1232,11 @@ def test_modify_ceph_pool_size():
 
     LOG.info("Margin of error is set to {}".format(moe))
 
-    assert new_glance_pool - moe <= ceph_glance_pool <= new_glance_pool + moe, "Glance pool should be {} but is {}".format(new_glance_pool, ceph_glance_pool)
-    assert new_cinder_pool - moe <= ceph_cinder_pool <= new_cinder_pool + moe, "Cinder pool should be {} but is {}".format(new_cinder_pool, ceph_cinder_pool)
-    assert new_ephemeral_pool - moe <= ceph_ephemeral_pool <= new_ephemeral_pool + moe, "Ephemeral pool should be {} but is {}".format(new_ephemeral_pool, ceph_ephemeral_pool)
-    assert new_object_pool - moe <= ceph_object_pool <= new_object_pool + moe, "Object pool should be {} but is {}".format(new_object_pool, ceph_object_pool)
-
-
+    assert new_glance_pool - moe <= ceph_glance_pool <= new_glance_pool + moe, \
+        "Glance pool should be {} but is {}".format(new_glance_pool, ceph_glance_pool)
+    assert new_cinder_pool - moe <= ceph_cinder_pool <= new_cinder_pool + moe, \
+        "Cinder pool should be {} but is {}".format(new_cinder_pool, ceph_cinder_pool)
+    assert new_ephemeral_pool - moe <= ceph_ephemeral_pool <= new_ephemeral_pool + moe, \
+        "Ephemeral pool should be {} but is {}".format(new_ephemeral_pool, ceph_ephemeral_pool)
+    assert new_object_pool - moe <= ceph_object_pool <= new_object_pool + moe, \
+        "Object pool should be {} but is {}".format(new_object_pool, ceph_object_pool)

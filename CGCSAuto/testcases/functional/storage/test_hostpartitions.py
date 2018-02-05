@@ -26,10 +26,13 @@ Partition changes are done in service.
 import time
 import string
 
+from pytest import fixture, mark, skip
+
 from keywords import system_helper, host_helper, partition_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from pytest import fixture, mark, skip
+from testfixtures.recover_hosts import HostsToRecover
+
 
 CP_TIMEOUT = 120
 DP_TIMEOUT = 120
@@ -593,11 +596,15 @@ def test_attempt_host_unlock_during_partition_creation():
         free_disks = partition_helper.get_disks_with_free_space(host, disks)
         if not free_disks:
             continue
+
         for uuid in free_disks:
             size_mib = int(free_disks[uuid])
             if size_mib == 0:
-                LOG.tc_step("Skip this disk due to insufficient space")
+                LOG.info("Skip this disk due to insufficient space")
                 continue
+
+            LOG.tc_step("Lock {} and create a partition for disk {}".format(host, uuid))
+            HostsToRecover.add(host)
             host_helper.lock_host(host)
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
@@ -605,21 +612,14 @@ def test_attempt_host_unlock_during_partition_creation():
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
-            rc, out = host_helper.unlock_host(host, fail_ok=True)
-            assert rc != 0, "Unlock attempt unexpectedly passed"
 
-            LOG.tc_step("Check that partition was created succesfully")
-            partition_created = False
-            end_time = time.time() + CP_TIMEOUT
-            while time.time() < end_time:
-                status = partition_helper.get_partition_info(host, uuid, "status")
-                LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-                assert status == "Creating" or status == "Ready", "Partition has unexpected state {}".format(status)
-                if status == "Ready":
-                    LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
-                    partition_created = True
-                    break
-            assert partition_created, "Partition was not successfully created"
+            LOG.tc_step("Attempt to unlock host and ensure it's rejected when partition is being created")
+            rc_ = host_helper.unlock_host(host, fail_ok=True)[0]
+            assert rc_ != 0, "Unlock attempt unexpectedly passed"
+
+            LOG.tc_step("wait for partition to be created")
+            partition_helper.wait_for_partition_ready(host=host, uuid=uuid, other_status='Creating', timeout=CP_TIMEOUT)
+
             # Only test one disk on each host
             break
         # Do it on one host only

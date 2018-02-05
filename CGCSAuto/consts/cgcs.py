@@ -487,6 +487,7 @@ class CpuModel:
     CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX',
                   'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')
 
+
 class ExtLdap:
     LDAP_SERVER = 'ldap://128.224.186.62'
     LDAP_DC = 'dc=tis,dc=wrs,dc=com'
@@ -499,3 +500,15 @@ class SpareIPs:
     NEW_OAM_IP0 = "128.224.151.184"
     NEW_OAM_IP1 = "128.224.151.185"
     NEW_OAM_IP2 = "128.224.151.186"
+
+
+class BackendStates:
+    CONFIGURED = 'configured'
+    CONFIGURING = 'configuring'
+
+
+class PartitionStatus:
+    READY = 'Ready'
+    MODIFYING = 'Modifying'
+    DELETING = 'Deleting'
+    CREATING = 'Creating'

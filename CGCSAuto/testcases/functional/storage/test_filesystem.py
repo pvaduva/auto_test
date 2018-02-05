@@ -7,7 +7,7 @@ from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailState
-from keywords import host_helper, system_helper, local_storage_helper, install_helper, filesystem_helper, common
+from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -17,20 +17,24 @@ from testfixtures.recover_hosts import HostsToRecover
 
 DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
 
+
 @fixture()
 def aio_precheck():
     if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():
         skip("Test only applies to AIO-SX or AIO-DX systems")
+
 
 @fixture()
 def lvm_precheck():
     if system_helper.is_simplex() or system_helper.is_storage_system():
         skip("Test does not apply to AIO-SX systems or storage systems")
 
+
 @fixture()
 def storage_precheck():
     if not system_helper.is_storage_system():
         skip("This test only applies to storage nodes")
+
 
 @fixture()
 def freespace_check():
@@ -477,8 +481,7 @@ def _test_increase_cinder():
                                           entity_id="host={}".format(host))
 
     LOG.tc_step("Validate cinder size is increased")
-    table_ = table_parser.table(cli.system("storage-backend-show lvm-store"))
-    cinder_gib2 = table_parser.get_value_two_col_table(table_, "cinder_gib")
+    cinder_gib2 = storage_helper.get_storage_backend_show_vals(backend='lvm', fields='cinder_gib')
     LOG.info("cinder is currently {}".format(cinder_gib2))
     assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
 
