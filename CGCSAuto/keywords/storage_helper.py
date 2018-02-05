@@ -419,21 +419,29 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         1, cli err message
 
     """
+    if 'ceph' in backend:
+        backend = 'ceph-store'
+    elif 'lvm' in backend:
+        backend = 'lvm-store'
+    elif 'file' in backend:
+        backend = 'file-store'
 
     args = backend
 
     backend_info = get_storage_backend_info(backend)
 
     if cinder:
-        args += ' cinder_pool_gib=' + cinder
-    if glance and backend == 'ceph':
-        args += ' glance_pool_gib=' + glance
-    if ephemeral and backend == 'ceph':
-        args += ' ephemeral_pool_gib=' + ephemeral
-    if object_gateway and backend == 'ceph':
-        args += ' object_gateway=' + str(object_gateway)
-    if object_gib and backend == 'ceph':
-        args += ' object_pool_gib=' + object_gib
+        args += ' cinder_pool_gib={}'.format(cinder)
+
+    if 'ceph' in backend:
+        if glance:
+            args += ' glance_pool_gib={}'.format(glance)
+        if ephemeral:
+            args += ' ephemeral_pool_gib={}'.format(ephemeral)
+        if object_gateway:
+            args += ' object_gateway={}'.format(object_gateway)
+        if object_gib:
+            args += ' object_pool_gib={}'.format(object_gib)
 
     code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
     # TODO return new values of storage allocation and check they are the right values
@@ -446,7 +454,6 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         if fail_ok:
             return code, out
         raise exceptions.CLIRejected(msg)
-
 
 
 def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
