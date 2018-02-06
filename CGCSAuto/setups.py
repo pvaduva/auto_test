@@ -779,3 +779,8 @@ def set_region(region=None):
         Tenant.update_tenant_dict(tenant, username=region_tenant, tenant=region_tenant)
         if region != local_region:
             keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
+
+
+def set_sys_type(con_ssh):
+    sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
+    ProjVar.set_var(SYS_TYPE=sys_type)

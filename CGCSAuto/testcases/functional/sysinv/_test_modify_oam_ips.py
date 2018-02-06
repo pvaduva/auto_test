@@ -7,7 +7,7 @@ from pytest import fixture, mark
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper, keystone_helper
 from utils.ssh import ControllerClient
-from consts.cgcs import EventLogID, HostAvailState, HostOperState, SpareIPs
+from consts.cgcs import EventLogID, HostAvailState, HostOperState, SpareIP
 import time
 
 original_ip0 = "0.0.0.0"
@@ -90,9 +90,9 @@ def _test_modify_oam_ips(oam_ips):
     LOG.info("Original oam_floating_ip: {}".format(original_ip2))
 
     LOG.tc_step("Modify OAM IPs to new IPs")
-    new_oam_ip0 = SpareIPs.NEW_OAM_IP0
-    new_oam_ip1 = SpareIPs.NEW_OAM_IP1
-    new_oam_ip2 = SpareIPs.NEW_OAM_IP2
+    new_oam_ip0 = SpareIP.NEW_OAM_IP0
+    new_oam_ip1 = SpareIP.NEW_OAM_IP1
+    new_oam_ip2 = SpareIP.NEW_OAM_IP2
     arg_str = ""
     LOG.info("args passed in:{}".format(oam_ips))
     if not oam_ips:

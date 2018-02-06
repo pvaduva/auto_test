@@ -626,7 +626,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_hypervisor_up=True,
-                check_webservice_up=True, check_subfunc=True):
+                check_webservice_up=True, check_subfunc=True, check_first=True):
     """
     Unlock given host
     Args:
@@ -656,24 +656,24 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
     """
     LOG.info("Unlocking {}...".format(host))
-    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
-                          con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
-        LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-        wait_for_host_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
-                                                 HostAvailState.DEGRADED], con_ssh=con_ssh,
-                             use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
-
-    if get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet=use_telnet,
-                          con_telnet=con_telnet) == HostAdminState.UNLOCKED:
-        message = "Host already unlocked. Do nothing"
-        LOG.info(message)
-        return -1, message
-
-    if not use_telnet:
+    if not use_telnet and not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet,
-                                          con_telnet=con_telnet)
+    if check_first:
+        if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
+                              con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
+            LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
+            wait_for_host_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
+                                                     HostAvailState.DEGRADED], con_ssh=con_ssh,
+                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
+
+        if get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet=use_telnet,
+                              con_telnet=con_telnet) == HostAdminState.UNLOCKED:
+            message = "Host already unlocked. Do nothing"
+            LOG.info(message)
+            return -1, message
+
+    is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet,
                                   con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,

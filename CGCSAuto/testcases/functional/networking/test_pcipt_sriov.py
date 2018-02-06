@@ -7,7 +7,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, VMStatus, DevClassIds
+from consts.cgcs import FlavorSpec, VMStatus, DevClassID
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -484,7 +484,7 @@ class TestVmPCIOperations:
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
             # qat-vf devices only
-            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassIds.QAT_VF)
+            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassID.QAT_VF)
 
         # self.nova_pci_devices = nova_pci_devices
         if not nova_pci_devices:

@@ -22,6 +22,7 @@ class ProjVar:
                   'REGION': 'RegionOne',
                   'COLLECT_TELNET': False,
                   'TELNET_THREADS': None,
+                  'SYS_TYPE': None,
                   }
 
     @classmethod

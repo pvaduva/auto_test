@@ -355,7 +355,7 @@ class VMNetworkStr:
     NET_IF = r"auto {}\niface {} inet dhcp\n"
 
 
-class HTTPPorts:
+class HTTPPort:
     NEUTRON_PORT = 9696
     NEUTRON_VER = "v2.0"
     CEIL_PORT = 8777
@@ -378,12 +378,12 @@ class HTTPPorts:
     PATCHING_VER = "v1"
 
 
-class CeilometerSamples:
+class CeilometerSample:
     VSWITCH_PORT_TRANSMIT_UTIL = "vswitch.port.transmit.util"
     VSWITCH_ENGINE_UTIL = "vswitch.engine.util"
 
 
-class QoSSpecs:
+class QoSSpec:
     READ_BYTES = 'read_bytes_sec'
     WRITE_BYTES = 'write_bytes_sec'
     TOTAL_BYTES = 'total_bytes_sec'
@@ -392,7 +392,7 @@ class QoSSpecs:
     TOTAL_IOPS = 'total_iops_sec'
 
 
-class OrchestStrategyPhases:
+class OrchestStrategyPhase:
     INITIAL = 'initial'
     BUILD = 'build'
     ABORT = 'abort'
@@ -407,13 +407,13 @@ class OrchestStrategyPhases:
 
     @staticmethod
     def validate(phase):
-        if phase in [OrchestStrategyPhases.BUILD, OrchestStrategyPhases.APPLY, OrchestStrategyPhases.ABORT]:
+        if phase in [OrchestStrategyPhase.BUILD, OrchestStrategyPhase.APPLY, OrchestStrategyPhase.ABORT]:
             return True
         else:
             return False
 
 
-class OrchestStrategyStates:
+class OrchStrategyState:
     # initial
     INITIAL = 'initial'
     # apply phase
@@ -435,9 +435,9 @@ class OrchestStrategyStates:
     ABORT_TIMEOUT = 'abort-timeout'
 
     OrchestStrategyPhaseStates = {
-        OrchestStrategyPhases.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
-        OrchestStrategyPhases.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
-        OrchestStrategyPhases.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+        OrchestStrategyPhase.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
+        OrchestStrategyPhase.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhase.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
     }
 
     def validate(self, phase, state):
@@ -447,8 +447,7 @@ class OrchestStrategyStates:
         return False
 
 
-class OrchestrationStrategyKeyNames:
-
+class OrchStrategyKey:
     STRATEGY_UUID = 'strategy-uuid'
     CONTROLLER_APPLY_TYPE = 'controller-apply-type'
     STORAGE_APPLY_TYPE = 'storage-apply-type'
@@ -467,7 +466,7 @@ class OrchestrationStrategyKeyNames:
     BUILD_REASON = 'build-reason'
 
 
-class DevClassIds:
+class DevClassID:
     QAT_VF = '0b4000'
     GPU = '030000'
 
@@ -495,14 +494,14 @@ class ExtLdap:
     LDAP_USER = 'cn=admin,dc=tis,dc=wrs,dc=com" password="admin'
 
 
-class SpareIPs:
+class SpareIP:
     # spared 3 IPs for OAM changing TC
     NEW_OAM_IP0 = "128.224.151.184"
     NEW_OAM_IP1 = "128.224.151.185"
     NEW_OAM_IP2 = "128.224.151.186"
 
 
-class BackendStates:
+class BackendState:
     CONFIGURED = 'configured'
     CONFIGURING = 'configuring'
 
@@ -512,3 +511,11 @@ class PartitionStatus:
     MODIFYING = 'Modifying'
     DELETING = 'Deleting'
     CREATING = 'Creating'
+
+
+class SysType:
+    AIO_DX = 'AIO-DX'
+    AIO_SX = 'AIO-SX'
+    STORAGE = 'Storage'
+    REGULAR = 'Regular'
+    MULTI_REGION = 'Multi-Region'

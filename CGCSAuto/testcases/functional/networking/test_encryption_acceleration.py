@@ -1,7 +1,7 @@
 from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, DevClassIds
+from consts.cgcs import FlavorSpec, DevClassID
 from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper, cinder_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -193,7 +193,7 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_info, enable_device_an
     device_address = hosts_pci_device_info[vm_host][0]['pci_address']
 
     host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                              **{'class id': DevClassIds.QAT_VF})[0]
+                                                              **{'class id': DevClassID.QAT_VF})[0]
     expt_qat_devs = {host_dev_name: 1}
     check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
 
@@ -299,7 +299,7 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         vm_host = nova_helper.get_vm_host(vm_id)
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+                                                                  **{'class id': DevClassID.QAT_VF})[0]
         expt_qat_devs = {host_dev_name: vfs}
         # 32 qat-vfs takes more than 1.5 hours to run tests
         check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, run_cpa=False)
@@ -352,7 +352,7 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
         vms[vm_name] = vm_id
         vm_host = nova_helper.get_vm_host(vm_id)
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+                                                                  **{'class id': DevClassID.QAT_VF})[0]
         expt_qat_devs = {} if '_no_crypto' in vm_name else {host_dev_name: 1}
         vms_qat_devs[vm_id] = expt_qat_devs
         check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
@@ -412,7 +412,7 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
     for vm_name_, vm_id_ in vms.items():
         vm_host = nova_helper.get_vm_host(vm_id_)
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+                                                                  **{'class id': DevClassID.QAT_VF})[0]
         expt_qat_devs = {host_dev_name: 4}
         check_helper.check_qat_service(vm_id=vm_id_, qat_devs=expt_qat_devs)
 
@@ -475,7 +475,7 @@ def check_device_list_against_pci_list(lspci_list_info, sysinv_device_list_tab):
     """
 
     LOG.info("Checking all devices are included in the list")
-    sysinv_device_list_tab = table_parser.filter_table(sysinv_device_list_tab, **{'class id': DevClassIds.QAT_VF})
+    sysinv_device_list_tab = table_parser.filter_table(sysinv_device_list_tab, **{'class id': DevClassID.QAT_VF})
 
     assert len(lspci_list_info) == len(sysinv_device_list_tab['values']), \
         "host devices list:{} and pci list:{} mismatch".format(sysinv_device_list_tab['values'], lspci_list_info)

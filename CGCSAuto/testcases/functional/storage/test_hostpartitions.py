@@ -614,7 +614,7 @@ def test_attempt_host_unlock_during_partition_creation():
             partitions_to_restore[host].append(uuid)
 
             LOG.tc_step("Attempt to unlock host and ensure it's rejected when partition is being created")
-            rc_ = host_helper.unlock_host(host, fail_ok=True)[0]
+            rc_ = host_helper.unlock_host(host, fail_ok=True, check_first=False)[0]
             assert rc_ != 0, "Unlock attempt unexpectedly passed"
 
             LOG.tc_step("wait for partition to be created")

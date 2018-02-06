@@ -3,7 +3,8 @@ import re
 import time
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import UUID, Prompt, Networks
+from consts.cgcs import UUID, Prompt, Networks, SysType
+from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
@@ -55,8 +56,39 @@ def _get_info_non_cli(cmd, con_ssh=None, use_telnet=False, con_telnet=None):
     return output
 
 
-def is_storage_system(con_ssh=None):
-    return bool(get_storage_nodes(con_ssh=con_ssh))
+def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None):
+    """
+    Please do NOT call this function in testcase/keyword. This is used to set global variable SYS_TYPE in ProjVar.
+    Use ProjVar.get_var('SYS_TYPE') in testcase/keyword instead.
+    Args:
+        con_ssh:
+        use_telnet:
+        con_telnet:
+
+    Returns:
+
+    """
+    is_aio = is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+    if is_aio:
+        sys_type = 'aio-dx'
+        if len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 1:
+            sys_type = 'aio-sx'
+    elif get_storage_nodes(con_ssh=con_ssh):
+        sys_type = 'storage'
+    else:
+        sys_type = 'regular'
+
+    # TODO: multi-region
+    LOG.info("=============System type: {} ==============".format(sys_type))
+    return sys_type
+
+
+def is_storage_system(con_ssh=None, use_telnet=False, con_telnet=None):
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return SysType.STORAGE == sys_type
+    else:
+        return bool(get_storage_nodes(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet))
 
 
 def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None):
@@ -68,12 +100,20 @@ def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None):
     Returns (bool):
 
     """
-    return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return SysType.AIO_DX == sys_type
+    else:
+        return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
            and len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 2
 
 
 def is_simplex(con_ssh=None, use_telnet=False, con_telnet=None):
-    return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return SysType.AIO_DX == sys_type
+    else:
+        return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
            and len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 1
 
 
@@ -87,6 +127,10 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
     Returns (bool): True if CPE or Simplex, else False
 
     """
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return 'aio' in sys_type.lower()
+
     table_ = table_parser.table(cli.system('host-show', controller, ssh_client=controller_ssh,
                                            use_telnet=use_telnet, con_telnet=con_telnet))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
@@ -99,7 +143,7 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
     return combined
 
 
-def get_storage_nodes(con_ssh=None):
+def get_storage_nodes(con_ssh=None, use_telnet=False, con_telnet=None):
     """
     Get hostnames with 'storage' personality from system host-list
     Args:
@@ -108,7 +152,7 @@ def get_storage_nodes(con_ssh=None):
     Returns (list): list of hostnames. Empty list [] returns when no storage nodes.
 
     """
-    return get_hostnames(personality='storage', con_ssh=con_ssh)
+    return get_hostnames(personality='storage', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
 
 def get_controllers(con_ssh=None, use_telnet=False, con_telnet=None):

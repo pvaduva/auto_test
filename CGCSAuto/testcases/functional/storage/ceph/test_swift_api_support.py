@@ -7,7 +7,7 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, host_helper, system_helper, \
     storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
-from consts.cgcs import GuestImages, BackendStates
+from consts.cgcs import GuestImages, BackendState
 from consts.auth import HostLinuxCreds
 from testfixtures.resource_mgmt import ResourceCleanup
 import time
@@ -165,7 +165,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     state = storage_helper.get_storage_backend_state('ceph')
     if system_helper.wait_for_alarm(alarm_id="250.001", timeout=10, fail_ok=True)[0]:
         LOG.info("Verifying ceph task is set to 'add-object-gateway'...")
-        assert BackendStates.CONFIGURING == state, \
+        assert BackendState.CONFIGURING == state, \
             "Unexpected ceph state '{}' after swift object gateway update ".format(state)
 
         LOG.info("Lock/Unlock controllers...")
@@ -178,7 +178,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
             host_helper.unlock_host(controller)
         assert system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=True), "Alarm 250.001 not cleared"
     else:
-        assert BackendStates.CONFIGURED == state, \
+        assert BackendState.CONFIGURED == state, \
             "Unexpected ceph state '{}' after swift object gateway update ".format(state)
 
     LOG.info("Verifying Swift provisioning setups...")
