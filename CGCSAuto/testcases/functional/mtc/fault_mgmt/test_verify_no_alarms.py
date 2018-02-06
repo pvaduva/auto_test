@@ -9,8 +9,10 @@ from utils import cli
 
 allowable_alarms=['100.104', '100.114', '400.001']
 
+# remove following test case since alarms are checked before and after each test.
 
-def test_tc4693_verify_no_alarms():
+
+def _test_tc4693_verify_no_alarms():
     """Method to list alarms
     """
 
