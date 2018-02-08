@@ -133,10 +133,7 @@ def test_ceilometer_retention_period():
     times = [31536000, 604800, 3600, 86400]
     for interval in times:
         LOG.tc_step("changing retention period to: {}".format(interval))
-        res, out = system_helper.set_retention_period(period=interval)
-        ret_per = system_helper.get_retention_period()
-        assert interval == int(ret_per), "FAIL: the retention period didn't change correctly"
-        assert 0 == res, "FAIL: the retention period didn't change correctly"
+        system_helper.set_retention_period(period=interval)
 
     times = [3500, 32000000]
     for interval in times:

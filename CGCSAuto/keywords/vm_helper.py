@@ -20,7 +20,7 @@ from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
-    keystone_helper, vlm_helper, storage_helper
+    keystone_helper, vlm_helper, storage_helper, ceilometer_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -1064,8 +1064,7 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     vm_storage_backing = vm_info.get_storage_type()
     current_host = vm_info.get_host_name()
-    candidate_hosts = host_helper.get_hypervisors_with_storage_backing(storage_backing=vm_storage_backing,
-                                                                       con_ssh=con_ssh)
+    candidate_hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=vm_storage_backing, con_ssh=con_ssh)
 
     hosts_table_ = table_parser.table(cli.system('host-list'))
     for host in candidate_hosts:
@@ -1115,7 +1114,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if len(host_helper.get_hypervisors_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+        if len(host_helper.get_hosts_in_storage_aggregate(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
                      "migrate to.".format(vm_id))
             return 1, output
@@ -3211,7 +3210,7 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
 
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if len(host_helper.get_hypervisors_with_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+        if len(host_helper.get_hosts_in_storage_aggregate(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
                      "migrate to.".format(vm_id))
             return 1, output
@@ -3312,63 +3311,226 @@ def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=
                                        check_interval=check_interval, time_to_stay=time_to_stay, fail_ok=fail_ok)
 
 
-def boost_cpu_usage(vm_id, cpu_num=1, con_ssh=None):
-    """
-    Boost cpu usage on given number of cpu cores on specified vm using dd cmd
-
-    Args:
-        vm_id (str):
-        cpu_num (int): number of times to run dd cmd. Each dd will normally be executed on different processor
-        con_ssh:
-
-    Returns (VMSSHClient): vm_ssh where the dd commands were sent.
-        To terminate the dd to release the cpu resources, use: vm_ssh.exec_cmd('pkill dd')
-    """
-    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
-    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
-
-    with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, close_ssh=False) as vm_ssh:
-        for i in range(cpu_num):
-            vm_ssh.exec_cmd(cmd=dd_cmd)
-
-    return vm_ssh
-
-
-def boost_cpu_usage_new_thread(vm_id, cpu_num=1, timeout=1200):
+def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, start_event=None, timeout=1200, con_ssh=None):
     """
     Boost cpu usage on given number of cpu cores on specified vm using dd cmd on a new thread
 
     Args:
         vm_id (str):
-        cpu_num (int): number of times to run dd cmd. Each dd will normally be executed on different processor
-        timeout (int): max time to wait before killing the thread. Thread should be ended from test function.
+        end_event (Events): Event for kill the dd processes
+        new_dd_events (list): Event(s) for adding new dd process(es)
+        start_event (Events): Event to set after sending first dd cmd.
+        timeout: Max time to wait for the end_event to be set before killing dd.
+        con_ssh
 
-    Returns (tuple): (<vm_ssh>, <thread for this function>)
+    Returns: thread
 
     Examples:
         LOG.tc_step("Boost VM cpu usage")
-        thread_timeout = 600
-        vm_ssh, vm_thread = vm_helper.boost_cpu_usage_new_thread(vm_id=vm_id, cpu_num=vcpus, timeout=thread_timeout)
 
-        LOG.tc_step("Check vm current vcpus in nova show is updated")
-        check_helper.wait_for_vm_vcpus_update(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu, timeout=120)
-
-        # End vm thread explicitly after vcpus are changed to expected value. If test failed, then the thread will be
-        # ended after the thread_timeout reaches.
-        vm_thread.end_thread()
-        vm_thread.wait_for_thread_end(timeout=3)
 
     """
-    LOG.info("Creating new thread to spike cpu_usage on {} vm cores for vm {}".format(cpu_num, vm_id))
-    thread = multi_thread.MThread(boost_cpu_usage, vm_id, cpu_num)
-    thread.start_thread(timeout=timeout)
-    vm_ssh = thread.get_output(wait=True)
+    if not new_dd_events:
+        new_dd_events = []
+    elif not isinstance(new_dd_events, list):
+        new_dd_events = [new_dd_events]
 
-    def _kill_dd(vm_ssh_):
-        vm_ssh_.exec_cmd('pkill dd')
+    def _boost_cpu_in_vm():
+        LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
+        dd_cmd = 'dd if=/dev/zero of=/dev/null &'
+        kill_dd = 'pkill -ex dd'
 
-    thread.set_end_func(_kill_dd, vm_ssh)
-    return vm_ssh, thread
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
+            LOG.info("Start first 2 dd processes in vm")
+            vm_ssh.exec_cmd(cmd=dd_cmd)
+            vm_ssh.exec_cmd(cmd=dd_cmd)
+            if start_event:
+                start_event.set()
+
+            end_time = time.time() + timeout
+            while time.time() < end_time:
+                if end_event.is_set():
+                    LOG.info("End event set, kill dd processes in vm")
+                    vm_ssh.exec_cmd(kill_dd)
+                    return
+
+                for event in new_dd_events:
+                    if event.is_set():
+                        LOG.info("New dd event set, start 2 new dd processes in vm")
+                        vm_ssh.exec_cmd(cmd=dd_cmd)
+                        vm_ssh.exec_cmd(cmd=dd_cmd)
+                        new_dd_events.remove(event)
+                        break
+
+                time.sleep(3)
+
+            LOG.error("End event is not set within timeout - {}s, kill dd anyways".format(timeout))
+            vm_ssh.exec_cmd(kill_dd)
+
+    LOG.info("Creating new thread to spike cpu_usage on vm cores for vm {}".format(vm_id))
+    thread = multi_thread.MThread(_boost_cpu_in_vm)
+    thread.start_thread(timeout=timeout + 10)
+
+    return thread
+
+
+def touch_remove_vm_voting_file(vm_id, filename='vote_no_to_stop', touch=True, con_ssh=None):
+    # valid_names: 'vote_no_to_stop|migrate|suspend|reboot', 'unhealthy', 'event_timeout'
+    cmd = '{} /tmp/{}'.format('touch' if touch else 'rm -f', filename)
+    with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
+        vm_ssh.exec_cmd(cmd, fail_ok=False)
+
+
+def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ssh=None, func_second_vm=None,
+                               **func_args):
+    vm_ids = nova_helper.get_vms(strict=False, name=vm_name)
+    assert len(vm_ids) < expt_max, "VMs already at its max count"
+
+    second_vm = None
+    if func_second_vm:
+        assert len(vm_ids) == 1, "More than 1 vms already, cannot determine which is the second vm"
+
+    end_event = Events('Max vm count reached')
+
+    LOG.info("Start dd process(es) in vm and wait for vm cpu scale up to {} vcpus".format(expt_max))
+    scale_out_end_time = time.time() + scale_out_timeout
+    vms_threads = []
+
+    for vm_id in vm_ids:
+        dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, timeout=scale_out_timeout, con_ssh=con_ssh)
+        vms_threads.append(dd_thread)
+
+    while time.time() < scale_out_end_time:
+        time.sleep(10)
+        current_vms = nova_helper.get_vms(strict=False, name=vm_name)
+        current_count = len(current_vms)
+        if current_count == expt_max:
+            if func_second_vm:
+                if not second_vm:
+                    second_vm = list(set(current_vms) - set(vm_ids))[0]
+                LOG.info("Execute {} for second {} vm".format(func_second_vm.__name__, vm_name))
+                func_second_vm(second_vm, **func_args)
+            end_event.set()
+            for thread in vms_threads:
+                thread.wait_for_thread_end(timeout=30)
+            break
+
+        elif current_count > len(vm_ids):
+            LOG.info("{} VMs scaled out to {}. Continue to wait for next scale out...".format(vm_name, current_count))
+            new_vms = list(set(current_vms) - set(vm_ids))
+            if func_second_vm and not second_vm:
+                second_vm = new_vms[0]
+
+            for vm_id in new_vms:
+                wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
+                new_dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, timeout=scale_out_timeout,
+                                                   con_ssh=con_ssh)
+                vms_threads.append(new_dd_thread)
+            vm_ids = current_vms
+
+        else:
+            # display ceilometer alarms for debugging purpose
+            ceilometer_helper.get_alarms()
+
+    else:
+        end_event.set()
+        for thread in vms_threads:
+            thread.wait_for_thread_end(timeout=30)
+        raise exceptions.VMTimeout("Timed out waiting for {} vms to scale out to expected count. Current: {}, Expt: {}".
+                                   format(vm_name, len(vm_ids), expt_max))
+
+    LOG.info("{} VMs successfully scaled up to {} vms.".format(vm_name, expt_max))
+    return second_vm
+
+
+def wait_for_auto_vm_scale_in(vm_name, expt_min=1, scale_in_timeout=1200, con_ssh=None):
+    LOG.info("Wait for {} vms to scale in to {}".format(vm_name, expt_min))
+    scale_in_end_time = time.time() + scale_in_timeout
+
+    vms = nova_helper.get_vms(strict=False, name=vm_name, con_ssh=con_ssh)
+    current_ = len(vms)
+    if current_ == expt_min:
+        LOG.info("{} VMs already at its min count {}".format(vm_name, expt_min))
+        return
+
+    while time.time() < scale_in_end_time:
+        time.sleep(10)
+        current_vms = nova_helper.get_vms(strict=False, name=vm_name, con_ssh=con_ssh)
+        current_count = len(current_vms)
+        if current_count == expt_min:
+            LOG.info("{} VMs successfully scaled in to {}".format(vm_name, expt_min))
+            return
+
+        elif current_count < current_:
+            LOG.info("{} VMs scaled in to {}. Continue to wait for next scale in...".format(vm_name, current_count))
+            current_ = current_count
+        else:
+            # display ceilometer alarms for debugging purpose
+            ceilometer_helper.get_alarms()
+    else:
+        raise exceptions.VMTimeout("Timed out waiting for {} vms to scale in after killing dd processes. "
+                                   "Current: {}, Expt: {}".format(vm_name, current_, expt_min))
+
+
+def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=1200, expt_max=None, expt_min=None,
+                            con_ssh=None):
+    min_, current_, max_ = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
+    assert current_ < max_, "Current vcpus is already at its max, scale down first."
+
+    if not expt_max:
+        expt_max = max_
+
+    if not expt_min:
+        expt_min = min_
+
+    end_event = Events('Max cpu count reached')
+    new_dd_events = []
+    for i in range(expt_max - current_ - 1):
+        new_dd_events.append(Events("Iteration{} - Send dd cmd".format(i+2)))
+
+    LOG.info("Start dd process(es) in vm and wait for vm cpu scale up to {} vcpus".format(expt_max))
+    scale_up_end_time = time.time() + scale_up_timeout
+    dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, new_dd_events=new_dd_events,
+                                   timeout=scale_up_timeout, con_ssh=con_ssh)
+
+    events = new_dd_events + [end_event]
+    while time.time() < scale_up_end_time:
+        time.sleep(10)
+        current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))[1]
+
+        if current_now > current_:
+            for x in range(current_now - current_):
+                event_ = events.pop(0)
+                event_.set()
+            current_ = current_now
+
+        if not events:
+            dd_thread.wait_for_thread_end(timeout=30)
+            break
+
+    else:
+        end_event.set()
+        dd_thread.wait_for_thread_end(timeout=30)
+        raise exceptions.VMTimeout("Timed out waiting to vcpu to scale up to max for vm {}. Current: {}, Expt: {}".
+                                   format(vm_id, current_, expt_max))
+
+    LOG.info("VM successfully scaled up to {} vcpus. dd processes killed. Wait for vm cpu to scale down to {} vcpus".
+             format(expt_max, expt_min))
+    scale_down_end_time = time.time() + scale_down_timeout
+
+    while time.time() < scale_down_end_time:
+        time.sleep(10)
+        current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))[1]
+        if current_now == expt_min:
+            LOG.info("VM successfully scaled down to {} vcpus".format(expt_min))
+            return
+
+        elif current_now < current_:
+            LOG.info("VM scaled down to {} vcpus. Continue to wait for next scale down...".format(current_now))
+            current_ = current_now
+
+    raise exceptions.VMTimeout("Timed out waiting for vcpu to scale down after killing dd processes for vm {}. "
+                               "Current: {}, Expt: {}".format(vm_id, current_, expt_min))
 
 
 def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_timeout=None, write_interval=5,
@@ -3384,7 +3546,6 @@ def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_t
         thread_timeout (int):
         write_interval (int): how frequent to write. Note: 5 seconds seem to be a good interval,
             1 second interval might have noticeable impact on the performance of pexpect.
-        end_now_flag (bool): whether to use thread.end_now flag to end the thread once thread.end_now is set to True
         con_ssh (SSHClient): controller ssh client
 
     Returns (tuple): (vm_ssh, new_thread)
@@ -4005,6 +4166,11 @@ def collect_guest_logs(vm_id):
     LOG.info("Attempt to collect guest logs with best effort")
     log_names = ['messages', 'user.log']
     try:
+        res = _recover_vm(vm_id=vm_id)
+        if not res:
+            LOG.info("VM {} in unrecoverable state, skip collect guest logs.".format(vm_id))
+            return
+
         with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
             for log_name in log_names:
                 log_path = '/var/log/{}'.format(log_name)
@@ -4019,3 +4185,58 @@ def collect_guest_logs(vm_id):
 
     except Exception as e:
         LOG.warning("Failed to collect guest logs: {}".format(e))
+
+
+def _recover_vm(vm_id, con_ssh=None):
+    status = nova_helper.get_vm_status(vm_id=vm_id, con_ssh=con_ssh)
+    if status == VMStatus.ACTIVE:
+        return True
+    elif status == VMStatus.STOPPED:
+        code, msg = start_vms(vms=vm_id, fail_ok=True)
+        return code == 0
+    elif status == VMStatus.PAUSED:
+        code, msg = unpause_vm(vm_id=vm_id, fail_ok=True, con_ssh=con_ssh)
+        if code > 0:
+            code, msg = resume_vm(vm_id, fail_ok=True, con_ssh=con_ssh)
+            if code > 0:
+                return False
+        return True
+    else:
+        return False
+
+
+def get_vm_vcpus_via_nova_show(vm_id, con_ssh=None):
+    """
+    Get min, current, max cpus for given vm via nova show
+    Args:
+        vm_id:
+        con_ssh:
+
+    Returns (list): [<min>, <current>, <max>]
+
+    """
+    return eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', use_openstack_cmd=True,
+                                                   con_ssh=con_ssh))
+
+
+def wait_for_vcpu_count(vm_id, current_cpu, min_cpu=None, max_cpu=None, time_out=600, fail_ok=False, con_ssh=None):
+
+    actual_vcpus = get_vm_vcpus_via_nova_show(vm_id=vm_id, con_ssh=con_ssh)
+    expt_vcpus = [min_cpu if min_cpu else actual_vcpus[0], current_cpu, max_cpu if max_cpu else actual_vcpus[2]]
+
+    if expt_vcpus == actual_vcpus:
+        return True
+
+    end_time = time.time() + time_out
+    while time.time() < end_time:
+        time.sleep(10)
+        actual_vcpus = get_vm_vcpus_via_nova_show(vm_id=vm_id, con_ssh=con_ssh)
+        if expt_vcpus == actual_vcpus:
+            return True
+
+    msg = "Timed out waiting for vm to reach expected cpu count. Expt: {}; actual: {}".format(expt_vcpus, actual_vcpus)
+    if fail_ok:
+        LOG.warning(msg)
+        return False
+
+    raise exceptions.VMTimeout(msg)

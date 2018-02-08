@@ -1,10 +1,11 @@
 import random
 import re
+import math
 
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.auth import Tenant, Guest
+from consts.auth import Tenant
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
@@ -15,7 +16,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
                   storage_backing=None, check_storage_backing=True):
     """
-    Create a flavor with given critria.
+    Create a flavor with given criteria.
 
     Args:
         name (str): substring of flavor name. Whole name will be <name>-<auto_count>. e,g., 'myflavor-1'. If None, name
@@ -85,7 +86,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     if not storage_backing:
         if check_storage_backing:
             LOG.info("Choose storage backing used by most hosts")
-            storage_backing, hosts = get_storage_backing_with_max_hosts(rtn_down_hosts=True, con_ssh=con_ssh)
+            storage_backing = get_storage_backing_with_max_hosts(con_ssh=con_ssh)[0]
         else:
             storage_backing = 'local_image'
 
@@ -102,7 +103,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     Get storage backing that has the most hypervisors
     Args:
         prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
-        rtn_down_hosts (bool): whether or not to count down hosts as well. Default is to return up hosts only.
+        rtn_down_hosts (bool): whether to return down hosts if no up hosts available
         con_ssh (SSHClient):
 
     Returns (tuple): (<storage_backing>(str), <hosts>(list))
@@ -111,70 +112,42 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
             AIO: ('local_lvm', ['controller-0', 'controller-1'])
 
     """
-
-    hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh, up_only=False),
-                        'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh,
-                                                                                up_only=False),
-                        'remote': host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh, up_only=False)
-                        }
-
     up_hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
-    up_hosts_by_backing = {storage: list(set(hosts) & set(up_hosts)) for storage, hosts in hosts_by_backing.items()}
+    hosts = list(up_hosts)
+    has_up_hosts = True
+    if not hosts:
+        has_up_hosts = False
+        hosts = host_helper.get_hypervisors()
+        LOG.warning("No up hypervisors. Check all hypervisors")
+    hosts_len = len(hosts)
 
     valid_backings = ['local_image', 'local_lvm', 'remote']
     valid_backings.remove(prefer)
     valid_backings.insert(0, prefer)
 
-    storage_backing_spec = prefer
+    hosts_by_backing = {}
     max_num = 0
+    selected_backing = prefer
+    checked_len = 0
     for backing in valid_backings:
-        hosts_num = len(up_hosts_by_backing[backing])
-        if hosts_num > max_num:
-            storage_backing_spec = backing
-            max_num = hosts_num
+        hosts_with_backing = host_helper.get_hosts_in_storage_aggregate(backing, con_ssh=con_ssh, up_only=False)
+        hosts_by_backing[backing] = hosts_with_backing
+        checked_len += len(hosts_with_backing)
+        if len(hosts_with_backing) >= math.ceil(hosts_len / 2):
+            selected_backing = backing
+            break
 
-    if max_num > 0:
-        hosts_by_backing = up_hosts_by_backing
-        LOG.info("Storage aggregate {} has most up hosts: {}".format(storage_backing_spec,
-                                                                     hosts_by_backing[storage_backing_spec]))
-    elif not rtn_down_hosts:
-        LOG.warning("No up host in storage aggregate. Return preferred storage backing")
-    else:
-        # image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
-        # down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
-        # for down_host in down_hosts:
-        #     host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
-        #     if 'image' in host_instance_backing:
-        #         backing = 'local_image'
-        #         image_hosts_num += 1
-        #     elif 'lvm' in host_instance_backing:
-        #         backing = 'local_lvm'
-        #         lvm_hosts_num += 1
-        #     else:
-        #         backing = 'remote'
-        #         remote_hosts_num += 1
-        #
-        #     hosts_by_backing[backing].append(down_host)
-        #
-        # hosts_nums = {'local_image': image_hosts_num, 'local_lvm': lvm_hosts_num, 'remote': remote_hosts_num}
-        # max_num = max(list(hosts_nums.values()))
-        # for backing in valid_backings:
-        #     if max_num == hosts_nums[backing]:
-        #         storage_backing_spec = backing
-        #         break
+        if len(hosts_with_backing) > max_num:
+            max_num = len(hosts_with_backing)
+            selected_backing = backing
+            if max_num >= hosts_len - checked_len:
+                break
 
-        storage_backing_spec = prefer
-        max_num = 0
-        for backing in valid_backings:
-            hosts_num = len(hosts_by_backing[backing])
-            if hosts_num > max_num:
-                storage_backing_spec = backing
-                max_num = hosts_num
-
-        LOG.warning("No up hosts in host-aggregate. Return {} storage backing based on instance backing for down hosts."
-                    .format(storage_backing_spec))
-
-    return storage_backing_spec, hosts_by_backing[storage_backing_spec]
+    selected_hosts = hosts_by_backing[selected_backing]
+    if has_up_hosts or not rtn_down_hosts:
+        selected_hosts = list(set(selected_hosts) & set(hosts))
+    LOG.info("{} storage aggregate has most hypervisors".format(selected_backing))
+    return selected_backing, selected_hosts
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
@@ -310,6 +283,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     Args:
         auth_info (dict):
         con_ssh (SSHClient):
+        guest_os
 
     Returns (str): id of the basic flavor
 
@@ -382,7 +356,8 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     return code, msg
 
 
-def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,
+                             con_ssh=None):
     """
     Unset specific extra spec(s) from given flavor.
 
@@ -1528,6 +1503,7 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=Tru
         rtn_val (str): name or id
         name (str): name for aggregate to create
         avail_zone (str):
+        check_first (bool)
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1739,8 +1715,8 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
 
     if not hosts_to_rm_or_add:
         warn_str = 'No' if remove else 'All'
-        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".format(warn_str,
-              aggregate, hosts, hosts_in_aggregate)
+        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".\
+            format(warn_str, aggregate, hosts, hosts_in_aggregate)
         LOG.warning(msg)
         return -1, msg
 

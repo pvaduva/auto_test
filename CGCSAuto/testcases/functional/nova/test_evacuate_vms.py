@@ -115,7 +115,7 @@ class TestDefaultGuest:
             - Remove admin role from primary tenant (module)
 
         """
-        hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
+        hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
         if len(hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
@@ -343,8 +343,13 @@ class TestDefaultGuest:
 
 
 class TestOneHostAvail:
-    @fixture(scope='class', autouse=not system_helper.is_simplex())
-    def add_hosts_to_zone(self, request, add_cgcsauto_zone):
+    @fixture(scope='class')
+    def get_zone(self, request, add_cgcsauto_zone):
+        if system_helper.is_simplex():
+            zone = 'nova'
+            return zone
+
+        zone = 'cgcsauto'
         storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
         host = hosts[0]
         LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
@@ -353,10 +358,11 @@ class TestOneHostAvail:
         def remove_hosts_from_zone():
             nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
         request.addfinalizer(remove_hosts_from_zone)
+        return zone
 
     @mark.sx_sanity
-    def test_reboot_only_host(self):
-        zone = 'nova' if system_helper.is_simplex() else 'cgcsauto'
+    def test_reboot_only_host(self, get_zone):
+        zone = get_zone
 
         LOG.tc_step("Launch 5 vms in {} zone".format(zone))
         vms = vm_helper.boot_vms_various_types(avail_zone=zone, cleanup='function')

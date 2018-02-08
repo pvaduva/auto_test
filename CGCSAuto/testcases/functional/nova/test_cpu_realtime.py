@@ -202,7 +202,7 @@ def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
 
 @fixture(scope='module')
 def check_hosts():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts(rtn_down_hosts=False)
+    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
     hosts_with_shared_cpu = []
     ht_hosts = []
     for host in hosts:

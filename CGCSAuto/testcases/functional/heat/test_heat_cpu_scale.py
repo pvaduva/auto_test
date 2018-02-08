@@ -1,7 +1,7 @@
 import os
 import time
 
-from pytest import mark, fixture
+from pytest import mark
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
@@ -10,7 +10,7 @@ from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.tis_log import LOG
 
 
-def launch_cpu_scaling_stack(vcpus, min_vcpus, con_ssh=None, auth_info=None):
+def launch_cpu_scaling_stack(vcpus, min_vcpus):
     """
         Create heat stack using VMAutoScaling.yaml for vcpu scaling
             - Verify heat stack is created sucessfully
@@ -18,145 +18,52 @@ def launch_cpu_scaling_stack(vcpus, min_vcpus, con_ssh=None, auth_info=None):
         Args:
             vcpus: max vcpu to be used
             min_vcpus: min vcpu to be used
-            con_ssh (SSHClient): If None, active controller ssh will be used.
-            auth_info (dict): Tenant dict. If None, primary tenant will be used.
 
         Returns (tuple): (rnt_code (int), message (str))
 
     """
 
-    fail_ok = False
     template_name = 'VMAutoScaling.yaml'
-    t_name, yaml = template_name.split('.')
-    stack_name = t_name
+    LOG.tc_step("Creating Heat Stack..using template %s", template_name)
+
+    stack_name = template_name.split('.')[0]
     vm_name = 'vm_cpu_scale'
-
+    image = GuestImages.DEFAULT_GUEST
     template_path = os.path.join(WRSROOT_HOME, HEAT_SCENARIO_PATH, template_name)
-    cmd_list = ['-f %s ' % template_path]
+    key_pair = vm_helper.get_any_keypair()
+    net_id = network_helper.get_mgmt_net_id()
+    network = network_helper.get_net_name_from_id(net_id=net_id)
 
-    # create a flavor with Hearbeat enabled]
+    # create a flavor with scaling enabled]
     fl_name = 'cpu_scale'
     flavor_id = nova_helper.create_flavor(vcpus=vcpus, ram=1024, root_disk=2, name=fl_name)[1]
     ResourceCleanup.add('flavor', flavor_id)
-
     extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.MIN_VCPUS: min_vcpus}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    cmd_list.append("-P FLAVOR=%s " % flavor_id)
+    params_string = '-f {} -P FLAVOR={} -P KEYPAIR={} -P IMAGE={} -P VM_NAME={} -P NETWORK={} {}'.\
+        format(template_path, flavor_id, key_pair, image, vm_name, network, stack_name)
 
-    key_pair = vm_helper.get_any_keypair()
-    cmd_list.append("-P KEYPAIR=%s " % key_pair)
-    # image = 'cgcs-guest'
-    image = GuestImages.DEFAULT_GUEST
-    cmd_list.append("-P IMAGE=%s " % image)
+    ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
+    heat_helper.create_stack(stack_name=stack_name, params_string=params_string, fail_ok=False)
 
-    cmd_list.append("-P VM_NAME=%s " % vm_name)
-
-    net_id = network_helper.get_mgmt_net_id()
-    network = network_helper.get_net_name_from_id(net_id=net_id)
-    cmd_list.append("-P NETWORK=%s " % network)
-
-    cmd_list.append(" %s" % stack_name)
-    params_string = ''.join(cmd_list)
-
-    LOG.tc_step("Creating Heat Stack..using template %s", template_name)
-
-    code, msg = heat_helper.create_stack(stack_name=stack_name, params_string=params_string, fail_ok=fail_ok)
-    # add the heat stack name for deleteion on failure
-    ResourceCleanup.add(resource_type='heat_stack', resource_id=t_name)
-    assert code == 0, "Failed to create heat stack"
-
-    return 0, stack_name
-
-
-def wait_for_cpu_to_scale(vm_id, min_cpu, current_cpu, max_cpu, time_out=600, check_interval=3,
-                          con_ssh=None, auth_info=None):
-
-    end_time = time.time() + time_out
-    while time.time() < end_time:
-        actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh,
-                                                               use_openstack_cmd=True))
-        if [min_cpu, current_cpu, max_cpu] == actual_vcpus:
-            return True
-
-        time.sleep(check_interval)
-
-    msg = "VM vcpu numbers{} did not go to expected numbers {} " \
-          "within timeout".format(vm_id, [min_cpu, current_cpu, max_cpu])
-    LOG.warning(msg)
-    return False
-
-
-def scale_up_vcpu(vm_name=None,  con_ssh=None, auth_info=None,cpu_num=1):
-    """
-    Returns:
-
-    """
-    # create a trigger for auto scale by login to vm and issue dd cmd
-    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-
-    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
-    dd_cmd = 'dd if=/dev/zero of=/dev/null &'
-    image = GuestImages.DEFAULT_GUEST
-
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=image, close_ssh=False) as vm_ssh:
-        VM_SSHS.append(vm_ssh)
-        vm_ssh.exec_cmd(cmd=dd_cmd, fail_ok=False)
-
-    return vm_ssh
-
-
-def scale_down_vcpu(vm_name=None,  con_ssh=None, auth_info=None,cpu_num=1):
-    """
-    Returns:
-
-    """
-    # create a trigger for auto scale by login to vm and issue dd cmd
-    vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-
-    LOG.info("Boosting cpu usage for vm {} using 'dd'".format(vm_id))
-    dd_cmd = 'pkill dd'
-    image = GuestImages.DEFAULT_GUEST
-
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=image, close_ssh=False) as vm_ssh:
-        VM_SSHS.append(vm_ssh)
-        vm_ssh.exec_cmd(cmd=dd_cmd, fail_ok=False)
-
-    return vm_ssh
-
-
-VM_SSHS = []
-
-
-@fixture(scope='function', autouse=True)
-def aa_close_vm_ssh(request):
-
-    def close_ssh():
-        global VM_SSHS
-        for ssh_client in VM_SSHS:
-            try:
-                ssh_client.close()
-            except Exception as e:
-                LOG.warning('Unable to close ssh - {}'.format(e.__str__()))
-        VM_SSHS = []
-    request.addfinalizer(close_ssh)
+    return stack_name
 
 
 @mark.usefixtures('check_alarms')
-@mark.parametrize(('vcpus', 'min_vcpus', 'swact', 'live_mig'), [
-    mark.p1((3, 1, True, False)),
-    mark.p1((3, 1, False, True)),
-    mark.priorities('nightly', 'sx_nightly')((3, 1, False, False)),
+@mark.parametrize(('vcpus', 'min_vcpus', 'live_mig', 'swact'), [
+    mark.priorities('nightly', 'sx_nightly')((3, 2, None, None)),
+    mark.p1((3, 1, 'live_migrate', 'swact')),
 ])
-def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
+def test_heat_cpu_scale(vcpus, min_vcpus, live_mig, swact):
     """
     Vcpu auto scale via  Heat template testing:
 
     Args:
         vcpus (int): Max number of vcpus to use in the flavor
         min_vcpus (Int): min number of vcpus use in  the flavor
-        swact: trigger scale down and swact anc check
         live_mig: trigger scale down, live-migrate and check
+        swact: trigger scale down and swact anc check
 
     =====
     Prerequisites (skip test if not met):
@@ -175,72 +82,54 @@ def test_heat_cpu_scale(vcpus, min_vcpus, swact, live_mig):
     """
     # create the heat stack
     LOG.tc_step("Creating heat stack for auto scaling Vms")
-    return_code, msg = launch_cpu_scaling_stack(vcpus=vcpus, min_vcpus=min_vcpus)
+    stack_name = launch_cpu_scaling_stack(vcpus=vcpus, min_vcpus=min_vcpus)
 
-    assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
-
-    stack_name = msg
     # verify VM is created
     LOG.tc_step("Verifying VM is created via heat stack for vcpu scaling")
     vm_name = 'vm_cpu_scale'
     vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-    if not vm_id:
-        assert "Error:vm was not created by stack"
+    assert vm_id, "Error:vm was not created by stack"
 
     GuestLogs.add(vm_id)
     # Verify Vcpus
-    LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
     expt_min_cpu = min_vcpus
-    expt_max_cpu = expt_current_cpu = vcpus
-    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
-        "Vcpu did not go to max number {} after initial boot".format(expt_max_cpu)
-
-    # wait for scale down to min
-    LOG.tc_step("Check vm vcpus gone to min vcpu")
-    expt_min_cpu = expt_current_cpu= min_vcpus
     expt_max_cpu = vcpus
-    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
-        "Failed to go to min vcpu {} after inital boot".format(min_vcpus)
 
-    # scale up now
-    LOG.tc_step("Scaling up vcpu")
-    assert scale_up_vcpu(vm_name=vm_name), "Failed to scale up vcpus"
+    LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
+    expt_current_cpu = expt_max_cpu
+    vm_helper.wait_for_vcpu_count(vm_id, current_cpu=expt_current_cpu, min_cpu=expt_min_cpu, max_cpu=expt_max_cpu)
 
-    # check if vcpu has gone up by one
-    expt_current_cpu += 1
+    LOG.tc_step("Nova scale vm cpu down to {}".format(expt_min_cpu))
+    for i in range(expt_current_cpu - expt_min_cpu):
+        vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+        time.sleep(10)
 
-    if not wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu):
-        assert "Failed to reach {} vcpus".format(expt_current_cpu)
+    LOG.tc_step("Check vm cpu auto scale up/down by running/killing dd processes in vm")
+    vm_helper.wait_for_auto_cpu_scale(vm_id=vm_id, expt_max=expt_max_cpu, expt_min=expt_min_cpu)
 
-    # scale up to maximum
-    for i in range (expt_current_cpu, vcpus):
-        assert scale_up_vcpu(vm_name=vm_name), "Failed to scale up vcpus"
+    expt_current_cpu = min_vcpus
+    is_sx = system_helper.is_simplex()
+    if live_mig and not is_sx:
+        vm_host = nova_helper.get_vm_host(vm_id)
+        LOG.tc_step("Live migrating the vm after triggering scale down")
+        vm_helper.live_migrate_vm(vm_id=vm_id)
+        vm_helper.wait_for_vcpu_count(vm_id, expt_current_cpu, min_cpu=expt_min_cpu, max_cpu=expt_max_cpu)
 
-    expt_current_cpu = vcpus
-    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
-        "Failed to reach {} vcpus".format(expt_current_cpu)
+        if not vm_host == nova_helper.get_vm_host(vm_id):
+            vm_helper.live_migrate_vm(vm_id=vm_id, destination_host=vm_host)
+            vm_helper.wait_for_vcpu_count(vm_id, expt_current_cpu, min_cpu=expt_min_cpu, max_cpu=expt_max_cpu)
 
-    # scaling down to min
-    scale_down_vcpu(vm_name=vm_name)
-
-    if swact and system_helper.is_simplex() == False:
-        LOG.tc_step("Ensure system has standby controller")
+    if swact and not is_sx:
         standby = system_helper.get_standby_controller_name()
         assert standby
-        # add a swact here:
+
         LOG.tc_step("Swact active controller and ensure active controller is changed")
         host_helper.swact_host()
 
         LOG.tc_step("Check all services are up on active controller via sudo sm-dump")
         host_helper.wait_for_sm_dump_desired_states(controller=standby, fail_ok=False)
 
-    if live_mig:
-        LOG.tc_step("Live migrating the vm after triggering scale down")
-        vm_helper.perform_action_on_vm(vm_id=vm_id,action='live_migrate')
-
-    expt_current_cpu = min_vcpus
-    assert wait_for_cpu_to_scale(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu), \
-        "Failed to reach {} vcpus".format(expt_current_cpu)
+        vm_helper.wait_for_vcpu_count(vm_id, current_cpu=expt_current_cpu, min_cpu=expt_min_cpu, max_cpu=expt_max_cpu)
 
     # delete heat stack
     LOG.tc_step("Deleting heat stack{}".format(stack_name))

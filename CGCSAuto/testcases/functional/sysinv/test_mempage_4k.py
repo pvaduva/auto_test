@@ -33,7 +33,7 @@ def ensure_sufficient_4k_pages(request):
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
 
     storage_backing = request.param
-    hypervisors = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
+    hypervisors = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
     if len(hypervisors) < 2:
         skip("Less than two hypersvisors with {} instance backing".format(storage_backing))
 

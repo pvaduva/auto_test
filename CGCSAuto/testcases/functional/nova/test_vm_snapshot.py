@@ -49,7 +49,7 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
 
         """
 
-    host_list = host_helper.get_hosts_by_storage_aggregate(storage_backing=inst_backing)
+    host_list = host_helper.get_hosts_in_storage_aggregate(storage_backing=inst_backing)
     if not host_list:
         skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(inst_backing))
 

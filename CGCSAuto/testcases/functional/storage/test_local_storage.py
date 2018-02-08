@@ -24,7 +24,7 @@ def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
     hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
 
     for host in hosts:
-        if host_helper.check_host_local_backing_type(host, storage_type=ls_type, con_ssh=con_ssh):
+        if host_helper.is_host_with_instance_backing(host, storage_type=ls_type, con_ssh=con_ssh):
             hosts_of_type.append(host)
 
     return hosts_of_type
@@ -109,7 +109,7 @@ class TestLocalStorage:
 
         request.addfinalizer(cleanup)
 
-        origin_lvg = host_helper.get_local_storage_backing(host)
+        origin_lvg = host_helper.get_host_instance_backing(host)
         if origin_lvg != local_storage:
             self._add_to_cleanup_list(to_cleanup=(host, origin_lvg, local_storage), cleanup_type='local_storage_type')
             LOG.fixture_step("(class) Set {} local storage backing to {}".format(host, local_storage))
@@ -141,14 +141,14 @@ class TestLocalStorage:
         return rtn_list
 
     def apply_storage_profile(self, compute_dest, ls_type='image', profile=None, force_change=False):
-        if host_helper.check_host_local_backing_type(compute_dest, ls_type) and not force_change:
+        if host_helper.is_host_with_instance_backing(compute_dest, ls_type) and not force_change:
             msg = 'Host already has local-storage backing:{}. No need to apply profile.'.format(ls_type)
             LOG.info(msg)
             return -1, msg
 
         LOG.debug('compute: {} is not in local-storage-type:{} or will force to apply'.format(compute_dest, ls_type))
         LOG.debug('get the original local-storage-type for compute:{}'.format(compute_dest))
-        old_type = host_helper.get_local_storage_backing(compute_dest)
+        old_type = host_helper.get_host_instance_backing(compute_dest)
 
         LOG.tc_step('Lock the host:{} for applying storage-profile'.format(compute_dest))
         HostsToRecover.add(compute_dest, scope='function')
@@ -178,7 +178,7 @@ class TestLocalStorage:
         host_helper.lock_host(compute, check_first=True, swact=True)
 
         LOG.debug('get the original local-storage-backing-type for compute:{}'.format(compute))
-        old_type = host_helper.get_local_storage_backing(compute)
+        old_type = host_helper.get_host_instance_backing(compute)
 
         LOG.info("Modify {} local storage to {}".format(compute, to_type))
         cmd = 'host-lvg-modify -b {} {} nova-local'.format(to_type, compute)
@@ -191,7 +191,7 @@ class TestLocalStorage:
     def _choose_compute_unlocked_diff_type(self, ls_type='image'):
         computes_unlocked_diff_type = [c for c in
                                        host_helper.get_up_hypervisors()
-                                       if not host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
+                                       if not host_helper.is_host_with_instance_backing(c, storage_type=ls_type)]
 
         if computes_unlocked_diff_type:
             return random.choice(computes_unlocked_diff_type)
@@ -200,7 +200,7 @@ class TestLocalStorage:
 
     def _get_computes_unlocked_same_type(self, ls_type='image'):
         computes_unlocked = [c for c in host_helper.get_up_hypervisors()
-                             if host_helper.check_host_local_backing_type(c, storage_type=ls_type)]
+                             if host_helper.is_host_with_instance_backing(c, storage_type=ls_type)]
 
         return computes_unlocked
 
@@ -318,7 +318,7 @@ class TestLocalStorage:
         host_helper.unlock_host(compute_dest)
 
         LOG.tc_step('Verify the local-storage type changed to {} on host:{}' .format(local_storage_type, compute_dest))
-        assert host_helper.check_host_local_backing_type(compute_dest, storage_type=local_storage_type), \
+        assert host_helper.is_host_with_instance_backing(compute_dest, storage_type=local_storage_type), \
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
     def test_apply_profile_to_smaller_sized_host(self, setup_local_storage, ensure_two_hypervisors):

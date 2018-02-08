@@ -519,3 +519,10 @@ class SysType:
     STORAGE = 'Storage'
     REGULAR = 'Regular'
     MULTI_REGION = 'Multi-Region'
+
+
+class HeatStackStatus:
+    CREATE_FAILED = 'CREATE_FAILED'
+    CREATE_COMPLETE = 'CREATE_COMPLETE'
+    UPDATE_COMPLETE = 'UPDATE_COMPLETE'
+    UPDATE_FAILED = 'UPDATE_FAILED'

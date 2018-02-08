@@ -302,8 +302,9 @@ class TestPcipt:
             - Boot 2 pcipt vms with pci-passthrough vif over selected network
             - Verify resource usage for providernet is increased as expected
             - Lock pci_vm host and ensure vm migrated to other host (or fail to lock if no other pcipt host available)
-            - Repeat above step for another pcipt vm
-            - Verify vms' pci-pt interfaces reachable and resource usage for pnet unchanged
+            - (Delete above tested pcipt vm if only two pcipt hosts available)
+            - Lock host for another pcipt vm, and lock is successful
+            - Verify vms' pci-pt interfaces reachable and resource usage for pnet as expected
             - 'sudo reboot -f' pci_vm host, and ensure vm evacuated or up on same host if no other pcipt host available
             - Repeat above step for another pcipt vm
             - Verify vms' pci-pt interfaces reachable and resource usage for pnet unchanged
