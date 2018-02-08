@@ -43,8 +43,8 @@ class BuildServers:
 class Builds:
     R5 = {
         'release': 'R5',
-        'iso': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_bootimage.iso',
-        'guest': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_tis-centos-guest.img'
+        'iso': '/localdisk/loadbuild/jenkins/TC_18.02_Host/latest_bootimage.iso',
+        'guest': '/localdisk/loadbuild/jenkins/TC_18.02_Guest/latest_tis-centos-guest.img'
     }
 
     R4 = {
