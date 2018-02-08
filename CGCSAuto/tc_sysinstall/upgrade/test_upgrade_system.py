@@ -4,6 +4,7 @@ from keywords import system_helper, host_helper, install_helper, storage_helper,
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import UpgradeVars
 from consts.cgcs import HostAvailState, HostOperState
+from consts.timeout import HostTimeout
 
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
@@ -61,7 +62,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     # unlock upgraded controller-1
     LOG.tc_step("Unlocking controller-1 after upgrade......")
-    host_helper.unlock_host("controller-1", available_only=True, check_hypervisor_up=False)
+    host_helper.unlock_host("controller-1", timeout=(HostTimeout.CONTROLLER_UNLOCK + 10), available_only=True,
+                            check_hypervisor_up=False)
     LOG.info("Host controller-1 unlocked after upgrade......")
 
     time.sleep(60)
