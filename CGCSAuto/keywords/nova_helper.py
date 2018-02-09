@@ -523,13 +523,14 @@ def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ss
     return table_parser.get_values(table_, 'Id', strict=strict, regex=regex, **kwargs)
 
 
-def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None):
+def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None, strict=False, **kwargs):
     """
     Get a server group(s) info as a list
 
     Args:
         server_groups (str|list): id(s) of server group(s).
         header (str): header string for info. such as 'Member', 'Metadata', 'Policies'
+        strict
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -537,10 +538,41 @@ def get_server_groups_info(server_groups=None, header='Policies', auth_info=None
 
     """
     table_ = table_parser.table(cli.nova('server-group-list', '--a', ssh_client=con_ssh, auth_info=auth_info))
-    if server_groups:
-        table_ = table_parser.filter_table(table_, Id=server_groups)
 
-    return table_parser.get_column(table_, header)
+    filters = kwargs
+    if server_groups:
+        filters['Id'] = server_groups
+
+    return table_parser.get_values(table_, target_header=header, merge_lines=True, strict=strict, **filters)
+
+
+def get_server_group_info(group_id=None, group_name=None, header='Members', strict=False, auth_info=None, con_ssh=None):
+    """
+    Get server group info for specified server group
+    Args:
+        group_id:
+        group_name:
+        header:
+        auth_info:
+        strict
+        con_ssh:
+
+    Returns (str|list|dict):
+
+    """
+    filters = {}
+    if group_name:
+        filters['Name'] = group_name
+
+    values = get_server_groups_info(server_groups=group_id, auth_info=auth_info, strict=strict, con_ssh=con_ssh,
+                                    **filters)
+    assert len(values) == 1, "More than 1 server group filtered"
+
+    value = values[0]
+    if header.lower() in ('policies', 'members', 'metadata'):
+        value = eval(value)
+
+    return value
 
 
 def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh=None, **metadata):

@@ -152,7 +152,7 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+    vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
     post_evac_host = nova_helper.get_vm_host(vm_id)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 

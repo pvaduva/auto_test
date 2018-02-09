@@ -160,7 +160,7 @@ def test_port_trunking(vif_model):
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         ip_addr = network_helper.get_ip_for_eth(eth_name=eth_name, ssh_client=vm_ssh)
 
-    if ip_addr is not None:
+    if ip_addr:
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
             LOG.tc_step("Ping on vlan interface from guest")
             network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)

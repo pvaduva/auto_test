@@ -13,6 +13,7 @@ from consts.timeout import ImageTimeout
 from consts.cgcs import Prompt, GuestImages
 from consts.proj_vars import ProjVar
 from keywords import common, storage_helper, system_helper, host_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -591,7 +592,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     return dest_path
 
 
-def get_guest_image(guest_os, rm_image=True, check_disk=False):
+def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
     """
     Get or create a glance image with given guest OS
     Args:
@@ -599,6 +600,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 cgcs-guest, vxworks-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
+        cleanup (str|None)
 
     Returns (str): image_id
 
@@ -621,6 +623,8 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]
+            if cleanup:
+                ResourceCleanup.add('image', resource_id=img_id, scope=cleanup)
         except:
             raise
         finally:

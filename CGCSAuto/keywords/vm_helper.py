@@ -708,8 +708,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             else:
                 raise exceptions.VMOperationFailed(message)
 
-        if not _wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
-                                   auth_info=auth_info, fail_ok=True):
+        if not wait_for_vm_status(vm_id=vm_id, status=VMStatus.ACTIVE, timeout=tmout, con_ssh=con_ssh,
+                                  auth_info=auth_info, fail_ok=True):
             vm_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
                                                            auth_info=auth_info)
             message = "VM {} did not reach ACTIVE state within {}. VM status: {}".format(vm_id, tmout, vm_status)
@@ -975,7 +975,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         return 6, output
 
     LOG.info("Waiting for VM status change to {} with best effort".format(VMStatus.MIGRATING))
-    in_mig_state = _wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60)
+    in_mig_state = wait_for_vm_status(vm_id, status=VMStatus.MIGRATING, timeout=60, fail_ok=True)
     if not in_mig_state:
         LOG.warning("VM did not reach {} state after triggering live-migration".format(VMStatus.MIGRATING))
 
@@ -1131,8 +1131,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
 
-    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
-                                    fail_ok=fail_ok, con_ssh=con_ssh)
+    vm_status = wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                   fail_ok=fail_ok, con_ssh=con_ssh)
 
     if vm_status is None:
         return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -1154,8 +1154,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
             return 5, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
-    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
-                                             fail_ok=fail_ok, con_ssh=con_ssh)
+    post_confirm_state = wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                            fail_ok=fail_ok, con_ssh=con_ssh)
 
     if post_confirm_state is None:
         err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
@@ -1212,8 +1212,8 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
         return 1, output
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
-    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
-                                    timeout=300, con_ssh=con_ssh)
+    vm_status = wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], fail_ok=fail_ok,
+                                   timeout=300, con_ssh=con_ssh)
 
     if vm_status is None:
         err_msg = 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -1232,8 +1232,8 @@ def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_
             return 3, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
-    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
-                                             fail_ok=fail_ok, con_ssh=con_ssh)
+    post_confirm_state = wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                            fail_ok=fail_ok, con_ssh=con_ssh)
 
     if post_confirm_state is None:
         err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
@@ -1321,8 +1321,8 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
         raise exceptions.VMTimeout(msg)
 
 
-def _wait_for_vm_status(vm_id, status, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=True,
-                        con_ssh=None, auth_info=Tenant.ADMIN):
+def wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
+                       con_ssh=None, auth_info=Tenant.ADMIN):
     """
 
     Args:
@@ -2165,7 +2165,7 @@ def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth
     if code == 1:
         return 1, output
 
-    result = _wait_for_vm_status(vm_id, expt_vm_status, fail_ok=fail_ok)
+    result = wait_for_vm_status(vm_id, expt_vm_status, fail_ok=fail_ok)
 
     if result is None:
         msg = "VM {} did not reach expected state - {} after reset-state.".format(vm_id, expt_vm_status)
@@ -2206,8 +2206,8 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None, cl
                                   fail_ok=False, **{'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
 
     LOG.info("Check vm status from nova show")
-    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
-                                        timeout=30)
+    actual_status = wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                       timeout=30)
     if not actual_status:
         msg = "VM {} did not reach active state after reboot.".format(vm_id)
         LOG.warning(msg)
@@ -2235,8 +2235,8 @@ def __perform_vm_action(vm_id, action, expt_status, timeout=VMTimeout.STATUS_CHA
     if code == 1:
         return 1, output
 
-    actual_status = _wait_for_vm_status(vm_id, [expt_status, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
-                                        timeout=timeout)
+    actual_status = wait_for_vm_status(vm_id, [expt_status, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                       timeout=timeout)
 
     if not actual_status:
         msg = "VM {} did not reach expected state {} after {}.".format(vm_id, expt_status, action)
@@ -2347,9 +2347,9 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
         return code, output
 
     LOG.info("Check vm status after vm rebuild")
-    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=fail_ok, con_ssh=con_ssh)
-    actual_status = _wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
-                                        timeout=VMTimeout.REBUILD)
+    wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=fail_ok, con_ssh=con_ssh)
+    actual_status = wait_for_vm_status(vm_id, [VMStatus.ACTIVE, VMStatus.ERROR], fail_ok=fail_ok, con_ssh=con_ssh,
+                                       timeout=VMTimeout.REBUILD)
 
     if not actual_status:
         msg = "VM {} did not reach active state after rebuild.".format(vm_id)
@@ -2942,7 +2942,7 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=N
     system_helper.wait_for_events(VMTimeout.AUTO_RECOVERY, strict=False, fail_ok=False, con_ssh=con_ssh,
                                   **{'Entity Instance ID': vm_id,
                                      'Event Log ID': EventLogID.REBOOT_VM_COMPLETE})
-    _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False, con_ssh=con_ssh)
+    wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False, con_ssh=con_ssh)
 
     if check_host_unchanged:
         post_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
@@ -3227,8 +3227,8 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
 
-    vm_status = _wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
-                                    fail_ok=fail_ok, con_ssh=con_ssh)
+    vm_status = wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
+                                   fail_ok=fail_ok, con_ssh=con_ssh)
 
     if vm_status is None:
         return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
@@ -3252,8 +3252,8 @@ def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, a
             return 5, err_msg
         raise exceptions.VMPostCheckFailed(err_msg)
 
-    post_confirm_state = _wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
-                                             fail_ok=fail_ok, con_ssh=con_ssh)
+    post_confirm_state = wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
+                                            fail_ok=fail_ok, con_ssh=con_ssh)
 
     if post_confirm_state is None:
         err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)

@@ -210,7 +210,7 @@ def test_heat_vm_scale_after_actions(vm_scaling_stack, actions):
     if "host_reboot" in actions:
         if system_helper.is_simplex():
             host_helper.reboot_hosts('controller-0', wait_for_reboot_finish=True)
-            vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=600, check_interval=10, fail_ok=False)
+            vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=600, check_interval=10, fail_ok=False)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         else:
             LOG.tc_step("evacuate vm before scale in/out")
