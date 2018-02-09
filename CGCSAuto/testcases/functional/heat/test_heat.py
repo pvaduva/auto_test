@@ -222,7 +222,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     cmd_list.append(" %s" % stack_name)
     params_string = ''.join(cmd_list)
 
-    LOG.tc_step("Creating Heat Stack..using template %s", template_name)
+    LOG.tc_step("Creating Heat Stack using template %s", template_name)
     heat_helper.create_stack(stack_name=stack_name, params_string=params_string, cleanup='function',
                              auth_info=auth_info, con_ssh=con_ssh)
 

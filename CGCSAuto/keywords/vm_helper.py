@@ -212,7 +212,6 @@ def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
 
     """
 
-    #wait_for_vm_pingable_from_natbox(vm_id)
     if vm_image_name is None:
         vm_image_name = nova_helper.get_vm_image_name(vm_id)
 
@@ -3311,7 +3310,7 @@ def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=
                                        check_interval=check_interval, time_to_stay=time_to_stay, fail_ok=fail_ok)
 
 
-def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, start_event=None, timeout=1200, con_ssh=None):
+def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, timeout=1200, con_ssh=None):
     """
     Boost cpu usage on given number of cpu cores on specified vm using dd cmd on a new thread
 
@@ -3319,7 +3318,7 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, start_event=None, t
         vm_id (str):
         end_event (Events): Event for kill the dd processes
         new_dd_events (list): Event(s) for adding new dd process(es)
-        start_event (Events): Event to set after sending first dd cmd.
+        dd_event (Events): Event to set after sending first dd cmd.
         timeout: Max time to wait for the end_event to be set before killing dd.
         con_ssh
 
@@ -3340,12 +3339,12 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, start_event=None, t
         dd_cmd = 'dd if=/dev/zero of=/dev/null &'
         kill_dd = 'pkill -ex dd'
 
-        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh) as vm_ssh:
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, timeout=120) as vm_ssh:
             LOG.info("Start first 2 dd processes in vm")
             vm_ssh.exec_cmd(cmd=dd_cmd)
             vm_ssh.exec_cmd(cmd=dd_cmd)
-            if start_event:
-                start_event.set()
+            if dd_event:
+                dd_event.set()
 
             end_time = time.time() + timeout
             while time.time() < end_time:
@@ -3395,49 +3394,61 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
     LOG.info("Start dd process(es) in vm and wait for vm cpu scale up to {} vcpus".format(expt_max))
     scale_out_end_time = time.time() + scale_out_timeout
     vms_threads = []
+    try:
+        dd_events = []
+        for vm_id in vm_ids:
+            dd_event = Events('dd started in {}'.format(vm_id))
+            dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, dd_event=dd_event, timeout=scale_out_timeout,
+                                           con_ssh=con_ssh)
+            vms_threads.append(dd_thread)
+            dd_events.append(dd_event)
 
-    for vm_id in vm_ids:
-        dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, timeout=scale_out_timeout, con_ssh=con_ssh)
-        vms_threads.append(dd_thread)
+        LOG.info("Wait for dd to be triggered in vm(s): {}".format(vm_ids))
+        for event in dd_events:
+            event.wait_for_event(timeout=180, fail_ok=False)
 
-    while time.time() < scale_out_end_time:
-        time.sleep(10)
-        current_vms = nova_helper.get_vms(strict=False, name=vm_name)
-        current_count = len(current_vms)
-        if current_count == expt_max:
-            if func_second_vm:
-                if not second_vm:
-                    second_vm = list(set(current_vms) - set(vm_ids))[0]
-                LOG.info("Execute {} for second {} vm".format(func_second_vm.__name__, vm_name))
-                func_second_vm(second_vm, **func_args)
-            end_event.set()
-            for thread in vms_threads:
-                thread.wait_for_thread_end(timeout=30)
-            break
+        LOG.info("Wait for vm scaling out...")
+        while time.time() < scale_out_end_time:
+            time.sleep(10)
+            current_vms = nova_helper.get_vms(strict=False, name=vm_name)
+            current_count = len(current_vms)
+            if current_count == expt_max:
+                if func_second_vm:
+                    if not second_vm:
+                        second_vm = list(set(current_vms) - set(vm_ids))[0]
+                    LOG.info("Execute {} for second {} vm".format(func_second_vm.__name__, vm_name))
+                    func_second_vm(second_vm, **func_args)
+                break
 
-        elif current_count > len(vm_ids):
-            LOG.info("{} VMs scaled out to {}. Continue to wait for next scale out...".format(vm_name, current_count))
-            new_vms = list(set(current_vms) - set(vm_ids))
-            if func_second_vm and not second_vm:
-                second_vm = new_vms[0]
+            elif current_count > len(vm_ids):
+                LOG.info("{} VMs scaled out to {}. Continue to wait for next scale out...".format(vm_name, current_count))
+                new_vms = list(set(current_vms) - set(vm_ids))
+                if func_second_vm and not second_vm:
+                    second_vm = new_vms[0]
 
-            for vm_id in new_vms:
-                wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
-                new_dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, timeout=scale_out_timeout,
-                                                   con_ssh=con_ssh)
-                vms_threads.append(new_dd_thread)
-            vm_ids = current_vms
+                vm_ids = current_vms
+                for vm_id in new_vms:
+                    wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
+
+                    dd_event = Events('dd started in {}'.format(vm_id))
+                    new_dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, timeout=scale_out_timeout,
+                                                       dd_event=dd_event, con_ssh=con_ssh)
+                    vms_threads.append(new_dd_thread)
+                    dd_event.wait_for_event(timeout=180, fail_ok=False)
+
+            else:
+                # display ceilometer alarms for debugging purpose
+                ceilometer_helper.get_alarms()
 
         else:
-            # display ceilometer alarms for debugging purpose
-            ceilometer_helper.get_alarms()
+            raise exceptions.VMTimeout(
+                "Timed out waiting for {} vms to scale out to expected count. Current: {}, Expt: {}".
+                format(vm_name, len(vm_ids), expt_max))
 
-    else:
+    finally:
         end_event.set()
         for thread in vms_threads:
             thread.wait_for_thread_end(timeout=30)
-        raise exceptions.VMTimeout("Timed out waiting for {} vms to scale out to expected count. Current: {}, Expt: {}".
-                                   format(vm_name, len(vm_ids), expt_max))
 
     LOG.info("{} VMs successfully scaled up to {} vms.".format(vm_name, expt_max))
     return second_vm
@@ -3474,7 +3485,8 @@ def wait_for_auto_vm_scale_in(vm_name, expt_min=1, scale_in_timeout=1200, con_ss
 
 def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=1200, expt_max=None, expt_min=None,
                             con_ssh=None):
-    min_, current_, max_ = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
+    min_, current_, max_ = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus',
+                                                                   auth_info=None, con_ssh=con_ssh))
     assert current_ < max_, "Current vcpus is already at its max, scale down first."
 
     if not expt_max:
@@ -3484,35 +3496,41 @@ def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=120
         expt_min = min_
 
     end_event = Events('Max cpu count reached')
+    dd_event = Events('dd started')
     new_dd_events = []
     for i in range(expt_max - current_ - 1):
         new_dd_events.append(Events("Iteration{} - Send dd cmd".format(i+2)))
 
     LOG.info("Start dd process(es) in vm and wait for vm cpu scale up to {} vcpus".format(expt_max))
     scale_up_end_time = time.time() + scale_up_timeout
-    dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, new_dd_events=new_dd_events,
+    dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, new_dd_events=new_dd_events, dd_event=dd_event,
                                    timeout=scale_up_timeout, con_ssh=con_ssh)
 
-    events = new_dd_events + [end_event]
-    while time.time() < scale_up_end_time:
-        time.sleep(10)
-        current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))[1]
+    try:
+        LOG.info("Waiting for dd event to be sent in vm before checking vm cpus")
+        dd_event.wait_for_event(timeout=180, fail_ok=False)
 
-        if current_now > current_:
-            for x in range(current_now - current_):
-                event_ = events.pop(0)
-                event_.set()
-            current_ = current_now
+        events = new_dd_events + [end_event]
+        while time.time() < scale_up_end_time:
+            time.sleep(10)
+            current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))[1]
 
-        if not events:
-            dd_thread.wait_for_thread_end(timeout=30)
-            break
+            if current_now > current_:
+                for x in range(current_now - current_):
+                    event_ = events.pop(0)
+                    event_.set()
+                current_ = current_now
 
-    else:
-        end_event.set()
+            if not events:
+                break
+
+        else:
+            end_event.set()
+            raise exceptions.VMTimeout("Timed out waiting to vcpu to scale up to max for vm {}. Current: {}, Expt: {}".
+                                       format(vm_id, current_, expt_max))
+
+    finally:
         dd_thread.wait_for_thread_end(timeout=30)
-        raise exceptions.VMTimeout("Timed out waiting to vcpu to scale up to max for vm {}. Current: {}, Expt: {}".
-                                   format(vm_id, current_, expt_max))
 
     LOG.info("VM successfully scaled up to {} vcpus. dd processes killed. Wait for vm cpu to scale down to {} vcpus".
              format(expt_max, expt_min))

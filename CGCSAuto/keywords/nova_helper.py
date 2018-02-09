@@ -472,13 +472,11 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
                 tmp_list.append('{}={}'.format(key, value))
         args += '--metadata ' + ','.join(tmp_list)
 
-    # process server group name
+    # process server group name and policy
     if name is None:
-        name = 'srv_grp'
+        name = 'grp_{}'.format(policy.replace('-', '_'))
     args += " {}-{}".format(name, Count.get_sever_group_count())
-
     policy = policy.replace('_', '-')
-    # process server group policy
     args += ' ' + policy
 
     LOG.info("Creating server group with args: {}...".format(args))
@@ -913,7 +911,7 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         field (str): field name in nova show table
         strict (bool): whether to perform a strict search on given field name
         con_ssh (SSHClient):
-        auth_info (dict):
+        auth_info (dict|None):
         use_openstack_cmd:
 
     Returns (str|list): value of specified field. Return list for multi-line value
@@ -1065,7 +1063,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
 
     Args:
         vm_id (str):
-        auth_info (dict):
+        auth_info (dict|None):
         con_ssh (SSHClient):
 
     Returns (dict): VM boot info dict. Format: {'type': <boot_source>, 'id': <source_id>}.
@@ -1096,7 +1094,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         return {'type': 'image', 'id': match.group(0)}
 
 
-def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_vm_image_name(vm_id, auth_info=None, con_ssh=None):
     """
 
     Args:

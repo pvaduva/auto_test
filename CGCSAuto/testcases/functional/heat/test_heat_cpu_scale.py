@@ -24,7 +24,7 @@ def launch_cpu_scaling_stack(vcpus, min_vcpus):
     """
 
     template_name = 'VMAutoScaling.yaml'
-    LOG.tc_step("Creating Heat Stack..using template %s", template_name)
+    LOG.tc_step("Creating Heat Stack using template %s", template_name)
 
     stack_name = template_name.split('.')[0]
     vm_name = 'vm_cpu_scale'
