@@ -177,7 +177,7 @@ def test_backup(pre_system_backup):
     else:
         LOG.info("No cinder volumes are avaialbe or in-use states in the system; skipping cinder volume export...")
 
-    # Copying ystem backup lSO file for future restore
+    # Copying system backup ISO file for future restore
     assert backup_load_iso_image(backup_info)
 
 

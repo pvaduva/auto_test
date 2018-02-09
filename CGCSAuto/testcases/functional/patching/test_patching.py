@@ -347,10 +347,16 @@ def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build
         patch_dir_or_file = os.path.join(patch_base_dir, lab_info.get_build_id())
 
     elif not os.path.abspath(patch_dir):
-        patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
+        if patch_base_dir is not None:
+            patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
 
+        else:
+            patch_dir_or_file = patch_base_dir
     else:
-        pass
+        patch_dir_or_file = patch_dir
+        if patch_base_dir:
+            LOG.info('patch-dir is an absolute path, while patch-base-dir is also provided'
+                     '\npatch-dir:{}\npatch-base-dir:{}'.format(patch_dir, patch_base_dir))
 
     rt_code, output = ssh_to_server.exec_cmd(
         'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')),
