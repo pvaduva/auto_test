@@ -538,7 +538,7 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
     tuxlab_conn.sendline("mkdir -p " + tuxlab_sub_dir)
     tuxlab_conn.find_prompt()
-    tuxlab_conn.sendline("chmod 755 " + tuxlab_sub_dir)
+    tuxlab_conn.sendline("chmod 775 " + tuxlab_sub_dir)
     tuxlab_conn.find_prompt()
 
     # Switch pxeboot.cfg files
