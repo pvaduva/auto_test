@@ -564,8 +564,8 @@ def get_server_group_info(group_id=None, group_name=None, header='Members', stri
     if group_name:
         filters['Name'] = group_name
 
-    values = get_server_groups_info(server_groups=group_id, auth_info=auth_info, strict=strict, con_ssh=con_ssh,
-                                    **filters)
+    values = get_server_groups_info(server_groups=group_id, header=header, auth_info=auth_info, strict=strict,
+                                    con_ssh=con_ssh, **filters)
     assert len(values) == 1, "More than 1 server group filtered"
 
     value = values[0]
