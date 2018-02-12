@@ -1068,7 +1068,7 @@ def wait_for_file_update(file_path, grep_str, expt_val, timeout=300, fail_ok=Fal
     if not ssh_client:
         ssh_client = ControllerClient.get_active_controller()
 
-    pattern = '{}.*=(.*)\n'.format(grep_str)
+    pattern = '{}.*=(.*)'.format(grep_str)
     end_time = time.time() + timeout
     value = None
     while time.time() < end_time:
