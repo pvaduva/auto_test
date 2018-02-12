@@ -568,11 +568,11 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
         log.info("Installing Centos load")
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
-        bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force"])
+        bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force", "--chmod=Du=rwx"])
         bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
     else:
         log.info("Installing wrlinux load")
-        bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force"])
+        bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force", "--chmod=Du=rwx"])
 
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
