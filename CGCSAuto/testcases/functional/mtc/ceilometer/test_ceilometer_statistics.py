@@ -159,9 +159,8 @@ def test_ceilometer_retention_sample():
     Teardown:
         - reset     ('module')
     """
+    LOG.tc_step("Set retention period to 3600 seconds")
     system_helper.set_retention_period(period=3600)
-    ret_per = system_helper.get_retention_period()
-    assert 3600 == int(ret_per), "The retention period was not changed to 1 hour"
 
     LOG.tc_step("Choosing a resource")
     out = ceilometer_helper.get_resources(header='Resource ID')
@@ -172,7 +171,7 @@ def test_ceilometer_retention_sample():
     curr_secs = curr_time.timestamp()
     new_time = datetime.fromtimestamp(curr_secs - 3540)
     new_time = str(new_time).replace(' ', 'T')
-    LOG.info("\nnow: {}\n59 min ago{}".format(curr_time, new_time))
+    LOG.info("\nNow: {}\n59 min ago: {}".format(curr_time, new_time))
 
     LOG.tc_step("Creating fake sample")
 
