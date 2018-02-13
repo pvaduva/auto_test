@@ -5,6 +5,7 @@ on CEPH-related helper functions.
 
 import re
 import time
+import ast
 
 from consts.auth import Tenant
 from utils import table_parser, cli, exceptions
@@ -265,8 +266,8 @@ def get_storage_group(host):
     """
 
     host_table = table_parser.table(cli.system('host-show', host))
-    peers = table_parser.get_values(host_table, 'Value', Property='peers')
-    storage_group = re.search('(group-\d+)', peers[0])
+    peers = table_parser.get_value_two_col_table(host_table, 'peers', merge_lines=True)
+    storage_group = re.search('(group-\d+)', peers)
     msg = 'Unable to determine replication group for {}'.format(host)
     assert storage_group, msg
     storage_group = storage_group.group(0)
@@ -368,21 +369,16 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
 
 
 def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
-    '''
+    """
     This function uses qemu-img info to determine what size of flavor to use.
+    Args:
+        con_ssh:
+        image_name (str): e.g. 'cgcs-guest.img'
+        location (str):  where to find images, e.g. '~/images'
 
-    Arguments:
-        - con_ssh: ssh connection
-        - image_name(string): e.g. 'cgcs-guest.img'
-        - location(string): where to find images, e.g. '~/images'
-
-    Test Steps:
-        1.  Parse qemu-img info for the image size
-
-    Return:
-        - image_size(int): e.g. 8
-    '''
-
+    Returns:
+        image_size(int): e.g. 8
+    """
 
     image_path = location + "/" + image_name
     cmd = 'qemu-img info {}'.format(image_path)
@@ -410,7 +406,7 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         cinder:
         glance:
         ephemeral:
-        object_:
+        object_gib:
         fail_ok:
         con_ssh:
 
@@ -419,21 +415,29 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         1, cli err message
 
     """
+    if 'ceph' in backend:
+        backend = 'ceph-store'
+    elif 'lvm' in backend:
+        backend = 'lvm-store'
+    elif 'file' in backend:
+        backend = 'file-store'
 
     args = backend
 
     backend_info = get_storage_backend_info(backend)
 
     if cinder:
-        args += ' cinder_pool_gib=' + cinder
-    if glance and backend == 'ceph':
-        args += ' glance_pool_gib=' + glance
-    if ephemeral and backend == 'ceph':
-        args += ' ephemeral_pool_gib=' + ephemeral
-    if object_gateway and backend == 'ceph':
-        args += ' object_gateway=' + str(object_gateway)
-    if object_gib and backend == 'ceph':
-        args += ' object_pool_gib=' + object_gib
+        args += ' cinder_pool_gib={}'.format(cinder)
+
+    if 'ceph' in backend:
+        if glance:
+            args += ' glance_pool_gib={}'.format(glance)
+        if ephemeral:
+            args += ' ephemeral_pool_gib={}'.format(ephemeral)
+        if object_gateway:
+            args += ' object_gateway={}'.format(object_gateway)
+        if object_gib:
+            args += ' object_pool_gib={}'.format(object_gib)
 
     code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
     # TODO return new values of storage allocation and check they are the right values
@@ -446,7 +450,6 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         if fail_ok:
             return code, out
         raise exceptions.CLIRejected(msg)
-
 
 
 def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
@@ -466,59 +469,101 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
         else:
             raise exceptions.TimeoutException(err_msg)
 
-def get_storage_backend_info(backend, fail_ok=False, con_ssh=None):
+
+def _get_storage_backend_show_table(backend, con_ssh=None):
+    # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
+    if 'ceph' in backend:
+        backend = 'ceph-store'
+    elif 'lvm' in backend:
+        backend = 'lvm-store'
+    elif 'file' in backend:
+        backend = 'file-store'
+    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh),
+                                combine_multiline_entry=True)
+    return table_
+
+
+def get_storage_backend_info(backend, keys=None, con_ssh=None):
     """
     Get storage backend pool allocation info
 
     Args:
         backend (str): storage backend to get info (e.g. ceph)
-        fail_ok:
+        keys (list|str): keys to return, e.g., ['name', 'backend', 'task']
         con_ssh:
 
     Returns: dict  {'cinder_pool_gib': 202, 'glance_pool_gib': 20, 'ephemeral_pool_gib': 0,
                     'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
 
     """
-    valid_backends = ['ceph', 'lvm']
+    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
 
-    args = backend
+    values = table_['values']
+    backend_info = {line[0]: line[1] for line in values}
 
-    table_ = table_parser.table(cli.system('storage-backend-show', args, ssh_client=con_ssh, fail_ok=fail_ok))
-
-    backend_info = {}
-    if table_:
-        values = table_['values']
-        for value in values:
-            backend_info[value[0]] = value[1]
+    if keys:
+        if isinstance(keys, str):
+            keys = [keys]
+        backend_info = {key_: backend_info[key_] for key_ in keys}
     return backend_info
 
-def get_configured_system_storage_backend(con_ssh=None, fail_ok=False):
+
+def get_storage_backend_show_vals(backend, fields, con_ssh=None):
+    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
+    vals = []
+    if isinstance(fields, str):
+        fields = (fields, )
+
+    for field in fields:
+        val = table_parser.get_value_two_col_table(table_, field)
+        if field in ('task', 'capabilities', 'object_gateway') or field.endswith('_gib'):
+            try:
+                val = eval(val)
+            except:
+                pass
+        vals.append(val)
 
 
-    backend = []
-    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
+def get_storage_backends(con_ssh=None, **filters):
+    backends = []
+    table_ = _get_storage_backend_list_table(con_ssh=con_ssh)
     if table_:
-        table_ = table_parser.filter_table(table_, state='configured')
-        backend = table_parser.get_column(table_, 'backend')
-    return backend
+        if filters:
+            table_ = table_parser.filter_table(table_, **filters)
+        backends = table_parser.get_column(table_, 'backend')
+    return backends
 
 
-def get_storage_backend_state_value(backend, con_ssh=None, fail_ok=False):
-    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
-    state = None
+def get_storage_backend_state(backend, con_ssh=None):
+    return get_storage_backend_list_vals(backend=backend, headers=('state',), con_ssh=con_ssh)[0]
+
+
+def get_storage_backend_task(backend, con_ssh=None):
+    return get_storage_backend_list_vals(backend=backend, headers=('task',), con_ssh=con_ssh)[0]
+
+
+def _get_storage_backend_list_table(con_ssh=None):
+    return table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh), combine_multiline_entry=True)
+
+
+def get_storage_backend_list_vals(backend, headers=('state', 'task'), con_ssh=None, **filters):
+    table_ = _get_storage_backend_list_table(con_ssh=con_ssh)
+    vals = []
     if table_:
-        table_ = table_parser.filter_table(table_, backend=backend)
-        state =  table_parser.get_column(table_, 'state')[0]
-    return state
+        table_ = table_parser.filter_table(table_, backend=backend, **filters)
+        if isinstance(headers, str):
+            headers = (headers, )
+        for header in headers:
+            val = table_parser.get_values(table_, header)[0]
+            if header in ('task', 'capabilities'):
+                # convert to dictionary or None type. e.g.,  {u'min_replication': u'1', u'replication': u'2'}
+                try:
+                    val = eval(val)
+                except:
+                    pass
+            vals.append(val)
 
-
-def get_storage_backend_task_value(backend, con_ssh=None, fail_ok=False):
-    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, fail_ok=fail_ok))
-    task = None
-    if table_:
-        table_ = table_parser.filter_table(table_, backend=backend)
-        task =  table_parser.get_column(table_, 'task')[0]
-    return task
+    return vals
 
 
 def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ceph_mon_dev_controller_0_uuid=None,

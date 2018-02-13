@@ -49,21 +49,21 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
 
         """
 
-    host_list = host_helper.get_hosts_by_storage_aggregate(storage_backing=inst_backing)
+    host_list = host_helper.get_hosts_in_storage_aggregate(storage_backing=inst_backing)
     if not host_list:
         skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(inst_backing))
 
     # Check if glance-image storage backing is present in system and skip if it is
-    if 'ceph' in storage_helper.get_configured_system_storage_backend():
-        table_ = table_parser.table(cli.system('storage-backend-show ceph'))
-        glance_pool = table_parser.get_value_two_col_table(table_, 'glance_pool_gib')
+    if 'ceph' in storage_helper.get_storage_backends():
+        glance_pool = storage_helper.get_storage_backend_show_vals(backend='ceph', fields=('glance_pool_gib', ))
         if glance_pool:
             skip("Skip lab with ceph-backed glance image storage")
 
     vm_host = host_list[0]
     snaptable_ = table_parser.table(cli.system("storage-usage-list", auth_info=Tenant.ADMIN))
 
-    snapshot_space = table_parser.get_values(snaptable_, "free capacity (Gib)", **{'service': 'glance', 'backend name': 'file'})[0]
+    snapshot_space = table_parser.get_values(snaptable_, "free capacity (Gib)",
+                                             **{'service': 'glance', 'backend type': 'file'})[0]
     snapshot_space_gb = int(float(snapshot_space))
     if snapshot_space_gb > 20:
         skip("Lab glance image directory too large for timely test execution")
@@ -106,27 +106,31 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
     snapshot_range_max = written_disk_size + 0.1
 
     # Make first snapshot
-    storage_before = float(table_parser.get_values(snaptable_, "free capacity (Gib)", **{'service': 'glance', 'backend name': 'file'})[0])
+    storage_before = float(table_parser.get_values(snaptable_, "free capacity (Gib)",
+                                                   **{'service': 'glance', 'backend type': 'file'})[0])
     LOG.tc_step("Create snapshots, current {} GiB of free space".format(storage_before))
     exit_code, output, original_snap_size = create_snapshot_from_instance(vm_id, name="snapshot0")
     assert exit_code == 0, "First snapshot failed"
 
     snaptable_ = table_parser.table(cli.system("storage-usage-list", auth_info=Tenant.ADMIN))
-    storage_left = float(table_parser.get_values(snaptable_, "free capacity (Gib)", **{'service': 'glance', 'backend name': 'file'})[0])
+    storage_left = float(table_parser.get_values(snaptable_, "free capacity (Gib)",
+                                                 **{'service': 'glance', 'backend type': 'file'})[0])
 
     space_taken = storage_before - storage_left
-    assert snapshot_range_min <= space_taken <= snapshot_range_max, "Space occupied by snapshot not in expected range, size is {}"\
-        .format(space_taken)
+    assert snapshot_range_min <= space_taken <= snapshot_range_max, \
+        "Space occupied by snapshot not in expected range, size is {}" .format(space_taken)
 
     LOG.tc_step("First snapshot created, {} GiB of storage left, attempt second snapshot".format(storage_left))
     exit_code, output, snap_size = create_snapshot_from_instance(vm_id, name="snapshot1")
     sleep(10)
 
     snaptable_ = table_parser.table(cli.system("storage-usage-list", auth_info=Tenant.ADMIN))
-    storage_after = float(table_parser.get_values(snaptable_, "free capacity (Gib)", **{'service': 'glance', 'backend name': 'file'})[0])
+    storage_after = float(table_parser.get_values(snaptable_, "free capacity (Gib)",
+                                                  **{'service': 'glance', 'backend type': 'file'})[0])
     assert exit_code != 0, "Snapshot succeeded when it was expected to fail"
     assert storage_left - 0.02 <= storage_after <= storage_left + 0.02, \
-        "Free capacity has changed to {} even though 2nd snapshot failed (expected to be 0.01 within)".format(storage_after, storage_left)
+        "Free capacity has changed to {} even though 2nd snapshot failed (expected to be 0.01 within)".\
+            format(storage_after, storage_left)
 
     expt_err = "Not enough space on the storage media for image {}".format((output.split())[-1])
     with host_helper.ssh_to_host(vm_host) as host_ssh:

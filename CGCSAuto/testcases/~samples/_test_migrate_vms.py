@@ -124,7 +124,7 @@ def prepare_hosts(request):
         Restore hosts to original state
     """
     expected_storage_backing = request.param
-    avail_hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing=expected_storage_backing)
+    avail_hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=expected_storage_backing)
     all_hosts = host_helper.get_hypervisors()
     modified_hosts = {}
     locked_hosts = []
@@ -133,7 +133,7 @@ def prepare_hosts(request):
     # Try to convert all available hypervisor hosts to the expected storage backing
     for host in all_hosts:
         if host not in avail_hosts:
-            original_storage = host_helper.get_local_storage_backing(host)
+            original_storage = host_helper.get_host_instance_backing(host)
             return_code, msg = host_helper.modify_host_storage_backing(host=host, storage=expected_storage_backing,
                                                                   fail_ok=True)
             if return_code == 0:

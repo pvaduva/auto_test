@@ -1,9 +1,9 @@
 import time
 from pytest import skip
-from utils.tis_log import LOG
 
+from utils.tis_log import LOG
+from utils.multi_thread import Events
 from keywords import system_helper, host_helper, vm_helper
-from testfixtures.resource_mgmt import ResourceCleanup
 
 
 def test_swact_20_times():
@@ -38,10 +38,8 @@ def test_swact_20_times():
     vm_base = vm_helper.boot_vm(name='pre_swact', cleanup='function')[1]
 
     LOG.tc_step("Start writing from pre-existed vm before swacting")
-    vm_ssh, base_vm_thread = vm_helper.write_in_vm(vm_base, end_now_flag=True, expect_timeout=40, thread_timeout=60*100)
-    base_vm_thread.end_now = False
-    base_vm_thread.end_thread()
-    # base_vm_thread.wait_for_thread_end(timeout=base_vm_thread.timeout)
+    end_event = Events("End write in base vm")
+    base_vm_thread = vm_helper.write_in_vm(vm_base, end_event=end_event, expect_timeout=40, thread_timeout=60*100)
 
     try:
         for i in range(20):
@@ -88,8 +86,8 @@ def test_swact_20_times():
         raise
     finally:
         LOG.tc_step("End the base_vm_thread")
-        base_vm_thread.end_now = True
-        base_vm_thread.wait_for_thread_end(timeout=10)
+        end_event.set()
+        base_vm_thread.wait_for_thread_end(timeout=20)
 
     post_standby = system_helper.get_standby_controller_name()
     assert post_standby, "System does not have standby controller after last swact"

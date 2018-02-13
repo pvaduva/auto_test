@@ -86,7 +86,7 @@ def test_unlock_host(hostname):
 
     host_helper.unlock_host(hostname)
 
-@mark.usefixtures('check_alarms')
+
 @mark.parametrize('hostnames', [
     ['compute-0'],
     'standby_controller',

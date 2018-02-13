@@ -43,8 +43,8 @@ class BuildServers:
 class Builds:
     R5 = {
         'release': 'R5',
-        'iso': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_bootimage.iso',
-        'guest': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_tis-centos-guest.img'
+        'iso': '/localdisk/loadbuild/jenkins/TC_18.02_Host/latest_bootimage.iso',
+        'guest': '/localdisk/loadbuild/jenkins/TC_18.02_Guest/latest_tis-centos-guest.img'
     }
 
     R4 = {
@@ -71,25 +71,25 @@ class Builds:
 
 class Licenses:
     R2 = {
-        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-15.12-full-jan2018.lic',
-        'Standard': '/folk/cgts/lab/licenses/wrslicense-15.12-full-jan2018.lic'
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-15.12-full-dec2018.lic',
+        'Standard': '/folk/cgts/lab/licenses/wrslicense-15.12-full-dec2018.lic'
     }
 
     R3 = {
-        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-16.10-full-jan2018.lic',
-        'Standard': '/folk/cgts/lab/licenses/wrslicense-16.10-full-jan2018.lic'
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-16.10-full-dec2018.lic',
+        'Standard': '/folk/cgts/lab/licenses/wrslicense-16.10-full-dec2018.lic'
     }
 
     R4 = {
-        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-17.06-full-jan2018.lic',
-        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-CPE-17.06-full-jan2018.lic',
-        'Standard': '/folk/cgts/lab/licenses/wrslicense-17.06-full-jan2018.lic'
+        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-17.06-full-dec2018.lic',
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-AIO-DX-17.06-full-dec2018.lic',
+        'Standard': '/folk/cgts/lab/licenses/wrslicense-17.06-full-dec2018.lic'
     }
 
     R5 = {
-        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-R5-full-jan2018.lic',
-        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-AIO-DX-R5-full-jan2018.lic',
-        'Standard': '/folk/cgts/lab/licenses/wrslicense-R5-full-jan2018.lic'
+        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-18.03-full-dec2018.lic',
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-AIO-DX-18.03-full-dec2018.lic',
+        'Standard': '/folk/cgts/lab/licenses/wrslicense-18.03-full-dec2018.lic'
     }
 
 

@@ -1174,7 +1174,7 @@ def is_volumes_pool_sufficient(min_size=40):
 
     """
     con_ssh = ControllerClient.get_active_controller()
-    lvs_pool = con_ssh.exec_sudo_cmd(cmd="lvs | grep --color='never' cinder-volumes-pool")[1]
+    lvs_pool = con_ssh.exec_sudo_cmd(cmd="lvs --units g | grep --color='never' cinder-volumes-pool")[1]
     # Sample output:
     # cinder-volumes-pool                         cinder-volumes twi-aotz-- 19.95g                          64.31  33.38
     #   volume-05fa416d-d37b-4d57-a6ff-ab4fe49deece cinder-volumes Vwi-a-tz--  1.00g cinder-volumes-pool    64.16

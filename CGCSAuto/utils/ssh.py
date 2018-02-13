@@ -1473,7 +1473,7 @@ TELNET_REGEX = '(.*-[\d]+)[ login:|:~\$]'
 TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
 
 
-class TelnetClient (Telnet):
+class TelnetClient(Telnet):
 
     def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
                  password=HostLinuxCreds.get_password()):

@@ -1,4 +1,4 @@
-import time
+import re
 from pytest import fixture, mark, skip
 
 from utils import cli, table_parser
@@ -268,7 +268,7 @@ class TestSharedCpuDisabled:
         LOG.tc_step("Attempt to resize vm with invalid flavor, and verify resize request is rejected.")
         code, msg = vm_helper.resize_vm(vm_id, flavor, fail_ok=True)
         assert code == 1, "Resize vm request is not rejected"
-        assert ResizeVMErr.SHARED_NOT_ENABLED.format('0') in msg
+        assert re.search(ResizeVMErr.SHARED_NOT_ENABLED.format('0'), msg)
 
         LOG.tc_step("Ensure VM is still pingable after resize reject")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
@@ -277,7 +277,7 @@ class TestSharedCpuDisabled:
 class TestSharedCpuEnabled:
     @fixture(scope='class')
     def add_shared_cpu(self, config_host_class):
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts(rtn_down_hosts=False)
+        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
 
         LOG.fixture_step("Ensure at least two hypervisors has shared cpu cores on both p0 and p1")
         shared_cpu_hosts = []
@@ -527,7 +527,7 @@ class TestMixSharedCpu:
 
     @fixture(scope='class')
     def config_host_cpus(self, config_host_class):
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts(rtn_down_hosts=False)
+        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
 
         if len(hosts) < 3:
             skip("Require at least three hosts with same storage backing")

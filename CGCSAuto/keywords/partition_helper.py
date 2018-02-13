@@ -1,13 +1,16 @@
 import time
+from pytest import fixture, mark, skip
 
 from keywords import system_helper, host_helper
+from consts.cgcs import PartitionStatus
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from pytest import fixture, mark, skip
+
 
 CP_TIMEOUT = 120
 DP_TIMEOUT = 120
 MP_TIMEOUT = 120
+
 
 def get_partitions(hosts, state):
     """
@@ -49,25 +52,15 @@ def delete_partition(host, uuid, fail_ok=False, timeout=DP_TIMEOUT):
     * rc, out - return code and output of the host-disk-partition-delete
     """
 
-    rc, out = cli.system('host-disk-partition-delete {} {}'.format(host, uuid),
-rtn_list=True)
-    if fail_ok:
-        return rc, out
+    rc, out = cli.system('host-disk-partition-delete {} {}'.format(host, uuid), rtn_list=True, fail_ok=fail_ok)
+    if rc > 0:
+        return 1, out
 
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        status = get_partition_info(host, uuid, "status")
-        LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-        assert status == "Deleting" or not status, "Partition has unexpected state {}".format(status)
-        if not status:
-            return rc, out
-    assert not status, "Partition was not deleted"
-
-    return rc, out
+    wait_for_partition_ready(host=host, uuid=uuid, timeout=timeout, other_status=PartitionStatus.DELETING)
+    return 0, "Partition successfully deleted"
 
 
-def create_partition(host, device_node, size_mib, fail_ok=False, wait=True,
-timeout=CP_TIMEOUT):
+def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, timeout=CP_TIMEOUT):
     """
     Create a partition on host.
 
@@ -82,25 +75,14 @@ timeout=CP_TIMEOUT):
     Returns:
     * rc, out - return code and output of the host-disk-partition-command
     """
-
-    #rc, out = cli.system('host-disk-partition-add -t lvm_phys_vol {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
-    rc, out = cli.system('host-disk-partition-add {} {} {}'.format(host, device_node, size_mib), rtn_list=True, fail_ok=fail_ok)
-    if fail_ok or not wait:
+    args = '{} {} {}'.format(host, device_node, size_mib)
+    rc, out = cli.system('host-disk-partition-add', args, rtn_list=True, fail_ok=fail_ok)
+    if rc > 0 or not wait:
         return rc, out
 
-    uuid = table_parser.get_value_two_col_table(table_parser.table(out),
-"uuid")
-
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        status = get_partition_info(host, uuid, "status")
-        LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-        assert status == "Creating" or status == "Ready", "Partition has unexpected state {}".format(status)
-        if status == "Ready":
-            LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
-            return rc, out
-
-    assert not status, "Partition was not created"
+    uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+    wait_for_partition_ready(host=host, uuid=uuid, timeout=timeout, other_status=PartitionStatus.CREATING)
+    return 0, "Partition successfully created"
 
 
 def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
@@ -117,22 +99,14 @@ def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
     * rc, out - return code and output of the host-disk-partition-command
     """
 
-    rc, out = cli.system('host-disk-partition-modify -s {} {} {}'.format(size_mib, host, uuid), rtn_list=True, fail_ok=fail_ok)
-    if fail_ok:
-        return rc, out
+    args = '-s {} {} {}'.format(size_mib, host, uuid)
+    rc, out = cli.system('host-disk-partition-modify', args, rtn_list=True, fail_ok=fail_ok)
+    if rc > 0:
+        return 1, out
 
     uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        status = get_partition_info(host, uuid, "status")
-        LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-        assert status == "Modifying" or status == "Ready", "Partition has unexpected state {}".format(status)
-        if status == "Ready":
-            LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
-            return rc, out
-
-    assert not status, "Partition was not modified"
+    wait_for_partition_ready(host=host, uuid=uuid, timeout=timeout, other_status=PartitionStatus.MODIFYING)
+    return 0, "Partition successfully modified"
 
 
 def get_partition_info(host, uuid, param=None):
@@ -157,6 +131,35 @@ def get_partition_info(host, uuid, param=None):
         param_value = table_parser.get_value_two_col_table(table_, param)
 
     return param_value
+
+
+def wait_for_partition_ready(host, uuid, other_status='Creating', timeout=120, fail_ok=False):
+    valid_status = ['Ready']
+    if isinstance(other_status, str):
+        other_status = (other_status, )
+    for status_ in other_status:
+        valid_status.append(status_)
+
+    end_time = time.time() + timeout
+    prev_status = ''
+    while time.time() < end_time:
+        status = get_partition_info(host, uuid, "status")
+        assert status in valid_status, "Partition has unexpected state {}".format(status)
+
+        if status != prev_status:
+            prev_status = status
+            LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
+
+        if status == "Ready":
+            LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
+            return True
+        time.sleep(5)
+
+    msg = "Partition {} on host {} not ready within {} seconds".format(uuid, host, timeout)
+    if fail_ok:
+        LOG.warning(msg)
+        return False
+    assert 0, msg
 
 
 def get_disk_info(host, device_node, param=None):

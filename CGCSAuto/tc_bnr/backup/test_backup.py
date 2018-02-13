@@ -147,11 +147,19 @@ def test_backup(pre_system_backup):
 
         LOG.tc_step("Storage lab detected. copying images to backup.")
         image_ids = glance_helper.get_images()
-        # img_file = ''
         for img_id in image_ids:
-            install_helper.export_image(img_id, backup_dest=backup_dest,
+            prop_key = 'store'
+            image_stores = glance_helper.get_image_properties(img_id, prop_key)
+            LOG.debug('image store backends:{}'.format(image_stores))
+
+            if image_stores and image_stores.get(prop_key, None) == 'rbd':
+                LOG.info('rbd based image, exporting it: {}, stores:{}'.format(img_id, image_stores))
+
+                install_helper.export_image(img_id, backup_dest=backup_dest,
                                         backup_dest_path=backup_info['backup_dest_full_path'], dest_server=dest_server,
                                         copy_to_usb=copy_to_usb)
+            else:
+                LOG.warn('non-rbd based image, skip it:  {}, store:{}'.format(img_id, image_stores))
 
     # execute backup available volume command
     LOG.tc_step("Cinder Volumes backup ...")
@@ -169,7 +177,7 @@ def test_backup(pre_system_backup):
     else:
         LOG.info("No cinder volumes are avaialbe or in-use states in the system; skipping cinder volume export...")
 
-    # Copying ystem backup lSO file for future restore
+    # Copying system backup ISO file for future restore
     assert backup_load_iso_image(backup_info)
 
 

@@ -56,12 +56,15 @@ class BuildServerPath:
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
                                '17.07': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/',
+                               '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/',
                                }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          '17.06': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
                          '17.07': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic', \
+                                   '/folk/cgts/lab/R5-AIO-SX-full.lic'],
+                         '18.01': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic', \
                                    '/folk/cgts/lab/R5-AIO-SX-full.lic']
                          }
 
@@ -74,7 +77,8 @@ class BuildServerPath:
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
                          '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_build/export/tis-centos-guest.img',
-                         '17.07': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img'
+                         '17.07': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img',
+                         '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img'
                          }
 
 

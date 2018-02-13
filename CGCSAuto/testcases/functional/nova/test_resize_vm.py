@@ -81,19 +81,12 @@ class TestResizeSameHost:
     @fixture(scope='class')
     def add_hosts_to_zone(self, request, add_cgcsauto_zone, get_hosts_per_backing):
         hosts_per_backing = get_hosts_per_backing
-        hosts_to_add = []
-        avail_hosts = {'remote': '', 'local_lvm': '', 'local_image': ''}
-        for backing in ['local_image', 'local_lvm', 'remote']:
-            if hosts_per_backing[backing]:
-                host_to_add = hosts_per_backing[backing][0]
-                hosts_to_add.append(host_to_add)
-                avail_hosts[backing] = host_to_add
-                LOG.fixture_step('Select host {} with backing {}'.format(host_to_add, backing))
+        avail_hosts = {key: vals[0] for key, vals in hosts_per_backing.items() if vals}
 
-        if not hosts_to_add:
+        if not avail_hosts:
             skip("No host in any storage aggregate")
 
-        nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)
+        nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=list(avail_hosts.values()))
 
         def remove_hosts_from_zone():
             nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
@@ -159,7 +152,7 @@ class TestResizeSameHost:
             - Delete cgcsautozone
 
         """
-        vm_host = add_hosts_to_zone[storage_backing]
+        vm_host = add_hosts_to_zone.get(storage_backing, None)
 
         if not vm_host:
             skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(storage_backing))
@@ -269,9 +262,9 @@ class TestResizeSameHost:
             - Delete cgcsauto zone
 
         """
-        vm_host = add_hosts_to_zone[storage_backing]
+        vm_host = add_hosts_to_zone.get(storage_backing, None)
 
-        if vm_host == '':
+        if not vm_host:
             skip("No available host with {} storage backing".format(storage_backing))
 
         LOG.tc_step('Create origin flavor')

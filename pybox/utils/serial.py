@@ -64,9 +64,9 @@ def expect_bytes(stream, text, timeout=180, fail_ok=False):
     """
     time.sleep(2)
     if timeout < 60:
-        LOG.info("Expecting text within {} seconds: {}".format(timeout, text))
+        LOG.info("Expecting text within {} seconds: {}\n".format(timeout, text))
     else:
-        LOG.info("Expecting text within {} minutes: {}".format((timeout/60), text))
+        LOG.info("Expecting text within {} minutes: {}\n".format((timeout/60), text))
     try:
         stream.expect_bytes("{}".format(text).encode('utf-8'), timeout=timeout)
     except streamexpect.ExpectTimeout:

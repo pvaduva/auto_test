@@ -183,6 +183,16 @@ class Labs:
         'compute_nodes': [21763, 21764, 21765],
     }
 
+    R730_1 = {
+        'short_name': 'r730_1',
+        'name': 'yow-cgcs-r730-1',
+        'floating ip': '128.224.150.121',
+        'controller-0 ip': '128.224.150.121',
+        'controller_nodes': [67160],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     R430_1_2 = {
         'short_name': 'r430_1_2',
         'name': 'yow-cgcs-r430-1_2',

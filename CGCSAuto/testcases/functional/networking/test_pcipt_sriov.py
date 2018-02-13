@@ -7,7 +7,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, VMStatus, DevClassIds
+from consts.cgcs import FlavorSpec, VMStatus, DevClassID
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -89,16 +89,8 @@ def vif_model_check(request):
     else:
         seg_id = None
 
-    if vif_model == 'pci-sriov':
-        port_id = network_helper.create_port(net_id= pci_net_id, vnic_type='direct')[1]
-        nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                        {'port-id': port_id, 'vif-model': vif_model}]
-    else:
-        nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                        {'net-id': pci_net_id, 'vif-model': vif_model}]
-
-    #nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-    #                {'net-id': pci_net_id, 'vif-model': vif_model}]
+    nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                   {'net-id': pci_net_id, 'vif-model': vif_model}]
     if extra_pcipt_net:
         nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
         extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id', strict=False,
@@ -160,7 +152,7 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+    vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
     post_evac_host = nova_helper.get_vm_host(vm_id)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
@@ -492,7 +484,7 @@ class TestVmPCIOperations:
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
             # qat-vf devices only
-            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassIds.QAT_VF)
+            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassID.QAT_VF)
 
         # self.nova_pci_devices = nova_pci_devices
         if not nova_pci_devices:

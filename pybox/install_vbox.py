@@ -536,9 +536,9 @@ if __name__ == "__main__":
         input()
     if vboxoptions.configure:
         if vboxoptions.enablehttps:
-            config_file = '/home/wrsroot/TiS_config.ini_centos_https'
+            config_file = '/home/wrsroot/system_config.centos_https'
         else:
-            config_file = '/home/wrsroot/TiS_config.ini_centos_http'
+            config_file = '/home/wrsroot/system_config.centos_http'
         remote_host = vboxoptions.buildserver
         ret = install_lab.config_controller(cont0_stream, config_file=config_file,
                                             release=vboxoptions.release, remote_host=remote_server)

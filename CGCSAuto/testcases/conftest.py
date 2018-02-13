@@ -43,10 +43,11 @@ def setup_test_session(global_setup):
     natbox_ssh.connect(retry=True)
 
     if ProjVar.get_var('COLLECT_TELNET'):
-
         end_event = Event()
         threads = setups.collect_telnet_logs_for_nodes(end_event=end_event)
         ProjVar.set_var(TELNET_THREADS=(threads, end_event))
+
+    setups.set_sys_type(con_ssh=con_ssh)
 
 
 def pytest_collectstart():

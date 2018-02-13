@@ -16,7 +16,7 @@ MINIMUM_CEPH_MON_GIB = 20
 
 @fixture(scope='session', autouse=True)
 def pre_ceph_install_check():
-    backend_info = storage_helper.get_configured_system_storage_backend()
+    backend_info = storage_helper.get_storage_backends()
     lab = ProjVar.get_var("LAB")
     LOG.fixture_step('Verify no ceph backend is currently configured in system: {}'.format(lab['name']))
     # if 'ceph' in backend_info:
@@ -192,8 +192,8 @@ def test_ceph_post_install(ceph_post_install_info):
 
     LOG.tc_step('Checking ceph is added and the task is set to reconfig-controller ...')
 
-    task = storage_helper.get_storage_backend_task_value('ceph')
-    state = storage_helper.get_storage_backend_state_value('ceph')
+    task = storage_helper.get_storage_backend_task('ceph')
+    state = storage_helper.get_storage_backend_state('ceph')
 
     assert task and 'reconfig-controller' == task.strip(), "Unexpected task value {}".format(task)
     assert state and 'configuring' == state.strip(), "Unexpected state value: {}".format(state)
@@ -222,8 +222,8 @@ def test_ceph_post_install(ceph_post_install_info):
     LOG.info("Swact back to controller-0...")
     host_helper.swact_host('controller-1')
 
-    assert 'ceph' in storage_helper.get_configured_system_storage_backend(), "Ceph backend not added"
-    assert 'provision-storage' == storage_helper.get_storage_backend_task_value('ceph'),\
+    assert 'ceph' in storage_helper.get_storage_backends(), "Ceph backend not added"
+    assert 'provision-storage' == storage_helper.get_storage_backend_task('ceph'),\
         "Ceph backend task is not provision-storage"
 
     LOG.tc_step('Adding storage nodes ......')

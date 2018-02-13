@@ -159,7 +159,7 @@ class TestEvacKPI:
         # if is_aio:
         #     skip("Evacuation KPI test unsuitable for AIO system")
 
-        hosts = host_helper.get_hosts_by_storage_aggregate()
+        hosts = host_helper.get_hosts_in_storage_aggregate()
         if len(hosts) < 2 or len(hosts) > 4:
             skip("Lab not suitable for this test. Too many or too few hosts with local_image backing")
 

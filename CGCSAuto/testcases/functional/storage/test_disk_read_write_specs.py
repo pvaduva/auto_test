@@ -11,7 +11,7 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import QoSSpecs, FlavorSpec
+from consts.cgcs import QoSSpec, FlavorSpec
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -37,20 +37,20 @@ class TestQoS:
         return flavor, hosts
 
     @mark.parametrize(('qos_spec', 'qos_spec_val'), [
-        mark.p1((QoSSpecs.READ_BYTES,  10485769)),
-        mark.p1((QoSSpecs.READ_BYTES,  200000000)),
-        mark.p2((QoSSpecs.READ_BYTES,  419430400)),
-        mark.p2((QoSSpecs.WRITE_BYTES, 10485769)),
-        mark.p2((QoSSpecs.WRITE_BYTES, 400000000)),
-        mark.p2((QoSSpecs.WRITE_BYTES, 419430400)),
-        mark.p2((QoSSpecs.TOTAL_BYTES, 10485769)),
-        mark.p2((QoSSpecs.TOTAL_BYTES, 419430400)),
-        mark.p2((QoSSpecs.READ_IOPS,   200)),
-        mark.p2((QoSSpecs.READ_IOPS,   5000)),
-        mark.p2((QoSSpecs.WRITE_IOPS,  200)),
-        mark.p2((QoSSpecs.WRITE_IOPS,  5000)),
-        mark.p2((QoSSpecs.TOTAL_IOPS,  200)),
-        mark.p1((QoSSpecs.TOTAL_IOPS,  5000)),
+        mark.p1((QoSSpec.READ_BYTES, 10485769)),
+        mark.p1((QoSSpec.READ_BYTES, 200000000)),
+        mark.p2((QoSSpec.READ_BYTES, 419430400)),
+        mark.p2((QoSSpec.WRITE_BYTES, 10485769)),
+        mark.p2((QoSSpec.WRITE_BYTES, 400000000)),
+        mark.p2((QoSSpec.WRITE_BYTES, 419430400)),
+        mark.p2((QoSSpec.TOTAL_BYTES, 10485769)),
+        mark.p2((QoSSpec.TOTAL_BYTES, 419430400)),
+        mark.p2((QoSSpec.READ_IOPS, 200)),
+        mark.p2((QoSSpec.READ_IOPS, 5000)),
+        mark.p2((QoSSpec.WRITE_IOPS, 200)),
+        mark.p2((QoSSpec.WRITE_IOPS, 5000)),
+        mark.p2((QoSSpec.TOTAL_IOPS, 200)),
+        mark.p1((QoSSpec.TOTAL_IOPS, 5000)),
         ])
     def test_disk_read_write_qos_specs(self, qos_spec, qos_spec_val, flavor_for_qos_test):
         """

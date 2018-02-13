@@ -2,7 +2,7 @@ import time
 from pytest import mark, skip, fixture
 
 from keywords import host_helper, nova_helper, vm_helper
-from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate
+from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate, Rebuild
 from consts.reasons import SkipStorageBacking
 from consts.cgcs import FlavorSpec
 
@@ -24,7 +24,7 @@ def hosts_per_backing():
     'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
@@ -73,13 +73,15 @@ def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
         assert 0 == code, msg
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
-    time.sleep(30)
-    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
-    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
-                              kpi_val=duration, uptime=1, unit='Time(ms)')
+    if 'local_lvm' != boot_from:
+        # live migration unsupported for boot-from-image vm with local_lvm storage
+        LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+        time.sleep(30)
+        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
+        assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
+                                  kpi_val=duration, uptime=1, unit='Time(ms)')
 
     def operation_cold(vm_id_):
         code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
@@ -89,9 +91,25 @@ def test_kpi_vm_launch_and_migrate(collect_kpi, hosts_per_backing, boot_from):
     LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
     time.sleep(30)
     duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_cold, vm_id)
-    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+    assert duration > 0, "No ping loss detected during cold migration for {} vm".format(boot_from)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
-                              kpi_val=duration, uptime=5, unit='Time(ms)')
+                              kpi_val=duration, uptime=1, unit='Time(ms)')
+
+    if 'volume' == boot_from:
+        LOG.info("Skip rebuild test for vm booted from cinder volume")
+        return
+
+    def operation_rebuild(vm_id_):
+        code, msg = vm_helper.rebuild_vm(vm_id=vm_id_)
+        assert 0 == code, msg
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+
+    LOG.tc_step("Collect vm rebuild KPI for vm booted from {}".format(boot_from))
+    time.sleep(30)
+    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_rebuild, vm_id)
+    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Rebuild.NAME.format(boot_from),
+                              kpi_val=duration, uptime=1, unit='Time(ms)')
 
 
 def check_for_qemu_process(host_ssh):
@@ -108,7 +126,9 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
     raw_thin_pool_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
     assert raw_thin_pool_output, "thin pool volume not found"
-    raw_lvs_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".format(excluded_vm))[1]
+    raw_lvs_output = host_ssh.exec_sudo_cmd(
+            "lvs --units g --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".
+                format(excluded_vm))[1]
 
     if raw_lvs_output:
         lvs_in_pool = raw_lvs_output.split('\n')
@@ -122,7 +142,8 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
 
 # TC5080
-def test_check_vm_disk_on_lvm_compute():
+@mark.parametrize('storage', ['local_lvm'])
+def test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
     """
         Tests that existence of volumes are properly reported for lvm-backed vms.
@@ -146,13 +167,12 @@ def test_check_vm_disk_on_lvm_compute():
 
     """
 
-    lvm_hosts = host_helper.get_hosts_by_storage_aggregate(storage_backing='local_lvm')
-    LOG.info("lvm hosts: {}".format(lvm_hosts))
-    if not lvm_hosts:
-        skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format("local_lvm"))
+    hosts_with_backing = hosts_per_backing.get(storage, [])
+    if not hosts_with_backing:
+        skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(storage))
 
     LOG.tc_step("Create flavor and boot vm")
-    flavor = nova_helper.create_flavor(storage_backing='local_lvm')[1]
+    flavor = nova_helper.create_flavor(storage_backing=storage, check_storage_backing=False)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
     vm = vm_helper.boot_vm(source='image', flavor=flavor, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm)
@@ -160,7 +180,7 @@ def test_check_vm_disk_on_lvm_compute():
 
     with host_helper.ssh_to_host(vm_host) as compute_ssh:
         LOG.tc_step("Look for qemu process")
-        compute_ssh.exec_sudo_cmd(cmd="lvs")
+        compute_ssh.exec_sudo_cmd(cmd="lvs --units g")
         assert check_for_qemu_process(compute_ssh), "qemu process not found when calling ps"
 
         LOG.tc_step("Look for pool information")
@@ -168,7 +188,7 @@ def test_check_vm_disk_on_lvm_compute():
 
         vm_vol_name = vm + '_disk'
         raw_vm_volume_output = \
-            compute_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name={}".format(vm_vol_name))[1]
+            compute_ssh.exec_sudo_cmd(cmd="lvs --units g --noheadings -o lv_size -S lv_name={}".format(vm_vol_name))[1]
         assert raw_vm_volume_output, "created vm volume not found"
         vm_volume_size = float(raw_vm_volume_output.strip('<g'))
 

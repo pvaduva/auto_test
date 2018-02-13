@@ -10,13 +10,13 @@ from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper
 
 from consts.heat import Heat, HeatUpdate
 from consts.filepaths import WRSROOT_HOME
-from consts.cgcs import HEAT_PATH
+from consts.cgcs import HEAT_PATH, HeatStackStatus
 from consts.auth import Tenant
 from consts.reasons import SkipSysType
 from testfixtures.fixture_resources import ResourceCleanup
 
 
-def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None):
+def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None, fail_ok=False):
     """
         Verify the heat resource creation/deletion for given resources
 
@@ -25,119 +25,102 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
             template_name (str): template to be used to create heat stack.
             stack_name(str): stack name used to create the stack
             auth_info
+            fail_ok
 
         Returns (int): return 0 if success 1 if failure
 
     """
+    LOG.info("Verifying heat resource {}".format(to_verify))
+
+    rtn_code = 0
+    msg = "Heat resource {} appeared".format(to_verify)
+    item_verified = to_verify
 
     if to_verify is 'volume':
         LOG.info("Verifying volume")
         vol_name = getattr(Heat, template_name)['vol_name']
-        volume_id = cinder_helper.get_volumes(name=vol_name)
-        if volume_id:
-            return 0
+        resource_found = cinder_helper.get_volumes(name=vol_name)
+
     elif to_verify is 'ceilometer_alarm':
-        LOG.info("Verifying ceilometer")
         table = ceilometer_helper.get_alarms()
-        alarm_id = table_parser.get_values(table, 'Alarm ID', Name=stack_name, strict=False)
-        if alarm_id:
-            return 0
+        resource_found = table_parser.get_values(table, 'Alarm ID', Name=stack_name, strict=False)
+
     elif to_verify is 'neutron_port':
         port_name = getattr(Heat, template_name)['port_name']
         if port_name is None:
             port_name = stack_name
-        LOG.info("Verifying neutron port")
-        port_id = network_helper.get_neutron_port(name=port_name)
-        if port_id:
-            return 0
+        resource_found = network_helper.get_neutron_port(name=port_name)
+
     elif to_verify is 'neutron_provider_net':
-        LOG.info("Verifying neutron provider net")
-        net_id = network_helper.get_providernets(name='physnetX')
-        if net_id:
-            return 0
+        resource_found = network_helper.get_providernets(name='physnetX')
+
     elif to_verify is 'neutron_provider_net_range':
-        LOG.info("Verifying neutron provider net range")
-        net_range = network_helper.get_providernet_ranges_dict(providernet_name='sample_physnet_X')
-        if net_range:
-            return 0
+        resource_found = network_helper.get_providernet_ranges_dict(providernet_name='sample_physnet_X')
+
     elif to_verify is 'nova_server_group':
-        LOG.info("Verifying nova server group")
-        server_group_id = nova_helper.get_server_groups(name=stack_name)
-        if server_group_id:
-            return 0
+        resource_found = nova_helper.get_server_groups(name=stack_name)
+
     elif to_verify is 'vm':
         vm_name = getattr(Heat, template_name)['vm_name']
-        LOG.info("Verifying server")
-        vm_id = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
-        if vm_id:
-            return 0
+        resource_found = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
+
     elif to_verify is 'nova_flavor':
-        LOG.info("Verifying nova flavor")
-        flavor_id = nova_helper.get_flavor_id(name='sample-flavor')
-        if flavor_id:
-            return 0
+        resource_found = nova_helper.get_flavor_id(name='sample-flavor')
+
     elif to_verify is 'neutron_net':
-        LOG.info("Verifying neutron net")
-        net_id = network_helper.get_tenant_net_id(net_name='sample-net')
-        if net_id:
-            return 0
+        resource_found = network_helper.get_tenant_net_id(net_name='sample-net')
+
     elif to_verify is 'image':
-        LOG.info("Verifying glance image")
-        image_id = glance_helper.get_image_id_from_name(name='sample_image')
-        if image_id:
-            return 0
+        resource_found = glance_helper.get_image_id_from_name(name='sample_image')
+
     elif to_verify is 'subnet':
-        LOG.info("Verifying subnet image")
-        subnet_id = network_helper.get_subnets(name='sample_subnet')
-        if subnet_id:
-            return 0
+        resource_found = network_helper.get_subnets(name='sample_subnet')
+
     elif to_verify is 'floating_ip':
-        LOG.info("Verifying floating ip")
-        floating_ip_id = network_helper.get_floating_ips()
-        if floating_ip_id:
-            return 0
+        resource_found = network_helper.get_floating_ips()
+
     elif to_verify is 'router':
-        LOG.info("Verifying router")
-        router_id = network_helper.get_tenant_router(router_name='sample_router', auth_info=auth_info)
-        if router_id:
-            return 0
+        resource_found = network_helper.get_tenant_router(router_name='sample_router', auth_info=auth_info)
+
     elif to_verify is 'router_gateway':
-        LOG.info("Verifying router gateway")
-        router_id = network_helper.get_tenant_router(router_name='sample_gateway_router', auth_info=auth_info)
-        if not router_id:
-            return 1
-        gateway_info = network_helper.get_router_ext_gateway_info(router_id=router_id, auth_info=auth_info)
-        if gateway_info:
-            return 0
+        item_verified = 'sample_gateway_router'
+        resource_found = network_helper.get_tenant_router(router_name='sample_gateway_router', auth_info=auth_info)
+        if resource_found:
+            item_verified = to_verify
+            resource_found = network_helper.get_router_ext_gateway_info(router_id=resource_found, auth_info=auth_info)
+
     elif to_verify is 'router_interface':
-        LOG.info("Verifying router interface")
+        item_verified = 'sample_if_router'
         router_id = network_helper.get_tenant_router(router_name='sample_if_router', auth_info=auth_info)
-        if not router_id:
-            return 1
-        LOG.info("Verifying subnet")
-        subnet_id = network_helper.get_subnets(name='sample_if_subnet', auth_info=auth_info)
-        if not subnet_id:
-            return 1
-        router_subnets = network_helper.get_router_subnets(router_id=router_id, auth_info=auth_info)
-        if subnet_id[0] in router_subnets:
-            return 0
+        resource_found = router_id
+        if resource_found:
+            item_verified = 'sample_if_subnet'
+            subnets = network_helper.get_subnets(name='sample_if_subnet', auth_info=auth_info)
+            resource_found = subnets
+            if resource_found:
+                item_verified = to_verify
+                router_subnets = network_helper.get_router_subnets(router_id=router_id, auth_info=auth_info)
+                resource_found = resource_found[0] in router_subnets
+
     elif to_verify is 'security_group':
-        LOG.info("Verifying neutron security group")
-        security_group = network_helper.get_security_group(name='SecurityGroupDeluxe')
-        if security_group:
-            return 0
+        resource_found = network_helper.get_security_group(name='SecurityGroupDeluxe')
     elif to_verify is 'key_pair':
         kp_name = getattr(Heat, template_name)['key_pair_name']
-        LOG.info("Verifying nova key pair")
-        key_pair_name = nova_helper.get_key_pair(name=kp_name)
-        if key_pair_name:
-            return 0
+        resource_found = nova_helper.get_key_pair(name=kp_name)
     elif to_verify is 'neutron_qos':
-        LOG.info("Verifying neutron qos policy")
-        qos_id = network_helper.get_qos(name='SampleQoS', auth_info=auth_info)
-        if qos_id:
-            return 0
-    return 1
+        resource_found = network_helper.get_qos(name='SampleQoS', auth_info=auth_info)
+    else:
+        raise ValueError("Unknown item to verify: {}".format(to_verify))
+
+    if not resource_found:
+        msg = "Heat stack {} resource {} does not exist".format(stack_name, item_verified)
+        if fail_ok:
+            rtn_code = 1
+        else:
+            assert resource_found, msg
+
+    LOG.info(msg)
+    return rtn_code, msg
 
 
 def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False, auth_info=Tenant.ADMIN):
@@ -172,18 +155,21 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
     exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok,
                                 auth_info=auth_info, rtn_list=True)
 
-    # See how long it takes to apply the update
-    start_time = time.time()
-
     if exitcode == 1:
         LOG.warning("Update heat stack request rejected.")
-        return [1, output]
-    LOG.info("Stack {} updated sucessfully.".format(stack_name))
+        return 1, output
+
+    # See how long it takes to apply the update
+    start_time = time.time()
+    LOG.info("Stack {} updated successfully.".format(stack_name))
 
     LOG.tc_step("Verifying Heat Stack Status for UPDATE_COMPLETE for updated stack %s", stack_name)
 
-    if not heat_helper.wait_for_heat_state(stack_name=stack_name, state='UPDATE_COMPLETE', auth_info=auth_info):
-        return [1, 'stack did not go to state UPDATE_COMPLETE']
+    res, msg = heat_helper.wait_for_heat_status(stack_name=stack_name, status=HeatStackStatus.UPDATE_COMPLETE,
+                                                auth_info=auth_info, fail_ok=fail_ok)
+    if not res:
+        return 2, msg
+
     LOG.info("Stack {} is in expected UPDATE_COMPLETE state.".format(stack_name))
     end_time = time.time()
 
@@ -191,15 +177,13 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
 
     for item in to_verify:
         LOG.tc_step("Verifying Heat updated resources %s for stack %s", item, stack_name)
-        verify_result = verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name,
-                                             auth_info=auth_info)
-        if verify_result is not 0:
-            LOG.warning("Verify resouces %s updated by heat stack Failed.", item)
-            return [1, "Heat resource verification failed"]
+        verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name, auth_info=auth_info,
+                             fail_ok=False)
 
-    LOG.info("Stack {} resources are updated as expected.".format(stack_name))
+    msg = "Stack {} resources are updated as expected.".format(stack_name)
+    LOG.info(msg)
 
-    return [0, 'stack_status']
+    return 0, msg
 
 
 def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, delete_after_swact=False):
@@ -214,12 +198,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
             template_name (str): template to be used to create heat stack.
             auth_info (dict): Tenant dict. If None, primary tenant will be used.
             delete_after_swact
-
-        Returns (tuple): (rnt_code (int), message (str))
-
     """
-
-    fail_ok = False
 
     t_name, yaml = template_name.split('.')
     params = getattr(Heat, t_name)['params']
@@ -243,64 +222,33 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     cmd_list.append(" %s" % stack_name)
     params_string = ''.join(cmd_list)
 
-    LOG.tc_step("Creating Heat Stack..using template %s", template_name)
-    exitcode, output = cli.heat('stack-create', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_list=True)
-    if exitcode == 1:
-        LOG.warning("Create heat stack request rejected.")
-        return [1, output]
-    LOG.info("Stack {} created sucessfully.".format(stack_name))
-
-    # add the heat stack name for deleteion on failure
-    ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
-
-    LOG.tc_step("Verifying Heat Stack Status for CREATE_COMPLETE for stack %s", stack_name)
-
-    if not heat_helper.wait_for_heat_state(stack_name=stack_name, state='CREATE_COMPLETE', auth_info=auth_info):
-        return [1, 'stack did not go to state CREATE_COMPLETE']
-    LOG.info("Stack {} is in expected CREATE_COMPLETE state.".format(stack_name))
+    LOG.tc_step("Creating Heat Stack using template %s", template_name)
+    heat_helper.create_stack(stack_name=stack_name, params_string=params_string, cleanup='function',
+                             auth_info=auth_info, con_ssh=con_ssh)
 
     for item in to_verify:
         LOG.tc_step("Verifying Heat created resources %s for stack %s", item, stack_name)
-        verify_result = verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name,
-                                             auth_info=auth_info)
-        if verify_result is not 0:
-            LOG.warning("Verify resouces %s created by heat stack Failed.", item)
-            return [1, "Heat resource verification failed"]
-
+        verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name, auth_info=auth_info)
     LOG.info("Stack {} resources are created as expected.".format(stack_name))
 
     if hasattr(HeatUpdate, t_name):
         LOG.tc_step("Updating stack %s", stack_name)
-        update_code, update_msg = update_stack(stack_name, template_name, ssh_client=con_ssh, auth_info=auth_info,
-                                               fail_ok=fail_ok)
-        if update_code == 1:
-            return [1, update_msg] 
+        update_stack(stack_name, template_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=False)
 
     if delete_after_swact:
-        swact_result = host_helper.swact_host()
-        if swact_result is 0:
-            return [1, "swact host failed"]
+        host_helper.swact_host()
 
     LOG.tc_step("Delete heat stack {} ".format(stack_name))
-    del_res, del_output = heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=True)
-    if del_res > 0:
-        LOG.info("Stack {} delete failed.".format(stack_name))
-        output = "Stack {} delete failed".format(stack_name)
-        return [1, output]
+    heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=False)
 
     LOG.info("Stack {} deleted successfully.".format(stack_name))
 
     LOG.tc_step("Verifying resource deletion after heat stack {} is deleted".format(stack_name))
     for item in to_verify:
         LOG.tc_step("Verifying Heat resources deletion %s for stack %s", item, stack_name)
-        verify_result = verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name,
-                                             auth_info=auth_info)
-        if verify_result is not 1:
-            LOG.warning("Verify resouces %s deletion by heat stack Failed.", item)
-            return [1, output]
-
-    return [0, 'stack_status']
+        code, msg = verify_heat_resource(to_verify=item, template_name=t_name, stack_name=stack_name, fail_ok=True,
+                                         auth_info=auth_info)
+        assert 1 == code, "Heat resource {} still exist after stack {} deletion".format(item, stack_name)
 
 
 @fixture(scope='module', autouse=True)
@@ -321,9 +269,6 @@ def revert_quota(request):
     return tenants_quotas
 
 
-# Overall skipif condition for the whole test function (multiple test iterations)
-# This should be a relatively static condition.i.e., independent with test params values
-# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
     mark.sanity('WR_Neutron_ProviderNetRange.yaml'),
@@ -384,16 +329,9 @@ def test_heat_template(template_name, revert_quota):
         ResourceCleanup.add('image', image_id)
 
     # add test step
-    return_code, msg = verify_basic_template(template_name)
-
-    # Verify test results using assert
-    LOG.tc_step("Verify test result")
-    assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
+    verify_basic_template(template_name)
 
 
-# Overall skipif condition for the whole test function (multiple test iterations)
-# This should be a relatively static condition.i.e., independent with test params values
-# @mark.skipif(less_than_two_hypervisors(), reason="Less than 2 hypervisor hosts on the system")
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
     mark.nightly('OS_Cinder_Volume.yaml'),
@@ -422,11 +360,4 @@ def test_delete_heat_after_swact(template_name):
         skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     # add test step
-    return_code, msg = verify_basic_template(template_name, delete_after_swact=True)
-
-    # Verify test results using assert
-    LOG.tc_step("Verify test result")
-    assert 0 == return_code, "Expected return code {}. Actual return code: {}; details: {}".format(0, return_code, msg)
-
-
-########################################################################################################################
+    verify_basic_template(template_name, delete_after_swact=True)

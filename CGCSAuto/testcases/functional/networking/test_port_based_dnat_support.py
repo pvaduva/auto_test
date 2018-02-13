@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils.ssh import NATBoxClient
 from utils.multi_thread import MThread
 from consts.cgcs import FlavorSpec, Prompt
-from keywords import network_helper, vm_helper, nova_helper, cinder_helper
+from keywords import network_helper, vm_helper, nova_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 GUEST_OS = 'ubuntu_14'
@@ -54,6 +54,8 @@ def delete_pfs(request):
 
 @fixture(scope='module')
 def get_vms_args():
+    glance_helper.get_guest_image(guest_os=GUEST_OS, cleanup='module')
+
     LOG.fixture_step("Create a favor with dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated-ubuntu', guest_os=GUEST_OS)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')

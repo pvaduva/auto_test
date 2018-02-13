@@ -49,7 +49,7 @@ def check_controllerfs(**kwargs):
             fs_name = fs + "-lv"
             expected_size = int(kwargs[fs])
 
-        cmd = "lvs --noheadings -o lv_size -S lv_name={}".format(fs_name)
+        cmd = "lvs --units g --noheadings -o lv_size -S lv_name={}".format(fs_name)
         rc, out = con_ssh.exec_sudo_cmd(cmd)
 
         actual_size = re.match(r'[\d]+', out.lstrip())

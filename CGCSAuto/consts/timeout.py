@@ -71,7 +71,7 @@ class ImageTimeout:
 class EventLogTimeout:
     HEARTBEAT_ESTABLISH = 300
     HEALTH_CHECK_FAIL = 60
-    VM_REBOOT_EVENT = 60
+    VM_REBOOT = 60
     NET_AGENT_NOT_RESPOND_CLEAR = 120
 
 

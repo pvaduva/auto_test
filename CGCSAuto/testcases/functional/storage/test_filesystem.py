@@ -7,7 +7,7 @@ from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailState
-from keywords import host_helper, system_helper, local_storage_helper, install_helper, filesystem_helper
+from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -17,20 +17,24 @@ from testfixtures.recover_hosts import HostsToRecover
 
 DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
 
+
 @fixture()
 def aio_precheck():
     if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():
         skip("Test only applies to AIO-SX or AIO-DX systems")
+
 
 @fixture()
 def lvm_precheck():
     if system_helper.is_simplex() or system_helper.is_storage_system():
         skip("Test does not apply to AIO-SX systems or storage systems")
 
+
 @fixture()
 def storage_precheck():
     if not system_helper.is_storage_system():
         skip("This test only applies to storage nodes")
+
 
 @fixture()
 def freespace_check():
@@ -308,7 +312,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     DISABLE until CGTS-8424 is fixed.
     """
 
-
+    start_time = common.get_date_in_format()
     drbdfs_val = {}
     fs = "backup"
     LOG.tc_step("Increase the backup size before proceeding with rest of test")
@@ -321,13 +325,13 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     hosts = system_helper.get_controllers()
     for host in hosts:
-       system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                     entity_id="host={}".format(host))
+        system_helper.wait_for_events(event_log_id=EventLogID.CONFIG_OUT_OF_DATE, start=start_time,
+                                      entity_instance_id="host={}".format(host), strict=False, **{'state': 'set'})
 
     for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host),
-                                         timeout=600)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host),
+                                          timeout=600)
 
     LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
     filesystem_helper.check_controllerfs(**drbdfs_val)
@@ -404,14 +408,13 @@ def _test_modify_drdb():
     cgcs_free_space = math.trunc(backup_freespace / 2)
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
-    rc, out = con_ssh.exec_cmd(cmd)
-
+    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     hosts = system_helper.get_controllers()
     for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host),
-                                         timeout=600)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host),
+                                          timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
     host_helper.wait_for_host_states(standby_cont, availability=HostAvailState.AVAILABLE)
     host_helper.swact_host()
@@ -478,8 +481,7 @@ def _test_increase_cinder():
                                           entity_id="host={}".format(host))
 
     LOG.tc_step("Validate cinder size is increased")
-    table_= table_parser.table(cli.system("storage-backend-show lvm"))
-    cinder_gib2 = table_parser.get_value_two_col_table(table_, "cinder_gib")
+    cinder_gib2 = storage_helper.get_storage_backend_show_vals(backend='lvm', fields='cinder_gib')
     LOG.info("cinder is currently {}".format(cinder_gib2))
     assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
 

@@ -22,6 +22,7 @@ class ProjVar:
                   'REGION': 'RegionOne',
                   'COLLECT_TELNET': False,
                   'TELNET_THREADS': None,
+                  'SYS_TYPE': None,
                   }
 
     @classmethod
@@ -38,6 +39,7 @@ class ProjVar:
             'LAB_NAME': lab['short_name'],
             'TEMP_DIR': logdir + '/tmp_files/',
             'PING_FAILURE_DIR': logdir + '/ping_failures/',
+            'GUEST_LOGS_DIR': logdir + '/guest_logs/',
             'PRIMARY_TENANT': tenant,
             'LAB': lab,
             'BOOT_VMS': is_boot,

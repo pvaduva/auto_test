@@ -407,11 +407,7 @@ def config_controller(stream, default=True, release='R5', config_file=None, back
     # TODO:Currently only uses config_file and default as optional arguments
     args = ''
     if config_file:
-        ret = serial.send_bytes(stream, "ls", prompt='TiS_config.ini_centos', fail_ok=True, timeout=10)
-        if ret != 0:
-            args += ' --default'
-        else:
-            args += '--config-file ' + config_file
+        args += '--config-file ' + config_file
     if release != 'R5':
         ret = serial.send_bytes(stream, "ls", prompt='license.lic', fail_ok=True, timeout=10)
         if ret != 0:

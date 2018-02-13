@@ -3,12 +3,11 @@ import time
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
-from utils import table_parser
 
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import MinCPUErr       # Do not remove this import, used by eval()
 from keywords import nova_helper, vm_helper, host_helper, check_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 @mark.parametrize(('vcpu_num', 'cpu_policy', 'min_vcpus', 'expected_err'), [
@@ -118,6 +117,7 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
+    GuestLogs.add(vm_id)
     time.sleep(10)
     # # Workaround due to CGTS-5755
     # if min_vcpus:
@@ -215,6 +215,7 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
 
     LOG.tc_step("Check vm vcpus in nova show did not change")
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+    GuestLogs.remove(vm_id)
 
 
 @fixture(scope='module')
@@ -276,6 +277,7 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
                              vm_host=vm_host, fail_ok=False)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
 
+    GuestLogs.add(vm_1)
     # scale down once
     LOG.tc_step("Scale down the vm once")
     vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
@@ -340,4 +342,7 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
 
     LOG.tc_step("Resize vm (expect success)")
     vm_helper.resize_vm(vm_1, unscale_flavor, fail_ok=False)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
     check_helper.check_vm_vcpus_via_nova_show(vm_1, 4, 4, 4)
+
+    GuestLogs.remove(vm_1)

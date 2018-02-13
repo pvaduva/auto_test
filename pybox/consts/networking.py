@@ -22,22 +22,24 @@ class NICs:
             'node_type': 'controller',
             '1': {'nic': 'hostonly', 'intnet': 'none', 'nictype': '82540EM', 'nicpromisc': 'deny', 'hostonlyadapter': 'VirtualBox Host-Only Ethernet Adapter'},
             '2': {'nic': 'intnet', 'intnet': 'intnet-management', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
-            '3': {'nic': 'intnet', 'intnet': 'intnet-infra', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+            '3': {'nic': 'intnet', 'intnet': 'intnet-data1', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+            '4': {'nic': 'intnet', 'intnet': 'intnet-data2', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
         }
     else:
         CONTROLLER = {
             'node_type': 'controller',
             '1': {'nic': 'hostonly', 'intnet': 'none', 'nictype': '82540EM', 'nicpromisc': 'deny', 'hostonlyadapter': 'vboxnet0'},
             '2': {'nic': 'intnet', 'intnet': 'intnet-management', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
-            '3': {'nic': 'intnet', 'intnet': 'intnet-infra', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+            '3': {'nic': 'intnet', 'intnet': 'intnet-data1', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+            '4': {'nic': 'intnet', 'intnet': 'intnet-data2', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
         }
 
     COMPUTE = {
         'node_type': 'compute',
         '1': {'nic': 'intnet', 'intnet': 'intnet-unused1', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
         '2': {'nic': 'intnet', 'intnet': 'intnet-management', 'nictype': '82540EM', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
-        '3': {'nic': 'intnet', 'intnet': 'intnet-data7', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
-        '4': {'nic': 'intnet', 'intnet': 'intnet-data8', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+        '3': {'nic': 'intnet', 'intnet': 'intnet-data1', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
+        '4': {'nic': 'intnet', 'intnet': 'intnet-data2', 'nictype': 'virtio', 'nicpromisc': 'allow-all', 'hostonlyadapter': 'none'},
     }
 
     STORAGE = {

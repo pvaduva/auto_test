@@ -3,7 +3,8 @@ import re
 import time
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import UUID, Prompt, Networks
+from consts.cgcs import UUID, Prompt, Networks, SysType
+from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
@@ -55,8 +56,39 @@ def _get_info_non_cli(cmd, con_ssh=None, use_telnet=False, con_telnet=None):
     return output
 
 
-def is_storage_system(con_ssh=None):
-    return bool(get_storage_nodes(con_ssh=con_ssh))
+def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None):
+    """
+    Please do NOT call this function in testcase/keyword. This is used to set global variable SYS_TYPE in ProjVar.
+    Use ProjVar.get_var('SYS_TYPE') in testcase/keyword instead.
+    Args:
+        con_ssh:
+        use_telnet:
+        con_telnet:
+
+    Returns:
+
+    """
+    is_aio = is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+    if is_aio:
+        sys_type = SysType.AIO_DX
+        if len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 1:
+            sys_type = SysType.AIO_SX
+    elif get_storage_nodes(con_ssh=con_ssh):
+        sys_type = SysType.STORAGE
+    else:
+        sys_type = SysType.REGULAR
+
+    # TODO: multi-region
+    LOG.info("=============System type: {} ==============".format(sys_type))
+    return sys_type
+
+
+def is_storage_system(con_ssh=None, use_telnet=False, con_telnet=None):
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return SysType.STORAGE == sys_type
+    else:
+        return bool(get_storage_nodes(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet))
 
 
 def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None):
@@ -68,12 +100,20 @@ def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None):
     Returns (bool):
 
     """
-    return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return SysType.AIO_DX == sys_type
+    else:
+        return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
            and len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 2
 
 
 def is_simplex(con_ssh=None, use_telnet=False, con_telnet=None):
-    return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return SysType.AIO_SX == sys_type
+    else:
+        return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
            and len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 1
 
 
@@ -87,6 +127,10 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
     Returns (bool): True if CPE or Simplex, else False
 
     """
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    if sys_type:
+        return 'aio' in sys_type.lower()
+
     table_ = table_parser.table(cli.system('host-show', controller, ssh_client=controller_ssh,
                                            use_telnet=use_telnet, con_telnet=con_telnet))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
@@ -99,7 +143,7 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
     return combined
 
 
-def get_storage_nodes(con_ssh=None):
+def get_storage_nodes(con_ssh=None, use_telnet=False, con_telnet=None):
     """
     Get hostnames with 'storage' personality from system host-list
     Args:
@@ -108,7 +152,7 @@ def get_storage_nodes(con_ssh=None):
     Returns (list): list of hostnames. Empty list [] returns when no storage nodes.
 
     """
-    return get_hostnames(personality='storage', con_ssh=con_ssh)
+    return get_hostnames(personality='storage', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
 
 def get_controllers(con_ssh=None, use_telnet=False, con_telnet=None):
@@ -220,8 +264,7 @@ def get_active_controller_name(con_ssh=None, use_telnet=False, con_telnet=None, 
     Returns: hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
-    return _get_active_standby(controller='active', con_ssh=con_ssh, use_telnet=use_telnet,
-                               con_telnet=con_telnet,  source_auth_info=source_auth_info)[0]
+    return _get_active_standby(controller='active', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)[0]
 
 
 def get_standby_controller_name(con_ssh=None, use_telnet=False, con_telnet=None):
@@ -233,24 +276,18 @@ def get_standby_controller_name(con_ssh=None, use_telnet=False, con_telnet=None)
     Returns (str): hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
     """
-    standby = _get_active_standby(controller='standby', con_ssh=con_ssh, use_telnet=use_telnet,
-                                  con_telnet=con_telnet)
+    standby = _get_active_standby(controller='standby', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     return '' if len(standby) == 0 else standby[0]
 
 
-def _get_active_standby(controller='active', con_ssh=None, use_telnet=False, con_telnet=None,
-                        source_auth_info=False):
-
-    output = cli.system('servicegroup-list', ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
-    LOG.info("system servicegroup list: \n{}".format(output))
-
-    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh,
-                                           use_telnet=use_telnet, con_telnet=con_telnet))
+def _get_active_standby(controller='active', con_ssh=None, use_telnet=False, con_telnet=None):
+    table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh, use_telnet=use_telnet,
+                                           con_telnet=con_telnet))
 
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
-    LOG.debug(" controller services: {}".format(table_))
     controllers = table_parser.get_values(table_, 'hostname', state=controller, strict=False)
     LOG.debug(" {} controller(s): {}".format(controller, controllers))
+
     if isinstance(controllers, str):
         controllers = [controllers]
 
@@ -962,9 +999,10 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
     Sets the PM retention period
     Args:
         period (int): the length of time to set the retention period (in seconds)
+        name
         fail_ok: True or False
         check_first: True or False
-        con_ssh (str):
+        con_ssh (SSHClient):
         auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
 
     Returns (tuple): (rtn_code (int), msg (str))
@@ -988,6 +1026,7 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
 
     section = 'database'
     if name in ('metering_time_to_live'):
+        name = 'metering_time_to_live'
         service = 'ceilometer'
     elif name == 'alarm_history_time_to_live':
         service = 'aodh'
@@ -1008,6 +1047,7 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
     if code == 1:
         return 2, output
 
+    LOG.info("Start post check after applying new value for {}".format(name))
     new_retention = get_retention_period(name=name)
 
     if period != new_retention:
@@ -1017,7 +1057,32 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
             return 3, err_msg
         raise exceptions.CeilometerError(err_msg)
 
+    conf_file = '/etc/{}/{}.conf'.format(service, service)
+    wait_for_file_update(file_path=conf_file, grep_str=name, expt_val=period, fail_ok=False, ssh_client=con_ssh)
+
     return 0, "{} {} is successfully set to: {}".format(service, name, new_retention)
+
+
+def wait_for_file_update(file_path, grep_str, expt_val, timeout=300, fail_ok=False, ssh_client=None):
+    LOG.info("Wait for {} to be updated to {} in {}".format(grep_str, expt_val, file_path))
+    if not ssh_client:
+        ssh_client = ControllerClient.get_active_controller()
+
+    pattern = '{}.*=(.*)'.format(grep_str)
+    end_time = time.time() + timeout
+    value = None
+    while time.time() < end_time:
+        output = ssh_client.exec_sudo_cmd('grep "^{}" {}'.format(grep_str, file_path), fail_ok=False)[1]
+        value = int((re.findall(pattern, output)[0]).strip())
+        if expt_val == value:
+            return True, value
+        time.sleep(5)
+
+    msg = "Timed out waiting for {} to reach {} in {}. Actual: {}".format(grep_str, expt_val, file_path, value)
+    if fail_ok:
+        LOG.warning(msg)
+        return False, value
+    raise exceptions.SysinvError(msg)
 
 
 def get_retention_period(name='metering_time_to_live', con_ssh=None):
@@ -2262,9 +2327,14 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
 
-def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None):
-    rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True, source_creden_=source_creden_)
-
+def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None,upgrade_ver=None):
+    if upgrade_ver >= '17.07':
+        load_path = '/home/wrsroot/bootimage.sig'
+        rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
+                                source_creden_=source_creden_)
+    else:
+        rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True,
+                            source_creden_=source_creden_)
     if rc == 0:
         table_ = table_parser.table(output)
         id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()

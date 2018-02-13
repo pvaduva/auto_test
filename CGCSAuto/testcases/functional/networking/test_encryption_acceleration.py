@@ -1,7 +1,7 @@
 from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, DevClassIds
+from consts.cgcs import FlavorSpec, DevClassID
 from keywords import network_helper, vm_helper, nova_helper, system_helper, host_helper, cinder_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -28,7 +28,8 @@ def hosts_pci_device_info():
 
     if not hosts_device_info:
         skip("co-proccessor PCI device not found")
-    
+
+    vm_helper.ensure_vms_quotas(vms_num=20)
     return hosts_device_info
 
 
@@ -192,7 +193,7 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_info, enable_device_an
     device_address = hosts_pci_device_info[vm_host][0]['pci_address']
 
     host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                              **{'class id': DevClassIds.QAT_VF})[0]
+                                                              **{'class id': DevClassID.QAT_VF})[0]
     expt_qat_devs = {host_dev_name: 1}
     check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
 
@@ -298,13 +299,13 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         vm_host = nova_helper.get_vm_host(vm_id)
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+                                                                  **{'class id': DevClassID.QAT_VF})[0]
         expt_qat_devs = {host_dev_name: vfs}
-        # 32 qat-vfs takes more than 1 hour to run tests
-        # check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=1800)
+        # 32 qat-vfs takes more than 1.5 hours to run tests
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, run_cpa=False)
 
         _perform_nova_actions(vms_dict={vm_name: vm_id}, flavors=_flavors, vfs=vfs)
-        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=5400)
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=10800)
 
 
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
@@ -351,7 +352,7 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
         vms[vm_name] = vm_id
         vm_host = nova_helper.get_vm_host(vm_id)
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+                                                                  **{'class id': DevClassID.QAT_VF})[0]
         expt_qat_devs = {} if '_no_crypto' in vm_name else {host_dev_name: 1}
         vms_qat_devs[vm_id] = expt_qat_devs
         check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs)
@@ -398,28 +399,24 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': 'avp'}]
 
-    quota_instance = number_of_vms if number_of_vms > 20 else 20
-    quota_cores = quota_instance * 4
-    nova_helper.update_quotas(instances=quota_instance, cores=quota_cores)
-    cinder_helper.update_quotas(volumes=quota_instance)
+    vm_helper.ensure_vms_quotas(number_of_vms + 10)
 
     vms = {}
+    LOG.tc_step("Launch {} vms using flavor flavor_qat_vf_4 and nics {}".format(number_of_vms, nics))
     for i in range(1, number_of_vms + 1):
         vm_name = 'vm_crypto_{}'.format(i)
-        LOG.tc_step("( Booting  a vm {} using flavor flavor_qat_vf_4 and nics {}".format(vm_name, nics))
         vm_id = vm_helper.boot_vm(cleanup='function', name='vm_crypto_{}'.format(i), nics=nics, flavor=flavor_id)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         vms[vm_name] = vm_id
 
     for vm_name_, vm_id_ in vms.items():
-
-        LOG.tc_step("Checking if other host has room for cold migrate vm")
         vm_host = nova_helper.get_vm_host(vm_id_)
         host_dev_name = system_helper.get_host_device_list_values(vm_host, field='device name',
-                                                                  **{'class id': DevClassIds.QAT_VF})[0]
+                                                                  **{'class id': DevClassID.QAT_VF})[0]
         expt_qat_devs = {host_dev_name: 4}
         check_helper.check_qat_service(vm_id=vm_id_, qat_devs=expt_qat_devs)
 
+        LOG.info("Checking if other host has room for cold migrate vm {}".format(vm_name_))
         for host_ in crypto_hosts:
             if host_ != vm_host:
                 total_vfs, used_vfs = network_helper.get_pci_device_vfs_counts_for_host(
@@ -433,12 +430,13 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
             LOG.info("Migrate to other host is not possible")
             expt_res = 2
 
-        LOG.tc_step("Attempt to cold migrate {}".format(vm_id_))
+        LOG.tc_step("Attempt to cold migrate {} and ensure it {}".format(vm_name_,
+                                                                         'succeeds' if expt_res == '0' else 'fails'))
         rc, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_,  fail_ok=True)
         assert expt_res == rc, "Expected: {}. Actual: {}".format(expt_res, msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)
 
-        LOG.tc_step("Attempt to suspend/resume VM {} ....".format(vm_name_))
+        LOG.tc_step("Suspend/resume VM {} ....".format(vm_name_))
         vm_helper.suspend_vm(vm_id_)
         vm_helper.resume_vm(vm_id_)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)
@@ -447,10 +445,9 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
         # total, used = network_helper.get_pci_device_vfs_counts_for_host(vm_host, vf_device_id)[0]
         # if (total - int(used)) >= 4:
         #     expt_res = 0
-        LOG.tc_step("Attempting to resize cpu and memory of VM {} ....".format(vm_name_))
-        flavor_resize_id = _flavors['flavor_resize_qat_vf_4']
 
-        LOG.info("Resizing VM to new flavor {} ...".format(flavor_resize_id))
+        flavor_resize_id = _flavors['flavor_resize_qat_vf_4']
+        LOG.tc_step("Resize VM {} to new flavor {} with increased memory...".format(vm_name_, flavor_resize_id))
         vm_helper.resize_vm(vm_id_, flavor_resize_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)
 
@@ -458,7 +455,7 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
         #     expt_res = 1
         #     LOG.info("Resizing of vm {} skipped; host {} max out vfs; used vfs = {}".format(vm_name_, vm_host, used))
 
-        LOG.tc_step("Attempt to live migrate {}".format(vm_id_))
+        LOG.tc_step("Attempt to live migrate {} and ensure it's rejected".format(vm_name_))
         rc, msg = vm_helper.live_migrate_vm(vm_id=vm_id_, fail_ok=True)
         assert 6 == rc, "Expect live migration to fail on vm with pci alias device. Actual: {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id_)
@@ -478,7 +475,7 @@ def check_device_list_against_pci_list(lspci_list_info, sysinv_device_list_tab):
     """
 
     LOG.info("Checking all devices are included in the list")
-    sysinv_device_list_tab = table_parser.filter_table(sysinv_device_list_tab, **{'class id': DevClassIds.QAT_VF})
+    sysinv_device_list_tab = table_parser.filter_table(sysinv_device_list_tab, **{'class id': DevClassID.QAT_VF})
 
     assert len(lspci_list_info) == len(sysinv_device_list_tab['values']), \
         "host devices list:{} and pci list:{} mismatch".format(sysinv_device_list_tab['values'], lspci_list_info)

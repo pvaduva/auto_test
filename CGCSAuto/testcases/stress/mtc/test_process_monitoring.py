@@ -755,12 +755,13 @@ class MonitoredProcess:
 
         quorum = int(getattr(self, 'quorum', 0))
         if quorum > 0:
-            retries = retries + 1 + 1
+            retries = retries + 1
             mode = getattr(self, 'mode', 'passive')
             if 'active' == mode:
                 wait_after_each_kill += 5
-            # have to kill 1 more time for mtcClient
-            retries += 1
+
+        # have to kill 1 more time for mtcClient
+        retries += 2
 
         LOG.info('retries={}, interval={}, debounce={}, wait_each_kill={}'.format(
             retries, interval, debounce, wait_after_each_kill))
@@ -771,6 +772,7 @@ class MonitoredProcess:
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
                     retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
 

@@ -89,13 +89,15 @@ class ImageDownload:
     LOG_PATH = '/var/log/cinder/cinder-volume.log'
     GREP_PATTERN = 'Image download .* at'
     PYTHON_PATTERN = 'Image download .* at (.*) MB/s'
+    UNIT = 'Rate(MB/s)'
 
 
 class ImageConversion:
-    NAME = 'image_conversion((MB/s))'
+    NAME = 'image_conversion(MB/s)'
     LOG_PATH = '/var/log/cinder/cinder-volume.log'
     GREP_PATTERN = 'Converted .* at'
     PYTHON_PATTERN = 'Converted .* image at (.*) MB/s'
+    UNIT = 'Rate(MB/s)'
 
 
 class VmStartup:
@@ -127,6 +129,10 @@ class LiveMigrate:
 
 class ColdMigrate:
     NAME = 'cold_migrate_{}'
+
+
+class Rebuild:
+    NAME = 'rebuild_{}'
 
 
 class Evacuate:

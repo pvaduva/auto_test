@@ -51,7 +51,7 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
     }
     number_of_hosts = host_num_mapping[number_of_hosts]
 
-    hosts_with_backing = host_helper.get_hosts_by_storage_aggregate(instance_backing)
+    hosts_with_backing = host_helper.get_hosts_in_storage_aggregate(instance_backing)
     if len(hosts_with_backing) >= number_of_hosts:
         LOG.info("Already have {} hosts in {} backing. Do nothing".format(len(hosts_with_backing), instance_backing))
         return
@@ -77,7 +77,7 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
         host_helper.wait_for_host_in_aggregate(host, storage_backing=instance_backing)
 
     LOG.tc_step("Check number of {} hosts is at least {}".format(instance_backing, number_of_hosts))
-    assert number_of_hosts <= len(host_helper.get_hosts_by_storage_aggregate(instance_backing)), \
+    assert number_of_hosts <= len(host_helper.get_hosts_in_storage_aggregate(instance_backing)), \
         "Number of {} hosts is less than {} after configuration".format(instance_backing, number_of_hosts)
 
 
@@ -139,7 +139,7 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
     LOG.tc_step("Calculate the hosts to be configured based on test params")
     candidate_hosts = get_candidate_hosts(number_of_hosts=number_of_hosts)
 
-    hosts_with_backing = host_helper.get_hosts_by_storage_aggregate(instance_backing)
+    hosts_with_backing = host_helper.get_hosts_in_storage_aggregate(instance_backing)
     if len(hosts_with_backing) == number_of_hosts:
         LOG.info("Already have {} hosts in {} backing. Do nothing".format(number_of_hosts, instance_backing))
         return
@@ -171,5 +171,5 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         host_helper.wait_for_host_in_aggregate(host, storage_backing=backing_to_config)
 
     LOG.tc_step("Check number of {} hosts is {}".format(instance_backing, number_of_hosts))
-    assert number_of_hosts == len(host_helper.get_hosts_by_storage_aggregate(instance_backing)), \
+    assert number_of_hosts == len(host_helper.get_hosts_in_storage_aggregate(instance_backing)), \
         "Number of {} hosts is not {} after configuration".format(instance_backing, number_of_hosts)

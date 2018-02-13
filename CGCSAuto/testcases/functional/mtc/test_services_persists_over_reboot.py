@@ -56,7 +56,7 @@ def test_system_persist_over_host_reboot(host_type):
     host_helper.wait_for_hosts_ready(host)
 
     LOG.tc_step("Check vm is still active and pingable after {} reboot".format(host))
-    vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
+    vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     LOG.tc_step("Check neutron agents and system services are in good state after {} reboot".format(host))
