@@ -77,15 +77,12 @@ class InstallVars:
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume, skip_labsetup,
+    def set_install_vars(cls, lab, resume, skip_labsetup, wipedisk,
                          build_server=None,
                          host_build_dir=None,
                          guest_image=None,
                          files_server=None,
-                         hosts_bulk_add=None,
-                         boot_if_settings=None,
-                         tis_config=None,
-                         lab_setup=None,
+                         files_dir=None,
                          heat_templates=None,
                          license_path=None,
                          out_put_dir=None,
@@ -95,31 +92,30 @@ class InstallVars:
                          ceph_mon_gib=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+        __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH
+        __files_server = files_server if files_server else __build_server
+        __files_dir = files_dir if files_dir else \
+            "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
 
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
             'SKIP_LABSETUP': skip_labsetup,
+            'WIPEDISK': wipedisk,
 
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR': host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
+            'TIS_BUILD_DIR': __host_build_dir,
 
             # Files paths
-            'FILES_SERVER': files_server if files_server else __build_server,
-            'DEFAULT_LAB_FILES_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(
-                    host_build_dir, lab['name']),
             # Default tuxlab for boot
             'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
 
+            'FILES_SERVER': __files_server,
+            'LAB_FILES_DIR': __files_dir,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
-            # Lab specific
-            'TIS_CONFIG': tis_config,
-            'HOSTS_BULK_ADD': hosts_bulk_add,
-            'BOOT_IF_SETTINGS': boot_if_settings,
-            'LAB_SETUP_PATH': lab_setup,
 
             # Generic
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
@@ -371,3 +367,5 @@ class BackupVars:
         for key, val in kwargs.items():
             print("Key: {} Value: {}".format(key, val))
             cls.__var_dict[key.upper()] = val
+        cls.__var_dict.update(**kwargs)
+

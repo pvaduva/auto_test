@@ -517,6 +517,27 @@ class Labs:
         'compute_nodes': [94867, 18658, 40810],
     }
 
+    WCP_113_121 = {
+        'short_name': 'wcp_113_121' ,
+        'name': 'yow-cgcs-wildcat-113_121',
+        'floating ip': '128.224.150.45',
+        'controller-0 ip': '128.224.64.12',
+        'controller-1 ip': '128.224.64.13',
+        'controller_nodes': [31701, 19174],
+        'compute_nodes': [11182, 47720, 56027, 28212, 33598],
+        'storage_nodes': [11507, 47400]
+    }
+
+    WP_3_7 = {
+        'short_name': 'wp_3_7',
+        'name': 'yow-cgcs-wolfpass-03_07',
+        'floating ip': '128.224.151.165',
+        'controller-0 ip': '128.224.151.163',
+        'controller-1 ip': '128.224.64.249',
+        'controller_nodes': [98522, 81712],
+        'compute_nodes': [94867, 18658, 40810]
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
@@ -583,7 +604,6 @@ class Labs:
     }
 
     NO_LAB = None
-
 
 def edit_lab_entry():
     # TODO
