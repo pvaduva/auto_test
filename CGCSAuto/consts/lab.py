@@ -487,6 +487,15 @@ class Labs:
         'tpm_installed': True,
     }
 
+    WCP_113_121 = {
+        'short_name': 'wcp_113_121',
+        'name': 'yow-cgcs-wildcat-113-121',
+        'floating ip': '128.224.150.45',
+        'controller-0 ip': '128.224.150.191',
+        'controller-1 ip': '128.224.150.57',
+
+    }
+
     WP_01_02 = {
         'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
