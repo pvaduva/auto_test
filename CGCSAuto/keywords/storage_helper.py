@@ -522,6 +522,7 @@ def get_storage_backend_show_vals(backend, fields, con_ssh=None):
             except:
                 pass
         vals.append(val)
+    return vals
 
 
 def get_storage_backends(con_ssh=None, **filters):

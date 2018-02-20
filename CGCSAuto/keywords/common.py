@@ -400,7 +400,7 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
     return unique_name
 
 
-def _parse_cpus_list(cpus):
+def parse_cpus_list(cpus):
     """
     Convert human friendly pcup list to list of integers.
     e.g., '5-7,41-43, 43, 45' >> [5, 6, 7, 41, 42, 43, 43, 45]

@@ -2557,7 +2557,7 @@ def get_vm_irq_info_from_hypervisor(vm_id, con_ssh=None):
                                                       fail_ok=True)
                 if code == 0:
                     cpu_list_irq = output
-                    cpu_list += common._parse_cpus_list(cpu_list_irq)
+                    cpu_list += common.parse_cpus_list(cpu_list_irq)
             pci_dev_dict['cpulist'] = sorted(list(set([int(i) for i in cpu_list])))
 
             pci_devs_dict[pci_addr] = pci_dev_dict
@@ -2656,7 +2656,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
                     # example: siblings:{0,1},{2,3},{5,6,8-10}
                     # initial value_ parsed: ['0,1', '2,3', '5,6,8-10']
                     value_ = re.findall('{([^}]*)}', value_)
-                    value_ = [common._parse_cpus_list(item) for item in value_]
+                    value_ = [common.parse_cpus_list(item) for item in value_]
                 instance_topology_dict[key_] = value_
 
             elif len(item_list) == 1:
@@ -2952,9 +2952,9 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=N
 
 
 def get_proc_nums_from_vm(vm_ssh):
-    total_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/present', fail_ok=False)[1])
-    online_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/online', fail_ok=False)[1])
-    offline_cores = common._parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/offline', fail_ok=False)[1])
+    total_cores = common.parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/present', fail_ok=False)[1])
+    online_cores = common.parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/online', fail_ok=False)[1])
+    offline_cores = common.parse_cpus_list(vm_ssh.exec_cmd('cat /sys/devices/system/cpu/offline', fail_ok=False)[1])
 
     return total_cores, online_cores, offline_cores
 
@@ -3003,7 +3003,7 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
             continue
 
         cpu_str = line.split(sep=': ')[-1].strip()
-        cpus = common._parse_cpus_list(cpus=cpu_str)
+        cpus = common.parse_cpus_list(cpus=cpu_str)
         all_cpus += cpus
 
     all_cpus = sorted(list(set(all_cpus)))

@@ -109,7 +109,7 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
 
         LOG.tc_step("Check emulator cpus is a subset of ordinary cpus")
         emulator_cpusets_str = emulatorpins[0]['cpuset']
-        emulater_cpusets = common._parse_cpus_list(emulator_cpusets_str)
+        emulater_cpusets = common.parse_cpus_list(emulator_cpusets_str)
         cpuset_dict = {}
         virsh_ord_cpus = []
         ord_cpusets = []

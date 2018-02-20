@@ -448,7 +448,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
                     vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
                                     format(cpu), fail_ok=False)[1]
 
-                    sib_for_cpu = common._parse_cpus_list(actual_sibs_for_cpu)
+                    sib_for_cpu = common.parse_cpus_list(actual_sibs_for_cpu)
                     if sib_for_cpu not in actual_sibs:
                         actual_sibs.append(sib_for_cpu)
 
