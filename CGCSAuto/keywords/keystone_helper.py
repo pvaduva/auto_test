@@ -253,7 +253,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
 
 
 def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
-                  url=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                  region=None, url=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get a list of endpoints with given arguments
     Args:
@@ -263,6 +263,7 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
         service_type(str): Service type
         enabled (str): True/False
         interface (str): Interface of endpoints. valid entries: admin, internal, public
+        region (str): RegionOne or RegionTwo
         url (str): url of endpoint
         strict(bool):
         auth_info (dict):
@@ -280,6 +281,7 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
         'Enabled': enabled,
         'Interface': interface,
         'URL': url,
+        'Region': region,
     }
 
     kwargs = {}

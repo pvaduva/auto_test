@@ -1,6 +1,8 @@
 import requests
 import json
 import re
+
+from consts.proj_vars import ProjVar
 from keywords import keystone_helper
 
 from utils.tis_log import LOG
@@ -31,15 +33,16 @@ class Rest:
         """
         self.token = ""
         self.token_payload = ""
+        self.region = ProjVar.get_var('REGION')
 
-        self.baseURL = keystone_helper.get_endpoints(
-            rtn_val='URL',
-            service_name=serviceName,
-            interface="public")[0]
-        self.ksURL = keystone_helper.get_endpoints(
-            rtn_val='URL',
-            service_name='keystone',
-            interface="public")[0]
+        self.baseURL = keystone_helper.get_endpoints(rtn_val='URL',
+                                                     service_name=serviceName,
+                                                     interface="public",
+                                                     region=self.region)[0]
+        self.ksURL = keystone_helper.get_endpoints(rtn_val='URL',
+                                                   service_name='keystone',
+                                                   interface="public",
+                                                   region=self.region)[0]
         self.generate_token_request()
         self.retrieve_token('/auth/tokens')
 
@@ -82,7 +85,7 @@ class Rest:
             headers = {'X-Auth-Token': self.token}
         else:
             headers = {'X-Auth-Token': "THISISNOTAVALIDTOKEN"}
-        return(headers)
+        return headers
 
     def get(self, resource="", auth=True):
         headers = self.auth_header_select(auth)
@@ -92,7 +95,7 @@ class Rest:
         r = requests.get(self.baseURL + resource,
                          headers=headers, verify=False)
         delta = kpi.stop()
-        return(r.status_code, r.json())
+        return r.status_code, r.json()
 
     def delete(self, resource="", auth=True):
         headers = self.auth_header_select(auth)
@@ -102,7 +105,7 @@ class Rest:
         r = requests.delete(self.baseURL + resource,
                             headers=headers, verify=True)
         delta = kpi.stop()
-        return(r.status_code, r.json())
+        return r.status_code, r.json()
 
     def patch(self, resource="", json_data={}, auth=True):
         headers = self.auth_header_select(auth)
@@ -114,7 +117,7 @@ class Rest:
                            headers=headers, data=json_data,
                            verify=True)
         delta = kpi.stop()
-        return(r.status_code, r.json())
+        return r.status_code, r.json()
 
     def put(self, resource="", json_data={}, auth=True):
         headers = self.auth_header_select(auth)
@@ -126,7 +129,7 @@ class Rest:
                          headers=headers, data=json_data,
                          verify=True)
         kpi.stop()
-        return(r.status_code, r.json())
+        return r.status_code, r.json()
 
     def post(self, resource="", json_data={}, auth=True):
         headers = self.auth_header_select(auth)
@@ -138,4 +141,4 @@ class Rest:
                           headers=headers, data=json_data,
                           verify=True)
         kpi.stop()
-        return(r.status_code, r.json())
+        return r.status_code, r.json()

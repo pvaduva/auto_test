@@ -1,4 +1,4 @@
-import time, re
+import time
 from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
@@ -60,16 +60,16 @@ def get_vlan_providernet():
     minimum_column = table_parser.get_column_index(vlan_entries_table, 'minimum')
     range_id = ''
     name = ''
-    min = 0
-    max = 0
+    min_ = 0
+    max_ = 0
     # Looping through the remaining entries and saving the one with the largest 'maximum' range value
     for entry in vlan_entries_table['values']:
         temp_max = int(entry[maximum_column])
-        if temp_max > max:
+        if temp_max > max_:
             range_id = entry[id_column]
             name = entry[providernet_name_column]
-            min = int(entry[minimum_column])
-            max = temp_max
+            min_ = int(entry[minimum_column])
+            max_ = temp_max
 
     providernet_id = network_helper.get_providernets(name)
 
@@ -79,7 +79,7 @@ def get_vlan_providernet():
     else:
         popped_entry = ''
 
-    return providernet_id, range_id, name, min, max, popped_entry
+    return providernet_id, range_id, name, min_, max_, popped_entry
 
 
 @fixture(scope='module', autouse=True)
@@ -256,7 +256,6 @@ def test_providernet_connectivity_reboot():
         hypervisors.remove(system_helper.get_active_controller_name())
         slave_computes = hypervisors
     else:
-        master_compute = hypervisors[0]
         slave_computes = hypervisors[1:]
 
     LOG.tc_step("Count pre-passed providernet tests")
@@ -270,11 +269,12 @@ def test_providernet_connectivity_reboot():
     audit_id = network_helper.schedule_providernet_connectivity_test()[1]
     slave_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id, host_name=slave_computes)
     assert not slave_status, "Connectivity test still list results for rebooting computes"
-    master_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
-                                                                             host_name=master_compute)
-    assert set(master_status) == {'UNKNOWN'}, "Master host is not in Unknown state after other computes reboot"
 
     if not small_footprint:
+        master_compute = hypervisors[0]
+        master_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
+                                                                                 host_name=master_compute)
+        assert set(master_status) == {'UNKNOWN'}, "Master host is not in Unknown state after other computes reboot"
         LOG.tc_step("Reboot the last compute host: {}".format(master_compute))
         HostsToRecover.add(master_compute)
         host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
@@ -479,7 +479,7 @@ def test_vlan_providernet_connectivity_delete_segment(create_delete_range):
     kwargs = {'segmentation_ids': '{}-{}'.format(min_range, max_range), 'status': ['PASS', 'FAIL']}
     network_helper.schedule_providernet_connectivity_test()
 
-    res_for_seg = network_helper.get_providernet_connectivity_test_results(**kwargs)
+    res_for_seg = network_helper.get_providernet_connectivity_test_results(strict=False, **kwargs)
     assert res_for_seg, "Seg range {}-{} is not listed in providernet-connectivity-test".format(min_range, max_range)
 
     LOG.tc_step("Delete the providernet range")
@@ -488,6 +488,6 @@ def test_vlan_providernet_connectivity_delete_segment(create_delete_range):
 
     network_helper.schedule_providernet_connectivity_test()
     LOG.tc_step("Verify the providernet-connectivity-test-list no longer shows the providernet range")
-    res_after_del = network_helper.get_providernet_connectivity_test_results(**kwargs)
+    res_after_del = network_helper.get_providernet_connectivity_test_results(strict=False, **kwargs)
     assert not res_after_del, "Segmentation range {}-{} is still listed in providernet-connectivity-test after " \
                               "deletion".format(min_range, max_range)

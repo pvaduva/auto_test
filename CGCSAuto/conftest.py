@@ -47,7 +47,7 @@ class MakeReport:
         if report.failed:
             global has_fail
             has_fail = True
-            msg = "\n***Failure at test {}: {}".format(call.when, call.excinfo)
+            msg = "***Failure at test {}: {}".format(call.when, call.excinfo)
             print(msg)
             LOG.debug(msg + "\n***Details: {}".format(report.longrepr))
             global tracebacks
