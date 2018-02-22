@@ -3,12 +3,11 @@ import re
 import time
 import copy
 import math
+import pexpect
 from contextlib import contextmanager
 
-from pexpect import TIMEOUT as ExpectTimeout
-
 from utils import exceptions, cli, table_parser, multi_thread
-from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, LocalHostClient
+from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
@@ -20,7 +19,7 @@ from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
-    keystone_helper, vlm_helper, storage_helper, ceilometer_helper
+    vlm_helper, storage_helper, ceilometer_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -70,8 +69,8 @@ def _set_vm_meta(vm_id, action, meta_data, check_after_set=False, con_ssh=None, 
 
     if action == 'set':
         all_set = all(k in meta_data_set for k in meta_data)
-        all_equal = all_set and \
-                    all(v == meta_data_set[k] or int(v) == int(meta_data_set[k]) for k, v in meta_data.items())
+        all_equal = \
+            all_set and all(v == meta_data_set[k] or int(v) == int(meta_data_set[k]) for k, v in meta_data.items())
         if all_set and all_equal:
             return 0, meta_data_set
 
@@ -1719,6 +1718,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         use_fip (bool): Whether to ssh to floating ip if a vm has one associated. Not applicable if vm_ip is given.
         retry (bool): whether or not to retry if fails to connect
         retry_timeout (int): max time to retry
+        close_ssh
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -2430,7 +2430,7 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
 
 def parse_cpu_list(list_in_str, prefix=''):
     results = []
-    found = re.search(r'[,]?\s*{}\s*(\d+(\d|\-|,)*)'.format(prefix), list_in_str, re.IGNORECASE)
+    found = re.search(r'[,]?\s*{}\s*(\d+(\d|-|,)*)'.format(prefix), list_in_str, re.IGNORECASE)
     if found:
         for cpus in found.group(1).split(','):
             if not cpus:
@@ -2927,7 +2927,7 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=N
             if index == 1:
                 raise exceptions.VMOperationFailed("Unable to reboot vm {}")
             vm_ssh_.parent.flush()
-        except ExpectTimeout:
+        except pexpect.TIMEOUT:
             vm_ssh_.send_control('c')
             vm_ssh_.expect()
             raise
@@ -2964,6 +2964,9 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
     cpu affinity list for vm via taskset -pc
     Args:
         vm_id (str):
+        host_ssh
+        vm_host
+        instance_name
         con_ssh (SSHClient):
 
     Returns (list): such as [10, 30]
@@ -3398,8 +3401,8 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
         dd_events = []
         for vm_id in vm_ids:
             dd_event = Events('dd started in {}'.format(vm_id))
-            dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, dd_event=dd_event, timeout=scale_out_timeout,
-                                           con_ssh=con_ssh)
+            dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, dd_event=dd_event,
+                                           timeout=scale_out_timeout, con_ssh=con_ssh)
             vms_threads.append(dd_thread)
             dd_events.append(dd_event)
 
@@ -3421,7 +3424,8 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
                 break
 
             elif current_count > len(vm_ids):
-                LOG.info("{} VMs scaled out to {}. Continue to wait for next scale out...".format(vm_name, current_count))
+                LOG.info("{} VMs scaled out to {}. Continue to wait for next scale out...".
+                         format(vm_name, current_count))
                 new_vms = list(set(current_vms) - set(vm_ids))
                 if func_second_vm and not second_vm:
                     second_vm = new_vms[0]
@@ -3513,7 +3517,8 @@ def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=120
         events = new_dd_events + [end_event]
         while time.time() < scale_up_end_time:
             time.sleep(10)
-            current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))[1]
+            current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus',
+                                                                  con_ssh=con_ssh))[1]
 
             if current_now > current_:
                 for x in range(current_now - current_):
@@ -3566,21 +3571,7 @@ def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_t
             1 second interval might have noticeable impact on the performance of pexpect.
         con_ssh (SSHClient): controller ssh client
 
-    Returns (tuple): (vm_ssh, new_thread)
-
-    Examples:
-        Sample test code to check write continues after swact:
-
-        vm_ssh, vm_thread = vm_helper.write_in_vm(vm_id, end_now_flag=True, expect_timeout=40)
-        vm_thread.end_now = False       # Initialize end_now flag
-        vm_thread.end_thread()          # Start to read the dd output
-
-        host_helper.swact_host()
-
-        vm_thread.end_now = True        # set end_now flag to True after swact completes
-        vm_thread.wait_for_thread_end(timeout=20)
-
-        assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
+    Returns (MThread): new_thread
 
     """
     if not start_event:
@@ -3923,7 +3914,8 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
 
         LOG.info("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
         vm5_name = 'image_ephemswap'
-        vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
+        vm5 = boot_vm(vm5_name, flavor_2, source='image', avail_zone=avail_zone, vm_host=target_host,
+                      cleanup=cleanup)[1]
 
         wait_for_vm_pingable_from_natbox(vm5)
         launched_vms.append(vm5)
@@ -4053,6 +4045,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         guest_os
         avail_zone:
         target_host:
+        ping_vms
         con_ssh:
         auth_info:
         cleanup
