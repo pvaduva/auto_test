@@ -507,6 +507,16 @@ class Labs:
         'system_mode': 'duplex',
     }
 
+    WP_03_07 = {
+        'short_name': 'wp_3_7',
+        'name': 'yow-cgcs-wolfpass-03_07',
+        'floating ip': '128.224.151.165',
+        'controller-0 ip': '128.224.151.163',
+        'controller-1 ip': '128.224.151.166',
+        'controller_nodes': [98522, 81712],
+        'compute_nodes': [94867, 18658, 40810],
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
