@@ -247,6 +247,15 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
         tenant_dictname = user.upper()
         Tenant.update_tenant_dict(tenant_dictname, username=name, password=password, tenant=project)
 
+    if password and user == 'admin':
+        from consts.proj_vars import ProjVar
+        if ProjVar.get_var('REGION') != 'RegionOne':
+            LOG.info("Run openstack_update_admin_password on secondary region after admin password change")
+            if not con_ssh:
+                con_ssh = ControllerClient.get_active_controller()
+            with con_ssh.login_as_root(timeout=30) as con_ssh:
+                con_ssh.exec_cmd('echo "n" | openstack_update_admin_password {}'.format(password))
+
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
     return 0, msg

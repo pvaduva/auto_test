@@ -1094,93 +1094,6 @@ def test_process_monitoring(process_name, con_ssh=None):
     User Stories:
         US61041 US66951 US18629
 
-    Test Cases:
-        sm
-        rmond
-        fsmond
-        hbsClient
-        mtcClient
-        mtcalarmd
-        sm-api
-        sm-watchdog
-        sysinv-agent
-        sw-patch-controller-daemon
-        sw-patch-agent
-        acpid
-        ceilometer-polling
-        mtclogd
-        ntpd
-        sm-eru
-        sshd
-        syslog-ng
-        io-monitor-manager
-        logmgmt
-        guestServer
-        host_agent
-        libvirtd
-        neutron-avr-agent
-        neutron-avs-agent
-        neutron-dhcp-agent
-        neutron-metadata-agent
-        neutron-sriov-nic-agent
-        nova-compute
-        vswitch
-        # postgres  SKIP as advised
-        rabbitmq-server # rabbit in SM
-        rabbit
-        sysinv-api  # sysinv-inv in SM
-        sysinv-inv
-        sysinv-conductor
-        mtc-agent
-        hbs-agent
-        hw-mon
-        dnsmasq
-        fm-mgr
-        keystone
-        glance-registry
-        glance-api
-        neutron-server
-        nova-api
-        nova-scheduler
-        nova-conductor
-        nova-cert
-        nova-console-auth
-        nova-novnc
-        cinder-api
-        cinder-scheduler
-        cinder-volume
-        ceilometer-collector
-        ceilometer-api
-        ceilometer-agent-notification
-        heat-engine
-        heat-api
-        heat-api-cfn
-        heat-api-cloudwatch
-        open-ldap
-        snmp
-        lighttpd
-        gunicorn changed to horizon
-        horizon
-        patch-alarm-manager
-        ceph-rest-api
-        ceph-manager
-        vim-api
-        vim-webserver
-        guest-agent
-        nova-api-proxy
-        haproxy
-        aodh-api
-        aodh-evaluator
-        aodh-listener
-        aodh-notifier
-
-
-    Args:
-        process_name (str): Name of the process to test. The following specical names are supported:
-        con_ssh:
-
-    Returns:
-
     Test Steps:
         - get process settings for the specified process name, from pre-defined information, configuration files and
             running processes on applicable hosts
@@ -1207,6 +1120,9 @@ def test_process_monitoring(process_name, con_ssh=None):
 
             ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
+    if ProjVar.get_var('REGION') != 'RegionOne' and re.search('keystone|glance', process_name):
+        skip("Keystone and Glance services are on primary region only")
+
     LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
 
     assert process_name in PROCESSES, \
