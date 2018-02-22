@@ -511,6 +511,7 @@ class PartitionStatus:
     MODIFYING = 'Modifying'
     DELETING = 'Deleting'
     CREATING = 'Creating'
+    IN_USE = 'In-Use'
 
 
 class SysType:
