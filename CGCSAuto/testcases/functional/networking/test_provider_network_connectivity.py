@@ -290,6 +290,7 @@ def test_providernet_connectivity_reboot():
 
     LOG.tc_step("Verify all the providernet connectivity tests PASS")
     end_time = time.time() + 60
+    post_passed = None
     while time.time() < end_time:
         network_helper.schedule_providernet_connectivity_test()
         post_passed = network_helper.get_providernet_connectivity_test_results(rtn_val='segmentation_ids',

@@ -15,7 +15,7 @@ def test_ping_hosts():
     ping_failed_list = []
     for hostname in system_helper.get_hostnames():
         LOG.tc_step("Send 100 pings to {} from Active Controller".format(hostname))
-        ploss_rate, untran_p = network_helper._ping_server(hostname, con_ssh, num_pings=100, timeout=300, fail_ok=True)
+        ploss_rate, untran_p = network_helper.ping_server(hostname, con_ssh, num_pings=100, timeout=300, fail_ok=True)
         if ploss_rate > 0:
             if ploss_rate == 100:
                 ping_failed_list.append("{}: Packet loss rate: {}/100\n".format(hostname, ploss_rate))

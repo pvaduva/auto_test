@@ -162,8 +162,8 @@ def wait_for_vol_attach(vm_id, vol_id, timeout=VMTimeout.VOL_ATTACH, con_ssh=Non
         LOG.warning("Volume {} is not shown in nova show {} in {} seconds".format(vol_id, vm_id, timeout))
         return False
 
-    return cinder_helper._wait_for_volume_status(vol_id, status='in-use', timeout=timeout,
-                                                  con_ssh=con_ssh, auth_info=auth_info)
+    return cinder_helper.wait_for_volume_status(vol_id, status='in-use', timeout=timeout,
+                                                con_ssh=con_ssh, auth_info=auth_info)
 
 
 def attach_vol_to_vm(vm_id, vol_id=None, con_ssh=None, auth_info=None, mount=True, del_vol=None):
@@ -696,7 +696,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
             if vm_id:
                 return 1, vm_id, output, new_vol       # vm_id = '' if cli is rejected without vm created
-            return 4, '', output, new_vol     # new_vol = '' if no new volume created. Pass this to test for proper teardown
+            return 4, '', output, new_vol     # new_vol = '' if no new volume created
 
         LOG.info("Post action check...")
         if poll and "100% complete" not in output:
@@ -750,7 +750,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 0, vm_ids, "VMs are booted successfully"
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False, wait_login=True):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -1444,13 +1444,13 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
     res_dict = {}
     for i in range(retry + 1):
         for ip in vms_ips:
-            packet_loss_rate = network_helper._ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                           timeout=timeout, fail_ok=True, vshell=False)[0]
+            packet_loss_rate = network_helper.ping_server(server=ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                          timeout=timeout, fail_ok=True, vshell=False)[0]
             res_dict[ip] = packet_loss_rate
 
         for vshell_ip in vshell_ips:
-            packet_loss_rate = network_helper._ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                           timeout=timeout, fail_ok=True, vshell=True)[0]
+            packet_loss_rate = network_helper.ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
+                                                          timeout=timeout, fail_ok=True, vshell=True)[0]
             res_dict[vshell_ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
@@ -1692,8 +1692,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
     with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                prompt=prompt, con_ssh=con_ssh, vm_ip=vm_ip, use_fip=use_fip) as from_vm_ssh:
         from_vm_ssh.exec_cmd('ip addr', get_exit_code=False)
-        return network_helper._ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings,
-                                           timeout=timeout, fail_ok=fail_ok)[0]
+        return network_helper.ping_server(ext_ip, ssh_client=from_vm_ssh, num_pings=num_pings,
+                                          timeout=timeout, fail_ok=fail_ok)[0]
 
 
 @contextmanager
@@ -2566,16 +2566,13 @@ def get_vm_irq_info_from_hypervisor(vm_id, con_ssh=None):
     return pci_devs_dict
 
 
-def get_vm_pcis_irqs_from_hypervisor(vm_id, hypervisor=None, con_ssh=None, retries=3, retry_interval=45):
+def get_vm_pcis_irqs_from_hypervisor(vm_id, con_ssh=None):
     """
     Get information for all PCI devices using tool nova-pci-interrupts.
 
     Args:
         vm_id (str):
-        hypervisor
-        con_ssh:
-        retries
-        retry_interval
+        con_ssh
 
     Returns (pci_info, vm_topology): details of the PCI device and VM topology
         Examples:
@@ -3175,111 +3172,6 @@ def _get_cloud_config_add_user(con_ssh=None):
     return file_path
 
 
-def modified_cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN,
-                             vm_image_name=None):
-    """
-    Cold migrate modifed for CGTS-4911
-    Args:
-        vm_id (str): vm to cold migrate
-        revert (bool): False to confirm resize, True to revert
-        con_ssh (SSHClient):
-        fail_ok (bool): True if fail ok. Default to False, ie., throws exception upon cold migration fail.
-        auth_info (dict):
-        vm_image_name
-
-    Returns (tuple): (rtn_code, message)
-        (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
-        (1, <stderr>) # cold migration cli rejected as expected
-        (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
-        (3, <stdout>) # Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
-        (4, timeout_message] # Cold migration command ran successfully, but timed out waiting for VM to reach
-            'Verify Resize' state or Error state.
-        (5, err_msg) # Cold migration command ran successfully, but VM is in Error state.
-        (6, err_msg) # Cold migration command ran successfully, and resize confirm/revert performed. But VM is not in
-            Active state after confirm/revert.
-        (7, err_msg) # Cold migration and resize confirm/revert ran successfully and vm in active state. But host for vm
-            is not as expected. i.e., still the same host after confirm resize, or different host after revert resize.
-
-    """
-    before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
-    before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh)
-    if not before_status == VMStatus.ACTIVE:
-        LOG.warning("Non-active VM status before cold migrate: {}".format(before_status))
-
-    LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
-    exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
-                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
-
-    if exitcode == 1:
-        vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if len(host_helper.get_hosts_in_storage_aggregate(vm_storage_backing, con_ssh=con_ssh)) < 2:
-            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
-                     "migrate to.".format(vm_id))
-            return 1, output
-        elif fail_ok:
-            LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
-            return 2, output
-        else:
-            raise exceptions.VMOperationFailed(output)
-
-    if 'Finished' not in output:
-        if fail_ok:
-            LOG.warning("Cold migration is not finished.")
-            return 3, output
-        raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
-
-    LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
-
-    vm_status = wait_for_vm_status(vm_id=vm_id, status=[VMStatus.VERIFY_RESIZE, VMStatus.ERROR], timeout=300,
-                                   fail_ok=fail_ok, con_ssh=con_ssh)
-
-    if vm_status is None:
-        return 4, 'Timed out waiting for Error or Verify_Resize status for VM {}'.format(vm_id)
-
-    # Modified here
-    # TODO Check file in vm
-    wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
-    with ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
-        filename = ""
-        look_for = ''
-        # vm_ssh.exec_cmd('cat {} | grep {}'.format(filename, look_for))
-
-    verify_resize_str = 'Revert' if revert else 'Confirm'
-    if vm_status == VMStatus.VERIFY_RESIZE:
-        LOG.info("{}ing resize..".format(verify_resize_str))
-        _confirm_or_revert_resize(vm=vm_id, revert=revert, con_ssh=con_ssh)
-
-    elif vm_status == VMStatus.ERROR:
-        err_msg = "VM {} in Error state after cold migrate. {} resize is not reached.".format(vm_id, verify_resize_str)
-        if fail_ok:
-            return 5, err_msg
-        raise exceptions.VMPostCheckFailed(err_msg)
-
-    post_confirm_state = wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.COLD_MIGRATE_CONFIRM,
-                                            fail_ok=fail_ok, con_ssh=con_ssh)
-
-    if post_confirm_state is None:
-        err_msg = "VM {} is not in Active state after {} Resize".format(vm_id, verify_resize_str)
-        return 6, err_msg
-
-    # Process results
-    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
-    host_changed = before_host != after_host
-    host_change_str = "changed" if host_changed else "did not change"
-    operation_ok = not host_changed if revert else host_changed
-
-    if not operation_ok:
-        err_msg = ("VM {} host {} after {} Resize. Before host: {}. After host: {}".
-                   format(vm_id, host_change_str, verify_resize_str, before_host, after_host))
-        if fail_ok:
-            return 7, err_msg
-        raise exceptions.VMPostCheckFailed(err_msg)
-
-    success_msg = "VM {} successfully cold migrated and {}ed Resize.".format(vm_id, verify_resize_str)
-    LOG.info(success_msg)
-    return 0, success_msg
-
-
 def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, time_to_stay=1, check_interval=3,
                      fail_ok=True, con_ssh=None):
     """
@@ -3854,6 +3746,7 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
         cleanup (str|None): Scope for resource cleanup, valid values: 'function', 'class', 'module', None.
             When None, vms/volumes/flavors will be kept on system
         avail_zone (str): availability zone to boot the vms
+        vms_num
 
     Returns (list): list of vm ids
 
@@ -3900,9 +3793,11 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
         if len(launched_vms) == vms_num:
             break
 
-        LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it pingable from NatBox")
+        LOG.info("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
+                 "pingable from NatBox")
         vm4_name = 'image_root_attachvol'
-        vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host, cleanup=cleanup)[1]
+        vm4 = boot_vm(vm4_name, flavor_1, source='image', avail_zone=avail_zone, vm_host=target_host,
+                      cleanup=cleanup)[1]
 
         vol = cinder_helper.create_volume(bootable=False, cleanup=cleanup)[1]
         attach_vol_to_vm(vm4, vol_id=vol, del_vol=cleanup)

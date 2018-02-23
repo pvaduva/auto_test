@@ -163,7 +163,7 @@ def test_port_trunking(vif_model):
     if ip_addr:
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
             LOG.tc_step("Ping on vlan interface from guest")
-            network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
+            network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
     # unset the subport on trunk_1 and try the ping (it will fail)
     LOG.tc_step(" Removing a subport from trunk and ping on vlan interface inside guest")
@@ -172,7 +172,7 @@ def test_port_trunking(vif_model):
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
         LOG.tc_step("Ping on vlan interface from guest")
-        ping = network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=True)[0]
+        ping = network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=True)[0]
         assert ping == 100, "Ping did not fail as expected."
 
     # set the subport on trunk_1 and try the ping (it will work)
@@ -182,7 +182,7 @@ def test_port_trunking(vif_model):
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
         LOG.tc_step("Ping on vlan interface from guest")
-        network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
+        network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
     # VM operation and ping
     for vm_actions in [['pause', 'unpause'], ['suspend', 'resume'], ['live_migrate'], ['cold_migrate']]:
@@ -204,7 +204,7 @@ def test_port_trunking(vif_model):
 
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
             LOG.tc_step("Ping on vlan interface from guest after action {}".format(vm_actions))
-            network_helper._ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
+            network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
 
 def test_port_trunking_basic():

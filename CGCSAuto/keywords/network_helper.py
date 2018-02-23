@@ -2462,7 +2462,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
+def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
     """
 
     Args:
@@ -3375,8 +3375,8 @@ def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
 
     res_dict = {}
     for ip_ in ips:
-        packet_loss_rate = _ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
-                                        fail_ok=True, vshell=False)[0]
+        packet_loss_rate = ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
+                                       fail_ok=True, vshell=False)[0]
         res_dict[ip_] = packet_loss_rate
 
     res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
