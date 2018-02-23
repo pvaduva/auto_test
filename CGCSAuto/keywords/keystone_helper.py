@@ -254,7 +254,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
             if not con_ssh:
                 con_ssh = ControllerClient.get_active_controller()
             with con_ssh.login_as_root(timeout=30) as con_ssh:
-                con_ssh.exec_cmd('echo "n" | openstack_update_admin_password {}'.format(password))
+                con_ssh.exec_cmd("echo 'n' | openstack_update_admin_password '{}'".format(password))
 
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
