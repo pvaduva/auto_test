@@ -38,6 +38,8 @@ TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
 TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
+PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
+
 REGION_MAP = {'RegionOne': '',
               'RegionTwo': '-R2'}
 
@@ -167,7 +169,6 @@ class HostTask:
     POWERING_ON = 'Powering-on'
     POWER_CYCLE = 'Critical Event Power-Cycle'
     POWER_DOWN = 'Critical Event Power-Down'
-
 
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '

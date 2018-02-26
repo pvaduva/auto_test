@@ -96,6 +96,8 @@ def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None):
     Whether it is two node CPE system
     Args:
         con_ssh:
+        use_telnet
+        con_telnet
 
     Returns (bool):
 
@@ -123,6 +125,8 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
     Args:
         controller_ssh (SSHClient):
         controller (str): controller to check
+        use_telnet
+        con_telnet
 
     Returns (bool): True if CPE or Simplex, else False
 
@@ -148,6 +152,8 @@ def get_storage_nodes(con_ssh=None, use_telnet=False, con_telnet=None):
     Get hostnames with 'storage' personality from system host-list
     Args:
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (list): list of hostnames. Empty list [] returns when no storage nodes.
 
@@ -160,6 +166,8 @@ def get_controllers(con_ssh=None, use_telnet=False, con_telnet=None):
     Get hostnames with 'controller' personality from system host-list
     Args:
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (list): list of hostnames
 
@@ -173,6 +181,8 @@ def get_computes(con_ssh=None, use_telnet=False, con_telnet=None):
     Get hostnames with 'compute' personality from system host-list
     Args:
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (list): list of hostnames. Empty list [] returns when no compute nodes.
 
@@ -194,6 +204,8 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
         strict (bool):
         exclude (bool):
         con_ssh (dict):
+        use_telnet
+        con_telnet
 
     Returns (list): hostnames
 
@@ -254,12 +266,13 @@ def _get_nodes(con_ssh=None, use_telnet=False, con_telnet=None):
     return nodes
 
 
-def get_active_controller_name(con_ssh=None, use_telnet=False, con_telnet=None, source_auth_info=False):
+def get_active_controller_name(con_ssh=None, use_telnet=False, con_telnet=None):
     """
     This assumes system has 1 active controller
     Args:
         con_ssh:
-        source_auth_info
+        use_telnet
+        con_telnet
 
     Returns: hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
@@ -272,6 +285,8 @@ def get_standby_controller_name(con_ssh=None, use_telnet=False, con_telnet=None)
     This assumes system has 1 standby controller
     Args:
         con_ssh:
+        use_telnet
+        con_telnet
 
     Returns (str): hostname of the active controller
         Further info such as ip, uuid can be obtained via System.CONTROLLERS[hostname]['uuid']
@@ -299,6 +314,8 @@ def get_active_standby_controllers(con_ssh=None, use_telnet=False, con_telnet=No
     Get active controller name and standby controller name (if any)
     Args:
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (tuple): such as ('controller-0', 'controller-1'), when non-active controller is in bad state or degraded
         state, or any scenarios where standby controller does not exist, this function will return
@@ -328,6 +345,8 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
@@ -383,6 +402,8 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
         combine_entries (bool): return list of strings when set to True, else return a list of tuples.
             e.g., when True, returns ["800.003 cluster=829851fa", "250.001 host=controller-0"]
                   when False, returns [("800.003", "cluster=829851fa"), ("250.001", "host=controller-0")]
+        use_telnet
+        con_telnet
 
     Returns (list): list of alarms with values of specified fields
 
@@ -470,7 +491,8 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     if not table_['values']:
         suppressed_list = []
     else:
-        suppressed_list = table_parser.get_values(table_, target_header="Suppressed Alarm ID's", **{'Status': 'suppressed'})
+        suppressed_list = table_parser.get_values(table_, target_header="Suppressed Alarm ID's",
+                                                  **{'Status': 'suppressed'})
 
     if suppressed_list:
         msg = "Unsuppress-all failed. Suppressed Alarm IDs: {}".format(suppressed_list)
@@ -500,12 +522,15 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
         query_type (str): OBSOLETE. data type of value. one of these: 'string', 'integer', 'float', 'boolean'
         event_log_id (str|None): event log id passed to system eventlog -q event_log_id=<event_log_id>
         entity_type_id (str|None): entity_type_id passed to system eventlog -q entity_type_id=<entity_type_id>
-        entity_instance_id (str|None): entity_instance_id passed to system eventlog -q entity_instance_id=<entity_instance_id>
+        entity_instance_id (str|None): entity_instance_id passed to
+            system eventlog -q entity_instance_id=<entity_instance_id>
         severity (str|None):
         start (str|None): start date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
         end (str|None): end date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
@@ -601,10 +626,13 @@ def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=No
         check_interval (int): how often to check the event logs
         event_log_id (str|None): event log id passed to system eventlog -q event_log_id=<event_log_id>
         entity_type_id (str|None): entity_type_id passed to system eventlog -q entity_type_id=<entity_type_id>
-        entity_instance_id (str|None): entity_instance_id passed to system eventlog -q entity_instance_id=<entity_instance_id>
+        entity_instance_id (str|None): entity_instance_id passed to
+            system eventlog -q entity_instance_id=<entity_instance_id>
         severity (str|None):
         start (str|None): start date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
         end (str|None): end date/time passed to '--query' in format "20170410"/"20170410 01:23:34"
+        use_telnet
+        con_telnet
 
         **kwargs: criteria to filter out event(s) from the events list table
 
@@ -646,6 +674,8 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
         fail_ok (bool): whether or not to raise exception if any alarm failed to delete
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (tuple): (rtn_code(int), message(str))
         0, "Alarms deleted successfully"
@@ -712,6 +742,8 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
         fail_ok (bool): whether to raise exception if alarm did not disappear within timeout
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (bool): True if alarm is gone else False
 
@@ -785,6 +817,8 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
         fail_ok (bool): whether to raise exception if alarm did not disappear within timeout
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (tuple): (<res_bool>, <rtn_val>). Such as (True, '200.009') or (False, None)
 
@@ -830,6 +864,8 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (tuple): (res(bool), remaining_alarms(list of tuple))
 
@@ -883,6 +919,8 @@ def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_s
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (tuple): (res(bool), remaining_alarms(tuple))
 
@@ -1025,7 +1063,7 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
             return -1, msg
 
     section = 'database'
-    if name in ('metering_time_to_live'):
+    if name in 'metering_time_to_live':
         name = 'metering_time_to_live'
         service = 'ceilometer'
     elif name == 'alarm_history_time_to_live':
@@ -1176,7 +1214,8 @@ def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False, 
 
     show_args = ','.join(table_names)
 
-    tables_ = table_parser.tables(con_ssh.exec_sudo_cmd('vm-topology --show {}'.format(show_args), expect_timeout=30)[1],
+    tables_ = table_parser.tables(con_ssh.exec_sudo_cmd('vm-topology --show {}'.
+                                                        format(show_args), expect_timeout=30)[1],
                                   combine_multiline_entry=combine_multiline)
 
     if exclude_one_col_table:
@@ -1671,6 +1710,8 @@ def get_host_interfaces_table(host, show_all=False, con_ssh=None, use_telnet=Fal
         show_all (bool):
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (dict):
 
@@ -1852,6 +1893,8 @@ def get_host_ethernet_port_table(host, con_ssh=None, use_telnet=False, con_telne
         host (str):
         con_ssh (SSHClient):
         auth_info (dict):
+        use_telnet
+        con_telnet
 
     Returns (dict):
 
@@ -1933,7 +1976,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
     value = value.strip('\"')
     if verify:
         if val != value:
-            msg = 'The service parameter was not added with the correct value {} to {}'.format(val,value)
+            msg = 'The service parameter was not added with the correct value {} to {}'.format(val, value)
             if fail_ok:
                 return 2, msg
             raise exceptions.SysinvError(msg)
@@ -1944,7 +1987,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
     return 0, uuid
 
 
-def modify_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
+def modify_service_parameter(service, section, name, value, apply=False, con_ssh=None, fail_ok=False,
                              check_first=True, create=True, verify=True):
     """
     Modify a service parameter
@@ -1953,6 +1996,7 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
         section (str): Required
         name (str): Required
         value (str): Required
+        apply
         con_ssh:
         fail_ok:
         check_first (bool): Check if the parameter exists first
@@ -1978,7 +2022,12 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
     LOG.info("Modifying service parameter")
     args = service + ' ' + section + ' ' + name + '=' + value
-    res, out = cli.system('service-parameter-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+    auth_info = dict(Tenant.ADMIN)
+    if service == 'identity' and section == 'config' and name == 'token_expiration':
+        auth_info['region'] = 'RegionOne'
+    res, out = cli.system('service-parameter-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                          auth_info=auth_info)
 
     if res == 1:
         return 1, out
@@ -1994,6 +2043,10 @@ def modify_service_parameter(service, section, name, value, con_ssh=None, fail_o
             raise exceptions.SysinvError(msg)
     msg = "Service parameter modified to {}".format(val)
     LOG.info(msg)
+
+    if apply:
+        apply_service_parameters(service, wait_for_config=True, con_ssh=con_ssh, auth_info=auth_info)
+
     return 0, msg
 
 
@@ -2031,7 +2084,8 @@ def delete_service_parameter(uuid, con_ssh=None, fail_ok=False, check_first=True
     return 0, msg
 
 
-def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh=None, fail_ok=False):
+def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh=None, auth_info=Tenant.ADMIN,
+                             fail_ok=False):
     """
     Apply service parameters
     Args:
@@ -2039,13 +2093,15 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
         wait_for_config (bool): Wait for config out of date alarms to clear
         timeout (int):
         con_ssh:
+        auth_info
         fail_ok:
 
     Returns (tuple): (rtn_code, message)
 
     """
     LOG.info("Applying service parameters {}".format(service))
-    res, out = cli.system('service-parameter-apply', service, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh)
+    res, out = cli.system('service-parameter-apply', service, rtn_list=True, fail_ok=fail_ok, auth_info=auth_info,
+                          ssh_client=con_ssh)
 
     if res == 1:
         return res, out
@@ -2318,6 +2374,8 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
 
     Args:
         con_ssh:
+        use_telnet
+        con_telnet
 
     Returns (str): e.g., 16.10
 
@@ -2327,14 +2385,14 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
     return ((sw_line.pop()).split("=")[1]).replace('"', '')
 
 
-def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None,upgrade_ver=None):
+def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None, upgrade_ver=None):
     if upgrade_ver >= '17.07':
         load_path = '/home/wrsroot/bootimage.sig'
         rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
                                 source_creden_=source_creden_)
     else:
         rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True,
-                            source_creden_=source_creden_)
+                                source_creden_=source_creden_)
     if rc == 0:
         table_ = table_parser.table(output)
         id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()
@@ -2462,7 +2520,7 @@ def wait_for_delete_imported_load(load_id, timeout=120, check_interval=5, fail_o
             return True
         else:
             if 'deleting' in table_parser.get_column(table_, 'state'):
-                rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh, fail_ok=True)
+                cli.system('load-delete', load_id, ssh_client=con_ssh, fail_ok=True)
         time.sleep(check_interval)
 
     else:
@@ -2534,8 +2592,8 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
             con_ssh.send('yes')
             index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
             if index == 1:
-               con_ssh.send('abort')
-               index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
+                con_ssh.send('abort')
+                index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]
             con_ssh.flush()
@@ -2775,7 +2833,7 @@ def is_infra_network_conifgured(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-    output = cli.system('infra-show', ssh_client=con_ssh, auth_info=auth_info )
+    output = cli.system('infra-show', ssh_client=con_ssh, auth_info=auth_info)
     if "Infrastructure network not configured" in output:
         return False,  None
     table_ = table_parser.table(output)
@@ -2859,13 +2917,15 @@ def disable_murano(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
     return 0, msg
 
 
-def get_host_addr_list(host, rtn_val='address', ifname=None, id=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def get_host_addr_list(host, rtn_val='address', ifname=None, id_=None, con_ssh=None, auth_info=Tenant.ADMIN,
+                       fail_ok=False):
     """
     Disable Murano Services
     Args:
+        host
         con_ssh (SSHClient):
         ifname:
-        id:
+        id_:
         rtn_val:
         auth_info (dict):
         fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
@@ -2875,9 +2935,9 @@ def get_host_addr_list(host, rtn_val='address', ifname=None, id=None, con_ssh=No
     """
 
     table_ = table_parser.table(cli.system('host-addr-list', host,  ssh_client=con_ssh, auth_info=auth_info,
-                                     fail_ok=fail_ok, rtn_list=True)[1])
+                                fail_ok=fail_ok, rtn_list=True)[1])
     args_dict = {
-        'id': id,
+        'id': id_,
         'ifname': ifname,
     }
     kwargs = {}
@@ -2907,6 +2967,7 @@ def get_host_disks_table(host, con_ssh=None, use_telnet=False, con_telnet=None, 
                                            use_telnet=use_telnet, con_telnet=con_telnet,
                                            auth_info=auth_info))
     return table_
+
 
 def get_network_values(header='uuid', uuid=None, ntype=None, 
                        mtu = None, link_capacity = None, 
@@ -2947,21 +3008,18 @@ def get_network_values(header='uuid', uuid=None, ntype=None,
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None,
-                       ntype=None, name=None, auth_info=Tenant.ADMIN,
-                       con_ssh = None, strict = True, regex = None,
-                       **kwargs):
+def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None, ntype=None, name=None, auth_info=Tenant.ADMIN,
+                       con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get cluster values from system cluster-list
     Args:
         header: 'uuid' (default)
         uuid:
         cluster_uuid:
-        type: (mapped as ntype)
+        ntype: (mapped as ntype)
         name:
         auth_info:
         con_ssh:
@@ -2972,9 +3030,7 @@ def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None,
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.system('cluster-list',
-                                           ssh_client=con_ssh,
-                                           auth_info=auth_info))
+    table_ = table_parser.table(cli.system('cluster-list', ssh_client=con_ssh, auth_info=auth_info))
     args_temp = {
         'uuid': uuid,
         'cluster_uuid': cluster_uuid,
@@ -2984,16 +3040,14 @@ def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None,
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_disk_values(host, header='uuid', uuid=None, device_node=None, 
-                    device_num=None,
+def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num=None,
                     device_type=None, size_mib=None, 
                     available_mib=None, rpm=None, serial_id=None, 
                     device_path=None, auth_info=Tenant.ADMIN,
-                    con_ssh = None, strict = True, regex = None,
+                    con_ssh=None, strict=True, regex=None,
                     **kwargs):
     """
     Get disk values from system host-disk-list
@@ -3001,7 +3055,7 @@ def get_disk_values(host, header='uuid', uuid=None, device_node=None,
         host: (mandatory)
         header: 'uuid' (default value)
         uuid: 
-        device-node:
+        device_node:
         device_num:
         device_type:
         size_mib:

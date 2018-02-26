@@ -68,6 +68,7 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
     assert post_pswd == security_helper.get_admin_password_in_keyring()
 
     if scenario == "change_pswd_swact":
+        LOG.tc_step("Swact active controller")
         host_helper.swact_host()
     else:
         LOG.tc_step("Unlock host {}".format(host))

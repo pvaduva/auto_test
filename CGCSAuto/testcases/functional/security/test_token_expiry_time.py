@@ -21,11 +21,9 @@ def service_params(request):
         res = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
                                                          name=name)[0]
         if res != exp_time:
-            LOG.fixture_step("Resetting service parameter {} {} {} to default of {}".format(service, section, name, exp_time))
-            res, out = system_helper.modify_service_parameter(service, section, name, str(exp_time))
-            if res == 0:
-                LOG.info("Service parameter {} {} {} reset to default.".format(service, section, name))
-                system_helper.apply_service_parameters(service=service, wait_for_config=True)
+            LOG.fixture_step("Resetting service parameter {} {} {} to default of {}".format(service, section,
+                                                                                            name, exp_time))
+            system_helper.modify_service_parameter(service, section, name, str(exp_time), apply=True)
 
     request.addfinalizer(cleanup)
     return service, section, name
@@ -72,8 +70,7 @@ def test_token_expiry(service_params):
             assert expire_time != value, "Expiry time was changed to rejected value"
         else:
             LOG.tc_step("Set token expiration service parameter to {}".format(expire_time))
-            system_helper.modify_service_parameter(service, section, name, str(expire_time))
-            system_helper.apply_service_parameters(service, wait_for_config=True)
+            system_helper.modify_service_parameter(service, section, name, str(expire_time), apply=True)
 
             LOG.tc_step("Verify that tokens now expire after expected time")
             token_expire_time = html_helper.get_user_token(rtn_value='expires')

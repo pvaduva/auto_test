@@ -3675,13 +3675,12 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         vlm_helper.power_off_hosts(hosts=host, reserve=False)
     else:
         LOG.tc_step("'sudo reboot -f' from {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=wait_for_host_up, con_ssh=con_ssh)
+        host_helper.reboot_hosts(host, wait_for_reboot_finish=False, con_ssh=con_ssh)
 
     try:
-        if vlm or not wait_for_host_up:
-            LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-            wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
-                                con_ssh=con_ssh)
+        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
+        wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                            con_ssh=con_ssh)
 
         LOG.tc_step("Check vms are in Active state and moved to other host(s) after host failure")
         res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
@@ -3728,7 +3727,10 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
     finally:
         if vlm:
             LOG.tc_step("Powering on {} from vlm".format(host))
-            vlm_helper.power_on_hosts(hosts=host, reserve=False, post_check=wait_for_host_up)
+            vlm_helper.power_on_hosts(hosts=host, reserve=False, post_check=True)
+
+            if wait_for_host_up:
+                host_helper.wait_for_hosts_ready(host, con_ssh=con_ssh)
 
 
 def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova', vms_num=5):

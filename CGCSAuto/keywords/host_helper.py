@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from utils import telnet as telnetlib
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, \
-    Networks, EventLogID, HostTask
+    Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts import proj_vars
@@ -219,6 +219,18 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                         else:
                             raise exceptions.HostPostCheckFailed(err_msg)
 
+                hosts_affine_incomplete = []
+                for host in list(set(computes) & set(hosts_avail)):
+                    if not wait_for_tasks_affined(host, fail_ok=True):
+                        hosts_affine_incomplete.append(host)
+
+                if hosts_affine_incomplete:
+                    err_msg = "Hosts platform tasks affining incomplete: {}".format(hosts_affine_incomplete)
+                    if fail_ok:
+                        return 4, err_msg
+                    else:
+                        raise exceptions.HostPostCheckFailed(err_msg)
+
     states_vals = {}
     task_unfinished_msg = ''
     for host in hostnames:
@@ -263,15 +275,16 @@ def recover_simplex(con_ssh=None, fail_ok=False):
     if not is_unlocked:
         unlock_host(host=host, available_only=True, fail_ok=fail_ok)
     else:
-        wait_for_hosts_ready(host, fail_ok=fail_ok)
+        wait_for_hosts_ready(host, fail_ok=fail_ok, check_task_affinity=False)
 
 
-def wait_for_hosts_ready(hosts, fail_ok=False, con_ssh=None):
+def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
         hosts:
         fail_ok: whether to raise exception when fail
+        check_task_affinity
         con_ssh:
 
     Returns:
@@ -311,6 +324,11 @@ def wait_for_hosts_ready(hosts, fail_ok=False, con_ssh=None):
             res_3 = wait_for_hypervisors_up(hypervisors, fail_ok=fail_ok, con_ssh=con_ssh,
                                             timeout=HostTimeout.HYPERVISOR_UP)
             res_unlock = res_unlock and res_3
+
+            if check_task_affinity:
+                for host in hypervisors:
+                    res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok)
+                    res_unlock = res_unlock and res_4
 
     return res_lock and res_unlock
 
@@ -736,6 +754,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                            timeout=HostTimeout.HYPERVISOR_UP)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
+            wait_for_tasks_affined(host)
+
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
                                           use_telnet=use_telnet, con_telnet=con_telnet, timeout=300)[0]:
@@ -767,6 +787,26 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
+
+
+def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
+    if system_helper.is_simplex():
+        return True
+
+    LOG.info("Check {} non-existent on {}".format(PLATFORM_AFFINE_INCOMPLETE, host))
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if not host_ssh.file_exists(PLATFORM_AFFINE_INCOMPLETE):
+                LOG.info("Platform tasks re-affined successfully")
+                return True
+            time.sleep(5)
+
+    err = "{} did not clear on {}".format(PLATFORM_AFFINE_INCOMPLETE, host)
+    if fail_ok:
+        LOG.warning(err)
+        return False
+    raise exceptions.HostError(err)
 
 
 def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
@@ -886,6 +926,13 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             for host in hosts_webdown:
                 res[host] = 6, "Host web-services is not active in system servicegroup-list"
             hosts_avail = list(set(hosts_avail) - set(hosts_webdown))
+
+        hosts_affine_incomplete = []
+        for host in list(set(computes) & set(hosts_avail)):
+            if not wait_for_tasks_affined(host, fail_ok=True):
+                hosts_affine_incomplete.append(host)
+                res[host] = 7, "Host platform tasks affining incomplete"
+        hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
 
     for host in hosts_avail:
         res[host] = 0, "Host is unlocked and in available state."
@@ -1072,7 +1119,7 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
 
     Args:
         hostname (str|None): When None, active controller will be used for swact.
-        swact_start_timeout (int): Max time to wait between cli executs and swact starts
+        swact_start_timeout (int): Max time to wait between cli executes and swact starts
         swact_complete_timeout (int): Max time to wait for swact to complete after swact started
         fail_ok (bool):
         con_ssh (SSHClient):
@@ -1132,6 +1179,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
                 if not hypervisor_up_res:
                     return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
 
+                for host in ('controller-0', 'controller-1'):
+                    task_aff_res = wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=fail_ok)
+                    if not task_aff_res:
+                        return 7, "tasks affining incomplete on {} after swact from {}".format(host, hostname)
+
     return rtn
 
 
@@ -1153,6 +1205,7 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
         (3, "Swact did not start within <swact_start_timeout>")     # returns when fail_ok=True
         (4, "Active controller did not change after swact within <swact_complete_timeou>")  # returns when fail_ok=True
         (5, "400.001 alarm is not cleared within timeout after swact")
+        (6, "tasks affining incomplete on <host>")
 
     """
     start = time.time()
