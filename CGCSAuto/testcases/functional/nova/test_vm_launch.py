@@ -124,7 +124,8 @@ def get_compute_free_disk_gb(host):
 def get_initial_pool_space(host_ssh, excluded_vm):
     all_volume_size = 0.00
 
-    raw_thin_pool_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
+    raw_thin_pool_output = host_ssh.exec_sudo_cmd(
+            cmd="lvs --units g --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
     assert raw_thin_pool_output, "thin pool volume not found"
     raw_lvs_output = host_ssh.exec_sudo_cmd(
             "lvs --units g --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".
