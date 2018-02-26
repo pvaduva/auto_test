@@ -170,13 +170,15 @@ def get_candidate_patches(expected_states=None,
 
         if include_patches_apply_to_all:
             extra_filtering = ''
-            if 'INSVC' in id_filters:
-                extra_filtering = 'INSVC'
-            elif 'RR' in id_filters:
+
+            if any('RR' in id_filter for id_filter in id_filters):
                 extra_filtering = 'RR'
 
+            elif any('INSVC' in id_filter for id_filter in id_filters):
+                extra_filtering = 'INSVC'
+
             if extra_filtering:
-                patch_ids += [p for p in all_patches if ('ALL' in p and extra_filtering in p) ]
+                patch_ids += [p for p in all_patches if ('ALL' in p and extra_filtering in p)]
             else:
                 patch_ids += [p for p in all_patches if 'ALL' in p]
 
@@ -254,14 +256,19 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
         else:
             patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
 
-    if reboot_required and active_controller is not None:
-        code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
-        assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
-        # need to wait for some time before the system in stable status after swact
-        time.sleep(60)
+    assert active_controller is not None, 'Failed to find the active controller?!'
 
-    if active_controller is not None:
-        patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
+    if reboot_required:
+        if not system_helper.is_simplex():
+            code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
+            assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
+
+            # need to wait for some time before the system in stable status after swact
+            time.sleep(60)
+        else:
+            LOG.info('No need to swact on AIO-Simplex system')
+
+    patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
 
     if patch_ids:
 
