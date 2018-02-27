@@ -2721,8 +2721,8 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
     Args:
         router_id (str): The router_id of the tenant router the portforwarding rule is created
         inside_addr(str): private ip address
-        inside_port (str):  private protocol port number
-        outside_port(str): The public layer4 protocol port number
+        inside_port (int|str):  private protocol port number
+        outside_port(int|str): The public layer4 protocol port number
         protocol(str): the protocol  tcp|udp|udp-lite|sctp|dccp
         tenant(str): The owner Tenant id.
         description(str): User specified text description. The default is "portforwarding"
@@ -2779,7 +2779,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
     # process result
     if code == 1:
-        msg = 'Fail to creat port forwarding rules: {}'.format(output)
+        msg = 'Fail to create port forwarding rules: {}'.format(output)
         if fail_ok:
             return 1, '', msg
         raise exceptions.NeutronError(msg)
