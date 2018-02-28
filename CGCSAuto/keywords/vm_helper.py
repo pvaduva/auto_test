@@ -3670,6 +3670,12 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         vms_to_check = [vms_to_check]
 
     HostsToRecover.add(host)
+    is_swacted = False
+    if wait_for_host_up:
+        active, standby = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
+        if standby and active == host:
+            is_swacted = True
+
     if vlm:
         LOG.tc_step("Power-off {} from vlm".format(host))
         vlm_helper.power_off_hosts(hosts=host, reserve=False)
@@ -3729,8 +3735,12 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
             LOG.tc_step("Powering on {} from vlm".format(host))
             vlm_helper.power_on_hosts(hosts=host, reserve=False, post_check=True)
 
-            if wait_for_host_up:
-                host_helper.wait_for_hosts_ready(host, con_ssh=con_ssh)
+        if wait_for_host_up:
+            LOG.tc_step("Waiting for {} to recover".format(host))
+            host_helper.wait_for_hosts_ready(host, con_ssh=con_ssh)
+            host_helper.wait_for_tasks_affined(host=host, con_ssh=con_ssh)
+            if is_swacted:
+                host_helper.wait_for_tasks_affined(standby, con_ssh=con_ssh)
 
 
 def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova', vms_num=5):

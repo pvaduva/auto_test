@@ -798,7 +798,7 @@ def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
         end_time = time.time() + timeout
         while time.time() < end_time:
             if not host_ssh.file_exists(PLATFORM_AFFINE_INCOMPLETE):
-                LOG.info("Platform tasks re-affined successfully")
+                LOG.info("{} platform tasks re-affined successfully".format(host))
                 return True
             time.sleep(5)
 
