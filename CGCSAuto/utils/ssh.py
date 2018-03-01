@@ -532,15 +532,10 @@ class SSHClient:
 
         return code, output
 
-    def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
+    def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_path=None, timeout=120):
 
-        # Process destination info
-        if dest_folder_name:
-            dest_folder_name += '/'
-        else:
-            dest_folder_name = ''
-
-        dest_path = ProjVar.get_var('TEMP_DIR') + dest_folder_name
+        if not dest_path:
+            dest_path = ProjVar.get_var('TEMP_DIR') + '/'
 
         to_host = local_host.get_host_ip() + ':'
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'

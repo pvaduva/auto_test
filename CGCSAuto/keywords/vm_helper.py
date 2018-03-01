@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 from utils import exceptions, cli, table_parser, multi_thread
 from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
+from utils import local_host
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
@@ -4096,10 +4097,15 @@ def collect_guest_logs(vm_id):
                 if not vm_ssh.file_exists(log_path):
                     continue
 
-                output = vm_ssh.exec_cmd('cat {}'.format(log_path), fail_ok=False)[1]
-                local_log_path = '{}/{}_{}'.format(ProjVar.get_var('GUEST_LOGS_DIR'), vm_id, log_name)
-                with open(local_log_path, mode='w') as f:
-                    f.write(output)
+                local_log_path = '{}/{}_{}'.format(ProjVar.get_var('GUEST_LOGS_DIR'), log_name, vm_id)
+                current_user = local_host.get_user()
+                if current_user == SvcCgcsAuto.USER:
+                    vm_ssh.scp_files_to_local_host(source_file=log_path, dest_user=current_user,
+                                                   dest_password=SvcCgcsAuto.PASSWORD, dest_path=local_log_path)
+                else:
+                    output = vm_ssh.exec_cmd('tail -n 200 {}'.format(log_path), fail_ok=False)[1]
+                    with open(local_log_path, mode='w') as f:
+                        f.write(output)
                 return
 
     except Exception as e:
