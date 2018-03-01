@@ -848,7 +848,8 @@ def pytest_sessionfinish(session):
     if repeat_count > 0 and has_fail:
         # _thread.interrupt_main()
         print('Printing traceback: \n' + '\n'.join(tracebacks))
-        pytest.exit("Abort upon stress test failure")
+        pytest.exit("\n========== Abort test session without teardown upon failure to leave the system in state "
+                    "==========")
 
     if no_teardown:
         pytest.exit("Stop session after first test without teardown")

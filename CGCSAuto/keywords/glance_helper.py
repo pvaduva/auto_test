@@ -250,7 +250,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         protected (bool): Prevent image from being deleted.
         cache_raw (bool): Convert the image to RAW in the background and store it for fast access
         store (str): Store to upload image to
-        wait: Wait for the convertion of the image to RAW to finish before returning the image
+        wait: Wait for the conversion of the image to RAW to finish before returning the image
         timeout (int): max seconds to wait for cli return
         con_ssh (SSHClient):
         auth_info (dict):

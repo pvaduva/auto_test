@@ -3881,7 +3881,8 @@ def get_sched_policy_and_priority_for_vcpus(instance_pid, host_ssh, cpusets=None
             items = out_line.split()
             rt_policy = items[2]
             rt_priority = items[3]
-            cpu_pol_and_prios.append((rt_policy, rt_priority))
+            rt_comm = items[-1]
+            cpu_pol_and_prios.append((rt_policy, rt_priority, rt_comm))
 
     LOG.info("CPU policy and priority for cpus with cpuset: {}; comm_pattern: {} - {}".format(cpusets, comm,
                                                                                               cpu_pol_and_prios))
