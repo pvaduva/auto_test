@@ -507,6 +507,11 @@ class BackendState:
     CONFIGURING = 'configuring'
 
 
+class BackendTask:
+    RECONFIG_CONTROLLER = 'reconfig-controller'
+    APPLY_MANIFEST = 'applying-manifests'
+
+
 class PartitionStatus:
     READY = 'Ready'
     MODIFYING = 'Modifying'

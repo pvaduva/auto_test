@@ -7,9 +7,10 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, host_helper, system_helper, \
     storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
-from consts.cgcs import GuestImages, BackendState
+from consts.cgcs import GuestImages, BackendState, BackendTask
 from consts.auth import HostLinuxCreds
 from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 import time
 
 
@@ -88,7 +89,7 @@ def pre_swift_check():
 
     """
     ceph_backend_info = get_ceph_backend_info()
-    if not eval(ceph_backend_info['object_gateway']):
+    if not ceph_backend_info['object_gateway']:
         return False, "Swift is NOT  enabled"
     if swift_helper.get_swift_containers(fail_ok=True)[0] != 0:
             return False, "Swift enabled but NOT properly configured in the system"
@@ -123,7 +124,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     Verifies basic swift provisioning works as expected
     Args:
         pool_size:
-        ceph_backend_installed:
+        pre_swift_check:
 
     Returns:
 
@@ -136,16 +137,15 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     object_pool_gib = None
     cinder_pool_gib = ceph_backend_info['cinder_pool_gib']
     if pool_size == 'default':
-        if not eval(ceph_backend_info['object_gateway'].strip()):
+        if not ceph_backend_info['object_gateway']:
             LOG.tc_step("Enabling SWIFT object store .....")
 
     else:
         assert pre_swift_check[0], pre_swift_check[1]
 
-        unallocated_gib = int(ceph_backend_info['ceph_total_space_gib']) - (
-            int(cinder_pool_gib) +
-            int(ceph_backend_info['glance_pool_gib']) +
-            int(ceph_backend_info['ephemeral_pool_gib']))
+        unallocated_gib = int(ceph_backend_info['ceph_total_space_gib'] - cinder_pool_gib
+                              + ceph_backend_info['glance_pool_gib']
+                              + ceph_backend_info['ephemeral_pool_gib'])
         if unallocated_gib == 0:
             unallocated_gib = int(int(cinder_pool_gib) / 4)
             cinder_pool_gib = str(int(cinder_pool_gib) - unallocated_gib)
@@ -155,7 +155,8 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
     rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=True,
                                                                      cinder=cinder_pool_gib,
-                                                                     object_gib=object_pool_gib)
+                                                                     object_gib=object_pool_gib,
+                                                                     services='cinder,glance,swift')
 
     LOG.info("Verifying if swift object gateway is enabled...")
     assert updated_backend_info['object_gateway'] == 'True', "Fail to enable Swift object gateway: {}"\
@@ -174,9 +175,14 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         LOG.info("Active Controller is {}; Standby Controller is {}...".format(active_controller, standby_controller))
 
         for controller in [standby_controller, active_controller]:
+            HostsToRecover.add(controller)
             host_helper.lock_host(controller, swact=True)
+            storage_helper.wait_for_storage_backend_vals(backend='ceph-store',
+                                                         **{'task': BackendTask.RECONFIG_CONTROLLER,
+                                                            'state': BackendState.CONFIGURING})
             host_helper.unlock_host(controller)
-        assert system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=True), "Alarm 250.001 not cleared"
+
+        system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=False)
     else:
         assert BackendState.CONFIGURED == state, \
             "Unexpected ceph state '{}' after swift object gateway update ".format(state)

@@ -397,7 +397,7 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
 
 
 def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=False,
-                           lock_unlock=True, fail_ok=False, con_ssh=None):
+                           services=None, lock_unlock=True, fail_ok=False, con_ssh=None):
     """
     Modify ceph storage backend pool allocation
 
@@ -407,6 +407,7 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         glance:
         ephemeral:
         object_gib:
+        services (str|list|tuple):
         fail_ok:
         con_ssh:
 
@@ -422,9 +423,14 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
     elif 'file' in backend:
         backend = 'file-store'
 
-    args = backend
+    args = ''
+    if services:
+        if isinstance(services, (list, tuple)):
+            services = ','.join(services)
+        args = '-s {} '.format(services)
+    args += backend
 
-    backend_info = get_storage_backend_info(backend)
+    get_storage_backend_info(backend)
 
     if cinder:
         args += ' cinder_pool_gib={}'.format(cinder)
@@ -499,12 +505,22 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None):
     table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
 
     values = table_['values']
-    backend_info = {line[0]: line[1] for line in values}
+    backend_info = {}
+    for line in values:
+        field = line[0]
+        value = line[1]
+        if field in ('task', 'capabilities', 'object_gateway') or field.endswith('_gib'):
+            try:
+                value = eval(value)
+            except:
+                pass
+        backend_info[field] = value
 
     if keys:
         if isinstance(keys, str):
             keys = [keys]
         backend_info = {key_: backend_info[key_] for key_ in keys}
+
     return backend_info
 
 
@@ -523,6 +539,29 @@ def get_storage_backend_show_vals(backend, fields, con_ssh=None):
                 pass
         vals.append(val)
     return vals
+
+
+def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=None, **expt_values):
+    if not expt_values:
+        raise ValueError("At least one key/value pair has to be provided via expt_values")
+
+    end_time = time.time() + timeout
+    dict_to_check = expt_values.copy()
+    stor_backend_info = None
+    while time.time() < end_time:
+        stor_backend_info = get_storage_backend_info(backend=backend, keys=list(dict_to_check.keys()), con_ssh=con_ssh)
+        for key, expt_val in dict_to_check.items():
+            actual_val = stor_backend_info[key]
+            if str(expt_val) == str(actual_val):
+                dict_to_check.pop(key)
+
+        if not dict_to_check:
+            return True, dict_to_check
+
+    if fail_ok:
+        return False, stor_backend_info
+    raise exceptions.StorageError("Storage backend show field(s) did not reach expected value(s). "
+                                  "Expected: {}; Actual: {}".format(dict_to_check, stor_backend_info))
 
 
 def get_storage_backends(con_ssh=None, **filters):

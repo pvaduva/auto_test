@@ -114,7 +114,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         host_ssh.send(cmd)
         host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
-        con_ssh.expect(timeout=30)
+        con_ssh.expect(timeout=120)
 
     # reconnect to lab and wait for system up if rebooting active controller
     if reboot_con:

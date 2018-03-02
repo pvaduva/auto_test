@@ -1185,7 +1185,7 @@ def test_modify_ceph_pool_size():
 
     LOG.tc_step("Check ceph pool information")
     cmd = "ceph osd pool get-quota {}"
-    max_bytes_regex = "max bytes.*([0-9]*)(.B)$"
+    max_bytes_regex = "max bytes.* (\d+)([M|K|G]B)"
 
     newcmd = cmd.format('images')
     rc, out = con_ssh.exec_cmd(newcmd)
