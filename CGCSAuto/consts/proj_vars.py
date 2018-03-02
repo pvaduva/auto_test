@@ -26,7 +26,8 @@ class ProjVar:
                   }
 
     @classmethod
-    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli):
+    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli,
+                 always_collect):
 
         labname = lab['short_name']
 
@@ -45,6 +46,7 @@ class ProjVar:
             'BOOT_VMS': is_boot,
             'NATBOX': natbox,
             'COLLECT_ALL': collect_all,
+            'ALWAYS_COLLECT': always_collect,
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,

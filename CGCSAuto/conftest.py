@@ -254,6 +254,7 @@ def pytest_configure(config):
 
     # Common reporting params
     collect_all = config.getoption('collectall')
+    always_collect = config.getoption('alwayscollect')
     report_all = config.getoption('reportall')
     report_tag = config.getoption('report_tag')
     resultlog = config.getoption('resultlog')
@@ -293,6 +294,7 @@ def pytest_configure(config):
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
+    always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
 
@@ -322,7 +324,8 @@ def pytest_configure(config):
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
-                     report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli)
+                     report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
+                     always_collect=always_collect)
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
@@ -391,6 +394,8 @@ def pytest_addoption(parser):
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
                      help=collect_all_help)
+    parser.addoption('--alwayscollect', '--always-collect', '--always_collect', dest='alwayscollect',
+                     action='store_true', help=collect_all_help)
     parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
                      help=report_help)
     parser.addoption('--report_tag', '--report-tag', action='store', dest='report_tag', metavar='tagname', default=None,
