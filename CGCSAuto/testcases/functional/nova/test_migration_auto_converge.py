@@ -24,21 +24,27 @@ def _get_stress_ng_heat(con_ssh=None):
 
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-    if con_ssh.file_exists(file_path=file_path):
-        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
-        return file_path
 
-    LOG.debug('Create userdata directory if not already exists')
-    cmd = 'mkdir -p {}'.format(file_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
+    if not con_ssh.file_exists(file_path=file_path):
+        LOG.debug('Create userdata directory if not already exists')
+        cmd = 'mkdir -p {}'.format(file_dir)
+        con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
+        source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
 
-    dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                 dest_name=file_name, con_ssh=con_ssh)
+        dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
+                                                                     dest_name=file_name, con_ssh=con_ssh)
 
-    if dest_path is None:
-        raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))
+        if dest_path is None:
+            raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))
+
+    from consts.proj_vars import ProjVar
+    from consts.cgcs import REGION_MAP
+    region = ProjVar.get_var("REGION")
+    if region != 'RegionOne':
+        region_str = REGION_MAP.get(region)
+        con_ssh.exec_cmd("sed -i 's/tenant2-net/tenant2{}-net/g' {}".format(region_str, file_path))
+        con_ssh.exec_cmd("sed -i 's/tenant2-mgmt-net/tenant2{}-mgmt-net/g' {}".format(region_str, file_path))
 
     return file_path
 
