@@ -23,7 +23,7 @@ class VMRecoveryNetworking:
 class ConfigController:
     NAME = 'config_controller'
     LOG_PATH = '/var/log/bash.log'
-    START = 'localhost .*sudo -S config_controller'
+    START = 'localhost .*sudo .*config_controller'
     END = 'controller-0'
 
 
