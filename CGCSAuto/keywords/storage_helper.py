@@ -8,6 +8,8 @@ import time
 import ast
 
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
+
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
@@ -476,7 +478,7 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
             raise exceptions.TimeoutException(err_msg)
 
 
-def _get_storage_backend_show_table(backend, con_ssh=None):
+def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.ADMIN):
     # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
     if 'ceph' in backend:
         backend = 'ceph-store'
@@ -484,12 +486,13 @@ def _get_storage_backend_show_table(backend, con_ssh=None):
         backend = 'lvm-store'
     elif 'file' in backend:
         backend = 'file-store'
-    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh),
+
+    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
     return table_
 
 
-def get_storage_backend_info(backend, keys=None, con_ssh=None):
+def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get storage backend pool allocation info
 
@@ -502,7 +505,7 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None):
                     'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
 
     """
-    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
+    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
 
     values = table_['values']
     backend_info = {}
@@ -524,8 +527,8 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None):
     return backend_info
 
 
-def get_storage_backend_show_vals(backend, fields, con_ssh=None):
-    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
+def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
     vals = []
     if isinstance(fields, str):
         fields = (fields, )
@@ -564,7 +567,7 @@ def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=N
                                   "Expected: {}; Actual: {}".format(dict_to_check, stor_backend_info))
 
 
-def get_storage_backends(con_ssh=None, **filters):
+def get_storage_backends(rtn_val='backend', con_ssh=None, **filters):
     backends = []
     table_ = _get_storage_backend_list_table(con_ssh=con_ssh)
     if table_:
@@ -771,7 +774,20 @@ def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True)
     ssh_client.exec_sudo_cmd('cat /etc/fstab', get_exit_code=False)
 
 
-def get_storage_usage(service='cinder', rtn_val='free capacity (GiB)', con_ssh=None, auth_info=Tenant.ADMIN):
-    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
-    val = table_parser.get_values(table_, rtn_val, service=service)[0]
+def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rtn_val='free capacity (GiB)',
+                      con_ssh=None, auth_info=Tenant.ADMIN):
+    auth_info_tmp = dict(auth_info)
+    region = ProjVar.get_var('REGION')
+    if region != 'RegionOne':
+        if service != 'cinder':
+            auth_info_tmp['region'] = 'RegionOne'
+
+    kwargs = {}
+    if backend_type:
+        kwargs['backend type'] = backend_type
+    if backend_name:
+        kwargs['backend name'] = backend_name
+
+    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info_tmp))
+    val = table_parser.get_values(table_, rtn_val, service=service, **kwargs)[0]
     return float(val)
