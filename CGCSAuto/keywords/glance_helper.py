@@ -7,11 +7,13 @@ from pytest import skip
 
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from consts.auth import Tenant, SvcCgcsAuto
+from utils.ssh import ControllerClient, NATBoxClient
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.timeout import ImageTimeout
 from consts.cgcs import Prompt, GuestImages
+from consts.proj_vars import ProjVar
 from keywords import common, storage_helper, system_helper, host_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -248,7 +250,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         protected (bool): Prevent image from being deleted.
         cache_raw (bool): Convert the image to RAW in the background and store it for fast access
         store (str): Store to upload image to
-        wait: Wait for the convertion of the image to RAW to finish before returning the image
+        wait: Wait for the conversion of the image to RAW to finish before returning the image
         timeout (int): max seconds to wait for cli return
         con_ssh (SSHClient):
         auth_info (dict):
@@ -272,7 +274,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     source_str = file_path
 
-    known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'centos', 'win', 'ge_edge']
+    known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'centos', 'win', 'ge_edge',
+                  'vxworks']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -289,13 +292,20 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     LOG.info("Creating glance image: {}".format(name))
 
+    if not disk_format:
+        if not source_image_file:
+            # default tis-centos-guest image is raw
+            disk_format = 'raw'
+        else:
+            disk_format = 'qcow2'
+
     optional_args = {
         '--id': image_id,
         '--name': name,
         '--visibility': 'private' if public is False else 'public',
         '--protected': protected,
         '--store': store,
-        '--disk-format': disk_format if disk_format else 'qcow2',
+        '--disk-format': disk_format,
         '--container-format': container_format if container_format else 'bare',
         '--min-disk': min_disk,
         '--min-ram': min_ram,
@@ -313,6 +323,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
     try:
+        LOG.info("Creating image {}...".format(name))
+        LOG.info("glance image-create {}".format(optional_args_str))
         code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
                                   auth_info=auth_info, timeout=timeout, rtn_list=True)
     except:
@@ -515,7 +527,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=None, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=3600, con_ssh=None):
     """
 
     Args:
@@ -551,49 +563,53 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
     source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
-    LOG.info('scp image from test server to active controller')
-    scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
-            SvcCgcsAuto.USER, SvcCgcsAuto.SERVER, source_path, dest_path)
+    source_ip = SvcCgcsAuto.SERVER
+    source_user = SvcCgcsAuto.USER
 
-    try:
-        con_ssh.send(scp_cmd)
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
-        if index == 2:
-            con_ssh.send('yes')
-            index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=3600)
-        if index == 1:
-            con_ssh.send(SvcCgcsAuto.PASSWORD)
-            index = con_ssh.expect(timeout=timeout)
-        if index != 0:
-            raise exceptions.SSHException("Failed to scp files")
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
+        nat_dest_path = '/tmp/{}'.format(dest_name)
+        nat_ssh = NATBoxClient.get_natbox_client()
+        if not nat_ssh.file_exists(nat_dest_path):
+            LOG.info("scp image from test server to NatBox: {}".format(nat_name))
+            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
+                                dest_path=nat_dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
 
-        exit_code = con_ssh.get_exit_code()
-        if not exit_code == 0:
-            raise exceptions.CommonError("scp unsuccessfully")
-
-        if not con_ssh.file_exists(file_path=dest_path):
+        LOG.info('scp image from natbox {} to active controller'.format(nat_name))
+        dest_user = HostLinuxCreds.get_user()
+        dest_pswd = HostLinuxCreds.get_password()
+        dest_ip = ProjVar.get_var('LAB').get('floating ip')
+        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
+                              dest_password=dest_pswd, timeout=timeout)
+        if not con_ssh.file_exists(dest_path):
             raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
-    except:
-        LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
-        con_ssh.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
-        raise
+    else:
+        LOG.info('scp image from test server to active controller')
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
+                            dest_path=dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
 
 
-def get_guest_image(guest_os, rm_image=True, check_disk=False):
+def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
     """
     Get or create a glance image with given guest OS
     Args:
         guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
-                cgcs-guest
+                cgcs-guest, vxworks-guest
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
+        cleanup (str|None)
 
     Returns (str): image_id
 
     """
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if nat_name == 'localhost' or nat_name.startswith("128.224"):
+        if re.search('win|rhel|opensuse', guest_os):
+            skip("Skip tests with large images for vbox")
+
     LOG.info("Get or create a glance image with {} guest OS".format(guest_os))
     img_id = get_image_id_from_name(guest_os, strict=True)
 
@@ -603,10 +619,12 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if guest_os == 'cgcs-guest' else 'qcow2'
+        disk_format = 'raw' if guest_os in ['cgcs-guest', 'vxworks', 'tis-centos-guest'] else 'qcow2'
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]
+            if cleanup:
+                ResourceCleanup.add('image', resource_id=img_id, scope=cleanup)
         except:
             raise
         finally:
@@ -615,3 +633,248 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False):
                 con_ssh.exec_cmd('rm -f {}'.format(image_path), fail_ok=True, get_exit_code=False)
 
     return img_id
+
+
+def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Set or unset a glance image with multiple vif-Queues
+    Args:
+        image (str): name or id of a glance image
+        set_ (bool): whether or not to set the  hw_vif_multiqueue_enabled
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns (str): code, msg
+
+    """
+
+    if image is None:
+        return 1, "Error:image_name not provided"
+    if set_:
+        cmd = 'image set '
+    else:
+        cmd = 'image unset '
+
+    cmd += image
+    cmd += ' --property'
+
+    if set_:
+        cmd += ' hw_vif_multiqueue_enabled=True'
+    else:
+        cmd += ' hw_vif_multiqueue_enabled'
+
+    res, out = cli.openstack(cmd, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+
+    return res, out
+
+
+def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+
+    Args:
+        image (str): image name or id
+        properties (None|str|list|tuple): properties to unset
+        tags (None|str|list|tuple): tags to unset
+        con_ssh:
+        auth_info:
+
+    Returns:
+    """
+    args = []
+    post_checks = {}
+    if properties:
+        if isinstance(properties, str):
+            properties = [properties]
+        for item in properties:
+            args.append('--property {}'.format(item))
+        post_checks['properties'] = properties
+
+    if tags:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            args.append('--tag {}'.format(tag))
+        post_checks['tags'] = tags
+
+    if not args:
+        raise ValueError("Nothing to unset. Please specify property or tag to unset")
+
+    args = ' '.join(args) + ' {}'.format(image)
+    code, out = cli.openstack('image unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    check_image_settings(image=image, check_dict=post_checks, unset=True, con_ssh=con_ssh, auth_info=auth_info)
+    msg = "Image {} is successfully unset".format(image)
+    return 0, msg
+
+
+def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None, container_format=None,
+              disk_format=None, architecture=None, instance_id=None, kernel_id=None, os_distro=None,
+              os_version=None, ramdisk_id=None, activate=None, project=None, project_domain=None, tags=None,
+              protected=None, visibility=None, membership=None, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Set image properties/metadata
+    Args:
+        image (str):
+        new_name (str|None):
+        properties (dict|None):
+        min_disk (int|str|None):
+        min_ram (int|str|None):
+        container_format (str|None):
+        disk_format (str|None):
+        architecture (str|None):
+        instance_id (str|None):
+        kernel_id (str|None):
+        os_distro (str|None):
+        os_version (str|None):
+        ramdisk_id (str|None):
+        activate (bool|None):
+        project (str|None):
+        project_domain (str|None):
+        tags (list|tuple|None):
+        protected (bool|None):
+        visibility (str): valid values: 'public', 'private', 'community', 'shared'
+        membership (str): valid values: 'accept', 'reject', 'pending'
+        con_ssh:
+        auth_info:
+
+    Returns (tupe):
+        (0, Image <image> is successfully modified)
+        (1, <stderr>)   - openstack image set is rejected
+
+    """
+
+    post_checks = {}
+    args = []
+    if protected is not None:
+        if protected:
+            args.append('--protected')
+            post_check_val = True
+        else:
+            args.append('--unprocteced')
+            post_check_val = False
+        post_checks['protected'] = post_check_val
+
+    if visibility is not None:
+        valid_vals = ('public', 'private', 'community', 'shared')
+        if visibility not in valid_vals:
+            raise ValueError("Invalid visibility specified. Valid options: {}".format(valid_vals))
+        args.append('--{}'.format(visibility))
+        post_checks['visibility'] = visibility
+
+    if activate is not None:
+        if activate:
+            args.append('--activate')
+            post_check_val = 'active'
+        else:
+            args.append('--deactivate')
+            post_check_val = 'deactivated'
+        post_checks['status'] = post_check_val
+
+    if membership is not None:
+        valid_vals = ('accept', 'reject', 'pending')
+        if membership not in valid_vals:
+            raise ValueError("Invalid membership specified. Valid options: {}".format(valid_vals))
+        args.append('--{}'.format(membership))
+        # Unsure how to do post check
+
+    if properties:
+        for key, val in properties.items():
+            args.append('--property {}="{}"'.format(key, val))
+            post_checks['properties'] = properties
+
+    if tags:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            args.append('--tag {}'.format(tag))
+        post_checks['tags'] = list(tags)
+
+    other_args = {
+        '--name': (new_name, 'name'),
+        '--min-disk': (min_disk, 'min_disk'),
+        '--min-ram': (min_ram, 'min_ram'),
+        '--container-format': (container_format, 'container_format'),
+        '--disk-format': (disk_format, 'disk_format'),
+        '--project': (project, 'owner'),    # assume project id will be given
+        '--project-domain': (project_domain, None),      # Post check unhandled atm
+        '--architecture': (architecture, None),
+        '--instance-id': (instance_id, None),
+        '--kernel-id': (kernel_id, None),
+        '--os-distro': (os_distro, None),
+        '--os-version': (os_version, None),
+        '--ramdisk-id': (ramdisk_id, None),
+    }
+
+    for key, val in other_args.items():
+        if val[0] is not None:
+            args[key] = val[0]
+            if val[1]:
+                post_checks[val[1]] = val[0]
+
+    args = ' '.join(args)
+    if not args:
+        raise ValueError("Nothing to set")
+
+    args += ' {}'.format(image)
+    code, out = cli.openstack('image set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    check_image_settings(image=image, check_dict=post_checks, con_ssh=con_ssh, auth_info=auth_info)
+    msg = "Image {} is successfully modified".format(image)
+    return 0, msg
+
+
+def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Check image settings via openstack image show.
+    Args:
+        image (str):
+        check_dict (dict): key should be the field;
+            if unset, value should be a list or tuple, key should be properties and/or tags
+            if set, value should be dict if key is properties or tags, otherwise value should normally be a str
+        unset (bool): whether to check if given metadata are set or unset
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (None):
+
+    """
+    LOG.info("Checking image setting is as specified: {}".format(check_dict))
+
+    post_tab = table_parser.table(cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info),
+                                  combine_multiline_entry=True)
+
+    for field, expt_val in check_dict.items():
+        actual_val = table_parser.get_value_two_col_table(post_tab, field=field, merge_lines=True)
+        if field == 'properties':
+            actual_vals = actual_val.split(', ')
+            actual_vals = ((val.split('=')) for val in actual_vals)
+            actual_dict = {k.strip(): v.strip() for k, v in actual_vals}
+            if unset:
+                for key in expt_val:
+                    assert -1 == actual_dict.get(key, -1)
+            else:
+                for key, val in expt_val.items():
+                    actual = actual_dict[key]
+                    try:
+                        actual = eval(actual)
+                    except NameError:
+                        pass
+                    assert str(val) == str(actual), "Property {} is not as set. Expected: {}, actual: {}".\
+                        format(key, val, actual_dict[key])
+        elif field == 'tags':
+            actual_vals = [val.strip() for val in actual_val.split(',')]
+            if unset:
+                assert not (set(expt_val) & set(actual_val)), "Expected to be unset: {}, actual: {}".\
+                    format(expt_val, actual_vals)
+            else:
+                assert set(expt_val) <= set(actual_vals), "Expected tags: {}, actual: {}".format(expt_val, actual_vals)
+        else:
+            if unset:
+                LOG.warning("Unset flag ignored. Only property and tag is valid for unset")
+            assert str(expt_val) == str(actual_val), "{} is not as set. Expected: {}, actual: {}".\
+                format(field, expt_val, actual_val)

@@ -13,6 +13,7 @@ from keywords import ceilometer_helper
 
 @mark.sanity
 @mark.cpe_sanity
+@mark.sx_nightly
 def test_ceilometer_vswitch_port_samples():
     """
     Test Steps:

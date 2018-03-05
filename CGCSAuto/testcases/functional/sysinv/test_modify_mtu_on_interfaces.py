@@ -130,8 +130,15 @@ def get_max_allowed_mtus(host='controller-0', network_type='oam', if_name='', if
     min_mtu = 0
 
     uses_ifs = if_info[if_name]['uses_ifs']
+
     if uses_ifs:
         min_mtu = min([if_info[nic]['mtu'] for nic in uses_ifs])
+
+    # check for mtu type
+    # if it's not vlan set not restriction till mtu 9216 CGTS-8184
+    uses_ifs_type = if_info[if_name]['type']
+    if uses_ifs_type != 'vlan':
+        min_mtu = 9216
 
     return min_mtu, if_info[if_name]['mtu'], if_name
 

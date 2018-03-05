@@ -43,7 +43,8 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     # Parse common test info from test_results.log
     lab, build, build_server, testcases_list, log_dir = __parse_common_info(file_path)
 
-    logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
+    # logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
+    logfile = 'none'        # Do not upload log to mongoDB since it will have major impact on performance
     tester_name = tester_name if tester_name else os.environ['USER']
     result_ini = os.path.join(log_dir, 'last_record.ini')
     upload_log = os.path.join(log_dir, 'uploaded_tests.log')

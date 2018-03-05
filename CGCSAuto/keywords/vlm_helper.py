@@ -189,7 +189,7 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=Tru
         rc, output = local_host.vlm_exec_cmd(action, barcode, reserve=reserve)
         if rc != 0:
             err_msg = "Failed to {} node {} {}: {}".format(action, host, barcode, output)
-            raise exceptions.VLMError(err_msg)
+            # raise exceptions.VLMError(err_msg)
 
         LOG.info("{} succeeded on {} {}".format(action, host, barcode))
 

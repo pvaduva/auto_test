@@ -1,5 +1,3 @@
-
-# flake8:
 import os.path
 import time
 import datetime
@@ -32,6 +30,8 @@ DEF_PROCESS_RESTART_CMD = r'/etc/init.d/{} restart'
 DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
 INTERVAL_BETWEEN_SWACT = 300 + 10
+
+IS_SIMPLEX = system_helper.is_simplex()
 
 SKIP_PROCESS_LIST = ('postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd')
 
@@ -227,9 +227,9 @@ PROCESSES = {
         'cmd': '/usr/bin/python2 /bin/nova-conductor', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    'nova-cert': {
-        'cmd': '/usr/bin/python2 /bin/nova-cert', 'impact': 'swact',
-        'severity': 'critical', 'node_type': 'active'},
+    # 'nova-cert': {
+    #     'cmd': '/usr/bin/python2 /bin/nova-cert', 'impact': 'swact',
+    #     'severity': 'critical', 'node_type': 'active'},
 
     # {'nova-consoleauth': {
     'nova-console-auth': {
@@ -378,10 +378,16 @@ class MonitoredProcess:
 
         self.lab_type = kwargs.get('lab_type', 'any')
         self.conf_file = kwargs.get('conf_file', None)
-        self.override = kwargs.get('override', True)
+        self.override = kwargs.get('override', False)
 
         self.prev_stats = None
         self.con_ssh = ControllerClient.get_active_controller()
+
+        if IS_SIMPLEX:
+            if self.impact == 'swact':
+                self.impact = 'enabled-degraded'
+            if self.node_type == 'controller':
+                self.node_type = 'active'
 
         if cmd:
             main_cmd = cmd.split()[0]
@@ -393,21 +399,23 @@ class MonitoredProcess:
             self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(self.name)
 
         elif not os.path.abspath(self.pid_file):
-            self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(os.path.basename(os.path.split(self.pid_file))[0])
+            self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(os.path.splitext(os.path.basename(self.pid_file))[0])
 
         self.update_process_info()
 
         self.check_process_settings()
 
     def check_process_settings(self):
+        LOG.debug('retries:{}, debounce:{}, interval:{}, process_type:{}, \npid_file:{}'.format(
+            self.retries, self.debounce, self.interval, self.process_type, self.pid_file))
         pass
 
     def is_supported_lab(self):
         lab_type = self.lab_type
-        if lab_type in ('any'):
+        if lab_type in ('any', ):
             return True
 
-        elif lab_type in ('storage'):
+        elif lab_type in ('storage', ):
             return len(system_helper.get_storage_nodes(con_ssh=self.con_ssh)) > 0
 
         return True
@@ -457,13 +465,15 @@ class MonitoredProcess:
             for k, v in settings.items():
                 setattr(self, k, v)
 
-            if 'restarts' in settings and not self.override:
+            # if 'restarts' in settings and not self.override:
+            if 'restarts' in settings:
                 self.retries = int(settings['restarts'].strip())
+                LOG.debug('retries (Not override):{}'.format(self.retries))
             else:
                 self.retries = getattr(self, 'retries', None)
                 if self.retries is None:
                     self.retries = 3
-            self.retries += 1
+                LOG.debug('retries:{}'.format(self.retries))
 
             self.interval = getattr(self, 'interval', None)
             if self.interval is None:
@@ -500,13 +510,13 @@ class MonitoredProcess:
             LOG.info('Choose the standby-controller:{} to test on, node-type:{}'.format(self.host, self.node_type))
 
         elif self.node_type in ('compute', 'all'):
-            computes = host_helper.get_hypervisors()
-            self.host = random.choice([h for h in computes if h != active_controller])
-            if not self.host:
-                LOG.error('No hypervisor other than the active-controller?! This is a SIMPLEX system?')
-                self.host = system_helper.get_active_controller_name(con_ssh=self.con_ssh)
-
-            LOG.info('Choose a non-active hypervisor:{} to test on, node-type:{}'.format(self.host, self.node_type))
+            if IS_SIMPLEX:
+                self.host = active_controller
+                LOG.info("Choose controller-0 for simplex system")
+            else:
+                computes = host_helper.get_hypervisors()
+                self.host = random.choice([h for h in computes if h != active_controller])
+                LOG.info('Choose a non-active hypervisor:{} to test on, node-type:{}'.format(self.host, self.node_type))
 
         else:
             # should never reach here
@@ -703,15 +713,15 @@ class MonitoredProcess:
 
             if len(matched_events) == 1:
                 LOG.warn('Only 1 event recorded? matched_event:\n{}\n'.format(matched_events[0]))
-                if service in ('ntpd'):
+                if service in ('ntpd', ):
                     event = matched_events[0]['event']
                     if event[1] == 'set':
-                        LOG.warn('Treat NTP sepcially, pass since it is set')
+                        LOG.warn('Treat NTP specially, pass since it is set')
                         return 0, tuple(matched_events)
 
             LOG.warn('No matched event found at try:{}, will sleep {} seconds and retry'
-                     '\nmatched events:\n{}, host={}, expected status={}, expecting={}'.format(
-                retry, interval, matched_events, host, target_status, expecting))
+                     '\nmatched events:\n{}, host={}, expected status={}, expecting={}'.
+                     format(retry, interval, matched_events, host, target_status, expecting))
 
             time.sleep(interval)
 
@@ -743,24 +753,25 @@ class MonitoredProcess:
 
         quorum = int(getattr(self, 'quorum', 0))
         if quorum > 0:
-            retries = retries * 2 + 1
+            retries += 1
             mode = getattr(self, 'mode', 'passive')
             if 'active' == mode:
                 wait_after_each_kill += 5
-            else:
-                retries += 1
 
-        LOG.info('interval={}, debounce={}, wait_each_kill={}'.format(interval, debounce, wait_after_each_kill))
+        # have to kill 1 more time for mtcClient
+        retries += 2
+
+        LOG.info('retries={}, interval={}, debounce={}, wait_each_kill={}'.format(
+            retries, interval, debounce, wait_after_each_kill))
 
         cmd = '''true; n=1; last_pid=''; pid=''; for((;n<{};)); do pid=\$(cat {} 2>/dev/null); date;
                 if [ "x\$pid" = "x" -o "\$pid" = "\$last_pid" ]; then echo "stale or empty PID:\$pid, last_pid=\$last_pid";
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
-                    retries+1, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+                    retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
-
         cmd_2 = 'cat >/home/wrsroot/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
 
         wait_time = max(wait_after_each_kill * retries + 60, 60)
@@ -776,7 +787,7 @@ class MonitoredProcess:
                     full_cmd = "nohup ./test_process.sh > ./results.txt 2>&1 &"
 
                     code, output = con.exec_cmd(full_cmd, fail_ok=True, expect_timeout=wait_time)
-                    #code, output = con.exec_sudo_cmd( full_cmd, fail_ok=True, expect_timeout=wait_time)
+                    # code, output = con.exec_sudo_cmd( full_cmd, fail_ok=True, expect_timeout=wait_time)
                     if 0 != code:
                         LOG.warn('Failed to kill process:{} on host:{}, cli:\n{}\noutput:\n{}'.format(
                             name, host, cmd, output))
@@ -795,9 +806,7 @@ class MonitoredProcess:
 
             wait_time_for_host_status = 90
 
-            time.sleep((retries + 1) * wait_after_each_kill)
-
-            if impact in ('log'):
+            if impact in ('log',):
                 check_event = True
 
             elif impact in ('enabled-degraded', 'disabled-failed'):
@@ -806,15 +815,15 @@ class MonitoredProcess:
                 if quorum == '1':
                     LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
                     wait_time_for_host_status = HostTimeout.REBOOT
-                    expected = {'operational': 'Disabled', 'availability': 'offline'}
+                    expected = {'operational': 'Disabled', 'availability': 'Offline'}
 
-                elif impact in ('disabled-failed'):
+                elif impact in ('disabled-failed',):
                     LOG.debug('wait host getting into status:disabled-failed')
                     wait_time_for_host_status = HostTimeout.REBOOT
-                    expected = {'operational': 'Disabled', 'availability': 'Failed'}
+                    expected = {'operational': 'Disabled', 'availability': ['Failed', 'Offline']}
                     # check_event = True
 
-                elif impact in ('enabled-degraded'):
+                elif impact in ('enabled-degraded',):
                     wait_time_for_host_status = 90
 
                     expected = {'operational': 'Enabled', 'availability': 'Degraded'}
@@ -823,8 +832,23 @@ class MonitoredProcess:
                 LOG.error('unknown IMPACT:{}'.format(impact))
                 assert False, 'Unknown IMPACT:{}'.format(impact)
 
-            reached = host_helper.wait_for_host_states(
-                host, timeout=wait_time_for_host_status, con_ssh=con_ssh, fail_ok=True, **expected)
+            sleep_time = (retries + 1) * wait_after_each_kill
+            if IS_SIMPLEX and expected['operational'] == 'Disabled':
+                LOG.info("Simplex system - check ssh disconnected")
+                reached = host_helper.wait_for_ssh_disconnect(fail_ok=True, timeout=sleep_time + 120)
+
+                if reached:
+                    host_helper.recover_simplex(fail_ok=True)
+
+            else:
+
+                LOG.info("Sleep for some time after each kill: {}".format(sleep_time))
+                time.sleep(sleep_time)
+
+                LOG.info("After process:{} been killed {} times, wait for {} to reach: {}".format(name, retries,
+                                                                                                  host, expected))
+                reached = host_helper.wait_for_host_states(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
+                                                           fail_ok=True, **expected)
 
             if not reached:
                 LOG.warn('Host:{} failed to get into status:{} after process:{} been killed {} times'.format(
@@ -845,8 +869,7 @@ class MonitoredProcess:
 
             if not reached and not found_event:
                 LOG.error('host {} did not reach expected status:{} after been killed {} times on host {}, '
-                          'and there is no relevant alarms/events found neither'.format(
-                    host, expected, name, retries))
+                          'and there is no relevant alarms/events found neither'.format(host, expected, name, retries))
             else:
                 if wait_recover:
                     operational = impact.split('-')[0]
@@ -907,7 +930,6 @@ class MonitoredProcess:
         return -1
 
     def kill_process_and_verify_impact(self, con_ssh=None):
-
         host = self.host
         node_type = self.node_type
         active_controller = self.active_controller
@@ -953,113 +975,95 @@ class MonitoredProcess:
         return code
 
 
-@mark.parametrize(('process_name'), [
-    mark.p1(('sm')),
+@mark.parametrize('process_name', [
+    mark.p1('sm'),
     # TODO CGTS-6451
-    mark.p1(('rmond')),
-    mark.p1(('fsmond')),
-    mark.p1(('hbsClient')),
-    mark.p1(('mtcClient')),
-    mark.p1(('mtcalarmd')),
-    mark.p1(('sm-api')),
-    mark.p1(('sm-watchdog')),
-    mark.p1(('sysinv-agent')),
-    mark.p1(('sw-patch-controller-daemon')),
-    mark.p1(('sw-patch-agent')),
-    # TODO jira?
-    mark.p1(('acpid')),
-    mark.p1(('ceilometer-polling')),
-    mark.p1(('mtclogd')),
-    # TODO need manual configuring
-    mark.p1(('ntpd')),
-    mark.p1(('sm-eru')),
-    mark.p1(('sshd')),
-    mark.p1(('syslog-ng')),
-    mark.p1(('io-monitor-manager')),
-    mark.p1(('logmgmt')),
-    mark.p1(('guestServer')),
-    mark.p1(('host_agent')),
-    mark.p1(('libvirtd')),
-    mark.p1(('neutron-avr-agent')),
-    mark.p1(('neutron-avs-agent')),
-    mark.p1(('neutron-dhcp-agent')),
-    mark.p1(('neutron-metadata-agent')),
-    mark.p1(('neutron-sriov-nic-agent')),
-    mark.p1(('nova-compute')),
-    mark.p1(('vswitch')),
+    mark.p1('rmond'),
+    mark.p1('fsmond'),
+    mark.priorities('p1', 'sx_nightly')('hbsClient'),
+    mark.p1('mtcClient'),
+    mark.p1('mtcalarmd'),
+    mark.p1('sm-api'),
+    mark.p1('sm-watchdog'),
+    mark.p1('sysinv-agent'),
+    mark.p1('sw-patch-controller-daemon'),
+    mark.p1('sw-patch-agent'),
+    mark.p1('acpid'),
+    mark.p1('ceilometer-polling'),
+    mark.p1('mtclogd'),
+    mark.p1('ntpd'),
+    mark.p1('sm-eru'),
+    mark.p1('sshd'),
+    mark.p1('syslog-ng'),
+    mark.p1('io-monitor-manager'),
+    mark.p1('logmgmt'),
+    mark.p1('guestServer'),
+    mark.p1('host_agent'),
+    mark.p1('libvirtd'),
+    mark.p1('neutron-avr-agent'),
+    mark.p1('neutron-avs-agent'),
+    mark.p1('neutron-dhcp-agent'),
+    mark.p1('neutron-metadata-agent'),
+    mark.p1('neutron-sriov-nic-agent'),
+    mark.p1('nova-compute'),
+    mark.p1('vswitch'),
 
     # mark.p1(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
     # mark.p1(('rabbitmq-server')), # rabbit in SM don't test as per CGTS-6336
-    mark.p1(('rabbit')),
-    mark.p1(('sysinv-inv')),    # sysinv-inv in SM
-    mark.p1(('sysinv-conductor')),
-    mark.p1(('mtc-agent')),
-    mark.p1(('hbs-agent')),
-    mark.p1(('hw-mon')),
-    mark.p1(('dnsmasq')),
-    mark.p1(('fm-mgr')),
-    # TODO CGTS-6396
-    mark.p1(('keystone')),
-    mark.p1(('glance-registry')),
-    # TODO CGTS-6398
+    mark.p1('rabbit'),
+    mark.p1('sysinv-inv'),    # sysinv-inv in SM
+    mark.p1('sysinv-conductor'),
+    mark.p1('mtc-agent'),
+    mark.p1('hbs-agent'),
+    mark.p1('hw-mon'),
+    mark.p1('dnsmasq'),
+    mark.p1('fm-mgr'),
+    mark.p1('keystone'),
+    mark.p1('glance-registry'),
     # major
-    mark.p1(('glance-api')),
-    mark.p1(('neutron-server')),
-    mark.p1(('nova-api')),
-    mark.p1(('nova-scheduler')),
-    mark.p1(('nova-conductor')),
-    mark.p1(('nova-cert')),
-    mark.p1(('nova-console-auth')),
+    mark.p1('glance-api'),
+    mark.p1('neutron-server'),
+    mark.p1('nova-api'),
+    mark.p1('nova-scheduler'),
+    mark.p1('nova-conductor'),
+    # mark.p1(('nova-cert')),       # Removed in pike
+    mark.p1('nova-console-auth'),
     # minor
-    mark.p1(('nova-novnc')),
-    #
+    mark.p1('nova-novnc'),
     # major
-    mark.p1(('cinder-api')),
-    mark.p1(('cinder-scheduler')),
-    # retries = 32
-    mark.p1(('cinder-volume')),
-    #
-    mark.p1(('ceilometer-collector')),
-    mark.p1(('ceilometer-api')),
-    mark.p1(('ceilometer-agent-notification')),
-    mark.p1(('heat-engine')),
+    mark.p1('cinder-api'),
+    mark.p1('cinder-scheduler'),
+    mark.p1('cinder-volume'),   # retries = 32
+    mark.p1('ceilometer-collector'),
+    mark.p1('ceilometer-api'),
+    mark.p1('ceilometer-agent-notification'),
+    mark.priorities('p1', 'sx_nightly')('heat-api'),
+    mark.p1('heat-api-cfn'),
+    mark.p1('heat-api-cloudwatch'),
+    mark.p1('heat-engine'),
+    mark.p1('snmp'),
 
-    # TODO CGTS-6396
-    mark.p1(('heat-api')),
-    mark.p1(('heat-api-cfn')),
-    mark.p1(('heat-api-cloudwatch')),
-    #
-    #
     # TODO CGTS-6426
     # mark.p1(('open-ldap')),, active/active
-    # retries = 32
-    mark.p1(('snmp')),
-
-    # TODO CGTS-6426
     # mark.p1(('lighttpd')),, active/active
+    # mark.p1('horizon'),, active/active
+    # mark.p1(('ceph-rest-api')),
+    mark.p1('ceph-manager'),
 
     # mark.p1(('gunicorn')), changed to horizon
-    # TODO CGTS-6398
-    # mark.p1(('horizon')),, active/active
-    # mark.p1(('horizon')),
-    # mark.p1(('patch-alarm-manager')),
-    #
-    # requires storage lab, active/active
-    # mark.p1(('ceph-rest-api')),
-    mark.p1(('ceph-manager')),
+    # mark.p1(('patch-alarm-manager')),     ???
 
-    mark.p1(('vim-api')),
-    mark.p1(('vim')),
+    mark.p1('vim-api'),
+    mark.p1('vim'),
     # minor
-    mark.p1(('vim-webserver')),
-    mark.p1(('guest-agent')),
-    mark.p1(('nova-api-proxy')),
-    mark.p1(('haproxy')),
-
-    mark.p1(('aodh-api')),
-    mark.p1(('aodh-evaluator')),
-    mark.p1(('aodh-listener')),
-    mark.p1(('aodh-notifier')),
+    mark.p1('vim-webserver'),
+    mark.p1('guest-agent'),
+    mark.p1('nova-api-proxy'),
+    mark.p1('haproxy'),
+    mark.p1('aodh-api'),
+    mark.p1('aodh-evaluator'),
+    mark.p1('aodh-listener'),
+    mark.p1('aodh-notifier'),
 ])
 def test_process_monitoring(process_name, con_ssh=None):
     """
@@ -1067,93 +1071,6 @@ def test_process_monitoring(process_name, con_ssh=None):
 
     User Stories:
         US61041 US66951 US18629
-
-    Test Cases:
-        sm
-        rmond
-        fsmond
-        hbsClient
-        mtcClient
-        mtcalarmd
-        sm-api
-        sm-watchdog
-        sysinv-agent
-        sw-patch-controller-daemon
-        sw-patch-agent
-        acpid
-        ceilometer-polling
-        mtclogd
-        ntpd
-        sm-eru
-        sshd
-        syslog-ng
-        io-monitor-manager
-        logmgmt
-        guestServer
-        host_agent
-        libvirtd
-        neutron-avr-agent
-        neutron-avs-agent
-        neutron-dhcp-agent
-        neutron-metadata-agent
-        neutron-sriov-nic-agent
-        nova-compute
-        vswitch
-        # postgres  SKIP as advised
-        rabbitmq-server # rabbit in SM
-        rabbit
-        sysinv-api  # sysinv-inv in SM
-        sysinv-inv
-        sysinv-conductor
-        mtc-agent
-        hbs-agent
-        hw-mon
-        dnsmasq
-        fm-mgr
-        keystone
-        glance-registry
-        glance-api
-        neutron-server
-        nova-api
-        nova-scheduler
-        nova-conductor
-        nova-cert
-        nova-console-auth
-        nova-novnc
-        cinder-api
-        cinder-scheduler
-        cinder-volume
-        ceilometer-collector
-        ceilometer-api
-        ceilometer-agent-notification
-        heat-engine
-        heat-api
-        heat-api-cfn
-        heat-api-cloudwatch
-        open-ldap
-        snmp
-        lighttpd
-        gunicorn changed to horizon
-        horizon
-        patch-alarm-manager
-        ceph-rest-api
-        ceph-manager
-        vim-api
-        vim-webserver
-        guest-agent
-        nova-api-proxy
-        haproxy
-        aodh-api
-        aodh-evaluator
-        aodh-listener
-        aodh-notifier
-
-
-    Args:
-        process_name (str): Name of the process to test. The following specical names are supported:
-        con_ssh:
-
-    Returns:
 
     Test Steps:
         - get process settings for the specified process name, from pre-defined information, configuration files and
@@ -1181,7 +1098,10 @@ def test_process_monitoring(process_name, con_ssh=None):
 
             ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
-    LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
+    if ProjVar.get_var('REGION') != 'RegionOne' and re.search('keystone|glance', process_name):
+        skip("Keystone and Glance services are on primary region only")
+
+    LOG.tc_step('Start testing SM/PM Process Monitoring')
 
     assert process_name in PROCESSES, \
         'Unknown process with name:{}'.format(process_name)

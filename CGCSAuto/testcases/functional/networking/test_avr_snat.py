@@ -224,7 +224,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     vm_helper.wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+    vm_helper.wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
     post_evac_host = nova_helper.get_vm_host(vm_)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
@@ -297,7 +297,7 @@ def test_snat_computes_lock_reboot(snat_setups):
     assert vm_host == post_reboot_host, "VM has moved to {} even though it's locked".format(post_reboot_host)
 
     LOG.tc_step("Verify vm is recovered after host reboot complete and can still ping outside")
-    vm_helper._wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+    vm_helper.wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=120, use_fip=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)

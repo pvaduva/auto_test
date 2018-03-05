@@ -1,4 +1,4 @@
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
 
@@ -74,16 +74,10 @@ def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_t
 
 def get_pci_vm_nics(vif_model, pci_net_id, other_pci_net_id=None):
     mgmt_net_id = network_helper.get_mgmt_net_id()
-
-    if vif_model == 'pci-sriov':
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': pci_net_id, 'vif-model': vif_model},
-                {'net-id': pci_net_id, 'vif-model': vif_model}]
-    else:
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': pci_net_id, 'vif-model': vif_model}]
-        if other_pci_net_id:
-            nics.append({'net-id': other_pci_net_id, 'vif-model': vif_model})
+    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+            {'net-id': pci_net_id, 'vif-model': vif_model}]
+    if other_pci_net_id:
+        nics.append({'net-id': other_pci_net_id, 'vif-model': vif_model})
 
     return nics
 
@@ -165,6 +159,7 @@ class TestSriov:
 
         return net_type, pci_net, pci_hosts, pnet_id, nics, initial_host, other_host, vfs_use_init, vm_num, vm_vcpus
 
+    @mark.nics
     def test_sriov_robustness(self, sriov_prep, add_admin_role_func):
         """
         Exhaust all CPUs on one compute by spawning VMs with 2 SR-IOV interface
@@ -213,8 +208,12 @@ class TestSriov:
         LOG.tc_step("Boot {} vms with 2 {} vifs each".format(vm_num, vif_model))
         vms = []
         for i in range(vm_num):
+            sriov_nics = nics.copy()
+            sriov_nic2 = sriov_nics[-1].copy()
+            sriov_nic2['port-id'] = network_helper.create_port(net_id=sriov_nic2.pop('net-id'), vnic_type='direct')[1]
+            sriov_nics.append(sriov_nic2)
             LOG.info("Booting vm{}...".format(i + 1))
-            vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function',
+            vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=sriov_nics, cleanup='function',
                                       vm_host=initial_host, avail_zone='cgcsauto')[1]
             vms.append(vm_id)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -286,6 +285,7 @@ class TestPcipt:
 
         return net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id, vm_num, vm_vcpus, pfs_use_init
 
+    @mark.nics
     def test_pcipt_robustness(self, pcipt_prep):
         """
         TC3_robustness: PCI-passthrough by locking and rebooting pci_vm host
@@ -302,8 +302,9 @@ class TestPcipt:
             - Boot 2 pcipt vms with pci-passthrough vif over selected network
             - Verify resource usage for providernet is increased as expected
             - Lock pci_vm host and ensure vm migrated to other host (or fail to lock if no other pcipt host available)
-            - Repeat above step for another pcipt vm
-            - Verify vms' pci-pt interfaces reachable and resource usage for pnet unchanged
+            - (Delete above tested pcipt vm if only two pcipt hosts available)
+            - Lock host for another pcipt vm, and lock is successful
+            - Verify vms' pci-pt interfaces reachable and resource usage for pnet as expected
             - 'sudo reboot -f' pci_vm host, and ensure vm evacuated or up on same host if no other pcipt host available
             - Repeat above step for another pcipt vm
             - Verify vms' pci-pt interfaces reachable and resource usage for pnet unchanged

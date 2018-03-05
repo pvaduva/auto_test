@@ -4,7 +4,7 @@ from pytest import mark, fixture, skip
 from keywords import host_helper, system_helper, keystone_helper, security_helper
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.reasons import SkipReason
+from consts.reasons import SkipSysType
 
 
 @fixture()
@@ -43,7 +43,7 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
 
     """
     if 'swact' in scenario and less_than_two_cons:
-        skip(SkipReason.LESS_THAN_TWO_CONTROLLERS)
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     host = system_helper.get_standby_controller_name()
     assert host, "No standby controller on system"
@@ -68,6 +68,7 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
     assert post_pswd == security_helper.get_admin_password_in_keyring()
 
     if scenario == "change_pswd_swact":
+        LOG.tc_step("Swact active controller")
         host_helper.swact_host()
     else:
         LOG.tc_step("Unlock host {}".format(host))

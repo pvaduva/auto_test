@@ -2,6 +2,7 @@ import time
 
 from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient
 
 from consts.auth import Tenant
 from keywords import common
@@ -246,13 +247,22 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
         tenant_dictname = user.upper()
         Tenant.update_tenant_dict(tenant_dictname, username=name, password=password, tenant=project)
 
+    if password and user == 'admin':
+        from consts.proj_vars import ProjVar
+        if ProjVar.get_var('REGION') != 'RegionOne':
+            LOG.info("Run openstack_update_admin_password on secondary region after admin password change")
+            if not con_ssh:
+                con_ssh = ControllerClient.get_active_controller()
+            with con_ssh.login_as_root(timeout=30) as con_ssh:
+                con_ssh.exec_cmd("echo 'y' | openstack_update_admin_password '{}'".format(password))
+
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
     return 0, msg
 
 
 def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
-                  url=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                  region=None, url=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get a list of endpoints with given arguments
     Args:
@@ -262,6 +272,7 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
         service_type(str): Service type
         enabled (str): True/False
         interface (str): Interface of endpoints. valid entries: admin, internal, public
+        region (str): RegionOne or RegionTwo
         url (str): url of endpoint
         strict(bool):
         auth_info (dict):
@@ -279,6 +290,7 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
         'Enabled': enabled,
         'Interface': interface,
         'URL': url,
+        'Region': region,
     }
 
     kwargs = {}
@@ -307,9 +319,24 @@ def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
 
 
 def is_https_lab(con_ssh=None, source_admin=True, auth_info=Tenant.ADMIN):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
     table_ = table_parser.table(cli.openstack('endpoint list', source_admin_=source_admin, ssh_client=con_ssh,
                                               auth_info=auth_info))
-
+    con_ssh.exec_cmd('unset OS_REGION_NAME')    # Workaround for CGTS-8348
     filters = {'Service Name': 'keystone', 'Service Type': 'identity', 'Interface': 'public'}
     keystone_pub = table_parser.get_values(table_=table_, target_header='URL', **filters)[0]
     return 'https' in keystone_pub
+
+
+def delete_users(user, fail_ok=False):
+    """
+    Delete the given openstack user
+    Args:
+        user: user name to delete
+        fail_ok: if the deletion expected to fail
+
+    Returns: tuple, (code, msg)
+    """
+    return cli.openstack('user delete', user, auth_info=Tenant.ADMIN, fail_ok=fail_ok)
+

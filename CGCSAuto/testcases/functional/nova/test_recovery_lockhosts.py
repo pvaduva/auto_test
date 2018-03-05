@@ -17,7 +17,7 @@ def check_alarms():
 
 @fixture(scope='function')
 def target_host():
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
     if len(nova_hosts) > 4:
         skip("More than 4 nova hosts detected.")
 
@@ -28,7 +28,7 @@ def target_host():
 
     assert target_host, "No nova host found on the system."
 
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
     hosts_to_lock = list(set(nova_hosts) - {target_host})
     HostsToRecover.add(hosts_to_lock, scope='function')
 
@@ -80,7 +80,6 @@ def test_vm_autorecovery_reboot_host(target_host):
     HostsToRecover.add(target_host, scope='function')
     host_helper.reboot_hosts(target_host)
     host_helper.wait_for_hypervisors_up(target_host)
-    host_helper.wait_for_hosts_in_nova_compute(target_host)
 
     for vm_id_ in vms:
         LOG.tc_step("Verify vm failure event is logged for vm {}".format(vm_id_))

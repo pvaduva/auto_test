@@ -1,20 +1,22 @@
 import random
 import re
+import math
 
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.auth import Tenant, Guest
+from consts.auth import Tenant
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
                   storage_backing=None, check_storage_backing=True):
     """
-    Create a flavor with given critria.
+    Create a flavor with given criteria.
 
     Args:
         name (str): substring of flavor name. Whole name will be <name>-<auto_count>. e,g., 'myflavor-1'. If None, name
@@ -27,6 +29,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         swap (int|None):
         is_public (bool):
         rxtx_factor (str):
+        guest_os (str|None): guest name such as 'tis-centos-guest' or None - default tis guest assumed
         fail_ok (bool): whether it's okay to fail to create a flavor. Default to False.
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
@@ -69,6 +72,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     subcmd = ' '.join([optional_args, mandatory_args])
 
     LOG.info("Creating flavor {}...".format(flavor_name))
+    LOG.info("nova flavor-create option: {}".format(subcmd))
     exit_code, output = cli.nova('flavor-create', subcmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                                  rtn_list=True)
 
@@ -82,7 +86,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     if not storage_backing:
         if check_storage_backing:
             LOG.info("Choose storage backing used by most hosts")
-            storage_backing, hosts = get_storage_backing_with_max_hosts(rtn_down_hosts=True, con_ssh=con_ssh)
+            storage_backing = get_storage_backing_with_max_hosts(con_ssh=con_ssh)[0]
         else:
             storage_backing = 'local_image'
 
@@ -99,7 +103,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     Get storage backing that has the most hypervisors
     Args:
         prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
-        rtn_down_hosts (bool): whether or not to count down hosts as well. Default is to return up hosts only.
+        rtn_down_hosts (bool): whether to return down hosts if no up hosts available
         con_ssh (SSHClient):
 
     Returns (tuple): (<storage_backing>(str), <hosts>(list))
@@ -108,58 +112,42 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
             AIO: ('local_lvm', ['controller-0', 'controller-1'])
 
     """
-
-    hosts_by_backing = {'local_image': host_helper.get_hosts_by_storage_aggregate(con_ssh=con_ssh),
-                        'local_lvm': host_helper.get_hosts_by_storage_aggregate('local_lvm', con_ssh=con_ssh),
-                        'remote': host_helper.get_hosts_by_storage_aggregate('remote', con_ssh=con_ssh)
-                        }
+    up_hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
+    hosts = list(up_hosts)
+    has_up_hosts = True
+    if not hosts:
+        has_up_hosts = False
+        hosts = host_helper.get_hypervisors()
+        LOG.warning("No up hypervisors. Check all hypervisors")
+    hosts_len = len(hosts)
 
     valid_backings = ['local_image', 'local_lvm', 'remote']
     valid_backings.remove(prefer)
     valid_backings.insert(0, prefer)
 
-    storage_backing_spec = prefer
+    hosts_by_backing = {}
     max_num = 0
+    selected_backing = prefer
+    checked_len = 0
     for backing in valid_backings:
-        hosts_num = len(hosts_by_backing[backing])
-        if hosts_num > max_num:
-            storage_backing_spec = backing
-            max_num = hosts_num
+        hosts_with_backing = host_helper.get_hosts_in_storage_aggregate(backing, con_ssh=con_ssh, up_only=False)
+        hosts_by_backing[backing] = hosts_with_backing
+        checked_len += len(hosts_with_backing)
+        if len(hosts_with_backing) >= math.ceil(hosts_len / 2):
+            selected_backing = backing
+            break
 
-    if max_num > 0:
-        LOG.info("{} backing has most hosts in aggregate: {}".format(storage_backing_spec,
-                                                                     hosts_by_backing[storage_backing_spec]))
-    elif max_num == 0 and not rtn_down_hosts:
-        LOG.warning("No host in host-aggregate. Return preferred storage backing")
-
-    else:
-        image_hosts_num = lvm_hosts_num = remote_hosts_num = 0
-        down_hosts = host_helper.get_hypervisors(state='down', con_ssh=con_ssh)
-        for down_host in down_hosts:
-            host_instance_backing = host_helper.get_local_storage_backing(down_host, con_ssh=con_ssh)
-            if 'image' in host_instance_backing:
-                backing = 'local_image'
-                image_hosts_num += 1
-            elif 'lvm' in host_instance_backing:
-                backing = 'local_lvm'
-                lvm_hosts_num += 1
-            else:
-                backing = 'remote'
-                remote_hosts_num += 1
-
-            hosts_by_backing[backing].append(down_host)
-
-        hosts_nums = {'local_image': image_hosts_num, 'local_lvm': lvm_hosts_num, 'remote': remote_hosts_num}
-        max_num = max(list(hosts_nums.values()))
-        for backing in valid_backings:
-            if max_num == hosts_nums[backing]:
-                storage_backing_spec = backing
+        if len(hosts_with_backing) > max_num:
+            max_num = len(hosts_with_backing)
+            selected_backing = backing
+            if max_num >= hosts_len - checked_len:
                 break
 
-        LOG.warning("No up hosts in host-aggregate. Return {} storage backing based on instance backing for down hosts."
-                    .format(storage_backing_spec))
-
-    return storage_backing_spec, hosts_by_backing[storage_backing_spec]
+    selected_hosts = hosts_by_backing[selected_backing]
+    if has_up_hosts or not rtn_down_hosts:
+        selected_hosts = list(set(selected_hosts) & set(hosts))
+    LOG.info("{} storage aggregate has most hypervisors".format(selected_backing))
+    return selected_backing, selected_hosts
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
@@ -295,6 +283,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     Args:
         auth_info (dict):
         con_ssh (SSHClient):
+        guest_os
 
     Returns (str): id of the basic flavor
 
@@ -307,6 +296,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
     if flavor_id == '':
         flavor_id = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh)[1]
+        ResourceCleanup.add('flavor', flavor_id, scope='session')
 
     return flavor_id
 
@@ -366,7 +356,8 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     return code, msg
 
 
-def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,
+                             con_ssh=None):
     """
     Unset specific extra spec(s) from given flavor.
 
@@ -481,13 +472,11 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
                 tmp_list.append('{}={}'.format(key, value))
         args += '--metadata ' + ','.join(tmp_list)
 
-    # process server group name
+    # process server group name and policy
     if name is None:
-        name = 'srv_grp'
+        name = 'grp_{}'.format(policy.replace('-', '_'))
     args += " {}-{}".format(name, Count.get_sever_group_count())
-
     policy = policy.replace('_', '-')
-    # process server group policy
     args += ' ' + policy
 
     LOG.info("Creating server group with args: {}...".format(args))
@@ -534,13 +523,14 @@ def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ss
     return table_parser.get_values(table_, 'Id', strict=strict, regex=regex, **kwargs)
 
 
-def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None):
+def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None, strict=False, **kwargs):
     """
     Get a server group(s) info as a list
 
     Args:
         server_groups (str|list): id(s) of server group(s).
         header (str): header string for info. such as 'Member', 'Metadata', 'Policies'
+        strict
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -548,10 +538,41 @@ def get_server_groups_info(server_groups=None, header='Policies', auth_info=None
 
     """
     table_ = table_parser.table(cli.nova('server-group-list', '--a', ssh_client=con_ssh, auth_info=auth_info))
-    if server_groups:
-        table_ = table_parser.filter_table(table_, Id=server_groups)
 
-    return table_parser.get_column(table_, header)
+    filters = kwargs
+    if server_groups:
+        filters['Id'] = server_groups
+
+    return table_parser.get_values(table_, target_header=header, merge_lines=True, strict=strict, **filters)
+
+
+def get_server_group_info(group_id=None, group_name=None, header='Members', strict=False, auth_info=None, con_ssh=None):
+    """
+    Get server group info for specified server group
+    Args:
+        group_id:
+        group_name:
+        header:
+        auth_info:
+        strict
+        con_ssh:
+
+    Returns (str|list|dict):
+
+    """
+    filters = {}
+    if group_name:
+        filters['Name'] = group_name
+
+    values = get_server_groups_info(server_groups=group_id, header=header, auth_info=auth_info, strict=strict,
+                                    con_ssh=con_ssh, **filters)
+    assert len(values) == 1, "More than 1 server group filtered"
+
+    value = values[0]
+    if header.lower() in ('policies', 'members', 'metadata'):
+        value = eval(value)
+
+    return value
 
 
 def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh=None, **metadata):
@@ -815,12 +836,8 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     Returns (str): storage extra spec value. Possible return values: 'local_image', 'local_lvm', or 'remote'
 
     """
-    flavor_output = get_vm_nova_show_value(vm_id=vm_id, field='flavor', strict=True, con_ssh=con_ssh,
-                                           auth_info=Tenant.ADMIN)
-    # extra_specs = eval(flavor_output)['extra_specs']
-    # return extra_specs['aggregate_instance_extra_specs:storage']
-
-    flavor_id = re.search(r'\((.*)\)', flavor_output).group(1)
+    # TODO: Update to get it from nova show directly
+    flavor_id = get_vm_flavor(vm_id=vm_id, rtn_val='id')
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
     extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
@@ -918,7 +935,7 @@ def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
     return _get_vm_volumes(table_)
 
 
-def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN, use_openstack_cmd=False):
     """
     Get vm nova show value for given field
     Args:
@@ -926,13 +943,21 @@ def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=T
         field (str): field name in nova show table
         strict (bool): whether to perform a strict search on given field name
         con_ssh (SSHClient):
-        auth_info (dict):
+        auth_info (dict|None):
+        use_openstack_cmd:
 
     Returns (str|list): value of specified field. Return list for multi-line value
 
     """
-    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_value_two_col_table(table_, field, strict)
+    if use_openstack_cmd:
+        table_ = table_parser.table(cli.openstack('server show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+    else:
+        table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
+
+    merge = False
+    if field in ['fault']:
+        merge = True
+    return table_parser.get_value_two_col_table(table_, field, strict, merge_lines=merge)
 
 
 def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):
@@ -952,7 +977,7 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     Returns (dict): e.g.,{<vm_id1>: <value of the field for vm1>, <vm_id2>: <value of the field for vm2>}
 
     """
-    args =  '--all-tenants' if auth_info['tenant'] == 'admin' else ''
+    args = '--all-tenants' if auth_info['tenant'] == 'admin' else ''
 
     table_ = table_parser.table(cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info))
     if vm_ids:
@@ -964,20 +989,25 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     return dict(zip(vm_ids, info))
 
 
-def get_vm_flavor(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_flavor(vm_id, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get flavor id of given vm
 
     Args:
         vm_id (str):
+        rtn_val (str): id or name
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (str):
 
     """
-    flavor_output = get_vm_nova_show_value(vm_id, field='flavor', strict=True, con_ssh=con_ssh, auth_info=auth_info)
-    return re.search(r'\((.*)\)', flavor_output).group(1)
+    flavor = get_vm_nova_show_value(vm_id, field='flavor:original_name', strict=True, con_ssh=con_ssh,
+                                    auth_info=auth_info)
+    if 'id' in rtn_val:
+        flavor = get_flavor_id(name=flavor, strict=True, con_ssh=con_ssh, auth_info=auth_info)
+
+    return flavor
 
 
 def get_vm_host(vm_id, con_ssh=None):
@@ -1055,7 +1085,7 @@ def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
     Returns (bool):
     """
-    exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
+    exit_code, output = cli.nova('show', vm_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
     return exit_code == 0
 
 
@@ -1065,7 +1095,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
 
     Args:
         vm_id (str):
-        auth_info (dict):
+        auth_info (dict|None):
         con_ssh (SSHClient):
 
     Returns (dict): VM boot info dict. Format: {'type': <boot_source>, 'id': <source_id>}.
@@ -1096,7 +1126,7 @@ def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
         return {'type': 'image', 'id': match.group(0)}
 
 
-def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_vm_image_name(vm_id, auth_info=None, con_ssh=None):
     """
 
     Args:
@@ -1112,13 +1142,12 @@ def get_vm_image_name(vm_id, auth_info=Tenant.ADMIN, con_ssh=None):
     if boot_info['type'] == 'image':
         image_id = boot_info['id']
         image_show_table = table_parser.table(cli.glance('image-show', image_id))
-        image_name = table_parser.get_value_two_col_table(image_show_table, 'image_name', strict=False)
-        if not image_name:
-            image_name = table_parser.get_value_two_col_table(image_show_table, 'name')
+        image_name = table_parser.get_value_two_col_table(image_show_table, 'name')
     else:      # booted from volume
         vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.ADMIN))
         image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
-        image_name = eval(image_meta_data)['image_name']
+        image_meta_data = table_parser.convert_value_to_dict_cinder(image_meta_data)
+        image_name = image_meta_data['image_name']
 
     return image_name
 
@@ -1181,9 +1210,10 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
         raise ValueError("Please specify at least one quota=value pair via kwargs.")
 
     args_ = ''
-    for key in kwargs:
-        key = key.strip().replace('_', '-')
-        args_ += '--{} {} '.format(key, kwargs[key])
+    for key, val in kwargs.items():
+        if val is not None:
+            key = key.strip().replace('_', '-')
+            args_ += '--{} {} '.format(key, val)
 
     if force:
         args_ += '--force '
@@ -1192,64 +1222,64 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
     cli.nova('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
 
 
-def set_image_metadata(image, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
-    """
-    Set image metadata with given key/value pair(s)
-    Args:
-        image (str):
-        fail_ok (bool):
-        auth_info:
-        con_ssh:
-        **kwargs: metadata name/value pair(s) to set
-
-    Returns (tuple):
-        (0, "Image metadata is successfully set.")
-        (1, <stderr>)
-        (2, "Expected metadata <key> is not listed in nova image-show <image>")
-        (3, "Metadata <key> value is not set to <value> in nova image-show <image>")
-
-    """
-
-    LOG.info("Setting image {} metadata to: {}".format(image, kwargs))
-    if not kwargs:
-        raise ValueError("At least one key-value pair")
-
-    meta_args = ''
-    args_dict = {}
-    for key, value in kwargs.items():
-        key = key.lower().strip()
-        value = str(value).strip()
-        args_dict[key] = value
-        meta_data = "{}={}".format(key, value)
-        meta_args = ' '.join([meta_args, meta_data])
-
-    positional_args = ' '.join([image, 'set', meta_args])
-    code, output = cli.nova('image-meta', positional_args, ssh_client=con_ssh, auth_info=auth_info,
-                            fail_ok=fail_ok, rtn_list=True)
-
-    if code == 1:
-        return 1, output
-
-    LOG.info("Checking image {} metadata is set to {}".format(image, kwargs))
-    actual_metadata = get_image_metadata(image, list(args_dict.keys()), con_ssh=con_ssh)
-    for key, value in args_dict.items():
-        if key not in actual_metadata:
-            msg = "Expected metadata {} is not listed in nova image-show {}".format(key, image)
-            if fail_ok:
-                LOG.warning(msg)
-                return 2, msg
-            raise exceptions.ImageError(msg)
-
-        if actual_metadata[key] != value:
-            msg = "Metadata {} value is not set to {} in nova image-show {}".format(key, value, image)
-            if fail_ok:
-                LOG.warning(msg)
-                return 3, msg
-            raise exceptions.ImageError(msg)
-
-    msg = "Image metadata is successfully set."
-    LOG.info(msg)
-    return 0, msg
+# def set_image_metadata(image, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
+#     """
+#     Set image metadata with given key/value pair(s)
+#     Args:
+#         image (str):
+#         fail_ok (bool):
+#         auth_info:
+#         con_ssh:
+#         **kwargs: metadata name/value pair(s) to set
+#
+#     Returns (tuple):
+#         (0, "Image metadata is successfully set.")
+#         (1, <stderr>)
+#         (2, "Expected metadata <key> is not listed in nova image-show <image>")
+#         (3, "Metadata <key> value is not set to <value> in nova image-show <image>")
+#
+#     """
+#
+#     LOG.info("Setting image {} metadata to: {}".format(image, kwargs))
+#     if not kwargs:
+#         raise ValueError("At least one key-value pair")
+#
+#     meta_args = ''
+#     args_dict = {}
+#     for key, value in kwargs.items():
+#         key = key.lower().strip()
+#         value = str(value).strip()
+#         args_dict[key] = value
+#         meta_data = "{}={}".format(key, value)
+#         meta_args = ' '.join([meta_args, meta_data])
+#
+#     positional_args = ' '.join([image, 'set', meta_args])
+#     code, output = cli.nova('image-meta', positional_args, ssh_client=con_ssh, auth_info=auth_info,
+#                             fail_ok=fail_ok, rtn_list=True)
+#
+#     if code == 1:
+#         return 1, output
+#
+#     LOG.info("Checking image {} metadata is set to {}".format(image, kwargs))
+#     actual_metadata = get_image_metadata(image, list(args_dict.keys()), con_ssh=con_ssh)
+#     for key, value in args_dict.items():
+#         if key not in actual_metadata:
+#             msg = "Expected metadata {} is not listed in nova image-show {}".format(key, image)
+#             if fail_ok:
+#                 LOG.warning(msg)
+#                 return 2, msg
+#             raise exceptions.ImageError(msg)
+#
+#         if actual_metadata[key] != value:
+#             msg = "Metadata {} value is not set to {} in nova image-show {}".format(key, value, image)
+#             if fail_ok:
+#                 LOG.warning(msg)
+#                 return 3, msg
+#             raise exceptions.ImageError(msg)
+#
+#     msg = "Image metadata is successfully set."
+#     LOG.info(msg)
+#     return 0, msg
 
 
 def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -1281,55 +1311,55 @@ def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
     return results
 
 
-def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
-    """
-     Unset specific extra spec(s) from given flavor.
-
-     Args:
-         image (str): id of the flavor
-         con_ssh (SSHClient):
-         auth_info (dict):
-         fail_ok (bool):
-         meta_keys (str|list): metadata(s) to be removed. At least one should be provided.
-
-     Returns (tuple): (rtn_code (int), message (str))
-         (0, 'Image metadata unset successfully.'): required extra spec(s) removed successfully
-         (1, <stderr>): unset image metadata cli rejected
-         (2, '<metadata> is still in the extra specs list'): post action check failed
-
-     """
-
-    LOG.info("Deleting image metadata: {}".format(meta_keys))
-    if check_first:
-        if not get_image_metadata(image, meta_keys, auth_info=auth_info, con_ssh=con_ssh):
-            msg = "Metadata {} not exist in nova image-show. Do nothing.".format(meta_keys)
-            LOG.info(msg)
-            return -1, msg
-
-    if isinstance(meta_keys, str):
-        meta_keys = [meta_keys]
-
-    for meta_key in meta_keys:
-        str(meta_key).replace(':', '_')
-
-    meta_keys_args = ' '.join(meta_keys)
-    exit_code, output = cli.nova('image-meta', '{} delete {}'.format(image, meta_keys_args), fail_ok=fail_ok,
-                                 ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
-    if exit_code == 1:
-        return 1, output
-
-    post_meta_keys = get_image_metadata(image, meta_keys, con_ssh=con_ssh, auth_info=auth_info)
-    for key in meta_keys:
-        if key in post_meta_keys:
-            err_msg = "{} is still in the image metadata after deletion.".format(key)
-            if fail_ok:
-                LOG.warning(err_msg)
-                return 2, err_msg
-            raise exceptions.ImageError(err_msg)
-    else:
-        success_msg = "Image metadata unset successfully."
-        LOG.info(success_msg)
-        return 0, success_msg
+# def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+#     """
+#      Unset specific extra spec(s) from given flavor.
+#
+#      Args:
+#          image (str): id of the flavor
+#          con_ssh (SSHClient):
+#          auth_info (dict):
+#          fail_ok (bool):
+#          meta_keys (str|list): metadata(s) to be removed. At least one should be provided.
+#
+#      Returns (tuple): (rtn_code (int), message (str))
+#          (0, 'Image metadata unset successfully.'): required extra spec(s) removed successfully
+#          (1, <stderr>): unset image metadata cli rejected
+#          (2, '<metadata> is still in the extra specs list'): post action check failed
+#
+#      """
+#
+#     LOG.info("Deleting image metadata: {}".format(meta_keys))
+#     if check_first:
+#         if not get_image_metadata(image, meta_keys, auth_info=auth_info, con_ssh=con_ssh):
+#             msg = "Metadata {} not exist in nova image-show. Do nothing.".format(meta_keys)
+#             LOG.info(msg)
+#             return -1, msg
+#
+#     if isinstance(meta_keys, str):
+#         meta_keys = [meta_keys]
+#
+#     for meta_key in meta_keys:
+#         str(meta_key).replace(':', '_')
+#
+#     meta_keys_args = ' '.join(meta_keys)
+#     exit_code, output = cli.nova('image-meta', '{} delete {}'.format(image, meta_keys_args), fail_ok=fail_ok,
+#                                  ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+#     if exit_code == 1:
+#         return 1, output
+#
+#     post_meta_keys = get_image_metadata(image, meta_keys, con_ssh=con_ssh, auth_info=auth_info)
+#     for key in meta_keys:
+#         if key in post_meta_keys:
+#             err_msg = "{} is still in the image metadata after deletion.".format(key)
+#             if fail_ok:
+#                 LOG.warning(err_msg)
+#                 return 2, err_msg
+#             raise exceptions.ImageError(err_msg)
+#     else:
+#         success_msg = "Image metadata unset successfully."
+#         LOG.info(success_msg)
+#         return 0, success_msg
 
 
 def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
@@ -1503,6 +1533,7 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=Tru
         rtn_val (str): name or id
         name (str): name for aggregate to create
         avail_zone (str):
+        check_first (bool)
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
@@ -1714,8 +1745,8 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
 
     if not hosts_to_rm_or_add:
         warn_str = 'No' if remove else 'All'
-        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".format(warn_str,
-              aggregate, hosts, hosts_in_aggregate)
+        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".\
+            format(warn_str, aggregate, hosts, hosts_in_aggregate)
         LOG.warning(msg)
         return -1, msg
 
@@ -1765,3 +1796,28 @@ def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     LOG.info("Listing migration history...")
     cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)
+
+
+def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    nova migration-list to collect migration history of each vm
+    Args:
+        hosts: one or more compute nodes
+        cpu_models: cpu models to match
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list): List of matching hosts
+
+    """
+    field = 'cpu_info_model'
+    return_hosts = []
+    for host in hosts:
+        LOG.info("Getting cpu model info...")
+        table_ = table_parser.table(cli.nova('hypervisor-show', host, ssh_client=con_ssh,
+                                             auth_info=auth_info))
+        host_cpu_model = table_parser.get_value_two_col_table(table_, field, strict=True, merge_lines=True)
+        if host_cpu_model in cpu_models:
+            return_hosts.append(host)
+
+    return return_hosts

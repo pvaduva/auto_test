@@ -8,7 +8,7 @@ import re
 from pytest import skip, fixture, mark
 
 from utils.tis_log import LOG
-from consts.cgcs import EventLogID, HostAvailabilityState, HostOperationalState
+from consts.cgcs import EventLogID, HostAvailState, HostOperState
 from keywords import host_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.verify_fixtures import check_alarms
@@ -197,7 +197,7 @@ def test_infra_network_failure_recovery(host_function):
 
     if is_standby:
         LOG.tc_step("Wait for standby controller to stay in degraded state for at least 60 seconds")
-        expt_states = {'operational': HostOperationalState.ENABLED, 'availability': HostAvailabilityState.DEGRADED}
+        expt_states = {'operational': HostOperState.ENABLED, 'availability': HostAvailState.DEGRADED}
         host_helper.wait_for_hosts_states(hosts=host, timeout=300, duration=60, check_interval=10, fail_ok=False,
                                           **expt_states)
 
@@ -209,14 +209,14 @@ def test_infra_network_failure_recovery(host_function):
 
     else:
         LOG.tc_step('Verify host {} in failed state after infra put down '.format(host))
-        expt_states = {'operational': HostOperationalState.DISABLED,
-                       'availability': [HostAvailabilityState.FAILED, HostAvailabilityState.OFFLINE]}
+        expt_states = {'operational': HostOperState.DISABLED,
+                       'availability': [HostAvailState.FAILED, HostAvailState.OFFLINE]}
         host_helper.wait_for_host_states(host, timeout=60, fail_ok=False, **expt_states)
         IF_DOWN_HOSTS.remove((host, infra_interface_dev_name))
 
     LOG.tc_step('Wait for host to be recovered')
-    expt_recov_states = {'operational': HostOperationalState.ENABLED,
-                         'availability': HostAvailabilityState.AVAILABLE}
+    expt_recov_states = {'operational': HostOperState.ENABLED,
+                         'availability': HostAvailState.AVAILABLE}
     host_helper.wait_for_hosts_states(host, duration=10, fail_ok=False, **expt_recov_states)
     host_helper.wait_for_hosts_ready(hosts=host)
 

@@ -10,11 +10,11 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
-from consts.cgcs import MELLANOX_DEVICE
-from consts.reasons import SkipReason
-from testfixtures.resource_mgmt import ResourceCleanup
+from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
+from consts.reasons import SkipStorageSpace
+from testfixtures.fixture_resources import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper
+    glance_helper, storage_helper
 
 SEP = '\n------------------------------------ '
 
@@ -26,12 +26,21 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
     data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
+    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, rtn_list=True)
 
-    device_types = system_helper.get_host_ports_values(host, 'device type', if_name=data_ports, strict=True)
+    ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
+
     extra_mt_ports = 0
-    for device_type in device_types:
+    for i in range(len(ports_dict['device type'])):
+        device_type = ports_dict['device type'][i]
         if re.search(MELLANOX_DEVICE, device_type):
-            extra_mt_ports += 1
+            # Only +1 if the other port of MX-4 is not used. CGTS-8303
+            port_name = ports_dict['name'][i]
+            dev = port_name[-1]
+            other_dev = '0' if dev == '1' else '1'
+            other_port = port_name[:-1] + other_dev
+            if other_port not in all_ports_used:
+                extra_mt_ports += 1
 
     if extra_mt_ports > 0:
         LOG.info("{}Mellanox devices are used on {} data interfaces. Perform loose check on port-engine map.".
@@ -47,7 +56,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
                 'Expected engines: {}; Actual engines: {}'.format(host, port, engines, actual_vswitch_map[port])
 
     else:
-        LOG.info("{}No Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
+        LOG.info("{}No extra Mellanox device used on {} data interfaces. Perform strict check on port-engine map.".
                  format(SEP, host))
 
         assert expt_vswitch_map == actual_vswitch_map, "vSwitch mapping unexpected. Expect: {}; Actual: {}".format(
@@ -326,6 +335,10 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     # Check host side info such as nova-compute.log and virsh pcpupin
     LOG.tc_step('Check vm topology from vm_host via: nova-compute.log, virsh vcpupin, taskset')
     instance_name = nova_helper.get_vm_instance_name(vm_id)
+    procs = host_helper.get_host_procs(hostname=vm_host)
+    # numa_nodes = list(range(len(procs)))
+    vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
+    assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
     with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
@@ -365,8 +378,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         else:
             LOG.info("{}Check affined cpus for floating vm is the same as unpinned cpus on vm host".format(SEP))
-            # TODO count all numa nodes for floating vm. Any way to get numa nodes dynamically from vm host?
-            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=[0, 1])
+            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=numa_nodes)
             unpinned_cpus = []
 
             for item in cpus_info:
@@ -376,7 +388,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
             err_msg = "Affined cpus for vm: {}, Unpinned cpus on vm host: {}".format(affined_cpus, unpinned_cpus)
             assert affined_cpus == unpinned_cpus, 'Affined cpus for floating vm are different than unpinned cpus ' \
-                                                  'on vm host {}\n{}'.format(vm_host, err_msg)
+                                                  'on vm host {} numa {}\n{}'.format(vm_host, numa_nodes, err_msg)
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None):
@@ -436,7 +448,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
                     vm_ssh.exec_cmd('cat /sys/devices/system/cpu/{}/topology/thread_siblings_list'.
                                     format(cpu), fail_ok=False)[1]
 
-                    sib_for_cpu = common._parse_cpus_list(actual_sibs_for_cpu)
+                    sib_for_cpu = common.parse_cpus_list(actual_sibs_for_cpu)
                     if sib_for_cpu not in actual_sibs:
                         actual_sibs.append(sib_for_cpu)
 
@@ -548,14 +560,263 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
     LOG.info("Check if storage fs is sufficient to launch boot-from-{} vm with {}".format(boot_source, guest_os))
     if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
-            skip(SkipReason.SMALL_CINDER_VOLUMES_POOL)
+            skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
 
     if guest_os == 'win_2016' and boot_source == 'volume':
         if not glance_helper.is_image_conversion_sufficient(guest_os=guest_os):
-            skip(SkipReason.INSUFFICIENT_IMG_CONV.format(guest_os))
+            skip(SkipStorageSpace.INSUFFICIENT_IMG_CONV.format(guest_os))
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
     img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if guest_os != 'ubuntu_14':
+    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
         ResourceCleanup.add('image', img_id)
+
+
+def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths, content, root=None, vm_action=None,
+                   prev_host=None, post_host=None, disks=None, post_disks=None, guest_os=None,
+                   check_volume_root=False):
+    """
+    Check the files on vm after specified action. This is to check the disks in the basic nova matrix table.
+    Args:
+        vm_id (str): 
+        storage_backing (str): local_image, local_lvm, or remote
+        root (int): root disk size in flavor. e.g., 2, 5
+        ephemeral (int): e.g., 0, 1 
+        swap (int): e.g., 0, 512
+        vm_type (str): image, volume, image_with_vol, vol_with_vol 
+        file_paths (list): list of file paths to check 
+        content (str): content of the files (assume all files have the same content) 
+        vm_action (str|None): live_migrate, cold_migrate, resize, evacuate, None (expect no data loss)
+        prev_host (None|str): vm host prior to vm_action. This is used to check if vm host has changed when needed.
+        post_host (None|str): vm host after vm_action.
+        disks (dict): disks that are returned from vm_helper.get_vm_devices_via_virsh()
+        post_disks (dict): only used in resize case
+        guest_os (str|None): default guest assumed for None. e,g., ubuntu_16
+        check_volume_root (bool): whether to check root disk size even if vm is booted from image
+
+    Returns:
+
+    """
+    final_disks = post_disks if post_disks else disks
+    final_paths = list(file_paths)
+    if not disks:
+        disks = vm_helper.get_vm_devices_via_virsh(vm_id=vm_id)
+
+    eph_disk = disks.get('eph', {})
+    if not eph_disk:
+        if post_disks:
+            eph_disk = post_disks.get('eph', {})
+    swap_disk = disks.get('swap', {})
+    if not swap_disk:
+        if post_disks:
+            swap_disk = post_disks.get('swap', {})
+
+    disk_check = 'no_loss'
+    if vm_action in [None, 'live_migrate']:
+        disk_check = 'no_loss'
+    elif vm_type == 'volume':
+        # boot-from-vol, non-live migrate actions
+        disk_check = 'no_loss'
+        if storage_backing == 'local_lvm' and (eph_disk or swap_disk):
+            disk_check = 'eph_swap_loss'
+        elif storage_backing == 'local_image' and vm_action == 'evacuate' and (eph_disk or swap_disk):
+            disk_check = 'eph_swap_loss'
+    elif storage_backing == 'local_image':
+        # local_image, boot-from-image, non-live migrate actions
+        disk_check = 'no_loss'
+        if vm_action == 'evacuate':
+            disk_check = 'local_loss'
+    elif storage_backing == 'local_lvm':
+        # local_lvm, boot-from-image, non-live migrate actions
+        disk_check = 'local_loss'
+        if vm_action == 'resize':
+            post_host = post_host if post_host else nova_helper.get_vm_host(vm_id)
+            if post_host == prev_host:
+                disk_check = 'eph_swap_loss'
+
+    LOG.info("disk check type: {}".format(disk_check))
+    loss_paths = []
+    # if post_disks and post_disks != disks:
+    #     post_swaps = post_disks.get('swap', {})
+    #     pre_swaps = disks.get('swap', {})
+    #     # Don't check swap disk if it was removed in resize
+    #     for swap in pre_swaps:
+    #         if swap not in post_swaps:
+    #             for path in file_paths:
+    #                 if swap in path:
+    #                     final_paths.remove(path)
+
+    if disk_check == 'no_loss':
+        no_loss_paths = final_paths
+    else:
+        # If there's any loss, we must not have remote storage. And any ephemeral/swap disks will be local.
+        disks_to_check = disks.get('eph', {})
+        # skip swap type checking for data loss since it's not a regular filesystem
+        # swap_disks = disks.get('swap', {})
+        # disks_to_check.update(swap_disks)
+
+        for path_ in final_paths:
+            # For tis-centos-guest, ephemeral disk is mounted to /mnt after vm launch.
+            if str(path_).rsplit('/', 1)[0] == '/mnt':
+                loss_paths.append(path_)
+                break
+
+        for disk in disks_to_check:
+            for path in final_paths:
+                if disk in path:
+                    # We mount disk vdb to /mnt/vdb, so this is looking for vdb in the mount path
+                    loss_paths.append(path)
+                    break
+
+        if disk_check == 'local_loss':
+            # if vm booted from image, then the root disk is also local disk
+            root_img = disks.get('root_img', {})
+            if root_img:
+                LOG.info("Auto mount vm disks again since root disk was local with data loss expected")
+                vm_helper.auto_mount_vm_disks(vm_id=vm_id, disks=final_disks)
+                file_name = final_paths[0].rsplit('/')[-1]
+                root_path = '/{}'.format(file_name)
+                loss_paths.append(root_path)
+                assert root_path in final_paths, "root_path:{}, file_paths:{}".format(root_path, final_paths)
+
+        no_loss_paths = list(set(final_paths) - set(loss_paths))
+
+    LOG.info("loss_paths: {}, no_loss_paths: {}, total_file_pahts: {}".format(loss_paths, no_loss_paths, final_paths))
+    res_files = {}
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=guest_os) as vm_ssh:
+
+        for file_path in loss_paths:
+            vm_ssh.exec_sudo_cmd('touch {}2'.format(file_path), fail_ok=False)
+            vm_ssh.exec_sudo_cmd('echo "{}" >> {}2'.format(content, file_path), fail_ok=False)
+
+        for file_path in no_loss_paths:
+            output = vm_ssh.exec_sudo_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+            res = '' if content in output else 'content mismatch'
+            res_files[file_path] = res
+
+        for file, error in res_files.items():
+            assert not error, "Check {} failed: {}".format(file, error)
+
+        swap_disk = final_disks.get('swap', {})
+        if swap_disk:
+            disk_name = list(swap_disk.keys())[0]
+            partition = '/dev/{}'.format(disk_name)
+            if disk_check != 'local_loss' and not disks.get('swap', {}):
+                mount_on, fs_type = storage_helper.mount_partition(ssh_client=vm_ssh, disk=disk_name,
+                                                                   partition=partition, fs_type='swap')
+                storage_helper.auto_mount_fs(ssh_client=vm_ssh, fs=partition, mount_on=mount_on, fs_type=fs_type)
+
+            LOG.info("Check swap disk is on")
+            swap_output = vm_ssh.exec_sudo_cmd('cat /proc/swaps | grep --color=never {}'.format(partition))[1]
+            assert swap_output, "Expect swapon for {}. Actual output: {}".\
+                format(partition, vm_ssh.exec_sudo_cmd('cat /proc/swaps')[1])
+
+            LOG.info("Check swap disk size")
+            _check_disk_size(vm_ssh, disk_name=disk_name, expt_size=swap)
+
+        eph_disk = final_disks.get('eph', {})
+        if eph_disk:
+            LOG.info("Check ephemeral disk size")
+            eph_name = list(eph_disk.keys())[0]
+            _check_disk_size(vm_ssh, eph_name, expt_size=ephemeral*1024)
+
+        if root:
+            image_root = final_disks.get('root_img', {})
+            root_name = ''
+            if image_root:
+                root_name = list(image_root.keys())[0]
+            elif check_volume_root:
+                root_name = list(final_disks.get('root_vol').keys())[0]
+
+            if root_name:
+                LOG.info("Check root disk size")
+                _check_disk_size(vm_ssh, disk_name=root_name, expt_size=root*1024)
+
+
+def _check_disk_size(vm_ssh, disk_name, expt_size):
+    partition = vm_ssh.exec_sudo_cmd('cat /proc/partitions | grep --color=never "{}$"'.format(disk_name))[1]
+    actual_size = int(int(partition.split()[-2].strip())/1024) if partition else 0
+    expt_size = int(expt_size)
+    assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
+
+
+def check_alarms(before_alarms, timeout=300):
+    after_alarms = system_helper.get_alarms()
+    new_alarms = []
+    check_interval = 5
+    schedule_conn_test = False
+    for item in after_alarms:
+        if item not in before_alarms:
+            alarm_id, entity_id = item.split('::::')
+            if alarm_id == EventLogID.PROVIDER_NETWORK_FAILURE:
+                # Providernet connectivity alarm handling
+                schedule_conn_test = True
+            elif alarm_id == EventLogID.CPU_USAGE_HIGH:
+                check_interval = 45
+            elif alarm_id == EventLogID.NTP_ALARM:
+                # NTP alarm handling
+                LOG.info("NTP alarm found, checking ntpq stats")
+                host = entity_id.split('host=')[1].split('.ntp')[0]
+                host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
+                continue
+
+            new_alarms.append((alarm_id, entity_id))
+
+    if schedule_conn_test:
+        LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
+        network_helper.schedule_providernet_connectivity_test()
+
+    if new_alarms:
+        LOG.info("New alarms detected. Waiting for new alarms to clear.")
+        res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=timeout,
+                                                                   check_interval=check_interval)
+        assert res, "New alarm(s) found and did not clear within {} seconds. " \
+                    "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
+
+
+def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
+    """
+    Check qat device and service on given vm
+    Args:
+        vm_id (str):
+        qat_devs (dict): {<qat-dev1-name>: <number1>, <qat-dev2-name>: <number2>}
+            e.g., {'Intel Corporation DH895XCC Series QAT Virtual Function [8086:0443]' : 32}
+        run_cpa (bool): whether to run cpa_sample_code in guest, it could take long time when there are many qat-vfs
+        timeout (int): timeout value to wait for cpa_sample_code to finish
+
+    Returns:
+
+    """
+    if qat_devs:
+        LOG.tc_step("Check qat-vfs on vm {}".format(vm_id))
+    else:
+        LOG.tc_step("Check no qat device exist on vm {}".format(vm_id))
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+        code, output = vm_ssh.exec_sudo_cmd('lspci -nn | grep --color=never QAT', fail_ok=True)
+        if not qat_devs:
+            assert 1 == code
+            return
+
+        assert 0 == code, "No QAT device exists on vm {}".format(vm_id)
+        for dev, expt_count in qat_devs.items():
+            actual_count = 0
+            for line in output.splitlines():
+                if dev in line:
+                    actual_count += 1
+            assert expt_count == actual_count, "qat device count for {} is {} while expecting {}".format(
+                    dev, actual_count, expt_count)
+
+        check_status_cmd = "systemctl status qat_service | grep '' --color=never"
+        status = vm_ssh.exec_sudo_cmd(check_status_cmd)[1]
+        active_str = 'Active: active'
+        if active_str not in status:
+            LOG.info("Start qat service")
+            vm_ssh.exec_sudo_cmd('systemctl start qat_service', fail_ok=False)
+            status = vm_ssh.exec_sudo_cmd(check_status_cmd, fail_ok=False)[1]
+            assert active_str in status, "qat_service is not in active state"
+
+        if run_cpa:
+            LOG.info("Run cpa_sample_code on quickAssist hardware")
+            output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
+            assert 'error' not in output.lower(), "cpa_sample_code test failed"

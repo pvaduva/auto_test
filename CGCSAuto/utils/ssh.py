@@ -2,16 +2,19 @@ import os
 import re
 import threading
 import time
+import getpass
+import socket
+from telnetlib import Telnet
 from contextlib import contextmanager
 
 import pexpect
 from pexpect import pxssh
 
 from utils import exceptions, local_host
-from utils.tis_log import LOG
+from utils.tis_log import LOG, get_tis_logger
 
 from consts.auth import Guest, HostLinuxCreds
-from consts.cgcs import Prompt, DATE_OUTPUT, GuestImages
+from consts.cgcs import Prompt, DATE_OUTPUT
 from consts.proj_vars import ProjVar
 from consts.lab import Labs, NatBoxes
 
@@ -60,8 +63,9 @@ class SSHClient:
             reconnect()         reconnects to session
     """
 
-    def __init__(self, host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), force_password=True,
-                 initial_prompt=CONTROLLER_PROMPT, timeout=60, session=None, searchwindownsize=None):
+    def __init__(self, host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
+                 force_password=True, initial_prompt=CONTROLLER_PROMPT, timeout=60, session=None,
+                 searchwindownsize=None, port=None):
         """
         Initiate an object for connecting to remote host
         Args:
@@ -79,19 +83,21 @@ class SSHClient:
         self.initial_prompt = initial_prompt
         self.prompt = initial_prompt
         self._session = session
-        # self.cmd_sent = ''
-        # self.cmd_output = ''
+        self.cmd_sent = ''
+        self.cmd_output = ''
         self.force_password = force_password
         self.timeout = timeout
         self.searchwindowsize = searchwindownsize
-        # self.logpath = None
+        self.logpath = None
+        self.port = port
 
-    def __get_logpath(self):
+    def _get_logpath(self):
         lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith('__')]
         lab_list = [lab_ for lab_ in lab_list if isinstance(lab_, dict)]
         for lab in lab_list:
-            if lab['floating ip'] == self.host:
-                lab_name = lab['short_name']
+            if lab.get('floating ip') == self.host or lab.get('controller-0 ip') == self.host \
+                    or lab.get('external_ip') == self.host:
+                lab_name = lab.get('short_name')
                 break
         else:
             lab_name = self.host
@@ -140,14 +146,14 @@ class SSHClient:
                 self._session.SSH_OPTS = _SSH_OPTS
                 self._session.force_password = self.force_password
                 self._session.maxread = 100000
-                self.logpath = self.__get_logpath()
+                self.logpath = self._get_logpath()
 
                 if self.logpath:
                     self._session.logfile = open(self.logpath, 'w+')
 
                 # Login
                 self._session.login(self.host, self.user, self.password, login_timeout=timeout,
-                                    auto_prompt_reset=False, quiet=False)
+                                    port=self.port, auto_prompt_reset=False, quiet=False)
 
                 # Set prompt for matching
                 self.set_prompt(prompt)
@@ -198,7 +204,6 @@ class SSHClient:
                 LOG.info("Login failed due to error: {}".format(e.__str__()))
 
                 if 'password refused' in e.__str__():
-                    print("hey: {}".format(self.searchwindowsize))
                     if self.searchwindowsize is None:
                         before_str = self._parse_output(self._session.before)
                         after_str = self._parse_output(self._session.after)
@@ -254,11 +259,14 @@ class SSHClient:
         """
         if flush:
             self.flush()
-        cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
-        if cmd_for_exitcode:
-            LOG.debug("Sending \'{}\'".format(cmd))
-        else:
-            LOG.debug("Sending: \'{}\'".format(cmd))
+
+        LOG.debug("Sending \'{}\'".format(cmd))
+        # cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
+        # is_read_only_cmd = (not cmd) or re.search('show|list|cat', cmd)
+        # if cmd_for_exitcode or is_read_only_cmd:
+        #     LOG.debug("Sending \'{}\'".format(cmd))
+        # else:
+        #     LOG.info("Sending: \'{}\'".format(cmd))
         try:
             rtn = self._session.sendline(cmd)
         # TODO: use specific exception to catch unexpected disconnection with remote host such as swact
@@ -275,6 +283,15 @@ class SSHClient:
         self.cmd_sent = cmd
 
         return str(rtn)
+
+    def send_sudo(self, cmd='', reconnect=False, expt_pswd_timeout=60, reconnect_timeout=300, flush=False):
+        cmd = 'sudo ' + cmd
+        self.send(cmd, reconnect=reconnect, reconnect_timeout=reconnect_timeout, flush=flush)
+        pw_prompt = Prompt.PASSWORD_PROMPT
+
+        index = self.expect(pw_prompt, timeout=expt_pswd_timeout, searchwindowsize=100, fail_ok=True)
+        if index == 0:
+            self.send(self.password)
 
     def flush(self, timeout=3):
         """
@@ -297,6 +314,7 @@ class SSHClient:
             fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
                 found.
             rm_date (bool): Whether to remove the date output before expecting
+            searchwindowsize (int|None): number of chars from end of the buffer to search for the strings in blob_list
 
         Returns: the index of the pattern matched in the output, assuming that blob can be a list.
 
@@ -380,7 +398,8 @@ class SSHClient:
             self.flush(10)
 
     def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
-                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None,
+                 prefix_space=False):
         """
 
         Args:
@@ -391,9 +410,13 @@ class SSHClient:
             err_only: if true, stdout will not be included in output
             rm_date (bool): weather to remove date output from cmd output before returning
             fail_ok (bool): whether to raise exception when non-zero exit-code is returned
+            get_exit_code
+            blob
+            force_end
             searchwindowsize (int): max chars to look for match from the end of the output.
                 Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
                     to speed up the search, and to avoid matching in the middle of the output.
+            prefix_space
 
         Returns (tuple): (exit code (int), command output (str))
 
@@ -404,6 +427,10 @@ class SSHClient:
         LOG.debug("Executing command...")
         if err_only:
             cmd += ' 1> /dev/null'          # discard stdout
+
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
+
         self.send(cmd, reconnect, reconnect_timeout)
         try:
             self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
@@ -415,7 +442,7 @@ class SSHClient:
             else:
                 raise
 
-        code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
 
         self.__force_end(force_end)
 
@@ -424,7 +451,7 @@ class SSHClient:
 
         return code, output
 
-    def __process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
+    def _process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
 
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.info("cmd output list: {}".format(cmd_output_list))
@@ -443,13 +470,13 @@ class SSHClient:
                             format(cmd, exit_code, cmd_output))
         else:
             exit_code = -1
-            LOG.info("Actual exit code for following cmd is unknown: {}".format(cmd))
+            LOG.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
 
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output
 
-    def proecess_cmd_result(self, cmd, rm_date=True, get_exit_code=True):
-        return self.__process_exec_result(cmd=cmd, rm_date=rm_date, get_exit_code=get_exit_code)
+    def process_cmd_result(self, cmd, rm_date=True, get_exit_code=True):
+        return self._process_exec_result(cmd=cmd, rm_date=rm_date, get_exit_code=get_exit_code)
 
     @staticmethod
     def _parse_output(output):
@@ -472,8 +499,8 @@ class SSHClient:
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, extra_opts=None, pre_opts=None,
-              timeout=60, fail_ok=False):
+    def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None,
+              pre_opts=None, timeout=60, fail_ok=False):
 
         dest_user = dest_user or HostLinuxCreds.get_user()
         dest_password = dest_password or HostLinuxCreds.get_password()
@@ -486,6 +513,9 @@ class SSHClient:
             pre_opts = ''
 
         ssh_opts = 'ssh {}'.format(' '.join(RSYNC_SSH_OPTIONS))
+        if ssh_port:
+            ssh_opts += ' -p {}'.format(ssh_port)
+
         cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
 
@@ -496,21 +526,16 @@ class SSHClient:
             self.send(dest_password)
             self.expect(timeout=timeout)
 
-        code, output = self.__process_exec_result(cmd, rm_date=True)
+        code, output = self._process_exec_result(cmd, rm_date=True)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for rsync cmd: {}".format(cmd))
 
         return code, output
 
-    def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_folder_name=None, timeout=10):
+    def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_path=None, timeout=120):
 
-        # Process destination info
-        if dest_folder_name:
-            dest_folder_name += '/'
-        else:
-            dest_folder_name = ''
-
-        dest_path = ProjVar.get_var('TEMP_DIR') + dest_folder_name
+        if not dest_path:
+            dest_path = ProjVar.get_var('TEMP_DIR') + '/'
 
         to_host = local_host.get_host_ip() + ':'
         to_user = (dest_user if dest_user is not None else local_host.get_user()) + '@'
@@ -601,6 +626,63 @@ class SSHClient:
             else:
                 raise exceptions.SSHException(msg)
 
+    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True):
+        source = source_path
+        if source_ip:
+            source = '{}:{}'.format(source_ip, source)
+            if source_user:
+                source = '{}@{}'.format(source_user, source)
+
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source, dest_path)
+
+        try:
+            self.send(scp_cmd)
+            index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+            if index == 2:
+                self.send('yes')
+                index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
+            if index == 1:
+                self.send(source_pswd)
+                index = self.expect(timeout=timeout)
+            if index != 0:
+                raise exceptions.SSHException("Failed to scp files")
+
+            exit_code = self.get_exit_code()
+            if not exit_code == 0:
+                raise exceptions.CommonError("scp unsuccessfully")
+
+            if not self.file_exists(file_path=dest_path):
+                raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+        except:
+            if cleanup:
+                LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
+                self.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
+            raise
+
+    def scp_on_source(self, source_path, dest_user, dest_ip, dest_path, dest_password, timeout=3600):
+        dest = dest_path
+        if dest_ip:
+            dest = '{}:{}'.format(dest_ip, dest)
+            if dest_user:
+                dest = '{}@{}'.format(dest_user, dest)
+
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source_path, dest)
+
+        self.send(scp_cmd)
+        index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
+        if index == 2:
+            self.send('yes')
+            index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
+        if index == 1:
+            self.send(dest_password)
+            index = self.expect(timeout=timeout)
+        if index != 0:
+            raise exceptions.SSHException("Failed to scp files")
+
+        exit_code = self.get_exit_code()
+        if not exit_code == 0:
+            raise exceptions.CommonError("scp unsuccessfully")
+
     def file_exists(self, file_path):
         return self.exec_cmd('stat {}'.format(file_path), fail_ok=True)[0] == 0
 
@@ -623,7 +705,7 @@ class SSHClient:
                 self.expect()
 
     def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
-                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None):
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None, prefix_space=False):
         """
         Execute a command with sudo.
 
@@ -632,17 +714,21 @@ class SSHClient:
             expect_timeout (int): timeout waiting for command to return
             rm_date (bool): whether to remove date info at the end of the output
             fail_ok (bool): whether to raise exception when non-zero exit code is returned
+            get_exit_code
             searchwindowsize (int): max chars to look for match from the end of the output.
                 Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
                     to speed up the search, and to avoid matching in the middle of the output.
             strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
                 searchwindowsize instead)
             extra_prompt (str|None)
+            prefix_space (bool): prefix ' ' to cmd, so that it will not go into bash history if HISTCONTROL=ignorespace
 
         Returns (tuple): (exit code (int), command output (str))
 
         """
         cmd = 'sudo ' + cmd
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
         LOG.debug("Executing sudo command...")
         self.send(cmd)
         pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
@@ -657,7 +743,7 @@ class SSHClient:
             prompts.remove(pw_prompt)
             self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
 
-        code, output = self.__process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for sudo cmd: {}".format(cmd))
 
@@ -694,6 +780,7 @@ class SSHClient:
             check_interval (int): how long to wait to execute the cmd again in seconds.
             disappear (bool): whether to wait for content appear or disappear
             non_zero_rtn_ok (bool): whether it's okay for cmd to have none-zero return code. Raise exception if False.
+            blob (str): string to wait for
 
         Returns (bool): True if content appears in cmd output within max wait time.
 
@@ -805,13 +892,20 @@ class SSHClient:
                 self.exec_cmd('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
                 self.exec_cmd("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
+    def get_host(self):
+        return self.host
+
+    def update_host(self, new_host):
+        self.host = new_host
+
+
 
 class SSHFromSSH(SSHClient):
     """
     Base class for ssh to another node from an existing ssh session
     """
     def __init__(self, ssh_client, host, user, password, force_password=True, initial_prompt=COMPUTE_PROMPT,
-                 timeout=10):
+                 timeout=60):
         """
 
         Args:
@@ -871,7 +965,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
                                             timeout=timeout, fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException(
+                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
                     if res_index == 1:
                         self.send('yes')
                         self.expect(PASSWORD_PROMPT)
@@ -882,7 +977,8 @@ class SSHFromSSH(SSHClient):
                     res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
                                             fail_ok=False)
                     if res_index == 2:
-                        raise exceptions.SSHException("Unable to login to {}".format(self.host))
+                        raise exceptions.SSHException(
+                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
 
                     if res_index == 0:
                         self.send('yes')
@@ -918,39 +1014,6 @@ class SSHFromSSH(SSHClient):
             raise exceptions.SSHRetryTimeout("Host: {}, User: {}, Password: {}".
                                              format(self.host, self.user, self.password))
 
-    # def expect(self, blob_list=None, timeout=10, fail_ok=False, rm_date=False):
-    #     """
-    #     Look for match in the output. Stop if 1) match is found, 2) match is not found and prompt is reached, 3) match
-    #     is not found and timeout is reached. For scenario 2 and 3, either throw timeout exception or return False based
-    #     on the 'fail' argument.
-    #     Args:
-    #         blob_list(list|str): pattern(s) to expect
-    #         timeout: max timeout value to wait for pattern
-    #         fail_ok: True or False. When False: throws exception if match not found. When True: return -1 when match not
-    #             found.
-    #         rm_date (bool): Weather to remove the date output before expecting
-    #
-    #     Returns: the index of the pattern matched in the output, assuming that blob can be a list.
-    #
-    #     Examples:
-    #         expect(): to wait for prompt
-    #         expect('good'): to wait for a match starts with 'good'
-    #         expect(['good', 'bad'], 10, False): to wait for a match start with 'good' or 'bad' with 10seconds timeout
-    #
-    #     """
-    #     if not blob_list:
-    #         blob_list = self.prompt
-    #
-    #     response = self.parent.expect(blob_list, timeout, fail_ok, rm_date=rm_date)
-    #     self.cmd_output = self.parent.cmd_output
-    #     return response
-
-    # def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
-    #     if flush:
-    #         self.flush()
-    #     self.parent.send(cmd, reconnect, reconnect_timeout)
-    #     self.cmd_sent = self.parent.cmd_sent
-
     def close(self, force=False):
         if force or self._is_connected():
             self.send('exit')
@@ -980,7 +1043,7 @@ class SSHFromSSH(SSHClient):
 class VMSSHClient(SSHFromSSH):
 
     def __init__(self, vm_ip, vm_img_name=Guest, user=None, password=None, vm_ext_port=None,
-                 natbox_client=None, prompt=None, timeout=20, retry=True, retry_timeout=120):
+                 natbox_client=None, prompt=None, timeout=60, retry=True, retry_timeout=120):
         """
 
         Args:
@@ -1044,14 +1107,15 @@ class VMSSHClient(SSHFromSSH):
 
 
 class FloatingClient(SSHClient):
-    def __init__(self, floating_ip, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(), initial_prompt=CONTROLLER_PROMPT):
+    def __init__(self, floating_ip, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
+                 initial_prompt=CONTROLLER_PROMPT):
 
         # get a list of floating ips for all known labs
         __lab_list = [getattr(Labs, attr) for attr in dir(Labs) if not attr.startswith(r'__')]
         __lab_list = [lab_ for lab_ in __lab_list if isinstance(lab_, dict)]
         ips = []
         for lab in __lab_list:
-            ip = lab['floating ip']
+            ip = lab.get('floating ip')
             ips.append(ip)
         if not floating_ip.strip() in ips:
             raise ValueError("Invalid input. No matching floating ips found in lab.Labs class")
@@ -1061,7 +1125,7 @@ class FloatingClient(SSHClient):
 
 class NATBoxClient:
     # a list of natbox dicts from lab.NatBox class
-    __natbox_list = [getattr(NatBoxes, attr) for attr in dir(NatBoxes) if not attr.startswith('__')]
+    __natbox_list = [getattr(NatBoxes, attr) for attr in dir(NatBoxes) if attr.startswith('NAT_')]
 
     # internal dict that holds the natbox client if set_natbox_client was called
     __natbox_ssh_map = {}
@@ -1081,30 +1145,33 @@ class NATBoxClient:
         curr_thread = threading.current_thread()
         idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         if not natbox_ip:
+            natbox_ip = ProjVar.get_var('NATBOX').get('ip')
             num_natbox = len(cls.__natbox_ssh_map)
             if num_natbox == 0:
                 raise exceptions.NatBoxClientUnsetException
 
-            if not NatBoxes.NAT_BOX_HW['ip'] in cls.__natbox_ssh_map:
-                LOG.warning("More than one natbox client available, returning the first one found.")
-                for ip in cls.__natbox_ssh_map:
-                    if not len(cls.__natbox_ssh_map[ip]) < idx:
-                        return cls.__natbox_ssh_map[ip][idx]
-                raise exceptions.NatBoxClientUnsetException
-            else:
-                natbox_ip = NatBoxes.NAT_BOX_HW['ip']
+            # if natbox_ip not in cls.__natbox_ssh_map:
+            #     LOG.warning("More than one natbox client available, returning the first one found.")
+            #     for ip in cls.__natbox_ssh_map:
+            #         if not len(cls.__natbox_ssh_map[ip]) < idx:
+            #             return cls.__natbox_ssh_map[ip][idx]
+            #     raise exceptions.NatBoxClientUnsetException
 
         return cls.__natbox_ssh_map[natbox_ip][idx]   # KeyError will be thrown if not exist
 
     @classmethod
     def set_natbox_client(cls, natbox_ip=NatBoxes.NAT_BOX_HW['ip']):
         for natbox in cls.__natbox_list:
-            ip = natbox['ip']
+            ip = natbox.get('ip')
             if ip == natbox_ip.strip():
                 curr_thread = threading.current_thread()
                 idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
-                user = natbox['user']
-                nat_ssh = SSHClient(ip, user, natbox['password'], initial_prompt=user + cls._PROMPT)
+                user = natbox.get('user')
+                if ip == 'localhost':
+                    # use localhost as natbox
+                    nat_ssh = LocalHostClient()
+                else:
+                    nat_ssh = SSHClient(ip, user, natbox.get('password'), initial_prompt=user + cls._PROMPT)
                 nat_ssh.connect(use_current=False)
                 nat_ssh.exec_cmd(cmd='TMOUT=0')
 
@@ -1116,7 +1183,11 @@ class NATBoxClient:
                 elif len(cls.__natbox_ssh_map[ip]) > idx:
                     cls.__natbox_ssh_map[ip][idx] = nat_ssh
                 else:
-                    new_ssh = SSHClient(ip, user, natbox['password'], initial_prompt=user + cls._PROMPT)
+                    if ip == 'localhost':
+                        new_ssh = LocalHostClient()
+                    else:
+                        new_ssh = SSHClient(ip, user, natbox.get('password'), initial_prompt=user + cls._PROMPT)
+
                     new_ssh.connect(use_current=False)
                     while len(cls.__natbox_ssh_map[ip]) < idx:
                         cls.__natbox_ssh_map[ip].append(new_ssh)
@@ -1127,6 +1198,111 @@ class NATBoxClient:
 
         raise ValueError(("No matching natbox ip found from natbox list. IP provided: {}\n"
                           "List of natbox(es) available: {}").format(natbox_ip, cls.__natbox_list))
+
+
+LOCAL_HOST = socket.gethostname()
+LOCAL_USER = getpass.getuser()
+LOCAL_PROMPT = re.escape('{}@{}$ '.format(LOCAL_USER, LOCAL_HOST))
+
+
+class LocalHostClient(SSHClient):
+    def __init__(self, initial_prompt=None, timeout=60, session=None, searchwindowsisze=None):
+        """
+
+        Args:
+            initial_prompt
+            timeout
+            session
+            searchwindowsisze
+
+        Returns:
+
+        """
+        if not initial_prompt:
+            initial_prompt = LOCAL_PROMPT
+        super(LocalHostClient, self).__init__(host=LOCAL_HOST, user=LOCAL_USER, password=None, force_password=False,
+                                              initial_prompt=initial_prompt, timeout=timeout, session=session,
+                                              searchwindownsize=searchwindowsisze)
+
+    def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
+                use_current=True, timeout=None):
+        # Do nothing if current session is connected and force_close is False:
+        if use_current and self._is_connected():
+            LOG.debug("Already connected to {}. Do nothing.".format(self.host))
+            # LOG.debug("ID of the session: {}".format(id(self)))
+            return
+
+        # use original prompt instead of self.prompt when connecting in case of prompt change during a session
+        if not prompt:
+            prompt = self.initial_prompt
+        if timeout is None:
+            timeout = self.timeout
+
+        # Connect to host
+        end_time = time.time() + retry_timeout
+        while time.time() < end_time:
+            # LOG into remote host
+            # print(str(self.searchwindowsize))
+            try:
+                LOG.info("Attempt to connect to host - {}".format(self.host))
+                self._session = pexpect.spawnu(command='bash', timeout=timeout, maxread=100000)
+
+                self.logpath = self._get_logpath()
+                if self.logpath:
+                    self._session.logfile = open(self.logpath, 'w+')
+
+                # Set prompt for matching
+                self.set_prompt(prompt)
+                self.send("PS1={}".format(prompt))
+                self.expect()
+                LOG.info("Login successful!")
+                return
+
+            # pxssh has a bug where the TIMEOUT exception during pxssh.login is completely eaten. i.e., it will still
+            # pretend login passed even if timeout exception was thrown. So below exceptions are unlikely to be received
+            # at all. But leave as is in case pxssh fix it in future releases.
+            except (OSError, pexpect.TIMEOUT, pexpect.EOF):
+                # fail login if retry=False
+                # LOG.debug("Reset session.after upon ssh error")
+                # self._session.after = ''
+                if not retry:
+                    raise
+
+            except:
+                LOG.error("Failed to spawn pexpect object due to unknown exception!")
+                raise
+
+            self.close()
+            LOG.debug("Retry in {} seconds".format(retry_interval))
+            time.sleep(retry_interval)
+
+        else:
+            raise exceptions.LocalHostError("Unable to spawn pexpect object on {}. Expected prompt: {}".format(
+                    self.host, self.prompt))
+
+    # def _process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
+    #
+    #     cmd_output_list = self.cmd_output.split('\n')
+    #     # LOG.info("cmd output list: {}".format(cmd_output_list))
+    #     # cmd_output_list[0] = ''                                       # exclude command, already done in expect
+    #
+    #     if rm_date:  # remove date output if any
+    #         if re.search(DATE_OUTPUT, cmd_output_list[-1]):
+    #             cmd_output_list = cmd_output_list[:-1]
+    #
+    #     cmd_output = '\n'.join(cmd_output_list)
+    #
+    #     if get_exit_code:
+    #         exit_code = self.get_exit_code()
+    #         if exit_code != 0:
+    #             LOG.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
+    #                         format(cmd, exit_code, cmd_output))
+    #     else:
+    #         exit_code = -1
+    #         LOG.info("Actual exit code for following cmd is unknown: {}".format(cmd))
+    #
+    #     cmd_output = cmd_output.strip()
+    #     return exit_code, cmd_output
 
 
 class ControllerClient:
@@ -1150,9 +1326,12 @@ class ControllerClient:
         """
         if not lab_name:
             lab_dict = ProjVar.get_var('lab')
+            if lab_dict is None:
+                return None
+
             for lab_ in cls.__lab_list:
-                if lab_dict['floating ip'] == lab_['floating ip']:
-                    lab_name = lab_['short_name']
+                if lab_dict['floating ip'] == lab_.get('floating ip'):
+                    lab_name = lab_.get('short_name')
                     break
             else:
                 lab_name = 'no_name'
@@ -1216,8 +1395,9 @@ class ControllerClient:
             raise TypeError("ssh_client has to be an instance of SSHClient!")
 
         for lab_ in cls.__lab_list:
-            if ssh_client.host == lab_['floating ip']:
-                lab_name_ = lab_['short_name']
+            if ssh_client.host == lab_.get('floating ip') or ssh_client.host == lab_.get('controller-0 ip') \
+                    or ssh_client.host == lab_.get('external_ip'):
+                lab_name_ = lab_.get('short_name')
                 break
         else:
             lab_name_ = 'no_name'
@@ -1265,7 +1445,250 @@ def ssh_to_controller0(ssh_client=None):
     if ssh_client.get_hostname() == 'controller-0':
         LOG.info("Already on controller-0. Do nothing.")
         return ssh_client
-    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
-                           initial_prompt=Prompt.CONTROLLER_0)
+    con_0_ssh = SSHFromSSH(ssh_client=ssh_client, host='controller-0', user=HostLinuxCreds.get_user(),
+                           password=HostLinuxCreds.get_password(), initial_prompt=Prompt.CONTROLLER_0)
     con_0_ssh.connect()
     return con_0_ssh
+
+
+def telnet_logger(host):
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if log_dir:
+        log_dir = '{}/telnet'.format(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
+        logpath = log_dir + '/telnet_' + host + ".log"
+    else:
+        logpath = None
+
+    logger = get_tis_logger(logger_name='telnet_{}'.format(host), log_path=logpath)
+
+    return logger
+
+TELNET_REGEX = '(.*-[\d]+)[ login:|:~\$]'
+TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
+
+
+class TelnetClient(Telnet):
+
+    def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
+                 password=HostLinuxCreds.get_password()):
+
+        super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
+
+        if not prompt and not hostname:
+            prompt = ':~\$ '
+            self.send()
+            index = self.expect(TELNET_REGEX, fail_ok=True)
+            if index == 0:
+                hostname = self.cmd_output
+        elif not prompt:
+            prompt = '{}:~\$ '.format(hostname)
+        elif not hostname:
+            found = re.findall(TELNET_REGEX, prompt)
+            if found:
+                hostname = found[0]
+        self.logger = telnet_logger(hostname) if hostname else telnet_logger(host)
+        self.hostname = hostname
+        self.prompt = prompt
+        self.cmd_output = ''
+        self.cmd_sent = ''
+        self.user = user
+        self.password = password
+        self.logger.info('Telnet connection to {}:{} ({}) is established'.format(host, port, hostname))
+
+    def connect(self, timeout=None, login=True, login_timeout=10, fail_ok=False):
+        timeout_arg = {'timeout': timeout} if timeout else {}
+        if self.eof:
+            self.logger.info("Re-open telnet connection to {}:{}".format(self.host, self.port))
+            self.open(host=self.host, port=self.port, **timeout_arg)
+
+        if login:
+            self.login(fail_ok=fail_ok, expect_prompt_timeout=login_timeout)
+        return self.sock
+
+    def login(self, expect_prompt_timeout=3, fail_ok=False):
+        self.send()
+        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
+        self.flush()
+        code = 0
+        if index == 0:
+            self.send(self.user)
+            self.expect(PASSWORD_PROMPT)
+            self.send(self.password)
+            self.expect()
+        elif index < 0:
+            self.logger.warning("System is not in login page and default prompt is not found either")
+            code = 1
+        return code
+
+    def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
+        if reconnect:
+            self.connect(timeout=reconnect_timeout)
+        if flush:
+            self.flush()
+
+        cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
+        is_read_only_cmd = (not cmd) or re.search('show|list|cat', cmd)
+        if cmd_for_exitcode or is_read_only_cmd:
+            self.logger.debug("Send: {}".format(cmd))
+        else:
+            self.logger.info("Send: {}".format(cmd))
+
+        self.cmd_sent = cmd
+        if not cmd.endswith('\n'):
+            cmd = '{}\n'.format(cmd)
+        # self.set_debuglevel(2)
+        self.write(cmd.encode())
+
+    def send_control(self, char='c'):
+        if char != 'c':
+            raise NotImplemented("Only ctrl+c is supported")
+        self.logger.info("Send: ctrl+{}".format(char))
+        self.write(b'\x03')
+
+    def _process_output(self, output, rm_date=False):
+        if isinstance(output, bytes):
+            output = output.decode(errors='ignore')
+        if not self.cmd_sent == '':
+            output_list = output.split('\r\n')
+            output_list[0] = ''  # do not display the sent command
+
+            if rm_date:  # remove date output if any
+                if re.search(DATE_OUTPUT, output_list[-1]):
+                    output_list = output_list[:-1]
+
+            output = '\n'.join(output_list)
+        self.cmd_sent = ''  # Make sure sent line is only removed once
+
+        self.cmd_output = output
+        return output
+
+    def expect(self, blob_list=None, timeout=None, fail_ok=False, rm_date=False, searchwindowsize=None):
+        if timeout is None:
+            timeout = self.timeout
+        if not blob_list:
+            blob_list = self.prompt
+        if isinstance(blob_list, (str, bytes)):
+            blob_list = [blob_list]
+
+        blobs = []
+        for blob in blob_list:
+            if isinstance(blob, str):
+                blob = blob.encode()
+            blobs.append(blob)
+
+        try:
+            index, re_obj, matched_text = Telnet.expect(self, list=blobs, timeout=timeout)
+            # Reformat the output
+            output = self._process_output(output=matched_text, rm_date=rm_date)
+            if index >= 0:
+                # Match found
+                self.logger.debug("Found: {}".format(output))
+                return index
+
+            # Error handling
+            self.logger.debug("No match found for: {}. Actual output: {}".format(blob_list, output))
+            if self.eof:
+                err_msg = 'EOF encountered before {} appear. '.format(blob_list)
+                index = -1
+            else:
+                err_msg = "Timed out waiting for {} to appear. ".format(blob_list)
+                index = -2
+
+        except EOFError:
+            err_msg = 'EOF encountered and before receiving anything. '
+            index = -1
+
+        if fail_ok:
+            self.logger.warning(err_msg)
+            return index
+
+        if index == -1:
+            raise exceptions.TelnetEOF(err_msg)
+        elif index == -2:
+            raise exceptions.TelnetTimeout(err_msg)
+        else:
+            raise exceptions.TelnetException("Unknown error! Please update telnet expect method")
+
+    def flush(self):
+        buffer = self.read_very_eager()
+        if buffer:
+            self.logger.debug("Flushed: \n{}".format(buffer.decode(errors='ignore')))
+        return buffer
+
+    def exec_cmd(self, cmd, expect_timeout=None, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=False,
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None):
+        if blob is None:
+            blob = self.prompt
+        if expect_timeout is None:
+            expect_timeout = self.timeout
+
+        self.logger.debug("Executing command...")
+        self.send(cmd, reconnect, reconnect_timeout)
+        try:
+            self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
+        except pexpect.TIMEOUT as e:
+            self.send_control()
+            self.flush()
+            if fail_ok:
+                self.logger.warning(e)
+            else:
+                raise
+
+        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+
+        self.__force_end(force_end)
+
+        if code > 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
+
+        return code, output
+
+    def msg(self, msg, *args):
+        return
+
+    def _process_exec_result(self, cmd, rm_date=False, get_exit_code=True):
+
+        cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
+        # LOG.info("cmd output list: {}".format(cmd_output_list))
+        # cmd_output_list[0] = ''                                       # exclude command, already done in expect
+
+        if rm_date:  # remove date output if any
+            if re.search(DATE_OUTPUT, cmd_output_list[-1]):
+                cmd_output_list = cmd_output_list[:-1]
+
+        cmd_output = '\n'.join(cmd_output_list)
+
+        if get_exit_code:
+            exit_code = self.get_exit_code()
+            if exit_code != 0:
+                self.logger.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
+                                    format(cmd, exit_code, cmd_output))
+        else:
+            exit_code = -1
+            self.logger.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
+
+        cmd_output = cmd_output.strip()
+        return exit_code, cmd_output
+
+    def get_exit_code(self):
+        self.send(EXIT_CODE_CMD)
+        self.expect(timeout=10)
+        matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
+        return int(matches[-1])
+
+    def __force_end(self, force):
+        if force:
+            self.flush()
+            self.send_control('c')
+            self.flush()
+
+    def set_prompt(self, prompt):
+        self.prompt = prompt
+
+    def get_hostname(self):
+        return self.exec_cmd('hostname')[1].splitlines()[0]
+
+    def close(self):
+        super().close()
+        self.logger.info("Telnet connection closed")

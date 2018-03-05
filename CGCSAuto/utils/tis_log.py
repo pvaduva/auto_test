@@ -1,13 +1,10 @@
 import logging
-import os
+from time import gmtime
 
-# from setup_consts import LOG_DIR
 from utils import exceptions
 
-FORMAT = "'%(asctime)s %(levelname)-5s %(filename)-10s %(funcName)-10s: %(message)s'"
+FORMAT = '[%(asctime)s] %(lineno)-5d%(levelname)-5s %(threadName)-8s %(module)s.%(funcName)-8s:: %(message)s'
 # TEST_LOG_LEVEL = 21
-# TODO: determine the name based on which lab to use
-# FILE_NAME = LOG_DIR + '/TIS_AUTOMATION.log'
 
 TC_STEP_SEP = '='*22
 TC_START_SEP = '+'*65
@@ -113,9 +110,53 @@ class TisLogger(logging.getLoggerClass()):
             msg = "\n{} {} Step {}: {}".format(TC_SETUP_STEP_SEP, fixture_, fixture_step, msg)
             self._log(logging.INFO, msg, args, **kwargs)
 
-# register our logger
+# register TiS logger
 logging.setLoggerClass(TisLogger)
-LOG = logging.getLogger('testlog')
+LOG = logging.getLogger('cgcs_log')
+__EXISTING_LOGGERS = {'cgcs_log': LOG}
+
+
+def __get_logger(name=None):
+    if (name == 'cgcs_log') or (not name):
+        return LOG
+    return logging.getLogger(name)
+
+
+def get_tis_logger(logger_name, log_path=None, timestamp=gmtime, stream=True, log_format=FORMAT):
+    # logger for log saved in file
+    existing_loggers = get_existing_loggers()
+    if logger_name in existing_loggers:
+        return existing_loggers[logger_name]
+
+    if not log_path:
+        raise ValueError("log_path has to be provided.")
+
+    logger = __get_logger(name=logger_name)
+    logging.Formatter.converter = timestamp
+    logger_formatter = logging.Formatter(log_format)
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setFormatter(logger_formatter)
+    file_handler.setLevel(logging.DEBUG)
+
+    logger.addHandler(file_handler)
+
+    if stream:
+        # logger for stream output
+        stream_hdler = logging.StreamHandler()
+        stream_hdler.setFormatter(logger_formatter)
+        stream_hdler.setLevel(logging.INFO)
+        logger.addHandler(stream_hdler)
+
+    add_logger(logger_name, logger=logger)
+    return logger
+
+
+def get_existing_loggers():
+    return __EXISTING_LOGGERS
+
+
+def add_logger(logger_name, logger):
+    __EXISTING_LOGGERS[logger_name] = logger
 
 # # screen output handler
 # handler = logging.StreamHandler()

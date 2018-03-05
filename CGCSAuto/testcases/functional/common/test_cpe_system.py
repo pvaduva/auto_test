@@ -6,6 +6,7 @@ from keywords import system_helper, nova_helper
 
 
 @mark.cpe_sanity
+@mark.sx_sanity
 def test_cpe_services_and_functions():
     if system_helper.host_exists(host='compute-0'):
         skip("compute-0 exists - skip for non-CPE lab")
@@ -18,7 +19,7 @@ def test_cpe_services_and_functions():
 
     LOG.tc_step("Check CPE system services via nova service-list")
     check_params = ["nova-scheduler",
-                    "nova-cert",
+                    # "nova-cert",
                     "nova-conductor",
                     "nova-consoleauth",
                     "nova-scheduler",
@@ -26,5 +27,5 @@ def test_cpe_services_and_functions():
 
     services_tab = nova_helper.get_nova_services_table()
     binaries = table_parser.get_column(services_tab, 'Binary')
-    assert set(check_params) <= set(binaries), "Not all binaries from {} exist in nova service-list".format(check_params)
-
+    assert set(check_params) <= set(binaries), "Not all binaries from {} exist in 'nova service-list'".\
+        format(check_params)

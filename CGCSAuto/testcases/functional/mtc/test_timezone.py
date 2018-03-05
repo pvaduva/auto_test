@@ -11,13 +11,13 @@ from pytest import fixture
 
 
 timezones = [
-    "Asia/Hong_Kong",
-    "America/Los_Angeles",
-    "Canada/Eastern",
-    "Canada/Central",
-    "Europe/London",
-    "Europe/Berlin",
-    "UTC"
+    "Asia/Hong_Kong",       # UTC+8
+    "America/Los_Angeles",  # UTC-8, DST:UTC-7
+    "Canada/Eastern",       # UTC-5, DST:UTC-4
+    "Canada/Central",       # UTC-6, DST:UTC-5
+    # "Europe/London",      # UTC, DST:UTC+1
+    "Europe/Berlin",        # UTC+1, DST:UTC+2
+    # "UTC"
 ]
 
 
@@ -31,7 +31,7 @@ def get_out_of_date_alarms():
 
 
 @fixture(scope='module', autouse=True)
-def teardown(request, get_out_of_date_alarms):
+def revert_timezone(request, get_out_of_date_alarms):
     def _revert():
         LOG.fixture_step("Reverting timezone to UTC")
         cli.system('modify', '--timezone=UTC')

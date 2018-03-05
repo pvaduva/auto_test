@@ -1,5 +1,4 @@
 import re
-import time
 from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
@@ -8,7 +7,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata
 from consts.cli_errs import CpuRtErr        # Do not remove this import. Used in eval()
 from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper, system_helper, \
     check_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_rt', 'rt_mask', 'shared_vcpu', 'expt_err'), [
@@ -73,44 +72,45 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
     return flv_id, code, output
 
 
-def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=None):
+def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=None,
+                                           offline_cpus=None, check_virsh_vcpusched=True):
+    LOG.tc_step("Check realtime and ordinary cpu info via virsh and ps")
     inst_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
 
     with host_helper.ssh_to_host(hostname=vm_host) as host_ssh:
 
-        LOG.tc_step("Check vcpusched, emulatorpin, and vcpupin in virsh dumpxml")
+        LOG.info("------ Check vcpusched, emulatorpin, and vcpupin in virsh dumpxml")
         vcpupins, emulatorpins, vcpuscheds = host_helper.get_values_virsh_xmldump(
                 instance_name=inst_name, host_ssh=host_ssh, target_type='dict',
                 tag_paths=('cputune/vcpupin', 'cputune/emulatorpin', 'cputune/vcpusched'))
-        # TODO : REMOVEEEE
-        print("vcpupins: {}, emulatorpins: {}, vcpuscheds: {}".format(vcpupins, emulatorpins, vcpuscheds))
 
-        # Each vcpu should have its own vcpupin entry in vish dumpxml
+        # Each vcpu should have its own vcpupin entry in virsh dumpxml
         assert vcpus == len(vcpupins), "vcpupin entries count in virsh dumpxml is not the same as vm vcpus count"
 
-        LOG.tc_step("Check realtime cpu count is same as specified in flavor and with fifo 1 policy")
+        LOG.info("------ Check realtime cpu count is same as specified in flavor and with fifo 1 policy")
 
-        if not expt_rt_cpus:
-            assert not vcpuscheds, "vcpushed exists in virsh dumpxml when realtime_cpu != yes"
+        if check_virsh_vcpusched:
+            if not expt_rt_cpus:
+                assert not vcpuscheds, "vcpushed exists in virsh dumpxml when realtime_cpu != yes"
 
-        else:
-            LOG.tc_step("Check vcpusched for realtime cpus")
-            virsh_rt_cpus = []
-            for vcpusched in vcpuscheds:
-                virsh_scheduler = vcpusched['scheduler']
-                virsh_priority = vcpusched['priority']
-                assert 'fifo' == virsh_scheduler, "Actual shed policy in virsh dumpxml: {}".format(virsh_scheduler)
-                assert '1' == virsh_priority, "Actual priority in virsh dumpxml: {}".format(virsh_scheduler)
+            else:
+                LOG.info("------ Check vcpusched for realtime cpus")
+                virsh_rt_cpus = []
+                for vcpusched in vcpuscheds:
+                    virsh_scheduler = vcpusched['scheduler']
+                    virsh_priority = vcpusched['priority']
+                    assert 'fifo' == virsh_scheduler, "Actual shed policy in virsh dumpxml: {}".format(virsh_scheduler)
+                    assert '1' == virsh_priority, "Actual priority in virsh dumpxml: {}".format(virsh_scheduler)
 
-                virsh_rt_cpu = int(vcpusched['vcpus'])
-                virsh_rt_cpus.append(virsh_rt_cpu)
+                    virsh_rt_cpu = int(vcpusched['vcpus'])
+                    virsh_rt_cpus.append(virsh_rt_cpu)
 
-            assert sorted(expt_rt_cpus) == sorted(virsh_rt_cpus), \
-                "Expected rt cpus: {}; Actual in virsh vcpusched: {}".format(expt_rt_cpus, virsh_rt_cpus)
+                assert sorted(expt_rt_cpus) == sorted(virsh_rt_cpus), \
+                    "Expected rt cpus: {}; Actual in virsh vcpusched: {}".format(expt_rt_cpus, virsh_rt_cpus)
 
-        LOG.tc_step("Check emulator cpus is a subset of ordinary cpus")
+        LOG.info("------ Check emulator cpus is a subset of ordinary cpus")
         emulator_cpusets_str = emulatorpins[0]['cpuset']
-        emulater_cpusets = common._parse_cpus_list(emulator_cpusets_str)
+        emulator_cpusets = common.parse_cpus_list(emulator_cpusets_str)
         cpuset_dict = {}
         virsh_ord_cpus = []
         ord_cpusets = []
@@ -119,7 +119,7 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
         for vcpupin in vcpupins:
             cpuset = int(vcpupin['cpuset'])
             vcpu_id = int(vcpupin['vcpu'])
-            if cpuset in emulater_cpusets:
+            if cpuset in emulator_cpusets:
                 # Don't include vcpu_id in case of scaled-down vm. Example:
                 # <cputune>
                 #   <shares>3072</shares>
@@ -153,7 +153,7 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
                                                                    "no realtime cpu or shared cpu set"
 
         comm_pattern = 'CPU [{}]/KVM'
-        LOG.tc_step("Check actual vm realtime cpu scheduler via ps")
+        LOG.info("------ Check actual vm realtime cpu scheduler via ps")
         rt_comm = comm_pattern.format(','.join([str(vcpu) for vcpu in expt_rt_cpus]))
         vm_pid = vm_helper.get_vm_pid(instance_name=inst_name, host_ssh=host_ssh)
         ps_rt_scheds = vm_helper.get_sched_policy_and_priority_for_vcpus(vm_pid, host_ssh, cpusets=rt_cpusets,
@@ -161,16 +161,28 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
         assert len(expt_rt_cpus) == len(ps_rt_scheds)
 
         for ps_rt_sched in ps_rt_scheds:
-            ps_rt_pol, ps_rt_prio = ps_rt_sched
-            assert ps_rt_pol == 'FF', "Actual sched policy: {}. ps_rt_sheds parsed: {}".format(ps_rt_pol, ps_rt_scheds)
-            assert ps_rt_prio == '1', "Actual priority: {}. ps_rt_sheds parsed: {}".format(ps_rt_pol, ps_rt_scheds)
+            ps_rt_pol, ps_rt_prio, ps_rt_comm = ps_rt_sched
+            expt_pol = 'FF'
+            expt_prio = '1'
+            if offline_cpus:
+                if isinstance(offline_cpus, int):
+                    offline_cpus = [offline_cpus]
+                cpu = int(re.findall('(\d+)/KVM', ps_rt_comm)[0])
+                if cpu in offline_cpus:
+                    expt_pol = 'TS'
+                    expt_prio = '-'
 
-        LOG.tc_step("Check actual vm ordinary cpu scheduler via ps")
+            assert ps_rt_pol == expt_pol, \
+                "Actual sched policy: {}. ps_rt_sheds parsed: {}".format(ps_rt_pol, ps_rt_scheds)
+            assert ps_rt_prio == expt_prio, \
+                "Actual priority: {}. ps_rt_sheds parsed: {}".format(ps_rt_pol, ps_rt_scheds)
+
+        LOG.info("------ Check actual vm ordinary cpu scheduler via ps")
         ord_comm = comm_pattern.format(','.join([str(vcpu) for vcpu in expt_ord_cpus]))
         ps_ord_scheds = vm_helper.get_sched_policy_and_priority_for_vcpus(vm_pid, host_ssh, cpusets=ord_cpusets,
                                                                           comm=ord_comm)
         for ps_ord_sched in ps_ord_scheds:
-            ps_ord_pol, ps_ord_prio = ps_ord_sched
+            ps_ord_pol, ps_ord_prio, ps_ord_comm = ps_ord_sched
             assert ps_ord_pol == 'TS' and ps_ord_prio == '-', "ps_ord_scheds parsed: {}".format(ps_ord_scheds)
 
 
@@ -203,12 +215,13 @@ def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
 
 @fixture(scope='module')
 def check_hosts():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts(rtn_down_hosts=False)
+    LOG.info("Get system storage backing, shared cpu, and HT configs.")
+    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
     hosts_with_shared_cpu = []
     ht_hosts = []
     for host in hosts:
         shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared')
-        if shared_cores_for_host[0] or shared_cores_for_host[1]:
+        if shared_cores_for_host[0] or shared_cores_for_host.get(1):
             hosts_with_shared_cpu.append(host)
         if system_helper.is_hyperthreading_enabled(host):
             ht_hosts.append(host)
@@ -303,6 +316,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
     expt_current_cpu = vcpus
     if min_vcpus is not None:
+        GuestLogs.add(vm_id)
         LOG.tc_step("Scale down cpu once")
         vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -311,7 +325,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
         expt_current_cpu -= 1
         check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
 
-    for actions in [['suspend', 'resume'], ['live_migrate'], ['cold_migrate'], ['rebuild']]:
+    for actions in [['suspend', 'resume'], ['stop', 'start'], ['live_migrate'], ['cold_migrate'], ['rebuild']]:
         LOG.tc_step("Perform {} on vm and check realtime cpu policy".format(actions))
         for action in actions:
             kwargs = {}
@@ -320,14 +334,33 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
             vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu)
-        vm_host = nova_helper.get_vm_host(vm_id)
+        vm_host_post_action = nova_helper.get_vm_host(vm_id)
         if shared_vcpu:
-            assert vm_host in hosts_with_shared_cpu
+            assert vm_host_post_action in hosts_with_shared_cpu
 
         LOG.tc_step("Check cpu thread policy in vm topology and vcpus in nova show after {}".format(actions))
-        check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thread, numa_num, vm_host,
-                                                        current_vcpus=expt_current_cpu)
+        check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thread, numa_num,
+                                                        vm_host_post_action, current_vcpus=expt_current_cpu)
+        check_virsh = True
+        offline_cpu = None
         if min_vcpus is not None:
+            offline_cpu = vcpus - 1
+            if offline_cpu in expt_rt_cpus:
+                check_virsh = False
+
             LOG.tc_step("Check vm vcpus are not changed after {}".format(actions))
             check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
+
+        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu,
+                                               offline_cpus=offline_cpu, check_virsh_vcpusched=check_virsh)
+
+    if min_vcpus is not None:
+        LOG.tc_step('Scale up vm and stop/start, and ensure realtime cpu config persists')
+        vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        vm_helper.stop_vms(vm_id)
+        vm_helper.start_vms(vm_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, vcpus, vcpus)
+        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu)
+        GuestLogs.remove(vm_id)

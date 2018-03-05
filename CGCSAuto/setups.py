@@ -1,15 +1,20 @@
 import re
 import time
-import os.path
+import os
 import configparser
+import threading
+import pexpect
+from multiprocessing import Process
 
 import setup_consts
-from utils import exceptions, cli, lab_info
+from utils import exceptions, lab_info
 from utils.tis_log import LOG
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT
-from utils.node import create_node_boot_dict, create_node_dict
-from consts.auth import Tenant, CliAuth, HostLinuxCreds
-from consts.cgcs import Prompt
+from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
+    TelnetClient, TELNET_LOGIN_PROMPT
+from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
+from utils.local_host import *
+from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
+from consts.cgcs import Prompt, REGION_MAP
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
@@ -32,6 +37,25 @@ def setup_tis_ssh(lab):
         ControllerClient.set_active_controller(con_ssh)
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
+    return con_ssh
+
+
+def setup_vbox_tis_ssh(lab):
+    
+    if 'external_ip'in lab.keys():
+        
+        con_ssh = ControllerClient.get_active_controller(fail_ok=True)
+        if con_ssh:
+            con_ssh.disconnect()
+
+        con_ssh = SSHClient(lab['external_ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                            CONTROLLER_PROMPT, port=lab['external_port'])
+        con_ssh.connect(retry=True, retry_timeout=30)
+        ControllerClient.set_active_controller(con_ssh)
+
+    else:
+        con_ssh = setup_tis_ssh(lab)
+
     return con_ssh
 
 
@@ -72,11 +96,15 @@ def setup_primary_tenant(tenant):
 def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
     natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
-    __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh=con_ssh)
-    return NATBoxClient.get_natbox_client()
+    nat_ssh = NATBoxClient.get_natbox_client()
+    nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
+    ProjVar.set_var(natbox_ssh=nat_ssh)
+
+    __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
+    return nat_ssh
 
 
-def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
+def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -143,18 +171,33 @@ def __copy_keyfile_to_natbox(natbox, keyfile_path, con_ssh):
     # ssh private key should now exist under keyfile_path
     con_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
 
-    cmd_3 = 'scp {} {}@{}:{}'.format(keyfile_name, natbox['user'], natbox['ip'], keyfile_path)
-    con_ssh.send(cmd_3)
-    rtn_3_index = con_ssh.expect(['.*\(yes/no\)\?.*', Prompt.PASSWORD_PROMPT])
-    if rtn_3_index == 0:
-        con_ssh.send('yes')
-        con_ssh.expect(Prompt.PASSWORD_PROMPT)
-    con_ssh.send(natbox['password'])
-    con_ssh.expect(timeout=30)
-    if not con_ssh.get_exit_code() == 0:
-        raise exceptions.CommonError("Failed to copy keyfile to NatBox")
+    tis_ip = ProjVar.get_var('LAB').get('floating ip')
+    for i in range(10):
+        try:
+            nat_ssh.flush()
+            cmd_3 = 'scp -v -o ConnectTimeout=30 {}@{}:{} {}'.format(
+                    HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
+            nat_ssh.send(cmd_3)
+            rtn_3_index = nat_ssh.expect([nat_ssh.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
+            if rtn_3_index == 2:
+                nat_ssh.send('yes')
+                nat_ssh.expect(Prompt.PASSWORD_PROMPT)
+            elif rtn_3_index == 1:
+                nat_ssh.send(HostLinuxCreds.get_password())
+                nat_ssh.expect(timeout=30)
+            if nat_ssh.get_exit_code() == 0:
+                LOG.info("key file is successfully copied from controller to NATBox")
+                return
+        except pexpect.TIMEOUT as e:
+            LOG.warning(e.__str__())
+            nat_ssh.send_control()
+            nat_ssh.expect()
 
-    LOG.info("key file is successfully copied from controller to NATBox")
+        except Exception as e:
+            LOG.warning(e.__str__())
+            time.sleep(10)
+
+    raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
 
 def boot_vms(is_boot):
@@ -175,36 +218,39 @@ def get_lab_dict(labname):
     labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
 
     for lab in labs:
-        if labname in lab['name'].replace('-', '_').lower().strip() \
-                or labname == lab['short_name'].replace('-', '_').lower().strip() \
-                or labname == lab['floating ip']:
+        if labname in lab.get('name').replace('-', '_').lower().strip() \
+                or labname == lab.get('short_name').replace('-', '_').lower().strip() \
+                or labname == lab.get('floating ip'):
             return lab
     else:
         if labname.startswith('128.224') or labname.startswith('10.'):
             return add_lab_entry(labname)
 
-        lab_valid_short_names = [lab['short_name'] for lab in labs]
+        lab_valid_short_names = [lab.get('short_name') for lab in labs]
         # lab_valid_names = [lab['name'] for lab in labs]
         raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
 
 
 def get_natbox_dict(natboxname):
     natboxname = natboxname.lower().strip()
-    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if not item.startswith('_')]
+    natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if item.startswith('NAT_')]
 
     for natbox in natboxes:
-        if natboxname.replace('-', '_') in natbox['name'].replace('-', '_') or natboxname == natbox['ip']:
+        if natboxname.replace('-', '_') in natbox.get('name').replace('-', '_') or natboxname == natbox.get('ip'):
             return natbox
     else:
-        raise ValueError("{} is not a valid input.".format(natboxname))
+        if natboxname.startswith('128.224'):
+            return NatBoxes.add_natbox(ip=natboxname)
+        else:
+            raise ValueError("{} is not a valid input.".format(natboxname))
 
 
 def get_tenant_dict(tenantname):
-    tenantname = tenantname.lower().strip().replace('_', '').replace('-', '')
+    # tenantname = tenantname.lower().strip().replace('_', '').replace('-', '')
     tenants = [getattr(Tenant, item) for item in dir(Tenant) if not item.startswith('_') and item.isupper()]
 
     for tenant in tenants:
-        if tenantname == tenant['tenant'].replace('_', '').replace('-', ''):
+        if tenantname == tenant.get('tenant').replace('_', '').replace('-', ''):
             return tenant
     else:
         raise ValueError("{} is not a valid input".format(tenantname))
@@ -277,7 +323,6 @@ def copy_files_to_con1():
         return
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
-
     file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1") as con_1_ssh:
@@ -362,8 +407,8 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
         installconf.read(installconf_path)
 
         # Parse lab info
-        lab_info = installconf['LAB']
-        lab_name = lab_info['LAB_NAME']
+        lab_info_ = installconf['LAB']
+        lab_name = lab_info_['LAB_NAME']
         if not lab_name:
             raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                              "has to be provided")
@@ -377,12 +422,68 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
     return lab_dict
 
 
+def is_vbox():
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    return nat_name == 'localhost' or nat_name.startswith('128.224.')
+
+
+def get_nodes_info():
+    if is_vbox():
+        return
+
+    lab = ProjVar.get_var('LAB')
+    nodes_info = create_node_dict(lab['controller_nodes'], 'controller')
+    nodes_info.update(create_node_dict(lab.get('compute_nodes', None), 'compute'))
+    nodes_info.update(create_node_dict(lab.get('storage_nodes', None), 'storage'))
+
+    LOG.debug("Nodes info: \n{}".format(nodes_info))
+    return nodes_info
+
+
+def collect_telnet_logs_for_nodes(end_event):
+    nodes_info = get_nodes_info()
+    node_threads = []
+    kwargs = {'prompt': '{}|:~\$'.format(TELNET_LOGIN_PROMPT), 'end_event': end_event}
+    for node_name in nodes_info:
+        kwargs['hostname'] = node_name
+        kwargs['telnet_ip'] = nodes_info[node_name].telnet_ip
+        kwargs['telnet_port'] = nodes_info[node_name].telnet_port
+        node_thread = threading.Thread(name='Telnet-{}'.format(node_name), target=_collect_telnet_logs, kwargs=kwargs)
+        node_thread.start()
+        node_threads.append(node_thread)
+
+    return node_threads
+
+
+def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, timeout=None, collect_interval=60):
+    node_telnet = TelnetClient(host=telnet_ip, prompt=prompt, port=telnet_port, hostname=hostname)
+    node_telnet.send()
+    time.sleep(3)
+    node_telnet.flush()
+    if not timeout:
+        timeout = 3600 * 48
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if end_event.is_set():
+            break
+        try:
+            # Read out everything in output buffer every minute
+            node_telnet.connect(login=False)
+            time.sleep(collect_interval)
+            node_telnet.flush()
+        except Exception as e:
+            node_telnet.logger.error('Failed to collect telnet log. {}'.format(e))
+    else:
+        node_telnet.logger.warning('Collect telnet log timed out')
+
+
 def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
                        controller1_ceph_mon_device, ceph_mon_gib):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
+    print("Setting Install vars : {} ".format(locals()))
 
     errors = []
     lab_to_install = lab
@@ -397,14 +498,21 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     heat_templates = None
     license_path = None
     out_put_dir = None
+    vbox = True if lab and 'vbox' in lab.lower() else False
+    if vbox:
+        LOG.info("The test lab is a VBOX TiS setup")
 
     if installconf_path:
+
         installconf = configparser.ConfigParser()
         installconf.read(installconf_path)
 
         # Parse lab info
         lab_info = installconf['LAB']
         lab_name = lab_info['LAB_NAME']
+        vbox = True if 'vbox' in lab_name.lower() else False
+        if vbox:
+            LOG.info("The test lab is a VBOX TiS setup")
         if lab_name:
             lab_to_install = get_lab_dict(lab_name)
 
@@ -413,9 +521,14 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             if con0_ip:
                 lab_to_install['controller-0 ip'] = con0_ip
 
-            con1_ip = lab_info['CONTROLLER0_IP']
+            con1_ip = lab_info['CONTROLLER1_IP']
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
+
+            float_ip = lab_info['FLOATING_IP']
+            if float_ip:
+                lab_to_install['floating ip'] = float_ip
+
         else:
             raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf "
                              "file")
@@ -485,13 +598,46 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
 
     # add nodes dictionary
-    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller'))
-    if 'compute_nodes' in lab_to_install:
-        lab_to_install.update( create_node_dict(lab_to_install['compute_nodes'], 'compute'))
-    if 'storage_nodes' in lab_to_install:
-        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage'))
 
-    lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
+
+    if 'compute_nodes' in lab_to_install:
+
+        lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
+    if 'storage_nodes' in lab_to_install:
+        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
+
+    if vbox:
+        lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
+    else:
+        lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+
+    if vbox:
+        # get the ip address of the local linux vm
+        cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
+        local_external_ip = os.popen(cmd).read().strip()
+        lab_to_install['local_ip'] = local_external_ip
+        vbox_gw = installconf['VBOX_GATEWAY']
+        external_ip = vbox_gw['EXTERNAL_IP']
+        if external_ip and external_ip != local_external_ip:
+            LOG.info("TiS VM external gwy IP is {}".format(external_ip))
+            lab_to_install['external_ip'] = external_ip
+            external_port = vbox_gw['EXTERNAL_PORT']
+            if external_port:
+                LOG.info("TiS VM external gwy port is {}".format(external_port))
+                lab_to_install['external_port'] = external_port
+            else:
+                raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
+                                              .format(external_ip))
+        username = getpass.getuser()
+        password = ''
+        if "svc-cgcsauto" in username:
+            password = SvcCgcsAuto.PASSWORD
+        else:
+            password = getpass.getpass()
+
+        lab_to_install['local_user'] = username
+        lab_to_install['local_password'] = password
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,
@@ -520,18 +666,20 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
     for host in hosts:
         LOG.info("scp vswitch log from {} to controller-0".format(host))
         dest_file = "{}_vswitch.info".format(host)
-        dest_file = os.path.join(WRSROOT_HOME, dest_file)
+        dest_file = '{}/{}'.format(WRSROOT_HOME, dest_file)
         con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(), dest_password=HostLinuxCreds.get_password(),
-                          dest_user='', timeout=30, sudo=True, sudo_password=None, fail_ok=True)
+                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+                          dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
+                          sudo_password=None, fail_ok=True)
 
     LOG.info("SCP vswitch log from lab to automation log dir")
     if log_path is None:
-        log_path = os.path.join(WRSROOT_HOME, '*_vswitch.info')
+        log_path = '{}/{}'.format(WRSROOT_HOME, '*_vswitch.info')
     source_ip = ProjVar.get_var('LAB')['controller-0 ip']
-    dest_dir = ProjVar.get_var('TEMP_DIR')
-    scp_to_local(dest_path=dest_dir, source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(), source_path=log_path,
-                 source_ip=source_ip, timeout=60)
+    dest_dir = ProjVar.get_var('PING_FAILURE_DIR')
+    scp_to_local(dest_path=dest_dir,
+                 source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+                 source_path=log_path, source_ip=source_ip, timeout=60)
 
 
 def list_migration_history(con_ssh):
@@ -560,7 +708,7 @@ def set_session(con_ssh):
 
     patches = '\n'.join(patches)
     tag = ProjVar.get_var('REPORT_TAG')
-    if tag:
+    if tag and ProjVar.get_var('CGCS_DB'):
         try:
             from utils.cgcs_reporter import upload_results
             sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
@@ -577,3 +725,62 @@ def set_session(con_ssh):
             LOG.info("Test session id: {}".format(session_id))
         except:
             LOG.exception("Unable to upload test session")
+
+
+def enable_disable_keystone_debug(con_ssh, enable=True):
+    """
+    Enable or disable keystone debug from keystone.conf
+    Args:
+        con_ssh:
+        enable:
+
+    Returns:
+
+    """
+    restart = False
+    file = '/etc/keystone/keystone.conf'
+    LOG.info("Set keystone debug to {}".format(enable))
+    if con_ssh.exec_sudo_cmd('cat {} | grep --color=never "insecure_debug = True"'.format(file))[0] == 0:
+        if not enable:
+            con_ssh.exec_sudo_cmd("sed -i '/^insecure_debug = /g' {}".format(file))
+            restart = True
+    else:
+        if enable:
+            find_cmd = "grep --color=never -E '^(debug|#debug) = ' {} | tail -1".format(file)
+            pattern = con_ssh.exec_sudo_cmd(find_cmd, fail_ok=False)[1]
+            con_ssh.exec_sudo_cmd("sed -i -E '/^{}/a insecure_debug = True' {}".format(pattern, file), fail_ok=False)
+            restart = True
+
+    if restart:
+        is_enabled = con_ssh.exec_sudo_cmd('cat {} | grep --color=never insecure_debug'.format(file))[0] == 0
+        if (enable and not is_enabled) or (is_enabled and not enable):
+            LOG.warning("Keystone debug is not {} in keystone.conf!".format(enable))
+            return
+
+        LOG.info("Restart keystone service after toggling keystone debug")
+        con_ssh.exec_sudo_cmd('sm-restart-safe service keystone', fail_ok=False)
+        time.sleep(3)
+
+
+def add_ping_failure(test_name):
+    file_path = '{}{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), 'ping_failures.txt')
+    with open(file_path, mode='a') as f:
+        f.write(test_name + '\n')
+
+
+def set_region(region=None):
+    local_region = CliAuth.get_var('OS_REGION_NAME')
+    if not region:
+        region = local_region
+    Tenant.set_region(region=region)
+    ProjVar.set_var(REGION=region)
+    for tenant in ('tenant1', 'tenant2'):
+        region_tenant = '{}{}'.format(tenant, REGION_MAP[region])
+        Tenant.update_tenant_dict(tenant, username=region_tenant, tenant=region_tenant)
+        if region != local_region:
+            keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
+
+
+def set_sys_type(con_ssh):
+    sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
+    ProjVar.set_var(SYS_TYPE=sys_type)

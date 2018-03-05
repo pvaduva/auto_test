@@ -3,7 +3,7 @@ from pytest import fixture
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from consts.timeout import HostTimeout
-from keywords import host_helper
+from keywords import host_helper, system_helper
 
 
 @fixture(scope='function', autouse=True)
@@ -71,6 +71,12 @@ class HostsToRecover():
 
     @staticmethod
     def _recover_hosts(hostnames, scope):
+        if system_helper.is_simplex():
+            LOG.fixture_step('{} Recover simplex host'.format(scope))
+            host_helper.recover_simplex(fail_ok=False)
+            return
+
+        # Recover hosts for non-simplex system
         hostnames = sorted(set(hostnames))
         table_ = table_parser.table(cli.system('host-list'))
         table_ = table_parser.filter_table(table_, hostname=hostnames)

@@ -1,6 +1,5 @@
 from pytest import mark, fixture, skip
 
-from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
@@ -78,7 +77,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
     mark.domain_sanity((2, 'dedicated', 'flavor', 'volume')),
     mark.p2((3, 'shared', 'flavor', 'volume')),
     mark.p1((1, 'dedicated', 'flavor', 'image')),
-    mark.nightly((2, 'dedicated', 'image', 'volume')),
+    mark.priorities('nightly')((2, 'dedicated', 'image', 'volume')),
     mark.p2((3, 'shared', 'image', 'volume')),
     mark.domain_sanity((1, 'dedicated', 'image', 'image')),
 ])
@@ -157,7 +156,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     mark.p1((2, 1, 'flavor', 'image')),
     mark.p1((1, 3, 'image', 'image')),
     mark.p1((2, 4, 'image', 'volume')),
-    mark.nightly((3, 2, 'flavor', 'volume')),
+    mark.priorities('nightly', 'sx_nightly')((3, 2, 'flavor', 'volume')),
 ])
 def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_source, boot_source):
     """
@@ -195,7 +194,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     LOG.tc_step("Getting host list")
     target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
     target_host = target_hosts[0]
-    storage_backing = host_helper.get_local_storage_backing(host=target_host)
+    storage_backing = host_helper.get_host_instance_backing(host=target_host)
     if 'image' in storage_backing:
         storage_backing = 'local_image'
     elif 'lvm' in storage_backing:

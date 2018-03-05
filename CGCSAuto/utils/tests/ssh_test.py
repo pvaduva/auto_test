@@ -1,4 +1,5 @@
 import time
+import pexpect
 import pytest
 
 from pexpect import pxssh
@@ -113,9 +114,19 @@ def test_expect_list():
     LOG.tc_func_end()
 
 if __name__ == "__main__":
-    test_reconnect_after_swact()
-    test_credential_incorrect()
-    test_connection_close()
-    test_send_cmd()
-    test_expect_list()
-    test_ssh_from_ssh()
+    # test_reconnect_after_swact()
+    # test_credential_incorrect()
+    # test_connection_close()
+    # test_send_cmd()
+    # test_expect_list()
+    # test_ssh_from_ssh()
+
+    p = pexpect.spawn('cat')
+    p.sendline('1234')  # We will see this twice (once from tty echo and again from cat).
+    p.expect(['1234'])
+    p.expect(['1234'])
+    p.setecho(False)  # Turn off tty echo
+    p.sendline('abcd')  # We will set this only once (echoed by cat).
+    p.sendline('wxyz')  # We will set this only once (echoed by cat)
+    p.expect(['abcd'])
+    p.expect(['wxyz'])

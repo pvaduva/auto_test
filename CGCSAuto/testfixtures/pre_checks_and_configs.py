@@ -2,28 +2,27 @@ import time
 from pytest import fixture, skip
 
 from utils.tis_log import LOG
+from utils.ssh import ControllerClient
 from consts.auth import Tenant
-from consts.reasons import SkipReason
-from consts.cgcs import EventLogID, HostAvailabilityState
+from consts.proj_vars import ProjVar
+from consts.reasons import SkipSysType
+from consts.cgcs import EventLogID, HostAvailState
+from consts.filepaths import WRSROOT_HOME, HeatTemplate
 from keywords import system_helper, host_helper, keystone_helper, security_helper
 
 
-@fixture(scope='function')
+@fixture(scope='session')
 def no_simplex():
+    LOG.fixture_step("(Session) Skip if Simplex")
     if system_helper.is_simplex():
-        skip(SkipReason.SIMPLEX_SYSTEM)
+        skip(SkipSysType.SIMPLEX_SYSTEM)
 
 
-@fixture(scope='class')
-def no_simplex_class():
-    if system_helper.is_simplex():
-        skip(SkipReason.SIMPLEX_SYSTEM)
-
-
-@fixture(scope='module')
-def no_simplex_module():
-    if system_helper.is_simplex():
-        skip(SkipReason.SIMPLEX_SYSTEM)
+@fixture(scope='session')
+def simplex_only():
+    LOG.fixture_step("(Session) Skip if not Simplex")
+    if not system_helper.is_simplex():
+        skip(SkipSysType.SIMPLEX_ONLY)
 
 
 @fixture(scope='module')
@@ -58,7 +57,8 @@ def wait_for_con_drbd_sync_complete():
         assert False, "drbd sync alarm {} is not cleared within timeout".format(EventLogID.CON_DRBD_SYNC)
 
     LOG.fixture_step("Wait for {} becomes available in system host-list".format(host))
-    host_helper.wait_for_host_states(host, availability=HostAvailabilityState.AVAILABLE, timeout=30, fail_ok=False)
+    host_helper.wait_for_host_states(host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False,
+                                     check_interval=10)
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
     host_helper.wait_for_sm_dump_desired_states(host, 'drbd-', strict=False, timeout=30, fail_ok=False)
@@ -108,3 +108,18 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     assert post_pswd == security_helper.get_admin_password_in_keyring()
 
     return post_pswd
+
+
+@fixture(scope='function')
+def collect_kpi(request):
+    collect_kpi_ = ProjVar.get_var('COLLECT_KPI') and bool(request.node.get_marker('kpi'))
+    log_path = ProjVar.get_var('KPI_PATH') if collect_kpi_ else None
+    return log_path
+
+
+@fixture(scope='session')
+def heat_files_check():
+    con_ssh = ControllerClient.get_active_controller()
+    heat_dir = HeatTemplate.HEAT_DIR
+    if not con_ssh.file_exists(heat_dir):
+        skip("HEAT templates directory not found. Expected heat dir: {}".format(heat_dir))

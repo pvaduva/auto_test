@@ -22,8 +22,6 @@ class TiSError(Exception):
 class NoMatchFoundError(TiSError):
     message = "No match found."
 
-class TelnetException(TiSError):
-    message = "Telnet Error"
 
 class InvalidStructure(TiSError):
     message = "Invalid cli output table structure."
@@ -35,6 +33,22 @@ class SSHException(TiSError):
     Examples: SSHRetryTimeout(SSHException)
     """
     message = "SSH error."
+
+
+class TelnetException(TiSError):
+    message = "Telnet Error"
+
+
+class TelnetTimeout(TelnetException):
+    message = 'Telnet timeout'
+
+
+class TelnetEOF(TelnetException):
+    message = 'Telnet EOF.'
+
+
+class LocalHostError(TiSError):
+    message = 'Localhost error.'
 
 
 class SSHRetryTimeout(SSHException):
@@ -172,7 +186,20 @@ class SWiftError(TiSError):
 
 
 class OrchestrationError(TiSError):
-    message = 'Orchestration error'
+    message = 'Orchestration error.'
+
 
 class UpgradeError(TiSError):
-    message = 'Upgrade error'
+    message = 'Upgrade error.'
+
+
+class BackupSystem(TiSError):
+    message = 'System Backup error.'
+
+
+class RestoreSystem(TiSError):
+    message = 'System Restore error.'
+
+
+class StorageError(TiSError):
+    message = 'Storage error.'

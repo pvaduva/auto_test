@@ -7,7 +7,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, VMStatus, DevClassIds
+from consts.cgcs import FlavorSpec, VMStatus, DevClassID
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -86,12 +86,11 @@ def vif_model_check(request):
                                              auto_info=Tenant.ADMIN)
         assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net)
 
-
     else:
         seg_id = None
 
     nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                    {'net-id': pci_net_id, 'vif-model': vif_model}]
+                   {'net-id': pci_net_id, 'vif-model': vif_model}]
     if extra_pcipt_net:
         nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
         extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id', strict=False,
@@ -153,7 +152,7 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
 
     LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper._wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+    vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
     post_evac_host = nova_helper.get_vm_host(vm_id)
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
@@ -303,7 +302,6 @@ class TestVmPCIOperations:
 
         return numa_match
 
-
     NIC_PCI_TYPES = ['pci-passthrough', 'pci-sriov']
     PCI_NUMA_AFFINITY_VALUES = ['strict', 'prefer']
 
@@ -444,7 +442,7 @@ class TestVmPCIOperations:
 
         return True
 
-    def wait_check_vm_states(self, step='boot', host_count=None):
+    def wait_check_vm_states(self, step='boot'):
         LOG.info('Check VM states after {}'.format(step))
 
         vm_helper.wait_for_vm_pingable_from_natbox(self.vm_id, fail_ok=False)
@@ -468,11 +466,12 @@ class TestVmPCIOperations:
         if flavor_id:
             ResourceCleanup.add('flavor', flavor_id)
 
+            pci_alias_spec = '{}:{}'.format(self.pci_alias_names[0], self.pci_alias) if self.pci_alias else None
             LOG.tc_step('Set extra-specs to the flavor {}'.format(flavor_id))
             extra_specs = {
                 FlavorSpec.CPU_POLICY: 'dedicated',
                 FlavorSpec.PCI_NUMA_AFFINITY: self.pci_numa_affinity,
-                FlavorSpec.PCI_PASSTHROUGH_ALIAS: 'qat-vf:{}'.format(self.pci_alias) if self.pci_alias else None,
+                FlavorSpec.PCI_PASSTHROUGH_ALIAS: pci_alias_spec,
                 FlavorSpec.PCI_IRQ_AFFINITY_MASK: self.pci_irq_affinity_mask}
             extra_specs = {k: str(v) for k, v in extra_specs.items() if v is not None}
 
@@ -485,7 +484,7 @@ class TestVmPCIOperations:
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
             # qat-vf devices only
-            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassIds.QAT_VF)
+            nova_pci_devices = network_helper.get_pci_devices_info(class_id=DevClassID.QAT_VF)
 
         # self.nova_pci_devices = nova_pci_devices
         if not nova_pci_devices:
@@ -503,6 +502,10 @@ class TestVmPCIOperations:
         if min_vfs < requested_vfs:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
 
+        self.pci_alias_names = list(nova_pci_devices.keys())
+
+
+    @mark.nics
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
         mark.p1((None, None, None)),
         mark.p1(('strict', None, None)),
@@ -558,8 +561,8 @@ class TestVmPCIOperations:
             LOG.info('Check if PCI-Alias devices existing')
             self.is_pci_device_supported(pci_alias)
 
-        self.vif_model, self.base_vm, self.base_flavor_id, self.nics_to_test, self.seg_id, self.net_type, self.pnet_id,\
-        self.extra_pcipt_net_name, self.extra_pcipt_net = vif_model_check
+        self.vif_model, self.base_vm, self.base_flavor_id, self.nics_to_test, self.seg_id, self.net_type, \
+            self.pnet_id, self.extra_pcipt_net_name, self.extra_pcipt_net = vif_model_check
 
         LOG.tc_step("Create a flavor with specified extra-specs and dedicated cpu policy")
         self.create_flavor_for_pci()

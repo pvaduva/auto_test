@@ -4,13 +4,13 @@ from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
 
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor, SkipHyperthreading
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
 # Do not remove used imports below as they are used in eval()
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
 
 from keywords import nova_helper, system_helper, vm_helper, host_helper, glance_helper, cinder_helper, check_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -174,7 +174,7 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 @fixture(scope='module')
 def ht_and_nonht_hosts():
     LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
     ht_hosts = []
     non_ht_hosts = []
     for host in nova_hosts:
@@ -596,6 +596,7 @@ class TestHTEnabled:
         LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         if min_vcpus:
+            GuestLogs.add(vm_id)
             vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
 
         vm_host = nova_helper.get_vm_host(vm_id)
@@ -667,6 +668,8 @@ class TestHTEnabled:
 
         LOG.tc_step("Check vm vcpus in nova show did not change")
         check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+        if min_vcpus:
+            GuestLogs.remove(vm_id)
 
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
         mark.p1((1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None)),
@@ -680,7 +683,7 @@ class TestHTEnabled:
         mark.p1((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', 'cold_mig_revert', None)),
         mark.p1((2, 'dedicated', 'prefer', None, None, None, 'volume', 'cold_mig_revert', None)),
         mark.p1((4, 'dedicated', 'isolate', 2, None, None, 'volume', ['suspend', 'resume', 'rebuild'], None)),
-        mark.priorities('nightly', 'domain_sanity')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
+        mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((6, 'dedicated', 'require', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         mark.p1((5, 'dedicated', 'prefer', None, None, 'strict', 'volume', ['suspend', 'resume', 'rebuild'], None)),
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
         mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
@@ -691,9 +694,9 @@ class TestHTEnabled:
 
         if 'mig' in nova_actions or 'evacuate' == host_action:
             if len(ht_hosts) + len(non_ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+                skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
             if cpu_thr_pol in ['require', 'isolate'] and len(ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
+                skip(SkipHyperthreading.LESS_THAN_TWO_HT_HOSTS)
 
         # Boot vm with given requirements and check vm is booted with correct topology
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
@@ -818,9 +821,9 @@ class TestHTEnabled:
         ht_hosts, non_ht_hosts = ht_hosts_
         if 'mig' in nova_actions:
             if len(ht_hosts) + len(non_ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+                skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
             if cpu_thr_pol in ['require', 'isolate'] and len(ht_hosts) < 2:
-                skip(SkipReason.LESS_THAN_TWO_HT_HOSTS)
+                skip(SkipHyperthreading.LESS_THAN_TWO_HT_HOSTS)
 
         name_str = 'cpu_thr_{}_in_img'.format(cpu_pol)
 
@@ -1136,7 +1139,7 @@ class TestVariousHT:
     def ht_hosts_(self, request, ht_and_nonht_hosts):
 
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
-        if len(host_helper.get_nova_hosts()) < 2:
+        if len(host_helper.get_up_hypervisors()) < 2:
             skip("Less than two up hypervisors in system.")
         if not ht_hosts:
             skip("System does not have up host with hyper-threading enabled")

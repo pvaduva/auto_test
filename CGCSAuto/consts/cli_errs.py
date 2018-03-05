@@ -14,9 +14,12 @@ class VCPUSchedulerErr:
 
 
 class NumaErr:
-    NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
+    GENERAL_ERR_PIKE = 'Requested instance NUMA topology cannot fit the given host NUMA topology'
+    # NUMA_AFFINITY_MISMATCH = " not match requested NUMA: {}"
+    NUMA_AFFINITY_MISMATCH = GENERAL_ERR_PIKE
     NUMA_NODE_EXCLUDED = "NUMA: {} excluded"
-    UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+    # UNINITIALIZED = '(NUMATopologyFilter) Uninitialized'
+    UNINITIALIZED = GENERAL_ERR_PIKE
     FLV_UNDEVISIBLE = 'ERROR (Conflict): flavor vcpus not evenly divisible by the specified hw:numa_nodes value'
     FLV_CPU_OR_MEM_UNSPECIFIED = 'ERROR (Conflict): CPU and memory allocation must be provided for all NUMA nodes'
     INSUFFICIENT_CORES = 'Not enough free cores to schedule the instance'
@@ -73,7 +76,7 @@ class SharedCPUErr:
 
 class ResizeVMErr:
     RESIZE_ERR = "Error resizing server"
-    SHARED_NOT_ENABLED = 'Shared not enabled for cell {}'
+    SHARED_NOT_ENABLED = 'Shared vCPU not enabled .*, required by instance cell {}'
 
 
 class ColdMigErr:
@@ -92,7 +95,7 @@ class LiveMigErr:
 class NetworkingErr:
     INVALID_VXLAN_VNI_RANGE = "exceeds 16777215"
     INVALID_MULTICAST_IP_ADDRESS = "is not a valid multicast IP address."
-    INVALID_VXLAN_PROVISION_PORTS = "is not in [4789, 8472]."
+    INVALID_VXLAN_PROVISION_PORTS = "Invalid input for port"
     VXLAN_TTL_RANGE_MISSING = "VXLAN time-to-live attribute missing"
     VXLAN_TTL_RANGE_TOO_LARGE = "is too large - must be no larger than '255'."
     VXLAN_TTL_RANGE_TOO_SMALL = "is too small - must be at least '1'."

@@ -2,12 +2,12 @@ import re
 
 from pytest import fixture, mark, skip
 
-from utils import table_parser
+from utils import table_parser, cli
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr
-from keywords import nova_helper, vm_helper, system_helper, host_helper
+from keywords import nova_helper, vm_helper, system_helper, host_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.pre_checks_and_configs import check_numa_num
 
@@ -301,7 +301,7 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     mark.p2((1, 1, 1, None)),
 ])
 # @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
-def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num):
+def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num, no_simplex):
     """
     Test NUMA nodes settings in flavor extra specs are successfully applied to a vm
 
@@ -317,6 +317,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
         - Boot a vm with flavor
         - Run vm-topology
         - Verify vcpus, numa nodes, cpulist for specific vm reflects the settings in flavor
+        - Ensure that all virtual NICs are associated with guest virtual numa node 0 (tests TC5069)
 
     Teardown:
         - Delete created vm, volume, and flavor
@@ -343,10 +344,8 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
     vm_id = vm_helper.boot_vm(flavor=flavor, cleanup='function')[1]
 
     LOG.tc_step("Verify cpu info for vm {} via vm-topology.".format(vm_id))
-    # con_ssh = ControllerClient.get_active_controller()
     nova_tab, libvirt_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
-    # nova_tab, libvirt_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers,libvirt',
-    #                                                              expect_timeout=30)[1], combine_multiline_entry=False)
+
     # Filter out the line for vm under test
     nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
     libvirt_tab = table_parser.filter_table(libvirt_tab, uuid=vm_id)
@@ -393,3 +392,15 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
 
     assert numa_nodes == nodelist_len, \
         "nodelist for vm {} in libvirt view does not match number of numa nodes set in flavor".format(vm_id)
+
+
+    # TC5069
+    LOG.tc_step("Check that all NICs are associated with the host NUMA node that guest NUMA-0 is mapped to")
+    host = nova_helper.get_vm_host(vm_id)
+    actual_nics = network_helper.get_vm_nics(vm_id)
+    with host_helper.ssh_to_host(host) as compute_ssh:
+        for nic in actual_nics:
+            port_id = list(nic.values())[0]['port_id']
+            ports_tab = table_parser.table(compute_ssh.exec_cmd("vshell port-show {}".format(port_id), fail_ok=False)[1])
+            socket_id = int(table_parser.get_value_two_col_table(ports_tab, field='socket-id'))
+            assert socket_id == numa_node0, "NIC is not associated with numa-node0"

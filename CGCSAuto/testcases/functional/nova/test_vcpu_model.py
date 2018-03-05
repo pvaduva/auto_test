@@ -1,11 +1,35 @@
 import re
-from pytest import fixture, mark, skip
+from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
+from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages, CpuModel
 from consts.cli_errs import VCPUSchedulerErr
+
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
+
+
+@fixture(scope='module')
+def cpu_models_supported():
+    storage_backing, hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    hosts_cpu_model_dict = host_helper.get_hypervisor_info(hosts=hypervisors, rtn_val='cpu_info_model')
+    all_cpu_models = list(CpuModel.CPU_MODELS)
+    max_index = second_index = len(all_cpu_models)
+
+    for host in hypervisors:
+        host_cpu_index = all_cpu_models.index(hosts_cpu_model_dict[host])
+        if host_cpu_index < max_index:
+            max_index = host_cpu_index
+        elif host_cpu_index < second_index:
+            second_index = host_cpu_index
+
+    all_cpu_models_supported = all_cpu_models[max_index:]
+    cpu_models_multi_host = all_cpu_models[second_index:]
+
+    LOG.info("For hosts in {} aggregate, CPU models supported by at least 2 hypervisors: {}; CPU models supported by "
+             "only 1 hypervisor: {}".format(storage_backing, cpu_models_multi_host,
+                                            list(set(all_cpu_models_supported) - set(cpu_models_multi_host))))
+    return cpu_models_multi_host, all_cpu_models_supported
 
 
 @mark.parametrize(('flv_model', 'img_model', 'boot_source', 'error'), [
@@ -15,9 +39,12 @@ from testfixtures.fixture_resources import ResourceCleanup
     ('SandyBridge', 'Passthrough', 'volume', 'error'),
     ('Passthrough', 'Haswell', 'image', 'error'),
     ('Passthrough', 'Passthrough', 'image', None),
-    ('SandyBridge', 'SandyBridge', 'volume', None)
+    ('SandyBridge', 'SandyBridge', 'volume', None),
+    ('Passthrough', 'Skylake-Server', 'image', 'error'),
+    ('Skylake-Server', 'Skylake-Client', 'volume', 'error'),
+    ('Skylake-Client', 'Skylake-Client', 'volume', None)
 ])
-def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
+def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error, cpu_models_supported):
     """
     Test when vcpu model is set in both flavor and image
     Args:
@@ -25,6 +52,7 @@ def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
         img_model (str): vcpu model metadata in image
         boot_source (str): launch vm from image or volume
         error (str|None): whether an error is expected with given flavor/image vcpu settings
+        cpu_models_supported (tuple): fixture
 
     Test steps:
         - Create a flavor and set vcpu model spec as specified
@@ -34,6 +62,11 @@ def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
         - Otherwise check vm is launched successfully and expected cpu model is used
 
     """
+    cpu_models_multi_host, all_cpu_models_supported = cpu_models_supported
+    if not error:
+        if flv_model != 'Passthrough' and (flv_model not in all_cpu_models_supported):
+            skip("vcpu model {} is not supported by system".format(flv_model))
+
     code, vm, msg = _boot_vm_vcpu_model(flv_model=flv_model, img_model=img_model, boot_source=boot_source)
 
     if error:
@@ -49,7 +82,7 @@ def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error):
         check_vm_cpu_model(vm_id=vm, vcpu_model=flv_model)
 
 
-def _boot_vm_vcpu_model(flv_model, img_model, boot_source):
+def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', avail_zone=None, vm_host=None):
     LOG.tc_step("Attempt to launch vm from {} with image vcpu model metadata: {}; flavor vcpu model extra spec: {}".
                 format(boot_source, img_model, flv_model))
 
@@ -72,7 +105,7 @@ def _boot_vm_vcpu_model(flv_model, img_model, boot_source):
         ResourceCleanup.add('volume', source_id)
 
     code, vm, msg, vol = vm_helper.boot_vm(name='vcpu_model', flavor=flv_id, source=boot_source, source_id=source_id,
-                                           fail_ok=True, cleanup='function')
+                                           fail_ok=True, cleanup='function', avail_zone=avail_zone, vm_host=vm_host)
     return code, vm, msg
 
 
@@ -90,8 +123,11 @@ def _boot_vm_vcpu_model(flv_model, img_model, boot_source):
     ('Passthrough', 'image', 'image'),
     ('Passthrough', 'image', 'volume'),
     ('SandyBridge', 'image', 'volume'),
+    ('Skylake-Client', 'flavor', 'image'),
+    ('Skylake-Server', 'image', 'volume'),
+    (None, None, 'volume')  # TC5065 + TC5145
 ])
-def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
+def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source, cpu_models_supported):
     """
     Test vcpu model specified in flavor will be applied to vm. In case host does not support specified vcpu model,
     proper error message should be displayed in nova show.
@@ -102,8 +138,9 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
         boot_source
 
     Test Steps:
-        - Set flavor extra spec or image metadata with given vcpu model
+        - Set flavor extra spec or image metadata with given vcpu model.
         - Boot a vm from volume/image
+        - Stop and then start vm and ensure that it retains its cpu model
         - If vcpu model is supported by host,
             - Check vcpu model specified in flavor/image is used by vm via virsh, ps aux (and /proc/cpuinfo)
             - Live migrate vm and check vcpu model again
@@ -114,11 +151,13 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
         - Delete created vm, volume, image, flavor
 
     """
+    cpu_models_multi_host, all_cpu_models_supported = cpu_models_supported
     flv_model = vcpu_model if vcpu_source == 'flavor' else None
     img_model = vcpu_model if vcpu_source == 'image' else None
     code, vm, msg = _boot_vm_vcpu_model(flv_model=flv_model, img_model=img_model, boot_source=boot_source)
 
-    if code != 0:
+    is_supported = (not vcpu_model) or (vcpu_model == 'Passthrough') or (vcpu_model in all_cpu_models_supported)
+    if not is_supported:
         LOG.tc_step("Check vm in error state due to vcpu model unsupported by hosts.")
         assert 1 == code, "boot vm cli exit code is not 1. Actual fail reason: {}".format(msg)
 
@@ -141,14 +180,27 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model, expt_arch=expt_arch)
 
+    multi_hosts_supported = (not vcpu_model) or (vcpu_model in cpu_models_multi_host) or \
+                            (vcpu_model == 'Passthrough' and cpu_models_multi_host)
+    # TC5141
+    LOG.tc_step("Stop and then restart vm and check if it retains its vcpu model")
+    vm_helper.stop_vms(vm)
+    vm_helper.start_vms(vm)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+    check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model, expt_arch=expt_arch)
+
+    if not multi_hosts_supported:
+        LOG.info("Skip migration steps. Less than two hosts in same storage aggregate support {}".format(vcpu_model))
+        return
+
     LOG.tc_step("Live (block) migrate vm and check {} vcpu model".format(vcpu_model))
     vm_helper.live_migrate_vm(vm_id=vm)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     check_vm_cpu_model(vm, vcpu_model, expt_arch=expt_arch)
 
     LOG.tc_step("Cold migrate vm and check {} vcpu model".format(vcpu_model))
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     vm_helper.cold_migrate_vm(vm_id=vm)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
     check_vm_cpu_model(vm, vcpu_model, expt_arch=expt_arch)
 
 
@@ -268,13 +320,16 @@ def _create_flavor_vcpu_model(vcpu_model, root_disk_size=None):
 @mark.parametrize(('vcpu_model', 'thread_policy'), [
     ('Penryn', 'isolate'),
     ('Passthrough', 'require'),
+    ('Skylake-Client', 'isolate'),
+    ('Skylake-Server', 'require')
 ])
-def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy):
+def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy, cpu_models_supported):
     """
     Launch vm with vcpu model spec and cpu thread policy both set
     Args:
         vcpu_model (str):
         thread_policy (str):
+        cpu_models_supported (tuple): fixture
 
     Test Steps:
         - create flavor with vcpu model and cpu thread extra specs set
@@ -283,6 +338,11 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy):
         - otherwise check vcpu model and cpu thread policy both set as expected
 
     """
+    cpu_models_multi_host, all_cpu_models_supported = cpu_models_supported
+    is_supported = (vcpu_model == 'Passthrough') or (vcpu_model in all_cpu_models_supported)
+    if not is_supported:
+        skip("{} is not supported by any hypervisor".format(vcpu_model))
+
     name = '{}_{}'.format(vcpu_model, thread_policy)
     flv_id = nova_helper.create_flavor(name=name, vcpus=2)[1]
     ResourceCleanup.add('flavor', flv_id)
@@ -301,3 +361,117 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy):
         vm_host = nova_helper.get_vm_host(vm)
         check_helper._check_vm_topology_via_vm_topology(vm_id=vm, vcpus=2, cpu_pol='dedicated',
                                                         cpu_thr_pol=thread_policy, numa_num=1, vm_host=vm_host)
+
+
+# TC5140
+def test_vcpu_model_evacuation(add_admin_role_func, cpu_models_supported):
+    """
+    Launch a set of vms with different cpu models and evacuate.
+
+    Skip if:
+        - Less than two hypervisors available for evacuation
+
+    Setups:
+        - Add admin role to tenant under test (in order to launch vm onto specific host)
+
+    Test Steps:
+        - Boot 4 vms from image or volume onto the same host with different cpu models set in flavor or image metadata
+            - 3 of them will have the 3 latest supported vcpu models
+            - 1 of them with Passthrough model
+        - Reboot -f the vms host all to trigger an evacuation
+        - Ensure evacuation for all vms is successful (vm host changed, active state, pingable from NatBox)
+        - Check VMs retained their correct cpu models
+
+    Teardown:
+            - Delete created vms
+            - Remove admin role from primary tenant (module)
+    """
+
+    cpu_models_multi_host, all_cpu_models_supported = cpu_models_supported
+    if not cpu_models_multi_host:
+        skip("Less than two hypervisors available for evacuation")
+
+    vm_dict = {}
+
+    LOG.info("Create 3 vms with top 3 vcpu models from: {}".format(cpu_models_multi_host))
+    target_host = None
+    boot_source = 'image'
+    flv_model = None
+    for i in range(3):
+        for vcpu_model in cpu_models_multi_host:
+            if flv_model:
+                img_model = vcpu_model
+                flv_model = None
+            else:
+                img_model = None
+                flv_model = vcpu_model
+            code, vm, msg = _boot_vm_vcpu_model(flv_model=flv_model, img_model=img_model, boot_source=boot_source,
+                                                avail_zone='nova', vm_host=target_host)
+            assert 0 == code, "Failed to launch vm with {} cpu model. Details: {}".format(vcpu_model, msg)
+
+            vm_helper.wait_for_vm_pingable_from_natbox(vm)
+            check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
+            vm_dict[vm] = vcpu_model
+
+            boot_source = 'image' if boot_source == 'volume' else 'volume'
+            if len(vm_dict) == 3:
+                break
+            if not target_host:
+                target_host = nova_helper.get_vm_host(vm_id=vm)
+
+        if len(vm_dict) == 3:
+            break
+
+    # Create a Passthrough VM
+    code, vm, msg = _boot_vm_vcpu_model('Passthrough', None, boot_source, avail_zone='nova', vm_host=target_host)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm)
+    expt_arch = host_helper.get_host_cpu_model(target_host)
+    check_vm_cpu_model(vm_id=vm, vcpu_model='Passthrough', expt_arch=expt_arch)
+    vm_dict[vm] = 'Passthrough'
+
+    LOG.tc_step("Reboot target host {} to start evacuation".format(target_host))
+    vm_helper.evacuate_vms(target_host, list(vm_dict.keys()))
+
+    LOG.tc_step("Check vcpu models unchanged after evacuation")
+    for vm_, cpu_ in vm_dict.items():
+        post_evac_expt_arch = None
+        LOG.info("Check vm {} has cpu model {} after evac".format(vm_, cpu_))
+
+        if cpu_ == 'Passthrough':
+            post_evac_expt_arch = expt_arch
+        check_vm_cpu_model(vm_id=vm_, vcpu_model=cpu_, expt_arch=post_evac_expt_arch)
+
+
+# TC6569
+def test_vmx_setting():
+    """
+    Test that vmx feature can be set in guest VM.
+
+    Test Steps:
+       - Create a flavor with extra specs hw:wrs:nested_vmx=True and hw:cpu_model=<a cpu model supported by the host>
+       - Instantiate a VM with the flavor and check that vm has correct vcpu model
+       - ssh into the VM and execute "grep vmx /proc/cpuinfo" and verify that vmx feature is set
+    """
+
+    # Create a flavor with specs: hw:wrs:nested_vmx=True and extraspec hw:cpu_model=<compute host cpu model>
+
+    host_cpu_model = 'Passthrough'
+    LOG.tc_step("Create flavor for vcpu model {}".format(host_cpu_model))
+    flavor_id = nova_helper.create_flavor(fail_ok=False)[1]
+    ResourceCleanup.add('flavor', flavor_id)
+
+    LOG.tc_step("Set extra specs for flavor of vcpu model {}".format(host_cpu_model))
+    extra_specs = {FlavorSpec.NESTED_VMX: True, FlavorSpec.VCPU_MODEL: host_cpu_model}
+    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+
+    LOG.tc_step("Create VM for vcpu model {}".format(host_cpu_model))
+    code, vm, msg, vol = vm_helper.boot_vm(flavor=flavor_id, cleanup='function', fail_ok=False)
+    ResourceCleanup.add('vm', vm)
+    LOG.tc_step("Check vcpu model is correct")
+    host = nova_helper.get_vm_host(vm)
+    expt_arch = host_helper.get_host_cpu_model(host)
+    check_vm_cpu_model(vm_id=vm, vcpu_model='Passthrough', expt_arch=expt_arch)
+
+    LOG.tc_step("Checking to see if 'vmx' is in /proc/cpuinfo")
+    with vm_helper.ssh_to_vm_from_natbox(vm) as vm_ssh:
+        vm_ssh.exec_cmd("grep vmx /proc/cpuinfo", fail_ok=False)

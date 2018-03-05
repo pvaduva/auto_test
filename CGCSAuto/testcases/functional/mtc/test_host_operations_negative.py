@@ -4,6 +4,15 @@ from keywords import host_helper, system_helper
 from utils.tis_log import LOG
 
 
+@mark.sx_sanity
+def test_add_host_simplex_negative(simplex_only):
+    LOG.tc_step("Check adding second controller is rejected on simplex system")
+    code, out = cli.system('host-add', '-n controller-1', fail_ok=True, rtn_list=True)
+
+    assert 1 == code, "Unexpected exitcode for 'system host-add controller-1': {}".format(code)
+    assert 'Adding a host on a simplex system is not allowed' in out, "Unexpected error message: {}".format(out)
+
+
 def test_delete_host_if_unlock_negative():
     """
     TC1936 Verify that interfaces can't be deleted from an unlocked host

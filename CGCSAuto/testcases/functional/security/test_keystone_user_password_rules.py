@@ -1,4 +1,3 @@
-
 import re
 import time
 import random
@@ -19,8 +18,11 @@ TEST_USER_NAME = 'keystoneuser'
 
 SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 MIN_PASSWORD_LEN = 7
-# MAX_PASSWORD_LEN = 15
-MAX_PASSWORD_LEN = 4096
+
+# Reduce password length due to upsteam issue https://bugs.launchpad.net/keystone/+bug/1735250
+# MAX_PASSWORD_LEN = 4096
+MAX_PASSWORD_LEN = 128
+
 NUM_TRACKED_PASSWORD = 2
 # WAIT_BETWEEN_CHANGE = 60
 WAIT_BETWEEN_CHANGE = 6
@@ -28,21 +30,6 @@ WAIT_BETWEEN_CHANGE = 6
 USER_LOCKED_OUT_TIME = 300
 USERS_INFO = {}
 USER_NUM = 0
-
-PASSWORD_RULE_INFO = {
-    'minimum_7_chars': ('length_generator', ''),
-    'not_last_used': ('change_history_generator', 'not_last_2'),
-    'at_least_1_lower_case': ('case_numerical_generator', 'lower'),
-    'at_least_1_upper_case': ('case_numerical_generator', 'upper'),
-    'at_least_1_digit': ('case_numerical_generator', 'digit'),
-    'at_least_1_special_case': ('special_char_generator', ''),
-
-    'not_in_dictionary': ('dictionary_generator', ''),
-    'at_least_3_char_diff': ('change_history_generator', '3_diff'),
-    'not_simple_reverse': ('change_history_generator', 'reversed'),
-    'disallow_only_1_case_diff': ('change_history_generator', '3_diff'),
-    'lockout_5_minute_after_5_tries': ('multiple_attempts_generator', 5),
-}
 
 # use this simple "dictionary" for now, because no english dictionary installed on test server
 SIMPLE_WORD_DICTIONARY = '''
@@ -154,12 +141,12 @@ def get_valid_password(user_name=None):
         if len(password) < total_length:
             password += ''.join(random.choice(alphabet) for _ in range(total_length - len(password)+1))
 
-        password = password.replace('\\', ',')
-        password = password.replace('`', ':')
-        password = password.replace('-', '<')
-        password = password.replace('{', '{{')
-        password = password.replace('}', '}}')
-        password = password.replace('!', '@')
+        # password = password.replace('\\', ',')
+        # password = password.replace('`', ':')
+        # password = password.replace('-', '<')
+        # password = password.replace('!', '@')
+        password = re.sub('.{', '{{', password)
+        password = re.sub('.}', '}}', password)
 
         if not is_last_used(password, user_name=user_name) and password not in frequently_used_words:
             break
@@ -505,6 +492,22 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
     return code, output
 
 
+PASSWORD_RULE_INFO = {
+    'minimum_7_chars': (length_generator, ''),
+    'not_last_used': (change_history_generator, 'not_last_2'),
+    'at_least_1_lower_case': (case_numerical_generator, 'lower'),
+    'at_least_1_upper_case': (case_numerical_generator, 'upper'),
+    'at_least_1_digit': (case_numerical_generator, 'digit'),
+    'at_least_1_special_case': (special_char_generator, ''),
+
+    'not_in_dictionary': (dictionary_generator, ''),
+    'at_least_3_char_diff': (change_history_generator, '3_diff'),
+    'not_simple_reverse': (change_history_generator, 'reversed'),
+    'disallow_only_1_case_diff': (change_history_generator, '3_diff'),
+    'lockout_5_minute_after_5_tries': (multiple_attempts_generator, 5),
+}
+
+
 @mark.parametrize(('role', 'password_rule'), [
     ('admin', 'minimum_7_chars'),
     ('non_admin', 'minimum_7_chars'),
@@ -560,7 +563,8 @@ def test_keystone_user_password_rules(role, password_rule):
     producer, args = PASSWORD_RULE_INFO[rule]
     send_args = (args, user_name, is_admin)
 
-    password_producer = eval(producer + '()')
+    # password_producer = eval(producer + '()')
+    password_producer = producer()
     password_producer.send(None)
 
     if rule == 'lockout_5_minute_after_5_tries':

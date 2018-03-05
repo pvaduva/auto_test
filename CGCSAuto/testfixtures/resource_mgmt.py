@@ -1,14 +1,13 @@
-from copy import deepcopy
-
 from pytest import fixture
 
-from utils import exceptions
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.heat import Heat
 from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+
+# SIMPLEX_RECOVERED = False
 
 
 @fixture(scope='function', autouse=True)
@@ -28,7 +27,7 @@ def delete_resources_func(request):
 
     """
     def delete_():
-        _delete(ResourceCleanup._get_resources('function'), scope='function')
+        _delete_resources(ResourceCleanup._get_resources('function'), scope='function')
         ResourceCleanup._reset('function')
     request.addfinalizer(delete_)
 
@@ -50,7 +49,7 @@ def delete_resources_class(request):
 
     """
     def delete_():
-        _delete(ResourceCleanup._get_resources('class'), scope='class')
+        _delete_resources(ResourceCleanup._get_resources('class'), scope='class')
         ResourceCleanup._reset('class')
     request.addfinalizer(delete_)
 
@@ -72,7 +71,7 @@ def delete_resources_module(request):
 
     """
     def delete_():
-        _delete(ResourceCleanup._get_resources('module'), scope='module')
+        _delete_resources(ResourceCleanup._get_resources('module'), scope='module')
         ResourceCleanup._reset('module')
     request.addfinalizer(delete_)
 
@@ -94,7 +93,7 @@ def delete_resources_session(request):
 
     """
     def delete_():
-        _delete(ResourceCleanup._get_resources('session'), scope='session')
+        _delete_resources(ResourceCleanup._get_resources('session'), scope='session')
         ResourceCleanup._reset('session')
     request.addfinalizer(delete_)
 
@@ -111,7 +110,12 @@ def flavor_id_module():
     return flavor
 
 
-def _delete(resources, scope):
+def _delete_resources(resources, scope):
+    # global SIMPLEX_RECOVERED
+    # if not SIMPLEX_RECOVERED and system_helper.is_simplex():
+    #     LOG.fixture_step('{} Ensure simplex host is up before cleaning up'.format(scope))
+    #     host_helper.recover_simplex(fail_ok=True)
+    #     SIMPLEX_RECOVERED = True
 
     vms_with_vols = resources['vms_with_vols']
     vms_no_vols = resources['vms_no_vols']
@@ -128,8 +132,21 @@ def _delete(resources, scope):
     ports = resources['ports']
     trunks = resources['trunks']
     networks = resources['networks']
+    vol_snapshots = resources['vol_snapshots']
+    aggregates = resources['aggregates']
 
     err_msgs = []
+    if heat_stacks:
+        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
+        auth_info = None
+        for stack in heat_stacks:
+            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
+            if heat_user is 'admin':
+                auth_info = Tenant.ADMIN
+            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
+            if code > 0:
+                err_msgs.append(msg)
+
     if vms_with_vols:
         LOG.fixture_step(
             "({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
@@ -141,6 +158,12 @@ def _delete(resources, scope):
         LOG.fixture_step("({}) Attempt to delete following vms: {}".format(scope, vms_no_vols))
         code, msg = vm_helper.delete_vms(vms_no_vols, delete_volumes=False, fail_ok=True, auth_info=Tenant.ADMIN)
         if code not in [0, -1]:
+            err_msgs.append(msg)
+
+    if vol_snapshots:
+        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
+        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.ADMIN)
+        if code > 0:
             err_msgs.append(msg)
 
     if volumes:
@@ -219,18 +242,52 @@ def _delete(resources, scope):
             if code > 0:
                 err_msgs.append(msg)
 
-    if heat_stacks:
-        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
-        auth_info = None
-        for stack in heat_stacks:
-            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
-            if heat_user is 'admin':
-                auth_info = Tenant.ADMIN
-            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
-            if code > 0:
-                err_msgs.append(msg)
+    if aggregates:
+        LOG.fixture_step("({}) Attempt to delete following aggregates: {}".format(scope, aggregates))
+        for aggregate in aggregates:
+            nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
+            nova_helper.delete_aggregate(name=aggregate)
 
     # Attempt all deletions before raising exception.
     if err_msgs:
         LOG.error("ERROR: Failed to delete resource(s). \nDetails: {}".format(err_msgs))
         # raise exceptions.CommonError("Failed to delete resource(s). Details: {}".format(err_msgs))
+
+
+@fixture(scope='function', autouse=True)
+def guest_logs_func(request):
+    """
+    Collect guest logs for guests in collect list. Applicable to guest heartbeat, server group, vm scaling test cases.
+     - Use fixture_resources.GuestLogs.add() to add a guest to collect list
+     - Use fixture_resources.GuestLogs.remove() to remove a guest from collect list if test passed
+
+    Examples:
+        see CGCSAuto/testcases/functional/mtc/guest_heartbeat/test_vm_voting.py for usage
+
+    """
+    def _collect():
+        _collect_guest_logs(scope='function')
+    request.addfinalizer(_collect)
+
+
+@fixture(scope='class', autouse=True)
+def guest_logs_class(request):
+    def _collect():
+        _collect_guest_logs(scope='class')
+    request.addfinalizer(_collect)
+
+
+@fixture(scope='module', autouse=True)
+def guest_logs_module(request):
+    def _collect():
+        _collect_guest_logs(scope='module')
+    request.addfinalizer(_collect)
+
+
+def _collect_guest_logs(scope):
+    guests = GuestLogs._get_guests(scope=scope)
+    if guests:
+        LOG.fixture_step("({}) Attempt to collect guest logs for: {}".format(scope, guests))
+        for guest in guests:
+            vm_helper.collect_guest_logs(vm_id=guest)
+        GuestLogs._reset(scope=scope)

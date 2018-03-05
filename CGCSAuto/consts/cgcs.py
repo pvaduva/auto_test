@@ -29,6 +29,22 @@ HEAT_FLAVORS = ['small_ded', 'small_float']
 MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
+PREFIX_BACKUP_FILE = 'titanium_backup_'
+TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
+IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
+CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
+BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
+TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
+PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
+
+PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
+
+REGION_MAP = {'RegionOne': '',
+              'RegionTwo': '-R2'}
+
+SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '17.07'], ['17.06', '18.01']]
+
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
@@ -56,6 +72,7 @@ class GuestImages:
         'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 7.5),
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
+        'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
     }
 
@@ -79,6 +96,18 @@ class Networks:
         'external': EXT_IP
     }
     INFRA_NETWORK_CIDR = "192.168.205.0/24"
+
+    @classmethod
+    def mgmt_net_name_pattern(cls):
+        from consts.proj_vars import ProjVar
+        region = REGION_MAP[ProjVar.get_var('REGION')]
+        return 'tenant\d{}-mgmt-net'.format(region)
+
+    @classmethod
+    def data_net_name_pattern(cls):
+        from consts.proj_vars import ProjVar
+        region = REGION_MAP[ProjVar.get_var('REGION')]
+        return 'tenant\d{}-net'.format(region)
 
 
 class SystemType:
@@ -109,51 +138,63 @@ class VMStatus:
     MIGRATING = 'MIGRATING'
 
 
+class ImageStatus:
+    QUEUED = 'queued'
+    ACTIVE = 'active'
+    SAVING = 'saving'
+
+
 class HostAdminState:
     UNLOCKED = 'unlocked'
     LOCKED = 'locked'
 
 
-class HostOperationalState:
+class HostOperState:
     ENABLED = 'enabled'
     DISABLED = 'disabled'
 
 
-class HostAvailabilityState:
+class HostAvailState:
     DEGRADED = 'degraded'
     OFFLINE = 'offline'
     ONLINE = 'online'
     AVAILABLE = 'available'
     FAILED = 'failed'
+    POWER_OFF = 'power-off'
 
 
 class HostTask:
     BOOTING = 'Booting'
     REBOOTING = 'Rebooting'
+    POWERING_ON = 'Powering-on'
     POWER_CYCLE = 'Critical Event Power-Cycle'
-
+    POWER_DOWN = 'Critical Event Power-Down'
 
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
     CONTROLLER_1 = '.*controller\-1\:~\$ '
     CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
 
-    ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
+    VXWORKS_PROMPT = '-> '
+
+    # ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
+    ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
 
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
-    PASSWORD_PROMPT = '.*assword\:.*'
+    PASSWORD_PROMPT = '.*assword\:[ ]?$|assword for .*:[ ]?$'
+    LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
     TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
+    TIS_NODE_PROMPT_BASE = '{}\:~\$ '
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
-
 
 
 class NovaCLIOutput:
@@ -200,6 +241,12 @@ class FlavorSpec:
     PCI_IRQ_AFFINITY_MASK = "hw:pci_irq_affinity_mask"
     CPU_REALTIME = 'hw:cpu_realtime'
     CPU_REALTIME_MASK = 'hw:cpu_realtime_mask'
+    HPET_TIMER = 'sw:wrs:guest:hpet'
+    NESTED_VMX = 'hw:wrs:nested_vmx'
+    NUMA0_CACHE_CPUS = 'hw:cache_vcpus.0'
+    NUMA1_CACHE_CPUS = 'hw:cache_vcpus.1'
+    NUMA0_L3_CACHE = 'hw:cache_l3.0'
+    NUMA1_L3_CACHE = 'hw:cache_l3.1'
 
 
 class ImageMetadata:
@@ -259,6 +306,7 @@ class EventLogID:
     NETWORK_AGENT_NOT_RESPOND = '300.003'
     CON_DRBD_SYNC = '400.001'
     SERVICE_GROUP_STATE_CHANGE = '400.001'
+    LOSS_OF_REDUNDANCY = '400.002'
     MTC_MONITORED_PROCESS_FAILURE = '200.006'
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
@@ -271,6 +319,7 @@ class EventLogID:
     PROVIDER_NETWORK_FAILURE = '300.005'
     BMC_SENSOR_ACTION = '200.007'
     CPU_USAGE_HIGH = '100.101'
+    FS_THRESHOLD_EXCEEDED = '100.104'
 
 
 class NetworkingVmMapping:
@@ -307,7 +356,7 @@ class VMNetworkStr:
     NET_IF = r"auto {}\niface {} inet dhcp\n"
 
 
-class HTTPPorts:
+class HTTPPort:
     NEUTRON_PORT = 9696
     NEUTRON_VER = "v2.0"
     CEIL_PORT = 8777
@@ -330,12 +379,12 @@ class HTTPPorts:
     PATCHING_VER = "v1"
 
 
-class CeilometerSamples:
+class CeilometerSample:
     VSWITCH_PORT_TRANSMIT_UTIL = "vswitch.port.transmit.util"
     VSWITCH_ENGINE_UTIL = "vswitch.engine.util"
 
 
-class QoSSpecs:
+class QoSSpec:
     READ_BYTES = 'read_bytes_sec'
     WRITE_BYTES = 'write_bytes_sec'
     TOTAL_BYTES = 'total_bytes_sec'
@@ -344,7 +393,7 @@ class QoSSpecs:
     TOTAL_IOPS = 'total_iops_sec'
 
 
-class OrchestStrategyPhases:
+class OrchestStrategyPhase:
     INITIAL = 'initial'
     BUILD = 'build'
     ABORT = 'abort'
@@ -359,13 +408,13 @@ class OrchestStrategyPhases:
 
     @staticmethod
     def validate(phase):
-        if phase in [OrchestStrategyPhases.BUILD, OrchestStrategyPhases.APPLY, OrchestStrategyPhases.ABORT]:
+        if phase in [OrchestStrategyPhase.BUILD, OrchestStrategyPhase.APPLY, OrchestStrategyPhase.ABORT]:
             return True
         else:
             return False
 
 
-class OrchestStrategyStates:
+class OrchStrategyState:
     # initial
     INITIAL = 'initial'
     # apply phase
@@ -382,14 +431,14 @@ class OrchestStrategyStates:
 
     # abort phase
     ABORTING = 'aborting'
-    ABORTED ='aborted'
+    ABORTED = 'aborted'
     ABORT_FAILED = 'abort-failed'
     ABORT_TIMEOUT = 'abort-timeout'
 
     OrchestStrategyPhaseStates = {
-        OrchestStrategyPhases.BUILD : [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT ],
-        OrchestStrategyPhases.ABORT : [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
-        OrchestStrategyPhases.APPLY : [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+        OrchestStrategyPhase.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
+        OrchestStrategyPhase.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhase.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
     }
 
     def validate(self, phase, state):
@@ -399,8 +448,7 @@ class OrchestStrategyStates:
         return False
 
 
-class OrchestrationStrategyKeyNames:
-
+class OrchStrategyKey:
     STRATEGY_UUID = 'strategy-uuid'
     CONTROLLER_APPLY_TYPE = 'controller-apply-type'
     STORAGE_APPLY_TYPE = 'storage-apply-type'
@@ -419,6 +467,69 @@ class OrchestrationStrategyKeyNames:
     BUILD_REASON = 'build-reason'
 
 
-class DevClassIds:
+class DevClassID:
     QAT_VF = '0b4000'
     GPU = '030000'
+
+
+class MaxVmsSupported:
+    SX = 10
+    DX = 10
+
+
+class BackupRestore:
+    USB_MOUNT_POINT = '/media/wrsroot'
+    USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
+    LOCAL_BACKUP_PATH = '/sandbox/backups'
+
+
+class CpuModel:
+    CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX',
+                  'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')
+
+
+class ExtLdap:
+    LDAP_SERVER = 'ldap://128.224.186.62'
+    LDAP_DC = 'dc=tis,dc=wrs,dc=com'
+    LDAP_DRIVER = 'ldap'
+    LDAP_USER = 'cn=admin,dc=tis,dc=wrs,dc=com" password="admin'
+
+
+class SpareIP:
+    # spared 3 IPs for OAM changing TC
+    NEW_OAM_IP0 = "128.224.151.184"
+    NEW_OAM_IP1 = "128.224.151.185"
+    NEW_OAM_IP2 = "128.224.151.186"
+
+
+class BackendState:
+    CONFIGURED = 'configured'
+    CONFIGURING = 'configuring'
+
+
+class BackendTask:
+    RECONFIG_CONTROLLER = 'reconfig-controller'
+    APPLY_MANIFEST = 'applying-manifests'
+
+
+class PartitionStatus:
+    READY = 'Ready'
+    MODIFYING = 'Modifying'
+    DELETING = 'Deleting'
+    CREATING = 'Creating'
+    IN_USE = 'In-Use'
+
+
+class SysType:
+    AIO_DX = 'AIO-DX'
+    AIO_SX = 'AIO-SX'
+    STORAGE = 'Storage'
+    REGULAR = 'Regular'
+    MULTI_REGION = 'Multi-Region'
+
+
+class HeatStackStatus:
+    CREATE_FAILED = 'CREATE_FAILED'
+    CREATE_COMPLETE = 'CREATE_COMPLETE'
+    UPDATE_COMPLETE = 'UPDATE_COMPLETE'
+    UPDATE_FAILED = 'UPDATE_FAILED'

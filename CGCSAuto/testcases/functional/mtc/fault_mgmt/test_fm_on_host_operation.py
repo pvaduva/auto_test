@@ -44,7 +44,7 @@ def _test_system_alarm_list_on_compute_reboot():
             alarms_tab['headers'], expt_headers)
 
     LOG.tc_step("Reboot a nova hypervisor host and wait for hypervisor state up")
-    compute_host = host_helper.get_nova_hosts()[0]
+    compute_host = host_helper.get_up_hypervisors()[0]
     host_helper.reboot_hosts(compute_host, wait_for_reboot_finish=True)
     time.sleep(20)
 
@@ -113,7 +113,7 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
                 alarms_l[i], alarm_l_val, alarm_s_val)
 
     LOG.tc_step("Check host lock is logged via system event-list")
-    system_helper.wait_for_events(entity_instance_id=compute_host, start=pre_lock_time,
+    system_helper.wait_for_events(entity_instance_id=compute_host, start=pre_lock_time, timeout=60,
                                   event_log_id=EventLogID.HOST_LOCK, fail_ok=False, **{'state': 'set'})
 
     pre_unlock_time = common.get_date_in_format()

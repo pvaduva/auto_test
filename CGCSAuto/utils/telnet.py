@@ -63,6 +63,10 @@ from utils.tis_log import LOG
 import sys
 sys.path.append('../sanityrefresh/labinstall')
 from constants import *
+from consts.lab import Labs
+from consts.proj_vars import ProjVar
+from consts.timeout import HostTimeout
+
 
 __all__ = ["Telnet"]
 
@@ -794,13 +798,13 @@ class Telnet:
 
         return output
 
-    def find_prompt(self, timeout=TELNET_EXPECT_TIMEOUT):
+    def find_prompt(self, prompt=PROMPT, timeout=TELNET_EXPECT_TIMEOUT):
         """Matches against prompt regex.
 
            Returns output matched up to prompt.
         """
         try:
-            result = self.expect([str.encode(PROMPT)], timeout)
+            result = self.expect([str.encode(prompt)], timeout)
             index = result[0]
             output = result[2]
         except EOFError:
@@ -816,19 +820,105 @@ class Telnet:
 
         return output
 
-    def exec_cmd(self, cmd, timeout=TELNET_EXPECT_TIMEOUT, show_output=True):
-        LOG.info(cmd)
+    def exec_cmd(self, cmd, extra_expects=None, timeout=TELNET_EXPECT_TIMEOUT,
+                 show_output=True, alt_prompt=None, will_reboot=False):
+        LOG.info('executing: {}'.format(cmd))
         self.write_line(cmd)
-        output = self.find_prompt(timeout)
+        expected = []
+        if extra_expects:
+            expected += [str.encode(s) for s in extra_expects]
+
+        expected.append(str.encode(PROMPT))
+
+        if alt_prompt is not None:
+            expected.append(str.encode(alt_prompt))
+
+        timeout = HostTimeout.REBOOT if will_reboot else timeout
+
+        try:
+            index, matched, output = self.expect(expected, timeout=timeout)
+            output = '\n'.join(output.decode('utf-8', 'ignore').splitlines())
+            LOG.debug('index:{}, output:{}, expected:{}'.format(index, output, expected))
+        except EOFError:
+            msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+            raise exceptions.TelnetException(msg)
+
+        if extra_expects and 0 <= index < len(extra_expects):
+            LOG.info('found expected:{}'.format(extra_expects))
+            return 0, output
+
+        if index == len(expected):
+            LOG.error('Timeout occurred: Failed to find prompt')
+            return -1, output
+
         if show_output:
-            LOG.info("Output:\n" + output)
+            LOG.info("index:{},output:\n{}\n".format(index, output))
+
         self.write_line(RETURN_CODE_CMD)
         try:
             index, match = self.expect([str.encode(RETURN_CODE_REGEX)], TELNET_EXPECT_TIMEOUT)[:2]
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-
             raise exceptions.TelnetException(msg)
+
+        if index == 0:
+            rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
+            LOG.info("Return code: " + rc)
+        else:
+            msg = "Timeout occurred: Failed to find return code, index={}".format(index)
+            LOG.error(msg)
+            raise exceptions.TelnetException(msg)
+
+        if not alt_prompt:
+            # LOG.info('wait for special prompt:{}'.format(alt_prompt))
+            # self.find_prompt(prompt=alt_prompt, timeout=timeout)
+        # else:
+            self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
+
+        return int(rc), output
+
+
+    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT, show_output=True, alt_prompt=None):
+
+        cmd = 'sudo ' + cmd
+
+        LOG.info("Executing sudo command...")
+        self.write_line(cmd)
+        expected = [str.encode(PASSWORD_PROMPT), str.encode(PROMPT)]
+
+        try:
+            index, matched, output = self.expect(expected, timeout=timeout)
+        except EOFError:
+            msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+            raise exceptions.TelnetException(msg)
+
+        if index == 0:
+            LOG.info("Found passord prompt. enter passowrd {}".format(password))
+            self.write(str.encode(password + '\r\n'))
+            expected = expected[1:]
+            try:
+                index, matched, output = self.expect(expected, timeout=timeout)
+            except EOFError:
+                msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+                raise exceptions.TelnetException(msg)
+
+        output = '\n'.join(output.decode('utf-8', 'ignore').splitlines())
+        LOG.info("Index: {}, Matched: {}, Output: {}".format(index, matched, output))
+
+        if index == len(expected):
+            LOG.error('Timeout occurred: Failed to find prompt')
+            return -1, output
+
+        if show_output:
+            LOG.info("index:{},output:\n{}\n".format(index, output))
+
+        self.write_line(RETURN_CODE_CMD)
+        try:
+            index, match = self.expect([str.encode(RETURN_CODE_REGEX)], TELNET_EXPECT_TIMEOUT)[:2]
+        except EOFError:
+            msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
+            raise exceptions.TelnetException(msg)
+
         if index == 0:
             rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
             LOG.info("Return code: " + rc)
@@ -836,8 +926,15 @@ class Telnet:
             msg = "Timeout occurred: Failed to find return code"
             LOG.error(msg)
             raise exceptions.TelnetException(msg)
-        self.find_prompt(TELNET_EXPECT_TIMEOUT)
+
+        if alt_prompt:
+            LOG.info('wait for special prompt:{}'.format(alt_prompt))
+            self.find_prompt(prompt=alt_prompt, timeout=timeout)
+        else:
+            self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
+
         return (int(rc), output)
+
 
     def login(self, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
         """Waits for login prompt to authenticate user.
@@ -861,23 +958,32 @@ class Telnet:
                 LOG.info("Searching for login prompt...")
                 self.write_line("")
                 try:
-                    index  = (self.expect([b"ogin:", str.encode(PROMPT)], TELNET_EXPECT_TIMEOUT))[0]
+                    index = (self.expect([b"ogin:", str.encode(PROMPT)], 30))[0]
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-
                     raise exceptions.TelnetException(msg)
+
                 if index == 0:
                     LOG.info("Found login prompt. Login as {}".format(username))
-                    #self.write_line(username)
                     self.write(str.encode(username + '\r\n'))
-                    self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
-                    #self.write_line(password)
-                    self.write(str.encode(password + '\r\n'))
+                    if password and len(password) > 0:
+                        self.get_read_until(PASSWORD_PROMPT, 30)
+                        self.write(str.encode(password + '\r\n'))
+                        self.find_prompt(timeout=30)
+                        self.write(str.encode('export TMOUT=0 \r\n'))
+                        self.find_prompt(timeout=30)
+                        self.write(str.encode('\r\n'))
+                        self.find_prompt(timeout=30)
+                    else:
+                        self.write_line("")
                     break
+
                 elif index == 1:
                     LOG.info('User "{}" is already logged in.'.format(username))
                     break
+
                 count += 1
+
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find login or prompt"
                 LOG.error(msg)
@@ -898,9 +1004,23 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', upgrade=False, usb=False):
-        if "wildcat" in node.host_name:
-            index = 0
+    def install(self, node, boot_device_dict,
+                host_os='centos',
+                upgrade=False,
+                usb=False,
+                small_footprint=False,
+                low_latency=False,
+                clone_install=False):
+        boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
+
+        if "wildcat" in node.host_name or "supermicro" in node.host_name:
+            if "wildcat" in node.host_name:
+                index = 0
+                boot_menu_name = "boot menu"
+            else:
+                index = 4
+                boot_menu_name = "Boot Menu"
+
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
@@ -909,39 +1029,85 @@ class Telnet:
             LOG.info("Use BIOS key: " + bios_key_hr)
             LOG.info("Installation timeout: " + str(install_timeout))
 
-            self.get_read_until("boot menu", 360)
+            self.get_read_until(boot_menu_name, 360)
             LOG.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 
-            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                      if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
             LOG.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                LOG.info("Boot device is: USB")
+            else:
+                LOG.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Please select boot device", 60)
 
             count = 0
             down_press_count = 0
-            while count < MAX_SEARCH_ATTEMPTS:
-                LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
-                #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
-                # Construct regex to work with wildcatpass machines
-                # in legacy and uefi mode
-                #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
-                regex = re.compile(b"\[\d+(.*?)\x1b")
 
-                LOG.info("wildcat: compiled regex is: {}".format(regex))
+             # GENERIC USB
+            if usb and node.name == CONTROLLER0:
+                LOG.info("Looking for USB device")
+                boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
+
+            LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
+            #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+            # Construct regex to work with wildcatpass machines
+            # in legacy and uefi mode
+            #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+            #regex = re.compile(b"\[\d+(.*?)\x1b")
+            # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+            if "wildcat" in node.host_name:
+                regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+            else:
+                if usb:
+                    regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
+                else:
+                    regex = re.compile(b"(\d{4}).*v\d+")
+                    # regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
+                    # regex = re.compile(b"Slot (\d{4}) v\d+")
+
+            LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
+
+            while count < MAX_SEARCH_ATTEMPTS:
+                # # GENERIC USB
+                # if usb and node.name == CONTROLLER0:
+                #     LOG.info("Looking for USB device")
+                #     boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
+                #
+                # LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
+                # #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+                # # Construct regex to work with wildcatpass machines
+                # # in legacy and uefi mode
+                # #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+                # #regex = re.compile(b"\[\d+(.*?)\x1b")
+                # # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                # if "wildcat" in node.host_name:
+                #     regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                # else:
+                #     if usb:
+                #         regex = re.compile(b"\[\d+(;32H)\|(.+)\|")
+                #     else:
+                #         regex = re.compile(b"Slot (\d{4}) v\d+")
+                #
+                # LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
 
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
+                    LOG.info("wildcat/supermicro: index: {} match: {} ".format(index, match))
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-
                     raise exceptions.TelnetException(msg)
+
                 if index == 0:
-                    match = match.group(1).decode('utf-8','ignore')
+                    LOG.info('match.group(0)={}'.format(match.group(0)))
+
+                    match = match.group(0).decode('utf-8','ignore')
                     LOG.info("Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         LOG.info("Found boot device {}".format(boot_device_regex))
@@ -963,25 +1129,30 @@ class Telnet:
 
             LOG.info("Waiting for ESC to exit")
             if node.name == CONTROLLER0 and not upgrade:
-                if boot_device_regex == 'USB':
-                    self.get_read_until("Select kernel options and boot kernel", 120)
-                    if small_footprint:
-                        LOG.info("Selecting Serial Controller+Compute Node Install")
-                        time.sleep(3)
-                        LOG.info("Pressing down key")
-                        self.write(str.encode(DOWN))
-                        LOG.info("Pressing down key")
-                        self.write(str.encode(DOWN))
-                        if host_os == 'wrlinux':
-                           self.write(str.encode(DOWN))
-                        time.sleep(1)
-                        LOG.info("Pressing ENTER key")
+                if usb:
+                    if not clone_install:
+                        self.get_read_until("Select kernel options and boot kernel", 120)
+                        if small_footprint:
+                            LOG.info("Selecting Serial Controller+Compute Node Install")
+                            time.sleep(3)
+                            LOG.info("Pressing down key")
+                            self.write(str.encode(DOWN))
+                            LOG.info("Pressing down key")
+                            self.write(str.encode(DOWN))
+                            if host_os == 'wrlinux':
+                               self.write(str.encode(DOWN))
+                            time.sleep(1)
+                            LOG.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
+                        else:
+                            time.sleep(1)
+                            LOG.info("Selecting Serial Controller Node Install")
+                            LOG.info("Pressing ENTER key")
                         self.write(str.encode("\r\r"))
                     else:
-                        time.sleep(1)
-                        LOG.info("Selecting Serial Controller Node Install")
-                        LOG.info("Pressing ENTER key")
-                    self.write(str.encode("\r\r"))
+                        LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
+                        install_timeout = 4800
+
                 # If we are performing a UEFI install then we need to use
                 # different logic to select the install option
                 elif "UEFI" in boot_device_regex:
@@ -991,13 +1162,16 @@ class Telnet:
                     LOG.info("Pressing ENTER key")
                     self.write(str.encode("\r\r"))
                 else:
-                    self.get_read_until("Boot from hard drive", 240)
+                    # self.get_read_until("Boot from hard drive", 240)
+                    LOG.info('Waiting for boot menu:{}'.format(boot_menu))
+                    self.get_read_until(boot_menu)
                     # New pxeboot cfg menu
                     # 0) Boot from hard drive
                     # 1) WRL Serial Controller Install
                     # 2) CentOS Serial Controller Install
                     # 3) WRL Serial CPE Install
                     # 4) CentOS Serial CPE Install
+                    # 6) CentOS Serial CPE Install (low latency)
                     LOG.info("Enter option for {} Controller Install".format(host_os))
                     if host_os == 'wrlinux':
                         #selection_menu_option = '1'
@@ -1008,7 +1182,10 @@ class Telnet:
 
                     else:
                         if small_footprint:
-                            selection_menu_option = '4'
+                            if low_latency:
+                                selection_menu_option = '6'
+                            else:
+                                selection_menu_option = '4'
                         else:
                             selection_menu_option = '2'
 
@@ -1028,8 +1205,8 @@ class Telnet:
             index, match = self.expect(BIOS_TYPES, BIOS_TYPE_TIMEOUT)[:2]
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-
             raise exceptions.TelnetException(msg)
+
         if 0 <= index <= len(BIOS_TYPES)-1:
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
@@ -1050,7 +1227,10 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
-            LOG.info("Boot device is: " + str(boot_device_regex))
+            if usb:
+                LOG.info("Boot device is: USB")
+            else:
+                LOG.info("Boot device is: " + str(boot_device_regex))
 
             self.get_read_until("Boot Menu", 200)
             LOG.info("Pressing BIOS key " + bios_key_hr)
@@ -1067,9 +1247,9 @@ class Telnet:
             while count < MAX_SEARCH_ATTEMPTS:
 
                 # GENERIC USB
-                if boot_device_regex == 'USB' and node.name == CONTROLLER0:
+                if usb and node.name == CONTROLLER0:
                     LOG.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash"
+                    boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
 
                 LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
                 #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
@@ -1103,27 +1283,32 @@ class Telnet:
 
             if node.name == CONTROLLER0 and not upgrade:
                 # booting device = USB tested only for Ironpass-31_32
-                if boot_device_regex == 'USB':
-                    self.get_read_until("Select kernel options and boot kernel", 120)
-                    if small_footprint:
-                        LOG.info("Selecting Serial Controller+Compute Node Install")
-                        time.sleep(1)
-                        LOG.info("Pressing DOWN key")
-                        self.write(str.encode(DOWN))
-                        LOG.info("Pressing DOWN key")
-                        self.write(str.encode(DOWN))
-                        if host_os == 'wrlinux':
-                           self.write(str.encode(DOWN))
-                        time.sleep(1)
-                        LOG.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
+                if usb:
+                    if not clone_install:
+                        self.get_read_until("Select kernel options and boot kernel", 120)
+                        if small_footprint:
+                            LOG.info("Selecting Serial Controller+Compute Node Install")
+                            time.sleep(1)
+                            LOG.info("Pressing DOWN key")
+                            self.write(str.encode(DOWN))
+                            LOG.info("Pressing DOWN key")
+                            self.write(str.encode(DOWN))
+                            if host_os == 'wrlinux':
+                               self.write(str.encode(DOWN))
+                            time.sleep(1)
+                            LOG.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
+                        else:
+                            time.sleep(1)
+                            LOG.info("Selecting Serial Controller Node Install")
+                            LOG.info("Pressing ENTER key")
+                            self.write(str.encode("\r\r"))
                     else:
-                        time.sleep(1)
-                        LOG.info("Selecting Serial Controller Node Install")
-                        LOG.info("Pressing ENTER key")
-                        self.write(str.encode("\r\r"))
+                        LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
+                        install_timeout = 4800
                 else:
-                    self.get_read_until("Boot from hard drive", 60)
+                    # self.get_read_until("Boot from hard drive", 60)
+                    self.get_read_until(boot_menu, 60)
                     LOG.info("Searching Kickstart boot device menu for ...")
                     # Some labs like IP-28_30 has Boot from hard drive selection as 0,1,2
                     # other have selection of 1,2,3. Need to determine menu options:
@@ -1150,7 +1335,7 @@ class Telnet:
                         else:
                             selection_menu_option = '2'
 
-                    LOG.info("Boot from hard drive selection = {}".format(selection_menu_option))
+                    LOG.info(boot_menu + " selection = {}".format(selection_menu_option))
                     self.write_line(selection_menu_option)
 
         elif bios_type == BIOS_TYPES[1]:
@@ -1167,7 +1352,8 @@ class Telnet:
                 # 2) CentOS Serial Controller Install
                 # 3) WRL Serial CPE Install
                 # 4) CentOS Serial CPE Install
-                self.get_read_until("Boot from hard drive", 30)
+                # self.get_read_until("Boot from hard drive", 30)
+                self.get_read_until(boot_menu, 60)
                 LOG.info("Enter option for {} Controller Install".format(host_os))
                 if host_os == 'wrlinux':
                     selection_menu_option = '1'
@@ -1181,8 +1367,16 @@ class Telnet:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
-            LOG.info("Boot device is: " + str(boot_device_regex))
 
+            if usb:
+                LOG.info("Boot device is: USB")
+            else:
+                LOG.info("Boot device is: " + str(boot_device_regex))
+
+            # GENERIC USB
+            if usb and node.name == CONTROLLER0:
+                LOG.info("Looking for USB device")
+                boot_device_regex = "USB|Kingston|JetFlash"
 
             # Read until we are prompted for the boot type
             self.get_read_until("PXE")
@@ -1224,7 +1418,8 @@ class Telnet:
                 raise exceptions.TelnetException(msg)
         
             if node.name == CONTROLLER0:
-                self.get_read_until("Kickstart Boot Menu", 300)
+                # self.get_read_until("Kickstart Boot Menu", 300)
+                self.get_read_until(boot_menu, 300)
                 LOG.info("Enter install type")
                 # New pxeboot cfg menu
                 # 0) Boot from hard drive
@@ -1253,6 +1448,7 @@ class Telnet:
         LOG.info("Found login prompt. {} installation has completed".format(node.name))
 
         return 0
+
 """
 def deploy_ssh_key(self):
     self.write_line("mkdir -p ~/.ssh/")
@@ -1288,7 +1484,6 @@ def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False, n
 
     return conn
 
-#-- new functions end
 
 def test():
     """Test program for telnetlib.

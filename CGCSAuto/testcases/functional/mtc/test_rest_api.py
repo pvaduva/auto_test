@@ -2,7 +2,7 @@ import copy
 import time
 
 from consts.timeout import HostTimeout
-from consts.cgcs import HTTPPorts, HostAdminState
+from consts.cgcs import HTTPPort, HostAdminState
 from pytest import fixture, skip
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import html_helper, host_helper
@@ -38,7 +38,7 @@ def prepare_modify_cpu(request):
     uuid = host_helper.get_hostshow_value(host=host, field='uuid')
     headers = get_headers()
 
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, 'iprofile')
+    url = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER, 'iprofile')
     data = {'profilename': 'test_compute_profile',
             'profiletype': 'cpu',
             'ihost_uuid': uuid}
@@ -49,7 +49,7 @@ def prepare_modify_cpu(request):
     def unlock():
         host_helper.apply_cpu_profile(host, iprofile_uuid)
 
-        url_ = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER,
+        url_ = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER,
                                       'iprofile/{}'.format(iprofile_uuid))
         html_helper.delete_request(url_, headers=headers, verify=False)
 
@@ -116,7 +116,7 @@ def test_restapi_neutron_get_extensions():
 
     """
     headers = get_headers()
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.NEUTRON_PORT, HTTPPorts.NEUTRON_VER, 'extensions')
+    url = html_helper.create_url(IP_ADDR, HTTPPort.NEUTRON_PORT, HTTPPort.NEUTRON_VER, 'extensions')
     data = html_helper.get_request(url, headers=headers, verify=False)
 
     res = validate_extensions(data)
@@ -134,7 +134,7 @@ def test_restapi_ceilometer_get_host_pipelines():
 
     """
     headers = get_headers()
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
+    url = html_helper.create_url(IP_ADDR, HTTPPort.CEIL_PORT, HTTPPort.CEIL_VER, 'wrs-pipelines')
     pipelines = html_helper.get_request(url, headers=headers, verify=False)
     LOG.tc_step("Checking how many pipelines were returned. Expecting at least {}.".format(NUM_PIPELINES))
     assert len(pipelines) >= NUM_PIPELINES, "FAIL: Expected {} pipelines. Only {} pipelines were found."\
@@ -152,7 +152,7 @@ def test_restapi_ceilometer_get_individual_pipelines():
     """
 
     headers = get_headers()
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
+    url = html_helper.create_url(IP_ADDR, HTTPPort.CEIL_PORT, HTTPPort.CEIL_VER, 'wrs-pipelines')
     pipelines = html_helper.get_request(url, headers=headers, verify=False)
     for item in pipelines:
         LOG.tc_step("Validating {}".format(item))
@@ -177,11 +177,11 @@ def test_restapi_ceilometer_put_pipelines():
 
     """
     headers = get_headers()
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, 'wrs-pipelines')
+    url = html_helper.create_url(IP_ADDR, HTTPPort.CEIL_PORT, HTTPPort.CEIL_VER, 'wrs-pipelines')
     pipelines = html_helper.get_request(url, headers=headers, verify=False)
     for item in pipelines:
         pipeline_id = "wrs-pipelines/" + item["name"]
-        pipeline_url = html_helper.create_url(IP_ADDR, HTTPPorts.CEIL_PORT, HTTPPorts.CEIL_VER, pipeline_id)
+        pipeline_url = html_helper.create_url(IP_ADDR, HTTPPort.CEIL_PORT, HTTPPort.CEIL_VER, pipeline_id)
         LOG.tc_step("Getting original pipeline data")
         payload = html_helper.get_request(pipeline_url, headers=headers, verify=False)
         copy_payload = copy.deepcopy(payload)
@@ -221,7 +221,7 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     hostname, uuid, iprofile_uuid = prepare_modify_cpu
     headers = get_headers()
 
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts")
+    url = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER, "ihosts")
     hosts = html_helper.get_request(url=url, headers=headers, verify=False)['ihosts']
     found = False
     for host in hosts:
@@ -232,7 +232,7 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     assert found, "FAIL: {} is not listed in the API".format(hostname)
 
     LOG.tc_step("Locking {}".format(hostname))
-    url = html_helper.create_url(IP_ADDR, HTTPPorts.SYS_PORT, HTTPPorts.SYS_VER, "ihosts/{}".format(uuid))
+    url = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER, "ihosts/{}".format(uuid))
     lock_data = [{"path": "/action", "value": "lock", "op": "replace"}]
     HostsToRecover.add(hostname, scope='function')
     html_helper.patch_request(url=url, headers=headers, data=lock_data, verify=False)

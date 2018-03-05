@@ -36,7 +36,7 @@ def compare_cores_to_configure(host, function, p0, p1):
 @fixture(scope='module', autouse=True)
 def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     LOG.info("Looking for a host to reconfigure.")
-    nova_hosts = host_helper.get_nova_hosts()
+    nova_hosts = host_helper.get_up_hypervisors()
     if len(nova_hosts) < 1:
         skip("No nova compute host available in the system, no host to lock and reconfigure.")
 
@@ -182,7 +182,6 @@ class TestVSwitchCPUReconfig:
 
         LOG.tc_step("Check {} is still a valid nova host.".format(host))
         host_helper.wait_for_hypervisors_up(host)
-        host_helper.wait_for_hosts_in_nova_compute(host, timeout=60, fail_ok=False)
 
         LOG.tc_step("Check vm can be launched on or live migrated to {}.".format(host))
         vm_id = vm_helper.boot_vm(flavor=flavor_, avail_zone='nova', vm_host=host, cleanup='function')[1]

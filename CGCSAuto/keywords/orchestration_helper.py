@@ -6,7 +6,7 @@ import time
 
 from utils import cli, exceptions
 from utils.tis_log import LOG
-from consts.cgcs import OrchestStrategyPhases, OrchestrationStrategyKeyNames
+from consts.cgcs import OrchestStrategyPhase, OrchStrategyKey
 from consts.timeout import OrchestrationPhaseTimeout
 
 
@@ -85,7 +85,7 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
             #timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.BUILD]
             timeout = OrchestrationPhaseTimeout.BUILD
 
-        if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhases.BUILD, timeout,
+        if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.BUILD, timeout,
                                               conn_ssh=conn_ssh)[0]:
             msg = "The {} strategy created failed build: {}".format(orchestration, output)
             LOG.warn(msg)
@@ -97,7 +97,7 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
     # get values of the created strategy
     results = get_current_strategy_values(orchestration)
 
-    if OrchestStrategyPhases.BUILD != results['current-phase']:
+    if OrchestStrategyPhase.BUILD != results['current-phase']:
 
         msg = "Unexpected {} strategy phase= {} encountered. A 'build' phase was expected. "\
             .format(orchestration, results["current-phase"])
@@ -163,7 +163,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
         if timeout is None:
             timeout = OrchestrationPhaseTimeout.APPLY
 
-        if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhases.APPLY, timeout=timeout,
+        if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.APPLY, timeout=timeout,
                                               conn_ssh=conn_ssh, fail_ok=True)[0]:
             msg = "The {} strategy apply phase failed to complete within the specified timeout={}."\
                 .format(orchestration, timeout)
@@ -184,7 +184,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
         else:
             raise exceptions.OrchestrationError(msg)
 
-    if OrchestStrategyPhases.APPLY != results[OrchestrationStrategyKeyNames.CURRENT_PHASE]:
+    if OrchestStrategyPhase.APPLY != results[OrchStrategyKey.CURRENT_PHASE]:
 
         msg = "Unexpected {} strategy phase= {} encountered. A 'build' phase was expected. "\
             .format(orchestration, results["current-phase"])
@@ -194,9 +194,9 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
         else:
             raise exceptions.OrchestrationError(msg)
 
-    if "failed" in results[OrchestrationStrategyKeyNames.APPLY_RESULT]:
+    if "failed" in results[OrchStrategyKey.APPLY_RESULT]:
         msg = "The {} strategy  'failed' in apply phase; reason = {}"\
-            .format(orchestration, results[OrchestrationStrategyKeyNames.ABORT_REASON])
+            .format(orchestration, results[OrchStrategyKey.ABORT_REASON])
         LOG.warn(msg)
         if fail_ok:
             return 3, msg
@@ -269,9 +269,9 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
         timeout = PHASE_COMPLETION_CHECK_INTERVAL
     else:
         if timeout is None:
-            if current_phase == OrchestStrategyPhases.BUILD:
+            if current_phase == OrchestStrategyPhase.BUILD:
                 timeout = OrchestrationPhaseTimeout.BUILD
-            elif current_phase == OrchestStrategyPhases.APPLY:
+            elif current_phase == OrchestStrategyPhase.APPLY:
                 timeout = OrchestrationPhaseTimeout.APPLY
             else:
                 timeout = OrchestrationPhaseTimeout.ABORT
@@ -284,7 +284,7 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
     while time.time() < end_time:
         output = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
         if len(output) > 0:
-            if output[OrchestrationStrategyKeyNames.CURRENT_PHASE] == OrchestStrategyPhases.ABORT:
+            if output[OrchStrategyKey.CURRENT_PHASE] == OrchestStrategyPhase.ABORT:
                 msg = "{} strategy {} phase was aborted before specified time: {}"\
                     .format(orchestration, current_phase, output)
                 LOG.warn(msg)
@@ -323,8 +323,8 @@ def get_current_strategy_phase(orchestration, conn_ssh=None):
 
     """
     results = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
-    return results[OrchestrationStrategyKeyNames.CURRENT_PHASE]\
-        if OrchestrationStrategyKeyNames.CURRENT_PHASE in results else None
+    return results[OrchStrategyKey.CURRENT_PHASE]\
+        if OrchStrategyKey.CURRENT_PHASE in results else None
 
 
 def validate_current_strategy_phase(orchestration, expected_phase, conn_ssh=None):
@@ -339,11 +339,11 @@ def validate_current_strategy_phase(orchestration, expected_phase, conn_ssh=None
 
     """
 
-    if not OrchestStrategyPhases.validate(phase=expected_phase):
+    if not OrchestStrategyPhase.validate(phase=expected_phase):
         LOG.warn("The specified orchestration strategy phase='{}' is not valid phase. Valid phases are: {}"
-                 .format(expected_phase, [OrchestStrategyPhases.BUILD,
-                                          OrchestStrategyPhases.ABORT,
-                                          OrchestStrategyPhases.APPLY]))
+                 .format(expected_phase, [OrchestStrategyPhase.BUILD,
+                                          OrchestStrategyPhase.ABORT,
+                                          OrchestStrategyPhase.APPLY]))
         return False
 
     current_phase = get_current_strategy_phase(orchestration, conn_ssh=conn_ssh)
@@ -368,7 +368,7 @@ def get_current_strategy_uuid(orchestration):
     """
     results = get_current_strategy_values(orchestration)
 
-    uuid = results[OrchestrationStrategyKeyNames.STRATEGY_UUID] \
-        if OrchestrationStrategyKeyNames.STRATEGY_UUID in results else None
+    uuid = results[OrchStrategyKey.STRATEGY_UUID] \
+        if OrchStrategyKey.STRATEGY_UUID in results else None
     LOG.info("{} strategy uuid = {}".format(orchestration, uuid))
     return uuid

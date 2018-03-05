@@ -33,7 +33,7 @@ def ensure_sufficient_4k_pages(request):
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
 
     storage_backing = request.param
-    hypervisors = host_helper.get_hosts_by_storage_aggregate(storage_backing=storage_backing)
+    hypervisors = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
     if len(hypervisors) < 2:
         skip("Less than two hypersvisors with {} instance backing".format(storage_backing))
 
@@ -130,7 +130,7 @@ def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure
 
 def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type):
 
-    LOG.tc_step("Create a flavor with {} vcpus, {} ephemera disk, {} swap disk".format(vcpus, ephemeral, swap))
+    LOG.tc_step("Create a flavor with {} vcpus, {}G ephemera disk, {}M swap disk".format(vcpus, ephemeral, swap))
 
     flavor_id = nova_helper.create_flavor(name='flv_4k', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
                                           storage_backing=storage_backing, check_storage_backing=False)[1]
@@ -163,7 +163,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 def __check_pagesize(vm_id):
     LOG.tc_step("Check pagesize is 4k for vm {} via vm-topology.".format(vm_id))
     con_ssh = ControllerClient.get_active_controller()
-    nova_tab = table_parser.tables(con_ssh.exec_cmd('vm-topology --show servers', expect_timeout=30)[1],
+    nova_tab = table_parser.tables(con_ssh.exec_sudo_cmd('vm-topology --show servers', expect_timeout=30)[1],
                                    combine_multiline_entry=False)[0]
 
     vm_row = [row for row in nova_tab['values'] if row[1] == vm_id][0]

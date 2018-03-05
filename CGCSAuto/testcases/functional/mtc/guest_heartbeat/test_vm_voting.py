@@ -1,14 +1,14 @@
 import re
 import time
 from pytest import fixture, mark, skip
+
 from utils import table_parser
 from utils.tis_log import LOG
-from utils import cli
 from consts.timeout import EventLogTimeout
 from consts.cgcs import FlavorSpec, VMStatus, EventLogID
-from consts.reasons import SkipReason
+from consts.reasons import SkipHypervisor
 from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 @fixture(scope='module')
@@ -22,18 +22,24 @@ def hb_flavor():
     return flavor_id
 
 
-def boot_vm_(flavor):
+def launch_vm(enable_hb=True, flavor=None, scope='function'):
+    vm_name = 'vm_with_hb' if enable_hb else 'vm_no_hb'
 
-    vm_name = 'vm_with_hb'
-    LOG.tc_step("Boot a vm with heartbeat enabled")
-    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor, cleanup='function')[1]
+    LOG.tc_step("Boot a {}".format(vm_name))
+    vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor, cleanup=scope)[1]
+    GuestLogs.add(vm_id, scope=scope)
 
-    event = system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
-                                          **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-
-    assert event, "VM heartbeat is not enabled."
-    assert EventLogID.HEARTBEAT_ENABLED == event[0], "VM heartbeat failed to establish."
+    LOG.tc_step("Check guest heartbeat event is {}logged".format('' if enable_hb else 'NOT '))
+    timeout = EventLogTimeout.HEARTBEAT_ESTABLISH if enable_hb else 120
+    events = system_helper.wait_for_events(timeout=timeout, strict=False, fail_ok=True,
+                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
+                                               EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+    if enable_hb:
+        assert events, "VM heartbeat is not enabled."
+        assert EventLogID.HEARTBEAT_ENABLED == events[0], "VM heartbeat failed to establish."
+    else:
+        assert EventLogID.HEARTBEAT_ENABLED not in events, \
+            "Heartbeat enable event appeared while hb is disabled in flavor"
 
     return vm_id
 
@@ -173,7 +179,7 @@ def _perform_action(vm_id, action, expt_fail):
     mark.p2('migrate'),
     mark.p2('suspend'),
     mark.p2('reboot'),
-    mark.priorities('domain_sanity', 'nightly')('stop'),
+    mark.priorities('domain_sanity', 'nightly', 'sx_nightly')('stop'),
 ])
 def test_vm_voting(action, hb_flavor):
     """
@@ -197,9 +203,9 @@ def test_vm_voting(action, hb_flavor):
     """
     if action == 'migrate':
         if len(host_helper.get_hypervisors()) < 2:
-            skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+            skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
-    vm_id = boot_vm_(hb_flavor)
+    vm_id = launch_vm(enable_hb=True, flavor=hb_flavor)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
@@ -225,6 +231,7 @@ def test_vm_voting(action, hb_flavor):
         time.sleep(15)
 
     _perform_action(vm_id, action, expt_fail=False)
+    GuestLogs.remove(vm_id)
 
 
 @mark.nightly
@@ -239,18 +246,11 @@ def test_vm_voting_no_hb_migrate():
 
     """
     if len(host_helper.get_hypervisors()) < 2:
-        skip(SkipReason.LESS_THAN_TWO_HYPERVISORS)
+        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.tc_step("Boot a vm without guest heartbeat")
-    vm_name = 'vm_no_hb_migrate'
-    vm_id = vm_helper.boot_vm(name=vm_name, cleanup='function')[1]
+    vm_id = launch_vm(enable_hb=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
-    LOG.tc_step("Check heartbeat event is NOT logged")
-    events = system_helper.wait_for_events(timeout=120, strict=False, fail_ok=True,
-                                           **{'Entity Instance ID': vm_id, 'Event Log ID': [
-                                              EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
-    assert EventLogID.HEARTBEAT_ENABLED not in events, "Heartbeat enable event appeared while hb is disabled in flavor"
 
     cmd = 'touch /tmp/vote_no_to_migrate'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
@@ -266,3 +266,89 @@ def test_vm_voting_no_hb_migrate():
 
     time.sleep(10)
     _perform_action(vm_id, 'migrate', expt_fail=False)
+    GuestLogs.remove(vm_id)
+
+
+@fixture(scope='module')
+def event_timeout_vm():
+    """
+    Text fixture to create flavor with specific 'heartbeat'
+
+    Returns: flavor dict as following:
+        {'id': <flavor_id>,
+         'heartbeat': <True/False>
+        }
+    """
+    LOG.fixture_step("Launch a vm with guest heartbeat enabled")
+    heartbeat = 'True'
+
+    flavor_id = nova_helper.create_flavor()[1]
+    ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
+    heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
+    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='module')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+    GuestLogs.add(vm_id)
+    system_helper.wait_for_events(EventLogTimeout.HEARTBEAT_ESTABLISH, strict=False, fail_ok=True,
+                                  entity_instance_id=vm_id,
+                                  **{'Event Log ID': [EventLogID.HEARTBEAT_DISABLED, EventLogID.HEARTBEAT_ENABLED]})
+
+    LOG.fixture_step("Wait for 30 seconds and touch /tmp/event_timeout from vm {}".format(vm_id))
+    time.sleep(30)
+
+    # touch the vm_voting_no_timeout file
+    cmd = "touch /tmp/event_timeout"
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        vm_ssh.exec_cmd(cmd)
+
+    GuestLogs.remove(vm_id)
+
+    return vm_id
+
+
+@mark.parametrize(('action', 'revert', 'vm_voting'), [
+    ('pause_vm', 'unpause_vm', '/tmp/vote_no_to_suspend'),
+    ('suspend_vm', 'resume_vm', '/tmp/vote_no_to_suspend'),
+    ('stop_vms', 'start_vms', '/tmp/vote_no_to_stop'),
+    ('reboot_vm', '', '/tmp/vote_no_to_reboot'),
+    ('live_migrate_vm', '', '/tmp/vote_no_to_migrate'),
+])
+def test_vm_voting_timeout(event_timeout_vm, action, revert, vm_voting):
+    """
+
+    Args:
+        event_timeout_vm: vm with voting event_timeout touched
+        action:
+        revert:
+        vm_voting:
+
+    Returns:
+
+    """
+    vm_id = event_timeout_vm
+
+    # since vm is shared, give it sometime in between tests
+    time.sleep(10)
+    LOG.tc_step("touch {} from vm".format(vm_voting))
+    cmd = "touch {}".format(vm_voting)
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        GuestLogs.add(vm_id)
+        vm_ssh.exec_cmd(cmd)
+
+    LOG.tc_step("Ensure vote_no actions are still allowed due to event_timeout touched")
+    # wait for vm to sync
+    time.sleep(10)
+
+    # confirm the action still work
+    cmd_str = "vm_helper.{}(vm_id)".format(action)
+    eval(cmd_str)
+
+    # revert back once excuted
+    if revert:
+        cmd_str = "vm_helper.{}(vm_id)".format(revert)
+        eval(cmd_str)
+
+    GuestLogs.remove(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

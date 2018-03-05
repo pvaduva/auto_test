@@ -3,7 +3,7 @@ from consts.cgcs import HEAT_FLAVORS, FlavorSpec
 
 
 @fixture(scope='session', autouse=True)
-def create_heat_flavors():
+def create_heat_flavors(heat_files_check):
     LOG.fixture_step("(session) Get or create a default heat flavor with 1 vcpu and dedicated cpu policy")
 
     for flv_name in HEAT_FLAVORS:
@@ -14,4 +14,3 @@ def create_heat_flavors():
                 nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
         ResourceCleanup.add('flavor', flavor, scope='session')
-

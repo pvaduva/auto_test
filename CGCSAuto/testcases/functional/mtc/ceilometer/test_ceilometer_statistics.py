@@ -5,6 +5,7 @@
 # of an applicable Wind River license agreement.
 
 import time
+import random
 from datetime import datetime, timedelta
 from pytest import mark, skip, fixture
 
@@ -18,6 +19,7 @@ from keywords import common, host_helper, ceilometer_helper, network_helper, gla
 
 @mark.cpe_sanity
 @mark.sanity
+@mark.sx_nightly
 @mark.parametrize('meter', [
     'image.size'
 ])
@@ -41,6 +43,20 @@ def test_statistics_for_one_meter(meter):
         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
+def check_event_in_tenant_or_admin(resource_id, event_type):
+    for auth_ in (None, Tenant.ADMIN):
+        traits = ceilometer_helper.get_events(event_type=event_type, header='traits:value', auth_info=auth_)
+        for trait in traits:
+            if resource_id in trait:
+                LOG.info("Resource found in ceilometer events using auth: {}".format(auth_))
+                break
+        else:
+            continue
+        break
+    else:
+        assert False, "{} event for resource {} was not found under admin or tenant".format(event_type, resource_id)
+
+
 @mark.sanity
 # Hardcode the parameter even though unused so sanity test name can show the meters tested
 @mark.parametrize('meters', [
@@ -61,27 +77,22 @@ def test_ceilometer_meters_exist(meters):
         skip("Over a day since install. Meters no longer exist.")
 
     # Check meter for routers
-    LOG.tc_step("Check number of 'router.create' meters is at least the number of existing routers")
-    routers = network_helper.get_routers(auth_info=Tenant.ADMIN)
-    router_create_meter_table = ceilometer_helper.get_meters_table(meter='router.create')
-    created_routers_in_meters = table_parser.get_column(router_create_meter_table, 'Resource ID')
-
-    assert set(routers) <= set(created_routers_in_meters), "router.create meters do not exist for all existing routers"
+    LOG.tc_step("Check number of 'router.create.end' events is at least the number of existing routers")
+    routers = network_helper.get_routers()
+    router_id = routers[0]
+    check_event_in_tenant_or_admin(resource_id=router_id, event_type='router.create.end')
 
     # Check meter for subnets
     LOG.tc_step("Check number of 'subnet.create' meters is at least the number of existing subnets")
-    subnets = network_helper.get_subnets(auth_info=Tenant.ADMIN)
-    subnet_create_meter_table = ceilometer_helper.get_meters_table(meter='subnet.create')
-    created_subnets_in_meters = table_parser.get_column(subnet_create_meter_table, 'Resource ID')
-
-    assert set(subnets) <= set(created_subnets_in_meters), "subnet.create meters do not exist for all existing subnets"
+    subnets = network_helper.get_subnets(name=Tenant.get_primary().get('tenant'), strict=False)
+    subnet = random.choice(subnets)
+    LOG.info("Subnet to check in ceilometer event list: {}".format(subnet))
+    check_event_in_tenant_or_admin(resource_id=subnet, event_type='subnet.create.end')
 
     # Check meter for image
     LOG.tc_step('Check meters for image')
     images = glance_helper.get_images()
-    # maybe change to image instead of image.upload?
-    # image_meters_tab = ceilometer_helper.get_meters_table(meter='image.upload')
-    image_meters_tab = ceilometer_helper.get_meters_table(meter='image')
+    image_meters_tab = ceilometer_helper.get_meters_table(meter='image.size')
     images_in_meter_list = table_parser.get_column(image_meters_tab, 'Resource ID')
 
     assert set(images) <= set(images_in_meter_list)
@@ -122,10 +133,7 @@ def test_ceilometer_retention_period():
     times = [31536000, 604800, 3600, 86400]
     for interval in times:
         LOG.tc_step("changing retention period to: {}".format(interval))
-        res, out = system_helper.set_retention_period(period=interval)
-        ret_per = system_helper.get_retention_period()
-        assert interval == int(ret_per), "FAIL: the retention period didn't change correctly"
-        assert 0 == res, "FAIL: the retention period didn't change correctly"
+        system_helper.set_retention_period(period=interval)
 
     times = [3500, 32000000]
     for interval in times:
@@ -151,9 +159,8 @@ def test_ceilometer_retention_sample():
     Teardown:
         - reset     ('module')
     """
+    LOG.tc_step("Set retention period to 3600 seconds")
     system_helper.set_retention_period(period=3600)
-    ret_per = system_helper.get_retention_period()
-    assert 3600 == int(ret_per), "The retention period was not changed to 1 hour"
 
     LOG.tc_step("Choosing a resource")
     out = ceilometer_helper.get_resources(header='Resource ID')
@@ -164,7 +171,7 @@ def test_ceilometer_retention_sample():
     curr_secs = curr_time.timestamp()
     new_time = datetime.fromtimestamp(curr_secs - 3540)
     new_time = str(new_time).replace(' ', 'T')
-    LOG.info("\nnow: {}\n59 min ago{}".format(curr_time, new_time))
+    LOG.info("\nNow: {}\n59 min ago: {}".format(curr_time, new_time))
 
     LOG.tc_step("Creating fake sample")
 

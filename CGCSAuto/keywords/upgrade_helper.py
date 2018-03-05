@@ -7,7 +7,7 @@ from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
-from consts.cgcs import HostOperationalState, HostAvailabilityState, Prompt, HostAdminState
+from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
 from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import HostTimeout
 
@@ -44,13 +44,16 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
             message = "Host is not locked. Locking host  before starting upgrade"
             LOG.info(message)
             rc, output = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=True)
-
             if rc != 0 and rc != -1:
                 err_msg = "Host {} fail on lock before starting upgrade: {}".format(host, output)
                 if fail_ok:
                     return 4, err_msg
                 else:
                     raise exceptions.HostError(err_msg)
+    if system_helper.is_simplex():
+        exitcode, output = simplex_host_upgrade(con_ssh=con_ssh)
+        return exitcode, output
+
 
     exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info,
                                   rtn_list=True, fail_ok=True, timeout=timeout)
@@ -65,7 +68,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     time.sleep(180)
 
     if not host_helper.wait_for_host_states(host, timeout=timeout, check_interval=60,
-                                            availability=HostAvailabilityState.ONLINE, con_ssh=con_ssh,
+                                            availability=HostAvailState.ONLINE, con_ssh=con_ssh,
                                             fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
         if fail_ok:
@@ -753,8 +756,8 @@ def upgrade_host_lock_unlock(host, con_ssh=None):
         time.sleep(60)
 
         if not host_helper.wait_for_host_states(host, timeout=360, fail_ok=True,
-                                                operational=HostOperationalState.ENABLED,
-                                                availability=HostAvailabilityState.AVAILABLE):
+                                                operational=HostOperState.ENABLED,
+                                                availability=HostAvailState.AVAILABLE):
             err_msg = " Swacting to standby is not possible because {} is not in available state " \
                   "within  the specified timeout".format(host)
             assert False, err_msg
@@ -786,4 +789,68 @@ def get_upgraded_hosts(upgrade_version, con_ssh=None, fail_ok=False, source_cred
                                            source_creden_=source_creden_))
     table_ = table_parser.filter_table(table_, **{'running_release': upgrade_version})
     return table_parser.get_values(table_, 'hostname')
+
+
+def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
+    """
+     Waits for the  upgrade state to be changed.
+
+     Args:
+         states:
+         timeout:
+         check_interval
+         fail_ok
+
+     Returns:
+
+     """
+    end_time = time.time() + timeout
+    if not states:
+        raise ValueError("Expected host state(s) has to be specified via keyword argument states")
+    state_match=False
+    while time.time() < end_time:
+        table_ = system_upgrade_show()[1]
+        act_state = table_parser.get_value_two_col_table(table_, "state")
+        if act_state == states:
+            state_match = True
+            break
+        time.sleep(check_interval)
+    msg = "{} state was not reached ".format(states)
+    if state_match:
+        return True
+    if fail_ok:
+       LOG.warning(msg)
+       return False
+    raise exceptions.TimeoutException(msg)
+
+
+def simplex_host_upgrade(con_ssh=None, fail_ok=False):
+    """
+    Simplex host_upgrade is to handle simplex host-upgrade cli.
+    Args:
+        con_ssh (SSHClient):
+        fail_ok (bool):
+
+    Returns (tuple):
+        (0, dict/list)
+        (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = "source /etc/nova/openrc; system host-upgrade controller-0"
+    con_ssh.send(cmd)
+    index = con_ssh.expect([con_ssh.prompt,  Prompt.YES_N_PROMPT])
+    con_ssh.send('yes')
+    if index == 0:
+        err_msg = "CLI system host upgrade rejected"
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+    else:
+        return 0, "host upgrade success"
+
 

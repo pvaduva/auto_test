@@ -60,16 +60,16 @@ def get_vlan_providernet():
     minimum_column = table_parser.get_column_index(vlan_entries_table, 'minimum')
     range_id = ''
     name = ''
-    min = 0
-    max = 0
+    min_ = 0
+    max_ = 0
     # Looping through the remaining entries and saving the one with the largest 'maximum' range value
     for entry in vlan_entries_table['values']:
         temp_max = int(entry[maximum_column])
-        if temp_max > max:
+        if temp_max > max_:
             range_id = entry[id_column]
             name = entry[providernet_name_column]
-            min = int(entry[minimum_column])
-            max = temp_max
+            min_ = int(entry[minimum_column])
+            max_ = temp_max
 
     providernet_id = network_helper.get_providernets(name)
 
@@ -79,7 +79,7 @@ def get_vlan_providernet():
     else:
         popped_entry = ''
 
-    return providernet_id, range_id, name, min, max, popped_entry
+    return providernet_id, range_id, name, min_, max_, popped_entry
 
 
 @fixture(scope='module', autouse=True)
@@ -256,48 +256,49 @@ def test_providernet_connectivity_reboot():
         hypervisors.remove(system_helper.get_active_controller_name())
         slave_computes = hypervisors
     else:
-        master_compute = hypervisors[0]
         slave_computes = hypervisors[1:]
 
     LOG.tc_step("Count pre-passed providernet tests")
-    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-    connectivity_table = table_parser.table(cmd)
-    pre_passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
+    pre_passed = network_helper.get_providernet_connectivity_test_results(rtn_val='segmentation_ids', status='PASS')
 
     LOG.tc_step("Reboot hosts: {}".format(slave_computes))
     HostsToRecover.add(slave_computes)
     host_helper.reboot_hosts(slave_computes, wait_for_reboot_finish=False)
 
-    if not small_footprint:
-        LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        connectivity_table = table_parser.table(cmd)
-        passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
-        hosts_passed = table_parser.get_column(passed_connectivity_tests, 'host_name')
-        for test_host in hosts_passed:
-            assert test_host == master_compute, "Host: {} did not reboot".format(test_host)
+    LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
+    audit_id = network_helper.schedule_providernet_connectivity_test()[1]
+    slave_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id, host_name=slave_computes)
+    assert not slave_status, "Connectivity test still list results for rebooting computes"
 
-        LOG.tc_step("Reboot host: {}".format(master_compute))
+    if not small_footprint:
+        master_compute = hypervisors[0]
+        master_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
+                                                                                 host_name=master_compute)
+        assert set(master_status) == {'UNKNOWN'}, "Master host is not in Unknown state after other computes reboot"
+        LOG.tc_step("Reboot the last compute host: {}".format(master_compute))
         HostsToRecover.add(master_compute)
         host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
 
+        res = network_helper.schedule_providernet_connectivity_test(timeout=45, fail_ok=True)[0]
+        assert res == 1, "Still finding results when all hypervisors are rebooting"
         LOG.tc_step("Verify the providernet connectivity test does not list PASS for any host")
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        connectivity_table = table_parser.table(cmd)
-        assert connectivity_table == {'headers': [], 'values': []}, "Atleast one compute is not rebooting"
+        status = network_helper.get_providernet_connectivity_test_results()
+        assert not status, "At least one compute is not rebooting"
 
     LOG.tc_step("Wait for {} to be available".format(hypervisors))
     host_helper.wait_for_hosts_ready(hypervisors)
 
     LOG.tc_step("Verify all the providernet connectivity tests PASS")
-    end_time = time.time() + 120
+    end_time = time.time() + 60
+    post_passed = None
     while time.time() < end_time:
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        connectivity_table = table_parser.table(cmd)
-        post_passed_connectivity_tests = table_parser.filter_table(connectivity_table, **{'status': 'PASS'})
-        if len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values']):
+        network_helper.schedule_providernet_connectivity_test()
+        post_passed = network_helper.get_providernet_connectivity_test_results(rtn_val='segmentation_ids',
+                                                                               status='PASS')
+        if sorted(pre_passed) == sorted(post_passed):
             break
-    assert len(pre_passed_connectivity_tests['values']) == len(post_passed_connectivity_tests['values'])
+
+    assert sorted(pre_passed) == sorted(post_passed), "Passed segments before the after host reboots are different"
 
 
 def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
@@ -337,33 +338,67 @@ def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
         elif param_filter == '--host_name':
             header = 'host_name'
             value = host_helper.get_up_hypervisors()[0]
-
         elif param_filter == '--segmentation_id':
             header = 'segmentation_ids'
             cmd = cli.neutron("providernet-range-list", auth_info=Tenant.ADMIN)
             table_ = table_parser.table(cmd)
             filtered_table = table_parser.filter_table(table_, **{'type': 'vlan'})
             value = table_parser.get_values(filtered_table, 'minimum')[0]
-
         LOG.tc_step("Verify output of providernet-connectivity-test-list using the {} filter".format(param_filter))
         cmd = cli.neutron('providernet-connectivity-test-list {} {}'.format(param_filter, value),
                           auth_info=Tenant.ADMIN)
         queried_table = table_parser.table(cmd)
         columns = ['status', 'message', 'segmentation_ids']
         queried_table = table_parser.remove_columns(queried_table, columns)
-
         cmd = cli.neutron('providernet-connectivity-test-list', auth_info=Tenant.ADMIN)
         kwargs = {header: value}
-        table_ = table_parser.table(cmd)
-        filtered_with_keyword_table = table_parser.filter_table(table_, strict=False, **kwargs)
+        table_ = table_parser.table(cmd, combine_multiline_entry=True)
+
+        if param_filter == '--segmentation_id':
+            filtered_table = table_parser.filter_table(table_, **{'type': 'vlan'})
+            filtered_with_keyword_table = table_segment_id_filter(filtered_table, value)
+        else:
+            filtered_with_keyword_table = table_parser.filter_table(table_, strict=False, **kwargs)
         columns = ['status', 'message', 'segmentation_ids']
         filtered_with_keyword_table = table_parser.remove_columns(filtered_with_keyword_table, columns)
-
         result, error = table_parser.compare_tables(queried_table, filtered_with_keyword_table)
         assert result == 0, "Tables are not the same. Filtered using: {}. Error: {}".format(param_filter, error)
 
 
-def test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
+def table_segment_id_filter(table_, value):
+
+    # filter out the number of rows in the table that match value or the number range contain value
+
+    if not table_['headers']:
+        LOG.warning("Empty table supplied")
+        return table_
+
+    column = table_parser.get_column(table_, 'segmentation_ids')
+
+    # create new table
+    new_table = dict()
+    new_table['headers'] = table_['headers']
+    new_table['values'] = []
+    for i in range(len(column)):
+        item = column[i]
+        # check for number set such as 1,1-2,3,4-5
+        number_obj = item.split(',')
+        for num_pair in number_obj:
+            num = num_pair.split('-')
+            # check if the value is between any number pair
+            if int(num[0]) <= int(value) <= int(num[-1]):
+                new_table['values'].append(table_['values'][i])
+                # only need one match per row
+                break
+
+    return new_table
+
+
+# Invalid test. Update needed. CGTS-8520
+# 1. Need to create new providernet so it's not associated to any networks
+# 2. Should schedule the connectivity test after mtu change, otherwise it's likely still displaying the result
+# from previous audit
+def _test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
     """
         US75531 - Providernet Connectivity Test with different MTU size
 
@@ -394,7 +429,26 @@ def test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
     assert first_test == second_test, "MTU change impacted providernet-connectivity-test-list"
 
 
-def test_vlan_providernet_connectivity_delete_segment(get_vlan_providernet):
+@fixture(scope='function')
+def create_delete_range(get_vlan_providernet, request):
+    providernet = get_vlan_providernet[2]
+    min_range = 4080
+    max_range = 4085
+    LOG.fixture_step("Create range on {} with the values {}".format(providernet, '{}-{}'.format(min_range, max_range)))
+    range_name = network_helper.create_providernet_range(providernet, min_range, max_range, rtn_val='name')[1]
+
+    def del_range():
+        if DEL_RANGE:
+            LOG.fixture_step("Delete providernet range {}".format(range_name))
+            network_helper.delete_providernet_range(range_name)
+    request.addfinalizer(del_range)
+    return range_name, min_range, max_range
+
+
+DEL_RANGE = True
+
+
+def test_vlan_providernet_connectivity_delete_segment(create_delete_range):
     """
         US75531 - Providernet Connectivity Test after deleting vlan segment range
 
@@ -415,26 +469,26 @@ def test_vlan_providernet_connectivity_delete_segment(get_vlan_providernet):
             - Revert pnet_audit_interval to 1800 seconds from 30 seconds
             - Revert MTU size to original
     """
-    providernet = get_vlan_providernet[2]
-    LOG.tc_step("Create range on {} with the values {}".format(providernet, '4080-4085'))
-    code, range = network_helper.create_providernet_range(providernet, 4080, 4085, rtn_val='name')
+    range_name, min_range, max_range = create_delete_range
 
-    LOG.tc_step("Wait for the providernet-connectivity-test-list to show the new range")
-    kwargs = {'segmentation_ids': '4080-4085', 'status': 'PASS'}
-    timeout = time.time() + 240
-    while time.time() < timeout:
-        cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-        providernet_test_table = table_parser.table(cmd)
-        filtered_test_table = table_parser.filter_table(providernet_test_table, strict=False, **kwargs)
-        if len(filtered_test_table['values']) > 0:
-            break
+    global DEL_RANGE
+    DEL_RANGE = True
+
+    LOG.tc_step("Schedule providernet-connectivity-test and ensure newly created range to be listed in "
+                "providernet-connectivity-test-list")
+
+    kwargs = {'segmentation_ids': '{}-{}'.format(min_range, max_range), 'status': ['PASS', 'FAIL']}
+    network_helper.schedule_providernet_connectivity_test()
+
+    res_for_seg = network_helper.get_providernet_connectivity_test_results(strict=False, **kwargs)
+    assert res_for_seg, "Seg range {}-{} is not listed in providernet-connectivity-test".format(min_range, max_range)
 
     LOG.tc_step("Delete the providernet range")
-    network_helper.delete_providernet_range(range)
-    assert len(filtered_test_table['values']) > 0, "Segmentation range did not show up or pass during test"
+    network_helper.delete_providernet_range(range_name)
+    DEL_RANGE = False
 
+    network_helper.schedule_providernet_connectivity_test()
     LOG.tc_step("Verify the providernet-connectivity-test-list no longer shows the providernet range")
-    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
-    providernet_test_table = table_parser.table(cmd)
-    filtered_test_table = table_parser.filter_table(providernet_test_table, **kwargs)
-    assert len(filtered_test_table['values']) == 0, "Segmentation range did not delete"
+    res_after_del = network_helper.get_providernet_connectivity_test_results(strict=False, **kwargs)
+    assert not res_after_del, "Segmentation range {}-{} is still listed in providernet-connectivity-test after " \
+                              "deletion".format(min_range, max_range)

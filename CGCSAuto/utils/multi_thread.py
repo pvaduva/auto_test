@@ -44,12 +44,6 @@ class MThread(threading.Thread):
         self._output_returned = threading.Event()
         self.timeout = None
         self._err = None
-        self._keep_running = threading.Event()
-        self.end_event = kwargs.get('end_event', None)
-        self._end = threading.Event()
-        self._end_func = None
-        self._end_args = None
-        self._end_kwargs = None
 
     def get_output(self, wait=True, timeout=None):
         """
@@ -80,23 +74,6 @@ class MThread(threading.Thread):
     def get_error_info(self):
         return self._err
 
-    def set_end_func(self, end_func, *end_args, **end_kwargs):
-        """
-        Function to execute after 'end' flag is set via end_thread().
-
-        Args:
-            end_func (callable):
-            *end_args: args to pass to end_func
-            **end_kwargs: kwargs to pass to end_func
-
-        Returns:
-
-        """
-        self.keep_alive()
-        self._end_func = end_func
-        self._end_args = end_args
-        self._end_kwargs = end_kwargs
-
     def start_thread(self, timeout=None, keep_alive=False):
         """
         Starts a thread.
@@ -109,8 +86,6 @@ class MThread(threading.Thread):
 
         """
         self.timeout = timeout
-        if keep_alive:
-            self.keep_alive()
         self.__start_thread_base()
 
     def __start_thread_base(self):
@@ -132,32 +107,15 @@ class MThread(threading.Thread):
             NATBoxClient.set_natbox_client()
             LOG.info("Execute function {}({}, {})".format(self.func.__name__, self.args, self.kwargs))
             self._output = self.func(*self.args, **self.kwargs)
-            self._output_returned.set()
             LOG.info("{} returned: {}".format(self.func.__name__, self._output.__str__()))
-            while True:
-                # end right away after func returns when keep_running is false
-                if not self._keep_running.is_set():
-                    break
-
-                # Wait for end flag to be set, then finish up the thread using end_func, otherwise check after 1 second
-                if self._end.is_set():
-                    if self._end_func is not None:
-                        LOG.info("Executing end_func: {}({}, {})".format(self._end_func.__name__, self._end_args,
-                                                                         self._end_kwargs))
-                        self._end_func(*self._end_args, **self._end_kwargs)
-                    break
-                time.sleep(1)
-
-            LOG.info("Terminating thread: {}".format(self.thread_id))
+            self._output_returned.set()
         except:
             err = traceback.format_exc()
             # LOG.error("Error found in thread call {}".format(err))
             self._err = err
-            if self.end_event is not None:
-                # set the end_event to terminate other threads
-                self.end_event.set()
             raise
         finally:
+            LOG.info("Terminating thread: {}".format(self.thread_id))
             ControllerClient.get_active_controller().close()
             NATBoxClient.get_natbox_client().close()
             LOG.debug("{} has finished".format(self.name))
@@ -178,6 +136,10 @@ class MThread(threading.Thread):
         """
         if not self.is_alive():
             LOG.info("{} was already finished".format(self.name))
+            if self._err:
+                if not fail_ok:
+                    raise ThreadingError("Error in thread: {}".format(self._err))
+                LOG.error("Error found in thread call {}".format(self._err))
             return True, self._err
 
         if self.timeout:
@@ -189,9 +151,10 @@ class MThread(threading.Thread):
         LOG.info("Wait for {} to finish".format(self.name))
         self.join(timeout)
 
+        if not fail_ok:
+            assert not self._err, "{} ran into an error: {}".format(self.name, self._err)
+
         if not self.is_alive():
-            if not fail_ok:
-                assert not self._err, "{} ran into an error: {}".format(self.name, self._err)
             LOG.info("{} has finished".format(self.name))
         else:
             # Thread didn't finish before timeout
@@ -201,20 +164,6 @@ class MThread(threading.Thread):
             raise ThreadingError(TIMEOUT_ERR.format(self.func, self.args, self.kwargs))
 
         return True, self._err
-
-    def keep_alive(self):
-        """
-        Keep the thread alive after self.func returns - until end_thread called, thread timeout reaches, or
-        wait_for_thread_end() called
-        """
-        self._keep_running.set()
-
-    def end_thread(self):
-        """
-        End the thread.
-        If end_func was set, then end_func will be executed before ending thread.
-        """
-        self._end.set()
 
 
 def get_multi_threads():

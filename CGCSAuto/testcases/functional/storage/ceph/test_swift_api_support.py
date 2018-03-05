@@ -7,10 +7,10 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, host_helper, system_helper, \
     storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
-from consts.cgcs import GuestImages
+from consts.cgcs import GuestImages, BackendState, BackendTask
 from consts.auth import HostLinuxCreds
-from consts.proj_vars import ProjVar
 from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 import time
 
 
@@ -22,8 +22,9 @@ OBJ_POOL_GIB = 100
 SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.control', 'default.rgw.data.root',
                'default.rgw.gc', 'default.rgw.log']
 
+
 def get_ceph_backend_info():
-    if 'ceph' in storage_helper.get_configured_system_storage_backend():
+    if 'ceph' in storage_helper.get_storage_backends():
         ceph_info = storage_helper.get_storage_backend_info('ceph')
         LOG.info('Ceph backend info: {}'.format(ceph_info))
         return ceph_info
@@ -76,6 +77,7 @@ def delete_swift_containers(request):
     request.addfinalizer(teardown)
     return None
 
+
 @fixture(scope='function')
 def pre_swift_check():
     """
@@ -87,12 +89,13 @@ def pre_swift_check():
 
     """
     ceph_backend_info = get_ceph_backend_info()
-    if not eval(ceph_backend_info['object_gateway']):
+    if not ceph_backend_info['object_gateway']:
         return False, "Swift is NOT  enabled"
     if swift_helper.get_swift_containers(fail_ok=True)[0] != 0:
             return False, "Swift enabled but NOT properly configured in the system"
 
     return True, 'Swift enabled and configured'
+
 
 def get_large_img_file():
     cmd = "df -h ~ | awk ' {print $4}'"
@@ -121,7 +124,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     Verifies basic swift provisioning works as expected
     Args:
         pool_size:
-        ceph_backend_installed:
+        pre_swift_check:
 
     Returns:
 
@@ -129,21 +132,20 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     ceph_backend_info = get_ceph_backend_info()
 
     if pool_size == 'default' and pre_swift_check[0]:
-        skip (msg = "Swift is already provisioned")
+        skip("Swift is already provisioned")
 
     object_pool_gib = None
     cinder_pool_gib = ceph_backend_info['cinder_pool_gib']
     if pool_size == 'default':
-        if not eval(ceph_backend_info['object_gateway'].strip()):
+        if not ceph_backend_info['object_gateway']:
             LOG.tc_step("Enabling SWIFT object store .....")
 
     else:
         assert pre_swift_check[0], pre_swift_check[1]
 
-        unallocated_gib = int(ceph_backend_info['ceph_total_space_gib']) - \
-                           (int(cinder_pool_gib) +
-                            int(ceph_backend_info['glance_pool_gib']) +
-                            int(ceph_backend_info['ephemeral_pool_gib']))
+        unallocated_gib = int(ceph_backend_info['ceph_total_space_gib'] - cinder_pool_gib
+                              + ceph_backend_info['glance_pool_gib']
+                              + ceph_backend_info['ephemeral_pool_gib'])
         if unallocated_gib == 0:
             unallocated_gib = int(int(cinder_pool_gib) / 4)
             cinder_pool_gib = str(int(cinder_pool_gib) - unallocated_gib)
@@ -153,18 +155,19 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
     rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=True,
                                                                      cinder=cinder_pool_gib,
-                                                                     object_gib=object_pool_gib)
+                                                                     object_gib=object_pool_gib,
+                                                                     services='cinder,glance,swift')
 
     LOG.info("Verifying if swift object gateway is enabled...")
     assert updated_backend_info['object_gateway'] == 'True', "Fail to enable Swift object gateway: {}"\
         .format(updated_backend_info)
     LOG.info("Swift object gateway is enabled.")
     LOG.info("Verifying ceph task ...")
-    task = storage_helper.get_storage_backend_task_value('ceph')
+    state = storage_helper.get_storage_backend_state('ceph')
     if system_helper.wait_for_alarm(alarm_id="250.001", timeout=10, fail_ok=True)[0]:
         LOG.info("Verifying ceph task is set to 'add-object-gateway'...")
-        assert task == "add-object-gateway", "Unexpected ceph state = {} after swift object gateway update "\
-            .format(task)
+        assert BackendState.CONFIGURING == state, \
+            "Unexpected ceph state '{}' after swift object gateway update ".format(state)
 
         LOG.info("Lock/Unlock controllers...")
         active_controller = system_helper.get_active_controller_name()
@@ -172,16 +175,21 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         LOG.info("Active Controller is {}; Standby Controller is {}...".format(active_controller, standby_controller))
 
         for controller in [standby_controller, active_controller]:
+            HostsToRecover.add(controller)
             host_helper.lock_host(controller, swact=True)
+            storage_helper.wait_for_storage_backend_vals(backend='ceph-store',
+                                                         **{'task': BackendTask.RECONFIG_CONTROLLER,
+                                                            'state': BackendState.CONFIGURING})
             host_helper.unlock_host(controller)
-        assert system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=True), "Alarm 250.001 not cleared"
+
+        system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=False)
     else:
-        assert task == "None", "Unexpected ceph state = {} after swift object gateway update ".format(task)
+        assert BackendState.CONFIGURED == state, \
+            "Unexpected ceph state '{}' after swift object gateway update ".format(state)
 
     LOG.info("Verifying Swift provisioning setups...")
     assert verify_swift_object_setup(), "Failure in swift setups"
 
-    #guest_os = 'centos_7'
     guest_os = GuestImages.DEFAULT_GUEST
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
 
@@ -424,9 +432,9 @@ def test_swift_cli_multiple_object_upload(pre_swift_check):
     assert stat_info["Container"] == container, "Unable to stat swift container {}"\
         .format(container)
 
-    assert stat_info["Objects"] == str(len(object_files)),\
+    assert str(len(object_files)) == stat_info["Objects"], \
         "Incorrect number of objects in container {}. Expected {} object, but has {} objects"\
-        .format(container, stat_info["Objects"])
+        .format(container, str(len(object_files)), stat_info["Objects"])
 
     assert eval(stat_info["Bytes"]) == total_bytes, "Incorrect Bytes size {} in stat. Expected {} Bytes."\
         .format(stat_info["Bytes"], total_bytes)
@@ -483,7 +491,7 @@ def test_swift_cli_update_metadata(pre_swift_check):
     """
     Verifies container and object metadata can be updated as expected
     Args:
-        ceph_backend_installed:
+        pre_swift_check:
 
     Returns:
 
@@ -789,7 +797,7 @@ def verify_swift_object_setup():
 
     LOG.info("Verifying if swift object pools are setup...")
 
-    if 'ceph' in storage_helper.get_configured_system_storage_backend():
+    if 'ceph' in storage_helper.get_storage_backends():
         con_ssh = ControllerClient.get_active_controller()
         cmd = "rados df | awk 'NR>1 && NR < 11 {{print $1}}'"
         rc, output = con_ssh.exec_cmd(cmd, fail_ok=True)
@@ -823,7 +831,6 @@ def verify_swift_object_setup():
 def get_test_obj_file_names(directory=TEST_OBJ_DIR, pattern='.sh'):
 
     con_ssh = ControllerClient.get_active_controller()
-    #test first if TEST_OBJ_DIR exist
     cmd = "test -d /home/wrsroot/{}".format(directory)
     rc, output = con_ssh.exec_cmd(cmd)
     if rc != 0:
@@ -853,8 +860,8 @@ def delete_object_file(object_path, rm_dir=False):
         con_ssh.exec_cmd(cmd)
         LOG.info("Files deleted {}: {}".format(object_path, output))
     standby_controller = system_helper.get_standby_controller_name()
-    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password()) \
-            as standby_ssh:
+    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(),
+                                 password=HostLinuxCreds.get_password()) as standby_ssh:
         cmd = "ls {}".format(object_path)
         rc, output = standby_ssh.exec_cmd(cmd)
         if rc == 0:
@@ -863,4 +870,3 @@ def delete_object_file(object_path, rm_dir=False):
             LOG.info("Files deleted {}: {}".format(object_path, output))
 
     return True
-

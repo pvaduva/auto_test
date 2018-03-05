@@ -6,11 +6,12 @@ from collections import Counter
 
 from consts.auth import Tenant
 from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE
+from consts.filepaths import UserData, TiSPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
-from utils.ssh import NATBoxClient
+from utils.ssh import NATBoxClient, ControllerClient
 from utils.tis_log import LOG
 
 
@@ -159,7 +160,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
     if isinstance(dns_servers, list):
         args += ' --dns-nameservers list=true {}'.format(' '.join(dns_servers))
     elif dns_servers is not None:
-        args += ' --dns-nameservers {}'.format(dns_servers)
+        args += ' --dns-nameserver {}'.format(dns_servers)
 
     if no_gateway:
         args += ' --no-gateway'
@@ -171,7 +172,9 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         '--gateway': gateway,
         '--ip-version': ip_version,
         '--subnetpool': subnet_pool,
-        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None
+        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None,
+        '--ipv6-ra-mode': "dhcpv6-stateful " if ip_version == 6 else None,
+        '--ipv6-address-mode': "dhcpv6-stateful " if ip_version == 6 else None
     }
 
     for key, value in args_dict.items():
@@ -251,7 +254,7 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
 
     Args:
         net_id (str): network id
-        field (str): such as 'status', 'subnets', 'wrs-net:vlan_id' or 'vlan_id' if strict=False
+        field (str): such as 'status', 'subnets'
         strict (bool): whether to perform strict search for the name of the field
         auto_info (dict):
         con_ssh (SSHClient):
@@ -267,6 +270,156 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, co
             value = [value]
 
     return value
+
+
+def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=None):
+    if isinstance(fields, str):
+        fields = [fields]
+    table_ = table_parser.table(cli.openstack('network show', net_id, ssh_client=con_ssh))
+    res = {}
+    for field in fields:
+        val = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
+        if field == 'subnets':
+            val = val.split(',')
+            val = [val_.strip() for val_ in val]
+        res[field] = val
+
+    if rtn_dict:
+        return res
+    else:
+        return list(res.values())
+
+
+def set_network(net_id, name=None, enable=None, share=None, enable_port_security=None, external=None, default=None,
+                provider_net_type=None, provider_phy_net=None, provider_segment=None, transparent_vlan=None,
+                auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None, **kwargs):
+    """
+    Update network with given parameters
+    Args:
+        net_id (str):
+        name (str|None): name to update to. Don't update name when None.
+        enable (bool|None): True to add --enable. False to add --disable. Don't update enable/disable when None.
+        share (bool|None):
+        enable_port_security (bool|None):
+        external (bool|None):
+        default (bool|None):
+        provider_net_type (str|None):
+        provider_phy_net (str|None):
+        provider_segment (str|int|None):
+        transparent_vlan (bool|None):
+        auth_info (dict):
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        **kwargs: additional key/val pairs that are not listed in 'openstack network update -h'.
+            e,g.,{'wrs-tm:qos': <qos_id>}
+
+    Returns (tuple): (code, msg)
+        (0, "Network <net_id> is successfully updated")   Network updated successfully
+        (1, <std_err>)    'openstack network update' cli is rejected
+
+    """
+    args_dict = {
+        '--name': (name, {'name': name}),
+        '--enable': ('store_true' if enable is True else None, {'admin_state_up': 'UP'}),
+        '--disable': ('store_true' if enable is False else None, {'admin_state_up': 'DOWN'}),
+        '--share': ('store_true' if share is True else None, {'shared': 'True'}),
+        '--no-share': ('store_true' if share is False else None, {'shared': 'False'}),
+        '--enable-port-security': ('store_true' if enable_port_security is True else None, {}),
+        '--disable-port-security': ('store_true' if enable_port_security is False else None, {}),
+        '--external': ('store_true' if external is True else None, {'router:external': 'External'}),
+        '--internal': ('store_true' if external is False else None, {'router:external': 'Internal'}),
+        '--default': ('store_true' if default is True else None, {'is_default': 'True'}),
+        '--no-default': ('store_true' if default is False else None, {'is_default': 'False'}),
+        '--transparent-vlan': ('store_true' if transparent_vlan is True else None, {'vlan_transparent': 'True'}),
+        '--no-transparent-vlan': ('store_true' if transparent_vlan is False else None, {'vlan_transparent': 'False'}),
+        '--provider-network-type': (provider_net_type, {'provider:network_type': provider_net_type}),
+        '--provider-physical-network': (provider_phy_net, {'provider:physical_network': provider_phy_net}),
+        '--provider-segment': (provider_segment, {'provider:segmentation_id': provider_segment}),
+    }
+    checks = {}
+    args_str = ''
+    for arg in args_dict:
+        val, check = args_dict[arg]
+        if val is not None:
+            set_val = '' if val == 'store_true' else ' {}'.format(val)
+            args_str += ' {}{}'.format(arg, set_val)
+            if check:
+                checks.update(**check)
+            else:
+                LOG.info("Unknown check field in 'openstack network show' for arg {}".format(arg))
+
+    for key, val_ in kwargs.items():
+        val_ = ' {}'.format(val_) if val_ else ''
+        field_name = key.split('--', 1)[-1]
+        arg = '--{}'.format(field_name)
+        args_str += ' {}{}'.format(arg, val_)
+        if val_:
+            checks.update(**kwargs)
+        else:
+            LOG.info("Unknown check field in 'openstack network show' for arg {}".format(arg))
+
+    if not args_str:
+        raise ValueError("Nothing to update. Please specify at least one None value")
+
+    LOG.info("Attempt to update network {} with following args: {}".format(net_id, args_str))
+    code, out = cli.openstack('network set', '{} {}'.format(args_str, net_id), ssh_client=con_ssh, rtn_list=True,
+                              fail_ok=fail_ok, auth_info=auth_info)
+    if code > 0:
+        return 1, out
+
+    if checks:
+        LOG.info("Check the values are updated to following in network show: {}".format(checks))
+        actual_res = get_net_show_values(net_id, fields=list(checks.keys()), rtn_dict=True)
+        failed = {}
+        for field in checks:
+            expt_val = checks[field]
+            actual_val = actual_res[field]
+            if expt_val != actual_val:
+                failed[field] = (expt_val, actual_val)
+
+        # Fail directly. If a field is not allowed to be updated, the cli should be rejected
+        assert not failed, "Actual value is different than set value in following fields: {}".format(failed)
+
+    msg = "Network {} is successfully updated".format(net_id)
+    return 0, msg
+
+
+def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    """
+    Update network qos to given value
+    Args:
+        net_id (str): network to update
+        qos_id (str|None): when None, remove the qos from network
+        fail_ok (bool):
+        auth_info (dict):
+        con_ssh (SSHClient):
+
+    Returns (tuple): (code, msg)
+        (0, "Network <net_id> qos is successfully updated to <qos_id>")
+        (1, <std_err>)  openstack network update cli rejected
+
+    """
+    if qos_id:
+        kwargs = {'--wrs-tm:qos': qos_id}
+        arg_str = '--wrs-tm:qos {}'.format(qos_id)
+    else:
+        kwargs = {'--no-qos': None}
+        arg_str = '--no-qos'
+
+    # code, msg = update_network(net_id=net_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh, **kwargs)
+
+    code, msg = cli.neutron('net-update', '{} {}'.format(arg_str, net_id), fail_ok=fail_ok, ssh_client=con_ssh,
+                            auth_info=auth_info, rtn_list=True)
+    if code > 0:
+        return code, msg
+
+    if '--no-qos' in kwargs:
+        actual_qos = get_net_info(net_id, field='wrs-tm:qos', auto_info=auth_info, con_ssh=con_ssh)
+        assert not actual_qos, "Qos {} is not removed from {}".format(actual_qos, net_id)
+
+    msg = "Network {} qos is successfully updated to {}".format(net_id, qos_id)
+    LOG.info(msg)
+    return 0, msg
 
 
 def _get_net_ids(net_name, con_ssh=None, auth_info=None):
@@ -591,7 +744,8 @@ def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_inf
     return 0, succ_msg
 
 
-def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=30, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+# TODO reduce timeout to 30s after issue fixed.
+def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=300, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     end_time = time.time() + timeout
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('list --a', ssh_client=con_ssh, auth_info=auth_info))
@@ -758,6 +912,125 @@ def get_qos(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
+def get_qos_names(qos_ids=None, con_ssh=None, auth_info=None):
+    """
+
+    Args:
+        qos_ids(str|list|None): QoS id to filter name.
+        con_ssh(SSHClient):  If None, active controller ssh will be used.
+        auth_info(dict): Tenant dict. If None, primary tenant will be used.
+
+    Returns(list): List of neutron qos names filtered by qos_id.
+
+    """
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    if qos_ids is None:
+        return table_parser.get_column(table_, 'name')
+
+    return table_parser.get_values(table_, 'name', strict=True, id=qos_ids)
+
+
+def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
+               con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Args:
+        name(str): Name of the QoS to be created.
+        tenant_name(str): Such as tenant1, tenant2. If none uses primary tenant.
+        description(str): Description of the created QoS.
+        scheduler(dict): Dictionary of scheduler policies formatted as {'policy': value}.
+        dscp(dict): Dictionary of dscp policies formatted as {'policy': value}.
+        ratelimit(dict): Dictionary of ratelimit policies formatted as {'policy': value}.
+        fail_ok(bool):
+        con_ssh(SSHClient):
+        auth_info(dict): Run the neutron qos-create cli using this authorization info. Admin by default,
+
+    Returns(tuple): exit_code(int), qos_id(str)
+                    (0, qos_id) qos successfully created.
+                    (1, output) qos not created successfully
+    """
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+    check_dict = {}
+    args = ''
+    current_qos = get_qos_names(con_ssh=con_ssh, auth_info=auth_info)
+    if name is None:
+        if tenant_name is None:
+            tenant_name = common.get_tenant_name(Tenant.get_primary())
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+        else:
+            name = common.get_unique_name("{}-qos".format(tenant_name), existing_names=current_qos, resource_type='qos')
+    args_dict = {'name': name,
+                 'tenant-id': tenant_id,
+                 'description': description,
+                 'scheduler': scheduler,
+                 'dscp': dscp,
+                 'ratelimit': ratelimit
+                 }
+    check_dict['policies'] = {}
+    for key, value in args_dict.items():
+        if value:
+            if key in ('scheduler', 'dscp', 'ratelimit'):
+                args += " --{}".format(key)
+                for policy, val in value.items():
+                    args += " {}={}".format(policy, val)
+                    value[policy] = str(val)
+                check_dict['policies'][key] = value
+            else:
+                args += " --{} '{}'".format(key, value)
+                if key is 'tenant-id':
+                    key = 'tenant_id'
+                check_dict[key] = value
+
+    LOG.info("Creating QoS with args: {}".format(args))
+    exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                    rtn_list=True)
+    if exit_code == 1:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    for key, exp_value in check_dict.items():
+        if key is 'policies':
+            actual_value = eval(table_parser.get_value_two_col_table(table_, key))
+        else:
+            actual_value = table_parser.get_value_two_col_table(table_, key)
+        if actual_value != exp_value:
+            msg = "Qos created but {} expected to be {} but actually {}".format(key, exp_value, actual_value)
+            raise exceptions.NeutronError(msg)
+
+    qos_id = table_parser.get_value_two_col_table(table_, 'id')
+    LOG.info("QoS successfully created")
+    return 0, qos_id
+
+
+def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        qos_id(str): QoS to be deleted
+        auth_info(dict): tenant to be used, if none admin will be used
+        con_ssh(SSHClient):
+        fail_ok(bool):
+
+    Returns: code(int), output(string)
+            (0, "QoS <qos_id> successfully deleted" )
+            (1, <std_err>)  openstack qos delete cli rejected
+    """
+
+    LOG.info("deleting QoS: {}".format(qos_id))
+    code, output = cli.neutron('qos-delete', qos_id, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
+                               rtn_list=True)
+    if code == 1:
+        return 1, output
+
+    if qos_id in get_qos(auth_info=auth_info, con_ssh=con_ssh):
+        msg = "QoS {} still listed in neutron QoS list".format(qos_id)
+        raise exceptions.NeutronError(msg)
+
+    succ_msg = "QoS {} successfully deleted".format(qos_id)
+    LOG.info(succ_msg)
+    return 0, succ_msg
+
+
 def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
     """
     Get internal network id that matches the given net_name of a specific tenant.
@@ -893,7 +1166,7 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.DATA_NET_NAME, ip_pattern=Networks.DATA_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.data_net_name_pattern(), ip_pattern=Networks.DATA_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -919,7 +1192,7 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
 
 
 def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.EXT_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.EXT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -939,7 +1212,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.MGMT_NET_NAME, ip_pattern=Networks.MGMT_IP, vms=vms,
+    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.MGMT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
@@ -1018,9 +1291,9 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
 def get_net_type_from_name(net_name):
     if re.search(Networks.INTERNAL_NET_NAME, net_name):
         net_type = 'internal'
-    elif re.search(Networks.DATA_NET_NAME, net_name):
+    elif re.search(Networks.data_net_name_pattern(), net_name):
         net_type = 'data'
-    elif re.search(Networks.MGMT_NET_NAME, net_name):
+    elif re.search(Networks.mgmt_net_name_pattern(), net_name):
         net_type = 'mgmt'
     else:
         raise ValueError("Unknown net_type for net_name - {}".format(net_name))
@@ -1768,7 +2041,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
                  <pci_alias2>: {...},
                  ...}
         Examples:
-            {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
+            {'qat-dh895xcc-vf': {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     """
     table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -1783,9 +2056,9 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
         table_ = table_parser.table(cli.nova('device-show {}'.format(alias)))
         # LOG.debug('output from nova device-show for device-id:{}\n{}'.format(alias, table_))
 
-        table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True)
+        table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True, lower_case=False)
         nova_pci_devices[alias] = table_dict
-        # {qat-vf: {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
+        # {'qat-dh895xcc-vf': {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     LOG.info('nova_pci_deivces: {}'.format(nova_pci_devices))
 
@@ -2162,6 +2435,8 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
     nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+    if isinstance(nics, str):
+        nics = [nics]
     nics = [eval(nic_) for nic_ in nics]
 
     return nics
@@ -2187,7 +2462,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
+def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
     """
 
     Args:
@@ -2371,6 +2646,7 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
             nets_on_pnet = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                        auth_info=auth_info, vlan_id=vlan_id)
 
+            # TODO: US102722 wrs-net:vlan_id removed from neutron subnets
             other_nets = get_networks_on_providernet(providernet_id=pnet_id, rtn_val='name', con_ssh=con_ssh,
                                                      auth_info=auth_info, vlan_id=vlan_id, exclude=True)
 
@@ -2387,9 +2663,9 @@ def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only
                 # If net_name unspecified:
                 elif re.search(Networks.INTERNAL_NET_NAME, net):
                     internal_nets.append(net)
-                elif re.search(Networks.DATA_NET_NAME, net):
+                elif re.search(Networks.data_net_name_pattern(), net):
                     tenant_nets.append(net)
-                elif re.search(Networks.MGMT_NET_NAME, net):
+                elif re.search(Networks.mgmt_net_name_pattern(), net):
                     mgmt_nets.append(net)
                 else:
                     LOG.warning("Unknown network with {} interface: {}. Ignore.".format(pci_type, net))
@@ -2423,9 +2699,9 @@ def _get_preferred_nets(nets, net_name=None, strict=False):
         # If net_name unspecified:
         elif re.search(Networks.INTERNAL_NET_NAME, net):
             internal_nets.append(net)
-        elif re.search(Networks.DATA_NET_NAME, net):
+        elif re.search(Networks.data_net_name_pattern(), net):
             tenant_nets.append(net)
-        elif re.search(Networks.MGMT_NET_NAME, net):
+        elif re.search(Networks.mgmt_net_name_pattern(), net):
             mgmt_nets.append(net)
         else:
             LOG.warning("Unknown network: {}. Ignore.".format(net))
@@ -2445,8 +2721,8 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
     Args:
         router_id (str): The router_id of the tenant router the portforwarding rule is created
         inside_addr(str): private ip address
-        inside_port (str):  private protocol port number
-        outside_port(str): The public layer4 protocol port number
+        inside_port (int|str):  private protocol port number
+        outside_port(int|str): The public layer4 protocol port number
         protocol(str): the protocol  tcp|udp|udp-lite|sctp|dccp
         tenant(str): The owner Tenant id.
         description(str): User specified text description. The default is "portforwarding"
@@ -2503,7 +2779,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
     # process result
     if code == 1:
-        msg = 'Fail to creat port forwarding rules: {}'.format(output)
+        msg = 'Fail to create port forwarding rules: {}'.format(output)
         if fail_ok:
             return 1, '', msg
         raise exceptions.NeutronError(msg)
@@ -3050,7 +3326,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
     return vms_routers
 
 
-def collect_networking_info(routers=None, vms=None):
+def collect_networking_info(routers=None, vms=None, sep_file=None):
     LOG.info("Ping tenant(s) router's external and internal gateway IPs")
 
     if not routers:
@@ -3068,16 +3344,29 @@ def collect_networking_info(routers=None, vms=None):
         router_ips = get_router_subnets(router_id=router_, rtn_val='ip_address', mgmt_only=True)
         ips_to_ping += router_ips
 
-    ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    res_bool, res_dict = ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
+    if sep_file:
+        res_str = "succeeded" if res_bool else 'failed'
+        content = "Ping router interfaces {}: {}\n".format(res_str, res_dict)
+        common.write_to_file(sep_file, content=content)
 
     hosts = []
     for router in routers:
-        hosts.append(get_router_info(router_id=router, field='wrs-net:host'))
+        router_host = get_router_info(router_id=router, field='wrs-net:host')
+        if router_host:
+            hosts.append(router_host)
+        else:
+            LOG.error("Router {} has no host, it may be down.".format(router))
 
-    LOG.info("Collect vswitch_info for {} router(s) on router host(s): ".format(routers, hosts))
-    for host in hosts:
-        ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
-        collect_vswitch_info_on_host(host)
+    if hosts:
+        LOG.info("Collect vswitch.info for {} router(s) on router host(s): ".format(routers, hosts))
+        for host in hosts:
+            ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
+            collect_vswitch_info_on_host(host)
+
+        if sep_file:
+            content = "vswitch.info collected for {} under {}\n".format(hosts, ProjVar.get_var('PING_FAILURE_DIR'))
+            common.write_to_file(sep_file, content=content)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
@@ -3086,8 +3375,8 @@ def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
 
     res_dict = {}
     for ip_ in ips:
-        packet_loss_rate = _ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
-                                        fail_ok=True, vshell=False)[0]
+        packet_loss_rate = ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
+                                       fail_ok=True, vshell=False)[0]
         res_dict[ip_] = packet_loss_rate
 
     res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
@@ -3478,3 +3767,252 @@ def get_ip_for_eth(ssh_client, eth_name):
         LOG.warning("Cannot find provided interface{} in 'ip addr'".format(eth_name))
         return ''
 
+
+def _is_v4_only(ip_list):
+
+    rtn_val = True
+    for ip in ip_list:
+        ip_addr = ipaddress.ip_address(ip)
+        if ip_addr.version == 6:
+            rtn_val = False
+    return rtn_val
+
+
+def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
+    """
+    Get the networks ids that matches the vxlan underlay ip version
+    Args:
+        vxlan_provider_net_id: vxlan provider net id to get the networks info
+        ip_version: 4 or 6 (IPV4 or IPV6)
+        mode: mode of the vxlan: dynamic or static
+        con_ssh (SSHClient):
+
+    Returns (list): The list of networks name that matches the vxlan underlay (v4/v6) and the mode
+
+    """
+    rtn_networks = []
+    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
+    if not networks:
+        return rtn_networks
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,
+                                                      rtn_val='providernet_attributes')
+    if not provider_attributes:
+        return rtn_networks
+
+    index = 0
+    new_attr_list = []
+    # In the case where some val could be 'null', need to change that to 'None'
+    for attr in provider_attributes:
+        new_attr = attr.replace('null', 'None')
+        new_attr_list.append(new_attr)
+
+    # getting the configured vxlan mode
+    dic_attr_1 = eval(new_attr_list[0])
+    vxlan_mode = dic_attr_1['mode']
+
+    if mode == 'static' and vxlan_mode == mode:
+        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data')
+        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name)
+        if ip_version == 4 and _is_v4_only(address):
+            rtn_networks.append(networks[index])
+        elif ip_version == 6 and not _is_v4_only(address):
+            LOG.info("here in v6")
+            rtn_networks = networks
+        else:
+            return rtn_networks
+    elif mode == 'dynamic' and vxlan_mode == mode:
+        for attr in provider_attributes:
+            dic_attr = eval (attr)
+            ip = dic_attr['group']
+            ip_addr = ipaddress.ip_address(ip)
+            if ip_addr.version == ip_version:
+                rtn_networks.append(networks[index])
+        index += 1
+
+    return rtn_networks
+
+
+def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
+                                              pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
+                                              con_ssh=None, strict=True, **filters):
+    args = []
+    if audit_id:
+        args.append('--audit-uuid {}'.format(audit_id))
+    if seg_id:
+        args.append('--segmentation_id {}'.format(seg_id))
+    if host:
+        args.append('--host_name {}'.format(host))
+    if pnet_id:
+        args.append('--providernet_id {}'.format(pnet_id))
+    if pnet_name:
+        args.append('providernet_name {}'.format(pnet_name))
+
+    LOG.info("Getting neutron providnet-connectivity-test-list. Filters: {}".format(args))
+
+    out = cli.neutron('providernet-connectivity-test-list', args, ssh_client=con_ssh, auth_info=auth_info)
+    if not out:
+        return None
+
+    table_ = table_parser.table(out)
+    return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
+
+
+def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=300,
+                                           fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+    args = []
+    if host:
+        args.append('--host {}'.format(host))
+    if seg_id:
+        args.append('--segmentation_id {}'.format(seg_id))
+    if pnet:
+        args.append('--providernet {}'.format(pnet))
+    args = ' '.join(args)
+
+    LOG.info("Scheduling providernet-connectivity-test. Args: {}".format(args))
+    table_ = table_parser.table(cli.neutron('providernet-connectivity-test-schedule', args, auth_info=auth_info,
+                                            ssh_client=con_ssh))
+    audit_id = table_parser.get_value_two_col_table(table_, field='audit_uuid')
+
+    if wait_for_test:
+        LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
+                LOG.info("providernet connectivity test scheduled successfully.")
+                return 0, audit_id
+        else:
+            if fail_ok:
+                return 1, "Failed to find results with scheduled UUID"
+            raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
+                                          "seconds after running 'neutron providernet-connectivity-test-schedule'".
+                                          format(audit_id, timeout))
+
+
+def get_dpdk_user_data(con_ssh=None):
+    """
+    copy the cloud-config userdata to TiS server.
+    This userdata adds wrsroot/li69nux user to guest
+
+    Args:
+        con_ssh (SSHClient):
+
+    Returns (str): TiS filepath of the userdata
+
+    """
+    file_dir = TiSPath.USERDATA
+    file_name = UserData.DPDK_USER_DATA
+    file_path = file_dir + file_name
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if con_ssh.file_exists(file_path=file_path):
+        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        return file_path
+
+    LOG.debug('Create userdata directory if not already exists')
+    cmd = 'mkdir -p {};touch {}'.format(file_dir, file_path)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    content = "#wrs-config\nFUNCTIONS=hugepages,avr\n"
+    con_ssh.exec_cmd('echo "{}" >> {}'.format(content, file_path), fail_ok=False)
+    output = con_ssh.exec_cmd('cat {}'.format(file_path))[1]
+    assert output in content
+
+    return file_path
+
+
+def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=False, start_event=None,
+                              ping_interval=0.2, single_ping_timeout=1, cumulative=False, init_timeout=60):
+    """
+    Get ping failure duration in milliseconds
+    Args:
+        server (str): destination ip
+        ssh_client (SSHClient): where the ping cmd sent from
+        timeout (int): Max time to ping and gather ping loss duration before
+        ipv6 (bool): whether to use ping IPv6 address
+        start_event
+        end_event: an event that signals the end of the ping
+        ping_interval (int|float): interval between two pings in seconds
+        single_ping_timeout (int): timeout for ping reply in seconds. Minimum is 1 second.
+        cumulative (bool): Whether to accumulate the total loss time before end_event set
+        init_timeout (int): Max time to wait before vm pingable
+
+    Returns (int): ping failure duration in milliseconds. 0 if ping did not fail.
+
+    """
+    optional_args = ''
+    if ipv6:
+        optional_args += '6'
+
+    fail_str = 'no answer yet'
+    cmd = 'ping{} -i {} -W {} -D -O {} | grep -B 1 -A 1 --color=never "{}"'.format(
+            optional_args, ping_interval, single_ping_timeout, server, fail_str)
+
+    start_time = time.time()
+    ping_init_end_time = start_time + init_timeout
+    prompts = [ssh_client.prompt, fail_str]
+    while time.time() < ping_init_end_time:
+        ssh_client.send_sudo(cmd=cmd)
+        index = ssh_client.expect(prompts, timeout=10, searchwindowsize=100, fail_ok=True)
+        if index == 1:
+            continue
+        elif index == 0:
+            raise exceptions.CommonError("Continuous ping cmd interrupted")
+
+        LOG.info("Ping to {} succeeded".format(server))
+        start_event.set()
+        break
+    else:
+        raise exceptions.VMNetworkError("VM is not reachable within {} seconds".format(init_timeout))
+
+    end_time = start_time + timeout
+    while time.time() < end_time:
+        if end_event.is_set():
+            LOG.info("End event set. Stop continuous ping and process results")
+            break
+
+    #  End ping upon end_event set or timeout reaches
+    ssh_client.send_control()
+    try:
+        ssh_client.expect(fail_ok=False)
+    except:
+        ssh_client.send_control()
+        ssh_client.expect(fail_ok=False)
+
+    # Process ping output to get the ping loss duration
+    output = ssh_client.process_cmd_result(cmd='sudo {}'.format(cmd), get_exit_code=False)[1]
+    lines = output.splitlines()
+    prev_succ = ''
+    duration = 0
+    count = 0
+    prev_line = ''
+    succ_str = 'bytes from'
+    post_succ = ''
+    for line in lines:
+        if succ_str in line:
+            if prev_succ and (fail_str in prev_line):
+                # Ping resumed after serious of lost ping
+                count += 1
+                post_succ = line
+                tmp_duration = _parse_ping_timestamp(post_succ) - _parse_ping_timestamp(prev_succ)
+                LOG.info("Count {} ping loss duration: {}".format(count, tmp_duration))
+                if cumulative:
+                    duration += tmp_duration
+                elif tmp_duration > duration:
+                    duration = tmp_duration
+            prev_succ = line
+
+        prev_line = line
+
+    if not post_succ:
+        LOG.warning("Ping did not resume within {} seconds".format(timeout))
+        duration = -1
+    else:
+        LOG.info("Final ping loss duration: {}".format(duration))
+    return duration
+
+
+def _parse_ping_timestamp(output):
+    timestamp = math.ceil(float(re.findall('\[(.*)\]', output)[0]) * 1000)
+    return timestamp

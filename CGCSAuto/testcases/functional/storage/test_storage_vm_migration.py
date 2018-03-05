@@ -2,8 +2,8 @@ import time, random
 from pytest import fixture, skip, mark
 
 from utils.tis_log import LOG
-from utils import table_parser
-from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper
+from utils import table_parser, exceptions, cli
+from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
 from consts.cgcs import VMStatus, GuestImages
 from consts.auth import Tenant
 from testfixtures.fixture_resources import ResourceCleanup
@@ -147,7 +147,6 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
     - no storage node
 
     """
-    pre_alarms = pre_alarm_
     for vm in vms_:
         vm_id = vm['id']
 
@@ -172,11 +171,8 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
         assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 
         LOG.tc_step("Verifying  filesystem is rw mode after live migration....")
-        assert is_vm_filesystem_rw(vm_id), 'After live migration rootfs filesystem is not RW as expected for VM {}'.format(vm['display_name'])
-
-        # LOG.tc_step("Checking for any new system alarm....")
-        # rc, new_alarm = is_new_alarm_raised(pre_alarms)
-        # assert not rc, " alarm(s) found: {}".format(new_alarm)
+        assert is_vm_filesystem_rw(vm_id), 'After live migration rootfs filesystem is not RW as expected for VM {}'.\
+            format(vm['display_name'])
 
 
 @mark.domain_sanity
@@ -253,7 +249,7 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
 
     LOG.tc_step("Verify VMs are evacuated.....")
 
-    computes = host_helper.get_nova_hosts()
+    computes = host_helper.get_up_hypervisors()
     computes.remove(host_0)
     after_evac_host_0 = nova_helper.get_vm_host((vms_[0])['id'])
     after_evac_host_1 = nova_helper.get_vm_host((vms_[1])['id'])
@@ -335,7 +331,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
 
         LOG.tc_step("Verifying  filesystem is rw mode after cold migration....")
         assert is_vm_filesystem_rw(vm_id), 'After cold migration rootfs filesystem is not RW as expected for ' \
-                                              'VM {}'.format(vm['display_name'])
+                                           'VM {}'.format(vm['display_name'])
 
         # LOG.tc_step("Checking for any system alarm ....")
         # rc, new_alarm = is_new_alarm_raised(pre_alarms)
@@ -373,7 +369,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     - less than one storage
 
     """
-    #skip("Currently not working. Centos image doesn't see both volumes")
+    # skip("Currently not working. Centos image doesn't see both volumes")
     LOG.tc_step("Creating a volume size=8GB.....")
     vol_id_0 = cinder_helper.create_volume(size=8)[1]
     ResourceCleanup.add('volume', vol_id_0, scope='function')
@@ -453,23 +449,35 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
     Returns:
 
     """
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-    # Give it some time to allow vm initiate
-    time.sleep(30)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
+
     if vm_image_name is None:
         vm_image_name = GuestImages.DEFAULT_GUEST
 
-    with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name) as vm_ssh:
-        if isinstance(rootfs, str):
-            rootfs = [rootfs]
-        for fs in rootfs:
-            cmd = "mount | grep {} | grep rw | wc -l".format(fs)
-            cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
-            if cmd_output != '1':
-                LOG.info("Filesystem /dev/{} is not rw for VM: {}".format(fs, vm_id))
-                return False
-        return True
+    router_host = dhcp_host = None
+    try:
+        LOG.info("---------Collecting router and dhcp agent host info-----------")
+        router_host = network_helper.get_router_info(field='wrs-net:host')
+        mgmt_net = network_helper.get_mgmt_net_id()
+        dhcp_tab = table_parser.table(cli.neutron('dhcp-agent-list-hosting-net', mgmt_net, auth_info=Tenant.ADMIN,
+                                                  fail_ok=False))
+        dhcp_host = table_parser.get_values(dhcp_tab, 'host')[0]
 
+        with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name, retry_timeout=300) as vm_ssh:
+            if isinstance(rootfs, str):
+                rootfs = [rootfs]
+            for fs in rootfs:
+                cmd = "mount | grep {} | grep rw | wc -l".format(fs)
+                cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
+                if cmd_output != '1':
+                    LOG.info("Filesystem /dev/{} is not rw for VM: {}".format(fs, vm_id))
+                    return False
+            return True
+    except exceptions.SSHRetryTimeout:
+        LOG.error("Failed to ssh, collecting vm console log.")
+        vm_helper.get_console_logs(vm_ids=vm_id)
+        LOG.info("Router host: {}. dhcp agent host: {}".format(router_host, dhcp_host))
+        raise
 
 # def is_new_alarm_raised(pre_list):
 #     alarms = system_helper.get_alarms_table()
@@ -550,7 +558,7 @@ def _test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size)
     while time.time() < end_time:
         i += 1
         LOG.tc_step("Iteration number: {}".format(i))
-        hosts = host_helper.get_hosts_by_storage_aggregate(backing)
+        hosts = host_helper.get_hosts_in_storage_aggregate(backing)
         vm_host = random.choice(hosts)
 
         if vol_size == 'small':
@@ -683,7 +691,7 @@ def _test_4911_other_stress_tests(action, backing, image, size):
             vm_helper.delete_vms(vm_id, stop_first=False)
 
         elif action == 'livemigrate':
-            vm_hosts = host_helper.get_hosts_by_storage_aggregate(backing)
+            vm_hosts = host_helper.get_hosts_in_storage_aggregate(backing)
             vm_host = random.choice(vm_hosts)
 
             if size == 'small':
@@ -711,7 +719,7 @@ def _test_4911_other_stress_tests(action, backing, image, size):
 
 
             for j in range(2):
-                vm_hosts = host_helper.get_hosts_by_storage_aggregate(backing)
+                vm_hosts = host_helper.get_hosts_in_storage_aggregate(backing)
                 vm_hosts.remove(nova_helper.get_vm_host(vm_1))
                 vm_host = random.choice(vm_hosts)
                 LOG.info("\n----------------- Live migration iteration: {}.{}".format(i, j + 1))

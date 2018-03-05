@@ -101,7 +101,7 @@ def test_dvr_update_router(router_info, _bring_up_router):
 
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [
     mark.p2((2, 'affinity')),
-    mark.nightly((2, 'anti-affinity')),
+    mark.priorities('nightly')((2, 'anti-affinity')),
     mark.p2((3, 'affinity')),
     mark.p2((3, 'anti-affinity')),
 ])
@@ -131,7 +131,7 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         - Revert router to
 
     """
-    if srv_grp_policy == 'anti-affinity' and len(host_helper.get_nova_hosts()) == 1:
+    if srv_grp_policy == 'anti-affinity' and len(host_helper.get_up_hypervisors()) == 1:
         skip("Only one nova host on the system.")
 
     LOG.tc_step("Update router to distributed if not already done")

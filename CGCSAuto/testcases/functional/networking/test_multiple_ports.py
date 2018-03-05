@@ -3,7 +3,7 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
-from consts.reasons import SkipReason
+from consts.reasons import SkipHostIf
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
@@ -100,7 +100,7 @@ class TestMutiPortsBasic:
     @mark.parametrize('vifs', [
         mark.p2((('avp', '00:02'), ('avp', '00:1f'))),
         mark.p2((('virtio', '01:01'), ('virtio', None))),
-        mark.nightly((('e1000', '04:09'), ('virtio', '08:1f'))),
+        mark.priorities('nightly', 'sx_nightly')((('e1000', '04:09'), ('virtio', '08:1f'))),
         mark.p2((('avp_x8', None), ('virtio_x7', None))),
     ], ids=id_params)
     def test_multiports_on_same_network_vm_actions(self, vifs, base_setup):
@@ -211,7 +211,7 @@ class TestMutiPortsBasic:
                                       timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
+        vm_helper.wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
         post_evac_host = nova_helper.get_vm_host(vm_under_test)
         assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
@@ -234,14 +234,25 @@ class TestMutiPortsPCI:
         sriov_info = network_helper.get_pci_interface_info(interface='sriov')
         pcipt_info = network_helper.get_pci_interface_info(interface='pthru')
         if not sriov_info:
-            skip(SkipReason.SRIOV_IF_UNAVAIL)
+            skip(SkipHostIf.SRIOV_IF_UNAVAIL)
         if not pcipt_info:
-            skip(SkipReason.PCIPT_IF_UNAVAIL)
+            skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
         LOG.fixture_step("(class) Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
         pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
         pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
         avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
+
+        # Exclude network on first segment
+        # The switch is setup with untagged frames for the first segment within the range.
+        # This is suitable for PCI passthrough, but would not work for SRIOV
+        pnet_name = network_helper.get_net_info(net_id=avail_nets[0], field='provider:physical_network')
+        first_seg = network_helper.get_first_segment_of_providernet(pnet_name, pnet_val='name')
+        untagged_net = network_helper.get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name')
+        if untagged_net in avail_nets:
+            avail_nets.remove(untagged_net)
+
+        LOG.info("Networks available for pcipt and sriov: {}".format(avail_nets))
 
         internal_net_name = None
         for net_ in avail_nets:
@@ -265,10 +276,16 @@ class TestMutiPortsPCI:
         extra_pcipt_net = None
         extra_pcipt_net_name = None
         pcipt_nets = network_helper.get_pci_vm_network(pci_type='pci-passthrough', net_name='internal0-net')
+
         if isinstance(pcipt_nets, list):
-            pcipt_nets.remove(internal_net_name)
+            LOG.info("internal_net_name: {}; pript nets: {}".format(internal_net_name, pcipt_nets))
+            try:
+                pcipt_nets.remove(internal_net_name)
+            except ValueError:
+                # it's not one of the pcipt_nets returned (func only returns first 2 nets)
+                pass
             extra_pcipt_net_name = pcipt_nets[0]
-            extra_pcipt_net = network_helper.get_net_id_from_name(pcipt_nets[0])
+            extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
@@ -309,7 +326,7 @@ class TestMutiPortsPCI:
     @mark.parametrize('vifs', [
         mark.p2(['virtio', 'avp', 'pci-passthrough']),
         # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
-        mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
+        # mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
         mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
         mark.p3((['pci-sriov', 'pci-passthrough'])),
         mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
@@ -359,7 +376,7 @@ class TestMutiPortsPCI:
                 break
 
         if pcipt_included and not pcipt_info:
-            skip(SkipReason.PCIPT_IF_UNAVAIL)
+            skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'avp'}]
@@ -483,7 +500,7 @@ class TestMutiPortsPCI:
                                       timeout=120)
 
         LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper._wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
+        vm_helper.wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
         post_evac_host = nova_helper.get_vm_host(vm_under_test)
         assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
