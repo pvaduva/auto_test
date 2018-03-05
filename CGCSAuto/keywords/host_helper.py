@@ -3673,3 +3673,10 @@ def power_on_host(host, fail_ok=False, timeout=HostTimeout.REBOOT, unlock=True, 
         msg += ' and unlocked'
 
     return 0, msg
+
+
+def clear_local_storage_cache(host, con_ssh=None):
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        with host_ssh.login_as_root() as root_ssh:
+            root_ssh.exec_cmd('rm -rf /etc/nova/instances/_base/*', fail_ok=True)
+            root_ssh.exec_cmd('sync;echo 3 > /proc/sys/vm/drop_caches', fail_ok=True)
