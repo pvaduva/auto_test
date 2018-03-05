@@ -820,3 +820,4 @@ def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
             LOG.info("Run cpa_sample_code on quickAssist hardware")
             output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
             assert 'error' not in output.lower(), "cpa_sample_code test failed"
+            LOG.info("cpa_sample_code test completed successfully")

@@ -2,13 +2,11 @@ import time
 import math
 
 from pytest import fixture, mark, skip
-from utils import table_parser, cli
 from utils.tis_log import LOG
 
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper
+from keywords import vm_helper, nova_helper, host_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import FlavorSpec, GuestImages
-from consts.auth import Tenant
 from consts.reasons import SkipHypervisor, SkipStorageBacking
 
 
@@ -57,18 +55,17 @@ def get_compute_disk_space(host):
     return host_helper.get_hypervisor_info(hosts=host, rtn_val='disk_available_least')[host]
 
 
-def check_correct_post_resize_value(original_disk_value, expected_increase, vm_host, sleep=True):
+def check_correct_post_resize_value(original_disk_value, expected_increase, host, sleep=True):
     if sleep:
         time.sleep(65)
-    post_resize_value = get_compute_disk_space(vm_host)
-    expected_range_min = original_disk_value - expected_increase - 1
-    expected_range_max = original_disk_value - expected_increase + 1
-    assert expected_range_min <= post_resize_value <= expected_range_max, \
-        "Expected about {} space left, got {} space left".format(
-                original_disk_value - expected_increase, post_resize_value)
 
-    LOG.info("original_disk_value: {}. post_resize_value: {}. expected_increase: {}".format(
-            original_disk_value, post_resize_value, expected_increase))
+    post_resize_value = get_compute_disk_space(host)
+    LOG.info("{} original_disk_value: {}. post_resize_value: {}. expected_increase: {}".format(
+            host, original_disk_value, post_resize_value, expected_increase))
+    expt_post = original_disk_value + expected_increase
+    assert expt_post-1 <= post_resize_value <= expt_post+1, \
+        "disk_available_least on {} expected: {}+-1, actual: {}".format(host, expt_post, post_resize_value)
+
     return post_resize_value
 
 
@@ -367,7 +364,7 @@ class TestResizeDiffHost:
         if len(hosts_with_backing) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
-        vm_host, cpu_count, compute_space_dict = get_cpu_count(hosts_with_backing)
+        origin_host, cpu_count, compute_space_dict = get_cpu_count(hosts_with_backing)
 
         root_disk_size = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1] + 3
 
@@ -380,9 +377,8 @@ class TestResizeDiffHost:
         nova_helper.set_flavor_extra_specs(flavor_1, **numa0_specs)
 
         LOG.tc_step("Boot a vm with above flavor")
-        vm_1 = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', avail_zone='nova',
-                                 vm_host=vm_host, fail_ok=False)[1]
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+        vm_to_resize = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', vm_host=origin_host)[1]
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_to_resize)
 
         # launch another vm
         LOG.tc_step("Create a flavor to occupy vcpus")
@@ -393,13 +389,12 @@ class TestResizeDiffHost:
         nova_helper.set_flavor_extra_specs(flavor_2, **second_specs)
 
         LOG.tc_step("Boot a vm with above flavor to occupy remaining vcpus")
-        vm_2 = vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', avail_zone='nova',
-                                 vm_host=vm_host, fail_ok=False)[1]
+        vm_2 = vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', vm_host=origin_host)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_2)
 
         LOG.tc_step('Check disk usage before resize')
-        original_disk_value_old_host = get_compute_disk_space(vm_host)
-        LOG.info("{} space left on compute".format(original_disk_value_old_host))
+        prev_val_origin_host = get_compute_disk_space(origin_host)
+        LOG.info("{} space left on compute".format(prev_val_origin_host))
 
         # create a larger flavor and resize
         LOG.tc_step("Create a flavor that has an extra vcpu to force resize to a different node")
@@ -409,19 +404,13 @@ class TestResizeDiffHost:
         nova_helper.set_flavor_extra_specs(resize_flavor, **numa0_specs)
 
         LOG.tc_step("Resize the vm and verify if it is on a different host")
-        vm_helper.resize_vm(vm_1, resize_flavor)
-        new_host = nova_helper.get_vm_host(vm_1)
-        assert new_host != vm_host, "vm did not change hosts following resize"
+        vm_helper.resize_vm(vm_to_resize, resize_flavor)
+        new_host = nova_helper.get_vm_host(vm_to_resize)
+        assert new_host != origin_host, "vm did not change hosts following resize"
 
         LOG.tc_step('Check disk usage after resize')
-        new_disk_value_old_host = get_compute_disk_space(vm_host)
-        LOG.info("Went from {} to {} space left on old compute".format(original_disk_value_old_host,
-                                                                       new_disk_value_old_host))
-        check_correct_post_resize_value(original_disk_value_old_host, (root_disk_size * -1), vm_host)
+        check_correct_post_resize_value(prev_val_origin_host, root_disk_size, origin_host)
 
-        original_disk_value_new_host = compute_space_dict[new_host]
-        new_disk_value_new_host = get_compute_disk_space(new_host)
-        LOG.info("Went from {} to {} space left on new compute".format(original_disk_value_new_host,
-                                                                       new_disk_value_new_host))
-        check_correct_post_resize_value(original_disk_value_new_host, root_disk_size, new_host, sleep=False)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+        prev_val_new_host = compute_space_dict[new_host]
+        check_correct_post_resize_value(prev_val_new_host, -root_disk_size, new_host, sleep=False)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_to_resize)
