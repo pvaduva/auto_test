@@ -136,12 +136,14 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
     object_pool_gib = None
     cinder_pool_gib = ceph_backend_info['cinder_pool_gib']
+
     if pool_size == 'default':
         if not ceph_backend_info['object_gateway']:
             LOG.tc_step("Enabling SWIFT object store .....")
 
     else:
-        assert pre_swift_check[0], pre_swift_check[1]
+        if not ceph_backend_info['object_gateway']:
+            skip("Swift is not provisioned")
 
         unallocated_gib = int(ceph_backend_info['ceph_total_space_gib'] - cinder_pool_gib
                               + ceph_backend_info['glance_pool_gib']

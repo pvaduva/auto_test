@@ -149,7 +149,7 @@ def test_delete_host_partitions():
 
 
 @mark.usefixtures('restore_partitions_teardown')
-def _test_increase_host_partition_size():
+def test_increase_host_partition_size():
     """
     This test modifies the size of existing partitions that are in Ready state.
     The partition will be deleted after modification, since decreasing the size
