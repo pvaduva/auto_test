@@ -125,10 +125,12 @@ class SwactUncontrolled:
 
 class LiveMigrate:
     NAME = 'live_migrate_{}'
+    NOVA_NAME = 'live_migrate_nova_{}'
 
 
 class ColdMigrate:
     NAME = 'cold_migrate_{}'
+    NOVA_NAME = 'cold_migrate_nova_{}'
 
 
 class Rebuild:

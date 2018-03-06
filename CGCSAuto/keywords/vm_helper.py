@@ -14,7 +14,7 @@ from utils.multi_thread import MThread, Events
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec
+    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
@@ -4165,3 +4165,79 @@ def wait_for_vcpu_count(vm_id, current_cpu, min_cpu=None, max_cpu=None, time_out
         return False
 
     raise exceptions.VMTimeout(msg)
+
+
+def get_vim_events(vm_id, event_ids=None, controller=None, con_ssh=None):
+    """
+    Get vim events from nfv-vim-events.log
+    Args:
+        vm_id (str):
+        event_ids (None|str|list|tuple): return only given vim events when specified
+        controller (None|str): controller where vim log is on. Use current active controller if None.
+        con_ssh (SSHClient):
+
+    Returns (list): list of dictionaries, each dictionary is one event. e.g.,:
+        [{'log-id': '47', 'event-id': 'instance-live-migrate-begin', ... , 'timestamp': '2018-03-04 01:34:28.915008'},
+        {'log-id': '49', 'event-id': 'instance-live-migrated', ... , 'timestamp': '2018-03-04 01:35:34.043094'}]
+
+    """
+    if not controller:
+        controller = system_helper.get_active_controller_name()
+
+    if isinstance(event_ids, str):
+        event_ids = [event_ids]
+
+    with host_helper.ssh_to_host(controller, con_ssh=con_ssh) as controller_ssh:
+        vm_logs = controller_ssh.exec_cmd('grep --color=never -A 4 -B 6 -E "entity .*{}" /var/log/nfv-vim-events.log'.
+                                          format(vm_id))[1]
+
+    log_lines = vm_logs.splitlines()
+    vm_events = []
+    vm_event = {}
+    for line in log_lines:
+        if re.search(' = ', line):
+            if line.startswith('log-id') and vm_event:
+                if not event_ids or vm_event['event-id'] in event_ids:
+                    vm_events.append(vm_event)
+
+                vm_event = {}
+            key, val = re.findall('(.*)= (.*)', line)[0]
+            vm_event[key.strip()] = val.strip()
+
+    if vm_event and (not event_ids or vm_event['event-id'] in event_ids):
+        vm_events.append(vm_event)
+
+    LOG.info("VM events: {}".format(vm_events))
+    return vm_events
+
+
+def get_live_migrate_duration(vm_id, con_ssh=None):
+    LOG.info("Get live migration duration from nfv-vim-events.log for vm {}".format(vm_id))
+    events = (VimEventID.live_migrate_begin, VimEventID.live_migrate_end)
+    live_mig_begin, live_mig_end = get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
+
+    start_time = live_mig_begin['timestamp']
+    end_time = live_mig_end['timestamp']
+    duration = common.get_timedelta_for_isotimes(time1=start_time, time2=end_time).total_seconds()
+    LOG.info("Live migration for vm {} took {} seconds".format(vm_id, duration))
+
+    return duration
+
+
+def get_cold_migrate_duration(vm_id, con_ssh=None):
+    LOG.info("Get cold migration duration from vim-event-log for vm {}".format(vm_id))
+    events = (VimEventID.cold_migrate_begin, VimEventID.cold_migrate_end,
+              VimEventID.cold_migrate_confirm_begin, VimEventID.cold_migrate_confirmed)
+    cold_mig_begin, cold_mig_end, cold_mig_confirm_begin, cold_mig_confirm_end = \
+        get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
+
+    duration_cold_mig = common.get_timedelta_for_isotimes(time1=cold_mig_begin['timestamp'],
+                                                          time2=cold_mig_end['timestamp']).total_seconds()
+
+    duration_confirm = common.get_timedelta_for_isotimes(time1=cold_mig_confirm_begin['timestamp'],
+                                                         time2=cold_mig_confirm_end['timestamp']).total_seconds()
+
+    duration = duration_cold_mig + duration_confirm
+    LOG.info("Cold migrate and confirm for vm {} took {} seconds".format(vm_id, duration))
+
+    return duration

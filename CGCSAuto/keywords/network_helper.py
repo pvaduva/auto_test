@@ -1263,7 +1263,7 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
             LOG.warning("No ip found for vm {} with pattern {}".format(vm_id, ip_pattern))
             continue
 
-        LOG.info('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
+        LOG.debug('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
         # if use_fip:
         #     vm_fips = []
         #     # ping floating ips only if any associated to vm, otherwise ping all the ips

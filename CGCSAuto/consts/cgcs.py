@@ -533,3 +533,12 @@ class HeatStackStatus:
     CREATE_COMPLETE = 'CREATE_COMPLETE'
     UPDATE_COMPLETE = 'UPDATE_COMPLETE'
     UPDATE_FAILED = 'UPDATE_FAILED'
+
+
+class VimEventID:
+    live_migrate_begin = 'instance-live-migrate-begin'
+    live_migrate_end = 'instance-live-migrated'
+    cold_migrate_begin = 'instance-cold-migrate-begin'
+    cold_migrate_end = 'instance-cold-migrated'
+    cold_migrate_confirm_begin = 'instance-cold-migrate-confirm-begin'
+    cold_migrate_confirmed = 'instance-cold-migrate-confirmed'

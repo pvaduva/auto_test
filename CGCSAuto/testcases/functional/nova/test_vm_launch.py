@@ -92,6 +92,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
                                   kpi_val=duration, uptime=1, unit='Time(ms)')
 
+        vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NOVA_NAME.format(boot_from),
+                                  kpi_val=vim_duration, uptime=1, unit='Time(s)')
+
     def operation_cold(vm_id_):
         code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
         assert 0 == code, msg
@@ -103,6 +107,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     assert duration > 0, "No ping loss detected during cold migration for {} vm".format(boot_from)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
                               kpi_val=duration, uptime=1, unit='Time(ms)')
+
+    vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NOVA_NAME.format(boot_from),
+                              kpi_val=vim_duration, uptime=1, unit='Time(s)')
 
     if 'volume' == boot_from:
         LOG.info("Skip rebuild test for vm booted from cinder volume")
