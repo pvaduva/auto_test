@@ -266,9 +266,10 @@ def check_system_health_query_upgrade():
     # Check system health for upgrade
     LOG.tc_func_start("UPGRADE_TEST")
     LOG.tc_step("Checking if system health is OK to start upgrade......")
-    rc, health = upgrade_helper.get_system_health_query_upgrade()
-    print("HEALTH: {}, {}".format(rc, health))
-    return rc, health
+    #rc, health = upgrade_helper.get_system_health_query_upgrade()
+    rc, health, actions = upgrade_helper.get_system_health_query_upgrade_2()
+    print("HEALTH: {}, {} Action: {}".format(rc, health, actions))
+    return rc, health, actions
 
 
 def get_system_active_controller():
