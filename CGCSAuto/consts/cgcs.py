@@ -20,6 +20,8 @@ BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
+METADATA_SERVER = '169.254.169.254'
+
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
