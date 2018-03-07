@@ -548,12 +548,14 @@ def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=N
     if not expt_values:
         raise ValueError("At least one key/value pair has to be provided via expt_values")
 
+    LOG.info("Wait for storage backend {} to reach: {}".format(backend, expt_values))
     end_time = time.time() + timeout
     dict_to_check = expt_values.copy()
     stor_backend_info = None
     while time.time() < end_time:
         stor_backend_info = get_storage_backend_info(backend=backend, keys=list(dict_to_check.keys()), con_ssh=con_ssh)
-        for key, expt_val in dict_to_check.items():
+        dict_to_iter = dict_to_check.copy()
+        for key, expt_val in dict_to_iter.items():
             actual_val = stor_backend_info[key]
             if str(expt_val) == str(actual_val):
                 dict_to_check.pop(key)
