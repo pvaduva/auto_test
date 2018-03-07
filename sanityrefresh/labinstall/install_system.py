@@ -183,7 +183,7 @@ def parse_args():
                          choices=['before', 'no'], default='before',
                          help='Apply branding files before config controller')
 
-    lab_grp.add_argument('--wipedisk_via_helper', dest='wipedisk_via_helper',
+    lab_grp.add_argument('--wipedisk', dest='wipedisk',
                          action='store_true',
                          help="wipedisk_via_helper during installation")
 
@@ -2387,6 +2387,7 @@ def main():
         run_config_complete = True
         if node_online or node_offline or node_degraded:
             run_config_complete = False
+            wait_state(controller0, AVAILABILITY, ONLINE)
             run_labsetup()
             unlock_node(nodes, selection_filter="controller-0", wait_done=False)
             controller0.ssh_conn.disconnect()
