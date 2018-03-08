@@ -56,7 +56,7 @@ def test_swact_20_times():
             host_helper.wait_for_sm_dump_desired_states(controller=standby, fail_ok=False)
 
             LOG.tc_step("{}Ensure pre-exist vm still pingable post swact".format(iter_str))
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_base, timeout=30)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_base, timeout=45)
 
             time.sleep(5)
             LOG.tc_step("{}Ensure writing from pre-existed vm resumes after swact".format(iter_str))
