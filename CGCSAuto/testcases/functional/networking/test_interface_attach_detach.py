@@ -39,10 +39,10 @@ def base_vm():
 
 @mark.nics
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
-    ('tis-centos-guest', 'net_id', [('virtio', 15)]),
+    ('tis-centos-guest', 'net_id', [('virtio', 7)]),
     # ('tis-centos-guest', 'net_id', [('avp', 15)]),
     # ('tis-centos-guest', 'net_id', [('rtl8139', 8), ('virtio', 7)]),
-    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
+    ('tis-centos-guest', 'net_id', [('avp', 2), ('virtio', 2), ('rtl8139', 2), ('e1000', 1)]),
     # ('tis-centos-guest', 'net_id', [('virtio', 6), ('avp', 2), ('virtio', 4), ('rtl8139', 3)])
     ('vxworks', 'net_id', [('e1000', 0)])
     #('tis-centos-guest', 'net_id', [('rtl8139', 1), ('e1000', 1)])
