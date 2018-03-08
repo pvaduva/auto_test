@@ -232,6 +232,11 @@ def test_snat_evacuate_vm(snat_setups, snat):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
+    host_helper.wait_for_hosts_ready(hosts=host)
+    if snat:
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=False)
+
 
 @mark.slow
 @mark.trylast

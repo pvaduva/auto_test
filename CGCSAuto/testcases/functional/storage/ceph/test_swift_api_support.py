@@ -157,9 +157,10 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         if not ceph_backend_info['object_gateway']:
             skip("Swift is not provisioned")
 
-        unallocated_gib = int(ceph_backend_info['ceph_total_space_gib'] - cinder_pool_gib
-                              + ceph_backend_info['glance_pool_gib']
-                              + ceph_backend_info['ephemeral_pool_gib'])
+        unallocated_gib = (ceph_backend_info['ceph_total_space_gib']
+                           - cinder_pool_gib
+                           - ceph_backend_info['glance_pool_gib']
+                           - ceph_backend_info['ephemeral_pool_gib'])
         if unallocated_gib == 0:
             unallocated_gib = int(int(cinder_pool_gib) / 4)
             cinder_pool_gib = str(int(cinder_pool_gib) - unallocated_gib)

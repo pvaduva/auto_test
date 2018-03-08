@@ -56,44 +56,37 @@ def delete_pfs(request):
 
 
 @fixture(scope='module')
-def get_vms_args():
+def _vms(get_vms_args):
+    vm_helper.ensure_vms_quotas(vms_num=8)
     glance_helper.get_guest_image(guest_os=GUEST_OS, cleanup='module')
 
     LOG.fixture_step("Create a favor with dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated-ubuntu', guest_os=GUEST_OS)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
-
     nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
+    internal_net_id = network_helper.get_internal_net_id()
     tenant_net_ids = network_helper.get_tenant_net_ids()
     if len(tenant_net_ids) < VMS_COUNT:
         tenant_net_ids += tenant_net_ids
     assert len(tenant_net_ids) >= VMS_COUNT
 
-    internal_net_id = network_helper.get_internal_net_id()
-    vm_names = ['virtio1_vm', 'avp1_vm', 'avp2_vm', 'vswitch1_vm']
-    vm_vif_models = {'virtio1_vm': 'virtio',
-                     'avp1_vm': 'avp',
-                     'avp2_vm': 'avp',
-                     'vswitch1_vm': 'avp'}
-    return flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models
+    vm_vif_models = {'virtio1_vm': ('virtio', tenant_net_ids[0]),
+                     'avp1_vm': ('avp', tenant_net_ids[1]),
+                     'avp2_vm': ('avp', tenant_net_ids[2]),
+                     'vswitch1_vm': ('avp', tenant_net_ids[3])}
 
-
-@fixture(scope='module')
-def _vms(get_vms_args):
-    flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models = get_vms_args
     vms = []
-
-    for (vm, i) in zip(vm_names, range(0, VMS_COUNT)):
+    for vm_name, vifs in vm_vif_models.items():
+        vif_model, tenant_net_id = vifs
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_ids[i], 'vif-model': vm_vif_models[vm]},
-                {'net-id': internal_net_id, 'vif-model': vm_vif_models[vm]}]
+                {'net-id': tenant_net_id, 'vif-model': vif_model},
+                {'net-id': internal_net_id, 'vif-model': vif_model}]
 
-        LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
-        vm_id = vm_helper.boot_vm(vm, flavor=flavor_id, source='volume', cleanup='module',
+        LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vif_model))
+        vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='volume', cleanup='module',
                                   nics=nics, guest_os=GUEST_OS)[1]
-
         vms.append(vm_id)
 
     return vms
