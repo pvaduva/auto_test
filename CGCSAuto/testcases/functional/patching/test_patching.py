@@ -741,7 +741,6 @@ class TestPatches:
 
         return patch_ids
 
-    @mark.kpi
     @mark.parametrize('patch', [
         'INSVC_ALLNODES',
         'RR_ALLNODES',
