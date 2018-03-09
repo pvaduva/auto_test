@@ -83,12 +83,16 @@ class Networks:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
     DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
-    # such as 192.168.11.6
-    MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.9\d\.\d{1,3}'
-    EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-8]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
-    # such as 172.16.1.11
+
+    # MGMT_IP and EXT_IP patterns are based on "NAT accessible IP address allocations" table in lab connectivity wiki
+    # management ip pattern, such as 192.168.111.6
+    MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.[8|9]\d\.\d{1,3}'
+    # external ip pattern
+    EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
+    
+    # tenant-net ip pattern such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
-    # such as 10.1.1.44
+    # internal-net ip pattern such as 10.1.1.44
     INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
     IPV4_IP = '\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}'
     IP_PATTERN = {
