@@ -141,7 +141,7 @@ class TestLockWithVMs:
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostLock.WITH_VM.format(storage_backing),
                                       host=None, log_path=HostLock.LOG_PATH, end_pattern=HostLock.END.format(host),
                                       start_pattern=HostLock.START.format(host), start_path=HostLock.START_PATH,
-                                      init_time=init_time, uptime=10)
+                                      init_time=init_time, uptime=5)
 
     @mark.sx_nightly
     def test_lock_with_max_vms_simplex(self, simplex_only):

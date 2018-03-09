@@ -334,7 +334,7 @@ def get_active_standby_controllers(con_ssh=None, use_telnet=False, con_telnet=No
 
 
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-                     auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
+                     auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None, retry=0):
     """
     Get active alarms_and_events dictionary with given criteria
     Args:
@@ -347,6 +347,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         auth_info (dict):
         use_telnet
         con_telnet
+        retry (None|int): number of times to retry if the alarm-list cli got rejected
 
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
@@ -358,13 +359,24 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     if show_suppress:
         args += ' --include_suppress'
 
-    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info,
-                                           use_telnet=use_telnet, con_telnet=con_telnet),
-                                combine_multiline_entry=True)
+    fail_ok = True
+    if not retry:
+        fail_ok = False
+        retry = 0
 
-    table_ = _compose_alarm_table(table_, uuid=uuid)
+    output = None
+    for i in range(retry+1):
+        code, output = cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                  rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
+        if code == 0:
+            table_ = table_parser.table(output, combine_multiline_entry=True)
+            table_ = _compose_alarm_table(table_, uuid=uuid)
+            return table_
 
-    return table_
+        if i < retry:
+            time.sleep(5)
+    else:
+        raise exceptions.CLIRejected('system alarm-list cli got rejected after {} retries: {}'.format(retry, output))
 
 
 def _compose_alarm_table(output, uuid=False):
@@ -2114,7 +2126,7 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
                  "There may be cli errors when active controller's config updates")
         end_time = time.time() + timeout
         while time.time() < end_time:
-            table_ = get_alarms_table(uuid=True, con_ssh=con_ssh)
+            table_ = get_alarms_table(uuid=True, con_ssh=con_ssh, retry=3)
             alarms_tab = table_parser.filter_table(table_, **{'Alarm ID': alarm_id})
             alarms_tab = _compose_alarm_table(alarms_tab, uuid=True)
             uuids = table_parser.get_values(alarms_tab, 'uuid')

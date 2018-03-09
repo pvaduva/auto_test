@@ -751,7 +751,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 0, vm_ids, "VMs are booted successfully"
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=240, fail_ok=False, con_ssh=None, use_fip=False):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -3325,7 +3325,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
 
                 vm_ids = current_vms
                 for vm_id in new_vms:
-                    wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=300)
+                    wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
 
                     dd_event = Events('dd started in {}'.format(vm_id))
                     new_dd_thread = boost_vm_cpu_usage(vm_id=vm_id, end_event=end_event, timeout=scale_out_timeout,
