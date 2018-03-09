@@ -56,7 +56,7 @@ def delete_pfs(request):
 
 
 @fixture(scope='module')
-def _vms(get_vms_args):
+def _vms():
     vm_helper.ensure_vms_quotas(vms_num=8)
     glance_helper.get_guest_image(guest_os=GUEST_OS, cleanup='module')
 
