@@ -631,13 +631,19 @@ def is_https(con_ssh):
 def scp_vswitch_log(con_ssh, hosts, log_path=None):
     source_file = '/scratch/var/extra/vswitch.info'
     for host in hosts:
-        LOG.info("scp vswitch log from {} to controller-0".format(host))
+
         dest_file = "{}_vswitch.info".format(host)
         dest_file = '{}/{}'.format(WRSROOT_HOME, dest_file)
-        con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
-                          dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
-                          sudo_password=None, fail_ok=True)
+
+        if host == 'controller-0':
+            LOG.info('cp vswitch log to {}'.format(dest_file))
+            con_ssh.exec_cmd('cp {} {}'.format(source_file, dest_file))
+        else:
+            LOG.info("scp vswitch log from {} to controller-0".format(host))
+            con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
+                              source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+                              dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
+                              sudo_password=None, fail_ok=True)
 
     LOG.info("SCP vswitch log from lab to automation log dir")
     if log_path is None:
