@@ -128,35 +128,35 @@ def test_snat_vm_actions(snat_setups, snat):
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Cold-migrate the VM and verify ping from VM")
     vm_helper.cold_migrate_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Pause and un-pause the VM and verify ping from VM")
     vm_helper.pause_vm(vm_)
     vm_helper.unpause_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Suspend and resume the VM and verify ping from VM")
     vm_helper.suspend_vm(vm_)
     vm_helper.resume_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Stop and start the VM and verify ping from VM")
     vm_helper.stop_vms(vm_)
     vm_helper.start_vms(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Reboot the VM and verify ping from VM")
     vm_helper.reboot_vm(vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Resize the vm to a flavor with 2 dedicated cpus and verify ping from VM")
@@ -165,7 +165,7 @@ def test_snat_vm_actions(snat_setups, snat):
     nova_helper.set_flavor_extra_specs(new_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     vm_helper.resize_vm(vm_, new_flv)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 
@@ -229,8 +229,13 @@ def test_snat_evacuate_vm(snat_setups, snat):
     assert post_evac_host != host, "VM is on the same host after original host rebooted."
 
     LOG.tc_step("Verify vm can still ping outside")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
+
+    host_helper.wait_for_hosts_ready(hosts=host)
+    if snat:
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=False)
 
 
 @mark.slow
@@ -284,7 +289,7 @@ def test_snat_computes_lock_reboot(snat_setups):
         HostsToRecover.add(host_, scope='function')
         host_helper.lock_host(host_, swact=True)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=120)
     LOG.tc_step("Ping external from vm {}".format(vm_))
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
@@ -299,7 +304,7 @@ def test_snat_computes_lock_reboot(snat_setups):
     LOG.tc_step("Verify vm is recovered after host reboot complete and can still ping outside")
     vm_helper.wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=120, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, use_fip=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 

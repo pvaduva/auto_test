@@ -1,4 +1,3 @@
-
 import re
 import os
 import random
@@ -23,7 +22,7 @@ NUM_VM = 5
 DEF_PRIORITY = 3
 DEF_MEM_SIZE = 1024
 DEF_DISK_SIZE = 1
-DEF_NUM_VCPU = 2
+DEF_NUM_VCPU = 1
 
 MIN_PRI = 1
 MAX_PRI = 10
@@ -339,7 +338,7 @@ class TestPrioritizedVMEvacuation:
         self.check_vm_settings()
         self.trigger_evacuation()
         self.check_vm_status()
-        self.check_evaucation_orders()
+        self.check_evacuation_orders()
         self.check_vm_settings()
 
     def check_vm_settings(self):
@@ -370,7 +369,7 @@ class TestPrioritizedVMEvacuation:
 
         LOG.info('OK, all VMs are in ACTIVE status\n')
 
-    def check_evaucation_orders(self):
+    def check_evacuation_orders(self):
         LOG.tc_step('Checking the order of VM evacuation')
 
         for vm_info in self.vms_info.values():
@@ -559,9 +558,7 @@ class TestPrioritizedVMEvacuation:
             self.prioritizing = [DEF_PRIORITY] * NUM_VM
 
         if 'diff' in vcpus:
-            self.vcpus = random.sample(range(NUM_VM * DEF_NUM_VCPU + 1,
-                                    DEF_NUM_VCPU,
-                                    -1 * DEF_NUM_VCPU), NUM_VM)
+            self.vcpus = random.sample(range(NUM_VM * DEF_NUM_VCPU + 1, DEF_NUM_VCPU, -1 * DEF_NUM_VCPU), NUM_VM)
         else:
             self.vcpus = [DEF_NUM_VCPU] * NUM_VM
 

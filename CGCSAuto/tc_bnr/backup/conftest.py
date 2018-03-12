@@ -20,7 +20,6 @@ def pytest_configure(config):
     delete_backups = not config.getoption('keep_backups')
     dest_labs = config.getoption('dest_labs')
 
-
     backup_dest = 'USB' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)

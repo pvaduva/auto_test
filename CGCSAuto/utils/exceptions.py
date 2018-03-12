@@ -186,16 +186,20 @@ class SWiftError(TiSError):
 
 
 class OrchestrationError(TiSError):
-    message = 'Orchestration error'
+    message = 'Orchestration error.'
 
 
 class UpgradeError(TiSError):
-    message = 'Upgrade error'
+    message = 'Upgrade error.'
 
 
 class BackupSystem(TiSError):
-    message = 'System Backup error'
+    message = 'System Backup error.'
 
 
 class RestoreSystem(TiSError):
-    message = 'System Restore error'
+    message = 'System Restore error.'
+
+
+class StorageError(TiSError):
+    message = 'Storage error.'

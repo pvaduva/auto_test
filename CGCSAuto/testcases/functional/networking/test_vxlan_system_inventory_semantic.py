@@ -1,5 +1,8 @@
 import random
+import re
+
 from pytest import fixture, mark, skip
+
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
@@ -7,6 +10,7 @@ from consts.auth import Tenant
 from keywords import host_helper, system_helper, common
 from testfixtures.recover_hosts import HostsToRecover
 from consts.cli_errs import NetworkingErr
+from consts.cgcs import Networks
 
 pro_net_name = 'provider_vxlan'
 
@@ -186,17 +190,19 @@ def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_
     Returns:
 
     """
+    auth_url = Tenant.ADMIN['auth_url']
+    if not re.search(Networks.IPV4_IP, auth_url):
+        skip("This test can only run on IPv4 system")
+
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("TC4: set the mode to 'static' ")
     args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-    if code > 0:
-        LOG.info("modify interface failed")
+    cli.system('host-if-modify', args_mode, fail_ok=False)
 
     LOG.tc_step("create the ip again after mode set to static")
     args = '{} {} 111.11.11.11 24'.format(compute, new_interface_)
-    code, err_info = cli.system('host-addr-add', args, rtn_list=True)
+    cli.system('host-addr-add', args)
 
     LOG.tc_step("TC4: set the mode to 'pool' when the ip still exist")
     args = '-nt data -p {} {} {} --ipv4-mode="pool" --ipv4-pool=management'.format(provider, compute, new_interface_)

@@ -1263,7 +1263,7 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
             LOG.warning("No ip found for vm {} with pattern {}".format(vm_id, ip_pattern))
             continue
 
-        LOG.info('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
+        LOG.debug('targeted_ip_str: {}, ips for vm: {}'.format(targeted_ips_str, ips_for_vm))
         # if use_fip:
         #     vm_fips = []
         #     # ping floating ips only if any associated to vm, otherwise ping all the ips
@@ -2462,7 +2462,7 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def _ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
+def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
     """
 
     Args:
@@ -2721,8 +2721,8 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
     Args:
         router_id (str): The router_id of the tenant router the portforwarding rule is created
         inside_addr(str): private ip address
-        inside_port (str):  private protocol port number
-        outside_port(str): The public layer4 protocol port number
+        inside_port (int|str):  private protocol port number
+        outside_port(int|str): The public layer4 protocol port number
         protocol(str): the protocol  tcp|udp|udp-lite|sctp|dccp
         tenant(str): The owner Tenant id.
         description(str): User specified text description. The default is "portforwarding"
@@ -2779,7 +2779,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
     # process result
     if code == 1:
-        msg = 'Fail to creat port forwarding rules: {}'.format(output)
+        msg = 'Fail to create port forwarding rules: {}'.format(output)
         if fail_ok:
             return 1, '', msg
         raise exceptions.NeutronError(msg)
@@ -3350,6 +3350,9 @@ def collect_networking_info(routers=None, vms=None, sep_file=None):
         content = "Ping router interfaces {}: {}\n".format(res_str, res_dict)
         common.write_to_file(sep_file, content=content)
 
+    if ProjVar.get_var('ALWAYS_COLLECT'):
+        common.collect_software_logs()
+
     hosts = []
     for router in routers:
         router_host = get_router_info(router_id=router, field='wrs-net:host')
@@ -3375,8 +3378,8 @@ def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
 
     res_dict = {}
     for ip_ in ips:
-        packet_loss_rate = _ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
-                                        fail_ok=True, vshell=False)[0]
+        packet_loss_rate = ping_server(server=ip_, ssh_client=natbox_ssh, num_pings=num_pings, timeout=timeout,
+                                       fail_ok=True, vshell=False)[0]
         res_dict[ip_] = packet_loss_rate
 
     res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())

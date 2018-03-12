@@ -222,7 +222,11 @@ class TestEvacKPI:
         LOG.tc_step("Get {} vm ping loss duration on evacuation while router is on same host")
         router_host = network_helper.get_router_info(field='wrs-net:host')
         vm_host = nova_helper.get_vm_host(vm_id=vm_id)
-        assert router_host == vm_host, "VM is not on same host as router after first evacuation"
+        if router_host != vm_host:
+            LOG.info("Move vm to the same host as router")
+            vm_helper.live_migrate_vm(vm_id=vm_id, destination_host=router_host)
+            time.sleep(30)
+
         with_router_kpi = vm_helper.get_ping_loss_duration_on_operation(vm_id, 600, 0.5, operation, vm_id, router_host,
                                                                         target_host)
         assert with_router_kpi > 0, "Ping loss duration is not properly detected"

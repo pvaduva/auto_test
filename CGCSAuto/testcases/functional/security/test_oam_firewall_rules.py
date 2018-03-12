@@ -8,7 +8,7 @@ from consts.filepaths import TestServerPath, WRSROOT_HOME
 from keywords import host_helper, system_helper, common, html_helper, keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
-from utils.multi_thread import MThread
+from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient, NATBoxClient
 
@@ -62,6 +62,11 @@ def test_firewall_rules_default():
 
     default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8774, 8776, 8777, 8778, 9292, 9696, 15491]
 
+    from consts.proj_vars import ProjVar
+    if ProjVar.get_var('REGION') != 'RegionOne':
+        default_ports.remove(5000)
+        default_ports.remove(9292)
+
     default_ports.append(443) if keystone_helper.is_https_lab() else default_ports.append(80)
 
     active_controller = system_helper.get_active_controller_name()
@@ -99,7 +104,7 @@ def _check_ports_with_netstat(con_ssh, active_controller, ports):
                 failed_ports.append(port)
 
         if not failed_ports:
-            LOG.info("Ports {} are listed in netstat")
+            LOG.info("Ports {} are listed in netstat".format(ports))
             return
 
         time.sleep(3)
@@ -217,7 +222,7 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)
-    end_time = time.time() + 30
+    end_time = time.time() + 90
     while time.time() < end_time:
         output = con_ssh.exec_sudo_cmd(cmd, get_exit_code=False)[1]
         if (port_expected_open and output) or (not port_expected_open and not output):
@@ -227,9 +232,10 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
     else:
         assert 0, "Port {} is {}listed in iptables. ".format(port, 'not ' if port_expected_open else '')
 
+    end_event = Events('Packet received')
     LOG.info("Open listener on port {}".format(port))
-    listener_thread = MThread(_listen_on_port, port)
-    listener_thread.start_thread(timeout=30, keep_alive=True)
+    listener_thread = MThread(_listen_on_port, port, end_event)
+    listener_thread.start_thread(timeout=300)
     if port_expected_open:
         if not _wait_for_listener(con_ssh, port):
             assert 0, "Port {} does not show listening in netstat. Expected to be listening.".format(port)
@@ -240,26 +246,34 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
         end_time = time.time() + 60
         while time.time() < end_time:
             output = natbox_ssh.exec_cmd("nc -v -w 2 {} {}".format(lab_ip, port), get_exit_code=False)[1]
-            if (port_expected_open and 'succeeded' in output) or (not port_expected_open and not 'succeeded' in output):
-                LOG.info("Access via port {} {} as expected".format(port, 'succeeded' if port_expected_open else
-                'rejected'))
+            if (port_expected_open and 'succeeded' in output) or (not port_expected_open and 'succeeded' not in output):
+                LOG.info("Access via port {} {} as expected".
+                         format(port, 'succeeded' if port_expected_open else 'rejected'))
                 return
         else:
             assert False, "Access via port is not {}".format(port, 'succeeded' if port_expected_open else 'rejected')
     finally:
-        listener_thread.end_thread()
-        listener_thread.wait_for_thread_end()
+        end_event.set()
+        listener_thread.wait_for_thread_end(timeout=10)
         con_ssh.send_control('c')
         con_ssh.expect(Prompt.CONTROLLER_PROMPT)
 
 
-def _listen_on_port(port):
+def _listen_on_port(port, end_event, timeout=300):
     """
     :param port: (int) Port to listen on
     """
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.send('nc -l {}'.format(port))
     con_ssh.expect("")
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if end_event.is_set():
+            return
+        time.sleep(1)
+
+    assert 0, "End event is not set within timeout, check automation code"
 
 
 def _wait_for_listener(con_ssh, port):

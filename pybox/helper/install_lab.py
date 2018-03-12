@@ -135,6 +135,8 @@ def get_patches(cont0_stream, local_path=None, remote_host=None, release='R5'):
     if local_path is None:
         local_path = env.FILEPATH + '{}/patches/'.format(release)
     remote_path = '/home/wrsroot/patches/'
+    LOG.info("Remote host is {}".format(remote_host))
+    
     if remote_host is not None:
         if release == 'R5':
             #patch_loc = env.Builds.R5['patches']
@@ -146,7 +148,7 @@ def get_patches(cont0_stream, local_path=None, remote_host=None, release='R5'):
         else:
             patch_loc = env.Builds.R2['patches']
         for items in patch_loc:
-            get_dir(items, remote_host, local_path, patch=True)
+            send_dir(local_path, '10.10.10.3', destination=remote_path)
         send_dir(local_path, destination=remote_path)
     else:
         LOG.info("Retrieving patches from {}".format(local_path))

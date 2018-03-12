@@ -22,12 +22,11 @@ The partition commands are:
 Partition changes are done in service.
 """
 
-
-import time
 import string
 
 from pytest import fixture, mark, skip
 
+from consts.cgcs import PartitionStatus
 from keywords import system_helper, host_helper, partition_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -73,7 +72,7 @@ def delete_partitions_teardown(request):
         global partitions_to_restore
 
         for host in partitions_to_restore:
-            print(partitions_to_restore[host])
+            LOG.info("Partitions to restore for {}: {}".format(host, partitions_to_restore[host]))
             for i in range(len(partitions_to_restore[host]) - 1, -1, -1):
                 uuid = partitions_to_restore[host][i]
                 device_node = partition_helper.get_partition_info(host, uuid, "device_node")
@@ -150,7 +149,7 @@ def test_delete_host_partitions():
 
 
 @mark.usefixtures('restore_partitions_teardown')
-def _test_increase_host_partition_size():
+def test_increase_host_partition_size():
     """
     This test modifies the size of existing partitions that are in Ready state.
     The partition will be deleted after modification, since decreasing the size
@@ -286,18 +285,7 @@ def test_create_multiple_partitions_on_single_host():
             assert rc != 0, "Partition creation was expected to fail but was instead successful"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out1), "uuid")
-
-            partition_created = False
-            end_time = time.time() + CP_TIMEOUT
-            while time.time() < end_time:
-                status = partition_helper.get_partition_info(host, uuid, "status")
-                LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-                assert status == "Creating" or status == "Ready", "Partition has unexpected state {}".format(status)
-                if status == "Ready":
-                    LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
-                    partition_created = True
-                    break
-            assert partition_created, "First partition was not successfully created"
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             # Only test one disk on each host
@@ -349,8 +337,7 @@ def test_create_many_small_host_partitions_on_a_single_host():
             LOG.info("Creating partition on {}".format(host))
             # partitions_to_restore[host] = []
             for i in range(0, num_partitions):
-                rc, out = partition_helper.create_partition(host, disk_uuid, int(partition_chunks))
-                uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+                uuid = partition_helper.create_partition(host, disk_uuid, int(partition_chunks))[1]
                 partitions_to_restore[host].append(uuid)
             # Only test one disk on each host
             break
@@ -363,14 +350,14 @@ def test_create_many_small_host_partitions_on_a_single_host():
 
 def _test_create_partition_and_associate_with_pv_nova_local():
     """
-    This test attempst to create a partition and then associate it with a PV
+    This test attempt to create a partition and then associate it with a PV
     (physical volume), resulting in the partition being In-use.  In this case,
     the test associates with nova-local.
 
     Assumptions:
     * There's some free disk space available
 
-    Test stesp:
+    Test step:
     * Query hosts to determine disk space
     * Create partition
     * Associate it with nova-local PV
@@ -418,19 +405,12 @@ def _test_create_partition_and_associate_with_pv_nova_local():
             cmd = "host-pv-add {} nova-local {}".format(host, uuid)
             rc, out = cli.system(cmd, rtn_list=True)
             assert rc == 0, "Associating partition with PV failed"
+
             host_helper.unlock_host(host)
             LOG.tc_step("Check that partition is In-use state")
-            partition_associated = False
-            end_time = time.time() + CP_TIMEOUT
-            while time.time() < end_time:
-                status = partition_helper.get_partition_info(host, uuid, "status")
-                LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-                assert status == "Ready" or status == "In-Use", "Partition has unexpected state {}".format(status)
-                if status == "In-Use":
-                    LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
-                    partition_associated = True
-                    break
-            assert partition_associated, "Partition was not successfully associated with PV"
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
+                                                       interim_status=PartitionStatus.READY, timeout=CP_TIMEOUT)
+
             LOG.tc_step("Attempt to delete In-Use partition")
             rc, out = partition_helper.delete_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
@@ -450,7 +430,7 @@ def _test_create_partition_and_associate_with_pv_nova_local():
 
 def _test_create_partition_and_associate_with_pv_cgts_vg():
     """
-    This test attempst to create a partition and then associate it with a PV
+    This test attempt to create a partition and then associate it with a PV
     (physical volume), resulting in the partition being In-use.
 
     Assumptions:
@@ -468,7 +448,7 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
     * None
 
     DISABLING: This fails since the partition says 'adding on unlock'.  Should
-    it be inservice?  Follow up with dev.
+    it be in-service?  Follow up with dev.
     """
 
     global partitions_to_restore
@@ -500,17 +480,8 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
             rc, out = cli.system(cmd, rtn_list=True)
             assert rc == 0, "Associating partition with PV failed"
             LOG.tc_step("Check that partition is In-use state")
-            partition_associated = False
-            end_time = time.time() + CP_TIMEOUT
-            while time.time() < end_time:
-                status = partition_helper.get_partition_info(host, uuid, "status")
-                LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-                assert status == "Ready" or status == "In-Use", "Partition has unexpected state {}".format(status)
-                if status == "In-Use":
-                    LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
-                    partition_associated = True
-                    break
-            assert partition_associated, "Partition was not successfully associated with PV"
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
+                                                       interim_status=PartitionStatus.READY, timeout=CP_TIMEOUT)
             LOG.tc_step("Attempt to delete In-Use partition")
             rc, out = partition_helper.delete_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
@@ -585,7 +556,7 @@ def test_attempt_host_unlock_during_partition_creation():
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
-    # Filtter out active controller
+    # Filter out active controller
     active_controller = system_helper.get_active_controller_name()
     print("This is active controller: {}".format(active_controller))
     hosts.remove(active_controller)
@@ -618,7 +589,7 @@ def test_attempt_host_unlock_during_partition_creation():
             assert rc_ != 0, "Unlock attempt unexpectedly passed"
 
             LOG.tc_step("wait for partition to be created")
-            partition_helper.wait_for_partition_ready(host=host, uuid=uuid, other_status='Creating', timeout=CP_TIMEOUT)
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
 
             # Only test one disk on each host
             break
@@ -755,7 +726,7 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
 
 def test_create_partition_using_valid_uuid_of_another_host():
     """
-    This test attempts to create a partition using a vaild uuid that belongs to
+    This test attempts to create a partition using a valid uuid that belongs to
     another host.  It is expected to fail.
 
     Arguments:
@@ -840,13 +811,13 @@ def test_modify_second_last_partition():
                 continue
 
             LOG.info("Creating first partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, partition_size)
-            uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            uuid = partition_helper.create_partition(host, disk_uuid, partition_size)[1]
             partitions_to_restore[host].append(uuid)
+
             LOG.info("Creating second partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, partition_size)
-            uuid1 = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            uuid1 = partition_helper.create_partition(host, disk_uuid, partition_size)[1]
             partitions_to_restore[host].append(uuid1)
+
             LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on disk {}".format(
                     uuid, partition_size, int(partition_size) + 1, host, disk_uuid))
             rc, out = partition_helper.modify_partition(host, uuid, int(partition_size) + 1, fail_ok=True)

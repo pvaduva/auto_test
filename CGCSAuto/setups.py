@@ -1,10 +1,7 @@
-import re
 import time
-import os
 import configparser
 import threading
 import pexpect
-from multiprocessing import Process
 
 import setup_consts
 from utils import exceptions, lab_info
@@ -19,7 +16,7 @@ from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper
+from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common
 from keywords.common import scp_to_local
 
 
@@ -257,37 +254,7 @@ def get_tenant_dict(tenantname):
 
 
 def collect_tis_logs(con_ssh):
-    LOG.info("Collecting all hosts logs...")
-    con_ssh.send('collect all')
-
-    expect_list = ['.*password for wrsroot:', 'collecting data.', con_ssh.prompt]
-    index_1 = con_ssh.expect(expect_list, timeout=10)
-    if index_1 == 2:
-        LOG.error("Something is wrong with collect all. Check ssh console log for detail.")
-        return
-    elif index_1 == 0:
-        con_ssh.send(con_ssh.password)
-        con_ssh.expect('collecting data')
-
-    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt], timeout=900)
-    if index_2 == 0:
-        output = con_ssh.cmd_output
-        con_ssh.expect()
-        logpath = re.findall('.*(/scratch/ALL_NODES_.*.tar).*', output)[0]
-        LOG.info("\n################### TiS server log path: {}".format(logpath))
-    else:
-        LOG.error("Collecting logs failed. No ALL_NODES logs found.")
-        return
-
-    lab_ip = ProjVar.get_var('LAB')['floating ip']
-    dest_path = ProjVar.get_var('LOG_DIR')
-    try:
-        LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
-        scp_to_local(source_path=logpath, source_ip=lab_ip, dest_path=dest_path, timeout=300)
-        LOG.info("{} is successfully copied to local directory: {}".format(logpath, dest_path))
-    except Exception as e:
-        LOG.warning("Failed to copy log file to localhost.")
-        LOG.error(e, exc_info=True)
+    common.collect_software_logs(con_ssh=con_ssh)
 
 
 def get_tis_timestamp(con_ssh):
@@ -664,13 +631,19 @@ def is_https(con_ssh):
 def scp_vswitch_log(con_ssh, hosts, log_path=None):
     source_file = '/scratch/var/extra/vswitch.info'
     for host in hosts:
-        LOG.info("scp vswitch log from {} to controller-0".format(host))
+
         dest_file = "{}_vswitch.info".format(host)
         dest_file = '{}/{}'.format(WRSROOT_HOME, dest_file)
-        con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                          source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
-                          dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
-                          sudo_password=None, fail_ok=True)
+
+        if host == 'controller-0':
+            LOG.info('cp vswitch log to {}'.format(dest_file))
+            con_ssh.exec_cmd('cp {} {}'.format(source_file, dest_file))
+        else:
+            LOG.info("scp vswitch log from {} to controller-0".format(host))
+            con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
+                              source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+                              dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
+                              sudo_password=None, fail_ok=True)
 
     LOG.info("SCP vswitch log from lab to automation log dir")
     if log_path is None:

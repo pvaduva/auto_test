@@ -1,6 +1,6 @@
+import re
 from pytest import mark, fixture, skip
 
-from utils import cli, table_parser
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment, NumaErr   # Do not remove this. Used in eval()
 from consts.cgcs import FlavorSpec
@@ -432,11 +432,11 @@ class TestNovaSchedulerAVS:
         return final_hosts_configured, storage_backing, ht_enabled
 
     @mark.parametrize(('vswitch_numa_affinity', 'numa_0', 'numa_nodes', 'expt_err'), [
-        ('strict', 0, None, "NumaErr.NUMA_AFFINITY_MISMATCH"),  # This error message has inconsistent formatting
+        ('strict', 0, None, "NumaErr.NUMA_VSWITCH_MISMATCH"),  # This error message has inconsistent formatting
         ('prefer', 0, None, None),
         ('strict', None, 1, None),
         ('prefer', None, None, None),
-        ('strict', None, 2, 'NumaErr.UNINITIALIZED')  # This error message is confusing
+        ('strict', None, 2, 'NumaErr.TWO_NUMA_ONE_VSWITCH')  # This error message is confusing
     ])
     def test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0, numa_nodes, expt_err):
         """
@@ -472,14 +472,12 @@ class TestNovaSchedulerAVS:
                                                   avail_zone='cgcsauto', vm_host=expt_host, fail_ok=True)
 
         if expt_err:
-            LOG.tc_step("Check boot vm failed due to conflict in vswtich node affinity and numa nodes requirements")
+            LOG.tc_step("Check boot vm failed due to conflict in vswitch node affinity and numa nodes requirements")
             assert 1 == code, "Boot vm is not rejected with conflicting requirements"
             actual_err = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
-            if 'NUMA_AFFINITY_MISMATCH' in expt_err:
-                expt_err = eval(expt_err).format(0)
-            else:
-                expt_err = eval(expt_err)
-            assert expt_err in actual_err, "Expected fault message is not found from nova show"
+            expt_err = eval(expt_err).format(0)
+
+            assert re.search(expt_err, actual_err), "Expected fault message is not found from nova show"
         else:
             LOG.tc_step("Check vm is booted successfully on numa node {}".format(expt_numa))
             assert 0 == code, "Boot vm is not successful. Details: {}".format(err)

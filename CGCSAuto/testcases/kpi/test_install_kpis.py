@@ -1,12 +1,14 @@
 """
 This is for gathering key performance metrics related to installation.
 """
+import re
 import time
 from pytest import fixture, skip, mark
 from utils.kpi import kpi_log_parser
+from consts.cgcs import TIMESTAMP_PATTERN
 from consts.proj_vars import ProjVar
 from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, NodeInstall, Idle
-from keywords import system_helper, host_helper, cinder_helper, glance_helper, vm_helper
+from keywords import system_helper, host_helper, vm_helper, common
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -168,18 +170,41 @@ def test_node_install_kpi(collect_kpi):
     hosts = system_helper.get_hostnames()
     print("System has hosts: {}".format(hosts))
 
-    for host in hosts:
-        kpi_name = NodeInstall.NAME.format(host)
-        log_path = NodeInstall.LOG_PATH
-        start_pattern = NodeInstall.START
-        start_path = NodeInstall.START_PATH
-        end_pattern = NodeInstall.END
+    log_path = NodeInstall.LOG_PATH
+    start_cmd = 'head -n 1 {}'.format(log_path)
+    end_cmd = 'tail -n 1 {}'.format(log_path)
+    date_cmd = '{} -n 1 /var/log/bash.log'
+    with host_helper.ssh_to_host('controller-0') as con0_ssh:
+        bash_start = con0_ssh.exec_sudo_cmd(date_cmd.format('head'), fail_ok=False)[1]
+        bash_end = con0_ssh.exec_sudo_cmd(date_cmd.format('tail'), fail_ok=False)[1]
+    bash_start = re.findall(TIMESTAMP_PATTERN, bash_start.strip())[0]
+    bash_end = re.findall(TIMESTAMP_PATTERN, bash_end.strip())[0]
+    date_ = bash_start.split('T')[0]
 
+    def _get_time_delta(start_, end_):
+        start_ = start_.replace(',', '.')
+        end_ = end_.replace(',', '.')
+        start_t = '{}T{}'.format(date_, start_)
+        end_t = '{}T{}'.format(date_, end_)
+
+        time_delta = common.get_timedelta_for_isotimes(start_t, end_t).total_seconds()
+        if time_delta < 0:
+            end_t = '{}T{}'.format(bash_end.split('T')[0], end_)
+            time_delta = common.get_timedelta_for_isotimes(start_t, end_t).total_seconds()
+        return time_delta
+
+    for host in hosts:
+        with host_helper.ssh_to_host(hostname=host) as host_ssh:
+            start_output = host_ssh.exec_sudo_cmd(start_cmd, fail_ok=False)[1].strip()
+            end_output = host_ssh.exec_sudo_cmd(end_cmd, fail_ok=False)[1].strip()
+
+        kpi_name = NodeInstall.NAME.format(host)
+        start_time = re.findall(NodeInstall.TIMESTAMP_PATTERN, start_output)[0]
+        end_time = re.findall(NodeInstall.TIMESTAMP_PATTERN, end_output)[0]
+
+        install_duration = _get_time_delta(start_time, end_time)
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, 
-                                  log_path=log_path, lab_name=lab_name, host=host,
-                                  start_pattern=start_pattern,
-                                  end_pattern=end_pattern, start_path=start_path,
-                                  sudo=True, topdown=True, start_pattern_init=True)
+                                  log_path=log_path, lab_name=lab_name, kpi_val=install_duration)
 
 
 @mark.kpi

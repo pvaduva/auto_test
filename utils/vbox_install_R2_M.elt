@@ -212,7 +212,7 @@ $boot_dir=$boot_image_dir
 
 # default user and password
 $user=wrsroot
-$pass=li69nux
+$pass=Li69nux*
 
 $admin_password=admin
 
@@ -907,12 +907,17 @@ $part=1
 
 ; === set up sudo root access (to make it easier later in the interact session)
 >echo "$pass" | sudo -S id
-<li69nux
+#<li69nux
 >export TMOUT=0
 
 ; === setup first IP interface
 >sudo /sbin/ip addr add $IP/24 dev eth0
+#<ssword
+#>$pass
+
 >sudo /sbin/ip link set eth0 up
+#<ssword
+#>$pass
 >ping $ping_opt  $IP
 <time=
 >
@@ -972,9 +977,15 @@ $directory=R2_files
 		>wget  http://$url:$proxy_port/files/install/$directory/$file
 		>
 	]
+	$file_list=bootimage.iso upgrade_license.lic
+	[ $file=$file_list
+		>wget  http://$url:$proxy_port/files/install/$directory/upgrade/$file
+		>
+	]
+
 ######################## Patching begin ##############################
 	?if $patch == yes ? [
-		@1500
+		@1000
 		; === Copying Patch file for 15.12
 		>wget -r -nH -nd -np -R index.html* --no-parent http://10.10.10.254:8088/files/install/R2_patches/
 		>mkdir patches
@@ -983,12 +994,18 @@ $directory=R2_files
 		>
 		; === Upload Patches
 		>sudo sw-patch upload-dir /home/wrsroot/patches/
+
 		>sudo sw-patch query
+
 		>sudo sw-patch query-hosts
+		*FORK serial
+
 		; === Apply Patches
 		>sudo sw-patch apply --all
+
 		; === Install Patches
 		>sudo sw-patch install-local
+
 		<Patch installation is complete
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
@@ -1015,11 +1032,26 @@ $directory=R2_files
 		>wrsroot
 		<assword
 		>$pass
-		----------- Bring up OAM interface again
+		@60
+		; === System will reboot twice
+		#<reboot NOW!
+		*FORK serial
+		>>^C		
+		; === reconnect to serial
+		>$console_connect
+		<login:
+
+		@5
+		; === initial login
+		*/.*: /
+		>wrsroot
+		<assword
+		>$pass		
+		; === ----------- Bring up OAM interface again
 
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<li69nux
+		<$pass
 		>export TMOUT=0
 		@60
 		; === setup first IP interface
@@ -1052,16 +1084,16 @@ $directory=R2_files
 		@30
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
-		<li69nux
+		<$pass
 
 		; === show version
 		>cat /etc/build.info
                 >sudo sw-patch query
 		<ssword
-		>li69nux
+		>$pass
                 >sudo sw-patch query-hosts
 		<ssword
-		>li69nux
+		>$pass
 		
 	]
 ######################## Patching Ends ###############################
@@ -1089,7 +1121,7 @@ $directory=R2_files
 >
 *INTERACT
 *EXP_INFO
-*FORK $connection
+*FORK serial
 ; === Configuring Controller Interface with Scenario $controller_consolidation
 >time sudo config_controller
 <time correct
@@ -1817,7 +1849,7 @@ $node_computes=$node_list
 
 ; === Adding tempest.conf info (in order to run nosetest)
 >echo "$pass" | sudo -S id
-<li69nux
+<$pass
 $tempest_conf=/etc/tempest/tempest.conf
 >cp $tempest_conf $tempest_conf.bak
 >sudo chmod 666 $tempest_conf
@@ -1837,7 +1869,7 @@ Add to tempest.conf to run tests
 >echo "# add at bottom of file" >> $tempest_conf
 >echo "[host_credentials]" >> $tempest_conf
 >echo "host_user= wrsroot" >> $tempest_conf
->echo "host_password = li69nux" >> $tempest_conf
+>echo "host_password = Li69nux*" >> $tempest_conf
 >						
 
 # show controller-1 message
@@ -1877,14 +1909,24 @@ Add to tempest.conf to run tests
 ?if $patch == yes ?[
         >sudo sw-patch query
 	<ssword
-	>li69nux
+	>$pass
         >sudo sw-patch query-hosts
 	<ssword
-	>li69nux
+	>$pass
 ]
 
 ; === Install Complete!!
 >
+
+?if $upgrade == yes ?[
+        >sudo sw-patch query
+        >sudo sw-patch query-hosts
+]
+
+; === Upgrade Complete!!
+>
+
+
 
 *INTERACT
 

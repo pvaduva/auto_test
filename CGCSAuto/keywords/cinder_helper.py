@@ -254,7 +254,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     if cleanup and volume_id:
         ResourceCleanup.add('volume', volume_id, scope=cleanup)
 
-    if not _wait_for_volume_status(vol_id=volume_id, status='available', auth_info=auth_info, fail_ok=fail_ok):
+    if not wait_for_volume_status(vol_id=volume_id, status='available', auth_info=auth_info, fail_ok=fail_ok):
         LOG.warning("Volume is created, but not in available state.")
         return 2, volume_id
 
@@ -296,8 +296,8 @@ def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
     return states
 
 
-def _wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
-                            check_interval=3, snapshot_vol=False,  con_ssh=None, auth_info=None):
+def wait_for_volume_status(vol_id, status='available', timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,
+                           check_interval=3, snapshot_vol=False, con_ssh=None, auth_info=None):
     """
 
     Args:
@@ -1255,8 +1255,8 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
         if rc == 1:
             LOG.warn('Failed to import volume for the:{} time'.format(retry+1))
 
-        if _wait_for_volume_status(vol_id=vol_id_, status=['available', 'in-use'], auth_info=auth_info,
-                                   con_ssh=con_ssh, fail_ok=True):
+        if wait_for_volume_status(vol_id=vol_id_, status=['available', 'in-use'], auth_info=auth_info,
+                                  con_ssh=con_ssh, fail_ok=True):
             break
     else:
         err_msg = "Volume is imported, but not in available/in-use state."
@@ -1295,7 +1295,7 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             table_ = table_parser.table(cli.cinder('export', vol_id, auth_info=Tenant.ADMIN, ssh_client=con_ssh))
 
             # wait for volume copy to complete
-            if not _wait_for_volume_status(vol_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh):
+            if not wait_for_volume_status(vol_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh):
                 err_msg = "cinder volume failed to reach available status after export"
                 if fail_ok:
                     LOG.warning(err_msg)
@@ -1317,8 +1317,8 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             LOG.info("Volume snapshot {} created for volume {}".format(snap_shot_id, vol_id))
 
             # wait for volume copy to complete
-            if not _wait_for_volume_status(snap_shot_id, snapshot_vol=True, fail_ok=fail_ok, auth_info=auth_info,
-                                           con_ssh=con_ssh):
+            if not wait_for_volume_status(snap_shot_id, snapshot_vol=True, fail_ok=fail_ok, auth_info=auth_info,
+                                          con_ssh=con_ssh):
                 err_msg = "cinder snapshot volume {} failed to reach available status after copy".format(snap_shot_id)
                 if fail_ok:
                     LOG.warning(err_msg)
@@ -1341,8 +1341,8 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             LOG.info("Exporting in-use Volume snapshot {} ".format(snap_shot_id))
             table_ = table_parser.table(cli.cinder('snapshot-export', snap_shot_id, auth_info=auth_info,
                                                    ssh_client=con_ssh))
-            if not _wait_for_volume_status(snap_shot_id, snapshot_vol=True, fail_ok=fail_ok, auth_info=auth_info,
-                                           con_ssh=con_ssh):
+            if not wait_for_volume_status(snap_shot_id, snapshot_vol=True, fail_ok=fail_ok, auth_info=auth_info,
+                                          con_ssh=con_ssh):
                 err_msg = "cinder snapshot volume {} failed to reach available status after export".format(snap_shot_id)
                 if fail_ok:
                     LOG.warning(err_msg)

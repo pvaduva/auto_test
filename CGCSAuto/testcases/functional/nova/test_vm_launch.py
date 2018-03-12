@@ -12,7 +12,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module')
-def hosts_per_backing():
+def hosts_per_backing(add_admin_role_module):
     hosts = host_helper.get_hosts_per_storage_backing()
     return hosts
 
@@ -43,13 +43,20 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
 
     if boot_from != 'volume':
         storage_backing = boot_from
-        if not hosts_per_backing.get(boot_from):
+        hosts = hosts_per_backing.get(boot_from)
+        if not hosts:
             skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(boot_from))
+
+        target_host = hosts[0]
+        LOG.tc_step("Clear local storage cache on {}".format(target_host))
+        host_helper.clear_local_storage_cache(host=target_host)
+
         LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage".format(storage_backing))
         boot_source = 'image'
         flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing,
                                            check_storage_backing=False)[1]
     else:
+        target_host = None
         boot_source = 'volume'
         storage_backing = nova_helper.get_storage_backing_with_max_hosts()[0]
         LOG.tc_step("Create a flavor with 2 vcpus, and dedicated cpu policy and {} storage".format(storage_backing))
@@ -58,8 +65,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     ResourceCleanup.add('flavor', flavor)
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
-    LOG.tc_step("Boot a vm from {} and collect vm startup time".format(boot_from))
-    vm_id = vm_helper.boot_vm(name=boot_from, flavor=flavor, source=boot_source, cleanup='function')[1]
+    host_str = ' on {}'.format(target_host) if target_host else ''
+    LOG.tc_step("Boot a vm from {}{} and collect vm startup time".format(boot_from, host_str))
+    vm_id = vm_helper.boot_vm(name=boot_from, flavor=flavor, source=boot_source, vm_host=target_host,
+                              cleanup='function')[1]
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VmStartup.NAME.format(boot_from),
                               log_path=VmStartup.LOG_PATH, end_pattern=VmStartup.END.format(vm_id),
@@ -83,6 +92,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
                                   kpi_val=duration, uptime=1, unit='Time(ms)')
 
+        vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NOVA_NAME.format(boot_from),
+                                  kpi_val=vim_duration, uptime=1, unit='Time(s)')
+
     def operation_cold(vm_id_):
         code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
         assert 0 == code, msg
@@ -94,6 +107,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     assert duration > 0, "No ping loss detected during cold migration for {} vm".format(boot_from)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
                               kpi_val=duration, uptime=1, unit='Time(ms)')
+
+    vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NOVA_NAME.format(boot_from),
+                              kpi_val=vim_duration, uptime=1, unit='Time(s)')
 
     if 'volume' == boot_from:
         LOG.info("Skip rebuild test for vm booted from cinder volume")
@@ -124,11 +141,12 @@ def get_compute_free_disk_gb(host):
 def get_initial_pool_space(host_ssh, excluded_vm):
     all_volume_size = 0.00
 
-    raw_thin_pool_output = host_ssh.exec_sudo_cmd(cmd="lvs --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
+    raw_thin_pool_output = host_ssh.exec_sudo_cmd(
+            cmd="lvs --units g --noheadings -o lv_size -S lv_name=nova-local-pool")[1]
     assert raw_thin_pool_output, "thin pool volume not found"
     raw_lvs_output = host_ssh.exec_sudo_cmd(
             "lvs --units g --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".
-                format(excluded_vm))[1]
+            format(excluded_vm))[1]
 
     if raw_lvs_output:
         lvs_in_pool = raw_lvs_output.split('\n')

@@ -1,6 +1,5 @@
 import re
 import time
-import pexpect
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
@@ -10,7 +9,7 @@ from utils.tis_log import LOG
 from utils import telnet as telnetlib
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, \
-    Networks, EventLogID, HostTask
+    Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts import proj_vars
@@ -21,7 +20,7 @@ from keywords.security_helper import LinuxUser
 @contextmanager
 def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None):
     """
-    ssh to a host from sshclient.
+    ssh to a host from ssh client.
 
     Args:
         hostname (str|None): host to ssh to. When None, return active controller ssh
@@ -74,6 +73,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
         check_hypervisor_up (bool):
         check_webservice_up (bool):
+        force_reboot (bool): whether to add -f, i.e., sudo reboot [-f]
 
     Returns (tuple): (rtn_code, message)
         (-1, "Reboot host command sent") Reboot host command is sent, but did not wait for host to be back up
@@ -114,7 +114,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         host_ssh.send(cmd)
         host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
-        con_ssh.expect(timeout=30)
+        con_ssh.expect(timeout=120)
 
     # reconnect to lab and wait for system up if rebooting active controller
     if reboot_con:
@@ -219,6 +219,18 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                         else:
                             raise exceptions.HostPostCheckFailed(err_msg)
 
+                hosts_affine_incomplete = []
+                for host in list(set(computes) & set(hosts_avail)):
+                    if not wait_for_tasks_affined(host, fail_ok=True):
+                        hosts_affine_incomplete.append(host)
+
+                if hosts_affine_incomplete:
+                    err_msg = "Hosts platform tasks affining incomplete: {}".format(hosts_affine_incomplete)
+                    if fail_ok:
+                        return 4, err_msg
+                    else:
+                        raise exceptions.HostPostCheckFailed(err_msg)
+
     states_vals = {}
     task_unfinished_msg = ''
     for host in hostnames:
@@ -263,15 +275,16 @@ def recover_simplex(con_ssh=None, fail_ok=False):
     if not is_unlocked:
         unlock_host(host=host, available_only=True, fail_ok=fail_ok)
     else:
-        wait_for_hosts_ready(host, fail_ok=fail_ok)
+        wait_for_hosts_ready(host, fail_ok=fail_ok, check_task_affinity=False)
 
 
-def wait_for_hosts_ready(hosts, fail_ok=False, con_ssh=None):
+def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None):
     """
     Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
     Args:
         hosts:
         fail_ok: whether to raise exception when fail
+        check_task_affinity
         con_ssh:
 
     Returns:
@@ -311,6 +324,11 @@ def wait_for_hosts_ready(hosts, fail_ok=False, con_ssh=None):
             res_3 = wait_for_hypervisors_up(hypervisors, fail_ok=fail_ok, con_ssh=con_ssh,
                                             timeout=HostTimeout.HYPERVISOR_UP)
             res_unlock = res_unlock and res_3
+
+            if check_task_affinity:
+                for host in hypervisors:
+                    res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok)
+                    res_unlock = res_unlock and res_4
 
     return res_lock and res_unlock
 
@@ -408,6 +426,8 @@ def wait_for_hosts_states(hosts, timeout=HostTimeout.REBOOT, check_interval=5, d
         check_interval (int):
         duration (int): wait for a host to be in given state(s) for at least <duration> seconds
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
         fail_ok (bool)
         **states: such as availability=[online, available]
 
@@ -469,6 +489,8 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         lock_timeout (int): max time in seconds waiting for host to goto locked state after locking attempt.
         timeout (int): how many seconds to wait for host to go online after lock
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
         fail_ok (bool):
         check_first (bool):
         swact (bool): whether to check if host is active controller and do a swact before attempt locking
@@ -636,10 +658,13 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
             Degraded or Available
         fail_ok (bool):
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
         check_subfunc (bool): whether to check subfunction_oper and subfunction_avail for CPE system
+        check_first (bool): whether to check host state before unlock.
 
     Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
@@ -729,6 +754,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                            timeout=HostTimeout.HYPERVISOR_UP)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
+            wait_for_tasks_affined(host)
+
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
                                           use_telnet=use_telnet, con_telnet=con_telnet, timeout=300)[0]:
@@ -762,6 +789,26 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     return 0, "Host is unlocked and in available state."
 
 
+def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
+    if system_helper.is_simplex():
+        return True
+
+    LOG.info("Check {} non-existent on {}".format(PLATFORM_AFFINE_INCOMPLETE, host))
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if not host_ssh.file_exists(PLATFORM_AFFINE_INCOMPLETE):
+                LOG.info("{} platform tasks re-affined successfully".format(host))
+                return True
+            time.sleep(5)
+
+    err = "{} did not clear on {}".format(PLATFORM_AFFINE_INCOMPLETE, host)
+    if fail_ok:
+        LOG.warning(err)
+        return False
+    raise exceptions.HostError(err)
+
+
 def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
                  check_hypervisor_up=False, check_webservice_up=False, use_telnet=False, con_telnet=None):
     """
@@ -774,6 +821,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
+        use_telnet
+        con_telnet
 
 
     Returns (dict): {host_0: res_0, host_1: res_1, ...}
@@ -878,6 +927,13 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
                 res[host] = 6, "Host web-services is not active in system servicegroup-list"
             hosts_avail = list(set(hosts_avail) - set(hosts_webdown))
 
+        hosts_affine_incomplete = []
+        for host in list(set(computes) & set(hosts_avail)):
+            if not wait_for_tasks_affined(host, fail_ok=True):
+                hosts_affine_incomplete.append(host)
+                res[host] = 7, "Host platform tasks affining incomplete"
+        hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
+
     for host in hosts_avail:
         res[host] = 0, "Host is unlocked and in available state."
 
@@ -906,6 +962,8 @@ def get_hostshow_value(host, field, merge_lines=False, con_ssh=None, use_telnet=
         field (str): The field of the host-show table
         merge_lines (bool)
         con_ssh (SSHClient)
+        use_telnet
+        con_telnet
 
     Returns:
         The value of the specified field for given host
@@ -924,6 +982,8 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
         con_ssh (SSHClient):
         fields (list|str): field names
         merge_lines (bool)
+        use_telnet
+        con_telnet
 
     Returns (dict): {field1: value1, field2: value2, ...}
 
@@ -970,7 +1030,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
             check_sysinv_cli(con_ssh_=con_ssh, use_telnet_=use_telnet, con_telnet_=con_telnet)
             return True
 
-        except Exception:
+        except:
             if use_telnet:
                 pass
             if not con_ssh._is_connected():
@@ -1059,10 +1119,12 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
 
     Args:
         hostname (str|None): When None, active controller will be used for swact.
-        swact_start_timeout (int): Max time to wait between cli executs and swact starts
+        swact_start_timeout (int): Max time to wait between cli executes and swact starts
         swact_complete_timeout (int): Max time to wait for swact to complete after swact started
         fail_ok (bool):
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (tuple): (rtn_code(int), msg(str))      # 1, 3, 4 only returns when fail_ok=True
         (0, "Active controller is successfully swacted.")
@@ -1089,7 +1151,7 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
 
     if use_telnet:
         rtn = wait_for_swact_complete_tel_session(hostname, swact_start_timeout=swact_start_timeout,
-                                  swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
+                                                  swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
     else:
         rtn = wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout,
                                       swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
@@ -1103,7 +1165,7 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
                 return 5, "Web-services for new controller is not active"
 
             hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, use_telnet=True,
-                                                    con_telnet=telnet_session)
+                                                        con_telnet=telnet_session)
             if not hypervisor_up_res:
                 return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
         else:
@@ -1116,6 +1178,11 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
                 hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh)
                 if not hypervisor_up_res:
                     return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
+
+                for host in ('controller-0', 'controller-1'):
+                    task_aff_res = wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=fail_ok)
+                    if not task_aff_res:
+                        return 7, "tasks affining incomplete on {} after swact from {}".format(host, hostname)
 
     return rtn
 
@@ -1131,12 +1198,14 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
         con_ssh (SSHClient):
         swact_start_timeout (int): Max time to wait between cli executs and swact starts
         swact_complete_timeout (int): Max time to wait for swact to complete after swact started
+        fail_ok
 
     Returns (tuple):
         (0, "Active controller is successfully swacted.")
         (3, "Swact did not start within <swact_start_timeout>")     # returns when fail_ok=True
         (4, "Active controller did not change after swact within <swact_complete_timeou>")  # returns when fail_ok=True
         (5, "400.001 alarm is not cleared within timeout after swact")
+        (6, "tasks affining incomplete on <host>")
 
     """
     start = time.time()
@@ -1176,7 +1245,7 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
 
 
 def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTimeout.SWACT,
-                            swact_complete_timeout=HostTimeout.SWACT, fail_ok=True):
+                                        swact_complete_timeout=HostTimeout.SWACT, fail_ok=True):
     """
     Wait for swact to start and complete. It uses telnet session to check swact
 
@@ -1185,6 +1254,7 @@ def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTim
 
         swact_start_timeout (int): Max time to wait between cli executs and swact starts
         swact_complete_timeout (int): Max time to wait for swact to complete after swact started
+        fail_ok
 
     Returns (tuple):
         (0, "Active controller is successfully swacted.")
@@ -1203,7 +1273,7 @@ def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTim
     if host_telnet_session is None:
         err_msg = "Cannot open telnet session with new active controller {}".format(new_active_controller)
         if fail_ok:
-               return 3, err_msg
+            return 3, err_msg
         else:
             raise exceptions.HostPostCheckFailed(err_msg)
 
@@ -1270,6 +1340,8 @@ def get_nova_hosts(zone='nova', status='enabled', state='up', con_ssh=None, auth
 
     Args:
         zone (str): returns only the hosts with specified zone
+        status
+        state
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -1289,6 +1361,8 @@ def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP, check_inte
         check_interval (int):
         fail_ok (bool):
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (tuple): res_bool(bool), hosts_not_up(list)
         (True, [])      # all hypervisors given are up and enabled
@@ -1473,6 +1547,8 @@ def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con
         state (str): e.g., 'up', 'down'
         status (str): e.g., 'enabled', 'disabled'
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
 
     Returns (list): a list of hypervisor names. Return () if no match found.
         Always return () for small footprint lab. i.e., do not work with small footprint lab
@@ -1822,7 +1898,7 @@ def get_host_threads_count(host, con_ssh=None):
         con_ssh = ControllerClient.get_active_controller()
 
     code, output = con_ssh.exec_sudo_cmd('''vm-topology --show topology | grep --color='never' "{}.*Threads/Core="'''.
-                                    format(host))
+                                         format(host))
     if code != 0:
         raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
 
@@ -2205,6 +2281,7 @@ def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', numa_node=None, con
     Args:
         hosts:
         rtn_val (str): valid values: vcpus_used, vcpus, vcpu_avail
+        numa_node (int|str)
         con_ssh:
 
     Returns (dict): host(str),cpu_val(float with 4 digits after decimal point) pairs as dictionary
@@ -2403,7 +2480,7 @@ def get_vcpus_info_in_log(host_ssh, numa_nodes=None, rtn_list=False):
             key, value = info.split(sep=':')
 
             if key in ['pinned_cpulist', 'unpinned_cpulist']:
-                value = common._parse_cpus_list(value)
+                value = common.parse_cpus_list(value)
             elif key in ['cpu_usage', 'shared']:
                 value = float(value)
             elif key == 'map':
@@ -2447,7 +2524,7 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     for line in vcpu_lines:
         # line example: '  0: 8'
         key, pcpus = line.strip().split(sep=': ')
-        vcpus[int(key)] = common._parse_cpus_list(pcpus.strip())
+        vcpus[int(key)] = common.parse_cpus_list(pcpus.strip())
 
     if rtn_list:
         all_cpus = []
@@ -3391,8 +3468,9 @@ def get_ntpq_status(host, con_ssh=None):
 
 def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_ssh=None):
 
-    LOG.info ("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
+    LOG.info("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
     end_time = time.time() + timeout
+    msg = ntp_alarms = None
     while time.time() < end_time:
         ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False,
                                               con_ssh=con_ssh)
@@ -3438,6 +3516,7 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
     Args:
         hosts (None|list):
         up_only (bool):
+        hyperthreaded
         storage_backing (None|str):
         con_ssh (SSHClient):
 
@@ -3514,7 +3593,7 @@ def get_traffic_control_info(con_ssh=None, port=None):
 
     """
     if con_ssh is None:
-         con_ssh = ControllerClient.get_active_controller()
+        con_ssh = ControllerClient.get_active_controller()
     traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
     return traffic_control
 
@@ -3544,15 +3623,14 @@ def get_host_telnet_session(host, login=True, lab=None):
     log_dir = proj_vars.ProjVar.get_var('LOG_DIR')
 
     if host_node.telnet_conn:
-         host_node.telnet_conn.close()
+        host_node.telnet_conn.close()
 
     host_node.telnet_conn = telnetlib.connect(host_node.telnet_ip,
-                                  int(host_node.telnet_port),
-                                  negotiate=host_node.telnet_negotiate,
-                                  port_login=True if host_node.telnet_login_prompt else False,
-                                  vt100query=host_node.telnet_vt100query,
-                                  log_path=log_dir + "/" + host_node.name + ".telnet.log", debug=False)
-
+                                              int(host_node.telnet_port),
+                                              negotiate=host_node.telnet_negotiate,
+                                              port_login=True if host_node.telnet_login_prompt else False,
+                                              vt100query=host_node.telnet_vt100query,
+                                              log_path=log_dir + "/" + host_node.name + ".telnet.log", debug=False)
 
     if host_node.telnet_conn and login:
         host_node.telnet_conn.login()
@@ -3595,3 +3673,10 @@ def power_on_host(host, fail_ok=False, timeout=HostTimeout.REBOOT, unlock=True, 
         msg += ' and unlocked'
 
     return 0, msg
+
+
+def clear_local_storage_cache(host, con_ssh=None):
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        with host_ssh.login_as_root() as root_ssh:
+            root_ssh.exec_cmd('rm -rf /etc/nova/instances/_base/*', fail_ok=True)
+            root_ssh.exec_cmd('sync;echo 3 > /proc/sys/vm/drop_caches', fail_ok=True)

@@ -119,17 +119,17 @@ def get_dir(source, remote_host, destination, patch=False, setup=False):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the files locally: e.g. /tmp/files/
     """
-    username = getpass.getuser()
+    username = 'svc-cgcsauto'
     if platform == 'win32' or platform == 'win64':
         privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
         pass
     else:
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
-    mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
+    #mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username)
     sftp_client = ssh_client.open_sftp()
     LOG.info(sftp_client.listdir(source))
     path = ''

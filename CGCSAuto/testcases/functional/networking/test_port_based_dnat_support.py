@@ -1,10 +1,11 @@
-
 import time
-from pytest import mark, fixture
+
+from pytest import fixture
+
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.ssh import NATBoxClient
-from utils.multi_thread import MThread
+from utils.multi_thread import MThread, Events
 from consts.cgcs import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -15,12 +16,12 @@ VMS_COUNT = 4
 
 @fixture(scope='module')
 def router_info(request):
-    LOG.fixture_step("get router id.")
-
+    LOG.fixture_step("Enable snat on tenant router")
     router_id = network_helper.get_tenant_router()
     network_helper.update_router_ext_gateway_snat(router_id, enable_snat=True)
 
     def teardown():
+        LOG.fixture_step("Disable snat on tenant router")
         network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
     request.addfinalizer(teardown)
 
@@ -30,6 +31,7 @@ def router_info(request):
 @fixture(scope='function')
 def delete_scp_files_from_nat(request):
     def teardown():
+        LOG.fixture_step("Delete scp files on NatBox")
         nat_ssh = NATBoxClient.get_natbox_client()
         cmd = "ls test_80*"
         rc, output = nat_ssh.exec_cmd(cmd)
@@ -45,6 +47,7 @@ def delete_scp_files_from_nat(request):
 @fixture(scope='function')
 def delete_pfs(request):
     def teardown():
+        LOG.fixture_step("Delete portforwarding rules")
         router_id = network_helper.get_tenant_router()
         pf_ids = network_helper.get_portforwarding_rules(router_id)
         network_helper.delete_portforwarding_rules(pf_ids)
@@ -53,44 +56,37 @@ def delete_pfs(request):
 
 
 @fixture(scope='module')
-def get_vms_args():
+def _vms():
+    vm_helper.ensure_vms_quotas(vms_num=8)
     glance_helper.get_guest_image(guest_os=GUEST_OS, cleanup='module')
 
     LOG.fixture_step("Create a favor with dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated-ubuntu', guest_os=GUEST_OS)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
-
     nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
+    internal_net_id = network_helper.get_internal_net_id()
     tenant_net_ids = network_helper.get_tenant_net_ids()
     if len(tenant_net_ids) < VMS_COUNT:
         tenant_net_ids += tenant_net_ids
     assert len(tenant_net_ids) >= VMS_COUNT
 
-    internal_net_id = network_helper.get_internal_net_id()
-    vm_names = ['virtio1_vm', 'avp1_vm', 'avp2_vm', 'vswitch1_vm']
-    vm_vif_models = {'virtio1_vm': 'virtio',
-                     'avp1_vm': 'avp',
-                     'avp2_vm': 'avp',
-                     'vswitch1_vm': 'avp'}
-    return flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models
+    vm_vif_models = {'virtio1_vm': ('virtio', tenant_net_ids[0]),
+                     'avp1_vm': ('avp', tenant_net_ids[1]),
+                     'avp2_vm': ('avp', tenant_net_ids[2]),
+                     'vswitch1_vm': ('avp', tenant_net_ids[3])}
 
-
-@fixture(scope='function')
-def _vms(get_vms_args):
-    flavor_id, vm_names, mgmt_net_id, tenant_net_ids, internal_net_id, vm_vif_models = get_vms_args
     vms = []
-
-    for (vm, i) in zip(vm_names, range(0, VMS_COUNT)):
+    for vm_name, vifs in vm_vif_models.items():
+        vif_model, tenant_net_id = vifs
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_ids[i], 'vif-model': vm_vif_models[vm]},
-                {'net-id': internal_net_id, 'vif-model': vm_vif_models[vm]}]
+                {'net-id': tenant_net_id, 'vif-model': vif_model},
+                {'net-id': internal_net_id, 'vif-model': vif_model}]
 
-        LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vm_vif_models[vm]))
-        vm_id = vm_helper.boot_vm(vm, flavor=flavor_id, source='volume', cleanup='function',
+        LOG.fixture_step("Boot a ubuntu14 vm with {} nics from above flavor and volume".format(vif_model))
+        vm_id = vm_helper.boot_vm(vm_name, flavor=flavor_id, source='volume', cleanup='module',
                                   nics=nics, guest_os=GUEST_OS)[1]
-
         vms.append(vm_id)
 
     return vms
@@ -102,13 +98,11 @@ def test_port_forwarding_rule_create_for_vm(_vms, delete_pfs):
         vm_name = nova_helper.get_vm_name_from_id(vm_id)
         public_port = str(9090 + i)
         LOG.info("Creating  port forwarding rule for VM: {}: outside_port={}.".format(vm_name, public_port))
-
         rc, pf_id, msg = network_helper.create_port_forwarding_rule_for_vm(vm_id,
                                                                            inside_port=str(90),
                                                                            outside_port=public_port)
 
         assert rc == 0, "Port forwarding rule create failed for VM {}: {}".format(vm_name, msg)
-
         LOG.info("rc {}; pf_id {} msg {}".format(rc, pf_id, msg))
 
 
@@ -132,115 +126,29 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
     LOG.tc_step("Creating tcp port forwarding rules for VMs: {}.".format(_vms))
     vm_tcp_pfs = create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, "tcp", for_ssh=False)
 
-    LOG.tc_step("Testing external access to vms and  TCP packets ...")
-
-    ext_ip_address = network_helper.get_router_ext_gateway_subnet_ip_address(router_id)
-    LOG.info("External Router IP address = {}".format(ext_ip_address))
-
-    LOG.info("Setting NATBox SSH session ...")
-    ssh_nat = NATBoxClient.get_natbox_client()
-
-    vm_threads = [None] * VMS_COUNT
-    index = 0
-    for k, v in vm_tcp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        ssh_public_port = vm_ssh_pfs[k]['public_port']
-        thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting)
-        vm_threads[index] = thread_vm
-        index += 1
-
-    LOG.info("Starting VM ssh session threads .... ")
-
-    for t in vm_threads:
-        t.start_thread()
-
-    time.sleep(90)
-
-    for k, v in vm_tcp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        rc, output = send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, v['public_port'],
-                                                     greeting, "tcp")
-        LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, v['public_port']))
-        LOG.info("Result rc= {}; Output = {}".format(rc, output))
-
-    for t in vm_threads:
-        t.wait_for_thread_end(fail_ok=True)
-
-    outputs = []
-    for t in vm_threads:
-        output = t.get_output()
-        LOG.info("Thread {} output: {}".format(t.name, output))
-        outputs.append(output)
-    for i in range(0, VMS_COUNT):
-        assert outputs[i][1] in outputs[i][0], "VM  did not receive the expected packets {}".format(outputs[i][1])
-        for j in range(0, VMS_COUNT):
-            if j != i:
-                assert outputs[i][1] not in outputs[j][0], "VM  received the unexpected packets {}"\
-                    .format(outputs[i][1])
-
-    LOG.info("TCP protocol external access VMs passed")
-
-    LOG.tc_step("Testing non tcp packets  in  TCP protocol port forwarding rules ...")
-
-    vm_threads = []
-    index = 0
-    for k, v in vm_tcp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        ssh_public_port = vm_ssh_pfs[k]['public_port']
-        thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting)
-        vm_threads.append(thread_vm)
-        index += 1
-
-    LOG.info("Starting VM ssh session threads and NAT ssh session threads .... ")
-
-    for t in vm_threads:
-        t.start_thread()
-    time.sleep(90)
-
-    for k, v in vm_tcp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        rc, output = send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, v['public_port'],
-                                                     greeting, "udp")
-        LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, v['public_port']))
-        LOG.info("Result rc= {}; Output = {}".format(rc, output))
-
-    outputs = []
-    for t in vm_threads:
-        output = t.get_output()
-        LOG.info("Thread {} output: {}".format(t.name, output))
-        outputs.append(output)
-
-    LOG.info("Terminating VM ssh sessions  by sending valid tcp packets .... ")
-    for k, v in vm_tcp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        rc, output = send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, v['public_port'],
-                                                     greeting, "tcp")
-        LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, v['public_port']))
-        LOG.info("Result rc= {}; Output = {}".format(rc, output))
-
-    LOG.info("Checking non-tcp packets are not received by vms......")
-    for i in range(0, VMS_COUNT):
-        assert outputs[i] is None or outputs[i][1] not in outputs[i][0], "VM received UDP packets on TCP port " \
-                                                                         "forwarding rules {}".format(outputs[i][1])
-    LOG.info("Non-tcp packets not received as expected .... ")
+    ext_gateway_ip = network_helper.get_router_ext_gateway_subnet_ip_address(router_id)
+    nat_ssh = NATBoxClient.get_natbox_client()
+    LOG.tc_step("Testing external access to vms and TCP packets ...")
+    check_port_forwarding_protocol(ext_gateway_ip, nat_ssh, vm_pfs=vm_tcp_pfs, vm_ssh_pfs=vm_ssh_pfs, protocol='tcp')
 
     LOG.tc_step("Testing SCP to and from VMs ...")
-    for k, v in vm_tcp_pfs.items():
-        vm_name = nova_helper.get_vm_name_from_id(k)
-        ssh_public_port = vm_ssh_pfs[k]['public_port']
-        scp_to_vm_from_nat_box(ssh_nat, k, "ubuntu", ext_ip_address, ssh_public_port)
+    for vm_id_, v in vm_tcp_pfs.items():
+        vm_name = nova_helper.get_vm_name_from_id(vm_id_)
+        ssh_public_port = vm_ssh_pfs[vm_id_]['public_port']
+        scp_to_vm_from_nat_box(nat_ssh, vm_id_, "ubuntu", ext_gateway_ip, ssh_public_port)
         LOG.info("SCP to/from VM {} is successful .... ".format(vm_name))
 
     LOG.info("SCP to/from VMs successful.... ")
 
     LOG.tc_step("Testing changes to forwarding rules ...")
     # get the first VM and external port forwarding rule
-    k, v = list(vm_tcp_pfs.items())[0]
+    vm_id_, v = list(vm_tcp_pfs.items())[0]
     # get the pf id and pf external port
     pf_id = v['pf_id']
     pf_external_port = v['public_port']
-    pf_ssh_external_port = vm_ssh_pfs[k]['public_port']
+    pf_ssh_external_port = vm_ssh_pfs[vm_id_]['public_port']
     new_pf_external_port = str(int(pf_external_port) + 1000)
+
     LOG.info("Update external port forwarding {} external port {} with new external port {} ".
              format(pf_id, pf_external_port, new_pf_external_port))
     network_helper.update_portforwarding_rule(pf_id, outside_port=new_pf_external_port)
@@ -249,34 +157,10 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
     assert ext_port == new_pf_external_port, "Failed to update port-forwarding rule {} external port"
 
     LOG.info("Port forwarding rule external port updated successfully to {}".format(ext_port))
-
-    LOG.info("Checking old external port {} is not reachable anymore.....".format(pf_external_port))
-
-    greeting = "Hello {}".format(pf_external_port)
-    thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, pf_ssh_external_port, greeting)
-
-    LOG.info("Starting VM ssh session thread  .... ")
-    thread_vm.start_thread()
-    time.sleep(30)
-    send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, pf_external_port, greeting, "tcp")
-    LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, pf_external_port))
-    LOG.info("Asserting the previous external port {} is not reachable".format(pf_external_port))
-    output = thread_vm.get_output()
-    assert output is None, "VM received TCP packets using previous external port {} ruling. Update " \
-                           "failed to change port: {}".format(pf_external_port, thread_vm.get_output())
-
-    LOG.info("The previous external port {} is not reachable as expected".format(pf_external_port))
-
-    LOG.info("Testing the  updated external port {} ....".format(new_pf_external_port))
-    greeting = "Hello {}".format(new_pf_external_port)
-    send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, new_pf_external_port, greeting, "tcp")
-    LOG.info("Asserting the updated external port {} is reachable".format(new_pf_external_port))
-    thread_vm.wait_for_thread_end(60)
-    LOG.info("Output = {}".format(thread_vm.get_output()))
-    output = thread_vm.get_output()
-    assert greeting in output[0], "Updated external port not reachable; packets not received: " \
-                                  "{}".format(output[0])
-
+    LOG.info("Check old external port {} cannot be reached, while new port {} can be reached".
+             format(pf_external_port, new_pf_external_port))
+    check_port_forwarding_ports(ext_gateway_ip, nat_ssh, vm_id=vm_id_, protocol='tcp', ssh_port=pf_ssh_external_port,
+                                old_port=pf_external_port, new_port=new_pf_external_port)
     LOG.info(" Updating port-forwarding rule to new external port {} is successful".format(pf_external_port))
 
 
@@ -302,126 +186,64 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
     LOG.tc_step("Creating udp port forwarding rules for VMs: {}.".format(_vms))
     vm_udp_pfs = create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, "udp", for_ssh=False)
 
-    ext_ip_address = network_helper.get_router_ext_gateway_subnet_ip_address(router_id)
-    LOG.info("External Router IP address = {}".format(ext_ip_address))
+    ext_gateway_ip = network_helper.get_router_ext_gateway_subnet_ip_address(router_id)
+    LOG.info("External Router IP address = {}".format(ext_gateway_ip))
 
     LOG.info("Setting NATBox SSH session ...")
-    ssh_nat = NATBoxClient.get_natbox_client()
+    nat_ssh = NATBoxClient.get_natbox_client()
 
-    vm_threads = [None] * VMS_COUNT
-    index = 0
-    for k, v in vm_udp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        ssh_public_port = vm_ssh_pfs[k]['public_port']
-        thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting,
-                            protocol='udp')
-        vm_threads[index] = thread_vm
-        index += 1
-
-    LOG.info("Starting VM ssh session threads .... ")
-
-    for t in vm_threads:
-        t.start_thread()
-    time.sleep(90)
-
-    for k, v in vm_udp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        rc, output = send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, v['public_port'],
-                                                     greeting, "udp")
-        LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, v['public_port']))
-        LOG.info("Result rc= {}; Output = {}".format(rc, output))
-
-    for t in vm_threads:
-        t.wait_for_thread_end(fail_ok=True)
-
-    outputs = []
-    for t in vm_threads:
-        output = t.get_output()
-        LOG.info("Thread {} output: {}".format(t.name, output))
-        outputs.append(output)
-    for i in range(0, VMS_COUNT):
-        assert outputs[i][1] in outputs[i][0], "VM  did not receive the expected packets {}".format(outputs[i][1])
-        for j in range(0, VMS_COUNT):
-            if j != i:
-                assert outputs[i][1] not in outputs[j][0], "VM  received the unexpected packets {}"\
-                    .format(outputs[i][1])
-
+    LOG.tc_step("Testing external access to vms and UDP packets ...")
+    check_port_forwarding_protocol(ext_gateway_ip, nat_ssh, vm_pfs=vm_udp_pfs, vm_ssh_pfs=vm_ssh_pfs, protocol='udp')
     LOG.info("UDP protocol external access VMs passed")
 
-    LOG.tc_step("Testing non udp packets  in  UDP protocol port forwarding rules ...")
-
-    vm_threads = [None] * VMS_COUNT
-    index = 0
-    for k, v in vm_udp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        ssh_public_port = vm_ssh_pfs[k]['public_port']
-        thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, k, ext_ip_address, ssh_public_port, greeting,
-                            protocol='udp')
-        vm_threads[index] = thread_vm
-        index += 1
-
-    LOG.info("Starting VM ssh session threads  .... ")
-
-    for t in vm_threads:
-        t.start_thread()
-    time.sleep(90)
-
-    for k, v in vm_udp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        rc, output = send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, v['public_port'],
-                                                     greeting, "tcp")
-        LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, v['public_port']))
-        LOG.info("Result rc= {}; Output = {}".format(rc, output))
-
-    outputs = []
-    for t in vm_threads:
-        output = t.get_output()
-        LOG.info("Thread {} output: {}".format(t.name, output))
-        outputs.append(output)
-
-    LOG.info("Terminating VM ssh sessions  by sending valid udp packets .... ")
-    for k, v in vm_udp_pfs.items():
-        greeting = "Hello {}".format(v['public_port'])
-        rc, output = send_packets_to_vm_from_nat_box(ssh_nat, ext_ip_address, v['public_port'],
-                                                     greeting, "udp")
-        LOG.info("Send {} to {}:{}".format(greeting, ext_ip_address, v['public_port']))
-        LOG.info("Result rc= {}; Output = {}".format(rc, output))
-
-    LOG.info("Checking non-udp packets are not received by vms......")
-    for i in range(0, VMS_COUNT):
-        assert outputs[i] is None or outputs[i][1] not in outputs[i][0], "VM received UDP packets on TCP port " \
-                                                                         "forwarding rules {}".format(outputs[i][1])
-    LOG.info("Non-udp packets not received as expected .... ")
-
-    LOG.tc_step("Testing TFTP to and from VMs ...")
-    LOG.info("TODO: The tftp tool not available in NAT box. Test skipped")
+    # LOG.tc_step("Testing tftp to and from VMs ...")
+    # LOG.info("TODO: The tftp tool not available in NAT box. Test skipped")
 
 
-def check_ssh_to_vm_and_wait_for_packets(vm_id, vm_ip, vm_ext_port, expect_output, protocol='tcp'):
-    ssh_nat = NATBoxClient.get_natbox_client()
-    with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='ubuntu_14', username='ubuntu',
-                                         password='ubuntu', natbox_client=ssh_nat, vm_ip=vm_ip,
-                                         vm_ext_port=vm_ext_port, retry=False) as vm_ssh:
-        if protocol == 'udp':
-            cmd = "nc -luw 1 80"
-        else:
-            cmd = "nc -lw 1 80"
+def check_ssh_to_vm_and_wait_for_packets(start_event, end_event, received_event, vm_id, vm_ip, vm_ext_port,
+                                         expt_output, protocol='tcp', timeout=1200):
+    with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='ubuntu_14', vm_ip=vm_ip, vm_ext_port=vm_ext_port,
+                                         username='ubuntu', password='ubuntu', retry=False) as vm_ssh:
 
-        rc, output = vm_ssh.exec_sudo_cmd(cmd, expect_timeout=300)
-        LOG.info("Expected output: {}".format(expect_output))
-        LOG.info("Received output: {}".format(output))
+        with vm_ssh.login_as_root() as root_ssh:
+            LOG.info("Start listening on port 80 on vm {}".format(vm_id))
+            cmd = "nc -l{}w 1 80".format('u' if protocol == 'udp' else '')
+            root_ssh.send(cmd)
+            start_event.set()
 
-    return output, expect_output
+            end_time = time.time() + timeout
+            while time.time() < end_time:
+
+                # Exit the vm ssh, end thread
+                if end_event.is_set():
+                    root_ssh.send_control()
+                    root_ssh.expect(timeout=10, fail_ok=True)
+                    return
+
+                # start_event is unset for a new test step
+                if not start_event.is_set():
+                    root_ssh.send(cmd)
+                    start_event.set()
+                    received_event.clear()
+
+                index = root_ssh.expect(timeout=10, fail_ok=True)
+                if index == 0:
+                    received_event.set()
+                    output = root_ssh.cmd_output
+                    assert expt_output in output, \
+                        "Output: {} received, but not as expected: {}".format(output, expt_output)
+                    LOG.info("Received output: {}".format(output))
+
+                time.sleep(5)
+
+    assert 0, "end_event is not set within timeout"
 
 
 def send_packets_to_vm_from_nat_box(ssh_nat, vm_ip, vm_ext_port, send_msg, protocol):
+    udp_param = '-4u ' if protocol == 'udp' else ''
+    cmd = "echo \"{}\" | nc {}-w 1 {} {}".format(send_msg, udp_param, vm_ip, vm_ext_port)
 
-    if protocol == 'udp':
-        cmd = "echo \"{}\" | nc -4u -w 1 {} {}".format(send_msg, vm_ip, vm_ext_port)
-    else:
-        cmd = "echo \"{}\" | nc -w 1 {} {}".format(send_msg, vm_ip, vm_ext_port)
-
-    rc, output = ssh_nat.exec_cmd(cmd)
+    rc, output = ssh_nat.exec_cmd(cmd, fail_ok=True)
     return rc, output
 
 
@@ -502,7 +324,6 @@ def create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, protocol, for_ss
         LOG.warn(msg)
         raise exceptions.InvalidStructure(msg)
 
-    base_port = 0
     inside_port = 80
     if protocol == "tcp":
         if for_ssh:
@@ -523,18 +344,101 @@ def create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, protocol, for_ss
         public_port = str(base_port + i)
         LOG.info("Creating port forwarding rule for VM: {}: protocol={}, inside_address={}, inside_port={},"
                  "outside_port={}.".format(vm_name, protocol,  vm_mgmt_ips[key][0], inside_port, public_port))
-
         rc, pf_id, msg = network_helper.create_port_forwarding_rule(router_id, inside_addr=vm_mgmt_ips[key][0],
                                                                     inside_port=str(inside_port),
                                                                     outside_port=public_port,
                                                                     protocol=protocol)
 
         assert rc == 0, "Port forwarding rule create failed for VM {}: {}".format(vm_name, msg)
-
         LOG.info("Port forwarding rule {} created for VM: {}".format(pf_id, vm_name))
 
         vm_pf_info = {'pf_id': pf_id, 'private_port': str(inside_port),  'public_port': public_port}
-
         vm_pfs[key] = vm_pf_info
 
     return vm_pfs
+
+
+def check_port_forwarding_ports(ext_gateway_ip, nat_ssh, vm_id, ssh_port, old_port, new_port, protocol):
+
+    end_event = Events("Hello msg sent to ports")
+    start_event = Events("VM {} started listening".format(vm_id))
+    received_event = Events("Greeting received on vm {}".format(vm_id))
+
+    LOG.tc_step("Starting VM ssh session threads .... ")
+    new_greeting = "Hello {}".format(new_port)
+    vm_thread = MThread(check_ssh_to_vm_and_wait_for_packets, start_event, end_event, received_event,
+                        vm_id, ext_gateway_ip, ssh_port, new_greeting, protocol)
+    vm_thread.start_thread()
+    try:
+        start_event.wait_for_event(timeout=180, fail_ok=False)
+        LOG.tc_step("Send Hello msg to vm from NATBox via old {} port {}, and check it's not received".
+                    format(protocol, old_port))
+
+        greeting = "Hello {}".format(old_port)
+        send_packets_to_vm_from_nat_box(nat_ssh, ext_gateway_ip, old_port, greeting, protocol)
+
+        time.sleep(10)
+        assert not received_event.is_set(), "Event {} is set".format(received_event)
+
+        LOG.tc_step("Check greeting is received on vm via new {} port {}".format(protocol, new_port))
+        send_packets_to_vm_from_nat_box(nat_ssh, ext_gateway_ip, new_port, new_greeting, protocol)
+
+        assert received_event.wait_for_event(timeout=30), "Event {} is not set".format(received_event)
+
+    except:
+        raise
+    finally:
+        end_event.set()
+        vm_thread.wait_for_thread_end(timeout=40, fail_ok=False)
+
+
+def check_port_forwarding_protocol(ext_gateway_ip, nat_ssh, vm_pfs, vm_ssh_pfs, protocol):
+    vm_threads = []
+    end_event = Events("Hello msg sent to ports")
+    start_events = []
+    received_events = []
+
+    try:
+        LOG.tc_step("Start listening on vms {} ports .... ".format(protocol))
+        for vm_id_, v in vm_pfs.items():
+            greeting = "Hello {}".format(v['public_port'])
+            ssh_public_port = vm_ssh_pfs[vm_id_]['public_port']
+            start_event = Events("VM {} started listening".format(vm_id_))
+            start_events.append(start_event)
+            received_event = Events("Greeting received on vm {}".format(vm_id_))
+            received_events.append(received_event)
+            thread_vm = MThread(check_ssh_to_vm_and_wait_for_packets, start_event, end_event, received_event,
+                                vm_id_, ext_gateway_ip, ssh_public_port, greeting, protocol)
+            thread_vm.start_thread()
+            vm_threads.append(thread_vm)
+
+        for event_ in start_events:
+            event_.wait_for_event(timeout=180, fail_ok=False)
+
+        diff_protocol = 'udp' if protocol == 'tcp' else 'tcp'
+        LOG.tc_step("Send Hello msg to vms from NATBox via {} ports, and check they are not received via {} ports".
+                    format(diff_protocol, protocol))
+        for vm_id_, v in vm_pfs.items():
+            greeting = "Hello {}".format(v['public_port'])
+            send_packets_to_vm_from_nat_box(nat_ssh, ext_gateway_ip, v['public_port'], greeting, diff_protocol)
+
+        time.sleep(10)
+        for event in received_events:
+            assert not event.is_set(), "Event {} is set".format(event)
+
+        LOG.tc_step("Send Hello msg to vms from NATBox via {} ports, and check they are received".
+                    format(protocol, protocol))
+        for vm_id_, v in vm_pfs.items():
+            greeting = "Hello {}".format(v['public_port'])
+            send_packets_to_vm_from_nat_box(nat_ssh, ext_gateway_ip, v['public_port'], greeting, protocol)
+
+        time.sleep(10)
+        for event in received_events:
+            assert event.wait_for_event(timeout=40, fail_ok=False), "Event {} is not set".format(event)
+
+    except:
+        raise
+    finally:
+        end_event.set()
+        for thread in vm_threads:
+            thread.wait_for_thread_end(timeout=40, fail_ok=True)

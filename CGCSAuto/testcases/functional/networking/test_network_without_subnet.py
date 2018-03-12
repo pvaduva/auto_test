@@ -119,7 +119,7 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
         LOG.info("ip address to ping {}".format(ip_addr))
-        network_helper._ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
     LOG.tc_step("Attach the interface to {} of {} vif_model".format(vm_under_test, vif_model))
     tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
@@ -134,7 +134,7 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
                 "before {}".format(vm_actions))
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
         LOG.info("ip address to ping {}".format(ip_addr))
-        network_helper._ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
     return tenant_port_id
 
@@ -158,7 +158,7 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
                 "after {}".format(vm_actions))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        network_helper._ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
     LOG.tc_step("Detach the {} interface {}".format(vif_model, tenant_port_id))
     vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
@@ -170,7 +170,7 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
     LOG.info("ip address to ping {}".format(ip_addr))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        network_helper._ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
 def _remove_dhclient_cache(vm_id):
     dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'

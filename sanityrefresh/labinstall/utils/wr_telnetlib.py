@@ -307,6 +307,7 @@ class Telnet:
     def close(self):
         """Close the connection."""
         if self.sock:
+            #self.sock.shutdown()
             self.sock.close()
         self.sock = 0
         self.eof = 1
@@ -773,18 +774,21 @@ class Telnet:
            Returns text in utf-8 encoding.
            Fails if given string is not found or if EOF is encountered.
         """
+        log.info("Looking for: {}".format(expected))
         try:
             output = self.read_until(str.encode(expected), timeout)
         except EOFError:
             msg = "Connection closed: Reached EOF and no data was read in Telnet session: {}:{}.".format(self.host, self.port)
-            log.exception(msg)
+            log.info(msg)
             wr_exit()._exit(1, msg)
 
         output = output.decode('utf-8', 'ignore')
         if expected not in output:
             msg = 'Timeout occurred: Failed to find \"{}\" in output. Output:\n{}'.format(expected, output)
-            log.error(msg)
+            log.info(msg)
             wr_exit()._exit(1, msg)
+        else:
+            log.info("Found expected text")
 
         lines = output.splitlines()
         # Remove command
@@ -886,10 +890,15 @@ class Telnet:
                 log.error(msg)
                 wr_exit()._exit(1, msg)
 
-    def menu_selection(self, host_os, small_footprint, lowlat, usb, security):
+
+    def menu_selection(self, host_os, small_footprint, lowlat, usb, security, iso_install):
         """
         Menu selection logic
         """
+
+        # Install from pxeboot script behaves exactly like USB installs
+        if iso_install:
+            usb = True
 
         # Options align with pxeboot.cfg on tuxlab
         if host_os == 'wrlinux':
@@ -1022,9 +1031,9 @@ class Telnet:
     #TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
     #TODO: If script returns zero, should check return code, otherwise remove it
-    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False, security=False):
-        if "wildcat" in node.host_name or "supermicro" in node.host_name:
-            if "wildcat" in node.host_name:
+    def install(self, node, boot_device_dict, small_footprint=False, host_os='centos', usb=False, lowlat=False, security=False, iso_install=False):
+        if "wildcat" in node.host_name or "supermicro" in node.host_name or "wolfpass" in node.host_name:
+            if "wildcat" in node.host_name or "wolfpass" in node.host_name:
                 index = 0
                 boot_menu_name = "boot menu"
             else:
@@ -1066,10 +1075,11 @@ class Telnet:
                 # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 # Construct regex to work with wildcatpass machines
                 # in legacy and uefi mode
-                if "wildcat" in node.host_name:
-                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
+                if "wildcat" in node.host_name or "wolfpass" in node.host_name:
+                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H|;13H)(.*?)\x1b")
                 else:
-                    regex = re.compile(b"Slot \d{4} v\d+")
+                    regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H|;13H)(.*?)\x1b|Slot \d{4} v\d+")
+                    #regex = re.compile(b"Slot \d{4} v\d+")
 
                 try:
                     index, match = self.expect([regex], BOOT_MENU_TIMEOUT)[:2]
@@ -1102,20 +1112,35 @@ class Telnet:
             if node.name == CONTROLLER0:
                 if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
                 elif "UEFI" in boot_device_regex:
                     # Special case for wcp92-98 (NVME default)
                     log.info("boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
-                    self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
+                    #self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
+                    self.get_read_until("Automatic Anaconda", BOOT_MENU_TIMEOUT)
+                    time.sleep(3)
+                    log.info("Pressing DOWN key")
                     self.write(str.encode(DOWN))
-                    if security:
+                    if small_footprint:
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
                         self.write(str.encode(DOWN))
+                    if lowlat:
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
+                        self.write(str.encode(DOWN))
+                    if security:
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
+                        self.write(str.encode(DOWN))
+                        time.sleep(1)
+                        log.info("Pressing DOWN key")
                         self.write(str.encode(DOWN))
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\r\r"))
                 else:
                     self.get_read_until("Boot from hard drive", 240)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
             self.get_read_until(LOGIN_PROMPT, install_timeout)
             log.info("Found login prompt. {} installation has completed".format(node.name))
@@ -1207,15 +1232,14 @@ class Telnet:
                 # booting device = USB tested only for Ironpass-31_32
                 if usb:
                     self.get_read_until("Select kernel options and boot kernel", 120)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
                 else:
                     self.get_read_until("Boot from hard drive", 60)
-                    self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                    self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
-        elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name:
+        elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name or "r730" in node.host_name:
             print("Hewlett-Packard BIOS")
-            # Hewlett-Packard BIOS
-            if "r430" in node.host_name:
+            if "r430" in node.host_name or "r730" in node.host_name:
                 bios_key = '\x1b@'
                 self.get_read_until("PXE Boot", 120)
             else:
@@ -1225,8 +1249,9 @@ class Telnet:
             self.write(str.encode(bios_key))
 
             if node.name == CONTROLLER0:
-                self.get_read_until("Kickstart Boot Menu", 120)
-                self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                #self.get_read_until("Kickstart Boot Menu", 120)
+                self.get_read_until("Boot Menu", 360)
+                self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
         elif bios_type == BIOS_TYPES[2]:
             boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
@@ -1284,11 +1309,12 @@ class Telnet:
 
             if node.name == CONTROLLER0:
                 self.get_read_until("Boot from hard drive", 300)
-                self.menu_selection(host_os, small_footprint, lowlat, usb, security)
+                self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
         # Not fool-proof.  FIX
         self.get_read_until(LOGIN_PROMPT, install_timeout)
         log.info("Found login prompt. {} installation has completed".format(node.name))
+
 
         return 0
 

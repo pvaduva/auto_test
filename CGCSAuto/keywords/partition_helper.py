@@ -56,7 +56,8 @@ def delete_partition(host, uuid, fail_ok=False, timeout=DP_TIMEOUT):
     if rc > 0:
         return 1, out
 
-    wait_for_partition_ready(host=host, uuid=uuid, timeout=timeout, other_status=PartitionStatus.DELETING)
+    wait_for_partition_status(host=host, uuid=uuid, timeout=timeout, final_status=None,
+                              interim_status=PartitionStatus.DELETING)
     return 0, "Partition successfully deleted"
 
 
@@ -81,8 +82,8 @@ def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, time
         return rc, out
 
     uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-    wait_for_partition_ready(host=host, uuid=uuid, timeout=timeout, other_status=PartitionStatus.CREATING)
-    return 0, "Partition successfully created"
+    wait_for_partition_status(host=host, uuid=uuid, timeout=timeout)
+    return 0, uuid
 
 
 def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
@@ -105,7 +106,7 @@ def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
         return 1, out
 
     uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-    wait_for_partition_ready(host=host, uuid=uuid, timeout=timeout, other_status=PartitionStatus.MODIFYING)
+    wait_for_partition_status(host=host, uuid=uuid, timeout=timeout, interim_status=PartitionStatus.MODIFYING)
     return 0, "Partition successfully modified"
 
 
@@ -133,11 +134,14 @@ def get_partition_info(host, uuid, param=None):
     return param_value
 
 
-def wait_for_partition_ready(host, uuid, other_status='Creating', timeout=120, fail_ok=False):
-    valid_status = ['Ready']
-    if isinstance(other_status, str):
-        other_status = (other_status, )
-    for status_ in other_status:
+def wait_for_partition_status(host, uuid, final_status=PartitionStatus.READY, interim_status='Creating', timeout=120,
+                              fail_ok=False):
+    final_status = None if not final_status else final_status
+    valid_status = [final_status]
+
+    if isinstance(interim_status, str):
+        interim_status = (interim_status,)
+    for status_ in interim_status:
         valid_status.append(status_)
 
     end_time = time.time() + timeout
@@ -146,16 +150,16 @@ def wait_for_partition_ready(host, uuid, other_status='Creating', timeout=120, f
         status = get_partition_info(host, uuid, "status")
         assert status in valid_status, "Partition has unexpected state {}".format(status)
 
-        if status != prev_status:
-            prev_status = status
-            LOG.info("Partition {} on host {} has status {}".format(uuid, host, status))
-
-        if status == "Ready":
-            LOG.info("Partition {} on host {} has {} state".format(uuid, host, status))
+        if status == final_status:
+            LOG.info("Partition {} on host {} has reached state: {}".format(uuid, host, status))
             return True
+        elif status != prev_status:
+            prev_status = status
+            LOG.info("Partition {} on host {} is in {} state".format(uuid, host, status))
+
         time.sleep(5)
 
-    msg = "Partition {} on host {} not ready within {} seconds".format(uuid, host, timeout)
+    msg = "Partition {} on host {} not in {} state within {} seconds".format(uuid, host, final_status, timeout)
     if fail_ok:
         LOG.warning(msg)
         return False

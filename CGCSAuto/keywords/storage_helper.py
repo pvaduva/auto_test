@@ -8,6 +8,8 @@ import time
 import ast
 
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
+
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
@@ -397,7 +399,7 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
 
 
 def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=False,
-                           lock_unlock=True, fail_ok=False, con_ssh=None):
+                           services=None, lock_unlock=True, fail_ok=False, con_ssh=None):
     """
     Modify ceph storage backend pool allocation
 
@@ -407,6 +409,7 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         glance:
         ephemeral:
         object_gib:
+        services (str|list|tuple):
         fail_ok:
         con_ssh:
 
@@ -422,9 +425,14 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
     elif 'file' in backend:
         backend = 'file-store'
 
-    args = backend
+    args = ''
+    if services:
+        if isinstance(services, (list, tuple)):
+            services = ','.join(services)
+        args = '-s {} '.format(services)
+    args += backend
 
-    backend_info = get_storage_backend_info(backend)
+    get_storage_backend_info(backend)
 
     if cinder:
         args += ' cinder_pool_gib={}'.format(cinder)
@@ -470,7 +478,7 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
             raise exceptions.TimeoutException(err_msg)
 
 
-def _get_storage_backend_show_table(backend, con_ssh=None):
+def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.ADMIN):
     # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
     if 'ceph' in backend:
         backend = 'ceph-store'
@@ -478,12 +486,13 @@ def _get_storage_backend_show_table(backend, con_ssh=None):
         backend = 'lvm-store'
     elif 'file' in backend:
         backend = 'file-store'
-    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh),
+
+    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
     return table_
 
 
-def get_storage_backend_info(backend, keys=None, con_ssh=None):
+def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get storage backend pool allocation info
 
@@ -496,20 +505,30 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None):
                     'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
 
     """
-    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
+    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
 
     values = table_['values']
-    backend_info = {line[0]: line[1] for line in values}
+    backend_info = {}
+    for line in values:
+        field = line[0]
+        value = line[1]
+        if field in ('task', 'capabilities', 'object_gateway') or field.endswith('_gib'):
+            try:
+                value = eval(value)
+            except:
+                pass
+        backend_info[field] = value
 
     if keys:
         if isinstance(keys, str):
             keys = [keys]
         backend_info = {key_: backend_info[key_] for key_ in keys}
+
     return backend_info
 
 
-def get_storage_backend_show_vals(backend, fields, con_ssh=None):
-    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh)
+def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
     vals = []
     if isinstance(fields, str):
         fields = (fields, )
@@ -522,9 +541,35 @@ def get_storage_backend_show_vals(backend, fields, con_ssh=None):
             except:
                 pass
         vals.append(val)
+    return vals
 
 
-def get_storage_backends(con_ssh=None, **filters):
+def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=None, **expt_values):
+    if not expt_values:
+        raise ValueError("At least one key/value pair has to be provided via expt_values")
+
+    LOG.info("Wait for storage backend {} to reach: {}".format(backend, expt_values))
+    end_time = time.time() + timeout
+    dict_to_check = expt_values.copy()
+    stor_backend_info = None
+    while time.time() < end_time:
+        stor_backend_info = get_storage_backend_info(backend=backend, keys=list(dict_to_check.keys()), con_ssh=con_ssh)
+        dict_to_iter = dict_to_check.copy()
+        for key, expt_val in dict_to_iter.items():
+            actual_val = stor_backend_info[key]
+            if str(expt_val) == str(actual_val):
+                dict_to_check.pop(key)
+
+        if not dict_to_check:
+            return True, dict_to_check
+
+    if fail_ok:
+        return False, stor_backend_info
+    raise exceptions.StorageError("Storage backend show field(s) did not reach expected value(s). "
+                                  "Expected: {}; Actual: {}".format(dict_to_check, stor_backend_info))
+
+
+def get_storage_backends(rtn_val='backend', con_ssh=None, **filters):
     backends = []
     table_ = _get_storage_backend_list_table(con_ssh=con_ssh)
     if table_:
@@ -731,7 +776,20 @@ def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True)
     ssh_client.exec_sudo_cmd('cat /etc/fstab', get_exit_code=False)
 
 
-def get_storage_usage(service='cinder', rtn_val='free capacity (GiB)', con_ssh=None, auth_info=Tenant.ADMIN):
-    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
-    val = table_parser.get_values(table_, rtn_val, service=service)[0]
+def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rtn_val='free capacity (GiB)',
+                      con_ssh=None, auth_info=Tenant.ADMIN):
+    auth_info_tmp = dict(auth_info)
+    region = ProjVar.get_var('REGION')
+    if region != 'RegionOne':
+        if service != 'cinder':
+            auth_info_tmp['region'] = 'RegionOne'
+
+    kwargs = {}
+    if backend_type:
+        kwargs['backend type'] = backend_type
+    if backend_name:
+        kwargs['backend name'] = backend_name
+
+    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info_tmp))
+    val = table_parser.get_values(table_, rtn_val, service=service, **kwargs)[0]
     return float(val)

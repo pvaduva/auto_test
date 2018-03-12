@@ -10,16 +10,6 @@ of this software may be licensed only pursuant to the terms
 of an applicable Wind River license agreement.
 '''
 
-'''
-modification history:
----------------------
-27apr16,amf  small footprint: handle drbd data-sync and custom configs
-08mar16,mzy  Inserting steps for storage lab installation
-25feb16,amf  Inserting steps for small footprint installations
-22feb16,mzy  Add sshpass support
-18feb16,amf  Adding doc strings to each function
-02dec15,kav  initial version
-'''
 
 import os
 import re
@@ -104,6 +94,9 @@ def parse_args():
     lab_grp.add_argument('--iso-install', dest='iso_install' , action="store_true", default=False,
                          help="iso install flag ")
 
+    lab_grp.add_argument('--skip-pxebootcfg', dest='skip_pxebootcfg' , action="store_true", default=False,
+                         help="Don't modify pxeboot.cfg if set")
+
     lab_grp.add_argument('--config-region', dest='config_region' , action="store_true", default=False,
                          help="configure_region instead of config_controller")
 
@@ -119,6 +112,10 @@ def parse_args():
                          action='store_true', help="Run installation"
                          " as small footprint. Not applicable"
                          " for tis-on-tis install")
+
+    lab_grp.add_argument('--system-mode', dest='system_mode', default='',
+                         choices=['duplex-direct', 'duplex', 'simplex'],
+                         help="select system mode")
 
     lab_grp.add_argument('--security', dest='security', default='',
                           choices=['', 'standard', 'extended'],
@@ -495,7 +492,31 @@ def deploy_key(conn):
             conn.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
             conn.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
-def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, host_os, install_output_dir):
+def restore_pxeboot_cfg(barcode, tuxlab_server, install_output_dir):
+    """
+    Unlink the existing pxeboot.cfg symlink and then restore it.  This is done
+    in case the file was modified for pre-R5 installs.
+    """
+
+    tuxlab_conn = SSHClient(log_path=install_output_dir + "/" + tuxlab_server + ".ssh.log")
+    tuxlab_conn.connect(hostname=tuxlab_server, username=USERNAME,
+                        password=PASSWORD)
+    tuxlab_conn.deploy_ssh_key(PUBLIC_SSH_KEY)
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + "/" + barcode
+
+    cmd = "cd {}".format(tuxlab_barcode_dir)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to cd to {}".format(tuxlab_barcode_dir)
+
+    log.info("Changing pxeboot.cfg symlink to {}".format(R5_PXEBOOT))
+    cmd = "[ -f {} ]".format(R5_PXEBOOT)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to find a pxeboot.cfg with gpt boot options defined"
+    assert tuxlab_conn.exec_cmd("unlink pxeboot.cfg")[0] == 0, "Unlink of pxeboot.cfg failed"
+    cmd = "ln -s {} pxeboot.cfg".format(R5_PXEBOOT)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Unable to symlink gpt pxeboot cfg"
+
+
+def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, host_os, install_output_dir, tis_blds_dir, skip_pxebootcfg):
     ''' Transfer the load and set the feed on the tuxlab server in preparation
         for booting up the lab.
     '''
@@ -510,18 +531,35 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
 
     tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + "/" + barcode
 
-    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
-        msg = "Failed to cd to: " + tuxlab_barcode_dir
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+    cmd = "cd {}".format(tuxlab_barcode_dir)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to cd to {}".format(tuxlab_barcode_dir)
 
     log.info("Copy load into feed directory")
     feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
     tuxlab_conn.sendline("mkdir -p " + tuxlab_sub_dir)
     tuxlab_conn.find_prompt()
-    tuxlab_conn.sendline("chmod 755 " + tuxlab_sub_dir)
+    tuxlab_conn.sendline("chmod 775 " + tuxlab_sub_dir)
     tuxlab_conn.find_prompt()
 
+    # Switch pxeboot.cfg files
+    old_releases = ["TC_17.06_Host", "TS_16.10_Host", "TS_15.12_Host"]
+    if tis_blds_dir.endswith('/'):
+        rel = tis_blds_dir[:-1]
+    else:
+        rel = tis_blds_dir
+
+    if rel in old_releases:
+        pxeboot_cfgfile = PRE_R5_PXEBOOT
+    else:
+        pxeboot_cfgfile = R5_PXEBOOT
+
+    if not skip_pxebootcfg:
+        log.info("Changing pxeboot.cfg symlink to {}".format(pxeboot_cfgfile))
+        cmd = "[ -f {} ]".format(pxeboot_cfgfile)
+        assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Failed to find a file called {}".format(pxeboot_cfgfile)
+        assert tuxlab_conn.exec_cmd("unlink pxeboot.cfg")[0] == 0, "Unlink of pxeboot.cfg failed"
+        cmd = "ln -s {} pxeboot.cfg".format(pxeboot_cfgfile)
+        assert tuxlab_conn.exec_cmd(cmd)[0] == 0, "Unable to symlink pxeboot.cfg to {}".format(pxeboot_cfgfile)
 
     # Extra forward slash at end is required to indicate the sync is for
     # all of the contents of RPM_INSTALL_REL_PATH into the feed path
@@ -530,11 +568,11 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
         log.info("Installing Centos load")
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
-        bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force"])
+        bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force", "--chmod=Du=rwx"])
         bld_server_conn.rsync("export/extra_cfgs/yow*", USERNAME, tuxlab_server, feed_path)
     else:
         log.info("Installing wrlinux load")
-        bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force"])
+        bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path, ["--delete", "--force", "--chmod=Du=rwx"])
 
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
@@ -619,6 +657,13 @@ def burn_usb_load_image(install_output_dir, node, bld_server_conn, load_path, is
         log.error(msg)
         wr_exit()._exit(1, msg)
 
+    cmd = "rm bootimage.iso"
+    rc, output = node.telnet_conn.exec_cmd(cmd)
+    if rc != 0:
+        msg = "Unable to delete bootimage.iso.  Please delete manually."
+        log.info(msg)
+        wr_exit()._exit(1, msg)
+
 
 def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_path=None, iso_host=None, c0_targetId=None):
     '''
@@ -662,7 +707,24 @@ def copy_iso(install_output_dir, tuxlab_server, bld_server_conn, load_path, iso_
     logutils.print_step("Iso copy finished")
     # wr_exit()._exit(54, "done for now")
 
-def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
+def test_state(node, attr_type, expected_state):
+    '''
+    Test the state of the given node
+    '''
+
+    global controller0
+
+    output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")[1]
+    output = "\n".join(output.splitlines()[3:-1])
+    match = re.search("^.*{}.*{}.*$".format(node.name, expected_state), \
+                      output, re.MULTILINE|re.IGNORECASE)
+    if match:
+        return True
+
+    return False
+
+
+def wait_state(nodes, attr_type, expected_state, sut=None, exit_on_find=False, fail_ok=False):
     ''' Function to wait for the lab to enter a specified state.
         If the expected state is not entered, the boot operation will be
         terminated.
@@ -673,14 +735,14 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
     else:
         nodes = copy.copy(nodes)
     count = 0
-    if type not in STATE_TYPE_DICT:
+    if attr_type not in STATE_TYPE_DICT:
         msg = "Type of state can only be one of: " + \
                    str(list(STATE_TYPE_DICT.keys()))
         log.error(msg)
         wr_exit()._exit(1, msg)
-    if expected_state not in STATE_TYPE_DICT[type]:
+    if expected_state not in STATE_TYPE_DICT[attr_type]:
         msg = "Expected {} state can only be on one of: {}"\
-                   .format(type, str(STATE_TYPE_DICT[type]))
+                   .format(attr_type, str(STATE_TYPE_DICT[attr_type]))
         log.error(msg)
         wr_exit()._exit(1, msg)
 
@@ -717,13 +779,13 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
             if match:
                 if exit_on_find:
                     return True
-                if type == ADMINISTRATIVE:
+                if attr_type == ADMINISTRATIVE:
                     node.administrative = expected_state
-                elif type == OPERATIONAL:
+                elif attr_type == OPERATIONAL:
                     node.operational = expected_state
-                elif type == AVAILABILITY:
+                elif attr_type == AVAILABILITY:
                     node.availability = expected_state
-                log.info("{} has {} state: {}".format(node.name, type, expected_state))
+                log.info("{} has {} state: {}".format(node.name, attr_type, expected_state))
                 expected_state_count += 1
                 # Remove matched line from output
                 output = re.sub(re.escape(match.group(0)), "", output)
@@ -738,7 +800,7 @@ def wait_state(nodes, type, expected_state, sut=None, exit_on_find=False):
             log.info("Sleeping for {} seconds...".format(str(sleep_secs)))
             time.sleep(sleep_secs)
         count += 1
-    if count == search_attempts:
+    if count == search_attempts and not fail_ok:
         msg = 'Waited {} seconds and {} did not become \"{}\"'.format(str(REBOOT_TIMEOUT), node_names, expected_state)
         log.error(msg)
         wr_exit()._exit(1, msg)
@@ -867,7 +929,7 @@ def get_settings(barcodes_controller, barcodes_compute):
 
     return server_name + last_server_number
 
-def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=True, usb=False, lowlat=False, security=False):
+def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=False, lowlat=False, security=False, iso_install=False):
     ''' Initiate the boot and installation operation.
     '''
 
@@ -886,9 +948,10 @@ def bring_up(node, boot_device_dict, small_footprint, host_os, install_output_di
 
     vlm_exec_cmd(VLM_TURNON, node.barcode)
     logutils.print_step("Installing {}...".format(node.name))
-    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security)
+    rc = node.telnet_conn.install(node, boot_device_dict, small_footprint, host_os, usb, lowlat, security, iso_install)
 
     if close_telnet_conn:
+        print("Closing telnet connection")
         node.telnet_conn.close()
 
     return rc
@@ -1216,11 +1279,13 @@ def reserveLabNodes(barcodes):
 
 def establish_ssh_connection(_controller0, install_output_dir):
 
+    print("Opening ssh connection")
     cont0_ssh_conn = SSHClient(log_path=install_output_dir +\
                                "/" + CONTROLLER0 + ".ssh.log")
     cont0_ssh_conn.connect(hostname=_controller0.host_ip,
                            username=WRSROOT_USERNAME,
                            password=WRSROOT_PASSWORD)
+
     return cont0_ssh_conn
 
 
@@ -1273,7 +1338,7 @@ def setupNetworking(host_os):
 def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths,
                       host_os, boot_device_dict, small_footprint, burn_usb,
                       tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
-                      security):
+                      security, iso_install):
 
     global controller0
     #global cumulus
@@ -1291,7 +1356,7 @@ def bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_
             usb = False
 
         # Boot up controller0
-        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat, security=security)
+        rc = bring_up(controller0, boot_device_dict, small_footprint, host_os, install_output_dir, close_telnet_conn=False, usb=usb, lowlat=lowlat, security=security, iso_install=iso_install)
         if rc != 0:
             msg = "Unable to bring up controller-0"
             wr_exit()._exit(1, msg)
@@ -1404,8 +1469,12 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                           WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
                           pre_opts=pre_opts, allow_fail=True)
 
+    bld_server_conn.rsync(os.path.join(guest_load_path, "tis-centos-guest.img"),
+                          WRSROOT_USERNAME, controller0.host_ip, \
+                          WRSROOT_IMAGES_DIR + "/tis-centos-guest.img",\
+                          pre_opts=pre_opts, allow_fail=True)
+
     # Get licenses
-    print("This is load_path: {}".format(load_path))
     if lab_type == "regular" or lab_type == "storage":
         license = LICENSE_FILEPATH
     elif lab_type == "cpe":
@@ -1580,10 +1649,38 @@ def bulkAddHosts():
         wr_exit()._exit(1, msg)
 
 
-def run_labsetup():
+def run_labsetup(fail_ok=False):
     cmd = './lab_setup.sh'
     cmd = WRSROOT_HOME_DIR + "/" + LAB_SETUP_SCRIPT
-    return controller0.ssh_conn.exec_cmd(cmd)
+    log.info("Running cmd: {}".format(cmd))
+    controller0.ssh_conn.sendline(cmd)
+
+    try:
+        log.info("Checking for password prompt")
+        controller0.ssh_conn.expect("Password:", timeout=20)
+        log.info("Found lab_setup password prompt.  Sending password.")
+        controller0.ssh_conn.sendline(WRSROOT_PASSWORD)
+    except:
+        log.info("Password prompt not found")
+        pass
+
+    log.info("Waiting for lab_setup.sh to complete")
+    controller0.ssh_conn.find_prompt(LAB_SETUP_TIMEOUT)
+    out = controller0.ssh_conn.get_after()
+    rc = controller0.ssh_conn.get_rc()
+
+    installer_exit = wr_exit()
+
+    if rc != "0":
+        if fail_ok:
+            msg = "lab_setup returned non-zero exit code but continuing anyways."
+            log.info(msg)
+        else:
+            msg = "lab_setup returned non-zero exit code, exiting install."
+            log.error(msg)
+            installer_exit._exit(1, msg)
+
+    return
 
 
 def run_cpe_compute_config_complete(host_os, install_output_dir):
@@ -1725,7 +1822,7 @@ def boot_other_lab_hosts(nodes, boot_device_dict, host_os, install_output_dir,
             wr_exit()._exit(1, msg)
 
 
-def unlock_node(nodes, selection_filter=None):
+def unlock_node(nodes, selection_filter=None, wait_done=True):
 
     _unlock_nodes = []
     if selection_filter is not None:
@@ -1743,7 +1840,8 @@ def unlock_node(nodes, selection_filter=None):
                 log.error(msg)
                 wr_exit()._exit(1, msg)
 
-        wait_state(_unlock_nodes, AVAILABILITY, AVAILABLE)
+        if wait_done:
+            wait_state(_unlock_nodes, AVAILABILITY, AVAILABLE)
 
 
 def do_next_install_step(_lab_type, step):
@@ -1828,6 +1926,7 @@ def main():
     tuxlab_server = args.tuxlab_server
     run_lab_setup = args.run_lab_setup
     small_footprint = args.small_footprint
+    system_mode = args.system_mode
     postinstall = args.postinstall
     burn_usb = args.burn_usb
     boot_usb = args.boot_usb
@@ -1852,6 +1951,7 @@ def main():
     guest_bld_dir = args.guest_bld_dir
     patch_dir_paths = args.patch_dir_paths
     iso_install = args.iso_install
+    skip_pxebootcfg = args.skip_pxebootcfg
     config_region = args.config_region
 
     install_timestr = time.strftime("%Y%m%d-%H%M%S")
@@ -1913,6 +2013,7 @@ def main():
         logutils.print_name_value("Tuxlab server", tuxlab_server)
         logutils.print_name_value("Is iso_install", iso_install)
         logutils.print_name_value("Small footprint", small_footprint)
+        logutils.print_name_value("Skip pxeboot cfg", skip_pxebootcfg)
 
     logutils.print_name_value("Build server", bld_server)
     logutils.print_name_value("Build server workspace", bld_server_wkspce)
@@ -1951,6 +2052,11 @@ def main():
 
     # installed load info for email message
     installed_load_info = ''
+
+    # Set security parameter for USB installs (assuming we're not installing an
+    # other release)
+    older_rel = ['TC_17.06_Host/', 'TC_17.06_Host', 'TS_15.12_Host/',
+    'TS_15.12_Host', 'TS_16.10_Host/', 'TS_16.10_Host']
 
     print("\nRunning as user: " + USERNAME + "\n")
 
@@ -2074,7 +2180,8 @@ def main():
                     and not tis_on_tis:
                 set_network_boot_feed(controller0.barcode, tuxlab_server,
                                     bld_server_conn, load_path, host_os,
-                                    install_output_dir)
+                                    install_output_dir, tis_blds_dir,
+                                    skip_pxebootcfg)
                 set_install_step_complete(lab_install_step)
     else:
         log.info('Skipping setup of network feed on tuxlab: '.format(tuxlab_server))
@@ -2178,9 +2285,18 @@ def main():
             with open(os.devnull, 'wb') as devnull:
                 isControllerOnline = subprocess.call(["ping", "-w {}".format(PING_TIMEOUT), "-c 4", "{}".format(controller0.host_ip)], stdout=devnull, stderr=subprocess.STDOUT)
             if(isControllerOnline == 0):
+                #controller0.telnet_conn = open_telnet_session(controller0, install_output_dir)
+                #controller0.telnet_conn.login(reset=True)
                 if controller0.ssh_conn is None:
                     controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
                 cmd = "test -f " + "wipedisk_helper " + "&& " + "test -f " + "wipedisk_automater"
+                #if controller0.telnet_conn.exec_cmd(cmd)[0] == 0:
+                #    cmd = "chmod 755 wipedisk_helper"
+                #    controller0.telnet_conn.exec_cmd(cmd)
+                #    cmd = "chmod 755 wipedisk_automater"
+                #    controller0.telnet_conn.exec_cmd(cmd)
+                #    cmd = "./wipedisk_automater"
+                #    controller0.telnet_conn.exec_cmd(cmd)
                 if controller0.ssh_conn.exec_cmd(cmd)[0] == 0:
                     cmd = "chmod 755 wipedisk_helper"
                     controller0.ssh_conn.exec_cmd(cmd)
@@ -2215,7 +2331,7 @@ def main():
         bringUpController(install_output_dir, bld_server_conn, load_path, patch_dir_paths, host_os,
                           boot_device_dict, small_footprint, burn_usb,
                           tis_on_tis, boot_usb, iso_path, iso_host, lowlat,
-                          security)
+                          security, iso_install)
         set_install_step_complete(lab_install_step)
 
     if stop == "1":
@@ -2257,13 +2373,38 @@ def main():
 
     if do_next_install_step(lab_type, lab_install_step):
         configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region)
+        #controller0.ssh_conn.disconnect()
+        controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+        # Depends on when we poll whether controller0 is offline or online
+        # Starting in R5 - since the controller-0 is initially in locked state after
+        # running config_controller there is a special case in AIO-direct where after
+        # the initial unlock controller-0 will be in degraded state (which is valid)
+        # AIO-direct controller-0 will only come online when controller-1 is powered on
+        # Maybe just check if not available instead
+        node_offline = test_state(controller0, AVAILABILITY, OFFLINE)
+        node_online = test_state(controller0, AVAILABILITY, ONLINE)
+        node_degraded = test_state(controller0, AVAILABILITY, DEGRADED)
+        run_config_complete = True
+        if node_online or node_offline or node_degraded:
+            run_config_complete = False
+            run_labsetup()
+            unlock_node(nodes, selection_filter="controller-0", wait_done=False)
+            controller0.ssh_conn.disconnect()
+            time.sleep(60)
+            controller0.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
+            controller0.telnet_conn.login()
+            controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+            if "duplex-direct" in system_mode:
+                wait_state(controller0, AVAILABILITY, DEGRADED)
+            else:
+                wait_state(controller0, AVAILABILITY, AVAILABLE)
         set_install_step_complete(lab_install_step)
 
-    time.sleep(10)
+        time.sleep(10)
 
     # Reconnect ssh session
-    controller0.ssh_conn.disconnect()
-    controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+    #controller0.ssh_conn.disconnect()
+    #controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
@@ -2288,36 +2429,48 @@ def main():
     # Complete controller0 configuration either as a regular host
     # or a small footprint host.
     # Lab-install -  Run_lab_setup - applicable cpe labs only
-    lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
+
+    if not tis_blds_dir in older_rel:
+        log.info("tis_blds_dir: {} not in older_rel: {}".format(tis_blds_dir, older_rel))
+        lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex', 'storage'])
+    else:
+        lab_install_step = install_step("run_lab_setup", 5, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
-    #if not executed:
-        if small_footprint:
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed in small footprint configuration."
-                log.error(msg)
-                installer_exit._exit(1, msg)
+        # lab_setup.sh only be ran when hosts are online
+        # TODO: below is a hack that ignores lab_setup failure - this makes the new istalls...
+        run_labsetup(fail_ok=True)
+        set_install_step_complete(lab_install_step)
+
+    # Lab-install -  Bulk hosts add- applicable all lab types
+    msg = 'bulk_hosts_add'
+    lab_install_step = install_step("bulk_hosts_add", 41, ['regular', 'storage', 'cpe'])
+
+    if do_next_install_step(lab_type, lab_install_step):
+        if not tis_on_tis:
+            bulkAddHosts()
             set_install_step_complete(lab_install_step)
 
-     # Lab-install - cpe_compute_config_complete - applicable cpe labs only
-    lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
-    if do_next_install_step(lab_type, lab_install_step):
-        if small_footprint:
-            run_cpe_compute_config_complete(host_os, install_output_dir)
-            set_install_step_complete(lab_install_step)
+    # Lab-install - cpe_compute_config_complete - applicable cpe labs only
+    # system compute-config-complete is only applicable to R3 and R4
+    # SW_VERSION="16.10 and SW_VERSION="17.06
+    #if tis_blds_dir in older_rel:
+    if run_config_complete:
+        lab_install_step = install_step("cpe_compute_config_complete", 6, ['cpe', 'simplex'])
+        if do_next_install_step(lab_type, lab_install_step):
+            if small_footprint:
+                run_cpe_compute_config_complete(host_os, install_output_dir)
+                set_install_step_complete(lab_install_step)
 
     # Lab-install -  Run_lab_setup - applicable cpe labs only
     lab_install_step = install_step("run_lab_setup", 7, ['cpe', 'simplex'])
     if do_next_install_step(lab_type, lab_install_step):
         if small_footprint:
         # Run lab_setup again to setup controller-1 interfaces
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed in small footprint configuration."
-                log.error(msg)
-                installer_exit._exit(1, msg)
+            run_labsetup(fail_ok=True)
 
-                log.info("Waiting for controller0 come online")
-                wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
-                wait_state(controller0, OPERATIONAL, ENABLED)
+            log.info("Waiting for controller0 come online")
+            wait_state(controller0, ADMINISTRATIVE, UNLOCKED)
+            wait_state(controller0, OPERATIONAL, ENABLED)
 
             set_install_step_complete(lab_install_step)
 
@@ -2352,12 +2505,10 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
         log.info("Beginning lab setup procedure for {} lab".format(lab_type))
 
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
         set_install_step_complete(lab_install_step)
 
+    # Extra lab_setup.sh after cinder changes
     log.info("Beginning lab setup procedure for {} lab".format(lab_type))
     # Lab-install -  run_lab_setup - applicable regular and storage labs
     lab_install_step = install_step("run_lab_setup", 11, ['regular', 'storage'])
@@ -2365,10 +2516,7 @@ def main():
         if lab_type is "regular" or "storage":
             # do run lab setup again
             # Run lab setup
-            if run_labsetup()[0] != 0:
-                msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-                log.error(msg)
-                installer_exit._exit(1, msg)
+            run_labsetup()
 
             set_install_step_complete(lab_install_step)
 
@@ -2396,10 +2544,7 @@ def main():
     if do_next_install_step(lab_type, lab_install_step):
     #if not executed:
         # do run lab setup to add osd
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
 
         set_install_step_complete(lab_install_step)
 
@@ -2431,17 +2576,13 @@ def main():
         wait_state(computes, AVAILABILITY, ONLINE)
 
         # do run lab setup to add osd
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
 
         set_install_step_complete(lab_install_step)
 
     # Lab-install - unlock_computes - applicable storage and regular labs
     lab_install_step = install_step("unlock_computes", 16, ['regular', 'storage'])
     if do_next_install_step(lab_type, lab_install_step):
-        print(nodes)
         unlock_node(nodes, selection_filter="compute")
         wait_state(nodes, OPERATIONAL, ENABLED)
         set_install_step_complete(lab_install_step)
@@ -2450,10 +2591,7 @@ def main():
     lab_install_step = install_step("run_lab_setup", 17, ['regular', 'storage', 'cpe'])
     if do_next_install_step(lab_type, lab_install_step):
         # do run lab setup to add osd
-        if run_labsetup()[0] != 0:
-            msg = "lab_setup failed in {} lab configuration.".format(lab_type)
-            log.error(msg)
-            installer_exit._exit(1, msg)
+        run_labsetup()
 
         set_install_step_complete(lab_install_step)
 
@@ -2540,6 +2678,9 @@ def main():
     rc, installed_load_info = controller0.ssh_conn.exec_cmd(cmd)
     if rc != 0:
         log.error("Failed to get build info")
+
+    if not (skip_pxebootcfg or iso_install):
+        restore_pxeboot_cfg(controller0.barcode, tuxlab_server, install_output_dir)
 
     wr_exit()._exit(0, "Installer completed.\n" + installed_load_info)
 

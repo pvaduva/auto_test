@@ -1,5 +1,3 @@
-
-# flake8:
 import os.path
 import time
 import datetime
@@ -414,10 +412,10 @@ class MonitoredProcess:
 
     def is_supported_lab(self):
         lab_type = self.lab_type
-        if lab_type in ('any'):
+        if lab_type in ('any', ):
             return True
 
-        elif lab_type in ('storage'):
+        elif lab_type in ('storage', ):
             return len(system_helper.get_storage_nodes(con_ssh=self.con_ssh)) > 0
 
         return True
@@ -715,15 +713,15 @@ class MonitoredProcess:
 
             if len(matched_events) == 1:
                 LOG.warn('Only 1 event recorded? matched_event:\n{}\n'.format(matched_events[0]))
-                if service in ('ntpd'):
+                if service in ('ntpd', ):
                     event = matched_events[0]['event']
                     if event[1] == 'set':
-                        LOG.warn('Treat NTP sepcially, pass since it is set')
+                        LOG.warn('Treat NTP specially, pass since it is set')
                         return 0, tuple(matched_events)
 
             LOG.warn('No matched event found at try:{}, will sleep {} seconds and retry'
-                     '\nmatched events:\n{}, host={}, expected status={}, expecting={}'.format(
-                retry, interval, matched_events, host, target_status, expecting))
+                     '\nmatched events:\n{}, host={}, expected status={}, expecting={}'.
+                     format(retry, interval, matched_events, host, target_status, expecting))
 
             time.sleep(interval)
 
@@ -755,7 +753,7 @@ class MonitoredProcess:
 
         quorum = int(getattr(self, 'quorum', 0))
         if quorum > 0:
-            retries = retries + 1
+            retries += 1
             mode = getattr(self, 'mode', 'passive')
             if 'active' == mode:
                 wait_after_each_kill += 5
@@ -773,9 +771,7 @@ class MonitoredProcess:
                 else sleep 0.5; fi; done; echo \$pid'''.format(
                     retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
 
-
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
-
         cmd_2 = 'cat >/home/wrsroot/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
 
         wait_time = max(wait_after_each_kill * retries + 60, 60)
@@ -979,113 +975,95 @@ class MonitoredProcess:
         return code
 
 
-@mark.parametrize(('process_name'), [
-    mark.p1(('sm')),
+@mark.parametrize('process_name', [
+    mark.p1('sm'),
     # TODO CGTS-6451
-    mark.p1(('rmond')),
-    mark.p1(('fsmond')),
+    mark.p1('rmond'),
+    mark.p1('fsmond'),
     mark.priorities('p1', 'sx_nightly')('hbsClient'),
-    mark.p1(('mtcClient')),
-    mark.p1(('mtcalarmd')),
-    mark.p1(('sm-api')),
-    mark.p1(('sm-watchdog')),
-    mark.p1(('sysinv-agent')),
-    mark.p1(('sw-patch-controller-daemon')),
-    mark.p1(('sw-patch-agent')),
-    # TODO jira?
-    mark.p1(('acpid')),
-    mark.p1(('ceilometer-polling')),
-    mark.p1(('mtclogd')),
-    # TODO need manual configuring
-    mark.p1(('ntpd')),
-    mark.p1(('sm-eru')),
-    mark.p1(('sshd')),
-    mark.p1(('syslog-ng')),
-    mark.p1(('io-monitor-manager')),
-    mark.p1(('logmgmt')),
-    mark.p1(('guestServer')),
-    mark.p1(('host_agent')),
-    mark.p1(('libvirtd')),
-    mark.p1(('neutron-avr-agent')),
-    mark.p1(('neutron-avs-agent')),
-    mark.p1(('neutron-dhcp-agent')),
-    mark.p1(('neutron-metadata-agent')),
-    mark.p1(('neutron-sriov-nic-agent')),
-    mark.p1(('nova-compute')),
-    mark.p1(('vswitch')),
+    mark.p1('mtcClient'),
+    mark.p1('mtcalarmd'),
+    mark.p1('sm-api'),
+    mark.p1('sm-watchdog'),
+    mark.p1('sysinv-agent'),
+    mark.p1('sw-patch-controller-daemon'),
+    mark.p1('sw-patch-agent'),
+    mark.p1('acpid'),
+    mark.p1('ceilometer-polling'),
+    mark.p1('mtclogd'),
+    mark.p1('ntpd'),
+    mark.p1('sm-eru'),
+    mark.p1('sshd'),
+    mark.p1('syslog-ng'),
+    mark.p1('io-monitor-manager'),
+    mark.p1('logmgmt'),
+    mark.p1('guestServer'),
+    mark.p1('host_agent'),
+    mark.p1('libvirtd'),
+    mark.p1('neutron-avr-agent'),
+    mark.p1('neutron-avs-agent'),
+    mark.p1('neutron-dhcp-agent'),
+    mark.p1('neutron-metadata-agent'),
+    mark.p1('neutron-sriov-nic-agent'),
+    mark.p1('nova-compute'),
+    mark.p1('vswitch'),
 
     # mark.p1(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
     # mark.p1(('rabbitmq-server')), # rabbit in SM don't test as per CGTS-6336
-    mark.p1(('rabbit')),
-    mark.p1(('sysinv-inv')),    # sysinv-inv in SM
-    mark.p1(('sysinv-conductor')),
-    mark.p1(('mtc-agent')),
-    mark.p1(('hbs-agent')),
-    mark.p1(('hw-mon')),
-    mark.p1(('dnsmasq')),
-    mark.p1(('fm-mgr')),
-    # TODO CGTS-6396
-    mark.p1(('keystone')),
-    mark.p1(('glance-registry')),
-    # TODO CGTS-6398
+    mark.p1('rabbit'),
+    mark.p1('sysinv-inv'),    # sysinv-inv in SM
+    mark.p1('sysinv-conductor'),
+    mark.p1('mtc-agent'),
+    mark.p1('hbs-agent'),
+    mark.p1('hw-mon'),
+    mark.p1('dnsmasq'),
+    mark.p1('fm-mgr'),
+    mark.p1('keystone'),
+    mark.p1('glance-registry'),
     # major
-    mark.p1(('glance-api')),
-    mark.p1(('neutron-server')),
-    mark.p1(('nova-api')),
-    mark.p1(('nova-scheduler')),
-    mark.p1(('nova-conductor')),
+    mark.p1('glance-api'),
+    mark.p1('neutron-server'),
+    mark.p1('nova-api'),
+    mark.p1('nova-scheduler'),
+    mark.p1('nova-conductor'),
     # mark.p1(('nova-cert')),       # Removed in pike
-    mark.p1(('nova-console-auth')),
+    mark.p1('nova-console-auth'),
     # minor
-    mark.p1(('nova-novnc')),
-    #
+    mark.p1('nova-novnc'),
     # major
-    mark.p1(('cinder-api')),
-    mark.p1(('cinder-scheduler')),
-    # retries = 32
-    mark.p1(('cinder-volume')),
-    #
-    mark.p1(('ceilometer-collector')),
-    mark.p1(('ceilometer-api')),
-    mark.p1(('ceilometer-agent-notification')),
-    mark.p1(('heat-engine')),
-
-    # TODO CGTS-6396
+    mark.p1('cinder-api'),
+    mark.p1('cinder-scheduler'),
+    mark.p1('cinder-volume'),   # retries = 32
+    mark.p1('ceilometer-collector'),
+    mark.p1('ceilometer-api'),
+    mark.p1('ceilometer-agent-notification'),
     mark.priorities('p1', 'sx_nightly')('heat-api'),
-    mark.p1(('heat-api-cfn')),
-    mark.p1(('heat-api-cloudwatch')),
-    #
-    #
+    mark.p1('heat-api-cfn'),
+    mark.p1('heat-api-cloudwatch'),
+    mark.p1('heat-engine'),
+    mark.p1('snmp'),
+
     # TODO CGTS-6426
     # mark.p1(('open-ldap')),, active/active
-    # retries = 32
-    mark.p1(('snmp')),
-
-    # TODO CGTS-6426
     # mark.p1(('lighttpd')),, active/active
+    # mark.p1('horizon'),, active/active
+    # mark.p1(('ceph-rest-api')),
+    mark.p1('ceph-manager'),
 
     # mark.p1(('gunicorn')), changed to horizon
-    # TODO CGTS-6398
-    # mark.p1(('horizon')),, active/active
-    # mark.p1(('horizon')),
-    # mark.p1(('patch-alarm-manager')),
-    #
-    # requires storage lab, active/active
-    # mark.p1(('ceph-rest-api')),
-    mark.p1(('ceph-manager')),
+    # mark.p1(('patch-alarm-manager')),     ???
 
-    mark.p1(('vim-api')),
-    mark.p1(('vim')),
+    mark.p1('vim-api'),
+    mark.p1('vim'),
     # minor
-    mark.p1(('vim-webserver')),
-    mark.p1(('guest-agent')),
-    mark.p1(('nova-api-proxy')),
-    mark.p1(('haproxy')),
-
-    mark.p1(('aodh-api')),
-    mark.p1(('aodh-evaluator')),
-    mark.p1(('aodh-listener')),
-    mark.p1(('aodh-notifier')),
+    mark.p1('vim-webserver'),
+    mark.p1('guest-agent'),
+    mark.p1('nova-api-proxy'),
+    mark.p1('haproxy'),
+    mark.p1('aodh-api'),
+    mark.p1('aodh-evaluator'),
+    mark.p1('aodh-listener'),
+    mark.p1('aodh-notifier'),
 ])
 def test_process_monitoring(process_name, con_ssh=None):
     """
@@ -1093,93 +1071,6 @@ def test_process_monitoring(process_name, con_ssh=None):
 
     User Stories:
         US61041 US66951 US18629
-
-    Test Cases:
-        sm
-        rmond
-        fsmond
-        hbsClient
-        mtcClient
-        mtcalarmd
-        sm-api
-        sm-watchdog
-        sysinv-agent
-        sw-patch-controller-daemon
-        sw-patch-agent
-        acpid
-        ceilometer-polling
-        mtclogd
-        ntpd
-        sm-eru
-        sshd
-        syslog-ng
-        io-monitor-manager
-        logmgmt
-        guestServer
-        host_agent
-        libvirtd
-        neutron-avr-agent
-        neutron-avs-agent
-        neutron-dhcp-agent
-        neutron-metadata-agent
-        neutron-sriov-nic-agent
-        nova-compute
-        vswitch
-        # postgres  SKIP as advised
-        rabbitmq-server # rabbit in SM
-        rabbit
-        sysinv-api  # sysinv-inv in SM
-        sysinv-inv
-        sysinv-conductor
-        mtc-agent
-        hbs-agent
-        hw-mon
-        dnsmasq
-        fm-mgr
-        keystone
-        glance-registry
-        glance-api
-        neutron-server
-        nova-api
-        nova-scheduler
-        nova-conductor
-        nova-cert
-        nova-console-auth
-        nova-novnc
-        cinder-api
-        cinder-scheduler
-        cinder-volume
-        ceilometer-collector
-        ceilometer-api
-        ceilometer-agent-notification
-        heat-engine
-        heat-api
-        heat-api-cfn
-        heat-api-cloudwatch
-        open-ldap
-        snmp
-        lighttpd
-        gunicorn changed to horizon
-        horizon
-        patch-alarm-manager
-        ceph-rest-api
-        ceph-manager
-        vim-api
-        vim-webserver
-        guest-agent
-        nova-api-proxy
-        haproxy
-        aodh-api
-        aodh-evaluator
-        aodh-listener
-        aodh-notifier
-
-
-    Args:
-        process_name (str): Name of the process to test. The following specical names are supported:
-        con_ssh:
-
-    Returns:
 
     Test Steps:
         - get process settings for the specified process name, from pre-defined information, configuration files and
@@ -1207,7 +1098,10 @@ def test_process_monitoring(process_name, con_ssh=None):
 
             ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
-    LOG.tc_step('Start testing SM/PM Prcocess Monitoring')
+    if ProjVar.get_var('REGION') != 'RegionOne' and re.search('keystone|glance', process_name):
+        skip("Keystone and Glance services are on primary region only")
+
+    LOG.tc_step('Start testing SM/PM Process Monitoring')
 
     assert process_name in PROCESSES, \
         'Unknown process with name:{}'.format(process_name)

@@ -1,28 +1,24 @@
-from pytest import mark
 from keywords import system_helper, keystone_helper
 from consts.cgcs import ExtLdap
 from utils.tis_log import LOG
-from pytest import mark, fixture, skip
+from pytest import mark, fixture
 
-srvice_param_restore_dic = []
+service_param_restore_dic = []
 
 
 @fixture(scope='module', autouse=True)
 def router_info(request):
-    global srvice_param_restore_dic
+    global service_param_restore_dic
 
     def teardown():
-        for dict in srvice_param_restore_dic:
-            if dict['action'] == 'delete':
-                code, msg = system_helper.delete_service_parameter(uuid=dict['uuid'])
-                assert code == 0, "Couldn't delete service param {}".format(dict['uuid'])
-            elif dict['action'] == 'modify':
-                code, msg = system_helper.modify_service_parameter(service=dict['service'],section=dict['section'],
-                                                                   name=dict['name'],value=dict['val'])
-                assert code == 0, "Couldn't modify service param {}".format(dict['uuid'])
-
-        code, msg = system_helper.apply_service_parameters(service='identity')
-        assert code == 0, "Expected service params apply to pass"
+        for dict_ in service_param_restore_dic:
+            if dict_['action'] == 'delete':
+                code, msg = system_helper.delete_service_parameter(uuid=dict_['uuid'])
+                assert code == 0, "Couldn't delete service param {}".format(dict_['uuid'])
+            elif dict_['action'] == 'modify':
+                system_helper.modify_service_parameter(service=dict_['service'], section=dict_['section'],
+                                                       name=dict_['name'], value=dict_['val'], apply=False)
+        system_helper.apply_service_parameters(service='identity')
 
     request.addfinalizer(teardown)
 
@@ -40,34 +36,32 @@ def test_ext_ldap():
         - Restore the system
 
     """
-    global srvice_param_restore_dic
+    global service_param_restore_dic
     service = 'identity'
     LOG.info("Add Ext LDAP service params")
-    code, msg = system_helper.create_service_parameter(service=service, section='ldap', name='url',
-                                                       value=ExtLdap.LDAP_SERVER)
+    system_helper.create_service_parameter(service=service, section='ldap', name='url', value=ExtLdap.LDAP_SERVER)
     uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ldap', name='url')[0]
-    dict = {'uuid':uuid, 'action':'delete', 'val':None}
-    srvice_param_restore_dic.append(dict)
+    dict_ = {'uuid': uuid, 'action': 'delete', 'val': None}
+    service_param_restore_dic.append(dict_)
 
     suffix = "\"" + ExtLdap.LDAP_DC + "\""
-    code, msg = system_helper.create_service_parameter(service=service, section='ldap', name='suffix', value=suffix)
+    system_helper.create_service_parameter(service=service, section='ldap', name='suffix', value=suffix)
     uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ldap',
                                                       name='suffix')[0]
-    dict = {'uuid': uuid, 'action': 'delete', 'val': None}
-    srvice_param_restore_dic.append(dict)
-    code, msg = system_helper.create_service_parameter(service=service,section='identity', name='driver',
-                                                       value=ExtLdap.LDAP_DRIVER)
-    dict = {'uuid': uuid, 'action': 'modify', 'service':'identity', 'section':'identity', 'name':'driver', 'val': 'sql'}
-    uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='identity',
-                                                      name='driver')[0]
-    srvice_param_restore_dic.append(dict)
+    dict_ = {'uuid': uuid, 'action': 'delete', 'val': None}
+    service_param_restore_dic.append(dict_)
+    system_helper.create_service_parameter(service=service, section='identity', name='driver',
+                                           value=ExtLdap.LDAP_DRIVER)
+    dict_ = {'uuid': uuid, 'action': 'modify', 'service': 'identity', 'section': 'identity',
+             'name': 'driver', 'val': 'sql'}
+
+    service_param_restore_dic.append(dict_)
     user = "\"" + ExtLdap.LDAP_USER + "\""
-    code, msg = system_helper.create_service_parameter(service=service,section='ldap', name='user', value=user,
-                                                       verify=False)
+    system_helper.create_service_parameter(service=service, section='ldap', name='user', value=user, verify=False)
     uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ldap',
                                                       name='user')[0]
-    dict = {'uuid': uuid, 'action': 'delete', 'val': None}
-    srvice_param_restore_dic.append(dict)
+    dict_ = {'uuid': uuid, 'action': 'delete', 'val': None}
+    service_param_restore_dic.append(dict_)
 
     code, msg = system_helper.apply_service_parameters(service=service)
     assert code == 0, "Expected service params apply to pass"

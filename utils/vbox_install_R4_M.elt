@@ -186,6 +186,7 @@ $load=none
 $source_image=yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 $source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/CGCS_4.0_Centos_Build/latest_bootimage.iso
 $source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_bootimage.iso
+#$source_image=svc-cgcsauto@yow-cgts4-lx.wrs.com:/folk/cgts/rel-ops/17.06/Titanium-Cloud-host-installer-17.06-b6.iso
 
 
 $boot_image=/home/$USER/VBox/latest_bootimage.iso
@@ -1061,26 +1062,37 @@ $directory=R4_files
 		>sudo sw-patch upload-dir /home/wrsroot/patches/
 		>sudo sw-patch query
 		>sudo sw-patch query-hosts
+		*FORK serial
+		>
 		; === Apply Patches
+		>
 		>sudo sw-patch apply --all
+		>
 		; === Install Patches
 		>sudo sw-patch install-local
+		
 		<Patch installation is complete
+
+		
+		
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
 		<root
                 >sudo sw-patch query
                 >sudo sw-patch query-hosts
+		>export TMOUT=0
+		#*FORK $connection
 		; === Reboot the controller
 		>sudo reboot
 		*FORK serial
-		>>^M
+		#>>^M
+		>>^C
 		; === reconnect to serial
 		>$console_connect
 		<login:
-
 		@5
 		; === initial login
+		
 		*/.*: /
 		>wrsroot
 		<assword
@@ -1156,7 +1168,7 @@ $directory=R4_files
 >
 *INTERACT
 *EXP_INFO
-*FORK $connection
+*FORK serial
 ; === Configuring Controller Interface with Scenario $controller_consolidation
 >export TMOUT=0
 >time sudo config_controller

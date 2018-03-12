@@ -459,7 +459,8 @@ if __name__ == "__main__":
         vboxoptions.install_lab = True
         vboxoptions.run_scripts = True
         vboxoptions.iso_location = env.ISOPATH.format(vboxoptions.release)
-        vboxoptions.patch_dir = env.FILEPATH + vboxoptions.release + "/patches/"
+        #vboxoptions.patch_dir = env.FILEPATH + vboxoptions.release + "/patches/"
+        vboxoptions.get_patches = False
         vboxoptions.install_patches = True
         vboxoptions.deletelab = True
         vboxoptions.createlab = True
@@ -519,9 +520,7 @@ if __name__ == "__main__":
         install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, host_type=host_type)
     elif vboxoptions.get_setup:
         install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type=host_type)
-    if vboxoptions.patch_dir:
-        install_lab.get_patches(cont0_stream, vboxoptions.patch_dir, release=vboxoptions.release)
-    elif vboxoptions.get_patches:
+    if vboxoptions.get_patches:
         install_lab.get_patches(cont0_stream, remote_host=remote_server, release=vboxoptions.release)
     if vboxoptions.config_file:
         sftp_send(vboxoptions.config_file, destination="/home/wrsroot/TiS_config.ini_centos")
@@ -540,8 +539,9 @@ if __name__ == "__main__":
         else:
             config_file = '/home/wrsroot/system_config.centos_http'
         remote_host = vboxoptions.buildserver
-        ret = install_lab.config_controller(cont0_stream, config_file=config_file,
-                                            release=vboxoptions.release, remote_host=remote_server)
+        ret = install_lab.config_controller(cont0_stream, config_file=config_file, release=vboxoptions.release,
+                                            remote_host=remote_server)
+        # ret = 1
         if ret == 1:
             LOG.info("Pausing to allow for manual configuration. Press enter to continue.")
             input()

@@ -16,7 +16,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
-
+DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
 @fixture()
 def aio_precheck():
@@ -132,7 +132,12 @@ def test_increase_controllerfs():
 
     drbdfs_val = {}
     LOG.tc_step("Determine the space available for each drbd filesystem")
-    for fs in DRBDFS: 
+    if system_helper.is_storage_system():
+        drbd_filesystems = DRBDFS_CEPH
+    else:
+        drbd_filesystems = DRBDFS
+
+    for fs in drbd_filesystems:
         drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
         LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
         if fs == 'backup':

@@ -1075,12 +1075,21 @@ $directory=R3_files
 		>
 		; === Upload Patches
 		>sudo sw-patch upload-dir /home/wrsroot/patches/
+		>
 		>sudo sw-patch query
+		>
 		>sudo sw-patch query-hosts
+		>
+		*FORK serial
+		>
+		
 		; === Apply Patches
 		>sudo sw-patch apply --all
 		; === Install Patches
 		>sudo sw-patch install-local
+		#; === reconnect to serial
+		#>$console_connect
+		>		
 		<Patch installation is complete
 		; === set up sudo root access (to make it easier later in the interact session)
 		>echo "$pass" | sudo -S id
@@ -1972,6 +1981,17 @@ Add to tempest.conf to run tests
 
 ; === Install Complete!!
 >
+
+?if $upgrade == yes ?[
+        >sudo sw-patch query
+        >sudo sw-patch query-hosts
+]
+
+; === Upgrade Complete!!
+>
+
+
+
 
 *INTERACT
 

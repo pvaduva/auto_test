@@ -487,6 +487,15 @@ class Labs:
         'tpm_installed': True,
     }
 
+    WCP_113_121 = {
+        'short_name': 'wcp_113_121',
+        'name': 'yow-cgcs-wildcat-113-121',
+        'floating ip': '128.224.150.45',
+        'controller-0 ip': '128.224.150.191',
+        'controller-1 ip': '128.224.150.57',
+
+    }
+
     WP_01_02 = {
         'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
@@ -496,6 +505,27 @@ class Labs:
         'controller_nodes': [62031, 29957],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+    }
+
+    WP_03_07 = {
+        'short_name': 'wp_3_7',
+        'name': 'yow-cgcs-wolfpass-03_07',
+        'floating ip': '128.224.151.165',
+        'controller-0 ip': '128.224.151.163',
+        'controller-1 ip': '128.224.151.166',
+        'controller_nodes': [98522, 81712],
+        'compute_nodes': [94867, 18658, 40810],
+    }
+
+    WCP_113_121 = {
+        'short_name': 'wcp_113_121',
+        'name': 'yow-cgcs-wildcat-113_121',
+        'floating ip': '128.224.150.45',
+        'controller-0 ip': '128.224.150.191',
+        'controller-1 ip': '128.224.150.57',
+        'controller_nodes': [31701, 19174],
+        'compute_nodes': [11182, 47720, 56027, 28212, 33598],
+        'storage_nodes': [11507, 47400],
     }
 
     VBOX = {

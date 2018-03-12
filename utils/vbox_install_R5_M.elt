@@ -1159,7 +1159,7 @@ $directory=R5_files
 >
 *INTERACT
 *EXP_INFO
-*FORK $connection
+*FORK serial
 ; === Configuring Controller Interface with Scenario $controller_consolidation
 >export TMOUT=0
 >time sudo config_controller
