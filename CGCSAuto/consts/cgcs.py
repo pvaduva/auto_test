@@ -45,7 +45,7 @@ PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
 REGION_MAP = {'RegionOne': '',
               'RegionTwo': '-R2'}
 
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '17.07'], ['17.06', '18.01']]
+SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
 
 class GuestImages:
