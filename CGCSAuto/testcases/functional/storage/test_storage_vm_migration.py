@@ -445,6 +445,7 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
     Args:
         vm_id:
         rootfs (str|list):
+        vm_image_name (None|str):
 
     Returns:
 

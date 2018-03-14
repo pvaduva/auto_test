@@ -389,4 +389,4 @@ class TestOneHostAvail:
         assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
 
         LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-        vm_helper.ping_vms_from_natbox(vms)
+        vm_helper.wait_for_vm_pingable_from_natbox(vms)

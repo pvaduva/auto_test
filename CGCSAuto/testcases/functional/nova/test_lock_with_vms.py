@@ -1,7 +1,7 @@
 import random
 
 from pytest import fixture, mark, skip
-
+import time
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, KPI_DATE_FORMAT
@@ -141,7 +141,7 @@ class TestLockWithVMs:
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostLock.WITH_VM.format(storage_backing),
                                       host=None, log_path=HostLock.LOG_PATH, end_pattern=HostLock.END.format(host),
                                       start_pattern=HostLock.START.format(host), start_path=HostLock.START_PATH,
-                                      init_time=init_time, uptime=10)
+                                      init_time=init_time, uptime=5)
 
     @mark.sx_nightly
     def test_lock_with_max_vms_simplex(self, simplex_only):
@@ -158,6 +158,8 @@ class TestLockWithVMs:
 
         LOG.tc_step("Ensure vms are in {} state after locked host come online".format(VMStatus.STOPPED))
         vm_helper.wait_for_vms_values(vms, values=VMStatus.STOPPED, fail_ok=False)
+        #TODO: TEMP delay for Chris F  must be reverted after
+        time.sleep(120)
 
         LOG.tc_step("Unlock host on simplex system")
         host_helper.unlock_host(host='controller-0')

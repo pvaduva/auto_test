@@ -377,13 +377,13 @@ class TestSharedCpuEnabled:
         # live migrate
         LOG.tc_step("Live migrate vm and then ping vm from NatBox")
         vm_helper.live_migrate_vm(vm_id)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes)
 
         # cold migrate
         LOG.tc_step("Cold migrate vm and then ping vm from NatBox")
         vm_helper.cold_migrate_vm(vm_id)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes)
 
     # TC2922
