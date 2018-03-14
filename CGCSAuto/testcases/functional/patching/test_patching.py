@@ -350,24 +350,25 @@ def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build
 
     # if an absolute path is specified, we do not need to guess the location of patch file(s),
     # otherwise, we need to deduce where they are based on the build information
+    build_id = lab_info.get_build_id()
+
     if patch_dir is None:
-        patch_dir_or_file = os.path.join(patch_base_dir, lab_info.get_build_id())
+        patch_dir_or_file = os.path.join(patch_base_dir, build_id)
 
-    elif not os.path.abspath(patch_dir):
-        if patch_base_dir is not None:
-            patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
+    elif not os.path.isabs(patch_dir):
+        patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
 
-        else:
-            patch_dir_or_file = patch_base_dir
     else:
-        patch_dir_or_file = patch_dir
         if patch_base_dir:
             LOG.info('patch-dir is an absolute path, while patch-base-dir is also provided'
                      '\npatch-dir:{}\npatch-base-dir:{}'.format(patch_dir, patch_base_dir))
+            LOG.info('ignore the patch_base_dir:{}'.format(patch_base_dir))
+
+    if patching_helper.is_dir(patch_dir_or_file, ssh_to_server):
+        patch_dir_or_file = os.path.join(patch_dir_or_file, build_id)
 
     rt_code, output = ssh_to_server.exec_cmd(
-        'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')),
-        fail_ok=True)
+        'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')), fail_ok=True)
 
     if 0 == rt_code and output:
         patch_dir_or_file = os.path.join(patch_dir_or_file, '*.patch')
@@ -433,7 +434,7 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
         'mkdir -p {} {}'.format(passing_patch_dir, failing_patch_dir), con_ssh=con_ssh)
     assert 0 == rt_code, 'Failed to create patch dir:{} on the active-controller'.format(dest_path)
 
-    LOG.info('Downloading patch files to lab:{} from:{}{}'.format(dest_path, patch_build_server, patch_dir_or_files))
+    LOG.info('Downloading patch files to lab:{} from:{}:{}'.format(dest_path, patch_build_server, patch_dir_or_files))
 
     ssh_to_server.rsync(patch_dir_or_files, html_helper.get_ip_addr(), passing_patch_dir,
                         dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(), timeout=1200)

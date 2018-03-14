@@ -14,6 +14,6 @@ def pytest_configure(config):
     if patch_base_dir is not None:
         PatchingVars.set_patching_var(patch_base_dir=patch_base_dir)
     else:
-        PatchingVars.set_patching_var(patch_base_dir=PatchingVars.get_patching_var('def_patch_build_base_dir'))
+        PatchingVars.set_patching_var(patch_base_dir=PatchingVars.get_patching_var('def_patch_base_dir'))
 
     PatchingVars.set_patching_var(patch_dir=patch_dir)
