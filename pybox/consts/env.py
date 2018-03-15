@@ -117,7 +117,7 @@ class Files:
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
             '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
         ],
-        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
+        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
     }
     R4 = {
         'setup': [
