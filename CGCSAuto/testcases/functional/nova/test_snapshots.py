@@ -117,7 +117,11 @@ def test_create_snapshot_using_boot_from_volume_vm():
         skip("No usable images found")
 
     LOG.tc_step("Create a cinder bootable volume")
-    vol_id = cinder_helper.create_volume(image_id=image_uuid, size=vol_size, fail_ok=False)[1]
+    # Check if lab has emc-vnx volume types. Use volume type = iscsi; Creating snapshot with emc-vnx(EMS San)
+    # is not supported yet.
+    volume_types = cinder_helper.get_volume_types(rtn_val='Name')
+    vol_type = 'iscsi' if any('emc' in t for t in volume_types) else None
+    vol_id = cinder_helper.create_volume(image_id=image_uuid, size=vol_size, vol_type=vol_type, fail_ok=False)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot VM using newly created bootable volume")
@@ -226,7 +230,12 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
         skip("No usable images found")
 
     LOG.tc_step("Create a cinder bootable volume")
-    vol_id = cinder_helper.create_volume(image_id=image_uuid, size=vol_size, fail_ok=False, cleanup='function')[1]
+    # Check if lab has emc-vnx volume types. Use volume type = iscsi; Creating snapshot with emc-vnx(EMS San)
+    # is not supported yet.
+    volume_types = cinder_helper.get_volume_types(rtn_val='Name')
+    vol_type = 'iscsi' if any('emc' in t for t in volume_types) else None
+    vol_id = cinder_helper.create_volume(image_id=image_uuid, size=vol_size, vol_type=vol_type, fail_ok=False,
+                                         cleanup='function')[1]
 
     LOG.tc_step("Boot VM using newly created bootable volume")
     vm_id = vm_helper.boot_vm(source="volume", source_id=vol_id, cleanup='function')[1]
