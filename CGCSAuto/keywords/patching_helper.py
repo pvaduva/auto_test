@@ -488,7 +488,7 @@ def is_dir(dirname, con_ssh=None):
     if not dirname:
         return False
 
-    code = run_cmd('test -d {}'.format(dirname), con_ssh=con_ssh, fail_ok=False)[0]
+    code = run_cmd('test -d {}'.format(dirname), con_ssh=con_ssh, fail_ok=True)[0]
 
     return 0 == code
 
