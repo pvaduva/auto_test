@@ -365,21 +365,19 @@ def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build
             LOG.info('ignore the patch_base_dir:{}'.format(patch_base_dir))
 
     if patching_helper.is_dir(patch_dir_or_file, ssh_to_server):
-        patch_dir_or_file = os.path.join(patch_dir_or_file, build_id)
 
-    rt_code, output = ssh_to_server.exec_cmd(
-        'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')), fail_ok=True)
+        rt_code, output = ssh_to_server.exec_cmd(
+            'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')), fail_ok=True)
 
-    if 0 == rt_code and output:
-        patch_dir_or_file = os.path.join(patch_dir_or_file, '*.patch')
+        if 0 == rt_code and output:
+            patch_dir_or_file = os.path.join(patch_dir_or_file, '*.patch')
 
     else:
-        err_msg = 'No patch files ready in directory :{} on the Patch Build server {}:\n{}'.format(
-            patch_dir_or_file, build_server, output)
+        err_msg = 'Not a directory:{}'.format(patch_dir_or_file)
         LOG.warn(err_msg)
 
         LOG.warn('Check if {} is a patch file'.format(patch_dir_or_file))
-        assert single_file_ok, err_msg
+        assert single_file_ok, err_msg + ', but not single patch file is not allowed'
 
         rt_code = ssh_to_server.exec_cmd('test -f {}'.format(patch_dir_or_file), fail_ok=True)[0]
         assert 0 == rt_code, err_msg
