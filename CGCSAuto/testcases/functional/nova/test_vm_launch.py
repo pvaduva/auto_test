@@ -108,7 +108,7 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
                               kpi_val=duration, uptime=1, unit='Time(ms)')
 
-    vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
+    vim_duration = vm_helper.get_cold_migrate_duration(vm_id=vm_id)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NOVA_NAME.format(boot_from),
                               kpi_val=vim_duration, uptime=1, unit='Time(s)')
 
