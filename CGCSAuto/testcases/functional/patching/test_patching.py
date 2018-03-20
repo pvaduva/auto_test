@@ -228,6 +228,7 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
     storages = []
     controllers = []
     for host in host_states.keys():
+        host = host.strip()
         if not host_states[host]['patch-current']:
             personality = patching_helper.get_personality(host, con_ssh=con_ssh)
             if 'storage' in personality:
@@ -249,27 +250,25 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
     for host in storages:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
 
-    active_controller = None
-    for host in controllers:
-        if host_helper.is_active_controller(host, con_ssh=con_ssh):
-            active_controller = host
-        else:
+    while len(controllers) > 1:
+        host = controllers.pop()
+
+        if not host_helper.is_active_controller(host, con_ssh=con_ssh):
             patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
-
-    assert active_controller is not None, 'Failed to find the active controller?!'
-
-    if reboot_required:
-        if not system_helper.is_simplex():
-            code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
-            assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
-
-            # need to wait for some time before the system in stable status after swact
-            time.sleep(60)
         else:
-            LOG.info('No need to swact on AIO-Simplex system')
+            controllers.append(host)
 
-    patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
+    if controllers:
+        host = controllers.pop()
 
+        if not host_helper.is_active_controller(host, con_ssh=con_ssh):
+            LOG.error('The only controller is not active controller?!!, host:{}'.format(host))
+
+        if not system_helper.is_simplex():
+            host_helper.swact_host(host)
+
+        patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        
     if patch_ids:
 
         expected_patch_states = ['Applied'] if not remove else ['Removed', 'Available']
@@ -570,7 +569,7 @@ def test_install_impacted_hosts(con_ssh=None):
         3   Do host-install on all the hosts impacted
 
     """
-    LOG.tc_step('Find if patches in Partial "Partial-Apply" or "Partial-Remove" states')
+    LOG.tc_step('Check if any patches are in Partial "Partial-Apply" or "Partial-Remove" states')
     partial_applied_patches = patching_helper.get_partial_applied(con_ssh=con_ssh)
     partial_applied_patches += patching_helper.get_partial_removed(con_ssh=con_ssh)
 
