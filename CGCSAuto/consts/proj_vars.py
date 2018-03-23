@@ -251,7 +251,7 @@ class PatchingVars:
     __var_dict = {
         'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         #'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
-        'DEF_PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/TC_18.03_Test_Patch_Build',
+        'DEF_PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_6.0_Test_Patch_Build',
         'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/',
         'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
         'PATCH_DIR': None,
