@@ -226,7 +226,7 @@ def test_port_trunking(vif_model):
     assert code == 0, "Failed to delete port trunk"
 
 
-def _test_port_trunking_basic():
+def test_port_trunking_basic():
     """
     Port trunking feature test cases
 
