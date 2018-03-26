@@ -17,7 +17,7 @@ try:
     import streamexpect
 except ImportError:
     LOG.info("You do not have streamexpect installed.")
-    exit(1)
+    sys.exit(1)
     
 from helper import vboxmanage
 from helper import install_lab
@@ -149,7 +149,7 @@ def menu_selector(stream, controller_type, securityprofile, release, lowlatency,
         time.sleep(4)
 
 
-def setup_networking(stream, release):
+def setup_networking(stream, release, password='Li69nux*'):
     """
     Setup initial networking so we can transfer files.
     """
@@ -167,13 +167,13 @@ def setup_networking(stream, release):
         return
     LOG.info("{} being set up with ip {}".format(interface, ip))
     serial.send_bytes(stream, "sudo /sbin/ip addr add {}/24 dev {}".format(ip, interface), expect_prompt=False)
-    host_helper.check_password(stream)
+    host_helper.check_password(stream, password=password)
     time.sleep(2)
     serial.send_bytes(stream, "sudo /sbin/ip link set {} up".format(interface), expect_prompt=False)
-    host_helper.check_password(stream)
+    host_helper.check_password(stream, password=password)
     time.sleep(2)
     serial.send_bytes(stream, "sudo route add default gw {}".format(host_ip), expect_prompt=False)
-    host_helper.check_password(stream)
+    host_helper.check_password(stream, password=password)
 
     NETWORKING_TIME = 60
     LOG.info("Wait a minute for networking to be established")
@@ -185,9 +185,10 @@ def setup_networking(stream, release):
 
 
 @pytest.mark.unit
-def test_install_vbox(controller_type, securityprofile, release, lowlatency, install_mode):
+def install_controller_0(cont0_stream, controller_type, securityprofile, release, 
+                         lowlatency, install_mode, username='wrsroot', password='Li69nux*'):
     """
-    Installation of vbox.
+    Installation of controller-0.
     Takes about 30 mins
     """
     # Power on controller-0
@@ -195,10 +196,8 @@ def test_install_vbox(controller_type, securityprofile, release, lowlatency, ins
     # Login
     # Change default password
     # Setup basic networking
-    # Close stream
-    vboxmanage.vboxmanage_startvm("controller-0")
-    sock = serial.connect("controller-0", 10000)
-    cont0_stream = streamexpect.wrap(sock, echo=True, close_stream=False)
+    # Return socket and stream
+
     LOG.info("Starting installation of controller-0")
     start_time=time.time()
     menu_selector(cont0_stream, controller_type, securityprofile, release, lowlatency, install_mode)
@@ -208,50 +207,66 @@ def test_install_vbox(controller_type, securityprofile, release, lowlatency, ins
     # Change password on initial login
     LOG.info("Controller-0 install duration: {} minutes".format(kpi.CONT0INSTALL/60))
     time.sleep(10)
-    host_helper.change_password(cont0_stream)
+    host_helper.change_password(cont0_stream, username=username, password=password)
     # Disable user logout
     host_helper.disable_logout(cont0_stream)
 
     # Setup basic networking
     time.sleep(10)
-
-    setup_networking(cont0_stream, release)
-    return sock, cont0_stream
+    setup_networking(cont0_stream, release, password=password)
     
 
-def test_install_nodes(cont0_stream, host_list=None):
+def start_and_connect_nodes(host_list=None):
+    """
+    Start and connect to other nodes. 
+    It requires controller-0 to be installed already 
+    Args:
+        host_list(list): list of host names to start and connect to.
+    Steps:
+        - Power on nodes and create stream to them.
+        - Returns sockets and streams for future use
+    """
+    streams = {}
+    socks = {}
+
+    LOG.info(host_list)
+    port = 10001
+    for host in host_list:
+        sock = serial.connect('{}'.format(host), port)
+        stream = streamexpect.wrap(sock, echo=True, close_stream=False)
+        time.sleep(10)
+        socks[host] = sock
+        streams[host] = stream
+        port += 1
+
+    return socks, streams
+
+def test_install_nodes(cont0_stream, socks, streams, host_list=None):
     """
     Tests node install, requires controller-0 to be installed previously
     Args:
+        cont0_stream:
+        socks:
+        streams:
         host_list(list): list of host names to install.
     Steps:
-        - Power on nodes and create stream to them.
+        - Create multiple threads
         - Set personalities for nodes
         - Wait for nodes to finish installing
-        - Returns streams for future use
     13-25 mins
     """
+    
+    ## Comment out this thread code for now as it seems to hold up
+    ## controller-0 serial connection.
     host_id = 2
-    streams = {}
 
-    # Since we don't need to install controller-0, let's remove it
-    host_list.remove("controller-0")
-
-    # Don't want to mess with vms that aren't supposed to be.
-    for item in host_list:
-        if 'controller' not in item and 'compute' not in item and 'storage' not in item:
-            host_list.remove(item)
-    # Create streams early so we can see what's happening
-    # If we don't power on the host, socket connection will fail
+    LOG.info("test_install_nodes")
     LOG.info(host_list)
     threads = []
     new_thread = []
-    port = 10001
     serial.send_bytes(cont0_stream, "source /etc/nova/openrc", prompt='keystone')
     for host in host_list:
-        stream = streamexpect.wrap(serial.connect('{}'.format(host), port), echo=True, close_stream=False)
         time.sleep(10)
-        streams[host] = stream
         if 'controller' in host:
             new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(host), host, 'controller',
                                                       host_id))
@@ -260,7 +275,6 @@ def test_install_nodes(cont0_stream, host_list=None):
         else:
             new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(host), host, 'storage', host_id))
         host_id += 1
-        port += 1
 
     for host in new_thread:
         host.start()
@@ -270,21 +284,88 @@ def test_install_nodes(cont0_stream, host_list=None):
     for items in threads:
         items.join(HostTimeout.HOST_INSTALL)
 
-    # Look for login
-    # Close the stream if we want
+    """
+    host_id = 2
+
+    LOG.info(host_list)
+    serial.send_bytes(cont0_stream, "source /etc/nova/openrc", prompt='keystone')
+    for host in host_list:
+        if 'controller' in host:
+            host_helper.install_host(cont0_stream, host, 'controller', host_id)
+        elif 'compute' in host:
+            host_helper.install_host(cont0_stream, host, 'compute', host_id)
+        else:
+            host_helper.install_host(cont0_stream, host, 'storage', host_id)
+        host_id += 1
+    """
+
+    # Now wait for nodes to come up. Look for login.
+    # Close the socket if we are done  
     start_time = time.time()
     for host in host_list:
-        serial.expect_bytes(streams[host], "login:", HostTimeout.HOST_INSTALL)
-        LOG.info("{} installation complete".format(host))
-        # stream.close()
+        try:
+            serial.expect_bytes(streams[host], "login:", HostTimeout.HOST_INSTALL)
+            LOG.info("{} installation complete".format(host))
+            # serial.disconnect(socks[host])
+        except Exception as e:
+            LOG.info("Connection failed for host {} with {}.".format(host, e))
+            ## Sometimes we get UnicodeDecodeError exception due to the output 
+            ## of installation. So try one more time maybe
+            LOG.info("WEI so try wait for {} login again?".format(host))
+            if HostTimeout.HOST_INSTALL > (time.time()-start_time):
+                serial.expect_bytes(streams[host], "login:", HostTimeout.HOST_INSTALL-(time.time()-start_time))
+            #serial.disconnect(socks[host])
+        #time.sleep(5)
 
     kpi.NODEINSTALL = time.time()-start_time
     LOG.info("Node install time: {} minutes".format(kpi.NODEINSTALL/60))
-    # Return streams dict in case we need to reference the streams later
-    return streams
 
+def get_all_vms(option="vms"):
+    node_list = []
+    vm_list = vboxmanage.vboxmanage_list(option)
+    LOG.info("The following VMs are present on the system: {}".format(vm_list))
+    for item in vm_list:
+        if b'controller-' in item or b'compute-' in item or b'storage-' in item:
+            node_list.append(item.decode('utf-8'))
+    return node_list
 
-def create_vms(vboxoptions):
+def take_snapshot(name):
+    node_list = get_all_vms("runningvms")
+    if len(node_list) != 0:
+        LOG.info("Taking snapshot of {}".format(name))
+        vboxmanage.vboxmanage_controlvms(node_list, "pause")
+        time.sleep(5)
+        vboxmanage.vboxmanage_takesnapshot(node_list, name)
+        time.sleep(10)
+        vboxmanage.vboxmanage_controlvms(node_list, "resume")
+        time.sleep(10)
+        ## TODO (WEI): Before return make sure VMs are up running again
+
+def restore_snapshot(host, name):
+    node_list = {host} 
+    if len(node_list) != 0:
+        LOG.info("Restore snapshot of {} for host {}".format(name, host))
+        vboxmanage.vboxmanage_controlvms(node_list, "poweroff")
+        time.sleep(5)
+        vboxmanage.vboxmanage_restoresnapshot(host, name)
+        time.sleep(5)
+        vboxmanage.vboxmanage_startvm(host)
+        time.sleep(10)
+        ## TODO (WEI): Before return make sure VMs are up running again
+
+def delete_lab():
+    node_list = get_all_vms("vms")
+
+    if vboxoptions.debug_rest:
+        node_list.remove("controller-0")
+
+    if len(node_list) != 0:
+        LOG.info("Deleting existing VMs: {}".format(node_list))
+        vboxmanage.vboxmanage_controlvms(node_list, "poweroff")
+        time.sleep(5)
+        vboxmanage.vboxmanage_deletevms(node_list)
+
+def create_lab(vboxoptions):
     """
     Creates vms using the arguments in vboxoptions.
     Takes about 4 mins
@@ -294,25 +375,18 @@ def create_vms(vboxoptions):
     assert not (vboxoptions.aio == True and vboxoptions.computes), "AIO cannot have compute nodes"
     assert not (
         vboxoptions.deletelab == True and vboxoptions.useexistinglab), "These options are incompatible with each other"
-    if vboxoptions.release:
-        assert vboxoptions.buildserver, "Must provide build server if release is specified"
+    ## WEI TODO: double check this
+    #if vboxoptions.release:
+    #    assert vboxoptions.buildserver, "Must provide build server if release is specified"
     if vboxoptions.buildserver:
         assert vboxoptions.release, "Must provide release if build server is specified"
     # LOG.info("Retrieving vbox extention pack")
     # Doesn't work automatically because it requires admin privileges and asks for a prompt
     # vboxmanage.vboxmanage_extpack()
-    node_list = []
-    vm_list = vboxmanage.vboxmanage_list("vms")
-    LOG.info("The following VMs are present on the system: {}".format(vm_list))
-    for item in vm_list:
-        if b'controller-' in item or b'compute-' in item or b'storage-' in item:
-            node_list.append(item)
+
     # Delete VMs if the user requests it
-    if vboxoptions.deletelab == True and len(node_list) != 0:
-        LOG.info("Deleting existing VMs as requested by user: {}".format(node_list))
-        vboxmanage.vboxmanage_controlvms(node_list, "poweroff")
-        time.sleep(5)
-        vboxmanage.vboxmanage_deletevms(node_list)
+    if vboxoptions.deletelab == True:
+        delete_lab()
 
     # Pull in node configuration
     node_config = [getattr(Nodes, attr) for attr in dir(Nodes) if not attr.startswith('__')]
@@ -333,7 +407,6 @@ def create_vms(vboxoptions):
 
     # Create and setup nodes
     if vboxoptions.useexistinglab == False:
-
         # Create nodes list
         nodes_list = []
         if vboxoptions.controllers:
@@ -348,11 +421,16 @@ def create_vms(vboxoptions):
             for id in range(0, vboxoptions.storage):
                 node_name = "storage-{}".format(id)
                 nodes_list.append(node_name)
+
+        ### WZWZ to remove 
+        if vboxoptions.debug_rest:
+            nodes_list.remove("controller-0")
+
         LOG.info("We will create the following nodes: {}".format(nodes_list))
         port = 10000
         for node in nodes_list:
             vboxmanage.vboxmanage_createvm(node)
-            vboxmanage.vboxmanage_storagectl(node)
+            vboxmanage.vboxmanage_storagectl(node, storectl="sata")
             if node.startswith("controller"):
                 node_type = controller_type
             elif node.startswith("compute"):
@@ -393,6 +471,10 @@ def create_vms(vboxoptions):
     else:
         LOG.info("Setup will proceed with existing VMs as requested by user")
 
+    ## WZWZ to remove
+    if vboxoptions.debug_rest:
+        return
+
     # Determine ISO to use
     if vboxoptions.useexistingiso is False and vboxoptions.iso_location is None:
         for item in builds:
@@ -413,18 +495,13 @@ def create_vms(vboxoptions):
         assert os.path.isfile(env.ISOPATH.format(vboxoptions.release)), \
             "ISO doesn't exist at: {}".format(env.ISOPATH.format(vboxoptions.release))
         PATH = env.ISOPATH.format(vboxoptions.release)
-    # Need a more programatic way to do this rather than hardcoding device - INVESTIGATE
-    vboxmanage.vboxmanage_storageattach(storetype="dvddrive", disk=PATH, device_num="1", port_num="1")
+    # TODO(WEI): Need a more programatic way to do this rather than hardcoding device and port - INVESTIGATE
+    vboxmanage.vboxmanage_storageattach(storetype="dvddrive", disk=PATH, device_num="0", port_num="2")
 
     # END VBOX SETUP
+    return controller_type
 
-    # Start installing the system
-    sock, cont0_stream = test_install_vbox(controller_type, vboxoptions.securityprofile, vboxoptions.release,
-                                           vboxoptions.lowlatency,
-                                           install_mode=vboxoptions.install_mode)
-    return sock, cont0_stream
 
-    
 if __name__ == "__main__":
     """
     Main installation.
@@ -437,10 +514,31 @@ if __name__ == "__main__":
         - Install other nodes
         - Run lab_setup iterations
     """
-    kpi.TOTALTIME = time.time()
+
     # pdb.set_trace()
     # START VBOX SETUP
     vboxoptions = handle_args().parse_args()
+
+    ## WEI: Just to delete the lab.
+    ## Add this option for convenience 
+    if vboxoptions.deletelab and not vboxoptions.createlab:
+        delete_lab()
+        LOG.info("vbox lab is deleted. ")
+        sys.exit(0)
+
+    ## WEI: Lab instal is quite stable up to the step when controller-0 is unlock.
+    ##      So I do following to debug the rest.
+    ## python3 install_vbox --createlab --debug-rest   (This will delete all the nodes except ctrr-0, restore ctrlr-0, re-create rest of nodes.) 
+    ## python3 install_vbox --install-lab
+    if vboxoptions.createlab and vboxoptions.debug_rest:
+        delete_lab()
+        restore_snapshot("controller-0", "snapshot-AFTER-unlock-controller-0")
+ 
+    kpi.TOTALTIME = time.time()
+
+    ## First do semantic checks
+    assert vboxoptions.release, "release has to be set to install a lab."
+
     if platform == 'win32' or platform == 'win64':
         if not os.path.exists(env.FILEPATH):
             os.mkdir(env.FILEPATH)
@@ -484,86 +582,191 @@ if __name__ == "__main__":
         else:
             vboxoptions.controllers = 2
             vboxoptions.computes = 2
+    if vboxoptions.username is None:
+        vboxoptions.username = 'wrsroot'
+    if vboxoptions.password is None:
+        vboxoptions.password = 'Li69nux*'
+
     LOG.info(vboxoptions)
+    
     if vboxoptions.createlab:
-        sock, cont0_stream = create_vms(vboxoptions)
-        node_list = []
-        for item in vboxmanage.vboxmanage_list('vms'):
-            if b'controller' in item or b'compute' in item or b'storage' in item:
-                node_list.append(item.decode('utf-8'))
-        LOG.info(node_list)
-        assert 'controller-0' in node_list, "controller-0 not in vm list. Stopping installation."
-    else:
-        # if vms were created this should be done already
-        node_list = []
-        for item in vboxmanage.vboxmanage_list('vms'):
-            if b'controller' in item or b'compute' in item or b'storage' in item:
-                node_list.append(item.decode('utf-8'))
-        LOG.info(node_list)
-        assert 'controller-0' in node_list, "controller-0 not in vm list. Stopping installation."
-        sock = serial.connect("controller-0", 10000)
-        cont0_stream = streamexpect.wrap(sock, echo=True, close_stream=False)
-        host_helper.login(cont0_stream, timeout=60)
-        setup_networking(cont0_stream, vboxoptions.release)
-    buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
-    for item in buildservers:
-        if item['short_name'].upper() == vboxoptions.buildserver:
-            remote_server = item['ip']
-    if vboxoptions.buildserver is None:
-        remote_server = None
-    if vboxoptions.aio:
-       host_type = "AIO-DX"
-    else:
-       host_type = "Standard"
-    if vboxoptions.setup_files:
-        install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, host_type=host_type)
-    elif vboxoptions.get_setup:
-        install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type=host_type)
-    if vboxoptions.patch_dir:
-        install_lab.get_patches(cont0_stream, vboxoptions.patch_dir, release=vboxoptions.release)
-    elif vboxoptions.get_patches:
-        install_lab.get_patches(cont0_stream, remote_host=remote_server, release=vboxoptions.release)
-    if vboxoptions.config_file:
-        sftp_send(vboxoptions.config_file, destination="/home/wrsroot/TiS_config.ini_centos")
-    elif vboxoptions.get_config:
-        install_lab.get_config_file(remote_server, release=vboxoptions.release)
-    # Configures controller-0
-    if vboxoptions.install_patches:
-        install_lab.install_patches_before_config(cont0_stream, vboxoptions.release)
-    if not vboxoptions.configure and not vboxoptions.config_file:
-        LOG.info("Pausing to allow for manual configuration. If any files are to be transferred manually please do so"
-                 " now. Press enter to continue.")
-        input()
-    if vboxoptions.configure:
-        if vboxoptions.enablehttps:
-            config_file = '/home/wrsroot/system_config.centos_https'
+        controller_type = create_lab(vboxoptions)
+
+        ## WZWZ remove it
+        if vboxoptions.debug_rest:
+            sys.exit(0)
+
+        vboxmanage.vboxmanage_startvm("controller-0")
+
+    node_list = get_all_vms("vms")
+    LOG.info(node_list)
+    assert 'controller-0' in node_list, "controller-0 not in vm list. Stopping installation."
+
+    ## TODO(WEI): Use contextManager to use with statement for socket, so that if the script
+    ## crashes, the socket will be closed; otherwise the socket process on the remote side 
+    ## may hang 
+    sock = serial.connect("controller-0", 10000)
+    cont0_stream = streamexpect.wrap(sock, echo=True, close_stream=False)
+
+    try:
+        if vboxoptions.createlab:
+            install_controller_0(cont0_stream, controller_type, vboxoptions.securityprofile, 
+                                 vboxoptions.release, vboxoptions.lowlatency, 
+                                 install_mode=vboxoptions.install_mode,
+                                 username=vboxoptions.username, password=vboxoptions.password)
         else:
-            config_file = '/home/wrsroot/system_config.centos_http'
-        remote_host = vboxoptions.buildserver
-        ret = install_lab.config_controller(cont0_stream, config_file=config_file,
-                                            release=vboxoptions.release, remote_host=remote_server)
-        if ret == 1:
-            LOG.info("Pausing to allow for manual configuration. Press enter to continue.")
+            ## WZWZ remove it
+            if not vboxoptions.debug_rest:
+                host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
+                setup_networking(cont0_stream, vboxoptions.release, password=vboxoptions.password)
+
+        ## Take snapshot
+        if vboxoptions.snapshot:
+            take_snapshot("snapshot-BEFORE-config-controller")
+
+        buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
+        for item in buildservers:
+            if item['short_name'].upper() == vboxoptions.buildserver:
+                remote_server = item['ip']
+        if vboxoptions.buildserver is None:
+            remote_server = None
+
+        if vboxoptions.aio:
+            host_type = "AIO-DX"
+        else:
+            host_type = "Standard"
+
+        if vboxoptions.setup_files:
+            install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, host_type=host_type, username=vboxoptions.username)
+        elif vboxoptions.get_setup:
+            install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type=host_type)
+
+        if vboxoptions.patch_dir:
+            install_lab.get_patches(cont0_stream, vboxoptions.patch_dir, release=vboxoptions.release, username=vboxoptions.username)
+        elif vboxoptions.get_patches:
+            install_lab.get_patches(cont0_stream, remote_host=remote_server, release=vboxoptions.release, username=vboxoptions.username)
+
+        if vboxoptions.config_file:
+            destination = "/home/" + vboxoptions.username + "/TiS_config.ini_centos"
+            sftp_send(vboxoptions.config_file, destination=destination)
+        elif vboxoptions.get_config:
+            install_lab.get_config_file(remote_server, release=vboxoptions.release, username=vboxoptions.username)
+
+        if vboxoptions.install_patches:
+            install_lab.install_patches_before_config(cont0_stream, vboxoptions.release, username=vboxoptions.username, password=vboxoptions.password)
+
+        if vboxoptions.configure and not vboxoptions.config_file and not vboxoptions.get_config:
+            LOG.info("Pausing to allow for manual configuration. If any files are to be transferred "
+                     "manually please do so now. Press enter to continue.")
             input()
-        if vboxoptions.release == 'R5':
-            if vboxoptions.lvm:
-                install_lab.enable_lvm(cont0_stream, vboxoptions.release)
-            # wait for online status, run lab_setup, unlock cont0, provision hosts, continue from before.
-            serial.send_bytes(cont0_stream, "source /etc/nova/openrc", prompt='keystone')
-            install_lab.install_controller_0(cont0_stream)
 
-    # installs nodes
-    streams = {}
-    if vboxoptions.install_lab and not vboxoptions.aio:
-        LOG.info("Starting lab installation.")
-        streams = test_install_nodes(cont0_stream, host_list=node_list)
-    # runs lab_setup.sh
-    if vboxoptions.run_scripts:
+        # Configures controller-0
+        if vboxoptions.configure:
+            ## WEI TODO: remove
+            #if vboxoptions.enablehttps:
+            #    config_file = '/home/wrsroot/system_config.centos_https'
+            #else:
+            #    config_file = '/home/wrsroot/system_config.centos_http'
 
-        install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio=vboxoptions.aio,
-                                        storage=vboxoptions.storage, release=vboxoptions.release, streams=streams)
+            ## TODO (WEI): define a constant for config_file
+            config_file = "/home/" + vboxoptions.username + "/TiS_config.ini_centos" 
+            ret = install_lab.config_controller(cont0_stream, config_file=config_file,
+                                                release=vboxoptions.release, remote_host=vboxoptions.buildserver,
+                                                password=vboxoptions.password)
+            if ret == 1:
+                LOG.info("Pausing to allow for manual configuration. Press enter to continue.")
+                input()
+
+            if vboxoptions.snapshot:
+                take_snapshot("snapshot-AFTER-config-controller")
+
+            if vboxoptions.release == 'R5':
+                # TODO (WEI): Remove it. cinder-volumes partition is created by lab_setup.sh
+                # 
+                #serial.send_bytes(cont0_stream, "source /etc/nova/openrc", prompt='keystone')
+                #if vboxoptions.lvm:
+                #    install_lab.enable_lvm(cont0_stream, vboxoptions.release)
+
+                # wait for online status, run lab_setup, unlock cont0, provision hosts, continue from before.
+                install_lab.lab_setup_controller_0_locked(cont0_stream, username=vboxoptions.password, password=vboxoptions.password)
+
+                if vboxoptions.snapshot:
+                    take_snapshot("snapshot-AFTER-unlock-controller-0")
+
+        # Now install rest of the nodes
+        
+        LOG.info("Now installing rest of the nodes....")
+        socks = {}
+        streams = {}
+        # Since we don't need to install controller-0, let's remove it
+        node_list.remove("controller-0")
+
+        # Don't want to mess with vms that aren't supposed to be.
+        for item in node_list:
+            if 'controller' not in item and 'compute' not in item and 'storage' not in item:
+                node_list.remove(item)
+
+        if vboxoptions.install_lab and not vboxoptions.aio:
+            LOG.info("Starting lab installation after controller-0 is unlocked.")
+
+            ## WZWZ to remove 
+            if vboxoptions.debug_rest:
+                host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
+
+            socks, streams = start_and_connect_nodes(host_list=node_list)
+            try:
+                test_install_nodes(cont0_stream, socks, streams, host_list=node_list)
+            except Exception as e:
+                LOG.info("Install rest of nodes not successful. {}".format(e))
+                for node in node_list:
+                    serial.disconnect(socks[node])
+                socks = {}
+                streams = {}
+                sys.exist(1)
+            else: 
+                for node in node_list:
+                    serial.disconnect(socks[node])
+                socks = {}
+                streams = {}
+
+            if vboxoptions.snapshot:
+                take_snapshot("snapshot-AFTER-lab-install")
+
+        # runs lab_setup.sh
+        if vboxoptions.run_scripts:
+            ## WZWZ to remove 
+            if vboxoptions.debug_rest:
+                host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
+           
+            if not streams:
+                socks, streams = start_and_connect_nodes(host_list=node_list)
+            try:
+                install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio=vboxoptions.aio,
+                                                storage=vboxoptions.storage, release=vboxoptions.release, 
+                                                socks=socks, streams=streams, username=vboxoptions.username, password=vboxoptions.password)
+            except Exception as e:
+                LOG.info("Run install script not successful. {}".format(e))
+                for node in node_list:
+                    serial.disconnect(socks[node])
+            else:
+                for node in node_list:
+                    serial.disconnect(socks[node])
+
+            ## TODO: WEI uncomment it out
+            #if vboxoptions.snapshot:
+            #    take_snapshot("snapshot-AFTER-lab-setup")
+
+    except Exception as e:
+        LOG.info("Oh no, something bad happened {}".format(e))
+        host_helper.logout(cont0_stream)
+        serial.disconnect(sock)
+        raise
+        
     host_helper.logout(cont0_stream)
     serial.disconnect(sock)
     LOG.info("Installation complete.")
+
+    ## TODO (WEI): fix KPI and time numbers
     kpi.get_kpi_metrics()
+    LOG.info("WEI These KPI numbers need to be fixed.")
     LOG.info("Total time taken: {} minutes".format((time.time() - kpi.TOTALTIME) / 60))

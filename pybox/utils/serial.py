@@ -39,6 +39,7 @@ def connect(hostname, port=10000):
         pass
         # disconnect(sock)
         sock = None
+    # TODO (WEI): double check this 
     sock.setblocking(0)
 
     return sock
@@ -108,7 +109,6 @@ def send_bytes(stream, text, fail_ok=False, expect_prompt=True, prompt=None, tim
             return -1
         else:
             LOG.error("Failed to send text, logging out.")
-            # disconnect(stream)
             stream.sendall("exit".encode('utf-8'))
             raise
     except Exception as e:

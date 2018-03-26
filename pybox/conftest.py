@@ -45,12 +45,12 @@ def pytest_addoption(parser):
         If present, don't create new VMs, use the existing ones.
         """,
         action='store_true')
-
-    parser.addoption("--enablehttps", help=
-        """
-        If present, use https system config file else use http config file
-        """,
-        action='store_true')
+    # WEI TODO: remove
+    #parser.addoption("--enablehttps", help=
+    #    """
+    #    If present, use https system config file else use http config file
+    #    """,
+    #    action='store_true')
 
     parser.addoption("--release", help=
         """
@@ -111,6 +111,24 @@ def pytest_addoption(parser):
         """
         If specified, we won't grab a new ISO but instead will use the existing
         one.  Typically stored at /tmp/bootimage.iso.
+        """,
+        action='store_true')
+
+    parser.addoption("--nessus", help=
+        """
+        Runs installer with the appropreate arguments for nessus scan setup. Currently requires files to be in the default folders.
+        """,
+        action='store_true')
+
+    parser.addoption("--complete", help=
+        """
+        Runs installer with the appropreate arguments for end to end setup. Retrieves files from a buildserver which mus be specified.
+        """,
+        action='store_true')
+
+    parser.addoption("--snapshot", help=
+        """
+        Take snapshot at different stages when the lab is installed. e.g. before and after config_controller, before and after lab_setup.
         """,
         action='store_true')
 
