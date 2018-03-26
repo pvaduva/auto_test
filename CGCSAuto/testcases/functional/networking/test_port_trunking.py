@@ -1,7 +1,7 @@
 from pytest import fixture, mark
 
 from utils.tis_log import LOG
-from keywords import vm_helper, network_helper
+from keywords import vm_helper, network_helper, nova_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -206,8 +206,27 @@ def test_port_trunking(vif_model):
             LOG.tc_step("Ping on vlan interface from guest after action {}".format(vm_actions))
             network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
+        vm_host = nova_helper.get_vm_host(vm2_id)
 
-def test_port_trunking_basic():
+        vm_on_target_host = nova_helper.get_vms_on_hypervisor(vm_host)
+
+    LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(vm_host))
+    vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm2_id, ping_vms=True)
+
+    for vm_id_on_target_host in vm_on_target_host:
+        LOG.tc_step("Setup Vlan interfaces inside guest")
+        _bring_up_vlan_interface(vm_id_on_target_host, 'eth1', [segment_1])
+
+    with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
+        LOG.tc_step("Ping on vlan interface from guest after evacuation")
+        network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
+
+    # Delete a trunk port used by the VM:
+    code = network_helper.delete_trunk(trunk_id=trunk1_id)[0]
+    assert code == 0, "Failed to delete port trunk"
+
+
+def _test_port_trunking_basic():
     """
     Port trunking feature test cases
 
