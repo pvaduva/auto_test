@@ -342,7 +342,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     filesystem_helper.check_controllerfs(**drbdfs_val)
 
     drbdfs_val = {}
-    fs = "cgcs"
+    fs = "img-conversions"
     LOG.tc_step("Determine the current filesystem size")
     drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))

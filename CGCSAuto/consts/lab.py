@@ -258,13 +258,23 @@ class Labs:
 
     SM_5_6 = {
         'short_name': 'sm_5_6',
-        'name': 'yow-cgcs-supermicro-5-6',
+        'name': 'yow-cgcs-supermicro-5_6',
         'floating ip': '128.224.151.54',
         'controller-0 ip': '128.224.150.84',
         'controller-1 ip': '128.224.150.56',
         'controller_nodes': [23516, 23517],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+    }
+
+    SM_5_8 = {
+        'short_name': 'sm_5_8',
+        'name': 'yow-cgcs-supermicro-5_8',
+        'floating ip': '128.224.151.54',
+        'controller-0 ip': '128.224.150.84',
+        'controller-1 ip': '128.224.150.56',
+        'controller_nodes': [23516, 23517],
+        'compute_nodes': [38294],
     }
 
     WCP_3_6 = {

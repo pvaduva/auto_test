@@ -76,14 +76,16 @@ def delete_partitions_teardown(request):
             for i in range(len(partitions_to_restore[host]) - 1, -1, -1):
                 uuid = partitions_to_restore[host][i]
                 device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+                device_node = device_node.rstrip(string.digits)
+                if device_node.startswith("/dev/nvme"):
+                    device_node = device_node[:-1]
                 partition_mib = partition_helper.get_partition_info(host, uuid, "size_mib")
-                device_node_nonum = device_node.rstrip(string.digits)
-                available_mib = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
+                available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
                 total_free = int(available_mib) + int(partition_mib)
                 LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
                 rc, out = partition_helper.delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
-                mib_after_del = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
+                mib_after_del = partition_helper.get_disk_info(host, device_node, "available_mib")
                 assert int(mib_after_del) == total_free, \
                     "Expected available_mib to be {} after deletion but instead was {}".format(
                             total_free, mib_after_del)
