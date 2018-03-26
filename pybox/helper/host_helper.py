@@ -18,7 +18,7 @@ def unlock_host(stream, hostname):
         - Check that host is locked
         - Unlock host
     """
-    LOG.info("Unlocking {}".format(hostname))
+    LOG.info("Unlock {}".format(hostname))
     serial.send_bytes(stream, "system host-list | grep {}".format(hostname), expect_prompt=False)
     try:
         serial.expect_bytes(stream, "locked")
@@ -26,7 +26,7 @@ def unlock_host(stream, hostname):
         LOG.info("Host {} not locked".format(hostname))
         return 1
     serial.send_bytes(stream, "system host-unlock {}".format(hostname), expect_prompt=False)
-    LOG.info("{} is unlocked".format(hostname))
+    LOG.info("Unlocking {}".format(hostname))
     
             
 def lock_host(stream, hostname):
@@ -39,7 +39,7 @@ def lock_host(stream, hostname):
         - Check that host is unlocked
         - Lock host
     """
-    LOG.info("Locking {}".format(hostname))    
+    LOG.info("Lock {}".format(hostname))    
     serial.send_bytes(stream, "system host-list |grep {}".format(hostname), expect_prompt=False)
     try:
         serial.expect_bytes(stream, "unlocked")
@@ -47,7 +47,7 @@ def lock_host(stream, hostname):
         LOG.info("Host {} not unlocked".format(hostname))
         return
     serial.send_bytes(stream, "system host-lock {}".format(hostname), expect_prompt=False)
-    LOG.info("{} is locked".format(hostname))
+    LOG.info("Locking {}".format(hostname))
 
 
 def reboot_host(stream, hostname):
@@ -64,7 +64,7 @@ def reboot_host(stream, hostname):
 
 def install_host(stream, hostname, host_type, host_id):
     """
-    Initiates install of specified host. Requires controller-0 to be installed.
+    Initiates install of specified host. Requires controller-0 to be installed already.
     Args:
         stream(stream): Stream to cont0
         hostname(str): Name of host
@@ -72,10 +72,6 @@ def install_host(stream, hostname, host_type, host_id):
         host_id(int): id to identify host
     """
         
-    if hostname == 'controller-0':
-        LOG.info("controller-0 is already installed")
-        return
-    
     time.sleep(10)
     LOG.info("Installing {} with id {}".format(hostname, host_id))
     if host_type is 'controller':
@@ -98,7 +94,7 @@ def disable_logout(stream):
     serial.send_bytes(stream, "export TMOUT=0")
 
 
-def change_password(stream):
+def change_password(stream, username="wrsroot", password="Li69nux*"):
     """
     changes the default password on initial login.
     Args:
@@ -106,18 +102,18 @@ def change_password(stream):
     
     """
     LOG.info('Changing password to Li69nux*')
-    serial.send_bytes(stream, "wrsroot", expect_prompt=False)
+    serial.send_bytes(stream, username, expect_prompt=False)
     serial.expect_bytes(stream, "Password:")
-    serial.send_bytes(stream, "wrsroot", expect_prompt=False)
+    serial.send_bytes(stream, username, expect_prompt=False)
     serial.expect_bytes(stream, "UNIX password:")
-    serial.send_bytes(stream, "wrsroot", expect_prompt=False)
+    serial.send_bytes(stream, username, expect_prompt=False)
     serial.expect_bytes(stream, "New password:")
-    serial.send_bytes(stream, "Li69nux*", expect_prompt=False)
+    serial.send_bytes(stream, password, expect_prompt=False)
     serial.expect_bytes(stream, "Retype new")
-    serial.send_bytes(stream, "Li69nux*")
+    serial.send_bytes(stream, password)
 
 
-def login(stream, timeout=600):
+def login(stream, timeout=600, username="wrsroot", password="Li69nux*"):
     """
     Logs into controller-0.
     Args:
@@ -132,10 +128,11 @@ def login(stream, timeout=600):
         if serial.expect_bytes(stream, "~$", timeout=10, fail_ok=True) == -1:
             serial.send_bytes(stream, '\n', expect_prompt=False)
             serial.expect_bytes(stream, "keystone", timeout=10)
+            #serial.send_bytes(stream, "source /etc/nova/openrc", prompt='keystone')
     else:
-        serial.send_bytes(stream, "wrsroot", expect_prompt=False)
+        serial.send_bytes(stream, username, expect_prompt=False)
         serial.expect_bytes(stream, "assword:")
-        serial.send_bytes(stream, "Li69nux*")
+        serial.send_bytes(stream, password)
     disable_logout(stream)
 
 
@@ -149,7 +146,7 @@ def logout(stream):
     time.sleep(5)
 
 
-def check_password(stream):
+def check_password(stream, password="Li69nux*"):
     ret = serial.expect_bytes(stream, 'assword', fail_ok=True, timeout=5)
     if ret == 0:    
-        serial.send_bytes(stream, 'Li69nux*', expect_prompt=False)
+        serial.send_bytes(stream, password, expect_prompt=False)

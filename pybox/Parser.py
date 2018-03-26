@@ -60,12 +60,12 @@ def handle_args():
         If present, don't create new VMs, use the existing ones.
         """,
         action='store_true')
-
-    parser.add_argument("--enablehttps", help=
-        """
-        If present, use https system config file else use http config file
-        """,
-        action='store_true')
+    # WEI TODO: remove
+    #parser.add_argument("--enablehttps", help=
+    #    """
+    #    If present, use https system config file else use http config file
+    #    """,
+    #    action='store_true')
 
     parser.add_argument("--release", help=
         """
@@ -77,7 +77,7 @@ def handle_args():
         """,
         choices=['R2', 'R3', 'R4', 'R5'],
         type=str,
-        required=True)
+        required=False)
 
 
     parser.add_argument("--buildserver", help=
@@ -199,9 +199,30 @@ def handle_args():
         Runs installer with the appropreate arguments for end to end setup. Retrieves files from a buildserver which mus be specified.
         """,
         action='store_true')
-    parser.add_argument("--lvm", help=
+    parser.add_argument("--snapshot", help=
         """
-        Configures storage with lvm backend.
+        Take snapshot at different stages when the lab is installed. e.g. before and after config_controller, before and after lab_setup.
         """,
         action='store_true')
+    parser.add_argument("--debug-rest", help=
+        """
+        Wei Uses this option to debug the rest of installation after controller-0 is unlocked 
+        """,
+        action='store_true')
+    parser.add_argument("--username", help=
+        """
+        Username. default is 'wrsroot'
+        """,
+        type=str)
+    parser.add_argument("--password", help=
+        """
+        Password. default is 'Li69nux*'
+        """,
+        type=str)
+    # WEI TODO: remove 
+    #parser.add_argument("--lvm", help=
+    #    """
+    #    Configures storage with lvm backend.
+    #    """,
+    #    action='store_true')
     return parser
