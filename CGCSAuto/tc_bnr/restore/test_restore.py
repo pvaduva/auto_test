@@ -525,7 +525,7 @@ def test_restore(restore_setup):
         if not is_sx:
             install_non_active_node(controller1, lab)
 
-    else:
+    elif len(lab['controller_nodes']) >= 2:
         LOG.tc_step('Install the standby controller: {}'.format(controller1))
         install_non_active_node(controller1, lab)
 
@@ -576,6 +576,8 @@ def test_restore(restore_setup):
                 assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(compute_host, rc, output)
 
         LOG.info("All nodes {} are restored ...".format(hostnames))
+    else:
+        LOG.warn('Only 1 controller, but not AIO lab!!??')
 
     LOG.tc_step("Delete backup files from {} ....".format(TiSPath.BACKUPS))
     con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
