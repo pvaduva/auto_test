@@ -43,9 +43,9 @@ class PrivKeyPath:
 
 class BuildServerPath:
     DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
-    DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
-    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/TC_18.03_Host'
-    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img'
+    DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins/CGCS_6.0_Host'
+    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_6.0_Host'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
