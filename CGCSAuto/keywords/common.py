@@ -147,7 +147,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
-    return scp_to_local(source_path, active_cont_ip, dest_path=dest_path,
+    return scp_to_local(source_path=source_path, source_ip=active_cont_ip, dest_path=dest_path,
                         source_user=src_user, source_password=src_password,
                         timeout=timeout, is_dir=is_dir)
 
@@ -176,7 +176,7 @@ def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
     _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(dest_path, source_ip, source_path,
+def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
                  source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
                  timeout=60, is_dir=False):
     """
@@ -192,6 +192,9 @@ def scp_to_local(dest_path, source_ip, source_path,
         is_dir (bool): whether to copy a single file or a directory
 
     """
+    if not source_path or not source_ip:
+        return
+
     dir_option = '-r ' if is_dir else ''
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
             dir_option, source_user, source_ip, source_path, dest_path)
