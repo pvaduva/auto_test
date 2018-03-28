@@ -62,7 +62,7 @@ def getFaultCount():
     dataW = driver.find_element_by_css_selector("#alarms > tbody:nth-child(2)")
     data = dataW.text
     if(data == ""):
-        print "No alarms have been triggered"
+        print ("No alarms have been triggered")
     else:
         data = [line.strip() for line in data.split('\n') if line.strip()]
         count = 0
@@ -77,7 +77,7 @@ def getFaultCount():
 def getFaultNames():
     # Use XPath to go through all fault reason text
     name = driver.find_element_by_xpath("//table[@id='alarms']")
-    print name.text
+    print (name.text)
     name = name.text # Raw text of entire object
     name = name.split('\n') # Split object into list
     name = name[6:] # Remove first 6 items from list (titles)
@@ -89,27 +89,27 @@ def getFaultNames():
 # notifyFaultsFound() prints all faults on Horizon Fault Management page to console (todo file?)
 def notifyFaultsFound(faultName):
     if(CONST_CPU_USAGE in faultName):
-        print faultName
+        print (faultName)
     else:
         pass
     if(CONST_VSWITCH_CPU_USAGE in faultName):
-        print faultName
+        print (faultName)
     else:
         pass
     if(CONST_SERVICE_GROUP_REDUNDANCY in faultName):
-        print faultName
+        print (faultName)
     else:
         pass
     if(CONST_COMMUNICATION_FAILURE in faultName):
-        print faultName
+        print (faultName)
     else:
         pass
     if(CONST_LICENSE_EXPIRY1 in faultName):
-        print faultName
+        print (faultName)
     else:
         pass
     if(CONST_LICENSE_EXPIRY2 in faultName):
-        print faultName
+        print (faultName)
     else:
         pass
 
@@ -121,8 +121,8 @@ def main():
     if(countM == 0):
         "No Faults"
         return 0
-    print "There are currently " + str(countM) + " faults."
-    print "Listing faults:"
+    print ("There are currently " + str(countM) + " faults.")
+    print ("Listing faults:")
     getFaultNames()
     driver.quit()
     return 0
