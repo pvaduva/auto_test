@@ -518,10 +518,10 @@ def _cyclictest_inside_vm():
 
     LOG.tc_step('Chose a hypervisor to run from suitable computes:{}'.format(testable_hypervisors.keys()))
     candidates = [h for h in testable_hypervisors
-                  if (not testable_hypervisors[h]['for_host_test'] and testable_hypervisors[h]['for_vm_test'])]
+                  if (not testable_hypervisors[h]['for_host_test'] and not testable_hypervisors[h]['for_vm_test'])]
 
     hypervisor = random.choice(candidates)
-    hypervisor['for_vm_test'] = True
+    testable_hypervisors[hypervisor]['for_vm_test'] = True
     LOG.info('OK, choose hypervisor {} to run cyclictest'.format(hypervisor))
 
     vm_id = _create_vm(hypervisor)
