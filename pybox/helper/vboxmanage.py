@@ -52,7 +52,7 @@ def vboxmanage_list(option="vms"):
     return vms_list
 
 
-def vboxmanage_showinfo(host="controller-0"):
+def vboxmanage_showinfo(host):
     """
     This returns info about the host 
     """
@@ -151,8 +151,8 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
             cmd.extend(['{}'.format(env.PORT)])
             env.PORT += 1
         else:
-            if hostname == 'controller-0':
-                cmd.extend(['{}controller0_serial'.format(uartpath)])
+            if 'controller-0' in hostname:
+                cmd.extend(['{}{}_serial'.format(uartpath, hostname)])
             else:
                 cmd.extend(['{}{}'.format(uartpath, hostname)])
     if nicbootprio2:
@@ -178,7 +178,7 @@ def vboxmanage_storagectl(hostname=None, storectl="sata"):
                                      stderr=subprocess.STDOUT)
 
 
-def vboxmanage_storageattach(hostname="controller-0", storectl="sata", storetype="hdd", disk=None, port_num="0",
+def vboxmanage_storageattach(hostname=None, storectl="sata", storetype="hdd", disk=None, port_num="0",
                              device_num="0"):
     """
     This attaches a disk to a controller.

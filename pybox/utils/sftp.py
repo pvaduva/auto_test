@@ -41,7 +41,7 @@ def sftp_get(source, remote_host, destination):
     sftp_client.close()
     ssh_client.close()
 
-def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
+def sftp_send(source, remote_host, destination, username, password):
     """
     Send files to remote server, usually controller-0
     args:
@@ -51,9 +51,6 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the file locally: /tmp/bootimage.iso
     """
-    username = 'wrsroot'
-    password = 'Li69nux*'
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
 
     ssh_client = paramiko.SSHClient()
@@ -78,7 +75,7 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     ssh_client.close()
     
     
-def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
+def send_dir(source, remote_host, destination, username, password):
     """
     Send directory contents to remote server, usually controller-0
     Note: does not send nested directories only files.
@@ -89,9 +86,6 @@ def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the file on host: /home/wrsroot/
     """
-    username = 'wrsroot'
-    password = 'Li69nux*'
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())

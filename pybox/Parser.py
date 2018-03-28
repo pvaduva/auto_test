@@ -219,6 +219,16 @@ def handle_args():
         Password. default is 'Li69nux*'
         """,
         type=str)
+    parser.add_argument("--labname", help=
+        """
+        The name of the lab to be created.
+        """,
+        type=str)
+    parser.add_argument("--controller0-ip", help=
+        """
+        OAM IP of controller-0 
+        """,
+        type=str)
     # WEI TODO: remove 
     #parser.add_argument("--lvm", help=
     #    """

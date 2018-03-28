@@ -12,7 +12,7 @@ from utils.install_log import LOG
 
 
 def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None, local_path=None,
-                        host_type='Standard', username='wrsroot'):
+                        host_type='Standard', ctrlr0_ip=None, username='wrsroot', password='Li69nux*'):
     """
     Retrieves necessary setup files from the host specified. If local_path is specified the files in that
     directory will be collected else files will be collected from remote_host
@@ -29,14 +29,19 @@ def get_lab_setup_files(stream, remote_host=None, release='R5', remote_path=None
     if local_path:
         if not local_path.endswith('/') or not local_path.endswith('\\'):
             local_path = local_path + '/'
-        get_lab_setup_scripts(remote_host, release, remote_path, local_path)
+        get_lab_setup_scripts(remote_host, release, remote_path, local_path,
+                              ctrlr0_ip=ctrlr0_ip, username=username, password=password)
     else:
-        get_lab_setup_scripts(remote_host, release, remote_path, local_path)
-        get_licence(remote_host, release, remote_path, local_path, host_type, username=username)
-        get_guest_img(stream, remote_host, release, remote_path, local_path, username=username)
+        get_lab_setup_scripts(remote_host, release, remote_path, local_path,
+                              ctrlr0_ip=ctrlr0_ip, username=username, password=password)
+        get_licence(remote_host, release, remote_path, local_path, host_type, 
+                    ctrlr0_ip=ctrlr0_ip, username=username, password=password)
+        get_guest_img(stream, remote_host, release, remote_path, local_path, 
+                      ctrlr0_ip=ctrlr0_ip, username=username, password=password)
 
 
-def get_lab_setup_scripts(remote_host=None, release='R5', remote_path=None, local_path=None):
+def get_lab_setup_scripts(remote_host=None, release='R5', remote_path=None, local_path=None,
+                          ctrlr0_ip=None, username='wrsroot', password='Li69nux*'):
     """
     Retrieves lab setup scripts including tenant and admin resources.
     Args:
@@ -61,11 +66,12 @@ def get_lab_setup_scripts(remote_host=None, release='R5', remote_path=None, loca
         for items in file_path:
             file = items.split('/')
             sftp_get(source=items, remote_host=remote_host, destination=local_path+file.pop())
-    send_dir(source=local_path)
+    send_dir(source=local_path, remote_host=ctrlr0_ip, destination='/home/'+username+'/', 
+             username=username, password=password)
 
 
 def get_licence(remote_host=env.BuildServers.CGTS4['ip'], release='R5', remote_path=None,
-                local_path=None, host_type='Standard', username='wrsroot'):
+                local_path=None, host_type='Standard', ctrlr0_ip=None, username='wrsroot', password='Li69nux*'):
     """
         Retrieves Licence from specified host and sends it to controller-0.
     Args:
@@ -89,11 +95,12 @@ def get_licence(remote_host=env.BuildServers.CGTS4['ip'], release='R5', remote_p
             file_path = env.Licenses.R2[host_type]
     local_path = local_path + 'license.lic'
     sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
-    sftp_send(source=local_path, destination='/home/' + username + '/license.lic')
+    sftp_send(source=local_path, remote_host=ctrlr0_ip, destination='/home/' + username + '/license.lic',
+              username=username, password=password)
 
 
 def get_guest_img(stream, remote_host=None, release='R5', remote_path=None,
-                  local_path=None, username='wrsroot'):
+                  local_path=None, ctrlr0_ip=None, username='wrsroot', password='Li69nux*'):
     """
  Retrieves necessary setup files from the host specified.
     Args:
@@ -124,12 +131,14 @@ def get_guest_img(stream, remote_host=None, release='R5', remote_path=None,
     if remote_host is not None:
         sftp_get(source=file_path, remote_host=remote_host, destination=local_path)
     if release != 'R2':
-        sftp_send(source=local_path, destination="/home/" + username + "/images/tis_centos_guest.img")
+        sftp_send(source=local_path, remote_host=ctrlr0_ip, destination="/home/" + username + "/images/tis_centos_guest.img",
+                  username=username, password=password)
     else:
-        sftp_send(source=local_path, destination="/home/" + username + "/images/cgcs-guest.img")
+        sftp_send(source=local_path, remote_host=ctrlr0_ip, destination="/home/" + username + "/images/cgcs-guest.img",
+                  username=username, password=password)
 
 
-def get_patches(cont0_stream, local_path=None, remote_host=None, release='R5', username='wrsroot'):
+def get_patches(cont0_stream, ctrlr0_ip=None, local_path=None, remote_host=None, release='R5', username='wrsroot', password='Li69nux*'):
     """
     Retrieves patches from remote_host or localhost if remote_host is None
     """
@@ -150,17 +159,20 @@ def get_patches(cont0_stream, local_path=None, remote_host=None, release='R5', u
         else:
             patch_loc = env.Builds.R2['patches']
         for items in patch_loc:
-            send_dir(local_path, '10.10.10.3', destination=remote_path)
-        send_dir(local_path, destination=remote_path)
+            send_dir(source=local_path, remote_host=ctrlr0_ip, destination=remote_path,
+                     username=username, password=password)
+        send_dir(source=local_path, remote_host=ctrlr0_ip, destination=remote_path,
+                 username=username, password=password)
     else:
         LOG.info("Retrieving patches from {}".format(local_path))
         if not local_path.endswith('/') or not local_path.endswith('\\'):
             local_path = local_path + '/'
         ## TODO (WEI): not to hardcode ctrl-0
-        send_dir(local_path, '10.10.10.3', remote_path)
+        send_dir(source=local_path, remote_host=ctrlr0_ip, destination=remote_path,
+                 username=username, password=password)
 
 
-def get_config_file(remote_host=None, release='R5', username='wrsroot'):
+def get_config_file(ctrlr0_ip=None, remote_host=None, release='R5', username='wrsroot', password='Li69nux*'):
     """
     Retrieves config file from remote host if specified or localhost if None.
     Sends file to cont0    
@@ -183,7 +195,8 @@ def get_config_file(remote_host=None, release='R5', username='wrsroot'):
         else:
             sftp_get(env.Files.R2['config'], remote_host, local_path)
     ## TODO (WEI): not to hardcode ctrl-0
-    sftp_send(local_path, '10.10.10.3', remote_path)
+    sftp_send(source=local_path, remote_host=ctrlr0_ip, destination=remote_path,
+              username=username, password=password)
 
 
 def lab_setup_controller_0_locked(stream, username='wrsroot', password='Li69nux*'):
@@ -239,7 +252,7 @@ def lab_setup_controller_0_locked(stream, username='wrsroot', password='Li69nux*
     time.sleep(60)
 
 
-def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5', socks=None, streams=None, username='wrsroot', password='Li69nux*'):
+def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5', socks=None, streams=None, labname=None, username='wrsroot', password='Li69nux*'):
     """
     Runs lab install.sh iterations. Currently does not support Simplex systems
     Args:
@@ -295,25 +308,28 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
                      "Please re-run the iteration before continuing. Press enter to continue.")
             input()
-        if 'controller-1' in host_list:
-            LOG.info("Installing controller-1")
-            cont1_stream = streamexpect.wrap(serial.connect('controller-1', 10001), echo=True, close_stream=False)
-            host_helper.install_host(stream, 'controller-1', 'controller', 2)
-            serial.expect_bytes(cont1_stream, "ogin:", timeout=HostTimeout.INSTALL)
-            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-            host_helper.check_password(stream, password=password)
-            ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
-            if ret != 0:
-                LOG.info("Lab_setup.sh failed. Pausing to allow for debugging."
-                         " Please re-run the iteration before continuing. Press enter to continue.")
-                input()
-            LOG.info("Unlocking Controller-1")
-            host_helper.unlock_host(stream, 'controller-1')
-            ret = serial.expect_bytes(cont1_stream, "ogin:")
-            if ret == 1:
-                LOG.info("Controller-1 not unlocked, pausing to allow for debugging. "
-                         "Please unlock before continuing. Press enter to continue.")
-                input()
+  
+        ctrlr1 = 'controller-1'
+        for host in host_list:
+            if ctrlr1 in host:
+                LOG.info("Installing {}".format(ctrlr1))
+                cont1_stream = streamexpect.wrap(serial.connect(ctrlr1, 10001), echo=True, close_stream=False)
+                host_helper.install_host(stream, ctrlr1, 'controller', 2)
+                serial.expect_bytes(cont1_stream, "ogin:", timeout=HostTimeout.INSTALL)
+                serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
+                host_helper.check_password(stream, password=password)
+                ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
+                if ret != 0:
+                     LOG.info("Lab_setup.sh failed. Pausing to allow for debugging."
+                              " Please re-run the iteration before continuing. Press enter to continue.")
+                     input()
+                LOG.info("Unlocking {}".format(ctrlr1))
+                host_helper.unlock_host(stream, ctrlr1)
+                ret = serial.expect_bytes(cont1_stream, "ogin:")
+                if ret == 1:
+                    LOG.info("Controller-1 not unlocked, pausing to allow for debugging. "
+                             "Please unlock before continuing. Press enter to continue.")
+                    input()
         LOG.info("Completed install successfully.")
     else:
         serial.send_bytes(stream, "source /etc/nova/openrc", prompt='keystone')
@@ -330,6 +346,8 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             port = 10002
             now = time.time()
             for hosts in host_list:
+                ## TODO (WEI): double check this
+                hosts = hosts[len(labname)+1:]
                 if hosts.startswith('storage'):
                     LOG.info("Unlocking {}".format(hosts))
                     host_helper.unlock_host(stream, hosts)
@@ -356,57 +374,39 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
                      "Please re-run the iteration before continuing. Press enter to continue.")
             input()
         for host in host_list:
+            host = host[len(labname)+1:]
             ret = host_helper.unlock_host(stream, host)
             if ret == 1:
-                LOG.info("{} not unlocked, pausing to allow for debugging. "
+                LOG.info("Cannot unlock {},  pausing to allow for debugging. "
                          "Please unlock before continuing. Press enter to continue.".format(host))
                 input()
-            time.sleep(10)
+            time.sleep(20)
         LOG.info("Waiting for {} to unlock.".format(host_list))
 
         now = time.time()
         ## Check unlocking status
         ## TODO (WEI): Maybe use multi-threads to check?
+        all_nodes_unlocked = True 
         for host in host_list:
             serial.send_bytes(streams[host], '\n', expect_prompt=False)
             # TODO Fix it! 'ogin:' is always found immediately after unlock
-            # WEI: By checking twice the problem seems to be fixed. 
             # WEI: It doesn't happen any more if disconnect after test_install_nodes() is done
             #      and recoonect before calling run_install_scripts() 
             try:
-                ret = serial.expect_bytes(streams[host], "{} login:".format(host), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
+                ret = serial.expect_bytes(streams[host], "{} login:".format(host[len(labname)+1:]), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
                 if ret != 0:
-                    LOG.info("{} not unlocked, pausing to allow for debugging. "
-                             "Please unlock {} before continuing. Press enter to continue.".format(host, host))
-                    input()
+                    LOG.info("Unlock {} timed-out.")
+                    all_nodes_unlocked = False
                 else:
                     LOG.info("Unlock time (mins): {}".format((time.time() - now)/60))
             except Exception as e:
                     LOG.info("Unlock {} failed with {}".format(host, e))
-                    LOG.info("{} not unlocked, pausing to allow for debugging. "
-                             "Please unlock {} before continuing. Press enter to continue.".format(host, host))
-                    input()
+                    all_nodes_unlocked = False
 
-        ## WEI check again        
-        #for host in host_list:
-        #    serial.send_bytes(streams[host], '\n', expect_prompt=False)
-        #    ret = serial.expect_bytes(streams[host], "{} login:".format(host), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
-        #    if ret != 0:
-        #        ## TODO (WEI): somehow in my VB setup, I always have to poweroff and start
-        #        ##             these VMs for them to become unlocked/enabled/available
-        #        LOG.info("Poweroff and start {}".format(host))
-        #        vboxmanage.vboxmanage_controlvms([host], "poweroff")
-        #        time.sleep(10)
-        #        vboxmanage.vboxmanage_startvm(host)
-#
-#                LOG.info("{} not unlocked, pausing to allow for debugging. "
-#                         "Please unlock {} before continuing. Press enter to continue.".format(host, host))
-#                input()
-#            else:
-#                LOG.info("Unlock time (mins): {}".format((time.time() - now)/60))
-
-
-            # serial.disconnect(socks[host])
+        if not all_nodes_unlocked:
+            LOG.info("Not all the nodes are unlocked successfully. Pausing to allow for debugging. "
+                     "Once they all become unlocked/enabled/available, press enter to continue.")
+            input()
 
         serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
         host_helper.check_password(stream, password=password)
@@ -503,6 +503,7 @@ def install_patches_before_config(stream, release='R5', username='wrsroot', pass
     host_helper.login(stream, username=username, password=password)
 
 
+## TODO (WEI): Remove it
 def enable_lvm(stream, release, password='Li69nux*'):
     """
     Enables LVM backend

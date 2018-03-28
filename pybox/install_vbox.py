@@ -149,17 +149,17 @@ def menu_selector(stream, controller_type, securityprofile, release, lowlatency,
         time.sleep(4)
 
 
-def setup_networking(stream, release, password='Li69nux*'):
+def setup_networking(stream, release, ctrlr0_ip, password='Li69nux*'):
     """
     Setup initial networking so we can transfer files.
     """
-    ip = "10.10.10.3"
+    ip = ctrlr0_ip 
     host_ip = "10.10.10.254"
     if release == "R2":
         interface = "eth0"
     else:
         interface = "enp0s3"
-    ret = serial.send_bytes(stream, "/sbin/ip address list", prompt='10.10.10.3', fail_ok=True, timeout=10)
+    ret = serial.send_bytes(stream, "/sbin/ip address list", prompt=ctrlr0_ip, fail_ok=True, timeout=10)
     if ret != 0:
         LOG.info("Setting networking up.")
     else:
@@ -185,8 +185,8 @@ def setup_networking(stream, release, password='Li69nux*'):
 
 
 @pytest.mark.unit
-def install_controller_0(cont0_stream, controller_type, securityprofile, release, 
-                         lowlatency, install_mode, username='wrsroot', password='Li69nux*'):
+def install_controller_0(cont0_stream, controller_type, securityprofile, release, lowlatency,
+                         install_mode, ctrlr0_ip, username='wrsroot', password='Li69nux*'):
     """
     Installation of controller-0.
     Takes about 30 mins
@@ -213,7 +213,7 @@ def install_controller_0(cont0_stream, controller_type, securityprofile, release
 
     # Setup basic networking
     time.sleep(10)
-    setup_networking(cont0_stream, release, password=password)
+    setup_networking(cont0_stream, release, ctrlr0_ip, password=password)
     
 
 def start_and_connect_nodes(host_list=None):
@@ -241,7 +241,7 @@ def start_and_connect_nodes(host_list=None):
 
     return socks, streams
 
-def test_install_nodes(cont0_stream, socks, streams, host_list=None):
+def test_install_nodes(cont0_stream, socks, streams, labname, host_list=None):
     """
     Tests node install, requires controller-0 to be installed previously
     Args:
@@ -256,8 +256,6 @@ def test_install_nodes(cont0_stream, socks, streams, host_list=None):
     13-25 mins
     """
     
-    ## Comment out this thread code for now as it seems to hold up
-    ## controller-0 serial connection.
     host_id = 2
 
     LOG.info("test_install_nodes")
@@ -266,14 +264,16 @@ def test_install_nodes(cont0_stream, socks, streams, host_list=None):
     new_thread = []
     serial.send_bytes(cont0_stream, "source /etc/nova/openrc", prompt='keystone')
     for host in host_list:
+        ## Remove the lab name from the host
+        tis_host = host[len(labname)+1:]
         time.sleep(10)
-        if 'controller' in host:
-            new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(host), host, 'controller',
+        if 'controller' in tis_host:
+            new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(tis_host), tis_host, 'controller',
                                                       host_id))
-        elif 'compute' in host:
-            new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(host), host, 'compute', host_id))
+        elif 'compute' in tis_host:
+            new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(tis_host), tis_host, 'compute', host_id))
         else:
-            new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(host), host, 'storage', host_id))
+            new_thread.append(threading.InstallThread(cont0_stream, '{} thread'.format(tis_host), tis_host, 'storage', host_id))
         host_id += 1
 
     for host in new_thread:
@@ -320,22 +320,27 @@ def test_install_nodes(cont0_stream, socks, streams, host_list=None):
     kpi.NODEINSTALL = time.time()-start_time
     LOG.info("Node install time: {} minutes".format(kpi.NODEINSTALL/60))
 
-def get_all_vms(option="vms"):
+def get_all_vms(labname, option="vms"):
     node_list = []
     vm_list = vboxmanage.vboxmanage_list(option)
     LOG.info("The following VMs are present on the system: {}".format(vm_list))
+
+    labname.encode('utf-8')
     for item in vm_list:
-        if b'controller-' in item or b'compute-' in item or b'storage-' in item:
+        if labname.encode('utf-8') in item and (b'controller-' in item or \
+           b'compute-' in item or b'storage-' in item):
             node_list.append(item.decode('utf-8'))
+
+    #print ("node list ", node_list)
     return node_list
 
-def take_snapshot(name):
-    node_list = get_all_vms("runningvms")
+def take_snapshot(labname, snapshot_name):
+    node_list = get_all_vms(labname, option="runningvms")
     if len(node_list) != 0:
-        LOG.info("Taking snapshot of {}".format(name))
+        LOG.info("Taking snapshot of {}".format(snapshot_name))
         vboxmanage.vboxmanage_controlvms(node_list, "pause")
         time.sleep(5)
-        vboxmanage.vboxmanage_takesnapshot(node_list, name)
+        vboxmanage.vboxmanage_takesnapshot(node_list, snapshot_name)
         time.sleep(10)
         vboxmanage.vboxmanage_controlvms(node_list, "resume")
         time.sleep(10)
@@ -353,11 +358,11 @@ def restore_snapshot(host, name):
         time.sleep(10)
         ## TODO (WEI): Before return make sure VMs are up running again
 
-def delete_lab():
-    node_list = get_all_vms("vms")
+def delete_lab(labname):
+    node_list = get_all_vms(labname, option="vms")
 
     if vboxoptions.debug_rest:
-        node_list.remove("controller-0")
+        node_list.remove(labname + "-controller-0")
 
     if len(node_list) != 0:
         LOG.info("Deleting existing VMs: {}".format(node_list))
@@ -411,31 +416,31 @@ def create_lab(vboxoptions):
         nodes_list = []
         if vboxoptions.controllers:
             for id in range(0, vboxoptions.controllers):
-                node_name = "controller-{}".format(id)
+                node_name = vboxoptions.labname + "-controller-{}".format(id)
                 nodes_list.append(node_name)
         if vboxoptions.computes:
             for id in range(0, vboxoptions.computes):
-                node_name = "compute-{}".format(id)
+                node_name = vboxoptions.labname + "-compute-{}".format(id)
                 nodes_list.append(node_name)
         if vboxoptions.storage:
             for id in range(0, vboxoptions.storage):
-                node_name = "storage-{}".format(id)
+                node_name = vboxoptions.labname + "-storage-{}".format(id)
                 nodes_list.append(node_name)
 
-        ### WZWZ to remove 
+        ### WZWZ to debug 
         if vboxoptions.debug_rest:
-            nodes_list.remove("controller-0")
+            nodes_list.remove(vboxoptions.labname + "-controller-0")
 
         LOG.info("We will create the following nodes: {}".format(nodes_list))
         port = 10000
         for node in nodes_list:
             vboxmanage.vboxmanage_createvm(node)
             vboxmanage.vboxmanage_storagectl(node, storectl="sata")
-            if node.startswith("controller"):
+            if "controller" in node:
                 node_type = controller_type
-            elif node.startswith("compute"):
+            elif "compute" in node:
                 node_type = "compute"
-            else:
+            elif "storage" in node:
                 node_type = "storage"
 
             for item in node_config:
@@ -454,7 +459,7 @@ def create_lab(vboxoptions):
                                                uartmode=serial_config[0]['uartmode'],
                                                uartpath=serial_config[0]['uartpath'])
 
-            if node.startswith("controller"):
+            if "controller" in node:
                 node_type = "controller"
 
             for item in nic_config:
@@ -471,7 +476,7 @@ def create_lab(vboxoptions):
     else:
         LOG.info("Setup will proceed with existing VMs as requested by user")
 
-    ## WZWZ to remove
+    ## WZWZ to debug 
     if vboxoptions.debug_rest:
         return
 
@@ -483,6 +488,10 @@ def create_lab(vboxoptions):
         for item in buildservers:
             if item['short_name'].upper() == vboxoptions.buildserver:
                 remote_server = item['ip']
+            else:
+                print ("WEI temp fix. buildserver is not given. exit...")
+                sys.exit(1)
+        ##TODO (WEI): Fix it! Ensure that vboxoptions.buildserver is set in this scenario
         sftp_get(remote_path, remote_server, env.ISOPATH.format(vboxoptions.release))
         PATH = env.ISOPATH.format(vboxoptions.release)
     elif vboxoptions.iso_location:
@@ -496,7 +505,8 @@ def create_lab(vboxoptions):
             "ISO doesn't exist at: {}".format(env.ISOPATH.format(vboxoptions.release))
         PATH = env.ISOPATH.format(vboxoptions.release)
     # TODO(WEI): Need a more programatic way to do this rather than hardcoding device and port - INVESTIGATE
-    vboxmanage.vboxmanage_storageattach(storetype="dvddrive", disk=PATH, device_num="0", port_num="2")
+    ctrlr0 = vboxoptions.labname + '-controller-0'
+    vboxmanage.vboxmanage_storageattach(ctrlr0, storetype="dvddrive", disk=PATH, device_num="0", port_num="2")
 
     # END VBOX SETUP
     return controller_type
@@ -519,20 +529,29 @@ if __name__ == "__main__":
     # START VBOX SETUP
     vboxoptions = handle_args().parse_args()
 
+    lab_config = [getattr(env.Lab, attr) for attr in dir(env.Lab) if not attr.startswith('__')]
+    if vboxoptions.labname is None:
+        vboxoptions.labname = lab_config[0]['name']
+
+    if vboxoptions.controller0_ip is None:
+        vboxoptions.controller0_ip = lab_config[0]['controller-0_ip']
+
     ## WEI: Just to delete the lab.
     ## Add this option for convenience 
+    print ("labname", vboxoptions.labname)
+
     if vboxoptions.deletelab and not vboxoptions.createlab:
-        delete_lab()
-        LOG.info("vbox lab is deleted. ")
+        delete_lab(vboxoptions.labname)
+        LOG.info("lab {} is deleted.".format(vboxoptions.labname))
         sys.exit(0)
 
     ## WEI: Lab instal is quite stable up to the step when controller-0 is unlock.
     ##      So I do following to debug the rest.
-    ## python3 install_vbox --createlab --debug-rest   (This will delete all the nodes except ctrr-0, restore ctrlr-0, re-create rest of nodes.) 
+    ## python3 install_vbox --createlab --debug-rest   (This will delete all the nodes except ctrlr-0, restore ctrlr-0, re-create rest of nodes.) 
     ## python3 install_vbox --install-lab
     if vboxoptions.createlab and vboxoptions.debug_rest:
-        delete_lab()
-        restore_snapshot("controller-0", "snapshot-AFTER-unlock-controller-0")
+        delete_lab(vboxoptions.labname)
+        restore_snapshot(vboxoptions.labname + "-controller-0", "snapshot-AFTER-unlock-controller-0")
  
     kpi.TOTALTIME = time.time()
 
@@ -584,46 +603,48 @@ if __name__ == "__main__":
             vboxoptions.controllers = 2
             vboxoptions.computes = 2
     if vboxoptions.username is None:
-        vboxoptions.username = 'wrsroot'
+        vboxoptions.username = lab_config[0]['username'] 
     if vboxoptions.password is None:
-        vboxoptions.password = 'Li69nux*'
+        vboxoptions.password = lab_config[0]['password'] 
 
     LOG.info(vboxoptions)
-    
+   
+    ctrlr0 = vboxoptions.labname + "-controller-0" 
+
     if vboxoptions.createlab:
         controller_type = create_lab(vboxoptions)
 
-        ## WZWZ remove it
+        ## WZWZ to debug 
         if vboxoptions.debug_rest:
             sys.exit(0)
 
-        vboxmanage.vboxmanage_startvm("controller-0")
+        vboxmanage.vboxmanage_startvm(ctrlr0)
 
-    node_list = get_all_vms("vms")
+    node_list = get_all_vms(vboxoptions.labname, option="vms")
     LOG.info(node_list)
-    assert 'controller-0' in node_list, "controller-0 not in vm list. Stopping installation."
+    assert ctrlr0 in node_list, "controller-0 not in vm list. Stopping installation."
 
     ## TODO(WEI): Use contextManager to use with statement for socket, so that if the script
     ## crashes, the socket will be closed; otherwise the socket process on the remote side 
     ## may hang 
-    sock = serial.connect("controller-0", 10000)
+    sock = serial.connect(ctrlr0, 10000)
     cont0_stream = streamexpect.wrap(sock, echo=True, close_stream=False)
 
     try:
         if vboxoptions.createlab:
             install_controller_0(cont0_stream, controller_type, vboxoptions.securityprofile, 
                                  vboxoptions.release, vboxoptions.lowlatency, 
-                                 install_mode=vboxoptions.install_mode,
+                                 install_mode=vboxoptions.install_mode, ctrlr0_ip=vboxoptions.controller0_ip,
                                  username=vboxoptions.username, password=vboxoptions.password)
         else:
-            ## WZWZ remove it
+            ## WZWZ to debug 
             if not vboxoptions.debug_rest:
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
-                setup_networking(cont0_stream, vboxoptions.release, password=vboxoptions.password)
+                setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip, password=vboxoptions.password)
 
         ## Take snapshot
         if vboxoptions.snapshot:
-            take_snapshot("snapshot-BEFORE-config-controller")
+            take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
 
         buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
         for item in buildservers:
@@ -638,18 +659,23 @@ if __name__ == "__main__":
             host_type = "Standard"
 
         if vboxoptions.setup_files:
-            install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, host_type=host_type, username=vboxoptions.username)
+            install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, 
+                                            host_type=host_type, ctrlr0_ip=vboxoptions.controller0_ip, 
+                                            username=vboxoptions.username, password=vboxoptions.password)
         elif vboxoptions.get_setup:
             install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type=host_type)
 
         if vboxoptions.get_patches:
-            install_lab.get_patches(cont0_stream, remote_host=remote_server, release=vboxoptions.release, username=vboxoptions.username)
+            install_lab.get_patches(cont0_stream, vboxoptions.controller0_ip, remote_host=remote_server, release=vboxoptions.release, 
+                                    username=vboxoptions.username, password=vboxoptions.password)
 
         if vboxoptions.config_file:
             destination = "/home/" + vboxoptions.username + "/TiS_config.ini_centos"
-            sftp_send(vboxoptions.config_file, destination=destination)
+            sftp_send(vboxoptions.config_file, remote_host=vboxoptions.controller0_ip, destination=destination,
+                      username=vboxoptions.username, password=vboxoptions.password)
         elif vboxoptions.get_config:
-            install_lab.get_config_file(remote_server, release=vboxoptions.release, username=vboxoptions.username)
+            install_lab.get_config_file(vboxoptions.controller0_ip, remote_server, release=vboxoptions.release, 
+                                        username=vboxoptions.username, password=vboxoptions.password)
 
         if vboxoptions.install_patches:
             install_lab.install_patches_before_config(cont0_stream, vboxoptions.release, username=vboxoptions.username, password=vboxoptions.password)
@@ -668,6 +694,7 @@ if __name__ == "__main__":
             #    config_file = '/home/wrsroot/system_config.centos_http'
 
             ## TODO (WEI): define a constant for config_file
+
             config_file = "/home/" + vboxoptions.username + "/TiS_config.ini_centos" 
             ret = install_lab.config_controller(cont0_stream, config_file=config_file,
                                                 release=vboxoptions.release, remote_host=vboxoptions.buildserver,
@@ -677,7 +704,7 @@ if __name__ == "__main__":
                 input()
 
             if vboxoptions.snapshot:
-                take_snapshot("snapshot-AFTER-config-controller")
+                take_snapshot(vboxoptions.labname, "snapshot-AFTER-config-controller")
 
             if vboxoptions.release == 'R5':
                 # TODO (WEI): Remove it. cinder-volumes partition is created by lab_setup.sh
@@ -687,10 +714,11 @@ if __name__ == "__main__":
                 #    install_lab.enable_lvm(cont0_stream, vboxoptions.release)
 
                 # wait for online status, run lab_setup, unlock cont0, provision hosts, continue from before.
-                install_lab.lab_setup_controller_0_locked(cont0_stream, username=vboxoptions.password, password=vboxoptions.password)
+                install_lab.lab_setup_controller_0_locked(cont0_stream,
+                                                          username=vboxoptions.username, password=vboxoptions.password)
 
                 if vboxoptions.snapshot:
-                    take_snapshot("snapshot-AFTER-unlock-controller-0")
+                    take_snapshot(vboxoptions.labname, "snapshot-AFTER-unlock-controller-0")
 
         # Now install rest of the nodes
         
@@ -698,7 +726,7 @@ if __name__ == "__main__":
         socks = {}
         streams = {}
         # Since we don't need to install controller-0, let's remove it
-        node_list.remove("controller-0")
+        node_list.remove(ctrlr0)
 
         # Don't want to mess with vms that aren't supposed to be.
         for item in node_list:
@@ -708,13 +736,17 @@ if __name__ == "__main__":
         if vboxoptions.install_lab and not vboxoptions.aio:
             LOG.info("Starting lab installation after controller-0 is unlocked.")
 
-            ## WZWZ to remove 
+            ## WZWZ to debug 
             if vboxoptions.debug_rest:
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
 
             socks, streams = start_and_connect_nodes(host_list=node_list)
             try:
-                test_install_nodes(cont0_stream, socks, streams, host_list=node_list)
+                test_install_nodes(cont0_stream, socks, streams, vboxoptions.labname, host_list=node_list)
+
+                if vboxoptions.snapshot:
+                    take_snapshot(vboxoptions.labname, "snapshot-AFTER-lab-install")
+
             except Exception as e:
                 LOG.info("Install rest of nodes not successful. {}".format(e))
                 for node in node_list:
@@ -728,12 +760,9 @@ if __name__ == "__main__":
                 socks = {}
                 streams = {}
 
-            if vboxoptions.snapshot:
-                take_snapshot("snapshot-AFTER-lab-install")
-
         # runs lab_setup.sh
         if vboxoptions.run_scripts:
-            ## WZWZ to remove 
+            ## WZWZ to debug 
             if vboxoptions.debug_rest:
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
            
@@ -741,8 +770,13 @@ if __name__ == "__main__":
                 socks, streams = start_and_connect_nodes(host_list=node_list)
             try:
                 install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio=vboxoptions.aio,
-                                                storage=vboxoptions.storage, release=vboxoptions.release, 
-                                                socks=socks, streams=streams, username=vboxoptions.username, password=vboxoptions.password)
+                             storage=vboxoptions.storage, release=vboxoptions.release, 
+                             socks=socks, streams=streams, labname=vboxoptions.labname, 
+                             username=vboxoptions.username, password=vboxoptions.password)
+
+                ## TODO: WEI uncomment it 
+                #if vboxoptions.snapshot:
+                #    take_snapshot(vboxoptions.labname, "snapshot-AFTER-lab-setup")
             except Exception as e:
                 LOG.info("Run install script not successful. {}".format(e))
                 for node in node_list:
@@ -750,10 +784,6 @@ if __name__ == "__main__":
             else:
                 for node in node_list:
                     serial.disconnect(socks[node])
-
-            ## TODO: WEI uncomment it out
-            #if vboxoptions.snapshot:
-            #    take_snapshot("snapshot-AFTER-lab-setup")
 
     except Exception as e:
         LOG.info("Oh no, something bad happened {}".format(e))
