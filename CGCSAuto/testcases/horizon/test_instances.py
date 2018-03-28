@@ -29,7 +29,8 @@ class TestInstances(helper.TenantTestCase):
     @mark.parametrize(('source_type', 'source_name', 'flavor_name', 'network_names'), [
         ('Image', 'tis-centos-guest', 'small', ['tenant1-mgmt-net']),
     ])
-    def test_create_delete_instance(self, instances_pg, source_type, source_name, flavor_name, network_names):
+    def test_create_delete_instance(self, instances_pg, source_type, source_name,
+                                    flavor_name, network_names):
         """
         Test the instance creation and deletion functionality:
 

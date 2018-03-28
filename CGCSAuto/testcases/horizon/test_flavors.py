@@ -1,5 +1,5 @@
 import random
-
+import os
 from utils.horizon.regions import messages
 from utils.horizon.pages.admin.compute import flavorspage
 from pytest import fixture
@@ -119,7 +119,7 @@ class TestFlavors(helper.AdminTestCase):
 
         self.FLAVOR_NAME = newname
 
-    '''def test_flavor_update_access(self, flavors_pg_action):   # CGTS-9135
+    def test_flavor_update_access(self, flavors_pg_action):
         """
         Tests the flavor update access functionality:
 
@@ -147,7 +147,7 @@ class TestFlavors(helper.AdminTestCase):
         LOG.tc_step('Update flavor access back to public and verify'.format(projects))
         flavors_pg_action.update_flavor_access(self.FLAVOR_NAME, projects,
                                                allocate=False)
-        assert flavors_pg_action.is_flavor_public(self.FLAVOR_NAME)'''
+        assert flavors_pg_action.is_flavor_public(self.FLAVOR_NAME)
 
     def test_create_flavor_with_excessive_vcpu_negative(self, flavors_pg):
         """

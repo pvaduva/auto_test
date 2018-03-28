@@ -44,8 +44,7 @@ class TestVolumesBasic(helper.TenantTestCase):
 
     @mark.parametrize(('volume_source_type', 'source_name'), [
         (None, None),
-        ('Image', 'tis-centos-guest'),
-        # ('Volume', 'vol-tenant1-virtio1')
+        ('Image', 'tis-centos-guest')
     ])
     def test_volume_create_delete(self, volumes_pg, volume_source_type, source_name):
         """

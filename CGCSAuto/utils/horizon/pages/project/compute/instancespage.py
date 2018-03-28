@@ -114,7 +114,7 @@ class InstancesPage(basepage.BasePage):
     DEFAULT_SOURCE_TYPE = 'Image'
     DEFAULT_SOURCE_NAME = 'tis-centos-guest'
     DEFAULT_FLAVOR_NAME = 'small'
-    DEFAULT_NETWORK_NAMES = ['tenant1-mgmt-net', 'internal0-net0']
+    DEFAULT_NETWORK_NAMES = ['tenant1-mgmt-net',]
 
 
     INSTANCES_TABLE_NAME_COLUMN = 'Instance Name'
