@@ -61,8 +61,6 @@ testable_hypervisors = {}
 
 @fixture(scope='session', autouse=True)
 def prepare_test_session():
-    global testable_hypervisors
-
     suitable_targets = _check_test_conditions()
     if not suitable_targets:
         skip('Not suitable for cyclictest')
@@ -418,7 +416,7 @@ def _run_cyclictest(con_target, program, target_host=None, settings=None, active
 def _cyclictest_on_hypervisor():
     global testable_hypervisors
 
-    LOG.tc_step('Randomly pick one hypervisor to test')
+    LOG.tc_step('Randomly pick one hypervisor to test, {}'.format(testable_hypervisors))
 
     hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     LOG.debug('-all up/enabled hypervisors:{}'.format(hypervisors))
@@ -427,9 +425,11 @@ def _cyclictest_on_hypervisor():
 
     active_controller_name = activie_controller.host
 
-    chosen_hypervisor = random.choice([h for h in testable_hypervisors
-                                       if not h['for_host_test'] and not h['for_vm_test']])
-    chosen_hypervisor['for_host_test'] = True
+    candidates = [h for h in testable_hypervisors
+                  if not testable_hypervisors[h]['for_host_test'] and not testable_hypervisors[h]['for_vm_test']]
+
+    chosen_hypervisor = random.choice(candidates)
+    testable_hypervisors[chosen_hypervisor]['for_host_test'] = True
 
     # chosen_hypervisor = 'controller-1'
     LOG.info('OK, randomly selected hypervisor:{} to test on'.format(chosen_hypervisor))
@@ -517,7 +517,8 @@ def _cyclictest_inside_vm():
     LOG.tc_step('Run cyclictest on VM')
 
     LOG.tc_step('Chose a hypervisor to run from suitable computes:{}'.format(testable_hypervisors.keys()))
-    candidates = [h for h in testable_hypervisors if (not h['for_host_test'] and h['for_vm_test'])]
+    candidates = [h for h in testable_hypervisors
+                  if (not testable_hypervisors['h]']['for_host_test'] and testable_hypervisors[h]['for_vm_test'])]
 
     hypervisor = random.choice(candidates)
     hypervisor['for_vm_test'] = True
