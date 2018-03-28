@@ -538,8 +538,6 @@ if __name__ == "__main__":
 
     ## WEI: Just to delete the lab.
     ## Add this option for convenience 
-    print ("labname", vboxoptions.labname)
-
     if vboxoptions.deletelab and not vboxoptions.createlab:
         delete_lab(vboxoptions.labname)
         LOG.info("lab {} is deleted.".format(vboxoptions.labname))
@@ -556,7 +554,8 @@ if __name__ == "__main__":
     kpi.TOTALTIME = time.time()
 
     ## First do semantic checks
-    assert vboxoptions.release, "release has to be set to install a lab."
+    if not vboxoptions.release:
+        vboxoptions.release = 'R5'
 
     if platform == 'win32' or platform == 'win64':
         if not os.path.exists(env.FILEPATH):
