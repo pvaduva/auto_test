@@ -214,8 +214,9 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
         if platform == 'win32' or platform == 'win64':
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
-#            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
-            file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+            ## TODO (WEI): This is for me only
+            #file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
 
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',
