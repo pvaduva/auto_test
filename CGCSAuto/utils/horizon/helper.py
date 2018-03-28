@@ -9,7 +9,8 @@ import time
 from utils.tis_log import LOG
 
 
-driver0 = webdriver.Firefox() # webdriver started
+driver0 = webdriver.Firefox()
+driver0.maximize_window()
 
 
 class Browser:

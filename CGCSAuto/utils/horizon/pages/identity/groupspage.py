@@ -34,10 +34,6 @@ class GroupsPage(basepage.BasePage):
 
     PARTIAL_URL = 'identity/groups'
 
-    def __init__(self, driver):
-        super(GroupsPage, self).__init__(driver)
-        self._page_title = 'Groups'
-
     @property
     def table_name_column(self):
         return "Name"

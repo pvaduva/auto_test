@@ -3,6 +3,7 @@ from utils.horizon.pages.project.compute import servergroupspage
 from pytest import fixture, mark
 from utils.horizon import helper
 from utils.tis_log import LOG
+from time import sleep
 
 
 class TestServerGroup(helper.TenantTestCase):
