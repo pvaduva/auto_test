@@ -578,7 +578,7 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     else:
         log.info("Installing wrlinux load")
         bld_server_conn.rsync(load_path + "/" + RPM_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path,
-                              ["--delete", "--force"])
+                              ["--delete", "--force", "--chmod=Du=rwx"])
 
         bld_server_conn.sendline("cd " + load_path)
         bld_server_conn.find_prompt()
