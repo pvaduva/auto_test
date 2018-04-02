@@ -180,7 +180,7 @@ def parse_args():
                          choices=['before', 'no'], default='before',
                          help='Apply branding files before config controller')
 
-    lab_grp.add_argument('--wipedisk', dest='wipedisk',
+    lab_grp.add_argument('--wipedisk', dest='wipedisk', default=False,
                          action='store_true',
                          help="wipedisk during installation")
 
