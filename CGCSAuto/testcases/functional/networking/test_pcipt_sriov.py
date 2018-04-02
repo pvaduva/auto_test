@@ -144,6 +144,10 @@ def test_evacuate_pci_vm(vif_model_check):
 
     host = nova_helper.get_vm_host(vm_id)
 
+    LOG.tc_step("Login in to VM & do sync command")
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        vm_ssh.exec_sudo_cmd('sync')
+
     LOG.tc_step("Reboot vm host {}".format(host))
     host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
     HostsToRecover.add(host, scope='function')
