@@ -166,7 +166,7 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
     result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 
-def vboxmanage_storagectl(hostname=None, storectl="sata"):
+def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="on"):
     """
     This creates a storage controller on the host.
     """
@@ -174,7 +174,7 @@ def vboxmanage_storagectl(hostname=None, storectl="sata"):
     assert hostname, "Hostname is required"
     assert storectl, "Type of storage controller is required"
     LOG.info("Creating {} storage controller on VM {}".format(storectl, hostname))
-    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl],
+    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl, '--hostiocache ', hostiocache],
                                      stderr=subprocess.STDOUT)
 
 
@@ -214,9 +214,9 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
         if platform == 'win32' or platform == 'win64':
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
-            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+            #file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
             ## TODO (WEI): This is for me only
-            #file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+            file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
 
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',

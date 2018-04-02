@@ -336,15 +336,28 @@ def get_all_vms(labname, option="vms"):
 
 def take_snapshot(labname, snapshot_name):
     node_list = get_all_vms(labname, option="runningvms")
-    if len(node_list) != 0:
+    hosts = len(node_list)
+    if hosts != 0:
         LOG.info("Taking snapshot of {}".format(snapshot_name))
         vboxmanage.vboxmanage_controlvms(node_list, "pause")
         time.sleep(5)
         vboxmanage.vboxmanage_takesnapshot(node_list, snapshot_name)
-        time.sleep(10)
+        time.sleep(5)
         vboxmanage.vboxmanage_controlvms(node_list, "resume")
         time.sleep(10)
-        ## TODO (WEI): Before return make sure VMs are up running again
+
+    node_list = get_all_vms(labname, option="runningvms")
+    retry = 0
+    while retry < 10:
+        LOG.info("Waiting for VMs to come up running after taking snapshot..."
+                 "Up VMs are {} ".format(node_list))
+        if len(node_list) < hosts:
+            time.sleep(5)
+            node_list = get_all_vms(labname, option="runningvms")
+            retry += 1
+        else:
+            break
+    ## TODO (WEI): add a return code to indicate if VMs are up running or not
 
 def restore_snapshot(host, name):
     node_list = {host} 
@@ -635,15 +648,19 @@ if __name__ == "__main__":
                                  vboxoptions.release, vboxoptions.lowlatency, 
                                  install_mode=vboxoptions.install_mode, ctrlr0_ip=vboxoptions.controller0_ip,
                                  username=vboxoptions.username, password=vboxoptions.password)
+            ## Take snapshot
+            if vboxoptions.snapshot:
+                take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
+
         else:
             ## WZWZ to debug 
             if not vboxoptions.debug_rest:
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
                 setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip, password=vboxoptions.password)
 
-        ## Take snapshot
-        if vboxoptions.snapshot:
-            take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
+                ## Take snapshot
+                if vboxoptions.snapshot:
+                    take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
 
         buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
         for item in buildservers:
@@ -780,9 +797,9 @@ if __name__ == "__main__":
                 LOG.info("Run install script not successful. {}".format(e))
                 for node in node_list:
                     serial.disconnect(socks[node])
-            else:
-                for node in node_list:
-                    serial.disconnect(socks[node])
+            #else:
+            #    for node in node_list:
+            #        serial.disconnect(socks[node])
 
     except Exception as e:
         LOG.info("Oh no, something bad happened {}".format(e))
