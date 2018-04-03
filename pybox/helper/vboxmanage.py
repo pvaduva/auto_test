@@ -174,7 +174,7 @@ def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="on"):
     assert hostname, "Hostname is required"
     assert storectl, "Type of storage controller is required"
     LOG.info("Creating {} storage controller on VM {}".format(storectl, hostname))
-    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl, '--hostiocache ', hostiocache],
+    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl, '--hostiocache', hostiocache],
                                      stderr=subprocess.STDOUT)
 
 
