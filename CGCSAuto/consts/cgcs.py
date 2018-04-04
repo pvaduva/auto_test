@@ -176,6 +176,7 @@ class HostTask:
     POWER_CYCLE = 'Critical Event Power-Cycle'
     POWER_DOWN = 'Critical Event Power-Down'
 
+
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
     CONTROLLER_1 = '.*controller\-1\:~\$ '

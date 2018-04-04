@@ -87,7 +87,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
             flags = (auth_args + ' ' + flags).strip()
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
-    if  use_telnet:
+    if use_telnet:
         exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, timeout=timeout)
     else:
         exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
