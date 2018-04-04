@@ -166,7 +166,7 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
     result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 
-def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="on"):
+def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="off"):
     """
     This creates a storage controller on the host.
     """
