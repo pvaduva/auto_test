@@ -1,15 +1,17 @@
+import re
+import os
 import time
 import configparser
 import threading
 import pexpect
 
 import setup_consts
-from utils import exceptions, lab_info
 from utils.tis_log import LOG
+from utils import exceptions, lab_info
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
     TelnetClient, TELNET_LOGIN_PROMPT, SSHFromSSH
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
-from utils.local_host import *
+from utils import local_host
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, REGION_MAP
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
@@ -111,8 +113,9 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
-        natbox (dict): NATBox info such as ip
+        nat_ssh (SSHClient): NATBox client
         keyfile_path (str): Natbox path to scp keyfile to
+        con_ssh (SSHClient)
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
@@ -602,12 +605,12 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             else:
                 raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
                                               .format(external_ip))
-        username = getpass.getuser()
+        username = local_host.getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:
             password = SvcCgcsAuto.PASSWORD
         else:
-            password = getpass.getpass()
+            password = local_host.getpass.getpass()
 
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
@@ -793,6 +796,7 @@ def collect_sys_net_info(lab):
                         break
                     res_[res_key] = True
                 else:
+                    # ssh to lab
                     dest_user = HostLinuxCreds.get_user()
                     dest_pwd = HostLinuxCreds.get_password()
                     prompt = CONTROLLER_PROMPT
