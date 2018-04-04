@@ -373,7 +373,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
             if v == 0:
                 # non management affecting alarm present  use  foce upgrade
                 LOG.warn("System health query upgrade found non managment affecting alarms: {}"
-                         .format(alarm_severity_list))
+                         .format(k))
                 actions["force_upgrade"] = [True, "Non managment affecting  alarms present"]
 
             else:
