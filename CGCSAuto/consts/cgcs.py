@@ -481,7 +481,9 @@ class DevClassID:
 
 class MaxVmsSupported:
     SX = 10
+    XEON_D = 4
     DX = 10
+    VBOX = 2
 
 
 class BackupRestore:
