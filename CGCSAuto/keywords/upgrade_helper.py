@@ -345,6 +345,9 @@ def get_system_health_query_upgrade_2(con_ssh=None):
 
         elif "Missing manifests" in line:
             failed[line] = line
+        elif "alarms found" in line:
+            failed["managment affecting"] = int(line.split(',')[1].strip()[1])
+
 
     if len(failed) == 0:
         LOG.info("system health is OK to start upgrade......")
@@ -358,7 +361,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
     for k, v in failed.items():
         if "No alarms" in k:
             alarms = True
-            table_ = table_parser.table(cli.system('alarm-list'))
+            table_ = table_parser.table(cli.system('alarm-list --uuid'))
             alarm_severity_list = table_parser.get_column(table_, "Severity")
             if len(alarm_severity_list) > 0 and \
                 ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
@@ -366,10 +369,18 @@ def get_system_health_query_upgrade_2(con_ssh=None):
                 LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
                 actions["force_upgrade"] = [True, "Minor alarms present"]
 
+        elif "managment affecting"  in k:
+            if v == 0:
+                # non management affecting alarm present  use  foce upgrade
+                LOG.warn("System health query upgrade found non managment affecting alarms: {}"
+                         .format(alarm_severity_list))
+                actions["force_upgrade"] = [True, "Non managment affecting  alarms present"]
+
             else:
-                # major/critical alarm present
+                # major/critical alarm present,  management affecting
                 LOG.error("System health query upgrade found major or critical alarms: {}".format(alarm_severity_list))
                 return 1, failed, None
+
 
         elif "Missing manifests" in k:
             manifest = True
