@@ -195,7 +195,7 @@ def vboxmanage_storageattach(hostname=None, storectl="sata", storetype="hdd", di
     return result
 
 
-def vboxmanage_createmedium(hostname=None, disk_list=None):
+def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'):
     """
     This creates the required disks.
     """
@@ -204,7 +204,7 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
     assert disk_list, "A list of disk sizes is required"
 
     ## TODO (WEI): fix it
-    disk_dir = "/folk/cgts/users/"
+    #disk_dir = "/folk/cgts/users/"
 
     username = getpass.getuser()
     device_num = 0
@@ -212,11 +212,12 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
     disk_count = 1
     for disk in disk_list:
         if platform == 'win32' or platform == 'win64':
+            ## TODO (WEI) fix it
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
             #file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
             ## TODO (WEI): This is for me only
-            file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+            file_name = vbox_home_dir + '/' + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
 
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',
