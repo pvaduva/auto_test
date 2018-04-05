@@ -288,6 +288,8 @@ def pytest_configure(config):
     global region
     region = config.getoption('region')
 
+    collect_netinfo = config.getoption('netinfo')
+
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
@@ -297,6 +299,8 @@ def pytest_configure(config):
     always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+    if collect_netinfo:
+        ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
 
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
@@ -421,6 +425,9 @@ def pytest_addoption(parser):
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
+
+    parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
+                     help="Collect system networking info if scp keyfile fails")
 
     ##################################
     # Lab install or upgrade options #

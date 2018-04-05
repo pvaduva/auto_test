@@ -23,6 +23,7 @@ class ProjVar:
                   'COLLECT_TELNET': False,
                   'TELNET_THREADS': None,
                   'SYS_TYPE': None,
+                  'COLLECT_SYS_NET_INFO': False,
                   }
 
     @classmethod

@@ -1,22 +1,24 @@
+import re
+import os
 import time
 import configparser
 import threading
 import pexpect
 
 import setup_consts
-from utils import exceptions, lab_info
 from utils.tis_log import LOG
+from utils import exceptions, lab_info
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    TelnetClient, TELNET_LOGIN_PROMPT
+    TelnetClient, TELNET_LOGIN_PROMPT, SSHFromSSH
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
-from utils.local_host import *
+from utils import local_host
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, REGION_MAP
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common
+from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper
 from keywords.common import scp_to_local
 
 
@@ -28,10 +30,16 @@ def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
-        con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
-                            CONTROLLER_PROMPT)
-        con_ssh.connect(retry=True, retry_timeout=30)
-        ControllerClient.set_active_controller(con_ssh)
+        try:
+            con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                                CONTROLLER_PROMPT)
+            con_ssh.connect(retry=True, retry_timeout=30)
+            ControllerClient.set_active_controller(con_ssh)
+        except:
+            if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
+                LOG.error("SSH to lab fip failed. Collecting lab network info.")
+                collect_sys_net_info(lab=ProjVar.get_var('LAB'))
+            raise
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
     return con_ssh
@@ -105,8 +113,9 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
-        natbox (dict): NATBox info such as ip
+        nat_ssh (SSHClient): NATBox client
         keyfile_path (str): Natbox path to scp keyfile to
+        con_ssh (SSHClient)
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
@@ -475,8 +484,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         installconf.read(installconf_path)
 
         # Parse lab info
-        lab_info = installconf['LAB']
-        lab_name = lab_info['LAB_NAME']
+        lab_info_ = installconf['LAB']
+        lab_name = lab_info_['LAB_NAME']
         vbox = True if 'vbox' in lab_name.lower() else False
         if vbox:
             LOG.info("The test lab is a VBOX TiS setup")
@@ -484,15 +493,15 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             lab_to_install = get_lab_dict(lab_name)
 
         if lab_to_install:
-            con0_ip = lab_info['CONTROLLER0_IP']
+            con0_ip = lab_info_['CONTROLLER0_IP']
             if con0_ip:
                 lab_to_install['controller-0 ip'] = con0_ip
 
-            con1_ip = lab_info['CONTROLLER1_IP']
+            con1_ip = lab_info_['CONTROLLER1_IP']
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
 
-            float_ip = lab_info['FLOATING_IP']
+            float_ip = lab_info_['FLOATING_IP']
             if float_ip:
                 lab_to_install['floating ip'] = float_ip
 
@@ -596,12 +605,12 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             else:
                 raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
                                               .format(external_ip))
-        username = getpass.getuser()
+        username = local_host.getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:
             password = SvcCgcsAuto.PASSWORD
         else:
-            password = getpass.getpass()
+            password = local_host.getpass.getpass()
 
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
@@ -757,3 +766,88 @@ def set_region(region=None):
 def set_sys_type(con_ssh):
     sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
     ProjVar.set_var(SYS_TYPE=sys_type)
+
+
+def collect_sys_net_info(lab):
+    LOG.warning("Collecting system network info upon session setup failure")
+    res_ = {}
+    source_user = SvcCgcsAuto.USER
+    source_pwd = SvcCgcsAuto.PASSWORD
+    source_prompt = SvcCgcsAuto.PROMPT
+
+    dest_info_collected = False
+    for source_server in ('natbox', 'ts'):
+        source_ip = NatBoxes.NAT_BOX_HW['ip'] if source_server == 'natbox' else SvcCgcsAuto.SERVER
+        source_ssh = SSHClient(source_ip, source_user, source_pwd, initial_prompt=source_prompt)
+        source_ssh.connect()
+        for ip_type_ in ('fip', 'uip'):
+            lab_ip_type = 'floating ip' if ip_type_ == 'fip' else 'controller-0 ip'
+            dest_ip = lab[lab_ip_type]
+
+            for action in ('ping', 'ssh'):
+                res_key = '{}_{}_from_{}'.format(action, ip_type_, source_server)
+                res_[res_key] = False
+                LOG.info("\n=== {} to lab {} {} from {}".format(action, ip_type_, dest_ip, source_server))
+                if action == 'ping':
+                    # ping lab
+                    pkt_loss_rate_ = network_helper.ping_server(server=dest_ip, ssh_client=source_ssh, fail_ok=True)[0]
+                    if pkt_loss_rate_ == 100:
+                        LOG.warning('Failed to ping lab {} from {}'.format(ip_type_, source_server))
+                        break
+                    res_[res_key] = True
+                else:
+                    # ssh to lab
+                    dest_user = HostLinuxCreds.get_user()
+                    dest_pwd = HostLinuxCreds.get_password()
+                    prompt = CONTROLLER_PROMPT
+
+                    try:
+                        dest_ssh = SSHFromSSH(source_ssh, dest_ip, dest_user, dest_pwd, initial_prompt=prompt)
+                        dest_ssh.connect()
+                        res_[res_key] = True
+
+                        # collect info on tis system if able to ssh to it
+                        if not dest_info_collected:
+                            LOG.info("\n=== ssh to lab {} from {} succeeded. Collect info from TiS system".format(
+                                    ip_type_, source_server))
+                            dest_info_collected = True
+                            dest_ssh.exec_cmd('ip addr')
+                            dest_ssh.exec_cmd('ip neigh')
+                            dest_ssh.exec_cmd('ip route')
+                            default_gateway = dest_ssh.exec_cmd(' ip route | grep --color=never default')[1]
+
+                            # ping natbox from lab
+                            nat_ip = NatBoxes.NAT_BOX_HW['ip']
+                            pkt_loss_rate_to_nat = network_helper.ping_server(server=nat_ip,
+                                                                              ssh_client=dest_ssh, fail_ok=True)[0]
+                            res_['ping_natbox_from_lab'] = True if pkt_loss_rate_to_nat < 100 else False
+
+                            # ssh to natbox from lab if ping succeeded
+                            if pkt_loss_rate_to_nat < 100:
+                                res_key_ssh_nat = 'ssh_natbox_from_lab'
+                                res_[res_key_ssh_nat] = False
+                                try:
+                                    nat_ssh = SSHFromSSH(dest_ssh, nat_ip, source_user, source_pwd,
+                                                         initial_prompt=source_prompt)
+                                    nat_ssh.connect()
+                                    res_[res_key_ssh_nat] = True
+                                    nat_ssh.close()
+                                except:
+                                    LOG.warning('Failed to ssh to NatBox from lab')
+
+                            # ping default gateway from natbox
+                            if default_gateway:
+                                default_gateway = re.findall('default via (.*) dev .*', default_gateway)[0]
+
+                                nat_ssh_ = SSHClient(nat_ip, source_user, source_pwd, initial_prompt=source_prompt)
+                                nat_ssh_.connect()
+                                pkt_loss_rate_ = network_helper.ping_server(server=default_gateway,
+                                                                            ssh_client=nat_ssh_, fail_ok=True)[0]
+                                res_['ping_default_gateway_from_natbox'] = True if \
+                                    pkt_loss_rate_ < 100 else False
+                        dest_ssh.close()
+                    except:
+                        LOG.warning('Failed to ssh to lab {} from {}'.format(ip_type_, source_server))
+
+        source_ssh.close()
+        LOG.info("Lab networking info collected: {}".format(res_))
