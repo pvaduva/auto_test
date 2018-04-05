@@ -203,9 +203,6 @@ def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'
     assert hostname, "Hostname is required"
     assert disk_list, "A list of disk sizes is required"
 
-    ## TODO (WEI): fix it
-    #disk_dir = "/folk/cgts/users/"
-
     username = getpass.getuser()
     device_num = 0
     port_num = 0
@@ -215,8 +212,6 @@ def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'
             ## TODO (WEI) fix it
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
-            #file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
-            ## TODO (WEI): This is for me only
             file_name = vbox_home_dir + '/' + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
         LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
 

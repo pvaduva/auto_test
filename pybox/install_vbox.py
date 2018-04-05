@@ -470,7 +470,7 @@ def create_lab(vboxoptions):
             for item in node_config:
                 if item['node_type'] == node_type:
                     vboxmanage.vboxmanage_modifyvm(node, cpus=str(item['cpus']), memory=str(item['memory']))
-                    vboxmanage.vboxmanage_createmedium(node, item['disks'])
+                    vboxmanage.vboxmanage_createmedium(node, item['disks'], vbox_home_dir=vboxoptions.vbox_home_dir)
             if platform == 'win32' or platform == 'win64':
                 vboxmanage.vboxmanage_modifyvm(node, uartbase=serial_config[0]['uartbase'],
                                                uartport=serial_config[0]['uartport'],
@@ -639,7 +639,7 @@ if __name__ == "__main__":
         vboxoptions.hostiocache = 'on'
     else:
         vboxoptions.hostiocache = 'off'
-
+    
     LOG.info(vboxoptions)
 
     ctrlr0 = vboxoptions.labname + "-controller-0" 
