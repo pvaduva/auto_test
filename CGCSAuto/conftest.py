@@ -335,6 +335,9 @@ def pytest_configure(config):
         labname = ProjVar.get_var('LAB_NAME')
         ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
 
+    if setups.is_vbox():
+        ProjVar.set_var(IS_VBOX=True)
+
     InstallVars.set_install_var(lab=lab)
 
     config_logger(log_dir)

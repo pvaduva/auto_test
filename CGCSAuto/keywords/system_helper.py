@@ -3403,4 +3403,4 @@ def modify_oam_ips(arg_str, fail_ok=False):
         assert output
     msg = "OAM modified successfully."
     return 0, msg
-                          
+

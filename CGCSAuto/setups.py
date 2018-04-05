@@ -399,8 +399,10 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
 
 
 def is_vbox():
+    lab_name = ProjVar.get_var('LAB_NAME')
     nat_name = ProjVar.get_var('NATBOX').get('name')
-    return nat_name == 'localhost' or nat_name.startswith('128.224.')
+
+    return 'vbox' in lab_name or nat_name == 'localhost' or nat_name.startswith('128.224.')
 
 
 def get_nodes_info():

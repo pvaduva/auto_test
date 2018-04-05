@@ -145,8 +145,7 @@ class TestLockWithVMs:
 
     @mark.sx_nightly
     def test_lock_with_max_vms_simplex(self, simplex_only):
-
-        vms_num = MaxVmsSupported.SX
+        vms_num = host_helper.get_max_vms_supported(host='controller-0')
         vm_helper.ensure_vms_quotas(vms_num=vms_num)
 
         LOG.tc_step("Boot {} vms with various storage settings".format(vms_num))
@@ -158,7 +157,7 @@ class TestLockWithVMs:
 
         LOG.tc_step("Ensure vms are in {} state after locked host come online".format(VMStatus.STOPPED))
         vm_helper.wait_for_vms_values(vms, values=VMStatus.STOPPED, fail_ok=False)
-        #TODO: TEMP delay for Chris F  must be reverted after
+        # TODO: TEMP delay for Chris F  must be reverted after
         time.sleep(120)
 
         LOG.tc_step("Unlock host on simplex system")

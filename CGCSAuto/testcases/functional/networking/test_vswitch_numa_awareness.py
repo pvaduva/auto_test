@@ -745,10 +745,13 @@ class TestNovaSchedulerAVS:
                 assert expt_host == vm_host
                 assert 1 == vm_numa
 
-        LOG.tc_step("Reboot vm host and ensure vms stayed on same host and become active after host comes back up")
+        LOG.tc_step("Reboot vm host and ensure vms stayed on same host")
         code, err_vms = vm_helper.evacuate_vms(expt_host, vms, wait_for_host_up=True, timeout=300, fail_ok=True)
-        assert 2 == code, "Reboot host with vms are not as expected."
+        assert 1 == code, "Reboot host with vms are not as expected."
         assert sorted(err_vms) == sorted(vms), "Not all vms stayed on expected host"
+
+        LOG.tc_step("Ensure vms are active after host recovers")
+        vm_helper.wait_for_vms_values(vms=vms, timeout=300, fail_ok=False)
 
     @fixture(scope='class')
     def get_target_host_and_flavors(self, hosts_configured, request):

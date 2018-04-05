@@ -31,9 +31,9 @@ def is_ceph_healthy(con_ssh=None):
 
     health_ok = 'HEALTH_OK'
     health_warn = 'HEALTH_WARN'
+    health_err = "HEALTH_ERR"
     cmd = 'ceph -s'
 
-    # TODO: Get con_ssh if None
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -41,9 +41,14 @@ def is_ceph_healthy(con_ssh=None):
 
     if health_ok in out:
         msg = 'CEPH cluster is healthy'
+        LOG.info(msg)
         return True, msg
     elif health_warn in out:
         msg = 'CEPH cluster is in health warn state'
+        LOG.info(msg)
+        return False, msg
+    elif health_err in out:
+        msg = 'CEPH cluster is in health error state'
         return False, msg
 
     msg = 'Cannot determine CEPH health state'

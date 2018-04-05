@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 from utils import telnet as telnetlib
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, \
+from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
@@ -3508,6 +3508,18 @@ def get_host_cpu_model(host, con_ssh=None):
 
     LOG.info("CPU Model for {}: {}".format(host, cpu_model))
     return cpu_model
+
+
+def get_max_vms_supported(host, con_ssh=None):
+    max_count = 10
+    cpu_model = get_host_cpu_model(host=host, con_ssh=con_ssh)
+    if proj_vars.ProjVar.get_var('IS_VBOX'):
+        max_count = MaxVmsSupported.VBOX
+    elif re.search('Xeon.* CPU D-[\d]+', cpu_model):
+        max_count = MaxVmsSupported.XEON_D
+
+    LOG.info("Max number vms supported on {}: {}".format(host, max_count))
+    return max_count
 
 
 def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, storage_backing=None, con_ssh=None):
