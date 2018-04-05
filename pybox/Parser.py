@@ -229,6 +229,11 @@ def handle_args():
         OAM IP of controller-0 
         """,
         type=str)
+    parser.add_argument("--hostiocache", help=
+        """
+        Turn on host i/o caching 
+        """,
+        action='store_true')
     # WEI TODO: remove 
     #parser.add_argument("--lvm", help=
     #    """

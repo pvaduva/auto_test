@@ -348,7 +348,7 @@ def take_snapshot(labname, snapshot_name):
 
     node_list = get_all_vms(labname, option="runningvms")
     retry = 0
-    while retry < 10:
+    while retry < 20:
         LOG.info("Waiting for VMs to come up running after taking snapshot..."
                  "Up VMs are {} ".format(node_list))
         if len(node_list) < hosts:
@@ -356,20 +356,31 @@ def take_snapshot(labname, snapshot_name):
             node_list = get_all_vms(labname, option="runningvms")
             retry += 1
         else:
+            LOG.info("All VMs {} are up running after taking snapshot...".format(node_list))
             break
     ## TODO (WEI): add a return code to indicate if VMs are up running or not
 
-def restore_snapshot(host, name):
-    node_list = {host} 
+
+def restore_snapshot(node_list, name):
+    LOG.info("Restore snapshot of {} for hosts {}".format(name, node_list))
     if len(node_list) != 0:
-        LOG.info("Restore snapshot of {} for host {}".format(name, host))
         vboxmanage.vboxmanage_controlvms(node_list, "poweroff")
         time.sleep(5)
-        vboxmanage.vboxmanage_restoresnapshot(host, name)
-        time.sleep(5)
-        vboxmanage.vboxmanage_startvm(host)
-        time.sleep(10)
-        ## TODO (WEI): Before return make sure VMs are up running again
+    if len(node_list) != 0:
+        for host in node_list:
+            vboxmanage.vboxmanage_restoresnapshot(host, name)
+            time.sleep(5)
+        for host in node_list:
+            if "controller-0" not in host:
+                vboxmanage.vboxmanage_startvm(host)
+                time.sleep(10)
+        for host in node_list:
+            if "controller-0" in host:
+                vboxmanage.vboxmanage_startvm(host)
+                time.sleep(10) 
+    ## TODO (WEI) Before return make sure VM is up running again
+    ## Not needed. vboxmanage.vboxmanage_startvm() returns when vm is running
+
 
 def delete_lab(labname):
     node_list = get_all_vms(labname, option="vms")
@@ -448,7 +459,7 @@ def create_lab(vboxoptions):
         port = 10000
         for node in nodes_list:
             vboxmanage.vboxmanage_createvm(node)
-            vboxmanage.vboxmanage_storagectl(node, storectl="sata")
+            vboxmanage.vboxmanage_storagectl(node, storectl="sata", hostiocache=vboxoptions.hostiocache)
             if "controller" in node:
                 node_type = controller_type
             elif "compute" in node:
@@ -549,7 +560,7 @@ if __name__ == "__main__":
     if vboxoptions.controller0_ip is None:
         vboxoptions.controller0_ip = lab_config[0]['controller-0_ip']
 
-    ## WEI: Just to delete the lab.
+    ## Just to delete the lab.
     ## Add this option for convenience 
     if vboxoptions.deletelab and not vboxoptions.createlab:
         delete_lab(vboxoptions.labname)
@@ -562,8 +573,14 @@ if __name__ == "__main__":
     ## python3 install_vbox --install-lab
     if vboxoptions.createlab and vboxoptions.debug_rest:
         delete_lab(vboxoptions.labname)
-        restore_snapshot(vboxoptions.labname + "-controller-0", "snapshot-AFTER-unlock-controller-0")
+        restore_snapshot([vboxoptions.labname + "-controller-0"], "snapshot-AFTER-unlock-controller-0")
  
+    ## TODO (WEI): Sometimes compute nodes become locked/offline instead of locked/online
+    if vboxoptions.run_scripts and vboxoptions.debug_rest and not vboxoptions.install_lab:
+        vm_list = get_all_vms(vboxoptions.labname, option="vms")
+        restore_snapshot(vm_list, "snapshot-AFTER-lab-install")
+        time.sleep(120)
+
     kpi.TOTALTIME = time.time()
 
     ## First do semantic checks
@@ -618,49 +635,45 @@ if __name__ == "__main__":
         vboxoptions.username = lab_config[0]['username'] 
     if vboxoptions.password is None:
         vboxoptions.password = lab_config[0]['password'] 
+    if vboxoptions.hostiocache:
+        vboxoptions.hostiocache = 'on'
+    else:
+        vboxoptions.hostiocache = 'off'
 
     LOG.info(vboxoptions)
-   
+
     ctrlr0 = vboxoptions.labname + "-controller-0" 
 
     if vboxoptions.createlab:
         controller_type = create_lab(vboxoptions)
 
         ## WZWZ to debug 
-        if vboxoptions.debug_rest:
-            sys.exit(0)
-
-        vboxmanage.vboxmanage_startvm(ctrlr0)
+        if not vboxoptions.debug_rest:
+            vboxmanage.vboxmanage_startvm(ctrlr0)
+        else:
+            time.sleep(30)
 
     node_list = get_all_vms(vboxoptions.labname, option="vms")
     LOG.info(node_list)
     assert ctrlr0 in node_list, "controller-0 not in vm list. Stopping installation."
 
-    ## TODO(WEI): Use contextManager to use with statement for socket, so that if the script
-    ## crashes, the socket will be closed; otherwise the socket process on the remote side 
-    ## may hang 
     sock = serial.connect(ctrlr0, 10000)
     cont0_stream = streamexpect.wrap(sock, echo=True, close_stream=False)
 
     try:
-        if vboxoptions.createlab:
-            install_controller_0(cont0_stream, controller_type, vboxoptions.securityprofile, 
-                                 vboxoptions.release, vboxoptions.lowlatency, 
-                                 install_mode=vboxoptions.install_mode, ctrlr0_ip=vboxoptions.controller0_ip,
-                                 username=vboxoptions.username, password=vboxoptions.password)
-            ## Take snapshot
-            if vboxoptions.snapshot:
-                take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
-
-        else:
-            ## WZWZ to debug 
-            if not vboxoptions.debug_rest:
+        if not vboxoptions.debug_rest:
+            if vboxoptions.createlab:
+                install_controller_0(cont0_stream, controller_type, vboxoptions.securityprofile, 
+                                     vboxoptions.release, vboxoptions.lowlatency, 
+                                     install_mode=vboxoptions.install_mode, ctrlr0_ip=vboxoptions.controller0_ip,
+                                     username=vboxoptions.username, password=vboxoptions.password)
+            else:
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
                 setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip, password=vboxoptions.password)
 
-                ## Take snapshot
-                if vboxoptions.snapshot:
-                    take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
+            ## Take snapshot
+            if vboxoptions.snapshot:
+                take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
 
         buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
         for item in buildservers:
@@ -737,7 +750,6 @@ if __name__ == "__main__":
                     take_snapshot(vboxoptions.labname, "snapshot-AFTER-unlock-controller-0")
 
         # Now install rest of the nodes
-        
         LOG.info("Now installing rest of the nodes....")
         socks = {}
         streams = {}
@@ -784,6 +796,7 @@ if __name__ == "__main__":
            
             if not streams:
                 socks, streams = start_and_connect_nodes(host_list=node_list)
+
             try:
                 install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio=vboxoptions.aio,
                              storage=vboxoptions.storage, release=vboxoptions.release, 

@@ -349,7 +349,7 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
                 ## TODO (WEI): double check this
                 hosts = hosts[len(labname)+1:]
                 if hosts.startswith('storage'):
-                    LOG.info("Unlocking {}".format(hosts))
+                    LOG.info("Unlock {}".format(hosts))
                     host_helper.unlock_host(stream, hosts)
                     for host in host_list:
                         if 'storage' in host and streams == {}:
@@ -373,6 +373,8 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
                      "Please re-run the iteration before continuing. Press enter to continue.")
             input()
+
+        now = time.time()
         for host in host_list:
             host = host[len(labname)+1:]
             ret = host_helper.unlock_host(stream, host)
@@ -383,7 +385,7 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             time.sleep(20)
         LOG.info("Waiting for {} to unlock.".format(host_list))
 
-        now = time.time()
+
         ## Check unlocking status
         ## TODO (WEI): Maybe use multi-threads to check?
         failed_nodes = []
