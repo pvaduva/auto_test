@@ -26,7 +26,13 @@ def setup_test_session(global_setup):
     setups.copy_files_to_con1()
 
     global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
+    try:
+        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'),
+                                             con_ssh=con_ssh)
+    except:
+        if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
+            setups.collect_sys_net_info(lab=ProjVar.get_var('LAB'))
+        raise
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
@@ -71,10 +77,12 @@ def pytest_runtest_teardown(item):
     # print('')
     # message = 'Teardown started:'
     # testcase_log(message, item.nodeid, log_type='tc_teardown')
-    con_ssh.flush()
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    natbox_ssh.flush()
-    natbox_ssh.connect(retry=False)
+    if con_ssh:
+        con_ssh.flush()
+        con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    if natbox_ssh:
+        natbox_ssh.flush()
+        natbox_ssh.connect(retry=False)
 
 #
 # def pytest_unconfigure():

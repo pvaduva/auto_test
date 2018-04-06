@@ -35,12 +35,13 @@ def base_vm_():
     return base_vm, mgmt_net_id, tenant_net_id, internal_net_id, storage_backing
 
 
+# nic isolation is deprecated in R4 and no longer supported in R5. Remove following test cases. CGTS-9274
 @mark.parametrize(('spec_name', 'spec_val', 'vm_type', 'vif_model'), [
     mark.p3((FlavorSpec.NIC_ISOLATION, 'true', 'avp', 'avp')),
     mark.p3((FlavorSpec.NIC_ISOLATION, 'true', 'virtio', 'virtio')),
     mark.priorities('domain_sanity', 'nightly', 'sx_nightly')((FlavorSpec.NIC_ISOLATION, 'true', 'vswitch', 'avp')),
 ])
-def test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_vm_):
+def _test_avp_vms_with_vm_actions(spec_name, spec_val, vm_type, vif_model, base_vm_):
     """
     <summary>
 

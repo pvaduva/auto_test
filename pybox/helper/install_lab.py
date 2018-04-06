@@ -349,7 +349,7 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
                 ## TODO (WEI): double check this
                 hosts = hosts[len(labname)+1:]
                 if hosts.startswith('storage'):
-                    LOG.info("Unlocking {}".format(hosts))
+                    LOG.info("Unlock {}".format(hosts))
                     host_helper.unlock_host(stream, hosts)
                     for host in host_list:
                         if 'storage' in host and streams == {}:
@@ -373,6 +373,8 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
                      "Please re-run the iteration before continuing. Press enter to continue.")
             input()
+
+        now = time.time()
         for host in host_list:
             host = host[len(labname)+1:]
             ret = host_helper.unlock_host(stream, host)
@@ -383,10 +385,10 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             time.sleep(20)
         LOG.info("Waiting for {} to unlock.".format(host_list))
 
-        now = time.time()
+
         ## Check unlocking status
         ## TODO (WEI): Maybe use multi-threads to check?
-        all_nodes_unlocked = True 
+        failed_nodes = []
         for host in host_list:
             serial.send_bytes(streams[host], '\n', expect_prompt=False)
             # TODO Fix it! 'ogin:' is always found immediately after unlock
@@ -395,15 +397,50 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             try:
                 ret = serial.expect_bytes(streams[host], "{} login:".format(host[len(labname)+1:]), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
                 if ret != 0:
-                    LOG.info("Unlock {} timed-out.")
-                    all_nodes_unlocked = False
+                    LOG.info("Unlock {} timed-out.".format(host))
+                    failed_nodes.append(host)
                 else:
-                    LOG.info("Unlock time (mins): {}".format((time.time() - now)/60))
+                    LOG.info("Unlock {} time (mins): {}".format(host, (time.time() - now)/60))
             except Exception as e:
                     LOG.info("Unlock {} failed with {}".format(host, e))
-                    all_nodes_unlocked = False
+                    failed_nodes.append(host)
+            serial.disconnect(socks[host])
 
-        if not all_nodes_unlocked:
+        ## Let's reset the VMs that failed to unlock 
+        if failed_nodes:
+            vboxmanage.vboxmanage_controlvms(failed_nodes, action="reset")
+
+            time.sleep(10)
+ 
+            tmp_streams = {}
+            tmp_socks = {}
+
+            LOG.info(failed_nodes)
+            port = 10001
+            for host in failed_nodes:
+                tmp_sock = serial.connect('{}'.format(host), port)
+                tmp_stream = streamexpect.wrap(tmp_sock, echo=True, close_stream=False)
+                time.sleep(10)
+                tmp_socks[host] = tmp_sock
+                tmp_streams[host] = tmp_stream
+                port += 1
+         
+        host_failed = False
+        for host in failed_nodes:
+            serial.send_bytes(tmp_streams[host], '\n', expect_prompt=False)
+            try:
+                ret = serial.expect_bytes(tmp_streams[host], "{} login:".format(host[len(labname)+1:]), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
+                if ret != 0:
+                    LOG.info("{} timed-out to become unlocked/available after reset.".format(host))
+                    host_failed = True
+                else:
+                    LOG.info("{} became unlocked/available after reset. time (mins): {}".format(host, (time.time() - now)/60))
+            except Exception as e:
+                    LOG.info("{} failed to become unlocked/available after reset with {}".format(host, e))
+                    host_failed = True
+            serial.disconnect(tmp_socks[host])
+
+        if host_failed:
             LOG.info("Not all the nodes are unlocked successfully. Pausing to allow for debugging. "
                      "Once they all become unlocked/enabled/available, press enter to continue.")
             input()

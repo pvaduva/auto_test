@@ -174,8 +174,8 @@ class TestSharedCpuDisabled:
         mark.p1((2, 'dedicated', 1, 1, 1)),
         mark.p2((2, 'dedicated', 2, None, 1)),
         mark.p1((3, 'dedicated', 1, 1, 0)),
-        mark.p3((64, 'dedicated', 1, 1, 2)),
-        mark.p3((64, 'dedicated', 1, 1, 63)),   # Assuming quota for cores for tenant under test is less than 63
+        mark.p3((5, 'dedicated', 1, 1, 2)),
+        # mark.p3((64, 'dedicated', 1, 1, 63)),   # No host supports this many vcpus atm
     ])
     def test_launch_vm_shared_cpu_setting_negative(self, vcpus, cpu_policy, numa_nodes, numa_node0, shared_vcpu,
                                                    remove_shared_cpu):

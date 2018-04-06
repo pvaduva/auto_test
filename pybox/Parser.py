@@ -189,6 +189,13 @@ def handle_args():
         If specified the lab_setup.sh iterations will be run.
         """,
         action='store_true')
+    parser.add_argument("--vbox-home-dir", help=
+        """
+        This is the folder where vbox disks will be placed. e.g. /home or /folk/cgts/users
+        The disks will be in /home/wzhou/vbox_disks/ or /folk/cgts/users/wzhou/vbox_disks/ 
+        """,
+        type=str, default='/home'
+        )
     parser.add_argument("--nessus", help=
         """
         Runs installer with the appropreate arguments for nessus scan setup. Currently requires files to be in the default folders.
@@ -229,6 +236,11 @@ def handle_args():
         OAM IP of controller-0 
         """,
         type=str)
+    parser.add_argument("--hostiocache", help=
+        """
+        Turn on host i/o caching 
+        """,
+        action='store_true')
     # WEI TODO: remove 
     #parser.add_argument("--lvm", help=
     #    """
