@@ -477,6 +477,7 @@ class OrchStrategyKey:
 class DevClassID:
     QAT_VF = '0b4000'
     GPU = '030000'
+    USB = '0c0320'
 
 
 class MaxVmsSupported:
