@@ -874,6 +874,10 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         else:
             hosts_to_check.append(host)
 
+    if not hosts_to_check:
+        LOG.warning("Unlock host(s) rejected: {}".format(hosts_to_unlock))
+        return res
+
     if is_simplex:
         _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK,
                                     use_telnet=use_telnet, con_telnet=con_telnet)
