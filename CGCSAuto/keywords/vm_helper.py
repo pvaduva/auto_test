@@ -4100,6 +4100,7 @@ def collect_guest_logs(vm_id):
                 local_log_path = '{}/{}_{}'.format(ProjVar.get_var('GUEST_LOGS_DIR'), log_name, vm_id)
                 current_user = local_host.get_user()
                 if current_user == SvcCgcsAuto.USER:
+                    vm_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(log_path), fail_ok=True)
                     vm_ssh.scp_files_to_local_host(source_file=log_path, dest_user=current_user,
                                                    dest_password=SvcCgcsAuto.PASSWORD, dest_path=local_log_path)
                 else:
