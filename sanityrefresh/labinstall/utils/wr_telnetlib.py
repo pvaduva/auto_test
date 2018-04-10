@@ -880,7 +880,7 @@ class Telnet:
                     if password:
                         self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
                     self.write(str.encode(password + '\r\n'))
-                    self.find_prompt()
+                    #self.find_prompt()
                     break
                 elif index == 1:
                     log.info('User "{}" is already logged in.'.format(username))
