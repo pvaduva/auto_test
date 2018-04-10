@@ -8,7 +8,7 @@ from pytest import mark, fixture, skip
 from consts import build_server, filepaths
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.proj_vars import ProjVar
-from consts.cgcs import Prompt
+from consts.cgcs import Prompt, FlavorSpec
 from utils import cli, table_parser, lab_info
 from utils.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
@@ -266,31 +266,31 @@ def _calculate_histfile(hist_file, hypervisor_info):
 
     LOG.info('TODO: ignore cpu:{}'.format(ignore_ids))
 
-    accumlated = [[d for i, d in enumerate(result2[0]) if i not in ignore_ids]]
+    accumulated = [[d for i, d in enumerate(result2[0]) if i not in ignore_ids]]
     total_count = sum([t for i, t in enumerate(totals) if i not in ignore_ids])
     LOG.info('TODO: total={}'.format(total_count))
 
-    time_slots = len(result2.keys())
+    time_slots = len(list(result2.keys()))
     slot = 0
     for slot in range(1, time_slots):
         LOG.info('\nTODO:us:{}'.format(slot))
-        prev_counts = accumlated[slot-1]
+        prev_counts = accumulated[slot-1]
         LOG.info('TODO: prev_sums:{}'.format(prev_counts))
         LOG.info('TODO: ignore cpu:{}'.format(ignore_ids))
 
         vm_cpu_counts = [hit for i, hit in enumerate(result2[slot]) if i not in ignore_ids]
-        accumlated.append([hit + prev_counts[i] for i, hit in enumerate(vm_cpu_counts)])
+        accumulated.append([hit + prev_counts[i] for i, hit in enumerate(vm_cpu_counts)])
 
-        LOG.info('accumlated[{}]:{}'.format(slot, accumlated[slot]))
+        LOG.info('accumulated[{}]:{}'.format(slot, accumulated[slot]))
 
-        if (sum(accumlated[slot]) * 1.0 / total_count) > INCLUDING_RATIO:
-            LOG.info('Reach shreashold:{} at {} usec, {}'.format(
-                INCLUDING_RATIO*100, slot, sum(accumlated[slot]) * 1.0 / total_count))
+        if (sum(accumulated[slot]) * 1.0 / total_count) > INCLUDING_RATIO:
+            LOG.info('Reach threshold:{} at {} usec, {}'.format(
+                INCLUDING_RATIO*100, slot, sum(accumulated[slot]) * 1.0 / total_count))
             break
         else:
-            LOG.info('TODO: default to: sums[sec]={}'.format(accumlated[slot]))
-            LOG.info('usec:{}, sum till this sec:{}'.format(slot, sum(accumlated[slot])))
-            LOG.info('total:{}, {}%'.format(total_count, sum(accumlated[slot]) / total_count * 100))
+            LOG.info('TODO: default to: sums[sec]={}'.format(accumulated[slot]))
+            LOG.info('usec:{}, sum till this sec:{}'.format(slot, sum(accumulated[slot])))
+            LOG.info('total:{}, {}%'.format(total_count, sum(accumulated[slot]) / total_count * 100))
         LOG.info('')
     else:
         LOG.info('Wrong data in histfile:{}'.format(hist_file))
@@ -306,13 +306,14 @@ def _calculate_results(active_controller, run_log=None, hist_file=None, target_n
     global testable_hypervisors
 
     average_latency = _calculate_runlog(run_log, testable_hypervisors[target_name])
-    most_lanency = _calculate_histfile(hist_file, testable_hypervisors[target_name])
+    most_latency = _calculate_histfile(hist_file, testable_hypervisors[target_name])
 
-    return average_latency, most_lanency
+    return average_latency, most_latency
 
 
 def _report_results(active_controller, results):
     LOG.info('Report results')
+    print(str(results))
 
 
 def _process_results(con_target, run_log=None, hist_file=None, active_controller=None):
@@ -384,10 +385,10 @@ def _run_cyclictest(con_target, program, target_host=None, settings=None, active
     LOG.info('-create a temporary shell file to run CYCLICTEST')
     script_file = os.path.join(LOCAL_DIR, SHELL_FILE)
     script_file_content = script_file_template.format(local_path=LOCAL_DIR,
-                                                     start_file=start_file,
-                                                     end_file=end_file,
-                                                     program=cmd,
-                                                     run_log=run_log)
+                                                      start_file=start_file,
+                                                      end_file=end_file,
+                                                      program=cmd,
+                                                      run_log=run_log)
 
     con_target.exec_cmd('echo "{}" > {}'.format(script_file_content, script_file))
 
@@ -406,9 +407,9 @@ def _run_cyclictest(con_target, program, target_host=None, settings=None, active
                       duration=duration)
 
     local_run_log, local_hist_file = _fetch_results(con_target,
-                   run_log=run_log,
-                   hist_file=hist_file,
-                   active_controller=active_controller)
+                                                    run_log=run_log,
+                                                    hist_file=hist_file,
+                                                    active_controller=active_controller)
 
     _process_results(con_target, run_log=local_run_log, hist_file=local_hist_file, active_controller=active_controller)
 
@@ -421,9 +422,9 @@ def _cyclictest_on_hypervisor():
     hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     LOG.debug('-all up/enabled hypervisors:{}'.format(hypervisors))
 
-    activie_controller = ControllerClient.get_active_controller()
+    active_controller = ControllerClient.get_active_controller()
 
-    active_controller_name = activie_controller.host
+    active_controller_name = active_controller.host
 
     candidates = [h for h in testable_hypervisors
                   if not testable_hypervisors[h]['for_host_test'] and not testable_hypervisors[h]['for_vm_test']]
@@ -438,17 +439,17 @@ def _cyclictest_on_hypervisor():
     LOG.debug('program={}'.format(program))
 
     if active_controller_name == chosen_hypervisor:
-        con_target = activie_controller
+        con_target = active_controller
         chosen_hypervisor = system_helper.get_active_controller_name()
         LOG.info('The chosen hypervisor is happened the same as the active controller')
     else:
         LOG.tc_step('Connect to the target hypervisor:{}'.format(chosen_hypervisor))
-        inital_prompt = chosen_hypervisor.strip() + r':\~\$'
-        con_target = SSHFromSSH(activie_controller,
+        initial_prompt = chosen_hypervisor.strip() + r':\~\$'
+        con_target = SSHFromSSH(active_controller,
                                 chosen_hypervisor,
                                 HostLinuxCreds.get_user(),
                                 HostLinuxCreds.get_password(),
-                                initial_prompt=inital_prompt)
+                                initial_prompt=initial_prompt)
         con_target.connect(retry=2, timeout=60)
         LOG.info('OK, connected to the target hypervisor:{}'.format(chosen_hypervisor))
 
@@ -456,7 +457,7 @@ def _cyclictest_on_hypervisor():
 
         LOG.tc_step('Copy CYCLICTEST to selected hypervisor {}:{}'.format(chosen_hypervisor, program))
 
-        activie_controller.flush()
+        active_controller.flush()
         con_target.scp_on_dest(HostLinuxCreds.get_user(), active_controller_name,
                                program, program, HostLinuxCreds.get_password())
 
@@ -468,11 +469,11 @@ def _cyclictest_on_hypervisor():
 
     _run_cyclictest(con_target, program,
                     target_host=chosen_hypervisor,
-                    active_controller=activie_controller)
+                    active_controller=active_controller)
 
 
 def _get_rt_guest_image(remote_path=RT_GUEST_PATH, remote=None):
-    LOG.info('Scp guet image from the build server')
+    LOG.info('Scp guest image from the build server')
     active_controller = ControllerClient.get_active_controller()
     remote = remote or build_server.DEFAULT_BUILD_SERVER['ip']
     prompt = '\[{}@.* \~\]\$'.format(SvcCgcsAuto.USER)
@@ -486,8 +487,8 @@ def _get_rt_guest_image(remote_path=RT_GUEST_PATH, remote=None):
     ssh_to_server = SSHFromSSH(active_controller, remote, SvcCgcsAuto.USER, SvcCgcsAuto.PASSWORD, initial_prompt=prompt)
     try:
         ssh_to_server.connect(retry=5)
-        scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} wrsroot@{}:{}'.format(remote_path,
-            lab_info.get_lab_floating_ip(), local_image_file)
+        scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} wrsroot@{}:{}'.\
+            format(remote_path, lab_info.get_lab_floating_ip(), local_image_file)
 
         ssh_to_server.send(scp_cmd)
         timeout = 60
@@ -528,6 +529,7 @@ def _cyclictest_inside_vm():
 
     return vm_id, None
 
+
 def _create_vm(hypervisor):
     global testable_hypervisors
     LOG.tc_step('Run cyclictest on VM hosted on {}'.format(hypervisor))
@@ -548,16 +550,16 @@ def _create_vm(hypervisor):
 
     LOG.tc_step('Create the flavor')
     flavor_id, storage_backing = nova_helper.create_flavor(ram=1024, vcpus=4, root_disk=2,
-                                                           storage_backing= 'local_image')[1:3]
+                                                           storage_backing='local_image')[1:3]
     LOG.info('OK, flavor was created, id:{}, backing:{}'.format(flavor_id, storage_backing))
 
     cpu_info = dict(testable_hypervisors[hypervisor]['cpu_info'])
     extra_specs = {
-        'hw:cpu_model': cpu_info['model'],
-        'hw:cpu_policy': 'dedicated',
-        'hw:cpu_realtime': 'yes',
-        'hw:cpu_realtime_mask': '^0',
-        'hw:mem_page_size': 2048,
+        FlavorSpec.VCPU_MODEL: cpu_info['model'],
+        FlavorSpec.CPU_POLICY: 'dedicated',
+        FlavorSpec.CPU_REALTIME: 'yes',
+        FlavorSpec.CPU_REALTIME_MASK: '^0',
+        FlavorSpec.MEM_PAGE_SIZE: 2048,
     }
     LOG.tc_step('OK, extra spec set to id:{}\n{}'.format(id, extra_specs))
     nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
@@ -575,13 +577,11 @@ def _create_vm(hypervisor):
     return None
 
 
-@mark.parametrize(
-    ('where'), [
-        ('on_hypervisor'),
-        ('inside_vm'),
-        # (on_hypervisor_and_in_vm)
-    ]
-)
+@mark.parametrize('where', [
+    'on_hypervisor',
+    'inside_vm',
+    # on_hypervisor_and_in_vm
+])
 def test_cyclictest(where):
     if where.lower() == 'on_hypervisor':
         LOG.info('Run cyclictest on hypervisor')
