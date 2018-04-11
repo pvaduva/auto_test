@@ -8,10 +8,9 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, HostUnlock, KPI_DATE_FORMAT
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.pre_checks_and_configs import no_simplex
 
-from keywords import host_helper, system_helper, nova_helper, vm_helper, common
+from keywords import host_helper, system_helper, common
 
 
 @mark.sanity
@@ -83,8 +82,8 @@ def test_lock_unlock_host(host_type, collect_kpi):
     else:
         raise ValueError("Unrecognized host_type: {}".format(host_type))
 
-    # lock standby controller node and verify it is successfully locked
     LOG.tc_step("Lock {} host - {} and ensure it is successfully locked".format(host_type, host))
+    HostsToRecover.add(host)
     host_helper.lock_host(host, swact=False)
 
     locked_controller_admin_state = host_helper.get_hostshow_value(host, 'administrative')
