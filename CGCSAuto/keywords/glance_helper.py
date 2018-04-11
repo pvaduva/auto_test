@@ -619,7 +619,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if guest_os in ['cgcs-guest', 'vxworks', 'tis-centos-guest'] else 'qcow2'
+        disk_format = 'raw' if re.search('cgcs-guest|vxworks|tis-centos', guest_os) else 'qcow2'
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]

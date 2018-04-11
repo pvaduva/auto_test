@@ -75,7 +75,8 @@ class GuestImages:
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
         'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
-        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
+        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
+        'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5)
     }
 
 

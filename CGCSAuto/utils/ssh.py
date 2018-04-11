@@ -652,7 +652,7 @@ class SSHClient:
                 raise exceptions.CommonError("scp unsuccessfully")
 
             if not self.file_exists(file_path=dest_path):
-                raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+                raise exceptions.CommonError("{} does not exist after download".format(dest_path))
         except:
             if cleanup:
                 LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
