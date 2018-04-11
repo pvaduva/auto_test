@@ -196,6 +196,12 @@ class TestEvacKPI:
         router_host = network_helper.get_router_info(field='wrs-net:host')
         target_host = get_hosts[0] if router_host == get_hosts[1] else get_hosts[1]
 
+        active_con = system_helper.get_active_controller_name()
+        if target_host == active_con:
+            host_helper.swact_host(active_con)
+            assert router_host != network_helper.get_router_info(field='wrs-net:host'), \
+                "router host changed after swact"
+
         LOG.tc_step("Launch a {} vm on host that is different than router host".format(vm_type))
         vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, avail_zone='nova',
                                          target_host=target_host)
@@ -222,6 +228,11 @@ class TestEvacKPI:
         LOG.tc_step("Get {} vm ping loss duration on evacuation while router is on same host")
         router_host = network_helper.get_router_info(field='wrs-net:host')
         vm_host = nova_helper.get_vm_host(vm_id=vm_id)
+        if router_host == system_helper.get_active_controller_name():
+            host_helper.swact_host()
+            assert router_host == network_helper.get_router_info(field='wrs-net:host'), "Router moved after swact"
+            time.sleep(60)
+
         if router_host != vm_host:
             LOG.info("Move vm to the same host as router")
             vm_helper.live_migrate_vm(vm_id=vm_id, destination_host=router_host)

@@ -477,13 +477,20 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
                                       vm_host=vm_host_cold_mig, cpu_pol=cpu_pol, guest=guest_os)
 
 
+@fixture(scope='module')
+def check_system():
+    up_hypervisors = host_helper.get_up_hypervisors()
+    if len(up_hypervisors) < 2:
+        skip("Less than two up hypervisors")
+
+
 @mark.kpi
 @mark.parametrize('vm_type', [
     'virtio',
     'avp',
     'dpdk',
 ])
-def test_kpi_live_migrate(vm_type, collect_kpi):
+def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
     """
     Collect live migration ping loss duration KPI
     Args:

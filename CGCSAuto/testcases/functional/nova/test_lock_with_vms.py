@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, KPI_DATE_FORMAT
 from consts.reasons import SkipStorageBacking
-from consts.cgcs import VMStatus, MaxVmsSupported
+from consts.cgcs import VMStatus, SysType
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, host_helper, system_helper, common
 
@@ -77,7 +77,11 @@ class TestLockWithVMs:
         if len(target_hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
-        return storage_backing, target_hosts[0]
+        target_host = target_hosts[0]
+        if SysType.AIO_DX == system_helper.get_sys_type():
+            target_host = system_helper.get_standby_controller_name()
+
+        return storage_backing, target_host
 
     @mark.nightly
     @mark.kpi
