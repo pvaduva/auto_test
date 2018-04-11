@@ -97,19 +97,12 @@ class TestProjects(helper.AdminTestCase):
             - Verify the user is added to the project
         """
 
-        admin_name = 'admin'
-        regular_role_name = '_member_'
-        admin_role_name = 'admin'
-        roles2add = {regular_role_name, admin_role_name}
-
         LOG.tc_step('Allocate users to the project')
-        projects_pg_action.allocate_user_to_project(
-            admin_name, roles2add, self.PROJECT_NAME)
+        projects_pg_action.manage_members(self.PROJECT_NAME, users2allocate=['tenant1', 'admin'])
         assert projects_pg_action.find_message_and_dismiss(messages.SUCCESS)
         assert not projects_pg_action.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the users are added to the project')
-        user_roles = projects_pg_action.get_user_roles_at_project(
-            admin_name, self.PROJECT_NAME)
-        assert roles2add == user_roles
+        user_roles = projects_pg_action.get_member_roles_at_project(self.PROJECT_NAME, 'tenant1')
+        assert user_roles == {'_member_'}
 

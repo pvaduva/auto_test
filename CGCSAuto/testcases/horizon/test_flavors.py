@@ -1,5 +1,4 @@
 import random
-import os
 from utils.horizon.regions import messages
 from utils.horizon.pages.admin.compute import flavorspage
 from pytest import fixture
@@ -99,27 +98,23 @@ class TestFlavors(helper.AdminTestCase):
         """
 
         add_up = random.randint(1, 10)
-        old_vcpus = flavors_pg_action.get_flavor_vcpus(self.FLAVOR_NAME)
-        old_disk = flavors_pg_action.get_flavor_disk(self.FLAVOR_NAME)
+        old_vcpus = int(flavors_pg_action.get_flavor_info(self.FLAVOR_NAME, "VCPUs"))
 
         LOG.tc_step('Updates the flavor info and verifies it is updated successfully'.format(self.FLAVOR_NAME))
 
         newname = 'edit-' + self.FLAVOR_NAME
-        flavors_pg_action.update_flavor_info(self.FLAVOR_NAME, newname, add_up)
+        flavors_pg_action.edit_flavor(self.FLAVOR_NAME, newname=newname, vcpus=old_vcpus+add_up)
 
         assert flavors_pg_action.find_message_and_dismiss(messages.SUCCESS)
         assert not flavors_pg_action.find_message_and_dismiss(messages.ERROR)
         assert flavors_pg_action.is_flavor_present(newname)
 
-        new_vcpus = flavors_pg_action.get_flavor_vcpus(newname)
-        new_disk = flavors_pg_action.get_flavor_disk(newname)
-
-        assert not old_disk == new_disk
+        new_vcpus = flavors_pg_action.get_flavor_info(newname, "VCPUs")
         assert not old_vcpus == new_vcpus
 
         self.FLAVOR_NAME = newname
 
-    def test_flavor_update_access(self, flavors_pg_action):
+    '''def test_flavor_update_access(self, flavors_pg_action):
         """
         Tests the flavor update access functionality:
 
@@ -140,14 +135,13 @@ class TestFlavors(helper.AdminTestCase):
         projects = ['admin', 'tenant1']
 
         LOG.tc_step('Update flavor access by adding projects: {} and verify not public'.format(projects))
-        flavors_pg_action.update_flavor_access(self.FLAVOR_NAME, projects)
+        flavors_pg_action.modify_access(self.FLAVOR_NAME, allocate_projects=projects)
 
-        assert not flavors_pg_action.is_flavor_public(self.FLAVOR_NAME)
+        assert flavors_pg_action.get_flavor_info(self.FLAVOR_NAME, "Public") == "No"
 
         LOG.tc_step('Update flavor access back to public and verify'.format(projects))
-        flavors_pg_action.update_flavor_access(self.FLAVOR_NAME, projects,
-                                               allocate=False)
-        assert flavors_pg_action.is_flavor_public(self.FLAVOR_NAME)
+        flavors_pg_action.modify_access(self.FLAVOR_NAME, deallocate_projects=projects)
+        assert flavors_pg_action.get_flavor_info(self.FLAVOR_NAME, "Public") == "Yes"'''
 
     def test_create_flavor_with_excessive_vcpu_negative(self, flavors_pg):
         """

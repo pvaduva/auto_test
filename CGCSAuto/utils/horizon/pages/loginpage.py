@@ -13,10 +13,6 @@ class LoginPage(pageobject.PageObject):
     _login_submit_button_locator = (by.By.ID, 'loginBtn')
     _login_logout_reason_locator = (by.By.ID, 'logout_reason')
 
-    def __init__(self, driver):  
-        super(LoginPage, self).__init__(driver)
-        self._page_title = "Login"
-
     @property
     def username(self):
         return self._get_element(*self._login_username_field_locator)

@@ -110,7 +110,12 @@ class TestVolumesBasic(helper.TenantTestCase):
 
         instance_name = helper.gen_resource_name('volume_attachment')
         LOG.tc_step('Create new instance {}'.format(instance_name))
-        instances_pg.create_instance(instance_name)
+        instances_pg.create_instance(instance_name,
+                                     boot_source_type='Image',
+                                     create_new_volume=False,
+                                     source_name='tis-centos-guest',
+                                     flavor_name='small',
+                                     network_names=['tenant1-mgmt-net'])
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
         assert instances_pg.is_instance_active(instance_name)
 
@@ -121,8 +126,7 @@ class TestVolumesBasic(helper.TenantTestCase):
         volumes_pg.create_volume(self.VOLUME_NAME)
         volumes_pg.find_message_and_dismiss(messages.INFO)
         assert not (volumes_pg.find_message_and_dismiss(messages.ERROR))
-        assert (volumes_pg.is_volume_status(self.VOLUME_NAME,
-                                                      'Available'))
+        assert (volumes_pg.is_volume_status(self.VOLUME_NAME, 'Available'))
 
         LOG.tc_step('Attach the volume to the newly created instance')
         volumes_pg.attach_volume_to_instance(self.VOLUME_NAME, instance_name)
@@ -131,7 +135,7 @@ class TestVolumesBasic(helper.TenantTestCase):
 
         LOG.tc_step('Check that volume is In-use and link to instance')
         assert volumes_pg.is_volume_status(self.VOLUME_NAME, 'In-use')
-        assert volumes_pg.is_volume_attached_to_instance(self.VOLUME_NAME, instance_name)
+        assert instance_name in volumes_pg.get_volume_info(self.VOLUME_NAME, 'Attached To')
 
         LOG.tc_step('Detach volume from instance')
         volumes_pg.detach_volume_from_instance(self.VOLUME_NAME, instance_name)
@@ -211,7 +215,7 @@ class TestVolumesBasic(helper.TenantTestCase):
         LOG.tc_step('Check that the volume is edited successfully')
         assert volumes_pg_action.is_volume_present(new_name)
         assert volumes_pg_action.is_volume_status(new_name, 'Available')
-        assert volumes_pg_action.is_volume_bootable(new_name)
+        assert volumes_pg_action.get_volume_info(new_name, 'Bootable') == 'Yes'
         self.VOLUME_NAME = new_name
 
     def test_volume_extend(self, volumes_pg_action):
@@ -233,14 +237,14 @@ class TestVolumesBasic(helper.TenantTestCase):
             - Check that the volume size is changed
         """
         LOG.tc_step('Extend volume')
-        orig_size = volumes_pg_action.get_size(self.VOLUME_NAME)
-        volumes_pg_action.extend_volume(self.VOLUME_NAME, orig_size + 1)
+        orig_size = int(volumes_pg_action.get_volume_info(self.VOLUME_NAME, 'Size')[:-3])
+        volumes_pg_action.extend_volume(self.VOLUME_NAME, str(orig_size + 1))
         assert volumes_pg_action.find_message_and_dismiss(messages.INFO)
         assert not volumes_pg_action.find_message_and_dismiss(messages.ERROR)
         assert volumes_pg_action.is_volume_status(self.VOLUME_NAME, 'Available')
 
         LOG.tc_step('Check that the volume size is changed')
-        new_size = volumes_pg_action.get_size(self.VOLUME_NAME)
+        new_size = int(volumes_pg_action.get_volume_info(self.VOLUME_NAME, 'Size')[:-3])
         assert orig_size < new_size
 
     def test_volume_upload_to_image(self, volumes_pg_action):
@@ -269,7 +273,7 @@ class TestVolumesBasic(helper.TenantTestCase):
         for disk_format in all_formats:
             LOG.tc_step('Upload volume to image with disk format {}'.format(disk_format))
             image_name = helper.gen_resource_name('volume_image')
-            volumes_pg_action.upload_volume_to_image(self.VOLUME_NAME, image_name, disk_format)
+            volumes_pg_action.upload_to_image(self.VOLUME_NAME, image_name, disk_format)
             assert not volumes_pg_action.find_message_and_dismiss(messages.ERROR)
             assert volumes_pg_action.is_volume_status(self.VOLUME_NAME, 'Available')
 
@@ -278,7 +282,7 @@ class TestVolumesBasic(helper.TenantTestCase):
             images_pg.go_to_target_page()
             assert images_pg.is_image_present(image_name)
             assert images_pg.is_image_active(image_name)
-            assert images_pg.get_image_format(image_name) == all_formats[disk_format]
+            assert images_pg.get_image_info(image_name, 'Format') == all_formats[disk_format]
 
             LOG.tc_step('Delete image {}'.format(image_name))
             images_pg.delete_image(image_name)
@@ -313,9 +317,8 @@ class TestVolumesBasic(helper.TenantTestCase):
         instance_name = helper.gen_resource_name('volume_instance')
 
         LOG.tc_step('Launch volume {} as instance'.format(self.VOLUME_NAME))
-        volumes_pg_action.launch_instance(self.VOLUME_NAME, instance_name)
-
-        sleep(10)
+        volumes_pg_action.launch_as_instance(self.VOLUME_NAME, instance_name, delete_volume_on_instance_delete=True,
+                                             flavor_name='small', network_names=['tenant1-mgmt-net'])
 
         LOG.tc_step('Check that volume status is In-use')
         assert volumes_pg_action.is_volume_status(self.VOLUME_NAME, 'In-use')
@@ -325,7 +328,7 @@ class TestVolumesBasic(helper.TenantTestCase):
         instances_pg.go_to_target_page()
         assert instances_pg.is_instance_active(instance_name)
         volumes_pg_action.go_to_target_page()
-        assert instance_name in volumes_pg_action.get_attach_instance(self.VOLUME_NAME)
+        assert instance_name in volumes_pg_action.get_volume_info(self.VOLUME_NAME, "Attached To")
 
         LOG.tc_step('Delete the instance')
         instances_pg.go_to_target_page()
@@ -356,5 +359,5 @@ class TestVolumesBasic(helper.TenantTestCase):
         instance_name = helper.gen_resource_name('volume_instance')
         LOG.tc_step('Meet Error when launching non-bootable volume {} as instance'.format(self.VOLUME_NAME))
         with raises(ValueError):
-            volumes_pg_action.launch_instance(self.VOLUME_NAME, instance_name)
-
+            volumes_pg_action.launch_as_instance(self.VOLUME_NAME, instance_name, delete_volume_on_instance_delete=True,
+                                                 flavor_name='small', network_names=['tenant1-mgmt-net'])

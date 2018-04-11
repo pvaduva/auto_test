@@ -1,4 +1,5 @@
 from selenium import webdriver
+from pyvirtualdisplay import Display
 from utils.horizon.pages import loginpage
 from consts import horizon
 from pytest import fixture
@@ -8,7 +9,8 @@ import os
 import time
 from utils.tis_log import LOG
 
-
+display = Display(visible=False, size=(1920, 1080))
+display.start()
 driver0 = webdriver.Firefox()
 driver0.maximize_window()
 
@@ -20,6 +22,7 @@ class Browser:
 
         def teardown():
             driver.quit()
+            display.stop()
         request.addfinalizer(teardown)
 
         return driver

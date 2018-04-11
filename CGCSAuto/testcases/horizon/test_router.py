@@ -36,11 +36,11 @@ class TestRouters(helper.AdminTestCase):
         return routers_pg
 
     def _create_router(self, routerspage):
-        routerspage.create_router(self.ROUTER_NAME)
+        routerspage.create_router(self.ROUTER_NAME, external_network='external-net0')
         assert routerspage.find_message_and_dismiss(messages.SUCCESS)
         assert not routerspage.find_message_and_dismiss(messages.ERROR)
         assert routerspage.is_router_present(self.ROUTER_NAME)
-        assert routerspage.is_router_active(self.ROUTER_NAME)
+        assert routerspage.get_router_info(self.ROUTER_NAME, 'Status') == 'Active'
 
     def _delete_router(self, routerspage):
         routerspage.delete_router(self.ROUTER_NAME)
@@ -98,15 +98,15 @@ class TestRouters(helper.AdminTestCase):
         assert not routers_pg_action.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the gateway does not appear in the gateway table')
-        assert routers_pg_action.is_gateway_cleared(self.ROUTER_NAME)
+        assert routers_pg_action.get_router_info(self.ROUTER_NAME, 'External Network') == '-'
 
         LOG.tc_step('Set new gateway to the router')
-        routers_pg_action.set_gateway(self.ROUTER_NAME)
+        routers_pg_action.set_gateway(self.ROUTER_NAME, external_network='external-net0')
         assert routers_pg_action.find_message_and_dismiss(messages.SUCCESS)
         assert not routers_pg_action.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the new set gateway appears in the gateway table')
-        assert routers_pg_action.is_gateway_set(self.ROUTER_NAME)
+        assert routers_pg_action.get_router_info(self.ROUTER_NAME, 'External Network') == 'external-net0'
 
     def _create_interface(self, interfaces_page):
         interfaces_page.create_interface()
@@ -216,7 +216,7 @@ class TestRouters(helper.AdminTestCase):
         admin_routers_page = admin_routerspage.RoutersPage(routers_pg.driver)
         admin_routers_page.go_to_target_page()
         assert admin_routers_page.is_router_present(self.ROUTER_NAME)
-        assert admin_routers_page.is_router_active(self.ROUTER_NAME)
+        assert admin_routers_page.get_router_info(self.ROUTER_NAME, 'Status') == 'Active'
 
         LOG.tc_step('Edit the router name')
         new_name = "edited_" + self.ROUTER_NAME
@@ -226,7 +226,7 @@ class TestRouters(helper.AdminTestCase):
 
         LOG.tc_step('Verify the name is edited successfully')
         assert admin_routers_page.is_router_present(new_name)
-        assert admin_routers_page.is_router_active(new_name)
+        assert admin_routers_page.get_router_info(new_name, 'Status') == 'Active'
 
         LOG.tc_step('Delete router {} and verify it does not appear in the table'.format(self.ROUTER_NAME))
         admin_routers_page.delete_router(new_name)

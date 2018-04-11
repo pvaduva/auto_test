@@ -148,11 +148,23 @@ class SystemConfigurationPage(basepage.BasePage):
     def _get_row_with_system_name(self, name):
         return self.systems_table.get_row(self.SYSTEMS_TABLE_NAME_COLUMN, name)
 
+    def get_system_info(self, name, header):
+        row = self._get_row_with_system_name(name)
+        return row.cells[header].text
+
     def _get_row_with_address_pool_name(self, name):
         return self.systems_table.get_row(self.ADDRESS_POOLS_TABLE_NAME_COLUMN, name)
 
+    def get_address_pool_info(self, name, header):
+        row = self._get_row_with_address_pool_name(name)
+        return row.cells[header].text
+
     def _get_row_with_pipeline_name(self, name):
         return self.systems_table.get_row(self.PIPELINES_TABLE_NAME_CLOUMN, name)
+
+    def get_pipeline_info(self, name, header):
+        row = self._get_row_with_pipeline_name(name)
+        return row.cells[header].text
 
     def go_to_systems_tab(self):
         self.go_to_tab(self.SYSTEMS_TAB_INDEX)

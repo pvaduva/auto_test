@@ -72,8 +72,8 @@ class TestVolumeSnapshots(helper.TenantTestCase):
 
         LOG.tc_step('Check that snapshot is in the list and has reference to correct volume')
         assert volumes_snapshot_pg.is_volume_snapshot_available(self.VOLUME_SNAPSHOT_NAME)
-        actual_volume_name = volumes_snapshot_pg.get_volume_name(
-            self.VOLUME_SNAPSHOT_NAME)
+        actual_volume_name = volumes_snapshot_pg.get_snapshot_info(
+            self.VOLUME_SNAPSHOT_NAME, "Volume Name")
         assert self.VOLUME_NAME == actual_volume_name
 
         LOG.tc_step('Edit snapshot name and description')
@@ -84,7 +84,7 @@ class TestVolumeSnapshots(helper.TenantTestCase):
         assert volumes_snapshot_pg.is_volume_snapshot_available(new_name)
 
         LOG.tc_step('Delete snapshot {}'.format(self.VOLUME_SNAPSHOT_NAME))
-        volumes_snapshot_pg.delete_volume_snapshot(new_name)
+        volumes_snapshot_pg.delete_volume_snapshot_by_row(new_name)
         assert volumes_snapshot_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not volumes_snapshot_pg.find_message_and_dismiss(messages.ERROR)
         assert volumes_snapshot_pg.is_volume_snapshot_deleted(
@@ -122,7 +122,7 @@ class TestVolumeSnapshots(helper.TenantTestCase):
         new_volume = 'new_' + self.VOLUME_NAME
         LOG.tc_step('Create new volume {} from snapshot'.format(new_volume))
         volumes_snapshot_pg.create_volume_from_snapshot(
-            self.VOLUME_SNAPSHOT_NAME, new_volume)
+            self.VOLUME_SNAPSHOT_NAME, volume_name=new_volume)
 
         LOG.tc_step('Check the volume is created and has Available status')
         assert volumes_pg.is_volume_status(new_volume, 'Available')
@@ -131,7 +131,7 @@ class TestVolumeSnapshots(helper.TenantTestCase):
         sleep(1)
 
         LOG.tc_step('Delete the volume snapshot {}'.format(self.VOLUME_SNAPSHOT_NAME))
-        volumes_snapshot_pg.delete_volume_snapshot(self.VOLUME_SNAPSHOT_NAME)
+        volumes_snapshot_pg.delete_volume_snapshot_by_row(self.VOLUME_SNAPSHOT_NAME)
         assert volumes_snapshot_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not volumes_snapshot_pg.find_message_and_dismiss(messages.ERROR)
         assert volumes_snapshot_pg.is_volume_snapshot_deleted(

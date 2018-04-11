@@ -98,7 +98,7 @@ class TestGroup(helper.AdminTestCase):
         LOG.tc_step('Update the group info to {}.'.format(self.GROUP_NAME))
         new_group_name = 'edited-' + self.GROUP_NAME
         new_group_desc = 'edited-' + self.GROUP_DESCRIPTION
-        groups_pg.edit_group(self.GROUP_NAME, new_group_name, new_group_desc)
+        groups_pg.edit_group(self.GROUP_NAME, new_name=new_group_name, new_description=new_group_desc)
 
         LOG.tc_step('Verify the info is updated.')
         assert groups_pg.find_message_and_dismiss(messages.SUCCESS)

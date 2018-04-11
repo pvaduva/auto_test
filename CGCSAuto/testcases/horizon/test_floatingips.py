@@ -91,7 +91,12 @@ class TestFloatingip(helper.TenantTestCase):
         """
         instance_name = helper.gen_resource_name('instance')
         LOG.tc_step('Create new instance {}'.format(instance_name))
-        instances_pg.create_instance(instance_name)
+        instances_pg.create_instance(instance_name,
+                                     boot_source_type='Image',
+                                     create_new_volume=False,
+                                     source_name='tis-centos-guest',
+                                     flavor_name='small',
+                                     network_names=['tenant1-mgmt-net'])
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
         assert instances_pg.is_instance_active(instance_name)
 
@@ -107,19 +112,19 @@ class TestFloatingip(helper.TenantTestCase):
         assert not floatingip_page.find_message_and_dismiss(messages.ERROR)
         assert floatingip_page.is_floatingip_present(floating_ip)
 
-        assert '-' == floatingip_page.get_fixed_ip(floating_ip)
+        assert '-' == floatingip_page.get_floatingip_info(floating_ip, 'Mapped Fixed IP Address')
 
         LOG.tc_step('Associate floating ip to {} and verify'.format(instance_name))
         floatingip_page.associate_floatingip(floating_ip, instance_name, instance_ipv4)
         assert floatingip_page.find_message_and_dismiss(messages.SUCCESS)
         assert not floatingip_page.find_message_and_dismiss(messages.ERROR)
-        assert instance_info == floatingip_page.get_fixed_ip(floating_ip)
+        assert instance_info == floatingip_page.get_floatingip_info(floating_ip, 'Mapped Fixed IP Address')
 
         LOG.tc_step('Disassociate floating ip to {} and verify'.format(instance_name))
         floatingip_page.disassociate_floatingip(floating_ip)
         assert floatingip_page.find_message_and_dismiss(messages.SUCCESS)
         assert not floatingip_page.find_message_and_dismiss(messages.ERROR)
-        assert '-' == floatingip_page.get_fixed_ip(floating_ip)
+        assert '-' == floatingip_page.get_floatingip_info(floating_ip, 'Mapped Fixed IP Address')
 
         LOG.tc_step('Release Floating ip')
         floatingip_page.release_floatingip(floating_ip)
@@ -153,7 +158,7 @@ class TestFloatingipAdmin(helper.AdminTestCase):
     def test_allocate_floatingip_admin(self, floatingips_pg):
 
         LOG.tc_step('Allocates floating ip')
-        floating_ip = floatingips_pg.allocate_floatingip()
+        floating_ip = floatingips_pg.allocate_floatingip(tenant='tenant1')
 
         LOG.tc_step('Verifies that the floating ip {} is present'.format(floating_ip))
         assert floatingips_pg.find_message_and_dismiss(messages.SUCCESS)

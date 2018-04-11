@@ -100,6 +100,12 @@ class CheckBoxFormFieldRegion(CheckBoxMixin, BaseFormFieldRegion):
     _element_locator_str_suffix = 'input[type=checkbox]'
 
 
+class RadioCheckBoxFormFieldRegion(CheckBoxMixin, BaseFormFieldRegion):
+    """Checkbox field."""
+
+    _element_locator_str_suffix = 'input[type=radio]'
+
+
 class ChooseFileFormFieldRegion(BaseFormFieldRegion):
     """Choose file field."""
 

@@ -54,7 +54,7 @@ class TestImagesBasic(helper.AdminTestCase):
             assert images_pg.is_image_active(self.IMAGE_NAME)
 
             LOG.tc_step('Delete image {}.'.format(self.IMAGE_NAME))
-            images_pg.delete_image(self.IMAGE_NAME)
+            images_pg.delete_image_by_row(self.IMAGE_NAME)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
             assert not images_pg.find_message_and_dismiss(messages.ERROR)
 
@@ -346,7 +346,9 @@ class TestImagesAdvanced(helper.TenantTestCase):
 
             instance_name = helper.gen_resource_name('image_instance')
             LOG.tc_step('Launch new instance {} from image.'.format(instance_name))
-            images_pg.launch_instance_from_image(self.IMAGE_NAME, instance_name)
+            images_pg.launch_instance_from_image(self.IMAGE_NAME, instance_name,
+                                                 flavor_name='small', network_names=['tenant1-mgmt-net'],
+                                                 create_new_volume=False)
             instance_pg = instancespage.InstancesPage(images_pg.driver)
             instance_pg.go_to_target_page()
             assert not instance_pg.find_message_and_dismiss(messages.ERROR)
@@ -355,7 +357,7 @@ class TestImagesAdvanced(helper.TenantTestCase):
             assert instance_pg.is_instance_active(instance_name)
 
             LOG.tc_step('Delete instance {}.'.format(instance_name))
-            instance_pg.delete_instance(instance_name)
+            instance_pg.delete_instance_by_row(instance_name)
             assert not instance_pg.find_message_and_dismiss(messages.ERROR)
             assert instance_pg.is_instance_deleted(instance_name)
 

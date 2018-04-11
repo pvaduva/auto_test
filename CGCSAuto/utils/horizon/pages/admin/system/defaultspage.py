@@ -53,10 +53,6 @@ class DefaultsPage(basepage.BasePage):
         'Volumes'
     ]
 
-    def __init__(self, driver):
-        super(DefaultsPage, self).__init__(driver)
-        self._page_title = "Defaults"
-
     def _get_quota_row(self, name):
         return self.default_quotas_table.get_row(
             self.QUOTAS_TABLE_NAME_COLUMN, name)

@@ -46,7 +46,7 @@ class TestVolumeTypes(helper.AdminTestCase):
         volume_types_pg.delete_volume_type(volume_type_name)
         assert volume_types_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not volume_types_pg.find_message_and_dismiss(messages.ERROR)
-        assert volume_types_pg.is_volume_type_deleted(volume_type_name)
+        assert not volume_types_pg.is_volume_type_present(volume_type_name)
 
     def test_volume_type_create_delete(self, volume_types_pg):
         """
@@ -81,7 +81,7 @@ class TestVolumeTypes(helper.AdminTestCase):
         assert volume_types_pg.is_qos_spec_present(qos_spec_name)
 
     def _delete_qos_spec(self, volume_types_pg, qos_spec_name):
-        volume_types_pg.delete_qos_specs(qos_spec_name)
+        volume_types_pg.delete_qos_spec(qos_spec_name)
         assert volume_types_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not volume_types_pg.find_message_and_dismiss(messages.ERROR)
         assert not volume_types_pg.is_qos_spec_present(qos_spec_name)
@@ -142,19 +142,19 @@ class TestVolumeTypes(helper.AdminTestCase):
         assert volume_qos_spec_action.find_message_and_dismiss(messages.SUCCESS)
         assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
         LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
-        assert volume_qos_spec_action.get_consumer(qos_spec_name) == nova_compute_consumer
+        assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == nova_compute_consumer
 
         LOG.tc_step('Edit consumer of created QoS Spec to {}'.format(both_consumers))
         volume_qos_spec_action.edit_consumer(qos_spec_name, both_consumers)
         assert volume_qos_spec_action.find_message_and_dismiss(messages.SUCCESS)
         assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
         LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
-        assert volume_qos_spec_action.get_consumer(qos_spec_name) == both_consumers
+        assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == both_consumers
 
         LOG.tc_step('Edit consumer of created QoS Spec to {}'.format(cinder_consumer))
         volume_qos_spec_action.edit_consumer(qos_spec_name, cinder_consumer)
         assert volume_qos_spec_action.find_message_and_dismiss(messages.SUCCESS)
         assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
         LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
-        assert volume_qos_spec_action.get_consumer(qos_spec_name) == cinder_consumer
+        assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == cinder_consumer
 

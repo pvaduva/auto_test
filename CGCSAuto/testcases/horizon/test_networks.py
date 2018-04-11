@@ -46,16 +46,18 @@ class TestNetworks(helper.TenantTestCase):
             - Verify the network does not appear in the table after deletion
         """
         LOG.tc_step('Create new network {}.'.format(self.NETWORK_NAME))
-        networks_pg.create_network(self.NETWORK_NAME, self.SUBNET_NAME)
+        networks_pg.create_network(self.NETWORK_NAME,
+                                   subnet_name=self.SUBNET_NAME,
+                                   network_address='192.168.0.0/24')
         assert networks_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not networks_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the network appears in the networks table as active')
         assert networks_pg.is_network_present(self.NETWORK_NAME)
-        assert networks_pg.is_network_active(self.NETWORK_NAME)
+        assert networks_pg.get_network_info(self.NETWORK_NAME, "Status") == "Active"
 
         LOG.tc_step('Delete network {}.'.format(self.NETWORK_NAME))
-        networks_pg.delete_network(self.NETWORK_NAME)
+        networks_pg.delete_network_by_row(self.NETWORK_NAME)
         assert networks_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not networks_pg.find_message_and_dismiss(messages.ERROR)
 
@@ -103,16 +105,21 @@ class TestNetworksAdmin(helper.AdminTestCase):
         """
 
         LOG.tc_step('Create new network {}.'.format(self.NETWORK_NAME))
-        networks_pg.create_network(self.NETWORK_NAME, self.SUBNET_NAME)
+        networks_pg.create_network(self.NETWORK_NAME,
+                                   project='tenant1',
+                                   provider_network_type='vlan',
+                                   physical_network='group0-data0',
+                                   subnet_name=self.SUBNET_NAME,
+                                   network_address='192.168.0.0/24')
         assert networks_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not networks_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the network appears in the networks table as active')
         assert networks_pg.is_network_present(self.NETWORK_NAME)
-        assert networks_pg.is_network_active(self.NETWORK_NAME)
+        assert networks_pg.get_network_info(self.NETWORK_NAME, 'Status') == 'Active'
 
         LOG.tc_step('Delete network {}.'.format(self.NETWORK_NAME))
-        networks_pg.delete_network(self.NETWORK_NAME)
+        networks_pg.delete_network_by_row(self.NETWORK_NAME)
         assert networks_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not networks_pg.find_message_and_dismiss(messages.ERROR)
 

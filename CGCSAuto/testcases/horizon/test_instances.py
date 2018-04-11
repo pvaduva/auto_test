@@ -19,7 +19,7 @@ class TestInstances(helper.TenantTestCase):
         def teardown():
             LOG.fixture_step('Back to Groups page')
             if instances_pg.is_instance_present(self.INSTANCE_NAME):
-                instances_pg.delete_instance(self.INSTANCE_NAME)
+                instances_pg.delete_instance_by_row(self.INSTANCE_NAME)
             instances_pg.go_to_target_page()
 
         request.addfinalizer(teardown)
@@ -51,10 +51,11 @@ class TestInstances(helper.TenantTestCase):
 
         LOG.tc_step('Create new instance {}'.format(self.INSTANCE_NAME))
         instances_pg.create_instance(self.INSTANCE_NAME,
-                                     source_type=source_type,
+                                     boot_source_type=source_type,
                                      source_name=source_name,
                                      flavor_name=flavor_name,
-                                     network_names=network_names)
+                                     network_names=network_names,
+                                     create_new_volume=False)
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the instance appears in the instances table as active')

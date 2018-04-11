@@ -101,7 +101,7 @@ class TestSecuritygroup(helper.TenantTestCase):
         assert managerulespage.find_message_and_dismiss(messages.SUCCESS)
 
         LOG.tc_step('Verify the rule appears in the rules table')
-        assert managerulespage.is_port_present(self.RULE_PORT)
+        assert managerulespage.is_rule_present(self.RULE_PORT)
 
         LOG.tc_step('Delete rule {}'.format(self.RULE_PORT))
         managerulespage.delete_rule(self.RULE_PORT)
@@ -109,7 +109,7 @@ class TestSecuritygroup(helper.TenantTestCase):
         assert not managerulespage.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the rule does not appear in the table after deletion')
-        assert not managerulespage.is_port_present(self.RULE_PORT)
+        assert not managerulespage.is_rule_present(self.RULE_PORT)
 
         securitygroups_pg_action.go_to_target_page()
 
@@ -139,14 +139,14 @@ class TestSecuritygroup(helper.TenantTestCase):
         assert managerulespage.find_message_and_dismiss(messages.SUCCESS)
 
         LOG.tc_step('Verify the rule appears in the rules table')
-        assert managerulespage.is_port_present(self.RULE_PORT)
+        assert managerulespage.is_rule_present(self.RULE_PORT)
 
         LOG.tc_step('Delete rule {}'.format(self.RULE_PORT))
-        managerulespage.delete_rules(self.RULE_PORT)
+        managerulespage.delete_rule(self.RULE_PORT)
         assert managerulespage.find_message_and_dismiss(messages.SUCCESS)
         assert not managerulespage.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the rule does not appear in the table after deletion')
-        assert not managerulespage.is_port_present(self.RULE_PORT)
+        assert not managerulespage.is_rule_present(self.RULE_PORT)
 
         securitygroups_pg_action.go_to_target_page()

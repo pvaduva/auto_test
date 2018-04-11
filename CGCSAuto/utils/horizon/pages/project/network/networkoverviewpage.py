@@ -7,10 +7,6 @@ class NetworkOverviewPage(basepage.BasePage):
 
     DEFAULT_NETWORK_NAME = 'external-net0'
 
-    def __init__(self, driver):
-        super(NetworkOverviewPage, self).__init__(driver)
-        self._page_title = 'Network Details'
-
     def is_network_name_present(self, network_name=DEFAULT_NETWORK_NAME):
         dd_text = self._get_element(by.By.XPATH,
                                     "//dd[.='{0}']".format(network_name)).text

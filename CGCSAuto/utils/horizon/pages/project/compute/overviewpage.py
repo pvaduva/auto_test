@@ -23,15 +23,26 @@ class UsageTable(tables.TableRegion):
 class OverviewPage(basepage.BasePage):
     _date_form_locator = (by.By.ID, 'date_form')
 
-    def __init__(self, driver):
-        super(OverviewPage, self).__init__(driver)
-        self._page_title = 'Instance Overview'
+    USAGE_TABLE_NAME_COLUMN = 'Instance Name'
 
     @property
     def usage_table(self):
         return UsageTable(self.driver, self)
 
+    def _get_row_with_instance_name(self, name):
+        return self.usage_table.get_row(self.USAGE_TABLE_NAME_COLUMN, name)
+
+    def is_instance_present(self, name):
+        return bool(self._get_row_with_instance_name(name))
+
+    def get_instance_info(self, instance_name, header):
+        row = self._get_row_with_instance_name(instance_name)
+        return row.cells[header].text
+
     @property
     def date_form(self):
         src_elem = self._get_element(*self._date_form_locator)
         return forms.DateFormRegion(self.driver, src_elem)
+
+    def set_usage_query_time_period(self, start_date, end_date):
+        self.date_form.query(start_date, end_date)
