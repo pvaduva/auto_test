@@ -3981,8 +3981,8 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
     start_time = time.time()
     ping_init_end_time = start_time + init_timeout
     prompts = [ssh_client.prompt, fail_str]
+    ssh_client.send_sudo(cmd=cmd)
     while time.time() < ping_init_end_time:
-        ssh_client.send_sudo(cmd=cmd)
         index = ssh_client.expect(prompts, timeout=10, searchwindowsize=100, fail_ok=True)
         if index == 1:
             continue
