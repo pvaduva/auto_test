@@ -32,7 +32,7 @@ def pre_infra_install_check():
         lab_type = "regular"
 
     LOG.fixture_step('Verify no infra network is currently configured in system: {}'.format(lab['name']))
-    rc, infra_info = system_helper.is_infra_network_conifgured()
+    rc, infra_info = system_helper.is_infra_network_configured()
     if rc:
          skip("infra network is already configured  in the system {}".format(lab['name']))
 

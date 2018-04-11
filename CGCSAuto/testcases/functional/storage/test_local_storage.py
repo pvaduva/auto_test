@@ -95,18 +95,14 @@ class TestLocalStorage:
                 LOG.fixture_step("(class) Revert local storage backing for {}".format(old_new_types))
                 while old_new_types:
                     host_to_revert, old_type, _ = old_new_types.pop()
-                    host_helper.lock_host(host_to_revert, swact=True)
-                    LOG.info("Modify {} local storage to {}".format(host_to_revert, old_type))
-                    cmd = 'host-lvg-modify -b {} {} nova-local'.format(old_type, host_to_revert)
-                    cli.system(cmd, fail_ok=False)
-                    host_helper.unlock_host(host_to_revert)
+                    LOG.info("Revert {} local storage to {}".format(host_to_revert, old_type))
+                    host_helper.set_host_storage_backing(host=host_to_revert, inst_backing=old_type, unlock=True)
 
             except Exception as e:
                 LOG.exception(e)
                 exceptions.append(e)
 
             assert not exceptions, "Failure occurred. Errors: {}".format(exceptions)
-
         request.addfinalizer(cleanup)
 
         origin_lvg = host_helper.get_host_instance_backing(host)

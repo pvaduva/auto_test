@@ -3,6 +3,7 @@
 ####################################################################################
 
 import os
+import re
 import pexpect
 import time
 from datetime import datetime, timedelta
@@ -146,7 +147,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
-    return scp_to_local(source_path, active_cont_ip, dest_path=dest_path,
+    return scp_to_local(source_path=source_path, source_ip=active_cont_ip, dest_path=dest_path,
                         source_user=src_user, source_password=src_password,
                         timeout=timeout, is_dir=is_dir)
 
@@ -175,7 +176,7 @@ def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
     _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(dest_path, source_ip, source_path,
+def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
                  source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
                  timeout=60, is_dir=False):
     """
@@ -191,6 +192,9 @@ def scp_to_local(dest_path, source_ip, source_path,
         is_dir (bool): whether to copy a single file or a directory
 
     """
+    if not source_path or not source_ip:
+        return
+
     dir_option = '-r ' if is_dir else ''
     cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
             dir_option, source_user, source_ip, source_path, dest_path)
@@ -539,3 +543,38 @@ def write_to_file(file_path, content, mode='a'):
     with open(file_path, mode=mode) as f:
         f.write('\n-----------------[{}]-----------------\n{}\n'.format(time_stamp, content))
 
+
+def collect_software_logs(con_ssh=None):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+    LOG.info("Collecting all hosts logs...")
+    con_ssh.send('collect all')
+
+    expect_list = ['.*password for wrsroot:', 'collecting data.', con_ssh.prompt]
+    index_1 = con_ssh.expect(expect_list, timeout=10)
+    if index_1 == 2:
+        LOG.error("Something is wrong with collect all. Check ssh console log for detail.")
+        return
+    elif index_1 == 0:
+        con_ssh.send(con_ssh.password)
+        con_ssh.expect('collecting data')
+
+    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt], timeout=900)
+    if index_2 == 0:
+        output = con_ssh.cmd_output
+        con_ssh.expect()
+        logpath = re.findall('.*(/scratch/ALL_NODES_.*.tar).*', output)[0]
+        LOG.info("\n################### TiS server log path: {}".format(logpath))
+    else:
+        LOG.error("Collecting logs failed. No ALL_NODES logs found.")
+        return
+
+    lab_ip = ProjVar.get_var('LAB')['floating ip']
+    dest_path = ProjVar.get_var('LOG_DIR')
+    try:
+        LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
+        scp_to_local(source_path=logpath, source_ip=lab_ip, dest_path=dest_path, timeout=300)
+        LOG.info("{} is successfully copied to local directory: {}".format(logpath, dest_path))
+    except Exception as e:
+        LOG.warning("Failed to copy log file to localhost.")
+        LOG.error(e, exc_info=True)

@@ -228,6 +228,7 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
     storages = []
     controllers = []
     for host in host_states.keys():
+        host = host.strip()
         if not host_states[host]['patch-current']:
             personality = patching_helper.get_personality(host, con_ssh=con_ssh)
             if 'storage' in personality:
@@ -249,27 +250,25 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
     for host in storages:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
 
-    active_controller = None
-    for host in controllers:
-        if host_helper.is_active_controller(host, con_ssh=con_ssh):
-            active_controller = host
-        else:
+    while len(controllers) > 1:
+        host = controllers.pop()
+
+        if not host_helper.is_active_controller(host, con_ssh=con_ssh):
             patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
-
-    assert active_controller is not None, 'Failed to find the active controller?!'
-
-    if reboot_required:
-        if not system_helper.is_simplex():
-            code, output = host_helper.swact_host(active_controller, fail_ok=False, con_ssh=con_ssh)
-            assert 0 == code, 'Failed to swact host: from {}'.format(active_controller)
-
-            # need to wait for some time before the system in stable status after swact
-            time.sleep(60)
         else:
-            LOG.info('No need to swact on AIO-Simplex system')
+            controllers.append(host)
 
-    patching_helper.host_install(active_controller, reboot_required=reboot_required, con_ssh=con_ssh)
+    if controllers:
+        host = controllers.pop()
 
+        if not host_helper.is_active_controller(host, con_ssh=con_ssh):
+            LOG.error('The only controller is not active controller?!!, host:{}'.format(host))
+
+        if not system_helper.is_simplex():
+            host_helper.swact_host(host)
+
+        patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        
     if patch_ids:
 
         expected_patch_states = ['Applied'] if not remove else ['Removed', 'Available']
@@ -350,35 +349,34 @@ def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build
 
     # if an absolute path is specified, we do not need to guess the location of patch file(s),
     # otherwise, we need to deduce where they are based on the build information
+    build_id = lab_info.get_build_id()
+
     if patch_dir is None:
-        patch_dir_or_file = os.path.join(patch_base_dir, lab_info.get_build_id())
+        patch_dir_or_file = os.path.join(patch_base_dir, build_id)
 
-    elif not os.path.abspath(patch_dir):
-        if patch_base_dir is not None:
-            patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
+    elif not os.path.isabs(patch_dir):
+        patch_dir_or_file = os.path.join(patch_base_dir, patch_dir)
 
-        else:
-            patch_dir_or_file = patch_base_dir
     else:
-        patch_dir_or_file = patch_dir
         if patch_base_dir:
             LOG.info('patch-dir is an absolute path, while patch-base-dir is also provided'
                      '\npatch-dir:{}\npatch-base-dir:{}'.format(patch_dir, patch_base_dir))
+            LOG.info('ignore the patch_base_dir:{}'.format(patch_base_dir))
 
-    rt_code, output = ssh_to_server.exec_cmd(
-        'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')),
-        fail_ok=True)
+    if patching_helper.is_dir(patch_dir_or_file, ssh_to_server):
 
-    if 0 == rt_code and output:
-        patch_dir_or_file = os.path.join(patch_dir_or_file, '*.patch')
+        rt_code, output = ssh_to_server.exec_cmd(
+            'ls -ld {} 2>/dev/null'.format(os.path.join(patch_dir_or_file, '*.patch')), fail_ok=True)
+
+        if 0 == rt_code and output:
+            patch_dir_or_file = os.path.join(patch_dir_or_file, '*.patch')
 
     else:
-        err_msg = 'No patch files ready in directory :{} on the Patch Build server {}:\n{}'.format(
-            patch_dir_or_file, build_server, output)
+        err_msg = 'Not a directory:{}'.format(patch_dir_or_file)
         LOG.warn(err_msg)
 
         LOG.warn('Check if {} is a patch file'.format(patch_dir_or_file))
-        assert single_file_ok, err_msg
+        assert single_file_ok, err_msg + ', but not single patch file is not allowed'
 
         rt_code = ssh_to_server.exec_cmd('test -f {}'.format(patch_dir_or_file), fail_ok=True)[0]
         assert 0 == rt_code, err_msg
@@ -433,7 +431,7 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
         'mkdir -p {} {}'.format(passing_patch_dir, failing_patch_dir), con_ssh=con_ssh)
     assert 0 == rt_code, 'Failed to create patch dir:{} on the active-controller'.format(dest_path)
 
-    LOG.info('Downloading patch files to lab:{} from:{}{}'.format(dest_path, patch_build_server, patch_dir_or_files))
+    LOG.info('Downloading patch files to lab:{} from:{}:{}'.format(dest_path, patch_build_server, patch_dir_or_files))
 
     ssh_to_server.rsync(patch_dir_or_files, html_helper.get_ip_addr(), passing_patch_dir,
                         dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(), timeout=1200)
@@ -571,7 +569,7 @@ def test_install_impacted_hosts(con_ssh=None):
         3   Do host-install on all the hosts impacted
 
     """
-    LOG.tc_step('Find if patches in Partial "Partial-Apply" or "Partial-Remove" states')
+    LOG.tc_step('Check if any patches are in Partial "Partial-Apply" or "Partial-Remove" states')
     partial_applied_patches = patching_helper.get_partial_applied(con_ssh=con_ssh)
     partial_applied_patches += patching_helper.get_partial_removed(con_ssh=con_ssh)
 
@@ -741,7 +739,6 @@ class TestPatches:
 
         return patch_ids
 
-    @mark.kpi
     @mark.parametrize('patch', [
         'INSVC_ALLNODES',
         'RR_ALLNODES',

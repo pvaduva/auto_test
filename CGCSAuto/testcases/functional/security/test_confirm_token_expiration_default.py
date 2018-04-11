@@ -25,8 +25,7 @@ def test_confirm_token_expiration_default():
     expected_default_value = "3600"
 
     LOG.tc_step("Perform system service-parameter-list")
-    result_list = system_helper.\
-                  get_service_parameter_values(name='token_expiration')
+    result_list = system_helper.get_service_parameter_values(name='token_expiration')
 
     LOG.tc_step("Search for token-expiration in table")
     for default_value in result_list:

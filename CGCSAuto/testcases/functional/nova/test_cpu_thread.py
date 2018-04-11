@@ -1136,7 +1136,7 @@ class TestHTDisabled:
 class TestVariousHT:
 
     @fixture(scope='class', autouse=True, params=['two_plus_ht', 'one_ht'])
-    def ht_hosts_(self, request, ht_and_nonht_hosts):
+    def ht_hosts_mix(self, request, ht_and_nonht_hosts):
 
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
         if len(host_helper.get_up_hypervisors()) < 2:
@@ -1181,14 +1181,14 @@ class TestVariousHT:
         mark.p3((3, 'prefer', None)),
         mark.p3((3, 'require', None)),
     ])
-    def test_cold_migrate_vm_cpu_thread(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
+    def test_cold_migrate_vm_cpu_thread(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_mix):
         """
         Test cold migrate VM with specified cpu thread policy and various ht hosts number (1 or 2+) on system
         Args:
             vcpus:
             cpu_thread_policy:
             min_vcpus:
-            ht_hosts_:
+            ht_hosts_mix:
 
         Skip conditions:
             - Less than two up hypervisors in system
@@ -1210,7 +1210,7 @@ class TestVariousHT:
             - Unlock any locked hosts in setup      (class)
 
         """
-        ht_hosts, non_ht_hosts = ht_hosts_
+        ht_hosts, non_ht_hosts = ht_hosts_mix
 
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=vcpus)[1]

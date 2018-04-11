@@ -19,8 +19,8 @@ def connect(hostname, port=10000):
 
     # Need to power on host before we can connect
     vboxmanage.vboxmanage_startvm(hostname)
-    if hostname == 'controller-0':
-        socketname = '/tmp/controller0_serial'
+    if 'controller-0'in hostname:
+        socketname = '/tmp/' + hostname + '_serial'
     else:
         socketname = "/tmp/{}".format(hostname)
     LOG.info("Connecting to {}".format(hostname))

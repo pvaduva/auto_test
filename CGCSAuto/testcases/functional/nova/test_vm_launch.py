@@ -12,7 +12,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 
 
 @fixture(scope='module')
-def hosts_per_backing():
+def hosts_per_backing(add_admin_role_module):
     hosts = host_helper.get_hosts_per_storage_backing()
     return hosts
 
@@ -41,15 +41,23 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
 
+    # vm launch KPI
     if boot_from != 'volume':
         storage_backing = boot_from
-        if not hosts_per_backing.get(boot_from):
+        hosts = hosts_per_backing.get(boot_from)
+        if not hosts:
             skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(boot_from))
+
+        target_host = hosts[0]
+        LOG.tc_step("Clear local storage cache on {}".format(target_host))
+        host_helper.clear_local_storage_cache(host=target_host)
+
         LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage".format(storage_backing))
         boot_source = 'image'
         flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing,
                                            check_storage_backing=False)[1]
     else:
+        target_host = None
         boot_source = 'volume'
         storage_backing = nova_helper.get_storage_backing_with_max_hosts()[0]
         LOG.tc_step("Create a flavor with 2 vcpus, and dedicated cpu policy and {} storage".format(storage_backing))
@@ -58,58 +66,69 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     ResourceCleanup.add('flavor', flavor)
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
-    LOG.tc_step("Boot a vm from {} and collect vm startup time".format(boot_from))
-    vm_id = vm_helper.boot_vm(name=boot_from, flavor=flavor, source=boot_source, cleanup='function')[1]
+    host_str = ' on {}'.format(target_host) if target_host else ''
+    LOG.tc_step("Boot a vm from {}{} and collect vm startup time".format(boot_from, host_str))
+    vm_id = vm_helper.boot_vm(name=boot_from, flavor=flavor, source=boot_source, vm_host=target_host,
+                              cleanup='function')[1]
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VmStartup.NAME.format(boot_from),
                               log_path=VmStartup.LOG_PATH, end_pattern=VmStartup.END.format(vm_id),
                               start_pattern=VmStartup.START.format(vm_id), uptime=1)
 
-    if len(hosts_per_backing.get(storage_backing)) < 2:
-        skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
+    # Migration KPI
+    if len(hosts_per_backing.get(storage_backing)) >= 2:
+        LOG.info("Run migrate tests when more than 2 {} hosts available".format(storage_backing))
 
-    def operation_live(vm_id_):
-        code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
-        assert 0 == code, msg
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+        def operation_live(vm_id_):
+            code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
+            assert 0 == code, msg
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    if 'local_lvm' != boot_from:
-        # live migration unsupported for boot-from-image vm with local_lvm storage
-        LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+        if 'local_lvm' != boot_from:
+            # live migration unsupported for boot-from-image vm with local_lvm storage
+            LOG.tc_step("Collect live migrate KPI for vm booted from {}".format(boot_from))
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+            time.sleep(30)
+            duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
+            assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+            kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
+                                      kpi_val=duration, uptime=1, unit='Time(ms)')
+
+            vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
+            kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NOVA_NAME.format(boot_from),
+                                      kpi_val=vim_duration, uptime=1, unit='Time(s)')
+
+        def operation_cold(vm_id_):
+            code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
+            assert 0 == code, msg
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+
+        LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
         time.sleep(30)
-        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
-        assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
+        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_cold, vm_id)
+        assert duration > 0, "No ping loss detected during cold migration for {} vm".format(boot_from)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
                                   kpi_val=duration, uptime=1, unit='Time(ms)')
 
-    def operation_cold(vm_id_):
-        code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
-        assert 0 == code, msg
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+        vim_duration = vm_helper.get_cold_migrate_duration(vm_id=vm_id)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NOVA_NAME.format(boot_from),
+                                  kpi_val=vim_duration, uptime=1, unit='Time(s)')
 
-    LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
-    time.sleep(30)
-    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_cold, vm_id)
-    assert duration > 0, "No ping loss detected during cold migration for {} vm".format(boot_from)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
-                              kpi_val=duration, uptime=1, unit='Time(ms)')
+    # Rebuild KPI
+    if 'volume' != boot_from:
+        LOG.info("Run rebuild test for vm booted from image")
 
-    if 'volume' == boot_from:
-        LOG.info("Skip rebuild test for vm booted from cinder volume")
-        return
+        def operation_rebuild(vm_id_):
+            code, msg = vm_helper.rebuild_vm(vm_id=vm_id_)
+            assert 0 == code, msg
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    def operation_rebuild(vm_id_):
-        code, msg = vm_helper.rebuild_vm(vm_id=vm_id_)
-        assert 0 == code, msg
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
-
-    LOG.tc_step("Collect vm rebuild KPI for vm booted from {}".format(boot_from))
-    time.sleep(30)
-    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_rebuild, vm_id)
-    assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Rebuild.NAME.format(boot_from),
-                              kpi_val=duration, uptime=1, unit='Time(ms)')
+        LOG.tc_step("Collect vm rebuild KPI for vm booted from {}".format(boot_from))
+        time.sleep(30)
+        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_rebuild, vm_id)
+        assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Rebuild.NAME.format(boot_from),
+                                  kpi_val=duration, uptime=1, unit='Time(ms)')
 
 
 def check_for_qemu_process(host_ssh):
@@ -129,7 +148,7 @@ def get_initial_pool_space(host_ssh, excluded_vm):
     assert raw_thin_pool_output, "thin pool volume not found"
     raw_lvs_output = host_ssh.exec_sudo_cmd(
             "lvs --units g --noheadings -o lv_name,lv_size -S pool_lv=nova-local-pool | grep -v {}_disk".
-                format(excluded_vm))[1]
+            format(excluded_vm))[1]
 
     if raw_lvs_output:
         lvs_in_pool = raw_lvs_output.split('\n')

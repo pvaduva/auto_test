@@ -121,7 +121,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     vm_helper.suspend_vm(vm_id)
     vm_helper.resume_vm(vm_id)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])
 
@@ -129,14 +129,14 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     vm_helper.stop_vms(vm_id)
     vm_helper.start_vms(vm_id)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                                       prev_total_cpus=prev_cpus[vm_host])[1]
 
     LOG.tc_step("Live migrate vm and check vm topology stays the same")
     vm_helper.live_migrate_vm(vm_id=vm_id)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host = nova_helper.get_vm_host(vm_id)
     prev_siblings = prev_siblings if cpu_pol == 'dedicated' else None   # workaround for
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
@@ -145,7 +145,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     LOG.tc_step("Cold migrate vm and check vm topology stays the same")
     vm_helper.cold_migrate_vm(vm_id=vm_id)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     vm_host = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=flv_vcpus, cpu_pol=cpu_pol, vm_host=vm_host,
                                       prev_total_cpus=prev_cpus[vm_host])

@@ -164,7 +164,7 @@ def upgrade_setup(pre_check_upgrade):
         system_helper.import_load(upgrade_load_path,upgrade_ver=upgrade_version)
 
         # download and apply patches if patches are available in patch directory
-        if patch_dir and upgrade_version < "17.07":
+        if patch_dir and upgrade_version < "18.07":
             LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 
@@ -266,9 +266,10 @@ def check_system_health_query_upgrade():
     # Check system health for upgrade
     LOG.tc_func_start("UPGRADE_TEST")
     LOG.tc_step("Checking if system health is OK to start upgrade......")
-    rc, health = upgrade_helper.get_system_health_query_upgrade()
-    print("HEALTH: {}, {}".format(rc, health))
-    return rc, health
+    #rc, health = upgrade_helper.get_system_health_query_upgrade()
+    rc, health, actions = upgrade_helper.get_system_health_query_upgrade_2()
+    print("HEALTH: {}, {} Action: {}".format(rc, health, actions))
+    return rc, health, actions
 
 
 def get_system_active_controller():

@@ -82,8 +82,8 @@ def upload_objects(container, file_or_directory, segment_size=None, segment_cont
             raise exceptions.SWiftError(msg)
 
 
-def delete_objects(container=None, objects=None, delete_all=False, leave_segments=False, header=None, object_threads=None,
-                   container_threads=None, con_ssh=None, fail_ok=False):
+def delete_objects(container=None, objects=None, delete_all=False, leave_segments=False, header=None,
+                   object_threads=None, container_threads=None, con_ssh=None, fail_ok=False):
     """
     Deletes a container or objects within a container
     Args:

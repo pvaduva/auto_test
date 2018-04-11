@@ -258,13 +258,23 @@ class Labs:
 
     SM_5_6 = {
         'short_name': 'sm_5_6',
-        'name': 'yow-cgcs-supermicro-5-6',
+        'name': 'yow-cgcs-supermicro-5_6',
         'floating ip': '128.224.151.54',
         'controller-0 ip': '128.224.150.84',
         'controller-1 ip': '128.224.150.56',
         'controller_nodes': [23516, 23517],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+    }
+
+    SM_5_8 = {
+        'short_name': 'sm_5_8',
+        'name': 'yow-cgcs-supermicro-5_8',
+        'floating ip': '128.224.151.54',
+        'controller-0 ip': '128.224.150.84',
+        'controller-1 ip': '128.224.150.56',
+        'controller_nodes': [23516, 23517],
+        'compute_nodes': [38294],
     }
 
     WCP_3_6 = {
@@ -489,11 +499,13 @@ class Labs:
 
     WCP_113_121 = {
         'short_name': 'wcp_113_121',
-        'name': 'yow-cgcs-wildcat-113-121',
+        'name': 'yow-cgcs-wildcat-113_121',
         'floating ip': '128.224.150.45',
         'controller-0 ip': '128.224.150.191',
         'controller-1 ip': '128.224.150.57',
-
+        'controller_nodes': [31701, 19174],
+        'compute_nodes': [11182, 47720, 56027, 28212, 33598],
+        'storage_nodes': [11507, 47400],
     }
 
     WP_01_02 = {
@@ -515,27 +527,6 @@ class Labs:
         'controller-1 ip': '128.224.151.166',
         'controller_nodes': [98522, 81712],
         'compute_nodes': [94867, 18658, 40810],
-    }
-
-    WCP_113_121 = {
-        'short_name': 'wcp_113_121' ,
-        'name': 'yow-cgcs-wildcat-113_121',
-        'floating ip': '128.224.150.45',
-        'controller-0 ip': '128.224.64.12',
-        'controller-1 ip': '128.224.64.13',
-        'controller_nodes': [31701, 19174],
-        'compute_nodes': [11182, 47720, 56027, 28212, 33598],
-        'storage_nodes': [11507, 47400]
-    }
-
-    WP_3_7 = {
-        'short_name': 'wp_3_7',
-        'name': 'yow-cgcs-wolfpass-03_07',
-        'floating ip': '128.224.151.165',
-        'controller-0 ip': '128.224.151.163',
-        'controller-1 ip': '128.224.64.249',
-        'controller_nodes': [98522, 81712],
-        'compute_nodes': [94867, 18658, 40810]
     }
 
     VBOX = {
@@ -604,6 +595,7 @@ class Labs:
     }
 
     NO_LAB = None
+
 
 def edit_lab_entry():
     # TODO

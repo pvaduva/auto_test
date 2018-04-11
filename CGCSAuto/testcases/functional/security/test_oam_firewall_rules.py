@@ -222,7 +222,7 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)
-    end_time = time.time() + 30
+    end_time = time.time() + 90
     while time.time() < end_time:
         output = con_ssh.exec_sudo_cmd(cmd, get_exit_code=False)[1]
         if (port_expected_open and output) or (not port_expected_open and not output):

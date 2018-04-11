@@ -397,7 +397,7 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, no_simplex):
     assert prev_vm_host != vm_host, "vm host did not change after {} migration".format(mig_type)
 
     LOG.tc_step("Ping vm from NatBox after {} migration".format(mig_type))
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.p2
@@ -456,7 +456,7 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
     vm_helper.live_migrate_vm(vm_id)
 
     LOG.tc_step("Ping vm from NatBox after live migration")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     vm_host_live_mig = nova_helper.get_vm_host(vm_id)
     # vm topology from inside vm will not change after live-migrate between HT and non-HT vm
@@ -470,11 +470,18 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
     vm_helper.cold_migrate_vm(vm_id)
 
     LOG.tc_step("Ping vm from NatBox after cold migration")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     vm_host_cold_mig = nova_helper.get_vm_host(vm_id)
     check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_cold_mig],
                                       vm_host=vm_host_cold_mig, cpu_pol=cpu_pol, guest=guest_os)
+
+
+@fixture(scope='module')
+def check_system():
+    up_hypervisors = host_helper.get_up_hypervisors()
+    if len(up_hypervisors) < 2:
+        skip("Less than two up hypervisors")
 
 
 @mark.kpi
@@ -483,7 +490,7 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
     'avp',
     'dpdk',
 ])
-def test_kpi_live_migrate(vm_type, collect_kpi):
+def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
     """
     Collect live migration ping loss duration KPI
     Args:

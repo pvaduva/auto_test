@@ -23,6 +23,8 @@ class ProjVar:
                   'COLLECT_TELNET': False,
                   'TELNET_THREADS': None,
                   'SYS_TYPE': None,
+                  'COLLECT_SYS_NET_INFO': False,
+                  'IS_VBOX': False
                   }
 
     @classmethod
@@ -50,7 +52,7 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'KPI_PATH': logdir + '/kpi.ini'
+            'KPI_PATH': logdir + '/kpi.ini',
         })
 
     @classmethod
@@ -246,9 +248,10 @@ class UpgradeVars:
 class PatchingVars:
     __var_dict = {
         'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
+        #'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
+        'DEF_PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_6.0_Test_Patch_Build',
+        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/',
         'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
-        'DEF_PATCH_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
         'PATCH_DIR': None,
         'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
@@ -261,8 +264,11 @@ class PatchingVars:
         var_name = var_name.upper()
 
         if var_name not in cls.__var_dict:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
-
+            def_var_name = 'DEF_{}'.format(var_name)
+            if def_var_name not in cls.__var_dict:
+                raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+            else:
+                var_name = def_var_name
         return cls.__var_dict[var_name]
 
     @classmethod

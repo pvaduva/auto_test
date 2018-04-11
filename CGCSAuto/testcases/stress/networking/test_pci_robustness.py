@@ -386,12 +386,12 @@ class TestPcipt:
                 code, output = vm_helper.evacuate_vms(pre_evac_host, vm, fail_ok=True, wait_for_host_up=True)
 
                 if len(pci_hosts) < 3 and i == 0:
-                    assert 2 == code, "Expect vm stay on same host due to migration fail. Actual:{}".format(output)
+                    assert 1 == code, "Expect vm stay on same host due to migration fail. Actual:{}".format(output)
+                    vm_helper.wait_for_vm_status(vm_id=vm)
                 else:
                     assert 0 == code, "Expect vm evacuated to other host. Actual: {}".format(output)
-
-                post_evac_host = nova_helper.get_vm_host(vm)
-                assert post_evac_host in pci_hosts, "VM is not on pci host after evacuation"
+                    post_evac_host = nova_helper.get_vm_host(vm)
+                    assert post_evac_host in pci_hosts, "VM is not on pci host after evacuation"
 
                 check_vm_pci_interface(vms, net_type=net_type)
 
