@@ -408,7 +408,7 @@ class SSHClient:
             reconnect:
             reconnect_timeout:
             err_only: if true, stdout will not be included in output
-            rm_date (bool): whether to remove date output from cmd output before returning
+            rm_date (bool): weather to remove date output from cmd output before returning
             fail_ok (bool): whether to raise exception when non-zero exit-code is returned
             get_exit_code
             blob

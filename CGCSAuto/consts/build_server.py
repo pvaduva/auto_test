@@ -8,24 +8,9 @@ YOW_CGTS3_LX = {
     'ip': '128.224.145.134',
 }
 
-YOW_TUXLAB2 = {
-    'name': 'yow-tuxlab2',
-    'ip': '128.224.151.254'
-}
-
-YOW_CGCS_TUXLAB = {
-    'name': 'yow-cgcs-tuxlab',
-    'ip': '128.224.150.110'
-}
-
-
 DEFAULT_BUILD_SERVER = YOW_CGTS4_LX
 
 BUILD_SERVERS = [YOW_CGTS3_LX, YOW_CGTS4_LX]
-
-DEFAULT_TUXLAB_SERVER = YOW_TUXLAB2
-
-TUXLAB_SERVERS = [YOW_TUXLAB2, YOW_CGCS_TUXLAB]
 
 
 def get_build_server_info(hostname):
@@ -35,12 +20,6 @@ def get_build_server_info(hostname):
                 return bs
     return None
 
-def get_tuxlab_server_info(hostname):
-    if hostname:
-        for ts in TUXLAB_SERVERS:
-            if ts['name'] == hostname:
-                return ts
-    return None
 
 class Server(object):
     """Server representation.

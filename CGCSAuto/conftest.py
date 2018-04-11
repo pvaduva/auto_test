@@ -393,7 +393,6 @@ def pytest_addoption(parser):
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
-    wipedisk_help = 'wipe the disk(s) on the hosts'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -441,8 +440,6 @@ def pytest_addoption(parser):
                      help=resumeinstall_help)
     parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
                      help=skiplabsetup_help)
-    parser.addoption('--wipedisk', '--wipedisk', dest='wipedisk', action='store_true',
-                     help=wipedisk_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
     # Ceph Post Install
