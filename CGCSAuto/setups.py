@@ -19,11 +19,7 @@ from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
 
-<<<<<<< HEAD
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, install_helper
-=======
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper
->>>>>>> develop
 from keywords.common import scp_to_local
 from keywords.install_helper import ssh_to_build_server, get_git_name
 
@@ -773,7 +769,7 @@ def set_sys_type(con_ssh):
     sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
     ProjVar.set_var(SYS_TYPE=sys_type)
 
-<<<<<<< HEAD
+
 # TODO: currently no support for installing lab as a single controller node
 # Fix: overwrite the controller nodes in the lab with supplied ones
 # Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
@@ -920,7 +916,6 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
             lab_info_dict["name"] = lab_name[:last_num+1]
 
         return lab_info_dict
-=======
 
 def collect_sys_net_info(lab):
     LOG.warning("Collecting system network info upon session setup failure")
@@ -1005,4 +1000,3 @@ def collect_sys_net_info(lab):
 
         source_ssh.close()
         LOG.info("Lab networking info collected: {}".format(res_))
->>>>>>> develop
