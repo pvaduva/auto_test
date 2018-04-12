@@ -278,7 +278,9 @@ def test_install_nodes(cont0_stream, socks, streams, labname, host_list=None):
 
     for host in new_thread:
         host.start()
-        time.sleep(2)
+        ## WZWZ double check this
+        #time.sleep(2)
+        time.sleep(10)
         threads.append(host)
     
     for items in threads:
@@ -415,7 +417,7 @@ def create_lab(vboxoptions):
 
     # Delete VMs if the user requests it
     if vboxoptions.deletelab == True:
-        delete_lab()
+        delete_lab(vboxoptions.labname)
 
     # Pull in node configuration
     node_config = [getattr(Nodes, attr) for attr in dir(Nodes) if not attr.startswith('__')]
@@ -502,7 +504,7 @@ def create_lab(vboxoptions):
 
     ## WZWZ to debug
     if vboxoptions.debug_rest:
-        return
+        return controller_type
 
     # Determine ISO to use
     if vboxoptions.useexistingiso is False and vboxoptions.iso_location is None:
@@ -671,9 +673,10 @@ if __name__ == "__main__":
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
                 setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip, password=vboxoptions.password)
 
+            ## WZWZ DEBUG
             ## Take snapshot
-            if vboxoptions.snapshot:
-                take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
+            #if vboxoptions.snapshot:
+            #    take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
 
         buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
         for item in buildservers:
@@ -732,8 +735,9 @@ if __name__ == "__main__":
                 LOG.info("Pausing to allow for manual configuration. Press enter to continue.")
                 input()
 
-            if vboxoptions.snapshot:
-                take_snapshot(vboxoptions.labname, "snapshot-AFTER-config-controller")
+            ## WZWZ DEBUG
+            #if vboxoptions.snapshot:
+            #    take_snapshot(vboxoptions.labname, "snapshot-AFTER-config-controller")
 
             if vboxoptions.release == 'R5':
                 # TODO (WEI): Remove it. cinder-volumes partition is created by lab_setup.sh

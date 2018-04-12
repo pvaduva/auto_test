@@ -3,7 +3,7 @@ class Nodes:
         'node_type': 'controller_ceph',
         'memory': 8192,
         'cpus': 2,
-        'disks': [80000],
+        'disks': [120000],
     }
 
     CONTROLLER_LVM = {
