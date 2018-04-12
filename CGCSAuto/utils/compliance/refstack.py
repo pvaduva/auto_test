@@ -23,7 +23,7 @@ TEST_SERVER_PROMPT = '$'
 TEST_LOG_DIR = "/home/opnfv/refstack/refstack-client/.tempest/.testrepository/"
 TEST_LOCAL_DIR = "/home/opnfv/refstack/refstack-client"
 TEST_LIST_file = "/home/opnfv/refstack/test-list.txt"
-TEST_MAX_TIMEOUT = 10000
+TEST_MAX_TIMEOUT = 20000
 
 
 def connect_test(test_host, username, password):
@@ -38,6 +38,27 @@ def connect_test(test_host, username, password):
     except Exception as e:
         print(str(e))
         print("ERROR in Test: SSH is not connected")
+
+def set_test_list_file(hostname, username, password, refstack_test_list):
+    to_host = hostname + ':'
+    to_user = username + '@'
+    # copy test-list file to test server
+    source = refstack_test_list
+    destination = to_user + to_host + TEST_LIST_file
+    scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
+                        destination]).strip()
+    try:
+        var_child = pexpect.spawn(scp_cmd)
+        i = var_child.expect(["password:", pexpect.EOF])
+        if i == 0:
+            var_child.sendline(password)
+            var_child.expect(pexpect.EOF)
+        elif i == 1:
+            print
+            "Scp test-list file to test server timeout"
+            pass
+    except Exception as e:
+        print(e)
 
 
 def run_test():
@@ -176,27 +197,31 @@ if __name__ == "__main__":
         parser.add_argument("test_host")
         parser.add_argument("username")
         parser.add_argument("password")
+        parser.add_argument("refstack_test_list")
         parser.add_argument("--local_log_directory", type=str, default='/sandbox/AUTOMATION_LOGS/')
         #parser.add_argument("--local_log_directory", type=str, default='/tmp/AUTOMATION_LOGS/')
         args = parser.parse_args()
 
         test_host, username, password = args.test_host, args.username, args.password
+        refstack_test_list = args.refstack_test_list
         local_log_directory = args.local_log_directory
 
         local_dir = create_refstack_log_dir(local_log_directory)
 
         # connect to test Server 
         connect_test(test_host, username, password)
-        print ("connect to test vm.")
+        print ("connect to test server 128.224.187.110 successfully.")
         delete_previous_test_logs()
-        print ("Previous logs were deleted.")
+        print ("All previous logs were cleaned from /home/opnfv/refstack/refstack-client/.tempest/.testrepository/")
+        set_test_list_file(test_host, username, password, refstack_test_list)
+        print ("Refstack_test_list file is set on test server")
         run_test()
-        print ("run refstack is done!")
+        print ("Refstack testing run is done!")
         get_test_logs(test_host, username, password, local_dir)
-        print ("log files colelcted.")
+        print ("Log files are collected @yow-cgcs-test.wrs.com:/sandbox/AUTOMATION_LOGS/refstack/.")
         close_test()
-        print ("Test is Completed.")
+        print ("Refstack Test is Completed.")
 
     except Exception as e:
         print(str(e))
-        print("ERROR in Test: TESTCASE FAILED !")
+        print("ERROR in Test: Refstack TEST FAILED !")
