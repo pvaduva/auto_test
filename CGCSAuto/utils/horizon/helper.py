@@ -9,16 +9,14 @@ import os
 import time
 from utils.tis_log import LOG
 
-display = Display(visible=False, size=(1920, 1080))
-display.start()
-driver0 = webdriver.Firefox()
-driver0.maximize_window()
-
 
 class Browser:
     @fixture(scope="session")
     def driver(self, request):
-        driver = driver0
+        display = Display(visible=True, size=(1920, 1080))
+        display.start()
+        driver = webdriver.Firefox()
+        driver.maximize_window()
 
         def teardown():
             driver.quit()
