@@ -157,6 +157,7 @@ def __table_columns(first_table_row):
         start = end + 1
     return positions
 
+
 ###################################################################
 #  Above are contents from tempest_lib. Below are extended by us. #
 ###################################################################
@@ -775,6 +776,7 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None, low
         unique_key (bool): if key_header is unique for each row, such as UUID, then value for each key will be dict
             instead of list of dict
         eliminate_keys (None|str|list): columns to eliminate
+        lower_case (bool): Return the dictionary in lowercase
 
     Returns (dict): dictionary with value of the key_header as key, and the complete row as the value.
         The value itself is a list, number of items in the list depends on how many rows has the same value for

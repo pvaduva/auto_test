@@ -10,7 +10,7 @@ import setup_consts
 import setups
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
-#from consts.build_server import Server, get_build_server_info
+# from consts.build_server import Server, get_build_server_info
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
@@ -574,7 +574,7 @@ def pytest_addoption(parser):
                                           "setup feed from scratch")
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
-                                                "This will be helpful if the lab was/will be in customized way.")
+                                               "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
                      action='store_true', help="Restore a low-latency lab")
 
