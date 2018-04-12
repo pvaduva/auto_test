@@ -166,11 +166,7 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
     result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 
-<<<<<<< HEAD
-def vboxmanage_storagectl(hostname=None, storectl="sata"):
-=======
 def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="off"):
->>>>>>> develop
     """
     This creates a storage controller on the host.
     """
@@ -182,11 +178,7 @@ def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="off"):
                                      stderr=subprocess.STDOUT)
 
 
-<<<<<<< HEAD
-def vboxmanage_storageattach(hostname="controller-0", storectl="sata", storetype="hdd", disk=None, port_num="0",
-=======
 def vboxmanage_storageattach(hostname=None, storectl="sata", storetype="hdd", disk=None, port_num="0",
->>>>>>> develop
                              device_num="0"):
     """
     This attaches a disk to a controller.
@@ -211,9 +203,6 @@ def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'
     assert hostname, "Hostname is required"
     assert disk_list, "A list of disk sizes is required"
 
-    ## TODO (WEI): fix it
-    disk_dir = "/folk/cgts/users/"
-
     username = getpass.getuser()
     device_num = 0
     port_num = 0
@@ -223,12 +212,7 @@ def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'
             ## TODO (WEI) fix it
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
-<<<<<<< HEAD
-#            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
-            file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
-=======
             file_name = vbox_home_dir + '/' + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
->>>>>>> develop
         LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
 
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',
