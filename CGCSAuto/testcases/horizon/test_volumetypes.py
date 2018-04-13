@@ -3,18 +3,19 @@ from utils.horizon.pages.admin.volume import volumetypespage
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import admin_home_pg, driver
 
 
-class TestVolumeTypes(helper.AdminTestCase):
+class TestVolumeTypes:
     VOLUME_TYPE_NAME = None
     QOS_SPEC_NAME = None
 
     @fixture(scope='function')
-    def volume_types_pg(self, home_pg, request):
+    def volume_types_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Admin > Volume > Volume Types page')
         self.VOLUME_TYPE_NAME = helper.gen_resource_name('volume_type')
         self.QOS_SPEC_NAME = helper.gen_resource_name('qos_spec')
-        volume_types_pg = volumetypespage.VolumetypesPage(home_pg.driver)
+        volume_types_pg = volumetypespage.VolumetypesPage(admin_home_pg.driver)
         volume_types_pg.go_to_target_page()
 
         def teardown():

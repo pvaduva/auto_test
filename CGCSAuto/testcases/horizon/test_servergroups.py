@@ -3,17 +3,18 @@ from utils.horizon.pages.project.compute import servergroupspage
 from pytest import fixture, mark
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import tenant_home_pg, driver
 
 
-class TestServerGroup(helper.TenantTestCase):
+class TestServerGroup:
 
     GROUP_NAME = None
 
     @fixture(scope='function')
-    def server_groups_pg(self, home_pg, request):
+    def server_groups_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Server Groups')
         self.GROUP_NAME = helper.gen_resource_name('groups')
-        groups_pg = servergroupspage.ServerGroupsPage(home_pg.driver)
+        groups_pg = servergroupspage.ServerGroupsPage(tenant_home_pg.driver)
         groups_pg.go_to_target_page()
 
         def teardown():

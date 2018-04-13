@@ -3,16 +3,17 @@ from utils.horizon.pages.admin.compute import hostaggregatespage
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import admin_home_pg, driver
 
 
-class TestHostAggregates(helper.AdminTestCase):
+class TestHostAggregates:
+
     HOST_AGGREGATE_NAME = helper.gen_resource_name('aggregate')
-    HOST_AGGREGATE_AVAILABILITY_ZONE = "nova"
 
     @fixture(scope='function')
-    def hostaggregates_pg(self, home_pg, request):
+    def host_aggregates_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Admin > Compute > Host Aggregates')
-        hostaggregates_pg = hostaggregatespage.HostaggregatesPage(home_pg.driver)
+        hostaggregates_pg = hostaggregatespage.HostaggregatesPage(admin_home_pg.driver)
         hostaggregates_pg.go_to_target_page()
 
         def teardown():
@@ -22,7 +23,7 @@ class TestHostAggregates(helper.AdminTestCase):
         request.addfinalizer(teardown)
         return hostaggregates_pg
 
-    def test_host_aggregate_create(self, hostaggregates_pg):
+    def test_host_aggregate_create(self, host_aggregates_pg):
         """
         Test the host aggregate creation and deletion functionality:
 
@@ -42,19 +43,17 @@ class TestHostAggregates(helper.AdminTestCase):
         """
 
         LOG.tc_step('Create a new host aggregate {}.'.format(self.HOST_AGGREGATE_NAME))
-        hostaggregates_pg.create_host_aggregate(
-            name=self.HOST_AGGREGATE_NAME,
-            availability_zone=self.HOST_AGGREGATE_AVAILABILITY_ZONE)
-        assert hostaggregates_pg.find_message_and_dismiss(messages.SUCCESS)
-        assert not hostaggregates_pg.find_message_and_dismiss(
+        host_aggregates_pg.create_host_aggregate(self.HOST_AGGREGATE_NAME)
+        assert host_aggregates_pg.find_message_and_dismiss(messages.SUCCESS)
+        assert not host_aggregates_pg.find_message_and_dismiss(
             messages.ERROR)
         LOG.tc_step('Verify the host aggregate appears in the host aggregates table')
-        assert hostaggregates_pg.is_host_aggregate_present(self.HOST_AGGREGATE_NAME)
+        assert host_aggregates_pg.is_host_aggregate_present(self.HOST_AGGREGATE_NAME)
 
         LOG.tc_step('Delete host aggregate {}.'.format(self.HOST_AGGREGATE_NAME))
-        hostaggregates_pg.delete_host_aggregate(self.HOST_AGGREGATE_NAME)
-        assert hostaggregates_pg.find_message_and_dismiss(messages.SUCCESS)
-        assert not hostaggregates_pg.find_message_and_dismiss(messages.ERROR)
+        host_aggregates_pg.delete_host_aggregate(self.HOST_AGGREGATE_NAME)
+        assert host_aggregates_pg.find_message_and_dismiss(messages.SUCCESS)
+        assert not host_aggregates_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Verify the host aggregate does not appear in the table after deletion')
-        assert not hostaggregates_pg.is_host_aggregate_present(self.HOST_AGGREGATE_NAME)
+        assert not host_aggregates_pg.is_host_aggregate_present(self.HOST_AGGREGATE_NAME)

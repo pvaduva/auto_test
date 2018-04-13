@@ -3,18 +3,19 @@ from utils.horizon.regions import messages
 from utils.horizon.pages.admin.compute import flavorspage
 from pytest import fixture
 from utils.horizon import helper
+from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
 
 
-class TestFlavors(helper.AdminTestCase):
-    
+class TestFlavors:
+
     FLAVOR_NAME = None
 
     @fixture(scope='function')
-    def flavors_pg(self, home_pg, request):
+    def flavors_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Admin > Compute > Flavors')
         self.FLAVOR_NAME = helper.gen_resource_name('flavors')
-        flavors_pg = flavorspage.FlavorsPage(home_pg.driver)
+        flavors_pg = flavorspage.FlavorsPage(admin_home_pg.driver)
         flavors_pg.go_to_target_page()
 
         def teardown():
@@ -27,34 +28,14 @@ class TestFlavors(helper.AdminTestCase):
     @fixture(scope='function')
     def flavors_pg_action(self, flavors_pg, request):
         LOG.fixture_step('Create new flavor {}'.format(self.FLAVOR_NAME))
-        self._create_flavor(flavors_pg, self.FLAVOR_NAME)
+        flavors_pg.create_flavor(self.FLAVOR_NAME)
 
         def teardown():
             LOG.fixture_step('Delete flavor {}'.format(self.FLAVOR_NAME))
-            self._delete_flavor(flavors_pg, self.FLAVOR_NAME)
+            flavors_pg.delete_flavor(self.FLAVOR_NAME)
 
         request.addfinalizer(teardown)
         return flavors_pg
-
-    def _create_flavor(self, flavorspage, flavor_name):
-        flavorspage.create_flavor(
-            name=flavor_name,
-            vcpus=1,
-            ram=1024,
-            root_disk=20,
-            ephemeral_disk=0,
-            swap_disk=0,
-            rxtx_factor=1
-        )
-        assert flavorspage.find_message_and_dismiss(messages.SUCCESS)
-        assert not flavorspage.find_message_and_dismiss(messages.ERROR)
-        assert flavorspage.is_flavor_present(self.FLAVOR_NAME)
-
-    def _delete_flavor(self, flavorspage, flavor_name):
-        flavorspage.delete_flavor_by_row(flavor_name)
-        assert flavorspage.find_message_and_dismiss(messages.SUCCESS)
-        assert not flavorspage.find_message_and_dismiss(messages.ERROR)
-        assert not flavorspage.is_flavor_present(self.FLAVOR_NAME)
 
     def test_flavor_create(self, flavors_pg):
         """
@@ -75,9 +56,16 @@ class TestFlavors(helper.AdminTestCase):
             - Verifies the flavor does not appear in the table after deletion
         """
         LOG.tc_step('Creates flavor {} and verifies it appears in flavors table'.format(self.FLAVOR_NAME))
-        self._create_flavor(flavors_pg, self.FLAVOR_NAME)
+        flavors_pg.create_flavor(self.FLAVOR_NAME)
+        assert flavors_pg.find_message_and_dismiss(messages.SUCCESS)
+        assert not flavors_pg.find_message_and_dismiss(messages.ERROR)
+        assert flavors_pg.is_flavor_present(self.FLAVOR_NAME)
+
         LOG.tc_step('Deletes flavor {} and verifies it does not appear in flavors table'.format(self.FLAVOR_NAME))
-        self._delete_flavor(flavors_pg, self.FLAVOR_NAME)
+        flavors_pg.delete_flavor_by_row(self.FLAVOR_NAME)
+        assert flavors_pg.find_message_and_dismiss(messages.SUCCESS)
+        assert not flavors_pg.find_message_and_dismiss(messages.ERROR)
+        assert not flavors_pg.is_flavor_present(self.FLAVOR_NAME)
 
     def test_flavor_update_info(self, flavors_pg_action):
         """
@@ -159,15 +147,7 @@ class TestFlavors(helper.AdminTestCase):
                - Try to create a new flavor with 129 vCPUs
                - Check that the flavor cannot be created
             """
-        flavors_pg.create_flavor(
-            name=self.FLAVOR_NAME,
-            vcpus=129,
-            ram=1024,
-            root_disk=20,
-            ephemeral_disk=0,
-            swap_disk=0,
-            rxtx_factor=1
-        )
+        flavors_pg.create_flavor(self.FLAVOR_NAME, vcpus=129)
         assert not flavors_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not flavors_pg.is_flavor_present(self.FLAVOR_NAME)
 

@@ -4,19 +4,20 @@ from time import sleep
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import tenant_home_pg, driver
 
 
-class TestVolumeSnapshots(helper.TenantTestCase):
+class TestVolumeSnapshots:
 
     VOLUME_NAME = None
     VOLUME_SNAPSHOT_NAME = None
 
     @fixture(scope='function')
-    def volumes_pg(self, home_pg, request):
+    def volumes_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Volumes page')
         self.VOLUME_NAME = helper.gen_resource_name('volume')
         self.VOLUME_SNAPSHOT_NAME = helper.gen_resource_name('snapshot')
-        volumes_pg = volumespage.VolumesPage(home_pg.driver)
+        volumes_pg = volumespage.VolumesPage(tenant_home_pg.driver)
         volumes_pg.go_to_target_page()
         LOG.fixture_step('Create new volume {}'.format(self.VOLUME_NAME))
         self._create_volume(volumes_pg)

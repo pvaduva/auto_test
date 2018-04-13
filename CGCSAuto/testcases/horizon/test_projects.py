@@ -3,17 +3,18 @@ from utils.horizon.pages.identity import projectspage
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import admin_home_pg, driver
 
 
-class TestProjects(helper.AdminTestCase):
+class TestProjects:
 
     PROJECT_NAME = None
 
     @fixture(scope='function')
-    def projects_pg(self, home_pg, request):
+    def projects_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Identity > Projects')
         self.PROJECT_NAME = helper.gen_resource_name('projects')
-        projects_pg = projectspage.ProjectsPage(home_pg.driver)
+        projects_pg = projectspage.ProjectsPage(admin_home_pg.driver)
         projects_pg.go_to_target_page()
 
         def teardown():
@@ -25,10 +26,10 @@ class TestProjects(helper.AdminTestCase):
         return projects_pg
 
     @fixture(scope='function')
-    def projects_pg_action(self, home_pg, request):
+    def projects_pg_action(self, admin_home_pg, request):
         LOG.fixture_step('Go to Identity > Projects')
         self.PROJECT_NAME = helper.gen_resource_name('projects')
-        projects_pg = projectspage.ProjectsPage(home_pg.driver)
+        projects_pg = projectspage.ProjectsPage(admin_home_pg.driver)
         projects_pg.go_to_target_page()
         LOG.fixture_step('Create new project {}'.format(self.PROJECT_NAME))
         projects_pg.create_project(self.PROJECT_NAME)

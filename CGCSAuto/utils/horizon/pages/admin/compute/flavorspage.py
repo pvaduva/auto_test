@@ -74,8 +74,8 @@ class FlavorsPage(basepage.BasePage):
     def _get_row_by_flavor_name(self, name):
         return self.flavors_table.get_row(self.FLAVORS_TABLE_NAME_COLUMN, name)
 
-    def create_flavor(self, name, flavor_id=None, vcpus=None, ram=None,
-                      root_disk=None, ephemeral_disk=None,
+    def create_flavor(self, name, flavor_id=None, vcpus=1, ram=1024,
+                      root_disk=20, ephemeral_disk=None,
                       swap_disk=None, rxtx_factor=None,
                       allocate_projects=None):
         create_flavor_form = self.flavors_table.create_flavor()

@@ -3,17 +3,18 @@ from utils.horizon.pages.identity import rolespage
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import admin_home_pg, driver
 
 
-class TestRole(helper.AdminTestCase):
+class TestRole:
 
     ROLE_NAME = None
 
     @fixture(scope='function')
-    def roles_pg(self, home_pg, request):
+    def roles_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Identity > Roles')
         self.ROLE_NAME = helper.gen_resource_name('roles')
-        roles_pg = rolespage.RolesPage(home_pg.driver)
+        roles_pg = rolespage.RolesPage(admin_home_pg.driver)
         roles_pg.go_to_target_page()
 
         def teardown():

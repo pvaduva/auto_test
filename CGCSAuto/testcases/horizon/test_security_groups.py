@@ -4,52 +4,40 @@ from utils.horizon.pages.project.network import securitygroupspage
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import tenant_home_pg, driver
 
 
-class TestSecuritygroup(helper.TenantTestCase):
+class TestSecurityGroup:
     SEC_GROUP_NAME = None
     RULE_PORT = str(random.randint(9000, 9999))
 
     @fixture(scope='function')
-    def securitygroups_pg(self, home_pg, request):
+    def security_groups_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Network > Security Groups')
         self.SEC_GROUP_NAME = helper.gen_resource_name('sec_group')
-        securitygroups_pg = securitygroupspage.SecuritygroupsPage(home_pg.driver)
-        securitygroups_pg.go_to_target_page()
+        security_groups_pg = securitygroupspage.SecuritygroupsPage(tenant_home_pg.driver)
+        security_groups_pg.go_to_target_page()
 
         def teardown():
             LOG.fixture_step('Back to Security Groups page')
-            securitygroups_pg.go_to_target_page()
+            security_groups_pg.go_to_target_page()
 
         request.addfinalizer(teardown)
-        return securitygroups_pg
+        return security_groups_pg
 
     @fixture(scope='function')
-    def securitygroups_pg_action(self, securitygroups_pg, request):
+    def security_groups_pg_action(self, security_groups_pg, request):
         LOG.fixture_step('Create new security group {}'.format(self.SEC_GROUP_NAME))
-        self._create_securitygroup(securitygroups_pg)
+        security_groups_pg.create_securitygroup(self.SEC_GROUP_NAME)
 
         def teardown():
             LOG.fixture_step('Delete security group {}'.format(self.SEC_GROUP_NAME))
-            self._delete_securitygroup(securitygroups_pg)
+            security_groups_pg.delete_securitygroup(self.SEC_GROUP_NAME)
 
         request.addfinalizer(teardown)
-        return securitygroups_pg
+        return security_groups_pg
 
-
-    def _create_securitygroup(self, securitygroupspage):
-        securitygroupspage.create_securitygroup(self.SEC_GROUP_NAME)
-        assert securitygroupspage.find_message_and_dismiss(messages.SUCCESS)
-        assert not securitygroupspage.find_message_and_dismiss(messages.ERROR)
-        assert securitygroupspage.is_securitygroup_present(self.SEC_GROUP_NAME)
-
-    def _delete_securitygroup(self, securitygroupspage):
-        securitygroupspage.delete_securitygroup(self.SEC_GROUP_NAME)
-        assert securitygroupspage.find_message_and_dismiss(messages.SUCCESS)
-        assert not securitygroupspage.find_message_and_dismiss(messages.ERROR)
-        assert not securitygroupspage.is_securitygroup_present(self.SEC_GROUP_NAME)
-
-    def test_securitygroup_create_delete(self, securitygroups_pg):
+    def test_securitygroup_create_delete(self, security_groups_pg):
         """
         Test the security group creation and deletion functionality:
 
@@ -70,13 +58,19 @@ class TestSecuritygroup(helper.TenantTestCase):
 
         LOG.tc_step('Create new security group {} and Verify it appears in the security groups table'
                     .format(self.SEC_GROUP_NAME))
-        self._create_securitygroup(securitygroups_pg)
+        security_groups_pg.create_securitygroup(self.SEC_GROUP_NAME)
+        assert security_groups_pg.find_message_and_dismiss(messages.SUCCESS)
+        assert not security_groups_pg.find_message_and_dismiss(messages.ERROR)
+        assert security_groups_pg.is_securitygroup_present(self.SEC_GROUP_NAME)
 
         LOG.tc_step('Delete security group {} and Verify it does not appear in the table'
                     .format(self.SEC_GROUP_NAME))
-        self._delete_securitygroup(securitygroups_pg)
+        security_groups_pg.delete_securitygroup(self.SEC_GROUP_NAME)
+        assert security_groups_pg.find_message_and_dismiss(messages.SUCCESS)
+        assert not security_groups_pg.find_message_and_dismiss(messages.ERROR)
+        assert not security_groups_pg.is_securitygroup_present(self.SEC_GROUP_NAME)
 
-    def test_managerules_create_delete(self, securitygroups_pg_action):
+    def test_managerules_create_delete(self, security_groups_pg_action):
         """
         Test the manage rules creation and deletion functionality:
 
@@ -96,7 +90,7 @@ class TestSecuritygroup(helper.TenantTestCase):
             - Verify the rule does not appear in the table after deletion
         """
         LOG.tc_step('Create new rule {}'.format(self.RULE_PORT))
-        managerulespage = securitygroups_pg_action.go_to_manage_rules(self.SEC_GROUP_NAME)
+        managerulespage = security_groups_pg_action.go_to_manage_rules(self.SEC_GROUP_NAME)
         managerulespage.create_rule(self.RULE_PORT)
         assert managerulespage.find_message_and_dismiss(messages.SUCCESS)
 
@@ -111,9 +105,9 @@ class TestSecuritygroup(helper.TenantTestCase):
         LOG.tc_step('Verify the rule does not appear in the table after deletion')
         assert not managerulespage.is_rule_present(self.RULE_PORT)
 
-        securitygroups_pg_action.go_to_target_page()
+        security_groups_pg_action.go_to_target_page()
 
-    def test_managerules_create_delete_by_table(self, securitygroups_pg_action):
+    def test_managerules_create_delete_by_table(self, security_groups_pg_action):
         """
         Test the manage rules creation and deletion functionality:
 
@@ -134,7 +128,7 @@ class TestSecuritygroup(helper.TenantTestCase):
         """
 
         LOG.tc_step('Create new rule {}'.format(self.RULE_PORT))
-        managerulespage = securitygroups_pg_action.go_to_manage_rules(self.SEC_GROUP_NAME)
+        managerulespage = security_groups_pg_action.go_to_manage_rules(self.SEC_GROUP_NAME)
         managerulespage.create_rule(self.RULE_PORT)
         assert managerulespage.find_message_and_dismiss(messages.SUCCESS)
 
@@ -149,4 +143,4 @@ class TestSecuritygroup(helper.TenantTestCase):
         LOG.tc_step('Verify the rule does not appear in the table after deletion')
         assert not managerulespage.is_rule_present(self.RULE_PORT)
 
-        securitygroups_pg_action.go_to_target_page()
+        security_groups_pg_action.go_to_target_page()

@@ -70,9 +70,9 @@ class RoutersPage(basepage.BasePage):
                       external_network=None, router_type=None):
         create_router_form = self.routers_table.create_router()
         create_router_form.name.text = name
-        if admin_state_up:
+        if admin_state_up is True:
             create_router_form.admin_state_up.mark()
-        if not admin_state_up:
+        if admin_state_up is False:
             create_router_form.admin_state_up.unmark()
         if external_network is not None:
             create_router_form.external_network.text = external_network
@@ -86,9 +86,9 @@ class RoutersPage(basepage.BasePage):
         edit_rouer_form = self.routers_table.edit_router(row)
         if new_name is not None:
             edit_rouer_form.name.text = new_name
-        if enable_admin_state:
+        if enable_admin_state is True:
             edit_rouer_form.admin_state.mark()
-        if not enable_admin_state:
+        if enable_admin_state is False:
             edit_rouer_form.admin_state.unmark()
         if router_type is not None:
             edit_rouer_form.mode.text = router_type

@@ -7,17 +7,18 @@ from time import sleep
 from utils.horizon.pages.project.compute import instancespage
 from utils.tis_log import LOG
 from pytest import mark, raises
+from testfixtures.horizon import tenant_home_pg, driver
 
 
-class TestVolumesBasic(helper.TenantTestCase):
+class TestVolumesBasic:
 
     VOLUME_NAME = None
 
     @fixture(scope='function')
-    def volumes_pg(self, home_pg, request):
+    def volumes_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Volumes page')
         self.VOLUME_NAME = helper.gen_resource_name('volume')
-        volumes_pg = volumespage.VolumesPage(home_pg.driver)
+        volumes_pg = volumespage.VolumesPage(tenant_home_pg.driver)
         volumes_pg.go_to_target_page()
 
         def teardown():
@@ -28,10 +29,10 @@ class TestVolumesBasic(helper.TenantTestCase):
         return volumes_pg
 
     @fixture(scope='function')
-    def instances_pg(self, home_pg, request):
+    def instances_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Instances')
         self.VOLUME_NAME = helper.gen_resource_name('volume')
-        instances_pg = instancespage.InstancesPage(home_pg.driver)
+        instances_pg = instancespage.InstancesPage(tenant_home_pg.driver)
         instances_pg.go_to_target_page()
 
         def teardown():
@@ -159,9 +160,9 @@ class TestVolumesBasic(helper.TenantTestCase):
         assert instances_pg.is_instance_deleted(instance_name)
 
     @fixture(scope='function')
-    def volumes_pg_action(self, home_pg, request):
+    def volumes_pg_action(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Volumes page')
-        volumes_pg = volumespage.VolumesPage(home_pg.driver)
+        volumes_pg = volumespage.VolumesPage(tenant_home_pg.driver)
         volumes_pg.go_to_target_page()
         self.VOLUME_NAME = helper.gen_resource_name('volume')
         LOG.fixture_step('Create new volume {}'.format(self.VOLUME_NAME))

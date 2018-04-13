@@ -125,13 +125,13 @@ class VolumesnapshotsPage(basepage.BasePage):
             instance_form.fields['boot-source-type'].text = boot_source_type
         sleep(1)
         instance_form._init_tab_fields(1)
-        if create_new_volume:
+        if create_new_volume is True:
             instance_form.fields['Create New Volume'].click_yes()
-            if delete_volume_on_instance_delete:
+            if delete_volume_on_instance_delete is True:
                 instance_form.fields['Delete Volume on Instance Delete'].click_yes()
-            if not delete_volume_on_instance_delete:
+            if delete_volume_on_instance_delete is False:
                 instance_form.fields['Delete Volume on Instance Delete'].click_no()
-        if not create_new_volume:
+        if create_new_volume is False:
             instance_form.fields['Create New Volume'].click_no()
         if volume_size is not None:
             instance_form.fields['volume-size'].value = volume_size

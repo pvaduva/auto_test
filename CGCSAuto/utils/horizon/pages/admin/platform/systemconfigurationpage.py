@@ -284,14 +284,18 @@ class SystemConfigurationPage(basepage.BasePage):
         edit_form = self.pipelines_table.update_setting(row)
         if location is not None:
             edit_form.location.text = location
-        if not is_enabled:
+        if is_enabled is False:
             edit_form.enabled.unmark()
+        if is_enabled is True:
+            edit_form.enabled.mark()
         if max_bytes is not None:
             edit_form.max_bytes.value = max_bytes
         if backup_count is not None:
             edit_form.backup_count.value = backup_count
-        if not is_compress:
+        if is_compress is False:
             edit_form.compress.unmark()
+        if is_compress is True:
+            edit_form.compress.mark()
         edit_form.submit()
 
     def is_pipeline_present(self, name):

@@ -61,12 +61,11 @@ class HostaggregatesPage(basepage.BasePage):
         return self.availability_zons_table.get_row(
             self.AVAILABILITY_ZONES_TABLE_NAME_COLUMN, name)
 
-    def create_host_aggregate(self, name, availability_zone):
-        create_host_aggregate_form = \
-            self.host_aggregates_table.create_host_aggregate()
+    def create_host_aggregate(self, name, availability_zone=None):
+        create_host_aggregate_form = self.host_aggregates_table.create_host_aggregate()
         create_host_aggregate_form.name.text = name
-        create_host_aggregate_form.availability_zone.text = \
-            availability_zone
+        if availability_zone is not None:
+            create_host_aggregate_form.availability_zone.text = availability_zone
         create_host_aggregate_form.submit()
 
     def delete_host_aggregate(self, name):

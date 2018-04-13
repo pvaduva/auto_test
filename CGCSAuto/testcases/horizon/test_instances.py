@@ -3,21 +3,22 @@ from utils.horizon.pages.project.compute import instancespage
 from pytest import fixture, mark
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import tenant_home_pg, driver
 
 
-class TestInstances(helper.TenantTestCase):
+class TestInstances:
 
     INSTANCE_NAME = None
 
     @fixture(scope='function')
-    def instances_pg(self, home_pg, request):
+    def instances_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Instance')
         self.INSTANCE_NAME = helper.gen_resource_name('instance')
-        instances_pg = instancespage.InstancesPage(home_pg.driver)
+        instances_pg = instancespage.InstancesPage(tenant_home_pg.driver)
         instances_pg.go_to_target_page()
 
         def teardown():
-            LOG.fixture_step('Back to Groups page')
+            LOG.fixture_step('Back to instance page')
             if instances_pg.is_instance_present(self.INSTANCE_NAME):
                 instances_pg.delete_instance_by_row(self.INSTANCE_NAME)
             instances_pg.go_to_target_page()
@@ -62,7 +63,7 @@ class TestInstances(helper.TenantTestCase):
         assert instances_pg.is_instance_active(self.INSTANCE_NAME)
 
         LOG.tc_step('Delete instance {}'.format(self.INSTANCE_NAME))
-        instances_pg.delete_instance(self.INSTANCE_NAME)
+        instances_pg.delete_instance_by_row(self.INSTANCE_NAME)
         assert instances_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
 

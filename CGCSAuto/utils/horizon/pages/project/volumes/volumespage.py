@@ -153,9 +153,9 @@ class VolumesPage(basepage.BasePage):
             volume_edit_form.name.text = new_name
         if description is not None:
             volume_edit_form.description.text = description
-        if bootable:
+        if bootable is True:
             volume_edit_form.bootable.mark()
-        if not bootable:
+        if bootable is False:
             volume_edit_form.bootable.unmark()
         volume_edit_form.submit()
 

@@ -107,9 +107,9 @@ class ImagesPage(basepage.BasePage):
             create_image_form.is_public.mark()
         if is_public is False:
             create_image_form.is_public.unmark()
-        if is_protected:
+        if is_protected is True:
             create_image_form.protected.mark()
-        if not is_protected:
+        if is_protected is False:
             create_image_form.protected.unmark()
         create_image_form.submit()
 

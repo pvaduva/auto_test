@@ -4,22 +4,23 @@ from utils.horizon.pages.admin.compute import imagespage as admin_imagespage
 from utils.horizon.pages.project.compute import instancespage
 from pytest import fixture
 from utils.horizon import helper
+from testfixtures.horizon import tenant_home_pg, driver, admin_home_pg
 from utils.tis_log import LOG
 
 
-class TestImagesBasic(helper.AdminTestCase):
+class TestImagesBasic:
 
     IMAGE_NAME = None
 
     @fixture(scope='function')
-    def images_pg(self, home_pg, request):
+    def images_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Images')
         self.IMAGE_NAME = helper.gen_resource_name('image')
-        images_pg = imagespage.ImagesPage(home_pg.driver)
+        images_pg = imagespage.ImagesPage(admin_home_pg.driver)
         images_pg.go_to_target_page()
 
         def teardown():
-            LOG.fixture_step('Back to Groups page')
+            LOG.fixture_step('Back to Images page')
             images_pg.go_to_target_page()
 
         request.addfinalizer(teardown)
@@ -298,15 +299,15 @@ class TestImagesBasic(helper.AdminTestCase):
             assert admin_images_pg.find_message_and_dismiss(messages.SUCCESS)
 
 
-class TestImagesAdvanced(helper.TenantTestCase):
+class TestImagesAdvanced:
 
     IMAGE_NAME = None
 
     @fixture(scope='function')
-    def images_pg(self, home_pg, request):
+    def images_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Images')
         self.IMAGE_NAME = helper.gen_resource_name('image')
-        images_pg = imagespage.ImagesPage(home_pg.driver)
+        images_pg = imagespage.ImagesPage(tenant_home_pg.driver)
         images_pg.go_to_target_page()
 
         def teardown():

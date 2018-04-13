@@ -69,7 +69,9 @@ class ProviderNetworksPage(basepage.BasePage):
             edit_provider_network_form.description.text = description
         if mtu is not None:
             edit_provider_network_form.mtu.value = mtu
-        if not is_vlan_transparent:
+        if is_vlan_transparent is True:
+            edit_provider_network_form.vlan_transparent.mark()
+        if is_vlan_transparent is False:
             edit_provider_network_form.vlan_transparent.unmark()
         edit_provider_network_form.submit()
 
