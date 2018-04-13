@@ -323,8 +323,8 @@ def pytest_configure(config):
         report_tag = report_tag if report_tag else 'cgcsauto'
 
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
-    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
-                     report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
+    ProjVar.set_vars(lab=lab, natbox=natbox, logdir="home/ebarrett", tenant=tenant, is_boot=is_boot, collect_all=collect_all,
+                     report_all=report_all, report_tag='cgcsauto', openstack_cli=openstack_cli,
                      always_collect=always_collect)
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
@@ -382,11 +382,14 @@ def pytest_addoption(parser):
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skiplabsetup_help = "Do not run lab_setup post lab install"
+    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,pxeboot,feed \n" \
+                "labsetup: Do not run lab_setup post lab install \n" \
+                "pxeboot: Don't modify pxeboot.cfg \n" \
+                "feed: skip setup of network feed"
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
-    wipedisk_help = 'wipe the disk(s) on the hosts'
+    wipedisk_help = 'Wipe the disk(s) on the hosts'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -429,13 +432,12 @@ def pytest_addoption(parser):
     # Install
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
-    parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
-                     help=skiplabsetup_help)
+    parser.addoption('--skip', dest='skiplist', action='store',
+                     help=skip_help)
     parser.addoption('--wipedisk', '--wipedisk', dest='wipedisk', action='store_true',
                      help=wipedisk_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
-    # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
     ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
@@ -626,7 +628,7 @@ def pytest_unconfigure(config):
 
     try:
         log_dir = ProjVar.get_var('LOG_DIR')
-        tc_res_path = log_dir + '/test_results.log'
+        tc_res_path = log_dir if log_dir else "/home/ebarrett" + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
         build_server = ProjVar.get_var('BUILD_SERVER')
         session_id = ProjVar.get_var('SESSION_ID')

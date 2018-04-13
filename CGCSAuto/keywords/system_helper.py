@@ -294,10 +294,10 @@ def get_standby_controller_name(con_ssh=None, use_telnet=False, con_telnet=None)
     standby = _get_active_standby(controller='standby', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     return '' if len(standby) == 0 else standby[0]
 
-
+# TODO: added source_creden_=Tenant.ADMIN because CLI commands were erroring
 def _get_active_standby(controller='active', con_ssh=None, use_telnet=False, con_telnet=None):
     table_ = table_parser.table(cli.system('servicegroup-list', ssh_client=con_ssh, use_telnet=use_telnet,
-                                           con_telnet=con_telnet))
+                                           con_telnet=con_telnet)) # , source_creden_=Tenant.ADMIN
 
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
     controllers = table_parser.get_values(table_, 'hostname', state=controller, strict=False)

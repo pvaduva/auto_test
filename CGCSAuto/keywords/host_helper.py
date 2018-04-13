@@ -7,6 +7,7 @@ from utils import cli, exceptions, table_parser
 from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 from utils import telnet as telnetlib
+from utils import local_host
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
@@ -280,7 +281,7 @@ def recover_simplex(con_ssh=None, fail_ok=False):
 
 def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None):
     """
-    Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
+    Wait for hosts to be in online state if locked, and available and hypervisor/webservice up if unlocked
     Args:
         hosts:
         fail_ok: whether to raise exception when fail
@@ -639,7 +640,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         con_telnet.login()
         con_telnet.exec_cmd("xterm")
 
-    # Give it sometime before openstack cmds enables on after host
+    # Give it sometime before openstack cmds enables on after host unlock
     _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                    fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
     time.sleep(10)
@@ -705,8 +706,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                   timeout=60)
     if exitcode == 1:
         return 1, output
-
-    if is_simplex:
+    # TODO: Temporary workaround
+    # if is_simplex:
         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                     timeout=HostTimeout.CONTROLLER_UNLOCK)
 
@@ -754,7 +755,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                            timeout=HostTimeout.HYPERVISOR_UP)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
-            wait_for_tasks_affined(host)
+            if not is_simplex:
+                wait_for_tasks_affined(host)
 
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
@@ -1003,7 +1005,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
         rtn[field] = val
     return rtn
 
-
+# TODO: this only checks once due to the timeout for cli.system show
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
                                    reconnect=True, use_telnet=False,  con_telnet=None):
     cli_enable_end_time = time.time() + timeout
@@ -1011,7 +1013,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     def check_sysinv_cli(con_ssh_, use_telnet_, con_telnet_):
 
         cli.system('show', ssh_client=con_ssh_, use_telnet=use_telnet_, con_telnet=con_telnet_,
-                   timeout=timeout)
+                   timeout=60)
         time.sleep(10)
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
                                                               con_telnet=con_telnet_)
@@ -1035,7 +1037,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                 pass
             if not con_ssh._is_connected():
                 if reconnect:
-                    LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
+                    LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
                     con_ssh.connect(retry_timeout=timeout)
                 else:
                     LOG.error("system disconnected")

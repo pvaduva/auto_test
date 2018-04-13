@@ -23,6 +23,7 @@ class ProjVar:
                   'COLLECT_TELNET': False,
                   'TELNET_THREADS': None,
                   'SYS_TYPE': None,
+                  'REPORT_TAG': "cgcsauto"
                   }
 
     @classmethod
@@ -77,7 +78,11 @@ class InstallVars:
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume, skip_labsetup, wipedisk,
+    def set_install_vars(cls, lab, resume,
+                         wipedisk = False,
+                         skip_labsetup = False,
+                         skip_feed = False,
+                         skip_pxebootcfg = False,
                          build_server=None,
                          host_build_dir=None,
                          guest_image=None,
@@ -102,6 +107,8 @@ class InstallVars:
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
             'SKIP_LABSETUP': skip_labsetup,
+            'SKIP_FEED': skip_feed,
+            'SKIP_PXEBOOTCFG': skip_pxebootcfg,
             'WIPEDISK': wipedisk,
 
             # TIS BUILD info
@@ -144,6 +151,7 @@ class InstallVars:
     def set_install_var(cls, **kwargs):
         for key, val in kwargs.items():
             cls.__var_dict[key.upper()] = val
+
 
     @classmethod
     def get_install_var(cls, var_name):
@@ -368,4 +376,3 @@ class BackupVars:
             print("Key: {} Value: {}".format(key, val))
             cls.__var_dict[key.upper()] = val
         cls.__var_dict.update(**kwargs)
-
