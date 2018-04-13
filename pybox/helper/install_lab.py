@@ -279,7 +279,9 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
         LOG.info("Lab_setup.sh not found. Please transfer the "
                  "required files before continuing. Press enter once files are obtained.")
         input()
+
     time.sleep(5)
+
     if release == 'R5' or release == 'R4':
         ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/images/', prompt="tis-centos-guest.img", fail_ok=True,
                                 timeout=10)
@@ -290,8 +292,11 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
         LOG.info("Guest image not found. Please transfer the file before continuing. "
                  "Press enter once guest image is obtained.")
         input()
+
     start = time.time()
+
     if aio:
+        ## FOR AIO 
         serial.send_bytes(stream, "source /etc/nova/openrc", prompt='keystone')
         if release != 'R5':
             serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False, fail_ok=True)
@@ -338,16 +343,68 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
                     input()
         LOG.info("Completed install successfully.")
     else:
+        ## FOR NON-AIO cases
         serial.send_bytes(stream, "source /etc/nova/openrc", prompt='keystone')
-        if release != 'R5':
-            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-            host_helper.check_password(stream, password=password)
-            ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
-            if ret != 0:
-                LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
-                         "Please re-run the iteration before continuing. Press enter to continue.")
-                input()
 
+        # TODO (WEI): double check this
+        # only if not R5, we run lab_setup.sh here
+        #if release != 'R5':
+        serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
+        host_helper.check_password(stream, password=password)
+        ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
+        if ret != 0:
+            LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
+                     "Please re-run the iteration before continuing. Press enter to continue.")
+            input()
+ 
+        ## TODO:
+        ## 1. Unlock sometimes won't bring a node into enabled/available state. Need to reset it
+        ##    if it doesn't become enabled. 
+        ## 2. When unlocking a node, sometimes the node will reboot again after the "login" 
+        ##    prompt is seen. So seeing "login" doesn't mean it becomes "unlocked/enabled". 
+        ##    What we need to do is after seeing "login" prompt, send to controller-0  
+        ##    "system host-list | grep node" to look for "enabled". 
+
+        ## Unlock controller-1
+        now = time.time()
+        ret = host_helper.unlock_host(stream, "controller-1")
+        if ret == 1:
+            LOG.info("Cannot unlock controller-1,  pausing to allow for debugging. "
+                     "Please unlock before continuing. Press enter to continue.")
+            input()
+    
+        ## Wait for controller-1 to come up
+        retry = 0
+        ctrlr_1 = labname + "-controller-1"
+        while retry < 5:
+            serial.send_bytes(streams[ctrlr_1], '\n', expect_prompt=False)
+            try:
+                ret = serial.expect_bytes(streams[ctrlr_1], "ontroller-1 login:", timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
+                if ret != 0:
+                    LOG.info("Unlock controller-1 timed-out. pausing to allow for debugging. Press enter to continue.")
+                    input()
+                    retry = 5
+                else:
+                    LOG.info("Unlock controller-1 time (mins): {}".format((time.time() - now)/60))
+                    ## Sometimes "login" is found right after "host-unlock" is issued. So we wait and try again. 
+                    if (time.time() - now)/60 < 5.0:
+                        LOG.info("Found controller-1 login right away. Need to wait and try again.")
+                        now = time.time()
+                        time.sleep(10)
+                        retry += 1
+                    else:
+                        retry = 5
+            except Exception as e:
+               LOG.info("Unlock controller-1 failed with {} pausing to allow for debugging. Press enter to continue.".format(e))
+               input()
+               retry = 5
+        serial.disconnect(socks[ctrlr_1])
+        host_list.remove(ctrlr_1)
+
+        ## Well, there is a chance that controller-1 is not "unlocked/enabled" yet. 
+        ## See comment #2 above.
+
+        ## If it is a storage lab
         if storage:
             LOG.info("Re-running lab_setup.sh to configure storage nodes.")
             serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
@@ -369,7 +426,6 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
                                  "Please unlock before continuing. Press enter to continue.".format(host))
                         input()
                     time.sleep(20)
-            LOG.info("Waiting for {} to unlock.".format(host_list))
 
             for host in host_list:
                 if 'storage' in host:
@@ -389,15 +445,16 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
 
             LOG.info("Competed storage node unlock")
 
-        LOG.info("Re-running lab_setup.sh before unlocking compute nodes.")
-        serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-        host_helper.check_password(stream, password=password)
-        ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
-        if ret != 0:
-            LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
-                     "Please re-run the iteration before continuing. Press enter to continue.")
-            input()
+            LOG.info("Re-running lab_setup.sh before unlocking compute nodes.")
+            serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
+            host_helper.check_password(stream, password=password)
+            ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
+            if ret != 0:
+                LOG.info("Lab_setup.sh failed. Pausing to allow for debugging. "
+                         "Please re-run the iteration before continuing. Press enter to continue.")
+                input()
 
+        # unlock compute nodes
         now = time.time()
         for host in host_list:
             host = host[len(labname)+1:]
@@ -411,23 +468,32 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
 
 
         ## Check unlocking status
-        ## TODO (WEI): Maybe use multi-threads to check?
         failed_nodes = []
         for host in host_list:
-            serial.send_bytes(streams[host], '\n', expect_prompt=False)
             # TODO Fix it! 'ogin:' is always found immediately after unlock
-            # WEI: It doesn't happen any more if disconnect after test_install_nodes() is done
-            #      and recoonect before calling run_install_scripts() 
-            try:
-                ret = serial.expect_bytes(streams[host], "{} login:".format(host[len(labname)+1:]), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
-                if ret != 0:
-                    LOG.info("Unlock {} timed-out.".format(host))
-                    failed_nodes.append(host)
-                else:
-                    LOG.info("Unlock {} time (mins): {}".format(host, (time.time() - now)/60))
-            except Exception as e:
+            # WEI: fixed it by retrying
+            retry = 0
+            while retry < 5:
+                serial.send_bytes(streams[host], '\n', expect_prompt=False)
+                try:
+                    ret = serial.expect_bytes(streams[host], "{} login:".format(host[len(labname)+1:]), timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
+                    if ret != 0:
+                        LOG.info("Unlock {} timed-out.".format(host))
+                        failed_nodes.append(host)
+                        retry = 5
+                    else:
+                        LOG.info("Unlock {} time (mins): {}".format(host, (time.time() - now)/60))
+                        if (time.time() - now)/60 < 5.0:
+                            LOG.info("login is found right after host-unlock. Wait and try again.")
+                            now = time.time()
+                            time.sleep(10)
+                            retry += 1
+                        else:
+                            retry = 5
+                except Exception as e:
                     LOG.info("Unlock {} failed with {}".format(host, e))
                     failed_nodes.append(host)
+                    retry = 5
             serial.disconnect(socks[host])
 
         ## Let's reset the VMs that failed to unlock 

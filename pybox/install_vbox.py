@@ -278,9 +278,8 @@ def test_install_nodes(cont0_stream, socks, streams, labname, host_list=None):
 
     for host in new_thread:
         host.start()
-        ## WZWZ double check this
-        #time.sleep(2)
-        time.sleep(10)
+        ## WEI Do NOT change this time value 
+        time.sleep(2)
         threads.append(host)
     
     for items in threads:
