@@ -1,15 +1,16 @@
-
 import os
 import re
 import time
 import random
 
-from pytest import mark, fixture, skip
+from pytest import fixture, skip, mark
 from consts.build_server import DEFAULT_BUILD_SERVER
-from consts.auth import HostLinuxCreds, SvcCgcsAuto
+from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
 from consts.proj_vars import ProjVar
 from consts.cgcs import FlavorSpec, GuestImages
+from consts.kpi_vars import CyclicTest
 from utils import cli, table_parser
+from utils.kpi import kpi_log_parser
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import common, host_helper, system_helper, patching_helper, glance_helper, nova_helper, vm_helper
@@ -17,35 +18,27 @@ from keywords import common, host_helper, system_helper, patching_helper, glance
 
 CYCLICTEST_EXE = '/folk/svc-cgcsauto/cyclictest/cyclictest'
 CYCLICTEST_DIR = '/home/wrsroot/cyclictest/'
-HISTGRAM_FILE = 'hist-file'
+HISTOGRAM_FILE = 'hist-file'
 SHELL_FILE = 'runcyclictest.sh'
 RESULT_FILE = 'result'
 RUN_LOG = 'runlog'
 INCLUDING_RATIO = 0.999999
-SKIP_PLATFORM_CPU = True
-SKIP_AVS_CPU = False
-SKIP_SHARED_CORES = True
-RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest-rt/CGCS_6.0_RT_Guest/latest_tis-centos-guest-rt.img'
-# ./cyclictest -S -p99 -n -m -d0 -H 20 -D 3600
-# CYCLICTEST_OPTS_TPMLATE = r'{program} -S -p {priority} -n -m -d {distance} -H {histofall} -l {loops}'
 
-TEST_LOG_DIR = '~/AUTOMATION_LOGS'
+RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest-rt/CGCS_5.0_RT_Guest/latest_tis-centos-guest-rt.img'
 BUILD_SERVER = DEFAULT_BUILD_SERVER['ip']
 
-cyclictest_conf = {
+# ./cyclictest -S -p99 -n -m -d0 -H 20 -D 3600
+# CYCLICTEST_OPTS_TEMPLATE = r'{program} -S -p {priority} -n -m -d {distance} -H {histofall} -l {loops}'
+cyclictest_params = {
     'smp': '',
     'priority': 99,
     'nanosleep': '',
     'mlock': '',
     'distance': 0,
-    # 'histofall': 20,
-    'histofall': 40,
-    'histfile': os.path.join(CYCLICTEST_DIR, HISTGRAM_FILE),
-    'duration': 30,
-    # 'duration': 90,
-    # 'duration': 1800,
-    # 'duration': 3600,
-    # 'duration': 7200,
+    'histofall': 20,
+    'histfile': '{}/{}'.format(CYCLICTEST_DIR, HISTOGRAM_FILE),
+    # 'duration': 30,
+    'duration': 3600,
 }
 
 script_file_template = '''
@@ -61,51 +54,63 @@ histfile_format = r'''^\d+(\s+\d+)+\s*'''
 testable_hypervisors = {}
 
 
-@fixture(scope='session', autouse=True)
+@fixture(scope='session')
 def prepare_test_session():
-    suitable_targets = _check_test_conditions()
+    suitable_targets = get_suitable_hypervisors()
     if not suitable_targets:
         skip('Not suitable for cyclictest')
-    else:
-        _prepare_files()
+
+    LOG.fixture_step('Make sure the executable of cyclictest exist, download if not')
+    local_path = common.scp_from_test_server_to_active_controller(CYCLICTEST_EXE, CYCLICTEST_DIR)
+    LOG.info('cyclictest has been copied to the active controller:{}'.format(local_path))
 
     return suitable_targets
 
 
-def get_columns(table, wanted_headers):
-    if not isinstance(wanted_headers, list) and not isinstance(wanted_headers, set):
-        wanted_headers = [wanted_headers]
+@fixture(scope='module')
+def get_rt_guest_image():
+    LOG.info('Scp guest image from the build server')
+    con_ssh = ControllerClient.get_active_controller()
+    img_path_on_tis = '{}/{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES['tis-centos-guest-rt'][2])
 
-    all_headers = table['headers']
-    if not set(wanted_headers).issubset(all_headers):
-        LOG.error('Unknown column:{}'.format(
-            list(set(all_headers) - set(wanted_headers)) + list(set(wanted_headers) - set(all_headers)))
-        )
-        return []
+    if not con_ssh.file_exists(img_path_on_tis):
+        con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=BUILD_SERVER, source_path=RT_GUEST_PATH,
+                            dest_path=img_path_on_tis, source_pswd=SvcCgcsAuto.PASSWORD)
 
-    selected_column_positions = [i for i, header in enumerate(all_headers) if header in wanted_headers]
-    results = []
-    for row in table['values']:
-        results.append([row[i] for i in selected_column_positions])
-
-    return results
+    return img_path_on_tis
 
 
-def get_cpu_info(host):
-    output = cli.openstack('hypervisor show ' + host, source_admin_=True)
+@fixture(scope='function')
+def get_hypervisor():
+    global testable_hypervisors
+
+    LOG.fixture_step('Chose a hypervisor to run from suitable computes:{}'.format(testable_hypervisors.keys()))
+    candidates = [h for h in testable_hypervisors
+                  if (not testable_hypervisors[h]['for_host_test'] and not testable_hypervisors[h]['for_vm_test'])]
+
+    if not candidates:
+        skip("No host left for test")
+
+    hypervisor = random.choice(candidates)
+    LOG.info("Host chosen: {}".format(hypervisor))
+    return hypervisor
+
+
+def get_cpu_info(hypervisor):
+    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.ADMIN)
     table = table_parser.table(output)
     cpu_info = table_parser.get_value_two_col_table(table, 'cpu_info')
 
-    cpu_table = system_helper.get_host_cpu_list_table(host)
-    thread_ids = get_columns(cpu_table, ['thread'])
+    cpu_table = system_helper.get_host_cpu_list_table(hypervisor)
+    thread_ids = table_parser.get_columns(cpu_table, ['thread'])
     num_threads = len(set(ids[0] for ids in thread_ids))
     LOG.info('per_core_threads:{}'.format(num_threads))
 
-    core_function = get_columns(cpu_table, ['log_core', 'assigned_function'])
+    core_function = table_parser.get_columns(cpu_table, ['log_core', 'assigned_function'])
 
     non_vm_cores = {}
     for core, assigned in core_function:
-        if assigned != 'VMs' and assigned != 'Shared':
+        if assigned != 'VMs':   # and assigned != 'Shared':
             if assigned in non_vm_cores:
                 non_vm_cores[assigned].append(int(core))
             else:
@@ -115,45 +120,11 @@ def get_cpu_info(host):
     return eval(cpu_info), num_threads, non_vm_cores, len(core_function)
 
 
-def _check_test_conditions():
-    global testable_hypervisors
+def get_suitable_hypervisors():
+    """
+    Get low latency hypervisors with HT-off
 
-    LOG.fixture_step('Check if the lab meets conditions required by this test case')
-    hypervisors = host_helper.get_hypervisors()
-
-    for hypervisor in hypervisors:
-        personalities = patching_helper.get_personality(hypervisor)
-        # if not personalities or 'lowlatency' not in personalities:
-        #     continue
-
-        cpu_info, num_threads, non_vm_cores, num_cores = get_cpu_info(hypervisor)
-
-        testable_hypervisors[hypervisor] = {
-            'personalities': personalities,
-            'cpu_info': cpu_info,
-            'non_vm_cores': non_vm_cores,
-            'num_cores': num_cores,
-            'for_host_test': False,
-            'for_vm_test': False,
-        }
-
-        # if cpu_info and 'topology' in cpu_info and cpu_info['topology']['threads'] == 1:
-        #     if num_threads != 1:
-        #         LOG.warn('conflicting info: num_threads={}, while cpu_info.threads={}'.format(
-        #             num_threads, cpu_info['topology']['threads']))
-        #     testable_hypervisors[hypervisor] = {
-        #         'personalities': personalities,
-        #         'cpu_info': cpu_info,
-        #         'non_vm_cores': non_vm_cores,
-        #         'num_cores': num_cores,
-        #         'for_host_test': False,
-        #         'for_vm_test': False,
-        #     }
-        # else:
-        #     LOG.warning('hypervisor:{} is Hyperthreading, ignore it'.format(hypervisor))
-
-    # TODO: more check should be done, including the following setting should be on the target, which however
-    # some cannot be easily done automatically
+    TODO: following settings should checked, but most cannot be easily done automatically
     # Processor Configuration
     # Hyper-Threading = Disabled
     # Power & Performance
@@ -166,62 +137,115 @@ def _check_test_conditions():
     # C-States
     # CPU C-State = Disabled
     # Acoustic and Performance
-    # Fan Profile = Performance
+    # Fan Profile = Performance:
+
+    """
+    global testable_hypervisors
+
+    LOG.fixture_step('Check if the lab meets conditions required by this test case')
+    hypervisors = host_helper.get_hypervisors()
+
+    for hypervisor in hypervisors:
+        personalities = patching_helper.get_personality(hypervisor)
+        if not personalities or 'lowlatency' not in personalities:
+            continue
+
+        cpu_info, num_threads, non_vm_cores, num_cores = get_cpu_info(hypervisor)
+        if cpu_info and 'topology' in cpu_info and cpu_info['topology']['threads'] == 1:
+            if num_threads != 1:
+                LOG.warn('conflicting info: num_threads={}, while cpu_info.threads={}'.format(
+                    num_threads, cpu_info['topology']['threads']))
+            testable_hypervisors[hypervisor] = {
+                'personalities': personalities,
+                'cpu_info': cpu_info,
+                'non_vm_cores': non_vm_cores,
+                'num_cores': num_cores,
+                'for_host_test': False,
+                'for_vm_test': False,
+            }
+        else:
+            LOG.warning('hypervisor:{} has HT-on, ignore it'.format(hypervisor))
 
     return testable_hypervisors.keys()
 
 
-def _prepare_files():
-    LOG.fixture_step('Make sure the executable of cyclictest exiting, download if not')
-    local_path = common.scp_from_test_server_to_active_controller(CYCLICTEST_EXE, CYCLICTEST_DIR)
+def fetch_results_from_target(target_ssh, target_host, active_con_name=None, run_log=None, hist_file=None,
+                              is_guest=False):
+    """
+    Copy results from target hypervisor or vm to active controller, then to local automation dir
+    Args:
+        target_ssh (SSHClient): hypervisor or vm ssh client
+        target_host (str): hypervisor that runs the cyclictest or host of the vm that runs the cyclictest
+        active_con_name (str): active controller name, used if is_guest=False.
+        run_log (str): runlog path on target
+        hist_file (str):  histfile path on target
+        is_guest (bool): whether target is hypervisor or vm
 
-    LOG.info('cyclictest has been copied to the active controller:{}'.format(local_path))
+    Returns (tuple): (<local_runlog_path> (str), <local_histlog_path> (str))
 
-
-def _fetch_results(target_host, run_log, hist_file, active_controller=None):
+    """
     LOG.info('Fetch results')
-    if not active_controller:
-        active_controller = ControllerClient.get_active_controller()
+    cyclictest_dir = os.path.dirname(run_log) if run_log else CYCLICTEST_DIR
+
+    con_ssh = ControllerClient.get_active_controller()
 
     user = HostLinuxCreds.get_user()
     password = HostLinuxCreds.get_password()
 
-    if not target_host == system_helper.get_active_controller_name():
-        active_controller.scp_on_dest(source_user=user,
-                                      source_ip=target_host,
-                                      source_pswd=password,
-                                      source_path=CYCLICTEST_DIR + '/*.txt',
-                                      dest_path=CYCLICTEST_DIR,
-                                      timeout=1800)
+    if not run_log:
+        run_log = '{}/{}-{}*.txt'.format(cyclictest_dir, RUN_LOG, target_host)
+        run_log = target_ssh.exec_cmd('ls {}'.format(run_log), fail_ok=False)[1]
 
-    assert active_controller.file_exists(run_log), 'Failed to fetch runlog_file to the active controller'
-    assert active_controller.file_exists(hist_file), 'Failed to fetch hist_file to the active controller'
-    active_controller.exec_sudo_cmd('chmod -R 755 {}/*.txt'.format(CYCLICTEST_DIR))
+    if not hist_file:
+        hist_file = '{}/{}-{}*.txt'.format(cyclictest_dir, HISTOGRAM_FILE, target_host)
+        hist_file = target_ssh.exec_cmd('ls {}'.format(hist_file), fail_ok=False)[1]
 
-    LOG.info('scp from the active controller to local:{}'.format(CYCLICTEST_DIR))
-    dest_path = ProjVar.get_var('LOG_DIR') or TEST_LOG_DIR
+    target_ssh.exec_sudo_cmd('chmod -R 755 {}/*.txt'.format(cyclictest_dir))
+    if not target_host == active_con_name:
+        LOG.info("Copy results from target to active controller: {}".format(CYCLICTEST_DIR))
+        dest_ip = con_ssh.host if is_guest else active_con_name
+        target_ssh.scp_on_source(source_path=cyclictest_dir + '/*.txt', dest_path=CYCLICTEST_DIR, dest_ip=dest_ip,
+                                 dest_user=user, dest_password=password, timeout=1800)
 
-    common.scp_from_active_controller(os.path.join(os.path.dirname(run_log), '*.txt'),
-                                      dest_path=dest_path,
+        LOG.info("Remove results files from target after scp to active controller")
+        target_ssh.exec_cmd('rm -rf {}/*.txt'.format(cyclictest_dir))
+        if not is_guest:
+            LOG.info("Exit target hypervisor to return to active controller")
+            target_ssh.close()
+
+    LOG.info('scp from the active controller to local:{}'.format(cyclictest_dir))
+    local_dest_path = '{}/cyclictest/'.format(ProjVar.get_var('LOG_DIR'))
+    os.makedirs(local_dest_path, exist_ok=True)
+
+    common.scp_from_active_controller('{}/*.txt'.format(CYCLICTEST_DIR),
+                                      dest_path=local_dest_path,
                                       src_user=user,
-                                      src_password=password
+                                      src_password=password,
+                                      timeout=1800,
                                       )
-    local_run_log = os.path.join(dest_path, os.path.basename(run_log))
+    local_run_log = os.path.join(local_dest_path, os.path.basename(run_log))
     assert os.path.isfile(local_run_log), 'Failed to fetch run log:{}'.format(run_log)
 
-    local_hist_file = os.path.join(dest_path, os.path.basename(hist_file))
+    local_hist_file = os.path.join(local_dest_path, os.path.basename(hist_file))
     assert os.path.isfile(local_hist_file), 'Failed to fetch hist-file:{}'.format(hist_file)
 
-    os.rename(local_hist_file, local_hist_file + '.bk')
-    os.rename(local_run_log, local_run_log + '.bk')
-    os.system('rm -f {}/*.txt'.format(os.path.dirname(local_hist_file)))
-    os.rename(local_hist_file + '.bk', local_hist_file)
-    os.rename(local_run_log + '.bk', local_run_log)
+    LOG.info("Remove results files from active controller after scp to localhost")
+    con_ssh.exec_cmd('rm -f {}/*.txt'.format(cyclictest_dir))
 
     return local_run_log, local_hist_file
 
 
-def _calculate_runlog(run_log, hypervisor_info):
+def _calculate_runlog(run_log, cores_to_ignore=None):
+    """
+    Get Average latency for the cores that need to be measured
+    Args:
+        run_log (str): local run log path
+        cores_to_ignore (list|None): cores to exclude from the calculation, such as non-rt-cores for vm, and
+            non-VMs-function cores on hypervisor
+
+    Returns:
+
+    """
     LOG.info('Calculate and report the results')
 
     result1 = {}
@@ -234,28 +258,25 @@ def _calculate_runlog(run_log, hypervisor_info):
                 result1[cur_tid] = (cur_min, cur_act, cur_avg, cur_max)
             else:
                 pass
-                # LOG.info('illformated, ignore:\n{}'.format(line))
 
     LOG.info('result1:{}'.format(result1))
 
-    non_vm_cores = hypervisor_info['non_vm_cores']
-    averages = [int(data[2]) for tid, data in result1.items()
-                if tid not in non_vm_cores['Platform'] and
-                tid not in non_vm_cores['vSwitch']
-                ]
+    if not cores_to_ignore:
+        cores_to_ignore = []
+    averages = [int(data[2]) for tid, data in result1.items() if tid not in cores_to_ignore]
     average = sum(averages) / len(averages)
     LOG.info('Average latency: {} usec'.format(average))
     with open(os.path.join(os.path.dirname(run_log), RESULT_FILE + '-host.txt'), 'a+') as f:
-        f.write('\nAverage latency: {} usec\n'.format(average))
+        f.write('Average latency: \t{} usec\n'.format(average))
 
-    return {'average': average}
+    return average
 
 
-def _calculate_histfile(hist_file, hypervisor_info):
-    global cyclictest_conf
+def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
+    global cyclictest_params
 
     LOG.info('Calculate results from hist-file')
-    num_item = hypervisor_info['num_cores'] + 2
+    num_item = num_cores + 2
     pattern2 = re.compile(histfile_format)
 
     result2 = {}
@@ -272,27 +293,25 @@ def _calculate_histfile(hist_file, hypervisor_info):
                 if m and len(m.groups()) == 2:
                     totals = [int(n) for n in m.group(1).split()]
                     totals = totals[:-1]
-    ignore_ids = []
-    if SKIP_PLATFORM_CPU:
-        ignore_ids += hypervisor_info['non_vm_cores']['Platform']
-    if SKIP_AVS_CPU:
-        ignore_ids += hypervisor_info['non_vm_cores']['vSwitch']
 
-    LOG.info('TODO: ignore cpu:{}'.format(ignore_ids))
+    if not cores_to_ignore:
+        cores_to_ignore = []
+    LOG.info('TODO: ignore cpu:{}'.format(cores_to_ignore))
 
-    accumulated = [[d for i, d in enumerate(result2[0]) if i not in ignore_ids]]
-    total_count = sum([t for i, t in enumerate(totals) if i not in ignore_ids])
+    accumulated = [[d for i, d in enumerate(result2[0]) if i not in cores_to_ignore]]
+    total_count = sum([t for i, t in enumerate(totals) if i not in cores_to_ignore])
     LOG.info('TODO: total={}'.format(total_count))
 
     time_slots = len(list(result2.keys()))
+    LOG.info("Time slots: {}".format(time_slots))
     slot = 0
     for slot in range(1, time_slots):
         LOG.info('\nTODO:us:{}'.format(slot))
         prev_counts = accumulated[slot-1]
         LOG.info('TODO: prev_sums:{}'.format(prev_counts))
-        LOG.info('TODO: ignore cpu:{}'.format(ignore_ids))
+        LOG.info('TODO: ignore cpu:{}'.format(cores_to_ignore))
 
-        vm_cpu_counts = [hit for i, hit in enumerate(result2[slot]) if i not in ignore_ids]
+        vm_cpu_counts = [hit for i, hit in enumerate(result2[slot]) if i not in cores_to_ignore]
         accumulated.append([hit + prev_counts[i] for i, hit in enumerate(vm_cpu_counts)])
 
         LOG.info('accumulated[{}]:{}'.format(slot, accumulated[slot]))
@@ -309,32 +328,22 @@ def _calculate_histfile(hist_file, hypervisor_info):
     else:
         LOG.info('Wrong data in histfile:{}'.format(hist_file))
 
-    LOG.info('{}% percentage: {} usec'.format(INCLUDING_RATIO*100, slot))
-    with open(os.path.join(os.path.dirname(hist_file), RESULT_FILE + '-hotst.txt'), 'a+') as f:
-        f.write('\n{}% percentage: {} usec\n'.format(INCLUDING_RATIO*100, slot))
+    LOG.info('{} percentile: {} usec'.format(INCLUDING_RATIO*100, slot))
+    with open(os.path.join(os.path.dirname(hist_file), RESULT_FILE + '-host.txt'), 'a+') as f:
+        f.write('{} percentile latency: \t{} usec\n'.format(INCLUDING_RATIO*100, slot))
 
-    return {'usec_for_6nines': slot}
+    return slot
 
 
-def _calculate_results(target_name, run_log, hist_file):
-    global testable_hypervisors
+def calculate_results(run_log, hist_file, cores_to_ignore, num_cores):
 
-    average_latency = _calculate_runlog(run_log, testable_hypervisors[target_name])
-    most_latency = _calculate_histfile(hist_file, testable_hypervisors[target_name])
+    if isinstance(cores_to_ignore, int):
+        cores_to_ignore = [cores_to_ignore]
+
+    average_latency = _calculate_runlog(run_log, cores_to_ignore=cores_to_ignore)
+    most_latency = _calculate_histfile(hist_file, cores_to_ignore=cores_to_ignore, num_cores=num_cores)
 
     return average_latency, most_latency
-
-
-def _report_results(active_controller, results):
-    LOG.info('Report results')
-    print(str(results))
-
-
-def _process_results(target_host, run_log=None, hist_file=None, active_controller=None):
-    LOG.tc_step('Process results')
-    results = _calculate_results(target_host, run_log=run_log, hist_file=hist_file)
-
-    _report_results(active_controller, results)
 
 
 def _wait_for_results(con_target, run_log=None, hist_file=None, duration=60, start_file=None, end_file=None):
@@ -378,42 +387,43 @@ def _wait_for_results(con_target, run_log=None, hist_file=None, duration=60, sta
         assert False, 'Timeout when running on target after {} seconds'.format(total_timeout)
 
 
-def _run_cyclictest(con_target, program, target_host=None, settings=None):
-    LOG.tc_step('On target:{}, run program:{}'.format(target_host, program))
+def run_cyclictest(target_ssh, program, target_hypervisor, settings=None, cyclictest_dir=CYCLICTEST_DIR):
+    LOG.tc_step('On target: {}, run program: {}'.format(target_hypervisor, program))
 
     if settings is None or not isinstance(settings, dict):
-        actual_settings = cyclictest_conf
+        actual_settings = cyclictest_params
     else:
         actual_settings = settings
 
     start_time = time.strftime("%Y-%m-%d-%H-%M-%S")
-    hist_file = actual_settings.get('histfile', None) + start_time + '.txt'
+    run_log = '{}/{}-{}-{}.txt'.format(cyclictest_dir, RUN_LOG, target_hypervisor, start_time)
+    hist_file = '{}/{}-{}-{}.txt'.format(cyclictest_dir, HISTOGRAM_FILE, target_hypervisor, start_time)
     actual_settings['histfile'] = hist_file
-    run_log = os.path.join(CYCLICTEST_DIR, RUN_LOG) + start_time + '.txt'
-    start_file = os.path.join(CYCLICTEST_DIR, 'start-{}.txt'.format(start_time))
-    end_file = os.path.join(CYCLICTEST_DIR, 'end-{}.txt'.format(start_time))
+    start_file = os.path.join(cyclictest_dir, 'start-{}.txt'.format(start_time))
+    end_file = os.path.join(cyclictest_dir, 'end-{}.txt'.format(start_time))
 
     options = ' '.join(('--' + key + ' ' + str(value) for key, value in actual_settings.items()))
     cmd = program + ' ' + options
 
     LOG.info('-create a temporary shell file to run CYCLICTEST')
-    script_file = os.path.join(CYCLICTEST_DIR, SHELL_FILE)
-    script_file_content = script_file_template.format(local_path=CYCLICTEST_DIR,
+    script_file = os.path.join(cyclictest_dir, SHELL_FILE)
+    script_file_content = script_file_template.format(local_path=cyclictest_dir,
                                                       start_file=start_file,
                                                       end_file=end_file,
                                                       program=cmd,
                                                       run_log=run_log)
 
-    con_target.exec_cmd('echo "{}" > {}'.format(script_file_content, script_file))
+    target_ssh.exec_cmd('echo "{}" > {}'.format(script_file_content, script_file))
 
     LOG.info('-make the temporary script executable')
-    con_target.exec_cmd('chmod +x {} ; cat {}'.format(script_file, script_file))
+    target_ssh.exec_cmd('chmod +x {} ; cat {}'.format(script_file, script_file))
 
+    time.sleep(60)
     LOG.info('-run script:{}'.format(script_file))
-    con_target.exec_sudo_cmd('nohup ' + script_file, fail_ok=False)
+    target_ssh.exec_sudo_cmd('nohup ' + script_file, fail_ok=False)
     duration = actual_settings.get('duration', 60)
 
-    _wait_for_results(con_target,
+    _wait_for_results(target_ssh,
                       run_log=run_log,
                       hist_file=hist_file,
                       start_file=start_file,
@@ -423,134 +433,112 @@ def _run_cyclictest(con_target, program, target_host=None, settings=None):
     return run_log, hist_file
 
 
-def _cyclictest_on_hypervisor():
+def create_rt_vm(hypervisor):
     global testable_hypervisors
+    LOG.tc_step('Create/get glance image using rt guest image')
+    image_id = glance_helper.get_guest_image(guest_os='tis-centos-guest-rt', cleanup='module')
 
-    LOG.tc_step('Randomly pick one hypervisor to test, {}'.format(testable_hypervisors))
-
-    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
-    LOG.debug('-all up/enabled hypervisors:{}'.format(hypervisors))
-
-    active_controller = ControllerClient.get_active_controller()
-    active_controller_name = system_helper.get_active_controller_name()
-
-    candidates = [h for h in testable_hypervisors
-                  if not testable_hypervisors[h]['for_host_test'] and not testable_hypervisors[h]['for_vm_test']]
-
-    chosen_hypervisor = random.choice(candidates)
-    testable_hypervisors[chosen_hypervisor]['for_host_test'] = True
-
-    # chosen_hypervisor = 'controller-1'
-    LOG.info('OK, randomly selected hypervisor:{} to test on'.format(chosen_hypervisor))
-
-    program = os.path.join(os.path.abspath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
-    LOG.debug('program={}'.format(program))
-
-    with host_helper.ssh_to_host(chosen_hypervisor) as con_target:
-        LOG.tc_step("Remove results files if any before test starts")
-        con_target.exec_cmd('mkdir -p {}; rm -f {}/*.txt'.format(CYCLICTEST_DIR, CYCLICTEST_DIR))
-
-        if not con_target.file_exists(program):
-            LOG.tc_step('Copy CYCLICTEST to selected hypervisor {}:{}'.format(chosen_hypervisor, program))
-
-            active_controller.flush()
-            con_target.scp_on_dest(HostLinuxCreds.get_user(), active_controller_name,
-                                   program, program, HostLinuxCreds.get_password())
-
-            LOG.info('Check if CYCLICTEST was copied to target hypervisor')
-            assert con_target.file_exists(program), \
-                'Failed to find CYCLICTEST executable on target hypervisor after copied'
-
-            LOG.info('-successfully copied to {}:{}'.format(chosen_hypervisor, program))
-
-        run_log, hist_file = _run_cyclictest(con_target, program, target_host=chosen_hypervisor)
-
-    local_run_log, local_hist_file = _fetch_results(chosen_hypervisor,
-                                                    run_log=run_log,
-                                                    hist_file=hist_file,
-                                                    active_controller=active_controller)
-
-    _process_results(chosen_hypervisor, run_log=local_run_log, hist_file=local_hist_file,
-                     active_controller=active_controller)
-
-
-def _cyclictest_inside_vm():
-    global testable_hypervisors
-    LOG.tc_step('Run cyclictest on VM')
-
-    LOG.tc_step('Chose a hypervisor to run from suitable computes:{}'.format(testable_hypervisors.keys()))
-    candidates = [h for h in testable_hypervisors
-                  if (not testable_hypervisors[h]['for_host_test'] and not testable_hypervisors[h]['for_vm_test'])]
-
-    hypervisor = random.choice(candidates)
-    testable_hypervisors[hypervisor]['for_vm_test'] = True
-    LOG.info('OK, choose hypervisor {} to run cyclictest'.format(hypervisor))
-
-    vm_id = _create_vm(hypervisor)
-
-    return vm_id, None
-
-
-def _create_vm(hypervisor):
-    global testable_hypervisors
-    LOG.tc_step('Run cyclictest on VM hosted on {}'.format(hypervisor))
-
-    LOG.tc_step('Download rt-guest')
-    image_file = _get_rt_guest_image()
-    LOG.tc_step('OK, image file downloaded:{}'.format(image_file))
-
-    LOG.tc_step('Create the image with the downloaded rt-guest')
-    image_name = 'img_' + os.path.splitext(os.path.basename(image_file))[0]
-    image_id = glance_helper.create_image(
-        source_image_file=image_file,
-        name=image_name,
-        public=True,
-        disk_format='raw',
-        container_format='bare',)[1]
-    LOG.tc_step('OK, glance image created, id:{}'.format(image_id))
-
-    LOG.tc_step('Create the flavor')
-    flavor_id, storage_backing = nova_helper.create_flavor(ram=1024, vcpus=4, root_disk=2,
+    vcpu_count = 4
+    non_rt_core = 0
+    LOG.tc_step('Create a flavor with specified cpu model, cpu policy, realtime mask, and 2M pagesize')
+    flavor_id, storage_backing = nova_helper.create_flavor(ram=1024, vcpus=vcpu_count, root_disk=2,
                                                            storage_backing='local_image')[1:3]
-    LOG.info('OK, flavor was created, id:{}, backing:{}'.format(flavor_id, storage_backing))
-
     cpu_info = dict(testable_hypervisors[hypervisor]['cpu_info'])
     extra_specs = {
         FlavorSpec.VCPU_MODEL: cpu_info['model'],
         FlavorSpec.CPU_POLICY: 'dedicated',
         FlavorSpec.CPU_REALTIME: 'yes',
-        FlavorSpec.CPU_REALTIME_MASK: '^0',
+        FlavorSpec.CPU_REALTIME_MASK: '^{}'.format(non_rt_core),
         FlavorSpec.MEM_PAGE_SIZE: 2048,
     }
-    LOG.tc_step('OK, extra spec set to id:{}\n{}'.format(id, extra_specs))
     nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
-    LOG.tc_step('OK, flavor was created, id:{}, backing:{}'.format(id, storage_backing))
 
-    LOG.tc_step('Boot the VM on the targeted hypervisor')
-    # vm_id = vm_helper.boot_vm(
-    #     flavor=flavor_id,
-    #     source='image',
-    #     source_id=image_id,
-    #     vm_host=hypervisor,
-    #     fail_ok=False
-    # )[1]
-    # return vm_id
-    return None
+    LOG.tc_step('Boot a VM with rt flavor and image on the targeted hypervisor: {}'.format(hypervisor))
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, source='image', source_id=image_id, vm_host=hypervisor,
+                              cleanup='function')[1]
+    return vm_id, vcpu_count, non_rt_core
 
 
-@mark.parametrize('where', [
-    'on_hypervisor',
-    'inside_vm',
-    # on_hypervisor_and_in_vm
-])
-def test_cyclictest(where):
-    if where.lower() == 'on_hypervisor':
-        LOG.info('Run cyclictest on hypervisor')
-        _cyclictest_on_hypervisor()
+def prep_test_on_host(target_ssh, target, file_path, active_controller_name, cyclictest_dir=CYCLICTEST_DIR):
+    LOG.tc_step("Copy cyclictest executable to target if not already exist: {}".format(target))
+    target_ssh.exec_cmd('mkdir -p {}; rm -f {}/*.*'.format(cyclictest_dir, cyclictest_dir))
 
-    elif where.lower() == 'inside_vm':
-        LOG.info('Run cyclictest inside a VM')
-        _cyclictest_inside_vm()
+    dest_path = '{}/{}'.format(cyclictest_dir, os.path.basename(file_path))
+    if not target_ssh.file_exists(dest_path):
+        LOG.info('Copy CYCLICTEST to selected host {}:{}'.format(target, dest_path))
+        target_ssh.scp_on_dest(HostLinuxCreds.get_user(), active_controller_name, dest_path=dest_path,
+                               source_path=file_path, source_pswd=HostLinuxCreds.get_password())
 
-    else:
-        LOG.info('Running cyclictest on:"{}" is not supported'.format(where))
+        LOG.info('Check if CYCLICTEST was copied to target host')
+        assert target_ssh.file_exists(dest_path), \
+            'Failed to find CYCLICTEST executable on target host after copied'
+
+        LOG.info('-successfully copied to {}:{}'.format(target, file_path))
+
+
+@mark.kpi
+def test_kpi_cyclictest_hypervisor(collect_kpi, prepare_test_session, get_hypervisor):
+    if not collect_kpi:
+        skip("KPI only test.  Skip due to kpi collection is not enabled")
+
+    global testable_hypervisors
+    chosen_hypervisor = get_hypervisor
+    cpu_info = testable_hypervisors[chosen_hypervisor]
+    cpu_info['for_host_test'] = True
+
+    LOG.info('Hypervisor chosen to run cyclictest: {}'.format(chosen_hypervisor))
+    active_controller_name = system_helper.get_active_controller_name()
+    program = os.path.join(os.path.abspath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
+    LOG.debug('program={}'.format(program))
+
+    with host_helper.ssh_to_host(chosen_hypervisor) as target_ssh:
+        prep_test_on_host(target_ssh, chosen_hypervisor, program, active_controller_name)
+        run_log, hist_file = run_cyclictest(target_ssh, program, target_hypervisor=chosen_hypervisor)
+
+        LOG.info("Process and upload test results")
+        local_run_log, local_hist_file = fetch_results_from_target(target_ssh=target_ssh, target_host=chosen_hypervisor,
+                                                                   active_con_name=active_controller_name,
+                                                                   run_log=run_log, hist_file=hist_file)
+
+    non_vm_cores = sum(list(cpu_info['non_vm_cores'].values()), [])
+    num_cores = cpu_info['num_cores']
+    avg_val, six_nines_val = calculate_results(run_log=local_run_log, hist_file=local_hist_file,
+                                               cores_to_ignore=non_vm_cores, num_cores=num_cores)
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=CyclicTest.NAME_HYPERVISOR_AVG,
+                              kpi_val=six_nines_val, uptime=15, unit=CyclicTest.UNIT)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=CyclicTest.NAME_HYPERVISOR_6_NINES,
+                              kpi_val=six_nines_val, uptime=15, unit=CyclicTest.UNIT)
+
+
+@mark.kpi
+def test_kpi_cyclictest_vm(collect_kpi, prepare_test_session, get_rt_guest_image, get_hypervisor, add_admin_role_func):
+    if not collect_kpi:
+        skip("KPI only test.  Skip due to kpi collection is not enabled")
+
+    hypervisor = get_hypervisor
+    testable_hypervisors[hypervisor]['for_vm_test'] = True
+    LOG.info('Hypervisor chosen to host rt vm: {}'.format(hypervisor))
+
+    vm_id, vcpu_count, non_rt_core = create_rt_vm(hypervisor)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+
+    cyclictest_dir = '/root/cyclictest/'
+    program = os.path.join(os.path.abspath(cyclictest_dir), os.path.basename(CYCLICTEST_EXE))
+    program_active_con = os.path.join(os.path.abspath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
+    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        prep_test_on_host(vm_ssh, vm_id, program_active_con, ControllerClient.get_active_controller().host,
+                          cyclictest_dir=cyclictest_dir)
+        run_log, hist_file = run_cyclictest(vm_ssh, program, target_hypervisor=vm_id, cyclictest_dir=cyclictest_dir)
+
+        LOG.info("Process and upload test results")
+        local_run_log, local_hist_file = fetch_results_from_target(target_ssh=vm_ssh, target_host=vm_id,
+                                                                   run_log=run_log, hist_file=hist_file, is_guest=True)
+
+    avg_val, six_nines_val = calculate_results(run_log=local_run_log, hist_file=local_hist_file,
+                                               cores_to_ignore=non_rt_core, num_cores=vcpu_count)
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=CyclicTest.NAME_VM_AVG,
+                              kpi_val=avg_val, uptime=15, unit=CyclicTest.UNIT)
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=CyclicTest.NAME_VM_6_NINES,
+                              kpi_val=six_nines_val, uptime=15, unit=CyclicTest.UNIT)

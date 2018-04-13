@@ -141,9 +141,9 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
 
     combined = 'controller' in subfunc and 'compute' in subfunc
 
-    str_ = 'not' if not combined else ''
+    str_ = 'not ' if not combined else ''
 
-    LOG.info("This is {} small footprint system.".format(str_))
+    LOG.info("This is {}small footprint system.".format(str_))
     return combined
 
 

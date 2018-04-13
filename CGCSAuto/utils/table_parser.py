@@ -910,3 +910,22 @@ def convert_value_to_dict_cinder(value):
         value = [value]
     d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
     return d
+
+
+def get_columns(table_, headers):
+    if not isinstance(headers, list) and not isinstance(headers, set):
+        headers = [headers]
+
+    all_headers = table_['headers']
+    if not set(headers).issubset(all_headers):
+        LOG.error('Unknown column:{}'.format(
+                list(set(all_headers) - set(headers)) + list(set(headers) - set(all_headers)))
+        )
+        return []
+
+    selected_column_positions = [i for i, header in enumerate(all_headers) if header in headers]
+    results = []
+    for row in table_['values']:
+        results.append([row[i] for i in selected_column_positions])
+
+    return results

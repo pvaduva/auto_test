@@ -19,7 +19,7 @@ from consts.filepaths import WRSROOT_HOME
 from keywords import system_helper, security_helper
 
 
-def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120, con_ssh=None):
+def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
     """
     SCP file or files under a directory from test server to TiS server
 
@@ -82,7 +82,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     return dest_path
 
 
-def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=180, is_dir=False,
+def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
                                               multi_files=False, con_ssh=None):
 
     """
@@ -132,7 +132,7 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
 def scp_to_active_controller(source_path, dest_path='',
                              dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                             timeout=60, is_dir=False):
+                             timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -143,7 +143,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 def scp_from_active_controller(source_path, dest_path='',
                                src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
-                               timeout=60, is_dir=False):
+                               timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -154,7 +154,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
 def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
                    dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                   timeout=60, is_dir=False):
+                   timeout=900, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
 
@@ -178,7 +178,7 @@ def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
 
 def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
                  source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
-                 timeout=60, is_dir=False):
+                 timeout=900, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
 
@@ -202,7 +202,7 @@ def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
     _scp_base(cmd, remote_password=source_password, timeout=timeout)
 
 
-def _scp_base(cmd, remote_password, logdir=None, timeout=60):
+def _scp_base(cmd, remote_password, logdir=None, timeout=900):
     LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')
