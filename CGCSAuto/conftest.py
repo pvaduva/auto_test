@@ -10,7 +10,7 @@ import setup_consts
 import setups
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
-#from consts.build_server import Server, get_build_server_info
+# from consts.build_server import Server, get_build_server_info
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
@@ -288,6 +288,8 @@ def pytest_configure(config):
     global region
     region = config.getoption('region')
 
+    collect_netinfo = config.getoption('netinfo')
+
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
@@ -297,6 +299,8 @@ def pytest_configure(config):
     always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+    if collect_netinfo:
+        ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
 
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
@@ -330,6 +334,9 @@ def pytest_configure(config):
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
         ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+
+    if setups.is_vbox():
+        ProjVar.set_var(IS_VBOX=True)
 
     InstallVars.set_install_var(lab=lab)
 
@@ -421,6 +428,9 @@ def pytest_addoption(parser):
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
+
+    parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
+                     help="Collect system networking info if scp keyfile fails")
 
     ##################################
     # Lab install or upgrade options #
@@ -564,7 +574,7 @@ def pytest_addoption(parser):
                                           "setup feed from scratch")
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
-                                                "This will be helpful if the lab was/will be in customized way.")
+                                               "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
                      action='store_true', help="Restore a low-latency lab")
 

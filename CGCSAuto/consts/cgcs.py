@@ -177,6 +177,7 @@ class HostTask:
     POWER_CYCLE = 'Critical Event Power-Cycle'
     POWER_DOWN = 'Critical Event Power-Down'
 
+
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
     CONTROLLER_1 = '.*controller\-1\:~\$ '
@@ -477,11 +478,14 @@ class OrchStrategyKey:
 class DevClassID:
     QAT_VF = '0b4000'
     GPU = '030000'
+    USB = '0c0320'
 
 
 class MaxVmsSupported:
     SX = 10
+    XEON_D = 4
     DX = 10
+    VBOX = 2
 
 
 class BackupRestore:

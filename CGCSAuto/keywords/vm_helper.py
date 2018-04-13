@@ -3702,13 +3702,6 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
                 if nova_helper.get_vm_host(vm) == host:
                     vms_host_err.append(vm)
 
-        if inactive_vms:
-            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-            if fail_ok:
-                LOG.warning(err_msg)
-                return 1, inactive_vms
-            raise exceptions.VMError(err_msg)
-
         if vms_host_err:
             if post_host:
                 err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
@@ -3719,7 +3712,14 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
             if fail_ok:
                 LOG.warning(err_msg)
-                return 2, vms_host_err
+                return 1, vms_host_err
+            raise exceptions.VMError(err_msg)
+
+        if inactive_vms:
+            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, inactive_vms
             raise exceptions.VMError(err_msg)
 
         if ping_vms:
@@ -4100,6 +4100,7 @@ def collect_guest_logs(vm_id):
                 local_log_path = '{}/{}_{}'.format(ProjVar.get_var('GUEST_LOGS_DIR'), log_name, vm_id)
                 current_user = local_host.get_user()
                 if current_user == SvcCgcsAuto.USER:
+                    vm_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(log_path), fail_ok=True)
                     vm_ssh.scp_files_to_local_host(source_file=log_path, dest_user=current_user,
                                                    dest_password=SvcCgcsAuto.PASSWORD, dest_path=local_log_path)
                 else:

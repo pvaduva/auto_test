@@ -1,22 +1,24 @@
+import re
+import os
 import time
 import configparser
 import threading
 import pexpect
 
 import setup_consts
-from utils import exceptions, lab_info
 from utils.tis_log import LOG
+from utils import exceptions, lab_info
 from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    TelnetClient, TELNET_LOGIN_PROMPT
+    TelnetClient, TELNET_LOGIN_PROMPT, SSHFromSSH
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
-from utils.local_host import *
+from utils import local_host
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, REGION_MAP
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common
+from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper
 from keywords.common import scp_to_local
 
 
@@ -28,10 +30,16 @@ def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
-        con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
-                            CONTROLLER_PROMPT)
-        con_ssh.connect(retry=True, retry_timeout=30)
-        ControllerClient.set_active_controller(con_ssh)
+        try:
+            con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                                CONTROLLER_PROMPT)
+            con_ssh.connect(retry=True, retry_timeout=30)
+            ControllerClient.set_active_controller(con_ssh)
+        except:
+            if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
+                LOG.error("SSH to lab fip failed. Collecting lab network info.")
+                collect_sys_net_info(lab=ProjVar.get_var('LAB'))
+            raise
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
     return con_ssh
@@ -105,8 +113,9 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
-        natbox (dict): NATBox info such as ip
+        nat_ssh (SSHClient): NATBox client
         keyfile_path (str): Natbox path to scp keyfile to
+        con_ssh (SSHClient)
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
@@ -390,8 +399,10 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
 
 
 def is_vbox():
+    lab_name = ProjVar.get_var('LAB_NAME')
     nat_name = ProjVar.get_var('NATBOX').get('name')
-    return nat_name == 'localhost' or nat_name.startswith('128.224.')
+
+    return 'vbox' in lab_name or nat_name == 'localhost' or nat_name.startswith('128.224.')
 
 
 def get_nodes_info():
@@ -475,8 +486,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
         installconf.read(installconf_path)
 
         # Parse lab info
-        lab_info = installconf['LAB']
-        lab_name = lab_info['LAB_NAME']
+        lab_info_ = installconf['LAB']
+        lab_name = lab_info_['LAB_NAME']
         vbox = True if 'vbox' in lab_name.lower() else False
         if vbox:
             LOG.info("The test lab is a VBOX TiS setup")
@@ -484,15 +495,15 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             lab_to_install = get_lab_dict(lab_name)
 
         if lab_to_install:
-            con0_ip = lab_info['CONTROLLER0_IP']
+            con0_ip = lab_info_['CONTROLLER0_IP']
             if con0_ip:
                 lab_to_install['controller-0 ip'] = con0_ip
 
-            con1_ip = lab_info['CONTROLLER1_IP']
+            con1_ip = lab_info_['CONTROLLER1_IP']
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
 
-            float_ip = lab_info['FLOATING_IP']
+            float_ip = lab_info_['FLOATING_IP']
             if float_ip:
                 lab_to_install['floating ip'] = float_ip
 
@@ -596,12 +607,12 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
             else:
                 raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
                                               .format(external_ip))
-        username = getpass.getuser()
+        username = local_host.getpass.getuser()
         password = ''
         if "svc-cgcsauto" in username:
             password = SvcCgcsAuto.PASSWORD
         else:
-            password = getpass.getpass()
+            password = local_host.getpass.getpass()
 
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password

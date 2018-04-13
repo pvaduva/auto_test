@@ -11,28 +11,16 @@ from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, Sy
 from keywords import system_helper, host_helper, vm_helper, common
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from testfixtures.pre_checks_and_configs import no_simplex
 
 
-@fixture()
-def drdb_precheck():
-    """
-    Skip test on simplex system.
-    """
-
-    if system_helper.is_simplex():
-        skip("This test does not apply to single node systems")
-
-
-@fixture()
+@fixture(scope='session')
 def heat_precheck():
     """
     Skip test on systems that don't use heat stacks to setup the lab.
     """
-
     con_ssh = ControllerClient.get_active_controller()
-
     cmd = "test -f /home/wrsroot/.heat_resources"
-
     rc, out = con_ssh.exec_cmd(cmd)
 
     if rc != 0:
@@ -40,10 +28,9 @@ def heat_precheck():
 
 
 @mark.kpi
-@mark.usefixtures("drdb_precheck")
-def test_drbd_kpi(collect_kpi):
+def test_drbd_kpi(no_simplex, collect_kpi):
     """
-    This test extracts the DRDB sync time from log files
+    This test extracts the DRBD sync time from log files
     """
 
     if not collect_kpi:
@@ -68,7 +55,7 @@ def test_config_controller_kpi(collect_kpi):
     """
 
     if not collect_kpi:
-        skip("KPI only test.  Skip due to kpi collection is not enabled")
+        skip("KPI only test. Skip due to kpi collection is not enabled")
 
     lab_name = ProjVar.get_var("LAB_NAME")
     log_path = ConfigController.LOG_PATH

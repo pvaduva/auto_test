@@ -363,8 +363,8 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
 
     LOG.tc_step("Verify memory is taken from {} pool".format(mem_table_header))
     assert sum(pre_used_mems) + 2048 == sum(post_used_mems), "Used memory is not increase by 2048MiB"
-    assert sum(pre_avail_mems) - 2048 == sum(post_avail_mems), ("Available memory in {} page pool is not decreased "
-                                                                "by 2048MiB").format(mem_page_size)
+    assert sum(post_avail_mems) - 500 < sum(pre_avail_mems) - 2048 < sum(post_avail_mems) + 500, \
+        "Available memory in {} page pool is not decreased by 2048MiB".format(mem_page_size)
 
     LOG.tc_step("Ensure vm is pingable from NatBox")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

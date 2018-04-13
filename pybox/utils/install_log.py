@@ -1,6 +1,10 @@
+import os
 import datetime
 import logging
 from consts.env import LOGPATH
+
+if not os.path.exists(LOGPATH):
+    os.mkdir(LOGPATH)
 
 current_time = datetime.datetime.now()
 

@@ -52,7 +52,7 @@ def vboxmanage_list(option="vms"):
     return vms_list
 
 
-def vboxmanage_showinfo(host="controller-0"):
+def vboxmanage_showinfo(host):
     """
     This returns info about the host 
     """
@@ -83,7 +83,7 @@ def vboxmanage_deletevms(hosts=None):
     if len(hosts) != 0:
         for hostname in hosts:
             LOG.info("Deleting VM {}".format(hostname))
-            result = subprocess.check_output(['vboxmanage', 'unregistervm', hostname.decode('utf-8'), '--delete'],
+            result = subprocess.check_output(['vboxmanage', 'unregistervm', hostname, '--delete'],
                                              stderr=subprocess.STDOUT)
 
     vms_list = vboxmanage_list("vms")
@@ -151,8 +151,8 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
             cmd.extend(['{}'.format(env.PORT)])
             env.PORT += 1
         else:
-            if hostname == 'controller-0':
-                cmd.extend(['{}controller0_serial'.format(uartpath)])
+            if 'controller-0' in hostname:
+                cmd.extend(['{}{}_serial'.format(uartpath, hostname)])
             else:
                 cmd.extend(['{}{}'.format(uartpath, hostname)])
     if nicbootprio2:
@@ -166,7 +166,7 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
     result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 
-def vboxmanage_storagectl(hostname=None, storectl="ide"):
+def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="off"):
     """
     This creates a storage controller on the host.
     """
@@ -174,11 +174,11 @@ def vboxmanage_storagectl(hostname=None, storectl="ide"):
     assert hostname, "Hostname is required"
     assert storectl, "Type of storage controller is required"
     LOG.info("Creating {} storage controller on VM {}".format(storectl, hostname))
-    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl],
+    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl, '--hostiocache', hostiocache],
                                      stderr=subprocess.STDOUT)
 
 
-def vboxmanage_storageattach(hostname="controller-0", storectl="ide", storetype="hdd", disk=None, port_num="0",
+def vboxmanage_storageattach(hostname=None, storectl="sata", storetype="hdd", disk=None, port_num="0",
                              device_num="0"):
     """
     This attaches a disk to a controller.
@@ -195,7 +195,7 @@ def vboxmanage_storageattach(hostname="controller-0", storectl="ide", storetype=
     return result
 
 
-def vboxmanage_createmedium(hostname=None, disk_list=None):
+def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'):
     """
     This creates the required disks.
     """
@@ -208,24 +208,20 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
     port_num = 0
     disk_count = 1
     for disk in disk_list:
-        # Need a better way to do this
-        if disk_count == 2:
-            device_num = 1
-        elif disk_count == 3:
-            port_num = 1
-            device_num = 0
-        elif disk_count == 4:
-            device_num = 1
         if platform == 'win32' or platform == 'win64':
+            ## TODO (WEI) fix it
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
-            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
-        LOG.info("Creating disk {} on VM {} on device {} port {}".format(file_name, hostname, device_num, port_num))
+            file_name = vbox_home_dir + '/' + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+        LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
+
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',
                                           file_name, '--format', 'vdi', '--variant', 'standard'],
                                          stderr=subprocess.STDOUT)
-        vboxmanage_storageattach(hostname, "ide", "hdd", file_name + ".vdi", str(port_num), str(device_num))
-        disk_count = disk_count + 1
+        LOG.info(result)
+        vboxmanage_storageattach(hostname, "sata", "hdd", file_name + ".vdi", str(port_num), str(device_num))
+        disk_count += 1
+        port_num += 1 
 
 
 def vboxmanage_startvm(hostname=None):
@@ -243,7 +239,9 @@ def vboxmanage_startvm(hostname=None):
         LOG.info("Host {} is already started".format(hostname))
     else:
         LOG.info("Powering on VM {}".format(hostname))
-        result = subprocess.check_output(['vboxmanage', 'startvm', hostname], stderr=subprocess.STDOUT)
+        # TODO (WEI) make it headless later
+        result = subprocess.check_output(['vboxmanage', 'startvm', hostname, '--type', 'headless'], stderr=subprocess.STDOUT)
+        #result = subprocess.check_output(['vboxmanage', 'startvm', hostname], stderr=subprocess.STDOUT)
         LOG.info(result)
 
 
@@ -256,6 +254,35 @@ def vboxmanage_controlvms(hosts=None, action=None):
     assert action, "Need to provide an action to execute"
  
     for host in hosts:
-        LOG.info("Executing {} action on VM {}".format(action, host.decode('utf-8')))
-        result = subprocess.call(["vboxmanage", "controlvm", host.decode('utf-8'), action], stderr=subprocess.STDOUT)
+        LOG.info("Executing {} action on VM {}".format(action, host))
+        result = subprocess.call(["vboxmanage", "controlvm", host, action], stderr=subprocess.STDOUT)
     time.sleep(1)
+
+
+## TODO (WEI): Add an "action" (take, restore, etc.) parameter to combine snapshot functions
+def vboxmanage_takesnapshot(hosts=None, name=None):
+    """
+    This allows you to take snapshot of VMs.
+    """
+
+    assert hosts, "Hostname is required"
+    assert name, "Need to provide a name for the snapshot"
+
+    for host in hosts:
+        LOG.info("Taking snapshot {} on VM {}".format(name, host))
+        result = subprocess.call(["vboxmanage", "snapshot", host, "take", name], stderr=subprocess.STDOUT)
+    time.sleep(10)
+
+
+def vboxmanage_restoresnapshot(host=None, name=None):
+    """
+    This allows you to restore snapshot of a VM.
+    """
+
+    assert host, "Hostname is required"
+    assert name, "Need to provide the snapshot to restore"
+
+    LOG.info("Restoring snapshot {} on VM {}".format(name, host))
+    result = subprocess.call(["vboxmanage", "snapshot", host, "restore", name], stderr=subprocess.STDOUT)
+    time.sleep(10)
+

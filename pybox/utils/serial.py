@@ -19,8 +19,8 @@ def connect(hostname, port=10000):
 
     # Need to power on host before we can connect
     vboxmanage.vboxmanage_startvm(hostname)
-    if hostname == 'controller-0':
-        socketname = '/tmp/controller0_serial'
+    if 'controller-0'in hostname:
+        socketname = '/tmp/' + hostname + '_serial'
     else:
         socketname = "/tmp/{}".format(hostname)
     LOG.info("Connecting to {}".format(hostname))
@@ -39,6 +39,7 @@ def connect(hostname, port=10000):
         pass
         # disconnect(sock)
         sock = None
+    # TODO (WEI): double check this 
     sock.setblocking(0)
 
     return sock
@@ -108,7 +109,6 @@ def send_bytes(stream, text, fail_ok=False, expect_prompt=True, prompt=None, tim
             return -1
         else:
             LOG.error("Failed to send text, logging out.")
-            # disconnect(stream)
             stream.sendall("exit".encode('utf-8'))
             raise
     except Exception as e:

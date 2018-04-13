@@ -77,91 +77,91 @@ DEBUGLEVEL = 0
 TELNET_PORT = 23
 
 # Telnet protocol characters (don't change)
-IAC  = bytes([255]) # "Interpret As Command"
+IAC = bytes([255])  # "Interpret As Command"
 DONT = bytes([254])
-DO   = bytes([253])
+DO = bytes([253])
 WONT = bytes([252])
 WILL = bytes([251])
 theNULL = bytes([0])
 
-SE  = bytes([240])  # Subnegotiation End
+SE = bytes([240])  # Subnegotiation End
 NOP = bytes([241])  # No Operation
-DM  = bytes([242])  # Data Mark
+DM = bytes([242])  # Data Mark
 BRK = bytes([243])  # Break
-IP  = bytes([244])  # Interrupt process
-AO  = bytes([245])  # Abort output
+IP = bytes([244])  # Interrupt process
+AO = bytes([245])  # Abort output
 AYT = bytes([246])  # Are You There
-EC  = bytes([247])  # Erase Character
-EL  = bytes([248])  # Erase Line
-GA  = bytes([249])  # Go Ahead
-SB =  bytes([250])  # Subnegotiation Begin
+EC = bytes([247])  # Erase Character
+EL = bytes([248])  # Erase Line
+GA = bytes([249])  # Go Ahead
+SB = bytes([250])  # Subnegotiation Begin
 
 
 # VT100 values
-ESC = bytes([27]) # Escape character
-VT100_DEVICE_STATUS = bytes([27,91,53,110]) # Device Status Query
-VT100_DEVICE_OK = bytes([27,91,48,110]) # Device OK
+ESC = bytes([27])  # Escape character
+VT100_DEVICE_STATUS = bytes([27, 91, 53, 110])  # Device Status Query
+VT100_DEVICE_OK = bytes([27, 91, 48, 110])  # Device OK
 
 # Telnet protocol options code (don't change)
 # These ones all come from arpa/telnet.h
-BINARY = bytes([0]) # 8-bit data path
-ECHO = bytes([1]) # echo
-RCP = bytes([2]) # prepare to reconnect
-SGA = bytes([3]) # suppress go ahead
-NAMS = bytes([4]) # approximate message size
-STATUS = bytes([5]) # give status
-TM = bytes([6]) # timing mark
-RCTE = bytes([7]) # remote controlled transmission and echo
-NAOL = bytes([8]) # negotiate about output line width
-NAOP = bytes([9]) # negotiate about output page size
-NAOCRD = bytes([10]) # negotiate about CR disposition
-NAOHTS = bytes([11]) # negotiate about horizontal tabstops
-NAOHTD = bytes([12]) # negotiate about horizontal tab disposition
-NAOFFD = bytes([13]) # negotiate about formfeed disposition
-NAOVTS = bytes([14]) # negotiate about vertical tab stops
-NAOVTD = bytes([15]) # negotiate about vertical tab disposition
-NAOLFD = bytes([16]) # negotiate about output LF disposition
-XASCII = bytes([17]) # extended ascii character set
-LOGOUT = bytes([18]) # force logout
-BM = bytes([19]) # byte macro
-DET = bytes([20]) # data entry terminal
-SUPDUP = bytes([21]) # supdup protocol
-SUPDUPOUTPUT = bytes([22]) # supdup output
-SNDLOC = bytes([23]) # send location
-TTYPE = bytes([24]) # terminal type
-EOR = bytes([25]) # end or record
-TUID = bytes([26]) # TACACS user identification
-OUTMRK = bytes([27]) # output marking
-TTYLOC = bytes([28]) # terminal location number
-VT3270REGIME = bytes([29]) # 3270 regime
-X3PAD = bytes([30]) # X.3 PAD
-NAWS = bytes([31]) # window size
-TSPEED = bytes([32]) # terminal speed
-LFLOW = bytes([33]) # remote flow control
-LINEMODE = bytes([34]) # Linemode option
-XDISPLOC = bytes([35]) # X Display Location
-OLD_ENVIRON = bytes([36]) # Old - Environment variables
-AUTHENTICATION = bytes([37]) # Authenticate
-ENCRYPT = bytes([38]) # Encryption option
-NEW_ENVIRON = bytes([39]) # New - Environment variables
+BINARY = bytes([0])  # 8-bit data path
+ECHO = bytes([1])  # echo
+RCP = bytes([2])  # prepare to reconnect
+SGA = bytes([3])  # suppress go ahead
+NAMS = bytes([4])  # approximate message size
+STATUS = bytes([5])  # give status
+TM = bytes([6])  # timing mark
+RCTE = bytes([7])  # remote controlled transmission and echo
+NAOL = bytes([8])  # negotiate about output line width
+NAOP = bytes([9])  # negotiate about output page size
+NAOCRD = bytes([10])  # negotiate about CR disposition
+NAOHTS = bytes([11])  # negotiate about horizontal tabstops
+NAOHTD = bytes([12])  # negotiate about horizontal tab disposition
+NAOFFD = bytes([13])  # negotiate about formfeed disposition
+NAOVTS = bytes([14])  # negotiate about vertical tab stops
+NAOVTD = bytes([15])  # negotiate about vertical tab disposition
+NAOLFD = bytes([16])  # negotiate about output LF disposition
+XASCII = bytes([17])  # extended ascii character set
+LOGOUT = bytes([18])  # force logout
+BM = bytes([19])  # byte macro
+DET = bytes([20])  # data entry terminal
+SUPDUP = bytes([21])  # supdup protocol
+SUPDUPOUTPUT = bytes([22])  # supdup output
+SNDLOC = bytes([23])  # send location
+TTYPE = bytes([24])  # terminal type
+EOR = bytes([25])  # end or record
+TUID = bytes([26])  # TACACS user identification
+OUTMRK = bytes([27])  # output marking
+TTYLOC = bytes([28])  # terminal location number
+VT3270REGIME = bytes([29])  # 3270 regime
+X3PAD = bytes([30])  # X.3 PAD
+NAWS = bytes([31])  # window size
+TSPEED = bytes([32])  # terminal speed
+LFLOW = bytes([33])  # remote flow control
+LINEMODE = bytes([34])  # Linemode option
+XDISPLOC = bytes([35])  # X Display Location
+OLD_ENVIRON = bytes([36])  # Old - Environment variables
+AUTHENTICATION = bytes([37])  # Authenticate
+ENCRYPT = bytes([38])  # Encryption option
+NEW_ENVIRON = bytes([39])  # New - Environment variables
 # the following ones come from
 # http://www.iana.org/assignments/telnet-options
 # Unfortunately, that document does not assign identifiers
 # to all of them, so we are making them up
-TN3270E = bytes([40]) # TN3270E
-XAUTH = bytes([41]) # XAUTH
-CHARSET = bytes([42]) # CHARSET
-RSP = bytes([43]) # Telnet Remote Serial Port
-COM_PORT_OPTION = bytes([44]) # Com Port Control Option
-SUPPRESS_LOCAL_ECHO = bytes([45]) # Telnet Suppress Local Echo
-TLS = bytes([46]) # Telnet Start TLS
-KERMIT = bytes([47]) # KERMIT
-SEND_URL = bytes([48]) # SEND-URL
-FORWARD_X = bytes([49]) # FORWARD_X
-PRAGMA_LOGON = bytes([138]) # TELOPT PRAGMA LOGON
-SSPI_LOGON = bytes([139]) # TELOPT SSPI LOGON
-PRAGMA_HEARTBEAT = bytes([140]) # TELOPT PRAGMA HEARTBEAT
-EXOPL = bytes([255]) # Extended-Options-List
+TN3270E = bytes([40])  # TN3270E
+XAUTH = bytes([41])  # XAUTH
+CHARSET = bytes([42])  # CHARSET
+RSP = bytes([43])  # Telnet Remote Serial Port
+COM_PORT_OPTION = bytes([44])  # Com Port Control Option
+SUPPRESS_LOCAL_ECHO = bytes([45])  # Telnet Suppress Local Echo
+TLS = bytes([46])  # Telnet Start TLS
+KERMIT = bytes([47])  # KERMIT
+SEND_URL = bytes([48])  # SEND-URL
+FORWARD_X = bytes([49])  # FORWARD_X
+PRAGMA_LOGON = bytes([138])  # TELOPT PRAGMA LOGON
+SSPI_LOGON = bytes([139])  # TELOPT SSPI LOGON
+PRAGMA_HEARTBEAT = bytes([140])  # TELOPT PRAGMA HEARTBEAT
+EXOPL = bytes([255])  # Extended-Options-List
 NOOPT = bytes([0])
 
 
@@ -246,20 +246,20 @@ class Telnet:
         self.irawq = 0
         self.cookedq = b''
         self.eof = 0
-        self.iacseq = b'' # Buffer for IAC sequence.
-#-- mod begins
+        self.iacseq = b''  # Buffer for IAC sequence.
+# -- mod begins
         self.negotiate = negotiate
         self.vt100query = vt100query
         if self.vt100query:
-            self.vt100querybuffer = b'' # Buffer for VT100 queries
-#-- mod ends
-        self.sb = 0 # flag for SB and SE sequence.
+            self.vt100querybuffer = b''  # Buffer for VT100 queries
+# -- mod ends
+        self.sb = 0  # flag for SB and SE sequence.
         self.sbdataq = b''
         self.option_callback = None
-#-- mod begins
+# -- mod begins
         self.logfile = logfile
         self.echo = None
-#-- mod ends
+# -- mod ends
         if host is not None:
             self.open(host, port, timeout)
 
@@ -481,20 +481,20 @@ class Telnet:
                         continue
                     if c == b"\021":
                         continue
-#-- mod begins
+# -- mod begins
                     # deal with vt100 escape sequences
                     if self.vt100query:
                         if self.vt100querybuffer:
-                           self.vt100querybuffer += c
-                           if len(self.vt100querybuffer) > 10:
-                               self.vt100querybuffer = b'' # too long, ignore
-                           elif self.vt100querybuffer == VT100_DEVICE_STATUS:
-                               self.sock.sendall(VT100_DEVICE_OK)
-                               self.vt100querybuffer = b''
+                            self.vt100querybuffer += c
+                            if len(self.vt100querybuffer) > 10:
+                                self.vt100querybuffer = b''  # too long, ignore
+                            elif self.vt100querybuffer == VT100_DEVICE_STATUS:
+                                self.sock.sendall(VT100_DEVICE_OK)
+                                self.vt100querybuffer = b''
                         if not self.vt100querybuffer and c == ESC:
-                           self.vt100querybuffer += c
+                            self.vt100querybuffer += c
                     # deal with IAC sequences
-#-- mod ends
+# -- mod ends
                     if c != IAC:
                         buf[self.sb] = buf[self.sb] + c
                         continue
@@ -510,7 +510,7 @@ class Telnet:
                     if c == IAC:
                         buf[self.sb] = buf[self.sb] + c
                     else:
-                        if c == SB: # SB ... SE start.
+                        if c == SB:  # SB ... SE start.
                             self.sb = 1
                             self.sbdataq = b''
                         elif c == SE:
@@ -531,53 +531,51 @@ class Telnet:
                     self.iacseq = b''
                     opt = c
                     if cmd in (DO, DONT):
-                        self.msg('IAC %s %d',
-                            cmd == DO and 'DO' or 'DONT', ord(opt))
+                        self.msg('IAC %s %d', cmd == DO and 'DO' or 'DONT', ord(opt))
                         if self.option_callback:
                             self.option_callback(self.sock, cmd, opt)
                         else:
-#-- mod begins
+# -- mod begins
                             if self.negotiate:
                                 # do some limited logic to use SGA if asked
                                 if cmd == DONT and opt == SGA:
-                                   self.sock.sendall(IAC + WILL + opt)
+                                    self.sock.sendall(IAC + WILL + opt)
                                 elif cmd == DO and opt == SGA:
-                                   self.sock.sendall(IAC + WILL + opt)
+                                    self.sock.sendall(IAC + WILL + opt)
                                 else:
-                                   self.sock.sendall(IAC + WONT + opt)
+                                    self.sock.sendall(IAC + WONT + opt)
                             else:
-#-- mod ends
+# -- mod ends
                                 self.sock.sendall(IAC + WONT + opt)
                     elif cmd in (WILL, WONT):
-                        self.msg('IAC %s %d',
-                            cmd == WILL and 'WILL' or 'WONT', ord(opt))
+                        self.msg('IAC %s %d', cmd == WILL and 'WILL' or 'WONT', ord(opt))
                         if self.option_callback:
                             self.option_callback(self.sock, cmd, opt)
                         else:
-#-- mod begins
+# -- mod begins
                             if self.negotiate:
                                 # do some limited logic to use SGA if asked
                                 if cmd == WONT and opt == SGA:
-                                   self.sock.sendall(IAC + DO + opt)
+                                    self.sock.sendall(IAC + DO + opt)
                                 elif cmd == WILL and opt == SGA:
-                                   self.sock.sendall(IAC + DO + opt)
+                                    self.sock.sendall(IAC + DO + opt)
                                 elif cmd == WILL and opt == ECHO:
-                                   self.sock.sendall(IAC + DO + opt)
+                                    self.sock.sendall(IAC + DO + opt)
                                 else:
-                                   self.sock.sendall(IAC + DONT + opt)
+                                    self.sock.sendall(IAC + DONT + opt)
                             else:
-#-- mod ends
+# -- mod ends
                                 self.sock.sendall(IAC + DONT + opt)
-        except EOFError: # raised by self.rawq_getchar()
-            self.iacseq = b'' # Reset on EOF
+        except EOFError:  # raised by self.rawq_getchar()
+            self.iacseq = b''  # Reset on EOF
             self.sb = 0
             pass
         self.cookedq = self.cookedq + buf[0]
-#-- mod begins
+# -- mod begins
         self.log_write(buf[0])
         if self.echo:
             self.echo.write(buf[0].decode('utf-8', 'ignore'))
-#-- mod ends
+# -- mod ends
         self.sbdataq = self.sbdataq + buf[1]
 
     def rawq_getchar(self):
@@ -655,9 +653,9 @@ class Telnet:
             line = sys.stdin.readline()
             if not line:
                 break
-#-- mod begins
+# -- mod begins
             self.write(line)
-#-- mod ends
+# -- mod ends
 
     def listener(self):
         """Helper for mt_interact() -- this executes in the other thread."""
@@ -668,9 +666,9 @@ class Telnet:
                 print('*** Connection closed by remote host ***')
                 return
             if data:
-#-- mod begins
+# -- mod begins
                 sys.stdout.write(data)
-#-- mod ends
+# -- mod ends
             else:
                 sys.stdout.flush()
 
@@ -730,16 +728,16 @@ class Telnet:
             raise EOFError
         return (-1, None, text)
 
-#-- mod begins
+# -- mod begins
     def log_write(self, text):
         if not text:
             return
 
         try:
-            if not isinstance(text,str):
-                text = text.decode('utf-8','ignore')
+            if not isinstance(text, str):
+                text = text.decode('utf-8', 'ignore')
         except AttributeError as e:
-            print ('log_write exception: ', e)
+            print('log_write exception: ', e)
             pass
 
         if self.logfile:
@@ -749,11 +747,11 @@ class Telnet:
             except UnicodeEncodeError:
                 # Commented out to prevent the log from filling up with
                 # these messages when a node is being installed
-                #print(' following text caused a UNICODE ENCODE ERROR ')
+                # print(' following text caused a UNICODE ENCODE ERROR ')
                 pass
-#-- mod ends
+# -- mod ends
 
-#-- new functions begin
+# -- new functions begin
     def write_line(self, text):
         """Wrapper for write().
            Writes text followed by line separator in utf-8 encoding.
@@ -775,7 +773,8 @@ class Telnet:
         try:
             output = self.read_until(str.encode(expected), timeout)
         except EOFError:
-            msg = "Connection closed: Reached EOF and no data was read in Telnet session: {}:{}.".format(self.host, self.port)
+            msg = "Connection closed: Reached EOF and no data was read in Telnet session: {}:{}.".format(self.host,
+                                                                                                         self.port)
 
             raise exceptions.TelnetException(msg)
 
@@ -862,7 +861,7 @@ class Telnet:
             raise exceptions.TelnetException(msg)
 
         if index == 0:
-            rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
+            rc = (match.group(0).decode('utf-8', 'ignore')).translate({ord('['): '', ord(']'): ''})
             LOG.info("Return code: " + rc)
         else:
             msg = "Timeout occurred: Failed to find return code, index={}".format(index)
@@ -877,8 +876,8 @@ class Telnet:
 
         return int(rc), output
 
-
-    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT, show_output=True, alt_prompt=None):
+    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT,
+                      show_output=True, alt_prompt=None):
 
         cmd = 'sudo ' + cmd
 
@@ -920,7 +919,7 @@ class Telnet:
             raise exceptions.TelnetException(msg)
 
         if index == 0:
-            rc = (match.group(0).decode('utf-8','ignore')).translate({ord('['): '', ord(']'): ''})
+            rc = (match.group(0).decode('utf-8', 'ignore')).translate({ord('['): '', ord(']'): ''})
             LOG.info("Return code: " + rc)
         else:
             msg = "Timeout occurred: Failed to find return code"
@@ -934,7 +933,6 @@ class Telnet:
             self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
 
         return (int(rc), output)
-
 
     def login(self, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
         """Waits for login prompt to authenticate user.
@@ -989,7 +987,7 @@ class Telnet:
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
 
-    #TODO: The regular expression passed into re.compile(...) to search through
+    # TODO: The regular expression passed into re.compile(...) to search through
     #      the boot menu for each BIOS type should perhaps be set as constants
     #      or even specified in the barcode .ini for each node. Some nodes
     #      e.g. wildcat13-14 do not print their BIOS type (wildcat) when they
@@ -1001,9 +999,9 @@ class Telnet:
     #      figures out what the BIOS type is and subsequently, how it determines
     #      which regex to pass into re.compile(...).
 
-    #TODO: The timeouts in this function need to be tested to see if they
+    # TODO: The timeouts in this function need to be tested to see if they
     #      should be increased/decreased
-    #TODO: If script returns zero, should check return code, otherwise remove it
+    # TODO: If script returns zero, should check return code, otherwise remove it
     def install(self, node, boot_device_dict,
                 host_os='centos',
                 upgrade=False,
@@ -1025,7 +1023,7 @@ class Telnet:
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
             bios_type = BIOS_TYPES[index]
-            LOG.info("BIOS type: " + bios_type.decode('utf-8','ignore'))
+            LOG.info("BIOS type: " + bios_type.decode('utf-8', 'ignore'))
             LOG.info("Use BIOS key: " + bios_key_hr)
             LOG.info("Installation timeout: " + str(install_timeout))
 
@@ -1050,17 +1048,17 @@ class Telnet:
             count = 0
             down_press_count = 0
 
-             # GENERIC USB
+            # GENERIC USB
             if usb and node.name == CONTROLLER0:
                 LOG.info("Looking for USB device")
                 boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
 
             LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
-            #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+            # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
             # Construct regex to work with wildcatpass machines
             # in legacy and uefi mode
-            #regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
-            #regex = re.compile(b"\[\d+(.*?)\x1b")
+            # regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
+            # regex = re.compile(b"\[\d+(.*?)\x1b")
             # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
             if "wildcat" in node.host_name:
                 regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
@@ -1107,7 +1105,7 @@ class Telnet:
                 if index == 0:
                     LOG.info('match.group(0)={}'.format(match.group(0)))
 
-                    match = match.group(0).decode('utf-8','ignore')
+                    match = match.group(0).decode('utf-8', 'ignore')
                     LOG.info("Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         LOG.info("Found boot device {}".format(boot_device_regex))
@@ -1140,7 +1138,7 @@ class Telnet:
                             LOG.info("Pressing down key")
                             self.write(str.encode(DOWN))
                             if host_os == 'wrlinux':
-                               self.write(str.encode(DOWN))
+                                self.write(str.encode(DOWN))
                             time.sleep(1)
                             LOG.info("Pressing ENTER key")
                             self.write(str.encode("\r\r"))
@@ -1174,7 +1172,7 @@ class Telnet:
                     # 6) CentOS Serial CPE Install (low latency)
                     LOG.info("Enter option for {} Controller Install".format(host_os))
                     if host_os == 'wrlinux':
-                        #selection_menu_option = '1'
+                        # selection_menu_option = '1'
                         if small_footprint:
                             selection_menu_option = '3'
                         else:
@@ -1190,7 +1188,7 @@ class Telnet:
                             selection_menu_option = '2'
 
                     if hasattr(node, "host_kickstart_menu_selection"):
-                        selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
+                        selection_menu_option = getattr(node, "host_kickstart_menu_selection")
 
                     LOG.info("Kickstart boot menu selection = {}".format(selection_menu_option))
 
@@ -1212,7 +1210,7 @@ class Telnet:
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
             bios_type = match.group(0)
-            LOG.info("BIOS type: " + bios_type.decode('utf-8','ignore'))
+            LOG.info("BIOS type: " + bios_type.decode('utf-8', 'ignore'))
             LOG.info("Use BIOS key: " + bios_key_hr)
             LOG.info("Installation timeout: " + str(install_timeout))
         else:
@@ -1222,7 +1220,8 @@ class Telnet:
 
         # American Megatrends BIOS, e.g. IronPass
         if bios_type == BIOS_TYPES[0]:
-            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                      if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
@@ -1252,9 +1251,9 @@ class Telnet:
                     boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
 
                 LOG.info("Searching boot device menu for {}...".format(boot_device_regex))
-                #regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
+                # regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*)\s+(.*?)\|")
                 regex = re.compile(b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*?)\|")
-                #\x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
+                # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
                 try:
                     index, match = self.expect([regex], TELNET_EXPECT_TIMEOUT)[:2]
                 except EOFError:
@@ -1262,7 +1261,7 @@ class Telnet:
 
                     raise exceptions.TelnetException(msg)
                 if index == 0:
-                    match = match.group(1).decode('utf-8','ignore')
+                    match = match.group(1).decode('utf-8', 'ignore')
                     LOG.info("Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         LOG.info("Found boot device {}".format(boot_device_regex))
@@ -1294,7 +1293,7 @@ class Telnet:
                             LOG.info("Pressing DOWN key")
                             self.write(str.encode(DOWN))
                             if host_os == 'wrlinux':
-                               self.write(str.encode(DOWN))
+                                self.write(str.encode(DOWN))
                             time.sleep(1)
                             LOG.info("Pressing ENTER key")
                             self.write(str.encode("\r\r"))
@@ -1312,9 +1311,9 @@ class Telnet:
                     LOG.info("Searching Kickstart boot device menu for ...")
                     # Some labs like IP-28_30 has Boot from hard drive selection as 0,1,2
                     # other have selection of 1,2,3. Need to determine menu options:
-                    #selection_menu_option = '2'
+                    # selection_menu_option = '2'
                     if hasattr(node, "host_kickstart_menu_selection"):
-                        selection_menu_option =  getattr(node, "host_kickstart_menu_selection")
+                        selection_menu_option = getattr(node, "host_kickstart_menu_selection")
 
                     # New pxeboot cfg menu
                     # 0) Boot from hard drive
@@ -1362,7 +1361,8 @@ class Telnet:
                 LOG.info("Kickstart boot menu selection = {}".format(selection_menu_option))
                 self.write_line(selection_menu_option)
         elif bios_type == BIOS_TYPES[2]:
-            boot_device_regex = next((value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                      if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
@@ -1398,7 +1398,7 @@ class Telnet:
                     raise exceptions.TelnetException(msg)
 
                 if index == 0:
-                    match = match.group(1).decode('utf-8','ignore')
+                    match = match.group(1).decode('utf-8', 'ignore')
                     LOG.info("Matched: " + match)
                     if re.search(boot_device_regex, match, re.IGNORECASE):
                         LOG.info("Found boot device {}".format(boot_device_regex))
@@ -1458,7 +1458,8 @@ def deploy_ssh_key(self):
         self.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
         self.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 """
-def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False, negotiate=False, vt100query=False, log_path=None, debug=False):
+def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False,
+            negotiate=False, vt100query=False, log_path=None, debug=False):
     """Establishes telnet connection to host."""
 
     if log_path:
@@ -1512,6 +1513,7 @@ def test():
     tn.open(host, port, timeout=0.5)
     tn.interact()
     tn.close()
+
 
 if __name__ == '__main__':
     test()

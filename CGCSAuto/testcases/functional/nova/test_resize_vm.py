@@ -51,7 +51,7 @@ def get_expt_disk_increase(origin_flavor, dest_flavor, boot_source, storage_back
     return expected_increase, expect_to_check
 
 
-def get_compute_disk_space(host):
+def get_disk_avail_least(host):
     return host_helper.get_hypervisor_info(hosts=host, rtn_val='disk_available_least')[host]
 
 
@@ -59,12 +59,22 @@ def check_correct_post_resize_value(original_disk_value, expected_increase, host
     if sleep:
         time.sleep(65)
 
-    post_resize_value = get_compute_disk_space(host)
+    post_resize_value = get_disk_avail_least(host)
     LOG.info("{} original_disk_value: {}. post_resize_value: {}. expected_increase: {}".format(
             host, original_disk_value, post_resize_value, expected_increase))
     expt_post = original_disk_value + expected_increase
-    assert expt_post-1 <= post_resize_value <= expt_post+1, \
-        "disk_available_least on {} expected: {}+-1, actual: {}".format(host, expt_post, post_resize_value)
+
+    if expected_increase < 0:
+        # vm is on this host, backup image files may be created if not already existed
+        backup_val = math.ceil(GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][3])
+        assert expt_post-backup_val <= post_resize_value <= expt_post
+    elif expected_increase > 0:
+        # vm moved away from this host, or resized to smaller disk on same host, backup files will stay
+        assert expt_post-1 <= post_resize_value <= expt_post+1, \
+            "disk_available_least on {} expected: {}+-1, actual: {}".format(host, expt_post, post_resize_value)
+    else:
+        assert expt_post == post_resize_value, \
+            "{} disk_available_least value changed to {} unexpectedly".format(host, post_resize_value)
 
     return post_resize_value
 
@@ -172,7 +182,7 @@ class TestResizeSameHost:
 
         if expect_to_check:
             LOG.tc_step('Check initial disk usage')
-            original_disk_value = get_compute_disk_space(vm_host)
+            original_disk_value = get_disk_avail_least(vm_host)
             LOG.info("{} space left on compute".format(original_disk_value))
 
         LOG.tc_step('Create destination flavor')
@@ -316,7 +326,7 @@ def get_cpu_count(hosts_with_backing):
                                                           numa_node=0)[vm_host]
     numa0_avail_cpus = math.floor(numa0_avail_cpus)
     for host in hosts_with_backing:
-        free_space = get_compute_disk_space(host)
+        free_space = get_disk_avail_least(host)
         compute_space_dict[host] = free_space
         LOG.info("{} space on {}".format(free_space, host))
 
@@ -366,7 +376,7 @@ class TestResizeDiffHost:
 
         origin_host, cpu_count, compute_space_dict = get_cpu_count(hosts_with_backing)
 
-        root_disk_size = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1] + 3
+        root_disk_size = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1] + 5
 
         # make vm (1 cpu)
         LOG.tc_step("Create flavor with 1 cpu")
@@ -393,7 +403,7 @@ class TestResizeDiffHost:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_2)
 
         LOG.tc_step('Check disk usage before resize')
-        prev_val_origin_host = get_compute_disk_space(origin_host)
+        prev_val_origin_host = get_disk_avail_least(origin_host)
         LOG.info("{} space left on compute".format(prev_val_origin_host))
 
         # create a larger flavor and resize

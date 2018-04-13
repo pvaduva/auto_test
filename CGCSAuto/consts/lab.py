@@ -499,11 +499,13 @@ class Labs:
 
     WCP_113_121 = {
         'short_name': 'wcp_113_121',
-        'name': 'yow-cgcs-wildcat-113-121',
+        'name': 'yow-cgcs-wildcat-113_121',
         'floating ip': '128.224.150.45',
         'controller-0 ip': '128.224.150.191',
         'controller-1 ip': '128.224.150.57',
-
+        'controller_nodes': [31701, 19174],
+        'compute_nodes': [11182, 47720, 56027, 28212, 33598],
+        'storage_nodes': [11507, 47400],
     }
 
     WP_01_02 = {
@@ -525,17 +527,6 @@ class Labs:
         'controller-1 ip': '128.224.151.166',
         'controller_nodes': [98522, 81712],
         'compute_nodes': [94867, 18658, 40810],
-    }
-
-    WCP_113_121 = {
-        'short_name': 'wcp_113_121',
-        'name': 'yow-cgcs-wildcat-113_121',
-        'floating ip': '128.224.150.45',
-        'controller-0 ip': '128.224.150.191',
-        'controller-1 ip': '128.224.150.57',
-        'controller_nodes': [31701, 19174],
-        'compute_nodes': [11182, 47720, 56027, 28212, 33598],
-        'storage_nodes': [11507, 47400],
     }
 
     VBOX = {

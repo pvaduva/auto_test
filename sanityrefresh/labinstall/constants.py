@@ -49,9 +49,9 @@ CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 #CENTOS_GUEST = DEFAULT_WKSPCE + "/TC_17.06_Guest"
 
 LIC_FILENAME = "license.lic"
-LICENSE_FILEPATH = "-L /folk/cgts/lab/R5-full.lic"
-SFP_LICENSE_FILEPATH = "-L /folk/cgts/lab/R5-AIO-DX-full.lic"
-SIMPLEX_LICENSE_FILEPATH = "-L /folk/cgts/lab/R5-AIO-SX-full.lic"
+LICENSE_FILEPATH = "-L /folk/cgts/lab/R6-full.lic"
+SFP_LICENSE_FILEPATH = "-L /folk/cgts/lab/R6-AIO-DX-full.lic"
+SIMPLEX_LICENSE_FILEPATH = "-L /folk/cgts/lab/R6-AIO-SX-full.lic"
 WRSROOT_ETC_PROFILE = "/etc/profile.d/custom.sh"
 WRSROOT_ETC_PROFILE_LEGACY = "/etc/profile"
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards"
@@ -119,7 +119,7 @@ PATCH_AVAILABLE_STATE = "Available"
 DEFAULT_BOOT_DEVICE_DICT = {'controller-0': '[ABC]00',
                             'compute': '[ABC]01',
                             'storage': '[ABC]01'}
-BIOS_TYPES = [b"American Megatrends", b"Hewlett-Packard", b"Phoenix", b"PowerEdge", b"American Megatrends"]
+BIOS_TYPES = [b"American Megatrends", b"Hewlett", b"Phoenix", b"PowerEdge", b"American Megatrends"]
 # BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~', '\x1b' + '[23~', '\x1b!']
 BIOS_TYPE_FN_KEY_ESC_CODES = ['\x1b' + '[17~', '\x1b' + '@', '\x1b' + '[24~', '\x1b' + '[23~',  '\x1b' + '!']
 # F6, ESC + @, F12 Phoenix used for R720 nodes (i.e. Dell), F6 for supermicro

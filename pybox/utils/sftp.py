@@ -35,14 +35,13 @@ def sftp_get(source, remote_host, destination):
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh_client.connect(remote_host, username=username)
     sftp_client = ssh_client.open_sftp()
-    LOG.info("Sending file from {} to {}".format(source, destination))
+    LOG.info("Getting file from {} to {}".format(source, destination))
     sftp_client.get(source, destination)
     LOG.info("Done")
     sftp_client.close()
     ssh_client.close()
 
-
-def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
+def sftp_send(source, remote_host, destination, username, password):
     """
     Send files to remote server, usually controller-0
     args:
@@ -52,16 +51,22 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the file locally: /tmp/bootimage.iso
     """
-    username = 'wrsroot'
-    password = 'Li69nux*'
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
 
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, password=password, look_for_keys=False, allow_agent=False)
-    sftp_client = ssh_client.open_sftp()
-
+  
+    ## TODO(WEI): need to make this timeout handling better
+    retry = 0
+    while retry < 8:
+        try:
+            ssh_client.connect(remote_host, username=username, password=password, look_for_keys=False, allow_agent=False)
+            sftp_client = ssh_client.open_sftp()
+            retry = 8
+        except Exception as e:
+            LOG.info("******* try again")
+            retry += 1
+            time.sleep(10)
 
     LOG.info("Sending file from {} to {}".format(source, destination))
     sftp_client.put(source, destination)
@@ -70,7 +75,7 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     ssh_client.close()
     
     
-def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
+def send_dir(source, remote_host, destination, username, password):
     """
     Send directory contents to remote server, usually controller-0
     Note: does not send nested directories only files.
@@ -81,15 +86,13 @@ def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the file on host: /home/wrsroot/
     """
-    username = 'wrsroot'
-    password = 'Li69nux*'
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh_client.connect(remote_host, username=username, password=password, look_for_keys=False, allow_agent=False)
     sftp_client = ssh_client.open_sftp()
     path = ''
+    send_img = False
     for items in os.listdir(source):
         path = source+items
         if os.path.isfile(path):
@@ -97,6 +100,7 @@ def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
                 remote_path = destination+'images/'+items
                 LOG.info("Sending file from {} to {}".format(path, remote_path))
                 sftp_client.put(path, remote_path)
+                send_img = True
             elif items.endswith('.iso'):
                 pass
             else:
@@ -106,6 +110,8 @@ def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     LOG.info("Done")
     sftp_client.close()
     ssh_client.close()
+    if send_img:
+        time.sleep(10)
     
     
 def get_dir(source, remote_host, destination, patch=False, setup=False):
@@ -149,3 +155,4 @@ def get_dir(source, remote_host, destination, patch=False, setup=False):
     LOG.info("Done")
     sftp_client.close()
     ssh_client.close()
+

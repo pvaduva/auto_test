@@ -5,7 +5,7 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID
 from consts.filepaths import UserData, TiSPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
@@ -48,8 +48,7 @@ def get_ip_address_str(ip=None):
         return None
 
 
-def create_network(name=None, shared=False, tenant_name=None,
-                   network_type=None, segmentation_id=None,
+def create_network(name=None, shared=False, tenant_name=None, network_type=None, segmentation_id=None,
                    physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=None, con_ssh=None):
 
     """
@@ -57,6 +56,7 @@ def create_network(name=None, shared=False, tenant_name=None,
 
     Args:
         name (str): name of the network
+        shared (bool)
         tenant_name: such as tenant1, tenant2.
         network_type (str): The physical mechanism by which the virtual network is
                         implemented
@@ -76,7 +76,7 @@ def create_network(name=None, shared=False, tenant_name=None,
 
     args = ' ' + name
     if tenant_name is not None:
-        tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+        tenant_id = keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
         args += ' --tenant-id ' + format(tenant_id)
 
     if shared:
@@ -126,6 +126,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         tenant_name: such as tenant1, tenant2.
         gateway (str): gateway ip of this subnet
         dhcp (bool): whether or not to enable DHCP
+        no_gateway (bool)
         dns_servers (str|list): DNS name servers. Such as ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
         alloc_pool (dict): {'start': <start_ip>, 'end': 'end_ip'}
         ip_version (int): 4, or 6
@@ -721,6 +722,7 @@ def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_inf
     args = '--fixed-ip-address {}'.format(vm_ip)
 
     # convert floatingip to id
+    fip_ip = None
     if fip_val == 'ip':
         fip_ip = floating_ip
         floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
@@ -810,13 +812,14 @@ def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=
         name (str): Given name for the provider network to filter
         strict (bool): Whether to perform strict search on provider net name or kwargs values
         regex (bool): Whether to use regex to perform search on given values
+        merge_lines
 
     Returns (str): Neutron provider net ids
 
     """
     table_ = table_parser.table(cli.neutron('providernet-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
-        return table_parser.get_values(table_, rtn_val, merge_lines=merge_lines,**kwargs)
+        return table_parser.get_values(table_, rtn_val, merge_lines=merge_lines, **kwargs)
 
     return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, name=name, merge_lines=merge_lines,
                                    **kwargs)
@@ -1311,6 +1314,7 @@ def get_routers(name=None, distributed=None, ha=None, gateway_ip=None, strict=Tr
         ha (bool): filter out HA router
         gateway_ip (str): ip of the router gateway such as "192.168.13.3"
         strict (bool): whether to perform strict search on router name
+        regex
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -1446,6 +1450,7 @@ def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info
     Args:
         router_id:
         rtn_val (str): 'subnet_id' or 'ip_address'
+        mgmt_only
         auth_info:
         con_ssh:
 
@@ -2060,7 +2065,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
         nova_pci_devices[alias] = table_dict
         # {'qat-dh895xcc-vf': {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
-    LOG.info('nova_pci_deivces: {}'.format(nova_pci_devices))
+    LOG.info('nova_pci_devices: {}'.format(nova_pci_devices))
 
     return nova_pci_devices
 
@@ -2477,6 +2482,7 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshe
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
+    output = packet_loss_rate = None
     for i in range(max(retry + 1, 0)):
         if not vshell:
             cmd = 'ping -c {} {}'.format(num_pings, server)
@@ -3045,6 +3051,7 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
                 e.g., "ip_address=IP_ADDR[,mac_address=MAC_ADDR]"
         no_allowed_addr_pairs (bool): Associate no allowed address pairs with the port
         dns_name (str):  Assign DNS name to the port (requires DNS integration extension)
+        wrs_vif
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
@@ -3277,13 +3284,21 @@ def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_co
 
 
 def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
-    table_ = table_parser.table(cli.nova(cmd='device-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
 
     values = table_parser.get_values(table_, field, **kwargs)
     if field in ['pci_pfs_configured', 'pci_pfs_used', 'pci_vfs_configured', 'pci_vfs_used']:
         values = [int(value) for value in values]
 
     return values
+
+
+def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Tenant.ADMIN, **kwargs):
+    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    if kwargs:
+        table_ = table_parser.filter_table(table_, **kwargs)
+
+    return table_parser.row_dict_table(table_, key_header='pci alias')
 
 
 def get_tenant_routers_for_vms(vms, con_ssh=None):
@@ -3313,8 +3328,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
     all_routers = get_routers(auth_info=Tenant.ADMIN)
     vms_routers = []
     for router in all_routers:
-        router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info,
-                                                       con_ssh=con_ssh)
+        router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info, con_ssh=con_ssh)
         if router_tenant in vms_tenants:
             vms_routers.append(router)
             if len(vms_routers) == len(vms_tenants):
@@ -3410,7 +3424,7 @@ def get_pci_device_numa_nodes(hosts):
     """
     hosts_numa = {}
     for host in hosts:
-        numa_nodes = system_helper.get_host_device_list_values(host, field='numa_node')
+        numa_nodes = host_helper.get_host_device_list_values(host, field='numa_node')
         hosts_numa[host] = numa_nodes
 
     LOG.info("Hosts numa_nodes map for PCI devices: {}".format(hosts_numa))
@@ -3464,6 +3478,7 @@ def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, 
     elif isinstance(hosts, str):
         hosts = [hosts]
 
+    agents_tab = None
     LOG.info("Wait for neutron agents to be alive for {}".format(hosts))
     end_time = time.time() + timeout
     while time.time() < end_time:
@@ -3485,7 +3500,7 @@ def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, 
 
 
 def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, strict=False,
-              auth_info=Tenant.ADMIN, con_ssh=None):
+               auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Get a list of trunks with given arguments
     Args:
@@ -3516,8 +3531,8 @@ def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, s
     return trunks
 
 
-def create_trunk(port_id, tenant_name=None, name=None,
-                 admin_state_up=True, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def create_trunk(port_id, tenant_name=None, name=None, admin_state_up=True, sub_ports=None,
+                 fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
     """Create a trunk via API.
     Args:
         port_id: Parent port of trunk.
@@ -3528,6 +3543,9 @@ def create_trunk(port_id, tenant_name=None, name=None,
             [[<ID of neutron port for subport>,
              segmentation_type(vlan),
              segmentation_id(<VLAN tag>)] []..]
+        fail_ok
+        con_ssh
+        auth_info
 
     Return: List with trunk's data returned from Neutron API.
     """
@@ -3539,10 +3557,10 @@ def create_trunk(port_id, tenant_name=None, name=None,
     if tenant_name is None:
         tenant_name = Tenant.get_primary()['tenant']
 
-    tenant_id=keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
     args = '--parent-port ' + port_id
     args += " --project " + format(tenant_id)
-    keys = ['port','segmentation-type','segmentation-id']
+    keys = ['port', 'segmentation-type', 'segmentation-id']
     if sub_ports is not None:
         for sub_port in sub_ports:
             tmp_list = []
@@ -3556,7 +3574,7 @@ def create_trunk(port_id, tenant_name=None, name=None,
         args += ' --enable'
     else:
         args += ' --disable'
-    args += ' '+ name
+    args += ' ' + name
 
     LOG.info("Creating port trunk for port: {}. Args: {}".format(port_id, args))
     code, output = cli.openstack('network trunk create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
@@ -3604,7 +3622,7 @@ def delete_trunk(trunk_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
         return -1, msg
 
     code, output = cli.openstack('network trunk delete', trunk_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                               auth_info=auth_info, )
+                                 auth_info=auth_info, )
 
     if code == 1:
         return 1, output
@@ -3630,11 +3648,14 @@ def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, au
             [[<ID of neutron port for subport>,
              segmentation_type(vlan),
              segmentation_id(<VLAN tag>)] []..]
+        fail_ok
+        con_ssh
+        auth_info
 
     Return: list with return code and msg.
     """
 
-    args=''
+    args = ''
     if trunk_id is None:
         raise ValueError("port_id has to be specified for parent port.")
 
@@ -3659,19 +3680,24 @@ def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, au
     if code == 1:
         return 1, output
 
-    msg='Subport is added succesfully'
+    msg = 'Subport is added successfully'
     return 0, msg
 
 
-def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def remove_trunk_subports(trunk_id, tenant_name=None, sub_ports=None, fail_ok=False, con_ssh=None,
+                          auth_info=Tenant.ADMIN):
     """Remove subports from a trunk via API.
     Args:
         trunk_id: Trunk id to remove the subports from
+        tenant_name
         sub_ports: List of subport
+        fail_ok
+        con_ssh
+        auth_info
 
     Return: list with return code and msg
     """
-    args=''
+    args = ''
     if trunk_id is None:
         raise ValueError("port_id has to be specified for parent port.")
 
@@ -3686,11 +3712,11 @@ def remove_trunk_subports(trunk_id,tenant_name=None, sub_ports=None, fail_ok=Fal
 
     LOG.info("Removing subport from trunk: {}. Args: {}".format(trunk_id, args))
     code, output = cli.openstack('network trunk unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_list=True)
+                                 rtn_list=True)
     if code == 1:
         return 1, output
 
-    msg = 'Subport is removed succesfully'
+    msg = 'Subport is removed successfully'
     return 0, msg
 
 
@@ -3794,10 +3820,10 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 
     """
     rtn_networks = []
-    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id')
+    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id', con_ssh=con_ssh)
     if not networks:
         return rtn_networks
-    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id,
+    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, con_ssh=con_ssh,
                                                       rtn_val='providernet_attributes')
     if not provider_attributes:
         return rtn_networks
@@ -3814,8 +3840,8 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
     vxlan_mode = dic_attr_1['mode']
 
     if mode == 'static' and vxlan_mode == mode:
-        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data')
-        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name)
+        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data', con_ssh=con_ssh)
+        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name, con_ssh=con_ssh)
         if ip_version == 4 and _is_v4_only(address):
             rtn_networks.append(networks[index])
         elif ip_version == 6 and not _is_v4_only(address):
@@ -3825,7 +3851,7 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
             return rtn_networks
     elif mode == 'dynamic' and vxlan_mode == mode:
         for attr in provider_attributes:
-            dic_attr = eval (attr)
+            dic_attr = eval(attr)
             ip = dic_attr['group']
             ip_addr = ipaddress.ip_address(ip)
             if ip_addr.version == ip_version:
@@ -3955,8 +3981,8 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
     start_time = time.time()
     ping_init_end_time = start_time + init_timeout
     prompts = [ssh_client.prompt, fail_str]
+    ssh_client.send_sudo(cmd=cmd)
     while time.time() < ping_init_end_time:
-        ssh_client.send_sudo(cmd=cmd)
         index = ssh_client.expect(prompts, timeout=10, searchwindowsize=100, fail_ok=True)
         if index == 1:
             continue
@@ -4019,3 +4045,91 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
 def _parse_ping_timestamp(output):
     timestamp = math.ceil(float(re.findall('\[(.*)\]', output)[0]) * 1000)
     return timestamp
+
+
+def create_pci_alias_for_devices(dev_type, hosts=None, devices=None, alias_names=None, apply=True, con_ssh=None):
+    """
+    Create pci alias for given devices by adding nova pci-alias service parameters
+    Args:
+        dev_type (str): Valid values: 'gpu-pf', 'user'
+        hosts (str|list|tuple|None): Check devices on given host(s). Check all hosts when None
+        devices (str|list|tuple|None): Devices to add in pci-alias. When None, add all devices for given dev_type
+        alias_names (str|list|tuple|None): Pci alias' to create. When None, name automatically.
+        apply (bool): whether to apply after nova service parameters modify
+        con_ssh:
+
+    Returns (list): list of dict.
+        e.g., [{'device_id': '1d2d', 'vendor_id': '8086', 'name': user_intel-1},
+               {'device_id': '1d26', 'vendor_id': '8086', 'name': user_intel-2}, ... ]
+
+    Examples:
+        network_helper.create_pci_alias_for_devices(dev_type='user', hosts=('compute-2', 'compute-3'))
+        network_helper.create_pci_alias_for_devices(dev_type='gpu-pf', devices='pci_0000_0c_00_0')
+
+    """
+    LOG.info("Prepare for adding pci alias")
+    if not hosts:
+        hosts = host_helper.get_hypervisors(con_ssh=con_ssh)
+
+    if not devices:
+        if 'gpu' in dev_type:
+            class_id = DevClassID.GPU
+        else:
+            class_id = DevClassID.USB
+        devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True,
+                                                          **{'class id': class_id})
+    elif isinstance(devices, str):
+        devices = [devices]
+
+    if not alias_names:
+        alias_names = [None] * len(devices)
+    elif isinstance(alias_names, str):
+        alias_names = [alias_names]
+
+    if len(devices) != len(alias_names):
+        raise ValueError("Number of devices do not match number of alias names provided")
+
+    LOG.info("Ensure devices are enabled on hosts {}: {}".format(hosts, devices))
+    host_helper.enable_disable_hosts_devices(hosts, devices)
+
+    host = hosts[0]
+    devices_to_create = []
+    param_strs = []
+    for i in range(len(devices)):
+        device = devices[i]
+        alias_name = alias_names[i]
+        dev_id, vendor_id, vendor_name = host_helper.get_host_device_values(
+                host=host, device=device, fields=('device id', 'vendor id', 'vendor name'))
+
+        if not alias_name:
+            alias_name = '{}_{}'.format(dev_type, vendor_name.split()[0].lower())
+            alias_name = common.get_unique_name(name_str=alias_name)
+
+        param = {'device_id': dev_id, 'vendor_id': vendor_id, 'name': alias_name}
+        param_str = ','.join(['{}={}'.format(key, val) for key, val in param.items()])
+        param_strs.append(param_str)
+
+        pci_alias_dict = {'device id': dev_id, 'vendor id': vendor_id, 'pci alias': alias_name}
+        devices_to_create.append(pci_alias_dict)
+
+    LOG.info("Create nova pci alias service parameters: {}".format(devices_to_create))
+    system_helper.create_service_parameter(service='nova', section='pci_alias', con_ssh=con_ssh,
+                                           name=dev_type, value='"{}"'.format(';'.join(param_strs)))
+
+    if apply:
+        LOG.info("Apply service parameters")
+        system_helper.apply_service_parameters(service='nova')
+        LOG.info("Verify nova pci alias' are listed after applying service parameters: {}".format(devices_to_create))
+        _check_pci_alias_created(devices_to_create, con_ssh=con_ssh)
+
+    return devices_to_create
+
+
+def _check_pci_alias_created(devices, con_ssh=None):
+    pci_alias_dict = get_pci_device_list_info(con_ssh=con_ssh)
+    for param_ in devices:
+        pci_alias = param_.get('pci alias')
+        assert pci_alias, "pci alias {} is not shown in nova device-list".format(pci_alias)
+        created_alias = pci_alias_dict[pci_alias]
+        assert param_.get('vendor id') == created_alias['vendor id']
+        assert param_.get('device id') == created_alias['device id']

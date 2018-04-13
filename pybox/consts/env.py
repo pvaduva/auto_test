@@ -95,11 +95,11 @@ class Licenses:
 
 class Lab:
     VBOX = {
-        'short_name': 'vbox',
-        'name': 'vbox',
-        'floating_ip': '10.10.10.3',
-        'controller-0_ip': '10.10.10.1',
-        'controller-1_ip': '10.10.10.2',
+        'short_name': 'lvm',
+        'name': 'lvm',
+        'floating_ip': '10.10.10.7',
+        'controller-0_ip': '10.10.10.8',
+        'controller-1_ip': '10.10.10.9',
         'username': 'wrsroot',
         'password': 'Li69nux*',
     }

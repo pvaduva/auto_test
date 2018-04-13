@@ -211,11 +211,23 @@ def check_ssh_to_vm_and_wait_for_packets(start_event, end_event, received_event,
             root_ssh.send(cmd)
             start_event.set()
 
+            def _check_receive_event():
+                # set receive event if msg received
+                index = root_ssh.expect(timeout=10, fail_ok=True)
+                if index == 0:
+                    received_event.set()
+                    output = root_ssh.cmd_output
+                    assert expt_output in output, \
+                        "Output: {} received, but not as expected: {}".format(output, expt_output)
+                    LOG.info("Received output: {}".format(output))
+
             end_time = time.time() + timeout
             while time.time() < end_time:
-
                 # Exit the vm ssh, end thread
                 if end_event.is_set():
+                    if not received_event.is_set():
+                        _check_receive_event()
+
                     root_ssh.send_control()
                     root_ssh.expect(timeout=10, fail_ok=True)
                     return
@@ -226,14 +238,7 @@ def check_ssh_to_vm_and_wait_for_packets(start_event, end_event, received_event,
                     start_event.set()
                     received_event.clear()
 
-                index = root_ssh.expect(timeout=10, fail_ok=True)
-                if index == 0:
-                    received_event.set()
-                    output = root_ssh.cmd_output
-                    assert expt_output in output, \
-                        "Output: {} received, but not as expected: {}".format(output, expt_output)
-                    LOG.info("Received output: {}".format(output))
-
+                _check_receive_event()
                 time.sleep(5)
 
     assert 0, "end_event is not set within timeout"

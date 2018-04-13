@@ -60,12 +60,12 @@ def handle_args():
         If present, don't create new VMs, use the existing ones.
         """,
         action='store_true')
-
-    parser.add_argument("--enablehttps", help=
-        """
-        If present, use https system config file else use http config file
-        """,
-        action='store_true')
+    # WEI TODO: remove
+    #parser.add_argument("--enablehttps", help=
+    #    """
+    #    If present, use https system config file else use http config file
+    #    """,
+    #    action='store_true')
 
     parser.add_argument("--release", help=
         """
@@ -77,7 +77,7 @@ def handle_args():
         """,
         choices=['R2', 'R3', 'R4', 'R5'],
         type=str,
-        required=True)
+        required=False)
 
 
     parser.add_argument("--buildserver", help=
@@ -189,6 +189,13 @@ def handle_args():
         If specified the lab_setup.sh iterations will be run.
         """,
         action='store_true')
+    parser.add_argument("--vbox-home-dir", help=
+        """
+        This is the folder where vbox disks will be placed. e.g. /home or /folk/cgts/users
+        The disks will be in /home/wzhou/vbox_disks/ or /folk/cgts/users/wzhou/vbox_disks/ 
+        """,
+        type=str, default='/home'
+        )
     parser.add_argument("--nessus", help=
         """
         Runs installer with the appropreate arguments for nessus scan setup. Currently requires files to be in the default folders.
@@ -199,9 +206,45 @@ def handle_args():
         Runs installer with the appropreate arguments for end to end setup. Retrieves files from a buildserver which mus be specified.
         """,
         action='store_true')
-    parser.add_argument("--lvm", help=
+    parser.add_argument("--snapshot", help=
         """
-        Configures storage with lvm backend.
+        Take snapshot at different stages when the lab is installed. e.g. before and after config_controller, before and after lab_setup.
         """,
         action='store_true')
+    parser.add_argument("--debug-rest", help=
+        """
+        Wei Uses this option to debug the rest of installation after controller-0 is unlocked 
+        """,
+        action='store_true')
+    parser.add_argument("--username", help=
+        """
+        Username. default is 'wrsroot'
+        """,
+        type=str)
+    parser.add_argument("--password", help=
+        """
+        Password. default is 'Li69nux*'
+        """,
+        type=str)
+    parser.add_argument("--labname", help=
+        """
+        The name of the lab to be created.
+        """,
+        type=str)
+    parser.add_argument("--controller0-ip", help=
+        """
+        OAM IP of controller-0 
+        """,
+        type=str)
+    parser.add_argument("--hostiocache", help=
+        """
+        Turn on host i/o caching 
+        """,
+        action='store_true')
+    # WEI TODO: remove 
+    #parser.add_argument("--lvm", help=
+    #    """
+    #    Configures storage with lvm backend.
+    #    """,
+    #    action='store_true')
     return parser

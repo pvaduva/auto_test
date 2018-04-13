@@ -8,10 +8,9 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, HostUnlock, KPI_DATE_FORMAT
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.pre_checks_and_configs import no_simplex
 
-from keywords import host_helper, system_helper, nova_helper, vm_helper, common
+from keywords import host_helper, system_helper, common
 
 
 @mark.sanity
@@ -44,7 +43,7 @@ def test_lock_active_controller_reject(no_simplex):
     mark.priorities('kpi')('compute'),
     mark.priorities('kpi')('storage'),
 ])
-def test_lock_unlock_host(host_type, no_simplex, collect_kpi):
+def test_lock_unlock_host(host_type, collect_kpi):
     """
     Verify lock unlock host
 
@@ -58,29 +57,33 @@ def test_lock_unlock_host(host_type, no_simplex, collect_kpi):
     if collect_kpi:
         init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
 
+    LOG.tc_step("Select a {} node from system if any".format(host_type))
     if host_type == 'controller':
-        LOG.tc_step('Retrieve the standby controller from system')
-        host = system_helper.get_standby_controller_name()
+        if system_helper.is_simplex():
+            host = 'controller-0'
+        else:
+            host = system_helper.get_standby_controller_name()
+            assert host, "No standby controller available"
 
-        assert host, "No standby controller available"
     elif host_type == 'compute':
         if system_helper.is_small_footprint():
             skip("No compute host on AIO system")
 
-        LOG.tc_step("Get a compute host from system")
         hosts = host_helper.get_up_hypervisors()
         assert hosts, "No hypervisor is up on system"
         host = hosts[0]
+
     elif host_type == 'storage':
         storage_nodes = system_helper.get_storage_nodes()
         if not storage_nodes:
             skip("No storage node on system")
         host = storage_nodes[0]
+
     else:
         raise ValueError("Unrecognized host_type: {}".format(host_type))
 
-    # lock standby controller node and verify it is successfully locked
     LOG.tc_step("Lock {} host - {} and ensure it is successfully locked".format(host_type, host))
+    HostsToRecover.add(host)
     host_helper.lock_host(host, swact=False)
 
     locked_controller_admin_state = host_helper.get_hostshow_value(host, 'administrative')
