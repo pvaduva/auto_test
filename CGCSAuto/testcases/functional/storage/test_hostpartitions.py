@@ -107,8 +107,6 @@ def test_delete_host_partitions():
     Teardown:
     * Re-create those partitions
     """
-
-
     global partitions_to_restore
     partitions_to_restore = {}
 
@@ -164,8 +162,6 @@ def test_increase_host_partition_size():
     * Delete the partitions
 
     """
-
-
     global partitions_to_restore
     partitions_to_restore = {}
 
@@ -203,8 +199,8 @@ def test_increase_host_partition_size():
                     uuid, size_mib, host, device_node))
             partition_helper.modify_partition(host, uuid, str(size_mib))
             new_disk_available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
-            assert new_disk_available_mib == "0", "Expected disk space to be consumed but instead we have {} available".\
-                format(new_disk_available_mib)
+            assert new_disk_available_mib == "0", \
+                "Expected disk space to be consumed but instead we have {} available".format(new_disk_available_mib)
             # Only test one disk on each host
             break
 
@@ -620,8 +616,6 @@ def test_decrease_host_partition_size():
     * Delete created partition
 
     """
-
-
     global partitions_to_restore
     partitions_to_restore = {}
 
@@ -683,7 +677,6 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
 
     """
 
-
     global partitions_to_restore
     partitions_to_restore = {}
 
@@ -717,7 +710,7 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
             device_node = device_node.rstrip(string.digits)
             if device_node.startswith("/dev/nvme"):
                 device_node = device_node[:-1]
-            size_mib = size_mib + 1
+            size_mib += 1
             LOG.tc_step("Modifying partition {} from size 1024 to size {} from host {} on device node {}".format(
                     uuid, size_mib, host, device_node))
             rc, out = partition_helper.modify_partition(host, uuid, str(size_mib), fail_ok=True)
@@ -829,7 +822,7 @@ def test_modify_second_last_partition():
             assert rc != 0, "Partition modification was expected to fail but instead was successful"
 
 
-def test_create_partition_using_non_existant_device_node():
+def test_create_partition_using_non_existent_device_node():
     """
     This test attempts to create a partition using an invalid disk.  It is
     expected to fail.

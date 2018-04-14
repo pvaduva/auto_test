@@ -351,9 +351,6 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     LOG.tc_step("Increase the size of filesystems")
     filesystem_helper.modify_controllerfs(**drbdfs_val)
 
-    # Display active alarms to delay the second modify and to assist debugging
-    system_helper.get_alarms_table()
-
     LOG.tc_step("Attempt to increase the size of the filesystem again")
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
