@@ -577,7 +577,7 @@ if __name__ == "__main__":
         restore_snapshot([vboxoptions.labname + "-controller-0"], "snapshot-AFTER-unlock-controller-0")
  
     ## TODO (WEI): Sometimes compute nodes become locked/offline instead of locked/online
-    if vboxoptions.run_scripts and vboxoptions.debug_rest and not vboxoptions.install_lab:
+    if vboxoptions.run_scripts and vboxoptions.debug_rest and not vboxoptions.install_lab and not vboxoptions.aio:
         vm_list = get_all_vms(vboxoptions.labname, option="vms")
         restore_snapshot(vm_list, "snapshot-AFTER-lab-install")
         time.sleep(120)

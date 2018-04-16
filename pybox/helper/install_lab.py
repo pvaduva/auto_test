@@ -221,17 +221,23 @@ def lab_setup_controller_0_locked(stream, username='wrsroot', password='Li69nux*
     except streamexpect.ExpectTimeout:
         LOG.info("Controller should be locked when configuration is completed.")
         return 1
-    ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/', prompt="lab_setup.sh", fail_ok=True, timeout=10)
-    if ret != 0:
-        LOG.info("Lab_setup.sh not found. Please transfer the "
-                 "required files before continuing. Press enter once files are obtained.")
-        input()
-    time.sleep(10)
+
     ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/images/', prompt="tis-centos-guest.img", fail_ok=True, timeout=10)
     if ret != 0:
         LOG.info("Guest image not found. Please transfer the "
                  "required files before continuing. Press enter once files are obtained.")
         input()
+
+    time.sleep(5)
+
+    ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/', prompt="lab_setup.sh", fail_ok=True, timeout=10)
+    if ret != 0:
+        LOG.info("Lab_setup.sh not found. Please transfer the "
+                 "required files before continuing. Press enter once files are obtained.")
+        input()
+
+    time.sleep(5)
+
     serial.send_bytes(stream, "sh lab_setup.sh", timeout=HostTimeout.LAB_INSTALL, expect_prompt=False)
     host_helper.check_password(stream, password=password)
     ret = serial.expect_bytes(stream, "topping after", timeout=1200, fail_ok=True)
@@ -273,15 +279,6 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
         - Unlocks nodes
     """
     LOG.info("Starting to run the second round of lab_setup script. ")
-    serial.send_bytes(stream, "chmod +x *.sh", timeout=20)
-    ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/', prompt="lab_setup.sh", fail_ok=True, timeout=10)
-    if ret != 0:
-        LOG.info("Lab_setup.sh not found. Please transfer the "
-                 "required files before continuing. Press enter once files are obtained.")
-        input()
-
-    time.sleep(5)
-
     if release == 'R5' or release == 'R4':
         ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/images/', prompt="tis-centos-guest.img", fail_ok=True,
                                 timeout=10)
@@ -291,6 +288,15 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
     if ret != 0:
         LOG.info("Guest image not found. Please transfer the file before continuing. "
                  "Press enter once guest image is obtained.")
+        input()
+
+    time.sleep(5)
+
+    serial.send_bytes(stream, "chmod +x *.sh", timeout=20)
+    ret = serial.send_bytes(stream, '/bin/ls /home/' + username + '/', prompt="lab_setup.sh", fail_ok=True, timeout=10)
+    if ret != 0:
+        LOG.info("Lab_setup.sh not found. Please transfer the "
+                 "required files before continuing. Press enter once files are obtained.")
         input()
 
     start = time.time()
@@ -312,6 +318,7 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             serial.send_bytes(stream, "system compute-config-complete", expect_prompt=False)
             serial.expect_bytes(stream, "login:",  timeout=HostTimeout.REBOOT)
             host_helper.login(stream, timeout=60, username=username, password=password)
+
         serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
         host_helper.check_password(stream, password=password)
         ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
@@ -321,26 +328,68 @@ def run_install_scripts(stream, host_list, aio=False, storage=False, release='R5
             input()
   
         ctrlr1 = 'controller-1'
-        for host in host_list:
-            if ctrlr1 in host:
-                LOG.info("Installing {}".format(ctrlr1))
-                cont1_stream = streamexpect.wrap(serial.connect(ctrlr1, 10001), echo=True, close_stream=False)
-                host_helper.install_host(stream, ctrlr1, 'controller', 2)
-                serial.expect_bytes(cont1_stream, "ogin:", timeout=HostTimeout.INSTALL)
-                serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
-                host_helper.check_password(stream, password=password)
-                ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
+        cont1_stream = streams[labname + '-' + ctrlr1]
+        LOG.info("Installing {} ".format(ctrlr1))
+        #cont1_stream = streamexpect.wrap(serial.connect(ctrlr1, 10001), echo=True, close_stream=False)
+        host_helper.install_host(stream, ctrlr1, host_type='controller', host_id=2)
+
+        # Now wait for controller-1 to come up. Look for login.
+        # Close the socket if we are done
+        try:
+            serial.expect_bytes(cont1_stream, "ontroller-1 login:", HostTimeout.HOST_INSTALL)
+            LOG.info("{} installation complete".format(ctrlr1))
+        except Exception as e:
+            LOG.info("Connection failed for {} with {}.".format(ctrlr1, e))
+            ## Sometimes we get UnicodeDecodeError exception due to the output
+            ## of installation. So try one more time maybe
+            if HostTimeout.HOST_INSTALL > (time.time()-start_time):
+                LOG.info("WEI so try wait for {} login again?".format(ctrlr1))
+                serial.expect_bytes(cont1_stream, "ontroller-1 login:", HostTimeout.HOST_INSTALL-(time.time()-start_time))
+        time.sleep(30)
+
+        serial.send_bytes(stream, "./lab_setup.sh", expect_prompt=False)
+        host_helper.check_password(stream, password=password)
+        ret = serial.expect_bytes(stream, "topping after", timeout=HostTimeout.LAB_INSTALL, fail_ok=True)
+        if ret != 0:
+             LOG.info("Lab_setup.sh failed. Pausing to allow for debugging."
+                      " Please re-run the iteration before continuing. Press enter to continue.")
+             input()
+
+        ## Unlock controller-1
+        now = time.time()
+        ret = host_helper.unlock_host(stream, ctrlr1)
+        if ret == 1:
+            LOG.info("Cannot unlock controller-1,  pausing to allow for debugging. "
+                     "Please unlock before continuing. Press enter to continue.")
+            input()
+
+        retry = 0
+        while retry < 5:
+            serial.send_bytes(cont1_stream, '\n', expect_prompt=False)
+            try:
+                ret = serial.expect_bytes(cont1_stream, "ontroller-1 login:", timeout=HostTimeout.COMPUTE_UNLOCK, fail_ok=True)
                 if ret != 0:
-                     LOG.info("Lab_setup.sh failed. Pausing to allow for debugging."
-                              " Please re-run the iteration before continuing. Press enter to continue.")
-                     input()
-                LOG.info("Unlocking {}".format(ctrlr1))
-                host_helper.unlock_host(stream, ctrlr1)
-                ret = serial.expect_bytes(cont1_stream, "ogin:")
-                if ret == 1:
-                    LOG.info("Controller-1 not unlocked, pausing to allow for debugging. "
+                    LOG.info("Unlock controller-1 timed-out. pausing to allow for debugging. "
                              "Please unlock before continuing. Press enter to continue.")
                     input()
+                    retry = 5
+                else:
+                    LOG.info("Unlock controller-1 time (mins): {}".format((time.time() - now)/60))
+                    if (time.time() - now)/60 < 5.0:
+                        LOG.info("login is found right after host-unlock. Wait and try again.")
+                        now = time.time()
+                        time.sleep(10)
+                        retry += 1
+                    else:
+                        retry = 5
+            except Exception as e:
+                LOG.info("Unlock controller-1 failed with {}".format(e))
+                LOG.info("Pausing to allow for debugging. "
+                         "Please unlock before continuing. Press enter to continue.")
+                input()
+                retry = 5
+        serial.disconnect(socks[labname + '-' + ctrlr1])
+
         LOG.info("Completed install successfully.")
     else:
         ## FOR NON-AIO cases
