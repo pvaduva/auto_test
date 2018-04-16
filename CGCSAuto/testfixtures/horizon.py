@@ -1,20 +1,25 @@
 from selenium import webdriver
 from pyvirtualdisplay import Display
 from utils.horizon.pages import loginpage
+from utils.horizon import video_recorder
 from consts import horizon
 from pytest import fixture
 from utils.tis_log import LOG
+import os
 
 
 @fixture(scope="session")
 def driver(request):
     display = Display(visible=False, size=(1920, 1080))
     display.start()
+    recorder = video_recorder.VideoRecorder(1920, 1080, os.environ['DISPLAY'])
+    recorder.start()
     driver = webdriver.Firefox()
     driver.maximize_window()
 
     def teardown():
         driver.quit()
+        recorder.stop()
         display.stop()
     request.addfinalizer(teardown)
 

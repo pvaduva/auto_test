@@ -6,5 +6,5 @@ TENANT_USERNAME = 'tenant1'
 TENANT_PASSWORD = 'Li69nux*'
 HORIZON_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
 TEMP_DIR = ProjVar.get_var('TEMP_DIR')
-# IS_VISIBLE = ProjVar.get_var('VISIBLE')
+# IS_HORIZON_VISIBLE = ProjVar.get_var('HORIZON_VISIBLE')
 DEFAULT_SUBNET = 'external-net0'
