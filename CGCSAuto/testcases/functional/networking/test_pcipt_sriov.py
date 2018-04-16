@@ -342,7 +342,7 @@ class TestVmPCIOperations:
 
         return self.numa_node
 
-    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=3):
+    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=20):
 
         LOG.tc_step('Check PCIPT/SRIOV numa/irq-cpu-affinity/alias on VM afer {}'.format(msg_prefx))
 
@@ -413,8 +413,6 @@ class TestVmPCIOperations:
             while not cpus_matched and count < retries:
                 count += 1
 
-                time.sleep(retry_interval)
-
                 indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
 
                 vm_pcpus = []
@@ -429,12 +427,14 @@ class TestVmPCIOperations:
                         LOG.warn(
                             'Mismatched CPU list after {}: expected/affin-mask cpu list:{}, actual:{}, '
                             'pci_info:{}'.format(msg_prefx, expected_pcpus_for_irqs, pci_info['cpulist'], pci_info))
+
                         LOG.warn('retries:{}'.format(count))
                         cpus_matched = False
                         break
                 vm_pci_infos.clear()
                 vm_topology.clear()
 
+                time.sleep(retry_interval)
                 vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
                 # vm_pci_infos.pop('pci_addr_list')
 
