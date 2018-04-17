@@ -103,6 +103,10 @@ class FlavorsPage(basepage.BasePage):
     def is_flavor_present(self, name):
         return bool(self._get_row_by_flavor_name(name))
 
+    def get_flavor_info(self, name, header):
+        row = self._get_row_by_flavor_name(name)
+        return row.cells[header].text
+
     def edit_flavor(self, name, newname=None, flavor_id=None, vcpus=None, ram=None,
                     root_disk=None, ephemeral_disk=None,
                     swap_disk=None, rxtx_factor=None,
@@ -177,9 +181,6 @@ class FlavorsPage(basepage.BasePage):
         confirm_delete_form = self.flavors_table.delete_flavor()
         confirm_delete_form.submit()
 
-    def get_flavor_info(self, name, header):
-        row = self._get_row_by_flavor_name(name)
-        return row.cells[header].text
 
 
 

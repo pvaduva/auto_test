@@ -269,6 +269,7 @@ def pytest_configure(config):
     tenant_arg = config.getoption('tenant')
     bootvms_arg = config.getoption('bootvms')
     openstack_cli = config.getoption('openstackcli')
+    horizon_visible = config.getoption('horizon_visible')
     global change_admin
     change_admin = config.getoption('changeadmin')
     global repeat_count
@@ -299,6 +300,7 @@ def pytest_configure(config):
     always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+    horizon_visible = True if horizon_visible else False
     if collect_netinfo:
         ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
 
@@ -329,7 +331,7 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
-                     always_collect=always_collect)
+                     always_collect=always_collect, horizon_visible=horizon_visible)
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
@@ -397,6 +399,7 @@ def pytest_addoption(parser):
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
     telnetlog_help = "Collect telnet logs throughout the session"
+    horizon_visible_help = "Display horizon on screen"
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -431,6 +434,9 @@ def pytest_addoption(parser):
 
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
+
+    parser.addoption('--horizon_visible', '--horizon_visible', '--horizon_visible', action='store_true',
+                     dest='horizon_visible', help=horizon_visible_help)
 
     ##################################
     # Lab install or upgrade options #

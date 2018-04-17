@@ -29,7 +29,7 @@ class ProjVar:
 
     @classmethod
     def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli,
-                 always_collect):
+                 always_collect, horizon_visible):
 
         labname = lab['short_name']
 
@@ -53,6 +53,7 @@ class ProjVar:
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
             'KPI_PATH': logdir + '/kpi.ini',
+            'HORIZON_VISIBLE': horizon_visible
         })
 
     @classmethod

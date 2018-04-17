@@ -13,7 +13,7 @@ import datetime
 @fixture(scope="session")
 def driver(request):
     os.makedirs(ProjVar.get_var('LOG_DIR') + '/horizon', exist_ok=True)
-    display = Display(visible=False, size=(1920, 1080))
+    display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
     display.start()
     driver = webdriver.Firefox()
     driver.maximize_window()
