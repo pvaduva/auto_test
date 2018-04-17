@@ -16,16 +16,15 @@ import signal
 import subprocess
 from threading import Thread
 import time
-from consts.proj_vars import ProjVar
 
 LOG = logging.getLogger(__name__)
 
 
 class VideoRecorder(object):
 
-    def __init__(self, width, height, display, frame_rate=15):
+    def __init__(self, width, height, display, video_path, frame_rate=15):
         self.is_launched = False
-        self.file_path = ProjVar.get_var('LOG_DIR') + '/' + 'testrecord' + '.mp4'
+        self.file_path = video_path
         # ffmpeg -f x11grab -r 15 -s 1920x1080 -i :0.0 -codec libx264 out.mp4
         self._cmd = ['ffmpeg', '-f', 'x11grab', '-r', str(frame_rate),
                      '-video_size', '{}x{}'.format(width, height),
