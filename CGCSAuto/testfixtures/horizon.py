@@ -10,7 +10,7 @@ from consts.proj_vars import ProjVar
 import datetime
 
 
-@fixture(scope="session")
+@fixture(scope="function")
 def driver(request):
     os.makedirs(ProjVar.get_var('LOG_DIR') + '/horizon', exist_ok=True)
     display = Display(visible=False, size=(1920, 1080))
