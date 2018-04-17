@@ -319,6 +319,7 @@ class EventLogID:
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
     INFRA_PORT_FAIL = '100.110'
+    IMA = '500.500'
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
