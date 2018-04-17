@@ -20,10 +20,11 @@ from utils.jenkins_utils.create_log_dir import create_refstack_log_dir
 from utils.ssh import SSHClient
 
 TEST_SERVER_PROMPT = '$'
-TEST_LOG_DIR = "/home/opnfv/refstack/refstack-client/.tempest/.testrepository/"
-TEST_LOCAL_DIR = "/home/opnfv/refstack/refstack-client"
-TEST_LIST_file = "/home/opnfv/refstack/test-list.txt"
+TEST_LOG_DIR = ""
+TEST_LOCAL_DIR = ""
+TEST_LIST_file = ""
 TEST_MAX_TIMEOUT = 20000
+TEST_LOG_FILES_LIST = ['/failing', '/test_run.log', '/[0-9]*', '/summary.txt']
 
 
 def connect_test(test_host, username, password):
@@ -33,8 +34,6 @@ def connect_test(test_host, username, password):
         ssh_client = SSHClient(host=test_host, user=username, password=password,
                                initial_prompt=TEST_SERVER_PROMPT)
         ssh_client.connect()
-        # check if SSH is estaablished 
-        ssh_client.send("date >> refsatck/refstack_test_run_timestamp.log", flush=True)
     except Exception as e:
         print(str(e))
         print("ERROR in Test: SSH is not connected")
@@ -59,11 +58,28 @@ def set_test_list_file(hostname, username, password, refstack_test_list):
             pass
     except Exception as e:
         print(e)
+    # copy parse tool to test server
+    source = "/folk/cgts/compliance/RefStack/parseResults.awk"
+    destination = to_user + to_host + TEST_LOCAL_DIR + "/parseResults.awk"
+    scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
+                        destination]).strip()
+    try:
+        var_child = pexpect.spawn(scp_cmd)
+        i = var_child.expect(["password:", pexpect.EOF])
+        if i == 0:
+            var_child.sendline(password)
+            var_child.expect(pexpect.EOF)
+        elif i == 1:
+            print
+            "Scp test-list file to test server timeout"
+            pass
+    except Exception as e:
+        print(e)
 
 
 def run_test():
     # setup refstack test environment 
-    cmd = 'cd /home/opnfv/refstack/refstack-client'
+    cmd = "cd " + TEST_LOCAL_DIR
     ssh_client.send(cmd, flush=True)
     try:
         ssh_client.expect(timeout=20, searchwindowsize=20)
@@ -74,7 +90,7 @@ def run_test():
         print("ERROR in Test: refsteack has timed out !")
 
     # run refstack test suite by giving test_list.txt 
-    cmd = "source .venv/bin/activate; refstack-client test -c etc/tempest.conf -v --test-list " + TEST_LIST_file + " > " + TEST_LOG_DIR + "test_run.log"
+    cmd = "source .venv/bin/activate; refstack-client test -c etc/tempest.conf -v --test-list " + TEST_LIST_file + " > " + TEST_LOG_DIR + "/test_run.log"
     ssh_client.send(cmd, flush=True)
     try:
         ssh_client.expect("JSON results saved in", timeout=TEST_MAX_TIMEOUT, searchwindowsize=200)
@@ -85,7 +101,7 @@ def run_test():
         print("ERROR in Test: refsteack run has timed out !")
 
     # parse the result
-    cmd = "awk -f /home/opnfv/refstack/parseResults.awk /home/opnfv/refstack/refstack-client/.tempest/.testrepository/[0-9]*" + " > " + TEST_LOG_DIR + "summary.txt"
+    cmd = "awk -f " + TEST_LOCAL_DIR + "/parseResults.awk " + TEST_LOG_DIR + "/[0-9]*" + " > " + TEST_LOG_DIR + "/summary.txt"
     ssh_client.send(cmd, flush=True)
     try:
         ssh_client.expect(timeout=60, searchwindowsize=200)
@@ -97,91 +113,31 @@ def run_test():
 
 
 def delete_previous_test_logs():
-    cmd = "rm /home/opnfv/refstack/refstack-client/.tempest/.testrepository/failing"
-    ssh_client.send(cmd, flush=True)
+    for item in TEST_LOG_FILES_LIST :
+        cmd = "rm " + TEST_LOG_DIR + item
+        ssh_client.send(cmd, flush=True)
 
-    cmd = "rm /home/opnfv/refstack/refstack-client/.tempest/.testrepository/test_run.log"
-    ssh_client.send(cmd, flush=True)
-
-    cmd = "find /home/opnfv/refstack/refstack-client/.tempest/.testrepository/ -name '[0-9]*' -delete"
-    ssh_client.send(cmd, flush=True)
-
-    cmd = "rm /home/opnfv/refstack/refstack-client/.tempest/.testrepository/summary.txt"
-    ssh_client.send(cmd, flush=True)
 
 def get_test_logs(hostname, username, password, log_directory):
     to_host = hostname + ':'
     to_user = username + '@'
-    # copy failing log to test server
-    source = to_user + to_host + TEST_LOG_DIR + "failing"
-    scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
+    # copy log files to test server
+    for item in TEST_LOG_FILES_LIST :
+        source = to_user + to_host + TEST_LOG_DIR + item
+        scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
                         log_directory]).strip()
-    try:
-        var_child = pexpect.spawn(scp_cmd)
-        i = var_child.expect(["password:", pexpect.EOF])
-        if i == 0:
-            var_child.sendline(password)
-            var_child.expect(pexpect.EOF)
-        elif i == 1:
-            print
-            "Got connection timeout"
-            pass
-    except Exception as e:
-        print(e)
-
-    #copy full log to test server
-    source = to_user + to_host + TEST_LOG_DIR + '[0-9]*'
-    scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
-                        log_directory]).strip()
-    try:
-        var_child = pexpect.spawn(scp_cmd)
-        i = var_child.expect(["password:", pexpect.EOF])
-
-        if i == 0:
-            var_child.sendline(password)
-            var_child.expect(pexpect.EOF)
-        elif i == 1:
-            print
-            "Got connection timeout"
-            pass
-    except Exception as e:
-        print(e)
-
-    #copy test runnning log to test server
-    source = to_user + to_host + TEST_LOG_DIR + 'test_run.log'
-    scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
-                        log_directory]).strip()
-    try:
-        var_child = pexpect.spawn(scp_cmd)
-        i = var_child.expect(["password:", pexpect.EOF])
-
-        if i == 0:
-            var_child.sendline(password)
-            var_child.expect(pexpect.EOF)
-        elif i == 1:
-            print
-            "Got connection timeout"
-            pass
-    except Exception as e:
-        print(e)
-
-    #copy summary log to test server
-    source = to_user + to_host + TEST_LOG_DIR + 'summary.txt'
-    scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
-                        log_directory]).strip()
-    try:
-        var_child = pexpect.spawn(scp_cmd)
-        i = var_child.expect(["password:", pexpect.EOF])
-
-        if i == 0:
-            var_child.sendline(password)
-            var_child.expect(pexpect.EOF)
-        elif i == 1:
-            print
-            "Got connection timeout"
-            pass
-    except Exception as e:
-        print(e)
+        try:
+            var_child = pexpect.spawn(scp_cmd)
+            i = var_child.expect(["password:", pexpect.EOF])
+            if i == 0:
+                var_child.sendline(password)
+                var_child.expect(pexpect.EOF)
+            elif i == 1:
+                print
+                "Got connection timeout"
+                pass
+        except Exception as e:
+            print(e)
 
 
 def close_test():
@@ -198,29 +154,36 @@ if __name__ == "__main__":
         parser.add_argument("username")
         parser.add_argument("password")
         parser.add_argument("refstack_test_list")
-        parser.add_argument("--local_log_directory", type=str, default='/sandbox/AUTOMATION_LOGS/')
-        #parser.add_argument("--local_log_directory", type=str, default='/tmp/AUTOMATION_LOGS/')
+        parser.add_argument("--refstack_install_directory", type=str, default='/home/opnfv/refstack/refstack-client')
+        #parser.add_argument("--local_log_directory", type=str, default='/sandbox/AUTOMATION_LOGS/')
+        parser.add_argument("--local_log_directory", type=str, default='/tmp/AUTOMATION_LOGS/')
         args = parser.parse_args()
 
         test_host, username, password = args.test_host, args.username, args.password
         refstack_test_list = args.refstack_test_list
+        TEST_LOCAL_DIR = args.refstack_install_directory
         local_log_directory = args.local_log_directory
 
         local_dir = create_refstack_log_dir(local_log_directory)
 
+        TEST_LOG_DIR = TEST_LOCAL_DIR + "/.tempest/.testrepository"
+        TEST_LIST_file = TEST_LOCAL_DIR + "/test-list.txt"
         # connect to test Server 
+        print ("\n\n###########################################\n")
+        print ("Refstack test run starts...\n")
         connect_test(test_host, username, password)
-        print ("connect to test server 128.224.187.110 successfully.")
+        print ("connect to test server {} successfully.\n". format(test_host))
         delete_previous_test_logs()
-        print ("All previous logs were cleaned from /home/opnfv/refstack/refstack-client/.tempest/.testrepository/")
+        print ("All previous logs were cleaned. \n")
         set_test_list_file(test_host, username, password, refstack_test_list)
-        print ("Refstack_test_list file is set on test server")
+        print ("test_list file is set on test server\n")
         run_test()
-        print ("Refstack testing run is done!")
+        print ("test run is done!\n")
         get_test_logs(test_host, username, password, local_dir)
-        print ("Log files are collected @yow-cgcs-test.wrs.com:/sandbox/AUTOMATION_LOGS/refstack/.")
+        print ("Log files are collected @yow-cgcs-test.wrs.com:/sandbox/AUTOMATION_LOGS/refstack/\n")
         close_test()
-        print ("Refstack Test is Completed.")
+        print ("Refstack Test run is completed.\n")
+        print ("###########################################\n\n")
 
     except Exception as e:
         print(str(e))
