@@ -10,7 +10,7 @@ from consts.proj_vars import ProjVar
 import datetime
 
 
-@fixture(scope="function")
+@fixture(scope="session")
 def driver(request):
     os.makedirs(ProjVar.get_var('LOG_DIR') + '/horizon', exist_ok=True)
     display = Display(visible=False, size=(1920, 1080))
@@ -25,11 +25,12 @@ def driver(request):
 
     return driver
 
+
 @fixture(scope='function')
 def admin_home_pg(driver, request):
     gmttime = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
     video_path = ProjVar.get_var('LOG_DIR') + '/horizon/' + str(gmttime) + '.mp4'
-    recorder = video_recorder.VideoRecorder(1920, 1080, ':1001', video_path)
+    recorder = video_recorder.VideoRecorder(1920, 1080, os.environ['DISPLAY'], video_path)
     recorder.start()
     LOG.fixture_step('Login as Admin')
     login_pg = loginpage.LoginPage(driver)
@@ -49,7 +50,7 @@ def admin_home_pg(driver, request):
 def tenant_home_pg(driver, request):
     gmttime = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
     video_path = ProjVar.get_var('LOG_DIR') + '/horizon/' + str(gmttime) + '.mp4'
-    recorder = video_recorder.VideoRecorder(1920, 1080, ':1001', video_path)
+    recorder = video_recorder.VideoRecorder(1920, 1080, os.environ['DISPLAY'], video_path)
     recorder.start()
     LOG.fixture_step('Login as Tenant')
     login_pg = loginpage.LoginPage(driver)
