@@ -1,3 +1,4 @@
+
 import pytest
 
 import setups
@@ -20,7 +21,7 @@ def pytest_configure(config):
     dest_labs = config.getoption('dest_labs')
 
     backup_dest = 'USB' if use_usb else 'local'
-    setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None, wipedisk=False,
+    setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
                                delete_backups=delete_backups, dest_labs=dest_labs)
@@ -79,3 +80,4 @@ def pytest_runtest_teardown(item):
     # delete any backup files from /opt/backups to save disk space
     con_ssh.exec_sudo_cmd("rm -rf /opt/backups/*")
     con_ssh.flush()
+

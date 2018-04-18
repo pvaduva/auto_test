@@ -49,32 +49,32 @@ def check_system_health_for_upgrade():
     return system_helper.get_system_health_query_upgrade()
 
 
-def download_license(lab, server, license_path, dest_name="upgrade_license"):
+def download_upgrade_license(lab, server, license_path):
 
     cmd = "test -h " + license_path
-    assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  '{} file not found in {}:{}'.format(dest_name.capitalize(),
-                                                                                       server.name, license_path)
+    assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
+            server.name, license_path)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    dest_path = os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name))
 
     if 'vbox' in lab['name']:
         if 'external_ip' in lab.keys():
             external_ip = lab['external_ip']
             external_port = lab['external_port']
-            server.ssh_conn.rsync("-L " + license_path, external_ip, dest_path,
+            server.ssh_conn.rsync("-L " + license_path, external_ip,
+                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                               pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
             local_ip = lab['local_ip']
-            dest_path = os.path.join(temp_path, "{}.lic".format(dest_name))
 
-            server.ssh_conn.rsync("-L " + license_path, local_ip, dest_path,
+            server.ssh_conn.rsync("-L " + license_path, local_ip,
+                                  os.path.join(temp_path, "upgrade_license.lic"),
                                   dest_user=lab['local_user'], dest_password=lab['local_password'],
                                   pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, "{}.lic".format(dest_name)),
-                                            dest_path=os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name)))
+            common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                            dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
 
             # server.ssh_conn.rsync("-L " + license_path, external_ip,
             #                       os.path.join(temp_path, "upgrade_license.lic"),
@@ -84,43 +84,9 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
             # common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
             #                                 dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
     else:
-        server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
-
-    return dest_path
-
-
-def install_license(license_path, timeout=30, con_ssh=None):
-    """
-    Installs upgrade license on controller-0
-    Args:
-        con_ssh (SSHClient): " SSH connection to controller-0"
-        license_path (str): " license full path in controller-0"
-        timeout (int);
-
-    Returns (int): 0 - success; 1 - failure
-
-    """
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    cmd = "sudo license-install " + license_path
-    con_ssh.send(cmd)
-    end_time = time.time() + timeout
-    rc = 1
-    while time.time() < end_time:
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.Y_N_PROMPT], timeout=timeout)
-        if index == 2:
-            con_ssh.send('y')
-
-        if index == 1:
-            con_ssh.send(HostLinuxCreds.get_password())
-
-        if index == 0:
-            rc = con_ssh.exec_cmd("echo $?")[0]
-            con_ssh.flush()
-            break
-
-    return rc
+        server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
+                            os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                            pre_opts=pre_opts)
 
 
 def download_upgrade_load(lab, server, load_path, upgrade_ver):
@@ -438,7 +404,7 @@ def power_off_host(hosts):
         rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
 
         if rc != 0:
-            err_msg = "Failed to power off node {}  barcode {}: {}"\
+            err_msg = "Failed to power off nod {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
@@ -491,15 +457,13 @@ def lock_hosts(hosts):
         host_helper.lock_host(host)
 
 
-
 @contextmanager
-def ssh_to_build_server(server=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
                         prompt=None):
     """
-    ssh to given build or boot server. If the server needs specifically needs to be a build server use the function in
-    host_helper
+    ssh to given build server.
     Usage: Use with context_manager. i.e.,
-        with ssh_to_yow_server(bld_srv=cgts-yow3-lx) as bld_srv_ssh:
+        with ssh_to_build_server(bld_srv=cgts-yow3-lx) as bld_srv_ssh:
             # do something
         # ssh session will be closed automatically
 
@@ -513,20 +477,19 @@ def ssh_to_build_server(server=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pass
 
     """
     # Get build_server dict from bld_srv param.
-    if isinstance(server, str):
-        for srv in BUILD_SERVERS + TUXLAB_SERVERS:
-            if srv['name'] in server or srv['ip'] == server:
-                server = srv
+    if isinstance(bld_srv, str):
+        for bs in BUILD_SERVERS:
+            if bs['name'] in bld_srv or bs['ip'] == bld_srv:
+                bld_srv = bs
                 break
         else:
-            raise exceptions.BuildServerError("Requested server - {} is not found. Choose server ip or "
-                                              "server name from: {}".format(server, BUILD_SERVERS + TUXLAB_SERVERS))
-    elif server not in BUILD_SERVERS + TUXLAB_SERVERS:
-        raise exceptions.BuildServerError("Unknown server: {}. Choose from: {}".format(server, BUILD_SERVERS +
-                                                                                       TUXLAB_SERVERS))
+            raise exceptions.BuildServerError("Requested build server - {} is not found. Choose server ip or "
+                                              "server name from: {}".format(bld_srv, BUILD_SERVERS))
+    elif bld_srv not in BUILD_SERVERS:
+        raise exceptions.BuildServerError("Unknown build server: {}. Choose from: {}".format(bld_srv, BUILD_SERVERS))
 
-    prompt = prompt if prompt else Prompt.BUILD_SERVER_PROMPT_BASE.format(user, server['name'])
-    bld_server_conn = SSHClient(server['ip'], user=user, password=password, initial_prompt=prompt)
+    prompt = prompt if prompt else Prompt.BUILD_SERVER_PROMPT_BASE.format(user, bld_srv['name'])
+    bld_server_conn = SSHClient(bld_srv['ip'], user=user, password=password, initial_prompt=prompt)
     bld_server_conn.connect()
 
     try:
@@ -581,19 +544,14 @@ def download_heat_templates(lab, server, load_path):
                               lab['controller-0 ip'],
                               TiSPath.HEAT, pre_opts=pre_opts)
 
-
+#TODO: need to find settings.ini for custom install
 def download_lab_config_files(lab, server, load_path, custom_path=None):
     lab_name = get_git_name(lab['name'])
-
-    if 'vbox' in lab_name:
-        return
-
     if custom_path:
         config_path = custom_path
     else:
         config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
     script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
-
 
     cmd = "test -e " + config_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
@@ -715,7 +673,7 @@ def add_storages(lab, server, load_path, custom_path=None):
 
 
 def run_lab_setup(con_ssh=None, timeout=3600):
-    return run_setup_script(script="lab_setup", config=True, con_ssh=con_ssh, timeout=timeout)
+    return run_setup_script(script="lab_setup", config=True)
 
 
 def run_infra_post_install_setup():
@@ -747,7 +705,7 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
         return rc, msg
-    # con_ssh.set_prompt()
+    con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
 
 
@@ -2152,6 +2110,87 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     return 0, None
 
 
+def set_network_boot_feed(bld_server_conn, load_path):
+    """
+    Sets the network feed for controller-0 in default taxlab
+    Args:
+        bld_server_conn:
+        load_path:
+
+    Returns:
+
+    """
+
+
+    if load_path is None:
+        load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
+
+    if bld_server_conn is None:
+        raise ValueError("Build server connection must be provided")
+
+    if load_path[-1:] == '/':
+        load_path = load_path[:-1]
+
+    tis_bld_dir = os.path.basename(load_path)
+    if tis_bld_dir == 'latest_build':
+        cmd = "readlink " + load_path
+        load_path = bld_server_conn.exec_cmd(cmd)[1]
+
+    LOG.info("Load path is {}".format(load_path))
+    cmd = "test -d " + load_path
+    if bld_server_conn.exec_cmd(cmd)[0] != 0:
+        msg = "Load path {} not found".format(load_path)
+        LOG.error(msg)
+        return False
+
+    lab = InstallVars.get_install_var("LAB")
+
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    controller0 = lab["controller-0"]
+    LOG.info("Set feed for {} network boot".format(controller0.barcode))
+    tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(load_path)
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
+
+    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        msg = "Failed to cd to: " + tuxlab_barcode_dir
+        LOG.error(msg)
+        return False
+
+    LOG.info("Copy load into feed directory")
+    feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
+    tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
+
+    LOG.info("Installing Centos load to feed path: {}".format(feed_path))
+    bld_server_conn.exec_cmd("cd " + load_path)
+    pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
+    bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force"], pre_opts=pre_opts)
+    bld_server_conn.rsync("export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts )
+    #extra_opts=["--delete", "--force"]
+    LOG.info("Create new symlink to feed directory")
+    if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
+        msg = "Failed to remove feed"
+        LOG.error(msg)
+        return False
+
+    if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
+        msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
+        LOG.error(msg)
+        return False
+
+    tuxlab_conn.close()
+
+    return True
+
+
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
                     small_footprint=False,  clone_install=False, system_restore=False):
     """
@@ -2490,7 +2529,7 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
     return 0, cloned_image_file_name
 
 
-def check_clone_status(tel_net_session=None, con_ssh=None, fail_ok=False):
+def check_clone_status( tel_net_session=None, con_ssh=None, fail_ok=False):
     """
     Checks the install-clone status after system is booted from cloned image.
     Args:
@@ -2905,23 +2944,14 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
 
     return 0, None
 
-# TODO: currently there are multiple exceptions (we can't just keep appending workarounds for each exception)
-# we need to establish a format and force the name to convert to that format
 def get_git_name(lab_name):
-    """
-    Args:
-        lab_name: Str name of the lab
-
-    Returns: the name of the lab as it is stored in the git server
-
-    """
     lab_name = lab_name.replace('\n', '')
     lab_name = lab_name.replace('yow-', '')
     try:
         lab_name.index('cgcs-')
     except ValueError:
         lab_name = 'cgcs-{}'.format(lab_name)
-    # Workaround for pv0 lab name
+    # Workaround for pv lab name scheme
     if len(lab_name.split('-')) < 3:
         last_letter = -1
         while lab_name[last_letter].isdigit():
@@ -2931,123 +2961,88 @@ def get_git_name(lab_name):
     return lab_name
 
 
-# TODO: figure out what config_region is and if we have to support it
-# TODO: add support for banners and branding
-def controller_system_config(active_controller=None, telnet_conn=None):
+# TODO: Clean up
+# TODO: more meaningful return
+# TODO: you can def get the active barcode easily
+# TODO: Add support for wrlinux
+def setup_network_boot_feed(build_dir, active_barcode, bld_srv_conn, tux_srv=DEFAULT_TUXLAB_SERVER, user=SvcCgcsAuto.USER,
+                            password=SvcCgcsAuto.PASSWORD, prompt=None):
+    # TODO: 2 different ssh connections in one function will be quite slow. Find a better way to do this
+    # could be by changing the naming scheme
+
+    if build_dir.endswith("/"):
+        cmd = "readlink " + build_dir[-1]
+    else:
+        cmd = "readlink " + build_dir
+    load_path = bld_srv_conn.exec_cmd(cmd)[1]
+
+    with ssh_to_tuxlab_server(tux_srv, user, password, prompt) as tux_conn:
+        tuxlab_sub_dir = "{}/{}".format(user, os.path.basename(load_path))
+        feed_path = "{}/{}/{}".format(TuxlabServerPath.DEFAULT_BARCODES_DIR, str(active_barcode), tuxlab_sub_dir)
+        pxeboot_cfgfile = "pxeboot.cfg.gpt"
+
+        assert tux_conn.exec_cmd("cd {}/{}".format(TuxlabServerPath.DEFAULT_BARCODES_DIR, str(active_barcode)))[0] == 0, \
+            "{}/{} does not exist. Please update {} and try again".format(TuxlabServerPath.DEFAULT_BARCODES_DIR,
+                                                                          str(active_barcode), tux_srv["name"])
+        assert tux_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)[0] == 0, \
+            "Failed to create {} directory".format(tuxlab_sub_dir)
+        assert tux_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)[0] == 0, \
+            "Failed to modify permissions for {} directory".format(tuxlab_sub_dir)
+        assert tux_conn.exec_cmd("[ -f {} ]".format(pxeboot_cfgfile))[0] == 0, \
+            "Failed to find a file called {}".format(pxeboot_cfgfile)
+        assert tux_conn.exec_cmd("unlink pxeboot.cfg")[0] == 0, "Unlink of pxeboot.cfg failed"
+        assert tux_conn.exec_cmd("ln -s {} pxeboot.cfg".format(pxeboot_cfgfile))[0] == 0, \
+            "Unable to symlink pxeboot.cfg to {}".format(pxeboot_cfgfile)
+
+        bld_srv_conn.rsync("{}/export/dist/isolinux//".format(load_path), tux_srv["ip"], feed_path, ["--delete", "--force"])
+        bld_srv_conn.rsync("{}/export/extra_cfgs/yow*".format(load_path), tux_srv["ip"], feed_path)
+
+        assert tux_conn.exec_cmd("rm -f feed")[0] == 0, "failed to remove feed"
+        assert tux_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] == 0, ""
+
+    return 0
+
+
+
+
+# TODO: maybe make a TuxlabServerError? Or generalise these 2 functions into one..
+@contextmanager
+def ssh_to_tuxlab_server(tux_srv=DEFAULT_TUXLAB_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                        prompt=None):
     """
-    Runs the config_controller command on the active_controller host
+    ssh to given tuxlab server.
+    Usage: Use with context_manager. i.e.,
+        with ssh_to_tuxlab_server(tux_srv=cgts-yow3-lx) as tux_srv_ssh:
+            # do something
+        # ssh session will be closed automatically
+
     Args:
-        active_controller: Node object representing the active controller
-        telnet_conn: The telnet connection to the active controller
+        tux_srv (str|dict): tuxlab server ip, name or dictionary (choose from consts.build_serve.BUILD_SERVERS)
+        user (str): svc-cgcsauto if unspecified
+        password (str): password for svc-cgcsauto user if unspecified
+        prompt (str|None): expected prompt. such as: svc-cgcsauto@yow-tuxlab2.wrs.com$
 
-    Returns:
+    Yields (SSHClient): ssh client for given tuxlab server and user
 
     """
-    lab = InstallVars.get_install_var("LAB")
-    output_dir = ProjVar.get_var('LOG_DIR')
-    config_file = "TiS_config.ini_centos"
-    wrsroot_etc_profile = "/etc/profile.d/custom.sh"
-
-    if active_controller is None:
-        active_controller = lab["controller-0"]
-
-    if telnet_conn:
-        connection = telnet_conn
-    else:
-        active_controller.telnet_conn = open_telnet_session(active_controller, output_dir)
-        active_controller.telnet_conn.login()
-        connection = active_controller.telnet_conn
-
-    connection.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
-                        wrsroot_etc_profile)
-    connection.exec_cmd("unset TMOUT")
-    connection.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
-    connection.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
-    connection.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
-
-    connection.exec_cmd("export USER=wrsroot")
-
-#    system_files = connection.exec_cmd('ls /home/wrsroot | tr -d "[:blank:]"')[1].splitlines()
-#    print("The system files are: \n {}".format(system_files))
-#    for file in system_files:
-#        if "TiS_config.ini" in file or "system_config" in file:
-#            config_file = file
-#            print("The controller config file is: {}".format(config_file))
-#            break
-
-    rc = connection.exec_cmd("test -f {}".format(config_file))[0]
-    if rc == 0:
-        cmd = 'echo "{}" | sudo -S config_controller --config-file {}'.format(HostLinuxCreds.get_password(), config_file)
-        os.environ["TERM"] = "xterm"
-        rc, output = connection.exec_cmd(cmd, timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
-        if rc == 0:
-            LOG.info("Controller configured")
+    # Get build_server dict from tux_srv param.
+    if isinstance(tux_srv, str):
+        for ts in TUXLAB_SERVERS:
+            if ts['name'] in tux_srv or ts['ip'] == tux_srv:
+                tux_srv = ts
+                break
         else:
-            err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
-            LOG.error(err_msg)
-            raise exceptions.CLIRejected(err_msg)
-    else:
-        # TODO: possibly list the files that are there. Possibly use pwd command to ensure we're in the right directory
-        err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, active_controller.name)
-        LOG.error(err_msg)
-        raise exceptions.CLIRejected(err_msg)
+            raise exceptions.BuildServerError("Requested tuxlab server - {} is not found. Choose server ip or "
+                                              "server name from: {}".format(tux_srv, TUXLAB_SERVERS))
+    elif tux_srv not in BUILD_SERVERS:
+        raise exceptions.BuildServerError("Unknown build server: {}. Choose from: {}".format(tux_srv, TUXLAB_SERVERS))
 
-    return rc, output
+    prompt = prompt if prompt else Prompt.BUILD_SERVER_PROMPT_BASE.format(user, tux_srv['name'])
+    tux_server_conn = SSHClient(tux_srv['ip'], user=user, password=password, initial_prompt=prompt)
+    tux_server_conn.connect()
 
-
-def post_install(active_controller=None):
-    """
-    runs post install scripts if there are any
-    Args:
-        active_controller: a Node object representing the active controller of the lab.
-
-    Returns tuple of a return code a message
-    -1: Unable to execute one of the scripts
-    0: succesfully ran post install scripts
-    1: there was no directory containing any post install scripts to run
-    2: The post install directory was empty
-
-
-    """
-    lab = InstallVars.get_install_var("LAB")
-    rc, msg = 0, None
-
-    if active_controller is None:
-        active_controller = lab["controller-0"]
-
-    if active_controller.ssh_conn is not None:
-        connection = active_controller.ssh_conn
-    elif active_controller.telnet_conn is not None:
-        connection = active_controller.telnet_conn
-    else:
-        connection = host_helper.get_host_telnet_session(active_controller.host_name, lab)
-    if connection is None:
-        connection = ControllerClient.get_active_controller(lab["name"])
-
-    assert connection, "Could not establish a connection to {}".format(active_controller.name)
-
-    if connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0] != 0:
-        rc, msg = 1, "No post install directory"
-
-    else:
-        scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
-
-        if len(scripts) > 0:
-            for script in scripts:
-                LOG.info("Attempting to run {}".format(script))
-                exec = connection.exec_cmd("chmod 755 /home/wrsroot/{}".format(script))[0]
-                if exec != 0:
-                    rc, msg = -1, 'Unable to change {} permissions'.format(script)
-                    break
-                exec = connection.exec_cmd("/home/wrsroot/{} {}".format(script, active_controller.host_name))[0]
-                if exec != 0:
-                    rc, msg = -1, 'Unable to execute {}'.format(script)
-                    break
-        else:
-            rc, msg = 2, "No post install scripts in the directory"
-
-    connection.exec_cmd("source /etc/nova/openrc; system alarm-list")
-    connection.exec_cmd("cat /etc/build.info")
-
-    return rc, msg
+    try:
+        yield tux_server_conn
+    finally:
+        tux_server_conn.close()
 

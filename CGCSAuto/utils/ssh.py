@@ -397,8 +397,7 @@ class SSHClient:
             self.send_control('c')
             self.flush(10)
 
-    # TODO: you made reconnect default to True because you were having so much trouble with prompts
-    def exec_cmd(self, cmd, expect_timeout=60, reconnect=True, reconnect_timeout=300, err_only=False, rm_date=True,
+    def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
                  fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None,
                  prefix_space=False):
         """

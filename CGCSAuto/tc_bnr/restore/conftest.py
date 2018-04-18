@@ -1,3 +1,4 @@
+
 import pytest
 
 import setups
@@ -26,7 +27,7 @@ def pytest_configure(config):
     skip_reinstall = config.getoption('skip_reinstall')
     low_latency = config.getoption('low_latency')
 
-    setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None, wipedisk=False,
+    setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path,
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)

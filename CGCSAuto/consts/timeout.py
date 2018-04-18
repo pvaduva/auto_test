@@ -5,7 +5,6 @@ class HostTimeout:
     ONLINE_AFTER_LOCK = 1200    # Host in online state after locked
     COMPUTE_UNLOCK = 840    # Compute host reaches enabled/available state after system host-unlock returned
     CONTROLLER_UNLOCK = 1360    # Host reaches enabled/available state after system host-unlock returned
-    CONFIG_CONTROLLER_TIMEOUT = 1800
     # REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
     REBOOT = 2400  # Host reaches enabled/available state after sudo reboot -f from host
     SWACT = 180     # Active controller switched and being able to run openstack CLI after system host-swact returned

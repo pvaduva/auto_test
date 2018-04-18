@@ -169,7 +169,7 @@ class HostTask:
     POWERING_ON = 'Powering-on'
     POWER_CYCLE = 'Critical Event Power-Cycle'
     POWER_DOWN = 'Critical Event Power-Down'
-# TODO: add set_x_prompt class function
+
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
     CONTROLLER_1 = '.*controller\-1\:~\$ '
@@ -195,11 +195,6 @@ class Prompt:
     Y_N_PROMPT = '.*\(y/n\)\?.*'
     YES_N_PROMPT = '.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
-
-    @classmethod
-    def set_admin_prompt(cls, prompt):
-        cls.ADMIN_PROMPT = prompt
-
 
 
 class NovaCLIOutput:

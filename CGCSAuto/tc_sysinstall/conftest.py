@@ -1,3 +1,4 @@
+
 import pytest
 import os
 import setups
@@ -67,13 +68,21 @@ def pytest_addoption(parser):
     controller_help = "Comma-separated list of VLM barcodes for controllers"
     compute_help = "Comma-separated list of VLM barcodes for computes"
     storage_help = "Comma-separated list of VLM barcodes for storage nodes"
+
+    parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
+    parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
+                     action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
+    parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
+                     action='store', metavar='SIZE',  help=ceph_mon_gib_help)
     build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
                         " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
     build_dir_path_help = "The path to the upgrade software release build directory in build server." \
                              " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
                              " Otherwise the default  build dir path for the upgrade software " \
                              "version will be used"
-    file_server_help = "The server that holds the lab file directory. Default is the build server"
+    file_server_help = "The server that holds the lab file directory." \ 
+                           "Default is the build server"
     license_help = "The full path to the new release software license file in build-server. " \
                    "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
                    " Otherwise, default license for the upgrade release will be used"
@@ -89,12 +98,21 @@ def pytest_addoption(parser):
                      action='store', metavar='DIR', help=file_dir_help)
     parser.addoption('--controller', dest='controller',
                      action='store', help=controller_help)
-    parser.addoption('--guest_image', '--guest-image', '--guest_image_path', '--guest-image-path',
+    parser.addoption('--build-server', '--build_server', dest='build_server',
+                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
+                     help=build_server_help)
+    parser.addoption('--tis-build-dir', '--tis_build_dir', dest='tis_build_dir', action='store',
+                     metavar='DIR', help=build_dir_path_help, default=BuildServerPath.DEFAULT_HOST_BUILD_PATH)
+    parser.addoption('--license', dest='upgrade_license', action='store',
+                     metavar='license full path', help=license_help)
+    parser.addoption('--guest_image', '--guest-image', '--guest_image_path', 'guest-image-path',
                      dest='guest_image_path', action='store', metavar='guest image full path',
                      default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
     parser.addoption('--heat_templates', '--heat-templates', '--heat_templates_path', '--heat-templates-path',
                      dest='heat_templates', action='store', metavar='heat templates full path',
                      default=BuildServerPath.HEAT_TEMPLATES, help=heat_help)
+
+    # TODO: choose custom nodes to install a lab (install new labs)
     parser.addoption('--compute', dest='compute',
                      action='store', help=compute_help)
     parser.addoption('--storage', dest='storage',
@@ -105,12 +123,14 @@ def pytest_configure(config):
     # Lab install params
     lab_arg = config.getoption('lab')
     resume_install = config.getoption('resumeinstall')
-    skiplist = config.getoption('skiplist')
+    skip_labsetup = config.getoption('skiplabsetup')
+    #TODO: Add functionality to wipedisk
     wipedisk = config.getoption('wipedisk')
     controller0_ceph_mon_device = config.getoption('ceph_mon_dev_controller_0')
     controller1_ceph_mon_device = config.getoption('ceph_mon_dev_controller_1')
     ceph_mon_gib = config.getoption('ceph_mon_gib')
     install_conf = config.getoption('installconf')
+    # TODO: fix up naming a bit
     lab_file_server = config.getoption("file_server")
     lab_file_dir = config.getoption('file_dir')
     build_server = config.getoption('build_server')
@@ -131,9 +151,9 @@ def pytest_configure(config):
                                                 license_path=install_license, guest_image=guest_image,
                                                 heat_templates=heat_templates)
 
-    setups.set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk,
+    setups.set_install_params(lab=lab_arg, skip_labsetup=skip_labsetup, resume=resume_install, wipedisk=wipedisk,
                               installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
-                              controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,)
+                              controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib)
     print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
 #
 #
