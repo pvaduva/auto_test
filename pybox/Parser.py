@@ -40,7 +40,9 @@ def handle_args():
         """
         If present, install controllers as controller+compute nodes.
         """,
-        action='store_true')
+        choices=['AIO-DX', 'AIO-SX'],
+        type=str,
+        required=False)
         
     parser.add_argument("--createlab", help=
         """
