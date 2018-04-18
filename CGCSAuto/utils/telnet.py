@@ -1012,9 +1012,8 @@ class Telnet:
                 low_latency=False,
                 clone_install=False):
         boot_menu = 'Automatic Anaconda / Kickstart Boot Menu'
-
-        if "wildcat" in node.host_name or "supermicro" in node.host_name:
-            if "wildcat" in node.host_name:
+        if "wildcat" in node.host_name or "supermicro" in node.host_name or "wolfpass" in node.host_name:
+            if "wildcat" in node.host_name or "wolfpass" in node.host_name:
                 index = 0
                 boot_menu_name = "boot menu"
             else:
@@ -1062,7 +1061,7 @@ class Telnet:
             # regex = re.compile(b"\[\d+(;22H|;15H|;11H)(.*?)\x1b")
             # regex = re.compile(b"\[\d+(.*?)\x1b")
             # regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
-            if "wildcat" in node.host_name:
+            if "wildcat" in node.host_name or "wolfpass" in node.host_name:
                 regex = re.compile(b"\[\d+(;22H|;15H|;14H|;11H)(.*?)\x1b")
             else:
                 if usb:
@@ -1071,8 +1070,6 @@ class Telnet:
                     regex = re.compile(b"(\d{4}).*v\d+")
                     # regex = re.compile(b"\[\d+(;32H|m)\|(.+)\|")
                     # regex = re.compile(b"Slot (\d{4}) v\d+")
-
-            LOG.info("wildcat/supermicro: compiled regex is: {}".format(regex))
 
             while count < MAX_SEARCH_ATTEMPTS:
                 # # GENERIC USB

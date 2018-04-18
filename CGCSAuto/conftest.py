@@ -10,11 +10,12 @@ import setup_consts
 import setups
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
-#from consts.build_server import Server, get_build_server_info
+# from consts.build_server import Server, get_build_server_info
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
+from consts.filepaths import BuildServerPath
 
 
 tc_start_time = None
@@ -288,6 +289,8 @@ def pytest_configure(config):
     global region
     region = config.getoption('region')
 
+    collect_netinfo = config.getoption('netinfo')
+
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
     lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
@@ -297,6 +300,8 @@ def pytest_configure(config):
     always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+    if collect_netinfo:
+        ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
 
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
@@ -330,6 +335,9 @@ def pytest_configure(config):
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
         ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+
+    if setups.is_vbox():
+        ProjVar.set_var(IS_VBOX=True)
 
     InstallVars.set_install_var(lab=lab)
 
@@ -382,11 +390,14 @@ def pytest_addoption(parser):
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skiplabsetup_help = "Do not run lab_setup post lab install"
+    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,pxeboot,feed \n" \
+                "labsetup: Do not run lab_setup post lab install \n" \
+                "pxeboot: Don't modify pxeboot.cfg \n" \
+                "feed: skip setup of network feed"
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
-    wipedisk_help = 'wipe the disk(s) on the hosts'
+    wipedisk_help = 'Wipe the disk(s) on the hosts'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -423,18 +434,24 @@ def pytest_addoption(parser):
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
 
+    parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
+                     help="Collect system networking info if scp keyfile fails")
+
     ##################################
     # Lab install or upgrade options #
     ##################################
+    LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
+
     # Install
     parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
-    parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
-                     help=skiplabsetup_help)
+    parser.addoption('--skip', dest='skiplist', action='store',
+                     help=skip_help)
     parser.addoption('--wipedisk', '--wipedisk', dest='wipedisk', action='store_true',
                      help=wipedisk_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+
     # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
@@ -446,6 +463,47 @@ def pytest_addoption(parser):
                      action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
+
+    # Custom install help
+    file_dir_help = "directory that contains the following lab files: {}. ".format(
+        ' '.join(v[1] for v in LAB_FILES)) + \
+                    "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
+                    "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
+    controller_help = "Comma-separated list of VLM barcodes for controllers"
+    compute_help = "Comma-separated list of VLM barcodes for computes"
+    storage_help = "Comma-separated list of VLM barcodes for storage nodes"
+    build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
+                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
+    build_dir_path_help = "The path to the upgrade software release build directory in build server." \
+                          " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
+                          " Otherwise the default  build dir path for the upgrade software " \
+                          "version will be used"
+    file_server_help = "The server that holds the lab file directory. Default is the build server"
+    license_help = "The full path to the new release software license file in build-server. " \
+                   "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
+                   " Otherwise, default license for the upgrade release will be used"
+    guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
+                       "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+    heat_help = "The full path to the python heat templates" \
+                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
+
+    # Custom install options
+    parser.addoption('--lab_file_server', '--lab-file-server', dest='file_server',
+                     action='store', default=build_server_consts.DEFAULT_BUILD_SERVER['name'], help=file_server_help)
+    parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
+                     action='store', metavar='DIR', help=file_dir_help)
+    parser.addoption('--controller', dest='controller',
+                     action='store', help=controller_help)
+    parser.addoption('--guest_image', '--guest-image', '--guest_image_path', '--guest-image-path',
+                     dest='guest_image_path', action='store', metavar='guest image full path',
+                     default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
+    parser.addoption('--heat_templates', '--heat-templates', '--heat_templates_path', '--heat-templates-path',
+                     dest='heat_templates', action='store', metavar='heat templates full path',
+                     default=BuildServerPath.HEAT_TEMPLATES, help=heat_help)
+    parser.addoption('--compute', dest='compute',
+                     action='store', help=compute_help)
+    parser.addoption('--storage', dest='storage',
+                     action='store', help=storage_help)
     # Note --lab is also a lab install option, when config file is not provided.
 
     ###############################

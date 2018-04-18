@@ -8,7 +8,7 @@ from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 from utils import telnet as telnetlib
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, \
+from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
@@ -280,7 +280,7 @@ def recover_simplex(con_ssh=None, fail_ok=False):
 
 def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None):
     """
-    Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
+    Wait for hosts to be in online state if locked, and available and hypervisor/webservice up if unlocked
     Args:
         hosts:
         fail_ok: whether to raise exception when fail
@@ -299,7 +299,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
     res_lock = res_unlock = True
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        res_lock = wait_for_hosts_states(hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
+        res_lock = wait_for_hosts_states(expt_online_hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
                                          con_ssh=con_ssh)
 
     if expt_avail_hosts:
@@ -307,7 +307,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
         controllers = list(set(system_helper.get_controllers()) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        res_unlock = wait_for_hosts_states(hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
+        res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
                                            con_ssh=con_ssh)
 
         if res_unlock:
@@ -639,7 +639,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         con_telnet.login()
         con_telnet.exec_cmd("xterm")
 
-    # Give it sometime before openstack cmds enables on after host
+    # Give it sometime before openstack cmds enables on after host unlock
     _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                    fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
     time.sleep(10)
@@ -707,8 +707,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         return 1, output
 
     if is_simplex:
-        _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-                                    timeout=HostTimeout.CONTROLLER_UNLOCK)
+         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
@@ -754,7 +754,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                            timeout=HostTimeout.HYPERVISOR_UP)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
-            wait_for_tasks_affined(host)
+            if not is_simplex:
+                wait_for_tasks_affined(host)
 
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
@@ -873,6 +874,10 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
             res[host] = 1, output
         else:
             hosts_to_check.append(host)
+
+    if not hosts_to_check:
+        LOG.warning("Unlock host(s) rejected: {}".format(hosts_to_unlock))
+        return res
 
     if is_simplex:
         _wait_for_simplex_reconnect(con_ssh=con_ssh, timeout=HostTimeout.CONTROLLER_UNLOCK,
@@ -1011,7 +1016,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     def check_sysinv_cli(con_ssh_, use_telnet_, con_telnet_):
 
         cli.system('show', ssh_client=con_ssh_, use_telnet=use_telnet_, con_telnet=con_telnet_,
-                   timeout=timeout)
+                   timeout=60)
         time.sleep(10)
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
                                                               con_telnet=con_telnet_)
@@ -1035,7 +1040,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                 pass
             if not con_ssh._is_connected():
                 if reconnect:
-                    LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
+                    LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
                     con_ssh.connect(retry_timeout=timeout)
                 else:
                     LOG.error("system disconnected")
@@ -3509,6 +3514,17 @@ def get_host_cpu_model(host, con_ssh=None):
     LOG.info("CPU Model for {}: {}".format(host, cpu_model))
     return cpu_model
 
+def get_max_vms_supported(host, con_ssh=None):
+    max_count = 10
+    cpu_model = get_host_cpu_model(host=host, con_ssh=con_ssh)
+    if proj_vars.ProjVar.get_var('IS_VBOX'):
+        max_count = MaxVmsSupported.VBOX
+    elif re.search('Xeon.* CPU D-[\d]+', cpu_model):
+        max_count = MaxVmsSupported.XEON_D
+
+    LOG.info("Max number vms supported on {}: {}".format(host, max_count))
+    return max_count
+
 
 def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, storage_backing=None, con_ssh=None):
     """
@@ -3673,3 +3689,171 @@ def power_on_host(host, fail_ok=False, timeout=HostTimeout.REBOOT, unlock=True, 
         msg += ' and unlocked'
 
     return 0, msg
+
+def clear_local_storage_cache(host, con_ssh=None):
+    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        with host_ssh.login_as_root() as root_ssh:
+            root_ssh.exec_cmd('rm -rf /etc/nova/instances/_base/*', fail_ok=True)
+            root_ssh.exec_cmd('sync;echo 3 > /proc/sys/vm/drop_caches', fail_ok=True)
+
+
+def get_host_device_list_values(host, field='name', list_all=False, con_ssh=None, auth_info=Tenant.ADMIN, strict=True,
+                                regex=False, **kwargs):
+    """
+    Get the parsed version of the output from system host-device-list <host>
+    Args:
+        host (str): host's name
+        field (str): field name to return value for
+        list_all (bool): whether to list all devices including the disabled ones
+        con_ssh (SSHClient):
+        auth_info (dict):
+        strict (bool): whether to perform strict search on filter
+        regex (bool): whether to use regular expression to search the value in kwargs
+        kwargs: key-value pairs to filter the table
+
+    Returns (list): output of system host-device-list <host> parsed by table_parser
+
+    """
+    param = '--nowrap'
+    param += ' --all' if list_all else ''
+    table_ = table_parser.table(cli.system('host-device-list {}'.format(param), host, ssh_client=con_ssh,
+                                           auth_info=auth_info))
+
+    values = table_parser.get_values(table_, target_header=field, strict=strict, regex=regex, **kwargs)
+
+    if field in ('numa_node', 'enabled'):
+        try:
+            values = [eval(val) for val in values]
+        except:
+            pass
+
+    return values
+
+
+def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Get host device values for given fields via system host-device-show
+    Args:
+        host:
+        device:
+        fields (str|list|tuple):
+        con_ssh:
+        auth_info:
+
+    Returns (list):
+
+    """
+    args = "{} {}".format(host, device)
+    table_ = table_parser.table(cli.system('host-device-show', args, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(fields, str):
+        fields = [fields]
+
+    vals = []
+    for field in fields:
+        value = table_parser.get_value_two_col_table(table_, field)
+        if field in ('numa_node', 'sriov_numvfs', 'sriov_totalvfs', 'enabled'):
+            try:
+                value = eval(value)
+            except:
+                pass
+        vals.append(value)
+
+    return vals
+
+
+def modify_host_device(host, device, new_name=None, new_state=None, check_first=True, lock_unlock=False, fail_ok=False,
+                       con_ssh=None, auth_info=Tenant.ADMIN):
+    """
+    Modify host device to given name or state.
+    Args:
+        host: host to modify
+        device: device name or pci address
+        new_name (str): new name to modify to
+        new_state (bool): new state to modify to
+        lock_unlock (bool): whether to lock unlock host before and after modify
+        con_ssh (SSHClient):
+        fail_ok (bool):
+        check_first (bool):
+        auth_info (dict):
+
+    Returns (tuple):
+
+    """
+    args = ''
+    fields = []
+    expt_vals = []
+    if new_name:
+        fields.append('name')
+        expt_vals.append(new_name)
+        args += ' --name {}'.format(new_name)
+    if new_state is not None:
+        fields.append('enabled')
+        expt_vals.append(new_state)
+        args += ' --enabled {}'.format(new_state)
+
+    if check_first and fields:
+        vals = get_host_device_values(host, device, fields=fields, con_ssh=con_ssh)
+        if vals == expt_vals:
+            return -1, "{} device {} already set to given name and/or state".format(host, device)
+
+    try:
+        if lock_unlock:
+            LOG.info("Lock host before modify host device")
+            lock_host(host=host)
+
+        LOG.info("Modify {} device {} with args: {}".format(host, device, args))
+        args = "{} {} {}".format(host, device, args.strip())
+        res, out = cli.system('host-device-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+
+        if res == 1:
+            return 1, out
+
+        LOG.info("Verifying the host device new pci name")
+        post_vals = get_host_device_values(host, device, fields=fields, con_ssh=con_ssh)
+        assert expt_vals == post_vals, "{} device {} is not modified to given values. Expt: {}, actual: {}".\
+            format(host, device, expt_vals, post_vals)
+
+        msg = "{} device {} is successfully modified to given values".format(host, device)
+        LOG.info(msg)
+        return 0, msg
+    finally:
+        if lock_unlock:
+            LOG.info("Unlock host after host device modify")
+            unlock_host(host=host)
+
+
+def enable_disable_hosts_devices(hosts, devices, enable=True):
+    """
+    Enable/Disable given devices on specified hosts. (lock/unlock required unless devices already in state)
+    Args:
+        hosts (str|list|tuple): hostname(s)
+        devices (str|list|tuple): device(s) name or address via system host-device-list
+        enable (bool): whether to enable or disable devices
+
+    Returns:
+
+    """
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    if isinstance(devices, str):
+        devices = [devices]
+
+    key = 'name' if 'pci_' in devices[0] else 'address'
+    for host_ in hosts:
+        states = get_host_device_list_values(host=host_, field='enabled', list_all=True, **{key: devices})
+        if (not enable) in states:
+            try:
+                lock_host(host=host_)
+                for i in range(len(states)):
+                    if states[i] is not enable:
+                        device = devices[i]
+                        modify_host_device(host=host_, device=device, new_state=enable, check_first=False)
+            finally:
+                unlock_host(host=host_)
+
+        post_states = get_host_device_list_values(host=host_, field='enabled', list_all=True, **{key: devices})
+        assert not ((not enable) in post_states), "Some devices enabled!={} after unlock".format(enable)
+
+    LOG.info("enabled={} set successfully for following devices on hosts {}: {}".format(enable, hosts, devices))

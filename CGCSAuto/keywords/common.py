@@ -237,7 +237,7 @@ def get_tenant_name(auth_info=None):
 def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
                        telnet_session=None):
     """
-    ssh to a exterbal node from sshclient.
+    ssh to a external node from sshclient.
 
     Args:
         host (str|None): hostname or ip address of remote node to ssh to.

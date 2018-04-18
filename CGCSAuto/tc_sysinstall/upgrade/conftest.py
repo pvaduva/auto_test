@@ -134,7 +134,7 @@ def upgrade_setup(pre_check_upgrade):
     # # get upgrade license file for release
     LOG.info("Downloading the license {}:{} for target release {}".format(bld_server_obj.name,
                                                                           license_path, upgrade_version))
-    install_helper.download_upgrade_license(lab, bld_server_obj, license_path)
+    install_helper.download_license(lab, bld_server_obj, license_path)
 
     LOG.tc_step("Checking if target release license is downloaded......")
     cmd = "test -e " + os.path.join(WRSROOT_HOME, "upgrade_license.lic")

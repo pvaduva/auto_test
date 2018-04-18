@@ -20,6 +20,8 @@ BOOT_FROM_VOLUME = 'Attempt to boot from volume - no image supplied'
 
 DNS_NAMESERVERS = ["147.11.57.133", "128.224.144.130", "147.11.57.128"]
 
+METADATA_SERVER = '169.254.169.254'
+
 # Heat template path
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
@@ -43,7 +45,7 @@ PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
 REGION_MAP = {'RegionOne': '',
               'RegionTwo': '-R2'}
 
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '17.07'], ['17.06', '18.01']]
+SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
 
 class GuestImages:
@@ -73,7 +75,8 @@ class GuestImages:
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
         'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
-        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
+        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
+        'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5)
     }
 
 
@@ -81,12 +84,16 @@ class Networks:
     MGMT_NET_NAME = 'tenant\d-mgmt-net'
     DATA_NET_NAME = 'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
-    # such as 192.168.11.6
-    MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.9\d\.\d{1,3}'
-    EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-8]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
-    # such as 172.16.1.11
+
+    # MGMT_IP and EXT_IP patterns are based on "NAT accessible IP address allocations" table in lab connectivity wiki
+    # management ip pattern, such as 192.168.111.6
+    MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.[8|9]\d\.\d{1,3}'
+    # external ip pattern
+    EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
+
+    # tenant-net ip pattern such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
-    # such as 10.1.1.44
+    # internal-net ip pattern such as 10.1.1.44
     INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
     IPV4_IP = '\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}'
     IP_PATTERN = {
@@ -169,6 +176,7 @@ class HostTask:
     POWERING_ON = 'Powering-on'
     POWER_CYCLE = 'Critical Event Power-Cycle'
     POWER_DOWN = 'Critical Event Power-Down'
+
 
 class Prompt:
     CONTROLLER_0 = '.*controller\-0\:~\$ '
@@ -311,6 +319,7 @@ class EventLogID:
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
     INFRA_PORT_FAIL = '100.110'
+    IMA = '500.500'
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
@@ -470,11 +479,14 @@ class OrchStrategyKey:
 class DevClassID:
     QAT_VF = '0b4000'
     GPU = '030000'
+    USB = '0c0320'
 
 
 class MaxVmsSupported:
     SX = 10
+    XEON_D = 4
     DX = 10
+    VBOX = 2
 
 
 class BackupRestore:
@@ -533,3 +545,12 @@ class HeatStackStatus:
     CREATE_COMPLETE = 'CREATE_COMPLETE'
     UPDATE_COMPLETE = 'UPDATE_COMPLETE'
     UPDATE_FAILED = 'UPDATE_FAILED'
+
+
+class VimEventID:
+    live_migrate_begin = 'instance-live-migrate-begin'
+    live_migrate_end = 'instance-live-migrated'
+    cold_migrate_begin = 'instance-cold-migrate-begin'
+    cold_migrate_end = 'instance-cold-migrated'
+    cold_migrate_confirm_begin = 'instance-cold-migrate-confirm-begin'
+    cold_migrate_confirmed = 'instance-cold-migrate-confirmed'
