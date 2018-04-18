@@ -795,7 +795,7 @@ if __name__ == "__main__":
                     serial.disconnect(socks[node])
                 socks = {}
                 streams = {}
-                sys.exist(1)
+                sys.exit(1)
             else: 
                 for node in node_list:
                     serial.disconnect(socks[node])
