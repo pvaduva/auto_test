@@ -73,9 +73,6 @@ def test_gpu_passthrough():
     LOG.tc_step("Delete vm  {} ".format(vm_id))
     vm_helper.delete_vms(vms=vm_id, stop_first=False)
 
-    actual_pci_pfs_used = _calculate_pf_used(nova_gpu_alias)
-    assert actual_pci_pfs_used == initial_gpu_pfs_used, "actual pci pfs is not equal to expected pci pfs"
-
     actual_gpu_pfs_used = _calculate_pf_used(nova_gpu_alias)
     assert actual_gpu_pfs_used == initial_gpu_pfs_used, "actual gpu pci pfs is not equal to expected pci pfs after vm delete"
 
@@ -95,7 +92,7 @@ def _get_nova_alias(class_id, dev_type):
 
     nova_devices = network_helper.create_pci_alias_for_devices(dev_type=dev_type, devices=devices)
     nova_alias = nova_devices[0]['pci alias']
-    LOG.info("nova alias name *********** {}".format(nova_alias))
+    LOG.info("nova alias name {}".format(nova_alias))
     return nova_alias
 
 
