@@ -1464,8 +1464,8 @@ def telnet_logger(host):
 
     return logger
 
-TELNET_REGEX = '(.*-[\d]+)[ login:|:~\$]'
-TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
+TELNET_REGEX = '(.*-\d+)( login:|:~\$)'
+TELNET_LOGIN_PROMPT = '(controller|compute|storage)-\d+ login:'
 
 
 class TelnetClient(Telnet):
@@ -1473,20 +1473,23 @@ class TelnetClient(Telnet):
     def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
                  password=HostLinuxCreds.get_password()):
 
+        self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
 
         if not prompt and not hostname:
             prompt = ':~\$ '
-            self.send()
+            self.send('\r\n\r\n')
             index = self.expect(TELNET_REGEX, fail_ok=True)
             if index == 0:
-                hostname = self.cmd_output
+                hostname = re.search(TELNET_REGEX, self.cmd_output).group(1)
+                prompt = '{}:~\$ '.format(hostname)
+
+            self.flush()
         elif not prompt:
             prompt = '{}:~\$ '.format(hostname)
         elif not hostname:
-            found = re.findall(TELNET_REGEX, prompt)
-            if found:
-                hostname = found[0]
+            hostname = re.search(TELNET_REGEX, prompt).group(0)
+
         self.logger = telnet_logger(hostname) if hostname else telnet_logger(host)
         self.hostname = hostname
         self.prompt = prompt
@@ -1504,10 +1507,29 @@ class TelnetClient(Telnet):
 
         if login:
             self.login(fail_ok=fail_ok, expect_prompt_timeout=login_timeout)
+
         return self.sock
 
+    def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
+        super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
+        try:
+            self.send('\r\n\r\n')
+            index = self.expect(['Login:', TELNET_REGEX])
+            self.flush()
+            if index == 0:
+                self.send('\r\n\r\n')
+                self.expect(TELNET_REGEX)
+                self.flush()
+            msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
+            self.logger.info(msg)
+
+        except Exception as e:
+            err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'.\
+                format(host, port, e.__str__())
+            self.logger.warning(err_msg)
+
     def login(self, expect_prompt_timeout=3, fail_ok=False):
-        self.send()
+        self.send('\r\n\r\n')
         index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
         self.flush()
         code = 0
@@ -1538,6 +1560,8 @@ class TelnetClient(Telnet):
         if not cmd.endswith('\n'):
             cmd = '{}\n'.format(cmd)
         # self.set_debuglevel(2)
+        cmd.replace('\r\n', '\n')
+        cmd.replace('\n', '\r\n')
         self.write(cmd.encode())
 
     def send_control(self, char='c'):
@@ -1578,7 +1602,7 @@ class TelnetClient(Telnet):
             blobs.append(blob)
 
         try:
-            index, re_obj, matched_text = Telnet.expect(self, list=blobs, timeout=timeout)
+            index, re_obj, matched_text = super(TelnetClient, self).expect(list=blobs, timeout=timeout)
             # Reformat the output
             output = self._process_output(output=matched_text, rm_date=rm_date)
             if index >= 0:
@@ -1672,6 +1696,7 @@ class TelnetClient(Telnet):
         return exit_code, cmd_output
 
     def get_exit_code(self):
+        self.flush()
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=10)
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
@@ -1690,5 +1715,7 @@ class TelnetClient(Telnet):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
     def close(self):
-        super().close()
-        self.logger.info("Telnet connection closed")
+        is_closed = False if self.sock else True
+        super(TelnetClient, self).close()
+        if not is_closed:
+            self.logger.info("Telnet socket closed")

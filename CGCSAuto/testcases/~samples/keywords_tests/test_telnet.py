@@ -1,26 +1,35 @@
 import time
 from utils.ssh import TelnetClient
+from telnetlib import Telnet
+
+
+def check_alarms():
+    pass
 
 
 def test_telnet():
-    telnet = TelnetClient(host='128.224.148.176', port=2001, hostname='controller-0', timeout=10)
+    # t_net = Telnet(host='128.224.148.230', port=2039, timeout=20)
+    # t_net.write(b'\r\n\r\n')
+    # output = t_net.read_until(b'ogin')
+    # print(output.decode())
+    # t_net.write('\r\n\r\n'.encode())
+    # output = t_net.expect(['(controller|compute|storage)-\d+ login:'.encode()])[2]
+    # output = t_net.read_until(b'ogin')
+    # print(output.decode())
+
+    # telnet = TelnetClient(host='128.224.148.230', port=2039, hostname='compute-1', timeout=10)
+    telnet = TelnetClient(host='128.224.148.230', port=2039, hostname=None, timeout=10)
     try:
+        print("hostname: {}; prompt: {}".format(telnet.hostname, telnet.prompt))
         telnet.connect()
-        telnet.send('ls')
-        time.sleep(5)
+        output = telnet.exec_cmd('pwd')[1]
+        print("Output: {}".format(output))
+
+        telnet.send('pwd')
+        time.sleep(3)
         output = telnet.flush()
         # output = telnet.read_very_eager()
-        print('read very eager: ' + str(output))
+        print('flushed: ' + str(output))
 
-        # telnet.flush()
-        # telnet.send()
-        # index = telnet.expect([telnet.prompt, 'controller-0 login'], fail_ok=False)
-        # assert 0 == index
-        #
-        # code, output = telnet.exec_cmd('pwd')
-        # print("Here's output for pwd: {}".format(output))
-        # # telnet.send('ls')
-        # # telnet.expect('hahaha')
     finally:
         telnet.close()
-    # print(content)

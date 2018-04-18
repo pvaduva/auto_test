@@ -41,7 +41,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
     """
     lab = ProjVar.get_var('LAB')
     if use_telnet and con_telnet is None:
-        raise ValueError("No Telenet session provided")
+        raise ValueError("No Telnet session provided")
 
     if ssh_client is None and not use_telnet:
         ssh_client = ControllerClient.get_active_controller()
