@@ -62,6 +62,7 @@ class GuestImages:
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),
         'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2', 0.3),
         'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2', 0.7),
+        'centos_gpu': ('centos-67-cloud-gpu.img', 16, 'centos-67-cloud-gpu.img', 0.7),
         'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2', 0.9),
         'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 1.5),                # OVP img
         'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 1.1),               # OVP img
