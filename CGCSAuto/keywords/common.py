@@ -74,7 +74,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
                               dest_password=dest_pswd, timeout=timeout)
 
-    else: # if not a VBox lab, scp from test server directly to TiS server
+    else:   # if not a VBox lab, scp from test server directly to TiS server
         LOG.info("scp file(s) from test server to tis server")
         con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
                             dest_path=dest_path, source_pswd=source_password, timeout=timeout)

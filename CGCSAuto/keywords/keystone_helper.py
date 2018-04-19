@@ -339,4 +339,3 @@ def delete_users(user, fail_ok=False):
     Returns: tuple, (code, msg)
     """
     return cli.openstack('user delete', user, auth_info=Tenant.ADMIN, fail_ok=fail_ok)
-

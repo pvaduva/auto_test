@@ -435,14 +435,13 @@ def collect_telnet_logs_for_nodes(end_event):
 
 def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, timeout=None, collect_interval=60):
     node_telnet = TelnetClient(host=telnet_ip, prompt=prompt, port=telnet_port, hostname=hostname)
-    node_telnet.send()
-    time.sleep(3)
-    node_telnet.flush()
     if not timeout:
         timeout = 3600 * 48
     end_time = time.time() + timeout
+    failure_count = 0
     while time.time() < end_time:
         if end_event.is_set():
+            node_telnet.close()
             break
         try:
             # Read out everything in output buffer every minute
@@ -451,8 +450,15 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
             node_telnet.flush()
         except Exception as e:
             node_telnet.logger.error('Failed to collect telnet log. {}'.format(e))
+            node_telnet.close()
+            failure_count += 1
+            if failure_count >= 5:
+                node_telnet.logger.error("5 failures encountered to collect telnet logs. Abort.")
+                raise
+            time.sleep(60)      # cool down period if telnet connection fails
     else:
         node_telnet.logger.warning('Collect telnet log timed out')
+        node_telnet.close()
 
 
 def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
@@ -771,6 +777,20 @@ def set_sys_type(con_ssh):
 
 
 def collect_sys_net_info(lab):
+    """
+    Collect networking related info on system if system cannot be reached.
+    Only applicable to hardware systems.
+
+    Args:
+        lab (dict): lab to collect networking info for.
+
+    Following info will be collected:
+        - ping/ssh fip/uip from NatBox and Test server
+        - if able to ssh to lab, collect ip neigh, ip route, ip addr.
+            - ping/ssh NatBox from lab
+            - ping lab default gateway from NatBox
+
+    """
     LOG.warning("Collecting system network info upon session setup failure")
     res_ = {}
     source_user = SvcCgcsAuto.USER
