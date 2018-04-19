@@ -1245,7 +1245,7 @@ class Telnet:
                 self.get_read_until("PXE Boot", 120)
             else:
                 self.get_read_until("Network Boot", 120)
-                #self.get_read_until("Network Boot", 10)
+                self.get_read_until("Network Boot", 10)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 
