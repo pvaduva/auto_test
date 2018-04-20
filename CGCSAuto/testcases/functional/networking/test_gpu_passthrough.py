@@ -1,6 +1,6 @@
 import re
 import random
-from pytest import fixture, mark
+from pytest import fixture
 from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus, FlavorSpec, GuestImages, DevClassID
@@ -8,7 +8,33 @@ from keywords import network_helper, nova_helper, vm_helper, glance_helper, syst
 from testfixtures.fixture_resources import ResourceCleanup
 
 
-def test_gpu_passthrough():
+@fixture(scope='module', autouse=True)
+def setup_alias(request):
+    LOG.fixture_step("Create nova device list for gpu device")
+    nova_gpu_alias = _get_nova_alias(class_id=DevClassID.GPU, dev_type='gpu')
+    LOG.fixture_step("Create nova device list for usb device")
+    nova_usb_alias = _get_nova_alias(class_id=DevClassID.USB, dev_type='user')
+
+    def revert_alias_setup():
+
+        service = 'nova'
+        gpu_uuid = system_helper.get_service_parameter_values \
+                                                (rtn_value='uuid', service=service, section='pci_alias', name='gpu')[0]
+        user_uuid = system_helper.get_service_parameter_values \
+                                                (rtn_value='uuid', service=service, section='pci_alias', name='user')[0]
+        LOG.fixture_step("Delete service parameter uuid {} ".format(gpu_uuid))
+        system_helper.delete_service_parameter(uuid=gpu_uuid)
+        LOG.fixture_step("Delete service parameter uuid {} ".format(user_uuid))
+        system_helper.delete_service_parameter(uuid=user_uuid)
+
+        system_helper.apply_service_parameters(service, wait_for_config=False)
+
+    request.addfinalizer(revert_alias_setup)
+
+    return nova_gpu_alias, nova_usb_alias
+
+
+def test_gpu_passthrough(setup_alias):
 
     """
         Test case for GPU passthrough
@@ -26,17 +52,14 @@ def test_gpu_passthrough():
 
     """
 
-    LOG.fixture_step("Create nova device list for gpu device")
-    nova_gpu_alias = _get_nova_alias(class_id=DevClassID.GPU, dev_type='gpu')
-    LOG.fixture_step("Create nova device list for usb device")
-    nova_usb_alias = _get_nova_alias(class_id=DevClassID.USB, dev_type='user')
+    nova_gpu_alias, nova_usb_alias = setup_alias
 
     #initialize parameter for basic operation
     name = 'gpu_passthrough'
     guest_os = 'centos_gpu'
     pf = 1
 
-    LOG.fixture_step("Create a flavor for GPU Passthrough")
+    LOG.tc_step("Create a flavor for GPU Passthrough")
     flavor_id = nova_helper.create_flavor(name=name, root_disk=16)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
     extra_spec = {FlavorSpec.PCI_PASSTHROUGH_ALIAS: '{}:{},{}:{}'.format(nova_gpu_alias, pf, nova_usb_alias, pf),
@@ -60,7 +83,7 @@ def test_gpu_passthrough():
     nics = [mgmt_nic, tenant_nic]
 
     LOG.tc_step("Boot a vm  {} with pci-alias and flavor ".format(nova_gpu_alias, flavor_id))
-    vm_id = vm_helper.boot_vm(name, flavor=flavor_id, source='image', source_id=image_id, nics=nics)[1]
+    vm_id = vm_helper.boot_vm(name, flavor=flavor_id, source='image', source_id=image_id, nics=nics, cleanup='function')[1]
 
     actual_gpu_pfs_used = _calculate_pf_used(nova_gpu_alias)
     expected_gpu_pfs_used = initial_gpu_pfs_used + pf
@@ -80,7 +103,6 @@ def test_gpu_passthrough():
     assert actual_usb_pfs_used == initial_usb_pfs_used, "actual usb pci pfs is not equal to expected pci pfs after vm delete"
 
     LOG.tc_step("Deleting nova service parameter service parameters for gpu & usb")
-    _service_parameter_cleanup()
 
 
 def _get_nova_alias(class_id, dev_type):
@@ -102,13 +124,4 @@ def _calculate_pf_used(nova_pci_alias):
     return pf_used
 
 
-def _service_parameter_cleanup():
-    service = 'nova'
-    gpu_uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='pci_alias', name='gpu')[0]
-    user_uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='pci_alias', name='user')[0]
-    LOG.info("Delete service parameter uuid {} ".format(gpu_uuid))
-    system_helper.delete_service_parameter(uuid=gpu_uuid)
-    LOG.info("Delete service parameter uuid {} ".format(user_uuid))
-    system_helper.delete_service_parameter(uuid=user_uuid)
 
-    system_helper.apply_service_parameters(service, wait_for_config=False)
