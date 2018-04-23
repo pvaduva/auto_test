@@ -70,7 +70,7 @@ def wait_for_stress_ng(ssh_client):
     return 1
 
 
-def test_migration_auto_converge():
+def test_migration_auto_converge(no_simplex):
     """
     Auto converge a VM with stress-ng running
 

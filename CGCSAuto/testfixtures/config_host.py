@@ -66,7 +66,7 @@ def config_host_class(request):
 def __config_host_base(scope, request):
 
     def config_host_func(host, modify_func, revert_func=None, *args, **kwargs):
-        if system_helper.get_active_controller_name() == host:
+        if (not system_helper.is_simplex()) and (system_helper.get_active_controller_name() == host):
             LOG.fixture_step("({}) Swact before locking as {} is active controller".format(scope, host))
             host_helper.swact_host(host)
 

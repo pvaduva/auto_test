@@ -128,7 +128,7 @@ class TestSharedCpuDisabled:
         hosts_unconfigured = []
         for host in hosts:
             shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared', thread=0)
-            if shared_cores_host[0] or shared_cores_host[1]:
+            if shared_cores_host[0] or shared_cores_host.get(1, None):
                 hosts_unconfigured.append(host)
 
         if not hosts_unconfigured:
@@ -141,12 +141,16 @@ class TestSharedCpuDisabled:
 
         for host_to_config in hosts_to_configure:
             shared_cores = host_helper.get_host_cpu_cores_for_function(host_to_config, 'shared', thread=0)
+            p1_config = p1_revert = None
+            if 1 in shared_cores:
+                p1_config = 0
+                p1_revert = len(shared_cores[1])
 
             def _modify(host_):
-                host_helper.modify_host_cpu(host_, 'shared', p0=0, p1=0)
+                host_helper.modify_host_cpu(host_, 'shared', p0=0, p1=p1_config)
 
             def _revert(host_):
-                host_helper.modify_host_cpu(host_, 'shared', p0=len(shared_cores[0]), p1=len(shared_cores[1]))
+                host_helper.modify_host_cpu(host_, 'shared', p0=len(shared_cores[0]), p1=p1_revert)
 
             config_host_class(host=host_to_config, modify_func=_modify, revert_func=_revert)
             host_helper.wait_for_hypervisors_up(host_to_config)
@@ -276,44 +280,44 @@ class TestSharedCpuDisabled:
 
 class TestSharedCpuEnabled:
     @fixture(scope='class')
-    def add_shared_cpu(self, config_host_class):
+    def add_shared_cpu(self, no_simplex, config_host_class):
         storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        if len(hosts) < 2:
+            skip("Less than two hypervisors with same storage backend")
 
         LOG.fixture_step("Ensure at least two hypervisors has shared cpu cores on both p0 and p1")
         shared_cpu_hosts = []
-        disabled_share_hosts = []
+        shared_disabled_hosts = {}
 
         for host_ in hosts:
             shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host_, function='shared')
+            if 1 not in shared_cores_for_host:
+                LOG.info("{} has only 1 processor. Ignore.".format(host_))
+                continue
+
             if shared_cores_for_host[0] and shared_cores_for_host[1]:
                 shared_cpu_hosts.append(host_)
                 if len(shared_cpu_hosts) == 2:
                     break
             else:
-                disabled_share_hosts.append(host_)
+                shared_disabled_hosts[host_] = shared_cores_for_host
         else:
-            while len(shared_cpu_hosts) < 2:
-                host_to_config = disabled_share_hosts.pop(0)
+            if len(shared_disabled_hosts) + len(shared_cpu_hosts) < 2:
+                skip("Less than two up hypervisors with 2 processors")
 
-                if not host_to_config:
-                    skip("No up hypervisor found to reconfigure")
+            def _modify(host):
+                host_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
 
-                shared_cores = host_helper.get_host_cpu_cores_for_function(host_to_config, 'shared')
-                mod = False
-                if len(shared_cores[0]) != 1 or len(shared_cores[1]) != 1:
-                    mod = True
+            for host_to_config, shared_cores in shared_disabled_hosts.items():
+                def _revert(host):
+                    LOG.fixture_step("Revert {} shared cpu setting to original".format(host))
+                    host_helper.modify_host_cpu(host, 'shared', p0=len(shared_cores[0]), p1=len(shared_cores[1]))
 
-                if mod:
-                    def _modify(host):
-                        host_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
-
-                    def _revert(host):
-                        LOG.fixture_step("Revert {} shared cpu setting to original".format(host))
-                        host_helper.modify_host_cpu(host, 'shared', p0=len(shared_cores[0]), p1=len(shared_cores[1]))
-
-                    config_host_class(host=host_to_config, modify_func=_modify, revert_func=_revert)
-                    host_helper.wait_for_hypervisors_up(host_to_config)
-                    shared_cpu_hosts.append(host_to_config)
+                config_host_class(host=host_to_config, modify_func=_modify, revert_func=_revert)
+                host_helper.wait_for_hypervisors_up(host_to_config)
+                shared_cpu_hosts.append(host_to_config)
+                if len(shared_cpu_hosts) >= 2:
+                    break
 
         return storage_backing
 
@@ -526,7 +530,7 @@ class TestSharedCpuEnabled:
 class TestMixSharedCpu:
 
     @fixture(scope='class')
-    def config_host_cpus(self, config_host_class):
+    def config_host_cpus(self, no_simplex, config_host_class):
         storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
 
         if len(hosts) < 3:
