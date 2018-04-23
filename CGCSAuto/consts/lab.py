@@ -602,6 +602,28 @@ def edit_lab_entry():
     raise NotImplementedError
 
 
+def get_lab_dict(lab, key='short_name'):
+    """
+
+    Args:
+        lab: lab name or fip
+        key: unique identifier to locate a lab. Valid values: short_name, name, floating ip
+
+    Returns (dict|None): lab dict or None if no matching lab found
+    """
+    __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
+    __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
+    __lab_list = [lab for lab in __lab_list if isinstance(lab, dict)]
+
+    lab_info = None
+    for lab_ in __lab_list:
+        if lab.lower().replace('-', '_') == lab_.get(key).lower().replace('-', '_'):
+            lab_info = lab_
+            break
+
+    return lab_info
+
+
 def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwargs):
     """
     Add a new lab dictionary to Labs class

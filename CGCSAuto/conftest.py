@@ -644,6 +644,7 @@ def pytest_unconfigure(config):
         build_server = ProjVar.get_var('BUILD_SERVER')
         session_id = ProjVar.get_var('SESSION_ID')
         session_tag = ProjVar.get_var('REPORT_TAG')
+        system_config = ProjVar.get_var('SYS_TYPE')
         session_str = 'Session Tag: {}\nSession ID: {}\n'.format(session_tag, session_id) if session_id else ''
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
         # pass_rate = fail_rate = '0'
@@ -655,11 +656,12 @@ def pytest_unconfigure(config):
                 f.write('\n\nLab: {}\n'
                         'Build ID: {}\n'
                         'Build Server: {}\n'
+                        'System Type: {}\n'
                         'Automation LOGs DIR: {}\n'
                         'Ends at: {}\n'
                         '{}'    # test session id and tag
-                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    tc_end_time, session_str, version_and_patch))
+                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, system_config,
+                                    ProjVar.get_var('LOG_DIR'), tc_end_time, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
