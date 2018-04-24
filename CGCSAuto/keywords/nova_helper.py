@@ -1786,7 +1786,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     return 0, succ_msg
 
 
-def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_migration_list_table(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     nova migration-list to collect migration history of each vm
     Args:
@@ -1795,7 +1795,7 @@ def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
     LOG.info("Listing migration history...")
-    cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)
+    return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info))
 
 
 def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant.ADMIN):

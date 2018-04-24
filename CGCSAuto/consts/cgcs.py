@@ -549,9 +549,17 @@ class HeatStackStatus:
 
 
 class VimEventID:
-    live_migrate_begin = 'instance-live-migrate-begin'
-    live_migrate_end = 'instance-live-migrated'
-    cold_migrate_begin = 'instance-cold-migrate-begin'
-    cold_migrate_end = 'instance-cold-migrated'
-    cold_migrate_confirm_begin = 'instance-cold-migrate-confirm-begin'
-    cold_migrate_confirmed = 'instance-cold-migrate-confirmed'
+    LIVE_MIG_BEGIN = 'instance-live-migrate-begin'
+    LIVE_MIG_END = 'instance-live-migrated'
+    COLD_MIG_BEGIN = 'instance-cold-migrate-begin'
+    COLD_MIG_END = 'instance-cold-migrated'
+    COLD_MIG_CONFIRM_BEGIN = 'instance-cold-migrate-confirm-begin'
+    COLD_MIG_CONFIRMED = 'instance-cold-migrate-confirmed'
+
+
+class MigStatus:
+    COMPLETED = 'completed'
+    RUNNING = 'running'
+    PREPARING = 'preparing'
+    PRE_MIG = 'pre-migrating'
+    POST_MIG = 'post-migrating'

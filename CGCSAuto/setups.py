@@ -673,7 +673,7 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
 
 
 def list_migration_history(con_ssh):
-    nova_helper.run_migration_list(con_ssh=con_ssh)
+    nova_helper.get_migration_list_table(con_ssh=con_ssh)
 
 
 def get_version_and_patch_info():

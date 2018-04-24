@@ -14,7 +14,7 @@ from utils.multi_thread import MThread, Events
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
+    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID, MigStatus
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
@@ -4214,7 +4214,7 @@ def get_vim_events(vm_id, event_ids=None, controller=None, con_ssh=None):
 
 def get_live_migrate_duration(vm_id, con_ssh=None):
     LOG.info("Get live migration duration from nfv-vim-events.log for vm {}".format(vm_id))
-    events = (VimEventID.live_migrate_begin, VimEventID.live_migrate_end)
+    events = (VimEventID.LIVE_MIG_BEGIN, VimEventID.LIVE_MIG_END)
     live_mig_begin, live_mig_end = get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
 
     start_time = live_mig_begin['timestamp']
@@ -4227,8 +4227,8 @@ def get_live_migrate_duration(vm_id, con_ssh=None):
 
 def get_cold_migrate_duration(vm_id, con_ssh=None):
     LOG.info("Get cold migration duration from vim-event-log for vm {}".format(vm_id))
-    events = (VimEventID.cold_migrate_begin, VimEventID.cold_migrate_end,
-              VimEventID.cold_migrate_confirm_begin, VimEventID.cold_migrate_confirmed)
+    events = (VimEventID.COLD_MIG_BEGIN, VimEventID.COLD_MIG_END,
+              VimEventID.COLD_MIG_CONFIRM_BEGIN, VimEventID.COLD_MIG_CONFIRMED)
     cold_mig_begin, cold_mig_end, cold_mig_confirm_begin, cold_mig_confirm_end = \
         get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
 
@@ -4242,3 +4242,105 @@ def get_cold_migrate_duration(vm_id, con_ssh=None):
     LOG.info("Cold migrate and confirm for vm {} took {} seconds".format(vm_id, duration))
 
     return duration
+
+
+def live_migrate_force_complete(vm_id, migration_id=None, timeout=300, fail_ok=False, con_ssh=None):
+    """
+    Run nova live-migration-force-complete against given vm and migration session.
+    Args:
+        vm_id (str):
+        migration_id (str|int):
+        timeout:
+        fail_ok:
+        con_ssh:
+
+    Returns (tuple):
+        (0, 'VM is successfully live-migrated after live-migration-force-complete')
+        (1, <err_msg>)      # nova live-migration-force-complete cmd rejected. Only returns if fail_ok=True.
+
+    """
+    if not migration_id:
+        migration_id = get_vm_migration_values(vm_id=vm_id, fail_ok=False, con_ssh=con_ssh)[0]
+
+    code, output = cli.nova('live-migration-force-complete', '{} {}'.format(vm_id, migration_id), fail_ok=fail_ok,
+                            rtn_list=True, ssh_client=con_ssh)
+
+    if code > 0:
+        return 1, output
+
+    wait_for_migration_status(vm_id=vm_id, migration_id=migration_id, fail_ok=False, timeout=timeout, con_ssh=con_ssh)
+    msg = "VM is successfully live-migrated after live-migration-force-complete"
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_vm_migration_values(vm_id, rtn_val='Id', migration_type='live-migration', fail_ok=True, con_ssh=None, **kwargs):
+    """
+    Get values for given vm via nova migration-list
+    Args:
+        vm_id (str):
+        rtn_val (str):
+        migration_type(str): valid types: live-migration, migration
+        fail_ok:
+        con_ssh:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    migration_tab = nova_helper.get_migration_list_table(con_ssh=con_ssh)
+    filters = {'Instance UUID': vm_id, 'Type': migration_type}
+    if kwargs:
+        filters.update(kwargs)
+    mig_ids = table_parser.get_values(migration_tab, target_header=rtn_val, **filters)
+    if not mig_ids and not fail_ok:
+        raise exceptions.VMError("{} has no {} session with filters: {}".format(vm_id, migration_type, kwargs))
+
+    return mig_ids
+
+
+def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, expt_status='completed',
+                              fail_ok=False, timeout=300, check_interval=5, con_ssh=None):
+    """
+    Wait for a migration session to reach given status in nova mgiration-list
+    Args:
+        vm_id (str):
+        migration_id (str|int):
+        migration_type (str): valid types: live-migration, migration
+        expt_status (str): migration status to wait for. such as completed, running, etc
+        fail_ok (bool):
+        timeout (int): max time to wait for the state
+        check_interval (int):
+        con_ssh:
+
+    Returns (tuple):
+        (0, <expt_status>)      #  migration status reached as expected
+        (1, <current_status>)   # did not reach given status. This only returns if fail_ok=True
+
+    """
+    if not migration_id:
+        migration_id = get_vm_migration_values(vm_id=vm_id, migration_type=migration_type, fail_ok=False,
+                                               con_ssh=con_ssh)[0]
+
+    LOG.info("Waiting for migration {} for vm {} to reach {} status".format(migration_id, vm_id, expt_status))
+    end_time = time.time() + timeout
+    prev_state=None
+    while time.time() < end_time:
+        mig_status = get_vm_migration_values(vm_id=vm_id, rtn_val='Status', **{'Id': migration_id})[0]
+        if mig_status == expt_status:
+            LOG.info("Migration {} for vm {} reached status: {}".format(migration_id, vm_id, expt_status))
+            return True, expt_status
+
+        if mig_status != prev_state:
+            LOG.info("Migration {} for vm {} is in status - {}".format(migration_id, vm_id, mig_status))
+            prev_state = mig_status
+
+        time.sleep(check_interval)
+
+    msg = 'Migration {} for vm {} did not reach {} status within {} seconds. It is in {} status.'. \
+        format(migration_id, vm_id, expt_status, timeout, prev_state)
+    if fail_ok:
+        LOG.warning(msg)
+        return False, prev_state
+    else:
+        raise exceptions.VMError(msg)
