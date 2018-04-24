@@ -5,8 +5,10 @@ from keywords import system_helper, common
 from consts.cgcs import EventLogID
 from consts.auth import HostLinuxCreds
 
+files_to_delete = []
 
-@fixture()
+
+@fixture(scope='module', autouse=True)
 def ima_precheck():
     """
     This tests if the system is enabled with IMA.  If not, we
@@ -14,7 +16,6 @@ def ima_precheck():
     """
 
     LOG.info("Checking if IMA is enabled")
-
     con_ssh = ControllerClient.get_active_controller()
 
     exitcode, output = con_ssh.exec_cmd("cat /proc/cmdline")
@@ -24,15 +25,15 @@ def ima_precheck():
         LOG.info("IMA is enabled")
 
 
-@fixture()
+@fixture(autouse=True)
 def delete_files(request):
+    global files_to_delete
+    files_to_delete = []
+
     def teardown():
         """
         Delete any created files on teardown.
         """
-
-        global files_to_delete
-
         for filename in files_to_delete:
             delete_file(filename)
 
@@ -195,7 +196,7 @@ def move_file(source_file, dest_file, user_type="root"):
     assert exitcode == 0, "Failed to move file from {} to {}".format(source_file, dest_file)
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_ima_create_symlink():
     """
     This test validates symlink behaviour on an IMA-enabled system
@@ -212,7 +213,6 @@ def test_ima_create_symlink():
     """
 
     global files_to_delete
-    files_to_delete = []
 
     start_time = common.get_date_in_format()
 
@@ -233,7 +233,7 @@ def test_ima_create_symlink():
     assert events_found == [], "Unexpected IMA events found"
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_ima_edit_monitored_file():
     """
     This test alters a monitored file and ensures the signature is lost.
@@ -252,7 +252,6 @@ def test_ima_edit_monitored_file():
     """
 
     global files_to_delete
-    files_to_delete = []
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
@@ -279,7 +278,7 @@ def test_ima_edit_monitored_file():
     assert events_found != [], "Expected IMA event not found"
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_ima_append_monitored_file():
     """
     This test appends some data to a monitored file.  This should trigger a
@@ -297,9 +296,7 @@ def test_ima_append_monitored_file():
     This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
     """
 
-
     global files_to_delete
-    files_to_delete = []
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
@@ -326,7 +323,7 @@ def test_ima_append_monitored_file():
     assert events_found != [], "Expected IMA event not found"
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_ima_copy_file_noalarm():
     """
     This test validates that copying a root file with the proper IMA signature,
@@ -343,7 +340,6 @@ def test_ima_copy_file_noalarm():
     """
 
     global files_to_delete
-    files_to_delete = []
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
@@ -366,7 +362,7 @@ def test_ima_copy_file_noalarm():
     assert events_found == [], "Unexpected IMA events found"
 
 
-@mark.usefixtures("ima_precheck")
+@mark.priorities('nightly', 'sx_nightly')
 def test_ima_dynamic_library_change():
     """
     This test validates that dynamic library changes are detected by the IMA
@@ -382,7 +378,6 @@ def test_ima_dynamic_library_change():
 
     This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
     """
-
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
@@ -412,7 +407,7 @@ def test_ima_dynamic_library_change():
     move_file(dest_file, source_file)
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_create_and_execute_new_root_file():
     """
     This test creates a new file owned by root and executes it, resulting in an
@@ -431,7 +426,6 @@ def test_create_and_execute_new_root_file():
     """
 
     global files_to_delete
-    files_to_delete = []
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
@@ -463,7 +457,7 @@ def test_create_and_execute_new_root_file():
     assert events_found != [], "Expected IMA event not found"
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_create_new_file_and_execute_as_non_root_user():
     """
     This creates a new file owned by the wrsroot user and attempts to execute
@@ -482,7 +476,6 @@ def test_create_new_file_and_execute_as_non_root_user():
     """
 
     global files_to_delete
-    files_to_delete = []
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
@@ -516,7 +509,6 @@ def test_create_new_file_and_execute_as_non_root_user():
 
 
 # CHECK TEST PROCEDURE - FAILS in the middle
-@mark.usefixtures("ima_precheck")
 def _test_dynamic_library_change_via_ld_preload_envvar_assignment():
     """
     This test attempts to execute a signed/protected binary by pointing to a
@@ -558,7 +550,7 @@ def _test_dynamic_library_change_via_ld_preload_envvar_assignment():
     delete_file(dest_file)
 
 
-@mark.usefixtures("ima_precheck", "delete_files")
+@mark.priorities('nightly', 'sx_nightly')
 def test_file_attribute_changes_ima_detection():
     """
     This test confirms that the user can make file attribute changes without
@@ -579,7 +571,6 @@ def test_file_attribute_changes_ima_detection():
     """
 
     global files_to_delete
-    files_to_delete = []
 
     start_time = common.get_date_in_format()
 
@@ -621,7 +612,7 @@ def test_file_attribute_changes_ima_detection():
     assert events_found == [], "Unexpected IMA event found"
 
 
-@mark.usefixtures("ima_precheck")
+@mark.priorities('nightly', 'sx_nightly')
 def test_ima_keyring_user_attacks():
     """
     This test validates that the IMA keyring is safe from user space attacks.
@@ -665,4 +656,3 @@ def test_ima_keyring_user_attacks():
     LOG.info("Attempt to delete a key")
     exitcode, msg = con_ssh.exec_sudo_cmd("keyctl clear {}".format(key_id))
     assert exitcode != 0, "Key ownership deletion should be rejected but instead succeeded"
-
