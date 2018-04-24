@@ -1,41 +1,9 @@
-import os
-import string
-
 from pytest import mark, fixture, skip
 from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 from keywords import system_helper, common
 from consts.cgcs import EventLogID
-from consts.auth import Guest, HostLinuxCreds
-
-
-def generate_violations(num_events=1):
-    """
-    This function generates some IMA violations.
-
-    """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    while i in range(0, num_events):
-
-        source_file = "/usr/sbin/sw-patch"
-        dest_file = "/usr/sbin/TEMP"
-        copy_file(source_file, dest_file)
-
-        LOG.info("Open copy of monitored file and save")
-        cmd = "vim {} '+:wq!'".format(dest_file)
-        exitcode, msg = con_ssh.exec_sudo_cmd(cmd)
-
-        LOG.info("Execute monitored file")
-        exitcode, msg = con_ssh.exec_sudo_cmd("{}".format(dest_file))
-
-        LOG.info("Check for IMA event")
-        system_helper.wait_for_events(entity_id=EventLogID.IMA,
-                                    severity="major", timeout=60,
-                                    strict=False, fail_ok=False)
-
-        delete_file(dest_file)
+from consts.auth import HostLinuxCreds
 
 
 @fixture()
@@ -227,8 +195,7 @@ def move_file(source_file, dest_file, user_type="root"):
     assert exitcode == 0, "Failed to move file from {} to {}".format(source_file, dest_file)
 
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_ima_create_symlink():
     """
     This test validates symlink behaviour on an IMA-enabled system
@@ -247,7 +214,6 @@ def test_ima_create_symlink():
     global files_to_delete
     files_to_delete = []
 
-    con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
 
     source_file = "/usr/sbin/ntpq"
@@ -267,8 +233,7 @@ def test_ima_create_symlink():
     assert events_found == [], "Unexpected IMA events found"
 
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_ima_edit_monitored_file():
     """
     This test alters a monitored file and ensures the signature is lost.
@@ -279,7 +244,7 @@ def test_ima_edit_monitored_file():
     - This results in the IMA signature being lost
     - Try to execute the file
     - Ensure there is an event generated saying 'IMA-signature-required'
-    
+
     Maps to TC_17642/T_15809 from US105523 Alter a monitored file by editing
     with vi, signature is lost
 
@@ -293,7 +258,6 @@ def test_ima_edit_monitored_file():
     start_time = common.get_date_in_format()
     host = system_helper.get_hostname()
 
-    entity_instance_id = "host={}.service=sudo".format(host)
     source_file = "/usr/sbin/ntpq"
     dest_file = "/usr/sbin/TEMP"
     copy_file(source_file, dest_file)
@@ -301,7 +265,7 @@ def test_ima_edit_monitored_file():
     LOG.info("Open copy of monitored file and save")
     cmd = "vim {} '+:wq!'".format(dest_file)
     exitcode, msg = con_ssh.exec_sudo_cmd(cmd)
-    
+
     files_to_delete.append(dest_file)
 
     LOG.info("Execute monitored file")
@@ -315,8 +279,7 @@ def test_ima_edit_monitored_file():
     assert events_found != [], "Expected IMA event not found"
 
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_ima_append_monitored_file():
     """
     This test appends some data to a monitored file.  This should trigger a
@@ -342,7 +305,6 @@ def test_ima_append_monitored_file():
     start_time = common.get_date_in_format()
     host = system_helper.get_hostname()
 
-    entity_instance_id = "host={}.service=sudo".format(host)
     source_file = "/usr/sbin/logrotate"
     dest_file = "/usr/sbin/TEMP"
     copy_file(source_file, dest_file)
@@ -364,8 +326,7 @@ def test_ima_append_monitored_file():
     assert events_found != [], "Expected IMA event not found"
 
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_ima_copy_file_noalarm():
     """
     This test validates that copying a root file with the proper IMA signature,
@@ -451,8 +412,7 @@ def test_ima_dynamic_library_change():
     move_file(dest_file, source_file)
 
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_create_and_execute_new_root_file():
     """
     This test creates a new file owned by root and executes it, resulting in an
@@ -481,7 +441,7 @@ def test_create_and_execute_new_root_file():
     LOG.info("Create new file")
     cmd = "touch {}".format(dest_file)
     exitcode, msg = con_ssh.exec_sudo_cmd(cmd)
-    
+
     LOG.info("Set file to be executable")
     chmod_file(dest_file, "755")
 
@@ -503,8 +463,7 @@ def test_create_and_execute_new_root_file():
     assert events_found != [], "Expected IMA event not found"
 
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_create_new_file_and_execute_as_non_root_user():
     """
     This creates a new file owned by the wrsroot user and attempts to execute
@@ -515,7 +474,7 @@ def test_create_new_file_and_execute_as_non_root_user():
     - Add exec permission
     - Execute it
     - Ensure there are no IMA violations
-   
+
     This maps to TC_17902/T_17144 from US105523 (Create a new file owned by
     wrsroot user and execute it (non-root)
 
@@ -533,7 +492,7 @@ def test_create_new_file_and_execute_as_non_root_user():
     LOG.info("Create new file")
     cmd = "touch {}".format(dest_file)
     exitcode, msg = con_ssh.exec_cmd(cmd)
-    
+
     LOG.info("Set file to be executable")
     chmod_file(dest_file, "755", user_type="wrsroot")
 
@@ -598,8 +557,8 @@ def _test_dynamic_library_change_via_ld_preload_envvar_assignment():
 
     delete_file(dest_file)
 
-@mark.usefixtures("delete_files")
-@mark.usefixtures("ima_precheck")
+
+@mark.usefixtures("ima_precheck", "delete_files")
 def test_file_attribute_changes_ima_detection():
     """
     This test confirms that the user can make file attribute changes without
@@ -622,7 +581,6 @@ def test_file_attribute_changes_ima_detection():
     global files_to_delete
     files_to_delete = []
 
-    con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
 
     LOG.info("Copy monitored file")
@@ -670,7 +628,7 @@ def test_ima_keyring_user_attacks():
 
     Test Steps:
     - Attempt to add new keys to the keyring
-    - Extract key ID and save 
+    - Extract key ID and save
     - Attempt to change the key timeout
     - Attempt to change the group and ownership of the key
     - Attempt to delete the key
@@ -707,5 +665,4 @@ def test_ima_keyring_user_attacks():
     LOG.info("Attempt to delete a key")
     exitcode, msg = con_ssh.exec_sudo_cmd("keyctl clear {}".format(key_id))
     assert exitcode != 0, "Key ownership deletion should be rejected but instead succeeded"
-
 
