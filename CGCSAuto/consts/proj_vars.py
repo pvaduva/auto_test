@@ -93,6 +93,8 @@ class InstallVars:
                          license_path=None,
                          out_put_dir=None,
                          boot_server=None,
+                         boot_type='pxe',
+                         iso_path=None,
                          controller0_ceph_mon_device=None,
                          controller1_ceph_mon_device=None,
                          ceph_mon_gib=None):
@@ -102,6 +104,7 @@ class InstallVars:
         __files_server = files_server if files_server else __build_server
         __files_dir = files_dir if files_dir else \
             "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
+        __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
 
         cls.__var_dict = {
             'LAB': lab,
@@ -119,8 +122,10 @@ class InstallVars:
             # Files paths
             'FILES_SERVER': __files_server,
             'LAB_FILES_DIR': __files_dir,
+            'ISO_PATH': __iso_path,
             # Default tuxlab for boot
             'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
+            'BOOT_TYPE': boot_type,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
 

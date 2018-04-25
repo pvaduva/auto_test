@@ -34,7 +34,7 @@ def setup_tis_ssh(lab):
 
     if con_ssh is None:
         try:
-            con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+            con_ssh = SSHClient(lab['controller-0 ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                 CONTROLLER_PROMPT)
             con_ssh.connect(retry=True, retry_timeout=30)
         except:
@@ -459,7 +459,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device,
-                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk):
+                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path):
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
@@ -796,7 +796,7 @@ def set_sys_type(con_ssh):
 
 
 def write_installconf(lab, controller, lab_files_server, lab_files_dir, build_server, tis_build_dir, compute, storage,
-                      license_path, guest_image, heat_templates):
+                      license_path, guest_image, heat_templates, boot, iso_path):
     """
     Writes a file in ini format of the install variables
     Args:
@@ -825,6 +825,7 @@ def write_installconf(lab, controller, lab_files_server, lab_files_dir, build_se
     host_build_dir = tis_build_dir if tis_build_dir and tis_build_dir != "" else BuildServerPath.DEFAULT_HOST_BUILD_PATH
     files_server = lab_files_server if lab_files_server and lab_files_server != "" else __build_server
     files_dir = lab_files_dir if lab_files_dir and lab_files_dir != "" else None
+    iso_path = iso_path if iso_path else host_build_dir + '/export/bootimage.iso'
 
     # Get lab info
     if files_server and files_dir:

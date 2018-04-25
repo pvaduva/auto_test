@@ -2857,7 +2857,8 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
     if 'controller-0' not in lab_dict.keys():
         raise ValueError("The Lab controller-0 node object must be provided")
 
-    con_ssh = ControllerClient.get_active_controller()
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
     clone_image_iso_dest_path = clone_image_iso_full_path
     src_lab = ProjVar.get_var("LAB")
     dest_lab_name = lab_dict['short_name']
@@ -2941,14 +2942,13 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
 
     return 0, None
 
-# TODO: currently there are multiple exceptions (we can't just keep appending workarounds for each exception)
-# we need to establish a format and force the name to convert to that format
+
 def get_git_name(lab_name):
     """
     Args:
         lab_name: Str name of the lab
 
-    Returns: the name of the lab as it is stored in the git server
+    Returns: the name of the lab as it is stored in the git repo
 
     """
     lab_name = lab_name.replace('\n', '')
@@ -3139,3 +3139,84 @@ def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_onl
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
+
+
+def set_network_boot_feed(bld_server_conn, load_path):
+    """
+    Sets the network feed for controller-0 in default taxlab
+    Args:
+        bld_server_conn:
+        load_path:
+
+    Returns:
+
+    """
+
+
+    if load_path is None:
+        load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
+
+    if bld_server_conn is None:
+        raise ValueError("Build server connection must be provided")
+
+    if load_path[-1:] == '/':
+        load_path = load_path[:-1]
+
+    tis_bld_dir = os.path.basename(load_path)
+    if tis_bld_dir == 'latest_build':
+        cmd = "readlink " + load_path
+        load_path = bld_server_conn.exec_cmd(cmd)[1]
+
+    LOG.info("Load path is {}".format(load_path))
+    cmd = "test -d " + load_path
+    if bld_server_conn.exec_cmd(cmd)[0] != 0:
+        msg = "Load path {} not found".format(load_path)
+        LOG.error(msg)
+        return False
+
+    lab = InstallVars.get_install_var("LAB")
+
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    controller0 = lab["controller-0"]
+    LOG.info("Set feed for {} network boot".format(controller0.barcode))
+    tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(load_path)
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
+
+    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        msg = "Failed to cd to: " + tuxlab_barcode_dir
+        LOG.error(msg)
+        return False
+
+    LOG.info("Copy load into feed directory")
+    feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
+    tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
+
+    # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
+    # bld_server_conn.exec_cmd("cd " + load_path)
+    pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
+    bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force"], pre_opts=pre_opts)
+    bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts )
+    #extra_opts=["--delete", "--force"]
+    LOG.info("Create new symlink to feed directory")
+    if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
+        msg = "Failed to remove feed"
+        LOG.error(msg)
+        return False
+
+    if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
+        msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
+        LOG.error(msg)
+        return False
+
+    tuxlab_conn.close()
+
+    return True

@@ -21,16 +21,16 @@ def install_setup():
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     lab = InstallVars.get_install_var("LAB")
     lab_type = lab["system_mode"]
-
+    lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
 
     con_ssh = setup_tis_ssh(lab)
     active_con_name = "controller-0"
     active_con = lab[active_con_name]
     active_con.ssh_conn = con_ssh
-    lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
 
-    # the default license path is just a placeholder. If the license path isn't given it needs to be determined
+    # Change default paths according to system version if skipping feed
     system_version = install_helper.get_current_system_version()
+
     if InstallVars.get_install_var("LICENSE") == BuildServerPath.DEFAULT_LICENSE_PATH:
         license_paths = BuildServerPath.TIS_LICENSE_PATHS[system_version]
         if "simplex" in lab_type:
@@ -39,8 +39,17 @@ def install_setup():
             license_path = license_paths[1]
         else:
             license_path = license_paths[0]
-        LOG.info("using license path: {}".format(license_path))
         InstallVars.set_install_var(license=license_path)
+
+    if InstallVars.get_install_var("SKIP_FEED"):
+
+        if InstallVars.get_install_var("TIS_BUILD_DIR") == BuildServerPath.DEFAULT_HOST_BUILD_PATH:
+            host_build_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[system_version]
+            InstallVars.set_install_var(tis_build_dir=host_build_path)
+
+        if InstallVars.get_install_var("GUEST_IMAGE") == BuildServerPath.DEFAULT_GUEST_IMAGE_PATH:
+            guest_image_path = BuildServerPath.GUEST_IMAGE_PATHS[system_version]
+            InstallVars.set_install_var(guest_image=guest_image_path)
 
     # Reserve nodes
     vlm_helper.unreserve_hosts(lab["hosts"])
@@ -73,19 +82,10 @@ def install_setup():
         file_server['ssh_conn'] = bld_server_conn
         file_server_obj = Server(**file_server)
 
-    boot_server = get_tuxlab_server_info(InstallVars.get_install_var('BOOT_SERVER'))
-    boot_server['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', boot_server['name'])
-    boot_server_conn = SSHClient(boot_server['name'], user=SvcCgcsAuto.USER,
-                                password=SvcCgcsAuto.PASSWORD, initial_prompt=boot_server['prompt'])
-    boot_server_conn.connect()
-    boot_server_conn.set_prompt(boot_server['prompt'])
-    boot_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
-    boot_server['ssh_conn'] = boot_server_conn
-    boot_server_obj = Server(**boot_server)
-
-    servers = {"build": bld_server_obj,
-               "lab_files": file_server_obj,
-               "boot": boot_server_obj}
+    servers = {
+               "build": bld_server_obj,
+               "lab_files": file_server_obj
+               }
 
     directories = {"build": InstallVars.get_install_var("TIS_BUILD_DIR"),
                    "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
@@ -96,7 +96,8 @@ def install_setup():
 
     skips = {"lab_setup": InstallVars.get_install_var("SKIP_LABSETUP"),
              "feed": InstallVars.get_install_var("SKIP_FEED"),
-             "pxebootcfg": InstallVars.get_install_var("SKIP_PXEBOOTCFG")}
+             "pxebootcfg": InstallVars.get_install_var("SKIP_PXEBOOTCFG"),
+             "boot_type": InstallVars.get_install_var("BOOT_TYPE")}
 
 
     _install_setup = {"lab": lab,
@@ -109,65 +110,37 @@ def install_setup():
     return _install_setup
 
 
-# TODO: add logging
-# TODO: not working
 def test_setup_network_feed(install_setup):
-    boot_srv = install_setup["servers"]["boot"]
     bld_srv = install_setup["servers"]["build"]
-    tis_build_dir = install_setup["directories"]["build"]
-    skip = install_setup["skips"]["feed"]
-    skip_pxebootcfg = install_setup["skips"]["pxebootcfg"]
-    active_controller = install_setup["active_controller"]
+    load_path = install_setup["directories"]["build"]
+    skip = install_setup["skips"]["feed"] or 'pxe' not in install_setup["skips"]["boot_type"]
 
     if skip:
-        pytest.skip("skip_feed was specified")
+        pytest.skip("Skip setup network boot feed was specified")
 
-    LOG.tc_step("Setup network boot feed")
+    assert install_helper.set_network_boot_feed(bld_srv.ssh_conn, load_path), "Failed to setup network boot feed"
 
-    if not active_controller:
-        lab = InstallVars.get_install_var("LAB")
-        active_controller = lab["controller-0"]
-    barcode = str(active_controller.barcode)
 
-    if tis_build_dir.endswith("/"):
-        cmd = "readlink " + tis_build_dir[:-1]
-    else:
-        cmd = "readlink " + tis_build_dir
-    load_path = bld_srv.ssh_conn.exec_cmd(cmd)[1]
+def test_burn_usb(install_setup):
+    iso_path = InstallVars.get_install_var('ISO_PATH')
+    bld_srv = install_setup["servers"]["build"].ssh_conn
+    lab = install_setup["lab"]
+    skip = 'burn' not in install_setup["skips"]["boot_type"]
 
-    barcode_dir = "{}/{}".format(TuxlabServerPath.DEFAULT_BARCODES_DIR, barcode)
-    tuxlab_sub_dir = "{}/{}".format(boot_srv.ssh_conn.user, os.path.basename(load_path))
-    feed_path = barcode_dir + "/" + tuxlab_sub_dir
-    pxeboot_cfgfile = "pxeboot.cfg.gpt"
+    if skip:
+        pytest.skip('lab will boot using {}'.format(install_setup["skips"]["boot_type"]))
 
-    # TODO: check if this command worked
-    boot_srv.ssh_conn.send("cd {}".format(barcode_dir))
-    boot_srv.ssh_conn.expect()
+    assert install_helper.scp_cloned_image_to_another(lab, boot_lab=False, clone_image_iso_full_path=iso_path,
+                                                      con_ssh=bld_srv.ssh_conn)
 
-    assert boot_srv.ssh_conn.exec_cmd("mkdir -p {}".format(tuxlab_sub_dir))[0] == 0, \
-        "Failed to create {} directory".format(tuxlab_sub_dir)
 
-    assert boot_srv.ssh_conn.exec_cmd("chmod 755 {}".format(tuxlab_sub_dir))[0] == 0, \
-        "Failed to modify permissions for {} directory".format(tuxlab_sub_dir)
+def test_iso_install(install_setup):
+    skip = 'iso' not in install_setup["skips"]["boot_type"]
 
-    if not skip_pxebootcfg:
-        assert boot_srv.ssh_conn.exec_cmd("[ -f {} ]".format(pxeboot_cfgfile))[0] == 0, \
-            "Failed to find a file called {}".format(pxeboot_cfgfile)
+    if skip:
+        pytest.skip('lab will boot using {}'.format(install_setup["skips"]["boot_type"]))
 
-        assert boot_srv.ssh_conn.exec_cmd("unlink pxeboot.cfg"[0] == 0), "Unlink of pxeboot.cfg failed"
-
-        assert boot_srv.ssh_conn.exec_cmd("ln -s {} pxeboot.cfg".format(pxeboot_cfgfile))[0] == 0, \
-            "Unable to symlink pxeboot.cfg to {}".format(pxeboot_cfgfile)
-
-        bld_srv.ssh_conn.rsync("{}/export/dist/isolinux/".format(load_path), boot_srv.name, feed_path,
-                               dest_user=boot_srv.ssh_conn.user, dest_password=boot_srv.ssh_conn.password,
-                               extra_opts=["--delete", "--force", "--chmod=Du=rwx"])
-
-        bld_srv.ssh_conn.rsync("{}/export/extra_cfgs/yow*".format(load_path), boot_srv.name, feed_path,
-                               dest_user=boot_srv.ssh_conn.user, dest_password=boot_srv.ssh_conn.password)
-
-        assert boot_srv.ssh_conn.exec_cmd("rm -f feed")[0] == 0, "failed to remove feed"
-        assert boot_srv.ssh_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] == 0, "failed to link feed"
+    pytest.fail("iso install not implemented")
 
 
 def test_config_controller(install_setup):
@@ -196,7 +169,9 @@ def test_config_controller(install_setup):
     wipedisk = InstallVars.get_install_var("WIPEDISK")
     active_controller = install_setup["active_controller"]
     controller_name = active_controller.name
+    boot_type = install_setup["skips"]["boot_type"]
     is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
+    usb = ('usb' in boot_type) or ('burn' in boot_type)
 
     LOG.tc_step("Install controller-0")
     if wipedisk:
@@ -205,7 +180,7 @@ def test_config_controller(install_setup):
     LOG.info("powering off hosts ...")
     vlm_helper.power_off_hosts(hosts)
     LOG.info("powered off hosts. booting {} ...".format(controller_name))
-    install_helper.boot_controller(lab, small_footprint=is_cpe)
+    install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb)
 
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
@@ -215,6 +190,7 @@ def test_config_controller(install_setup):
     license_path = install_setup["paths"]["license"]
 
     LOG.tc_step("Download lab files")
+    # TODO: possible peformance boost: multithreading
     LOG.info("Downloading lab config files")
     install_helper.download_lab_config_files(lab, lab_files_server, build_dir, custom_path=lab_files_dir)
     LOG.info("Downloading heat templates")
@@ -225,6 +201,8 @@ def test_config_controller(install_setup):
     install_helper.download_license(lab, build_server, license_path, dest_name="license")
 
     LOG.tc_step("Configure controller")
+    # TODO: add wait for host states and reconnect in controller_system_config
+    # TODO: controller_system_config doesn't exit if it failed
     rc, output = install_helper.controller_system_config(active_controller, telnet_conn=active_controller.telnet_conn)
     host_helper.wait_for_hosts_states(controller_name, availability=HostAvailState.ONLINE,
                                       use_telnet=True, con_telnet=active_controller.telnet_conn)
@@ -235,8 +213,6 @@ def test_config_controller(install_setup):
     install_helper.unlock_controller(controller_name, con_ssh=active_controller.ssh_conn)
 
 
-
-# TODO: figure out asserts
 def test_simplex_install(install_setup):
     """
          Complete install steps for a simplex lab
@@ -278,7 +254,7 @@ def test_simplex_install(install_setup):
 
 def test_duplex_install(install_setup):
     """
-         Complete install steps for a simplex lab
+         Complete install steps for a duplex lab
 
          Prerequisites:
              - Controller is online
@@ -303,9 +279,8 @@ def test_duplex_install(install_setup):
     lab = install_setup["lab"]
     hosts = lab["hosts"]
     lab_type = lab["system_mode"]
-    boot_device = lab['boot_device_dict']
+    boot_device = lab["boot_device_dict"]
     output_dir = ProjVar.get_var("LOG_DIR")
-    active_con = install_setup["active_controller"]
 
     if "duplex" not in lab_type:
         pytest.skip("lab is not a duplex lab")
@@ -326,14 +301,11 @@ def test_duplex_install(install_setup):
     install_helper.run_lab_setup()
 
     LOG.tc_step("Boot standby controller for CPE lab")
-    for hostname in hosts:
-        if active_con.name not in hostname:
-            standby_con = lab[hostname]
-            install_helper.bring_node_console_up(standby_con, boot_device, output_dir,
+    standby_con = lab["controller-1"]
+    install_helper.bring_node_console_up(standby_con, boot_device, output_dir,
                                                  small_footprint=True,
                                                  vlm_power_on=True,
                                                  close_telnet_conn=True)
-    host_helper.wait_for_hosts_ready(hosts)
 
     LOG.tc_step("Run lab setup for CPE lab")
     install_helper.run_lab_setup()
@@ -352,7 +324,6 @@ def test_duplex_install(install_setup):
     host_helper.wait_for_hosts_ready(hosts)
 
 
-# TODO: figure out asserts
 def test_standard_install(install_setup):
     """
          Configure the active controller
@@ -416,10 +387,12 @@ def test_standard_install(install_setup):
 
     LOG.tc_step("Check heat resources")
     setup_heat()
-    LOG.tc_step("Swact lock/unlock host")
-    # TODO: wait for the alarms to clear on their own first
-    rc, msg = host_helper.lock_unlock_controllers()
-    assert rc == 0, msg
+    # TODO: We could just delete the alarms
+    system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
+    if system_helper.get_alarms(alarm_id=250.001):
+        LOG.tc_step("Swact lock/unlock host")
+        rc, msg = host_helper.lock_unlock_controllers()
+        assert rc == 0, msg
 
 
 def test_storage_install(install_setup):
@@ -491,24 +464,29 @@ def test_storage_install(install_setup):
 
     LOG.tc_step("Unlock storage nodes")
     host_helper.unlock_hosts([storage_host for storage_host in hosts if "storage" in storage_host])
+    host_helper.wait_for_hosts_ready([storage_host for storage_host in hosts if "storage" in storage_host])
 
     LOG.tc_step("Run lab setup")
     install_helper.run_lab_setup()
 
     LOG.tc_step("Unlock compute nodes")
     host_helper.unlock_hosts([compute_host for compute_host in hosts if "compute" in compute_host])
+    host_helper.wait_for_hosts_ready([compute_host for compute_host in hosts if "compute" in compute_host])
 
     LOG.tc_step("Run lab setup")
     install_helper.run_lab_setup()
 
     setup_heat()
-    LOG.tc_step("Swact lock/unlock host")
-    rc, msg = host_helper.lock_unlock_controllers()
-    assert rc == 0, msg
+    system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
+    if system_helper.get_alarms(alarm_id=250.001):
+        LOG.tc_step("Swact lock/unlock host")
+        rc, msg = host_helper.lock_unlock_controllers()
+        assert rc == 0, msg
 
 
 def test_post_install():
     connection = ControllerClient.get_active_controller()
+
     rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0]
     if rc != 0:
         pytest.skip("No post install directory")

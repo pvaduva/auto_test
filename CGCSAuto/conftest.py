@@ -398,6 +398,12 @@ def pytest_addoption(parser):
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
     wipedisk_help = 'Wipe the disk(s) on the hosts'
+    boot_help = 'Select how to boot the lab. Default is pxe. Options are: \n' \
+                'pxe: boot from the network using pxeboot \n' \
+                'burn: burn the USB using iso-path and boot from it \n' \
+                'usb: Boot from load existing on USB \n' \
+                'iso: iso install flag'
+    iso_path_help = 'Full path to ISO file. Default is <build-dir'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -447,8 +453,10 @@ def pytest_addoption(parser):
                      help=resumeinstall_help)
     parser.addoption('--skip', dest='skiplist', action='store',
                      help=skip_help)
-    parser.addoption('--wipedisk', '--wipedisk', dest='wipedisk', action='store_true',
+    parser.addoption('--wipedisk',  dest='wipedisk', action='store_true',
                      help=wipedisk_help)
+    parser.addoption('--boot', dest='boot_list', action='store', default='pxe',
+                     help=boot_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
 
@@ -465,23 +473,13 @@ def pytest_addoption(parser):
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
 
     # Custom install help
-    file_dir_help = "directory that contains the following lab files: {}. ".format(
-        ' '.join(v[1] for v in LAB_FILES)) + \
+    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
                     "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
     controller_help = "Comma-separated list of VLM barcodes for controllers"
     compute_help = "Comma-separated list of VLM barcodes for computes"
     storage_help = "Comma-separated list of VLM barcodes for storage nodes"
-    build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
-                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
-    build_dir_path_help = "The path to the upgrade software release build directory in build server." \
-                          " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
-                          " Otherwise the default  build dir path for the upgrade software " \
-                          "version will be used"
     file_server_help = "The server that holds the lab file directory. Default is the build server"
-    license_help = "The full path to the new release software license file in build-server. " \
-                   "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
-                   " Otherwise, default license for the upgrade release will be used"
     guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
@@ -504,6 +502,8 @@ def pytest_addoption(parser):
                      action='store', help=compute_help)
     parser.addoption('--storage', dest='storage',
                      action='store', help=storage_help)
+    parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
+                     help=iso_path_help)
     # Note --lab is also a lab install option, when config file is not provided.
 
     ###############################
@@ -548,7 +548,7 @@ def pytest_addoption(parser):
     parser.addoption('--build-server', '--build_server',  dest='build_server',
                      action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
                      help=build_server_help)
-    parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
+    parser.addoption('--tis-build-dir', '--tis_build_dir', '--build-dir', '--build_dir',  dest='tis_build_dir',
                      action='store', metavar='DIR',  help=upgrade_build_dir_path)
     parser.addoption('--license',  dest='upgrade_license', action='store',
                      metavar='license full path', help=license_help)

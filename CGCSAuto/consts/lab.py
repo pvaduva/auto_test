@@ -191,6 +191,7 @@ class Labs:
         'controller_nodes': [67160],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+        'bios_type': b"PowerEdge"
     }
 
     R430_1_2 = {
@@ -527,6 +528,17 @@ class Labs:
         'controller-1 ip': '128.224.151.166',
         'controller_nodes': [98522, 81712],
         'compute_nodes': [94867, 18658, 40810],
+    }
+
+    ML350_G10 = {
+        'short_name': 'ml350_g10',
+        'name': 'yow-cgcs-ml350-g10-1',
+        'floating ip': '128.224.151.181',
+        'controller-0 ip': '128.224.151.181',
+        'controller_nodes': [55836],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+        'bios_type': b"Hewlett"
     }
 
     VBOX = {

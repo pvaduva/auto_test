@@ -21,7 +21,8 @@ def pytest_configure(config):
 
     backup_dest = 'USB' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None, wipedisk=False,
-                              controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
+                              controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None,
+                              boot="pxe", iso_path=None)
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
                                delete_backups=delete_backups, dest_labs=dest_labs)
 
