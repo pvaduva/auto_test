@@ -389,7 +389,8 @@ def test_standard_install(install_setup):
     setup_heat()
     # TODO: We could just delete the alarms
     system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
-    if system_helper.get_alarms(alarm_id=250.001):
+    alarm = system_helper.get_alarms(alarm_id='250.001')
+    if alarm:
         LOG.tc_step("Swact lock/unlock host")
         rc, msg = host_helper.lock_unlock_controllers()
         assert rc == 0, msg
@@ -478,7 +479,8 @@ def test_storage_install(install_setup):
 
     setup_heat()
     system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
-    if system_helper.get_alarms(alarm_id=250.001):
+    alarm = system_helper.get_alarms(alarm_id='250.001')
+    if alarm:
         LOG.tc_step("Swact lock/unlock host")
         rc, msg = host_helper.lock_unlock_controllers()
         assert rc == 0, msg
