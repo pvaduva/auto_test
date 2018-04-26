@@ -262,7 +262,7 @@ def test_scaling_vm_negative(ht_and_nonht_hosts, add_admin_role_func):
         """
 
     ht_hosts, non_ht_hosts, max_vcpus_per_proc, storage_backing = ht_and_nonht_hosts
-    if len(max_vcpus_per_proc[0]) < 4:
+    if max_vcpus_per_proc[0] < 4:
         skip("Less than 4 VMs cores on processor 0 of any hypervisor")
 
     proc0_vm_cores = vm_host = None
