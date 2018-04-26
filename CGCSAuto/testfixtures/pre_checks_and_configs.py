@@ -72,11 +72,12 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
-    keystone_helper.update_user('admin', password=post_pswd)
+    code, output = keystone_helper.update_user('admin', password=post_pswd)
+    assert "Warning: 'admin' password changed. Please wait 5 minutes before Locking/Unlocking the controllers" in output
 
     def _lock_unlock_controllers():
         LOG.fixture_step("Sleep for 120 seconds after admin password change")
-        time.sleep(120)  # CGTS-6928
+        time.sleep(300)  # CGTS-6928
         if more_than_one_controllers:
             active, standby = system_helper.get_active_standby_controllers()
             if standby:
