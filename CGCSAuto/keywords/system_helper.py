@@ -1021,7 +1021,7 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     if not kwargs:
         raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
 
-    attr_values_ = ['--{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
     code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
