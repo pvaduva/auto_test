@@ -81,216 +81,203 @@ def checksum_compare(source_file, dest_file):
         return False
 
 
-def create_symlink(source_file, dest_file, user_type="root"):
+def create_symlink(source_file, dest_file, sudo=True):
     """
     This creates a symlink given a source filename and a destination filename.
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
     LOG.info("Creating symlink to {} called {}".format(source_file, dest_file))
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("ln -sf {} {}".format(source_file, dest_file))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("ln -sf {} {}".format(source_file, dest_file))
-
-    assert exitcode == 0, "Symlink creation was expected to succeed but instead failed"
+    cmd = "ln -sf {} {}".format(source_file, dest_file)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
 
 
-def delete_file(filename, user_type="root"):
+def delete_file(filename, sudo=True):
     """
     This deletes a file.
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
     LOG.info("Deleting file {}".format(filename))
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("rm {}".format(filename))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("rm {}".format(filename))
-
-    assert exitcode == 0, "Unable to delete file"
+    cmd = "rm {}".format(filename)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
 
 
-def chmod_file(filename, permissions, user_type="root"):
+def chmod_file(filename, permissions, sudo=True):
     """
     This modifies permissions of a file
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    # Should we be more pythonic?
     LOG.info("Changing file permissions for {}".format(filename))
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("chmod {} {}".format(permissions, filename))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("chmod {} {}".format(permissions, filename))
-
-    assert exitcode == 0, "Failed to change file permissions"
+    cmd = "chmod {} {}".format(permissions, filename)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
 
 
-def chgrp_file(filename, group, user_type="root"):
+def chgrp_file(filename, group, sudo=True):
     """
     This modifies the group ownership of a file
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    # Should we be more pythonic?
     LOG.info("Changing file permissions for {}".format(filename))
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("chgrp {} {}".format(group, filename))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("chgrp {} {}".format(group, filename))
-
-    assert exitcode == 0, "Failed to change file group ownership"
+    cmd = "chgrp {} {}".format(group, filename)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
 
 
-def chown_file(filename, file_owner, user_type="root"):
+def chown_file(filename, file_owner, sudo=True):
     """
     This modifies the user that owns the file
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    # Should we be more pythonic?
     LOG.info("Changing the user that owns {}".format(filename))
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("chown {} {}".format(file_owner, filename))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("chown {} {}".format(file_owner, filename))
-
-    assert exitcode == 0, "Failed to change file group ownership"
+    cmd = "chown {} {}".format(file_owner, filename)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
 
 
-def copy_file(source_file, dest_file, user_type="root"):
+def copy_file(source_file, dest_file, sudo=True, preserve=True, cleanup=None):
     """
-    This creates a copy of a file and preserves the attributes.
+    This creates a copy of a file
+
+    Args:
+        source_file:
+        dest_file:
+        sudo (bool): whether to copy with sudo
+        cleanup (None|str): source or dest. Add source or dest file to files to delete list
+        preserve (bool): whether to preserve attributes of source file
+
+    Returns:
+
     """
+    LOG.info("Copy file {} preserve attributes".format('and' if preserve else 'without'))
+    preserve_str = '--preserve=all ' if preserve else ''
+    cmd = "cp {} {}{}".format(source_file, preserve_str, dest_file)
+    _exec_cmd(cmd, sudo=sudo, fail_ok=False)
 
-    con_ssh = ControllerClient.get_active_controller()
-
-    LOG.info("Copy file and preserve attributes")
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("cp {} --preserve=all {}".format(source_file, dest_file))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("cp {} --preserve=all {}".format(source_file, dest_file))
-
-    assert exitcode == 0, "File copy unexpectedly failed"
+    if cleanup:
+        file_path = source_file if cleanup == 'source' else dest_file
+        files_to_delete.append(file_path)
 
 
-def move_file(source_file, dest_file, user_type="root"):
+def move_file(source_file, dest_file, sudo=True):
     """
     This moves a file from source to destination
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
     LOG.info("Copy file and preserve attributes")
-    if user_type == "root":
-        exitcode, msg = con_ssh.exec_sudo_cmd("mv {} {}".format(source_file, dest_file))
-    else:
-        exitcode, msg = con_ssh.exec_cmd("mv {} {}".format(source_file, dest_file))
-
-    assert exitcode == 0, "Failed to move file from {} to {}".format(source_file, dest_file)
+    cmd = "mv {} {}".format(source_file, dest_file)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
 
 
-@mark.priorities('nightly', 'sx_nightly')
-def test_ima_create_symlink():
-    """
-    This test validates symlink behaviour on an IMA-enabled system
+def create_and_execute(file_path, sudo=True):
+    LOG.tc_step("Create a new {} file and execute it".format('root' if sudo else 'non-root'))
+    cmd = "touch {}".format(file_path)
+    _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
+    files_to_delete.append(file_path)
 
-    Test Steps:
-        - Create a symlink
-        - Confirm that source file and symlink checksum match
-        - Confirm symlink creation does not trigger an IMA violation alarm
-        - Remove the symlink
+    LOG.info("Set file to be executable")
+    chmod_file(file_path, "755", sudo=sudo)
 
-    Maps to TC_17684/T_15793 from US105523 (Symlink should work as
-    expected)
+    LOG.info("Append to copy of monitored file")
+    cmd = 'echo "ls" | {}tee -a {}'.format('sudo -S ' if sudo else '', file_path)
+    _exec_cmd(cmd=cmd, sudo=False, fail_ok=False)
 
-    """
-
-    global files_to_delete
-
-    start_time = common.get_date_in_format()
-
-    source_file = "/usr/sbin/ntpq"
-    dest_file = "my_symlink"
-    create_symlink(source_file, dest_file)
-
-    files_to_delete.append(dest_file)
-
-    checksum_match = checksum_compare(source_file, dest_file)
-    assert checksum_match, "SHA256 checksum should match source file and the symlink but didn't"
-
-    LOG.info("Ensure no unexpected events are raised")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found == [], "Unexpected IMA events found"
+    LOG.info("Execute created file")
+    _exec_cmd(file_path, sudo=sudo, fail_ok=False)
 
 
 @mark.priorities('nightly', 'sx_nightly')
-def test_ima_edit_monitored_file():
+@mark.parametrize(('operation', 'file_path'), [
+    ('create_symlink', '/usr/sbin/ntpq'),
+    ('copy_and_execute', '/usr/sbin/ntpq'),
+    ('change_file_attributes', '/usr/sbin/ntpq'),
+    ('create_and_execute', 'new_nonroot_file')
+])
+def test_ima_no_event(operation, file_path):
     """
-    This test alters a monitored file and ensures the signature is lost.
+    This test validates following scenarios will not generate IMA event:
+        - create symlink of a monitored file
+        - copy a root file with the proper IMA signature, the nexcute it
+        - make file attribute changes, include: chgrp, chown, chmod
+        - create and execute a files as wrsroot
 
     Test Steps:
-    - Copy a file with attributes
-    - Edit the file with vi and save it
-    - This results in the IMA signature being lost
-    - Try to execute the file
-    - Ensure there is an event generated saying 'IMA-signature-required'
+        - Perform specified operation on given file
+        - Confirm IMA violation event is not triggered
 
-    Maps to TC_17642/T_15809 from US105523 Alter a monitored file by editing
-    with vi, signature is lost
+    Teardown:
+        - Delete created test file
 
+    Maps to TC_17684/TC_17644/TC_17640/TC_17902 from US105523
     This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
+
     """
 
     global files_to_delete
-
-    con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
-    host = system_helper.get_hostname()
+    source_file = file_path
+    con_ssh = ControllerClient.get_active_controller()
 
-    source_file = "/usr/sbin/ntpq"
-    dest_file = "/usr/sbin/TEMP"
-    copy_file(source_file, dest_file)
+    LOG.tc_step("{} for {}".format(operation, source_file))
+    if operation == 'create_symlink':
+        dest_file = "my_symlink"
+        create_symlink(source_file, dest_file)
+        files_to_delete.append(dest_file)
 
-    LOG.info("Open copy of monitored file and save")
-    cmd = "vim {} '+:wq!'".format(dest_file)
-    exitcode, msg = con_ssh.exec_sudo_cmd(cmd)
+        checksum_match = checksum_compare(source_file, dest_file)
+        assert checksum_match, "SHA256 checksum should match source file and the symlink but didn't"
 
-    files_to_delete.append(dest_file)
+    elif operation == 'copy_and_execute':
+        dest_file = "/usr/sbin/TEMP"
+        copy_file(source_file, dest_file)
+        files_to_delete.append(dest_file)
 
-    LOG.info("Execute monitored file")
-    exitcode, msg = con_ssh.exec_sudo_cmd("{} -p".format(dest_file))
+        LOG.info("Execute the copied file")
+        con_ssh.exec_sudo_cmd("{} -p".format(dest_file))
 
-    LOG.info("Check for IMA event")
+    elif operation == 'change_file_attributes':
+        dest_file = "/usr/sbin/TEMP"
+        copy_file(source_file, dest_file)
+        files_to_delete.append(dest_file)
+
+        LOG.info("Change permission of copy")
+        chmod_file(dest_file, "777")
+        LOG.info("Changing group ownership of file")
+        chgrp_file(dest_file, "wrs")
+        LOG.info("Changing file ownership")
+        chown_file(dest_file, "wrsroot:wrs")
+
+    elif operation == 'create_and_execute':
+        dest_file = "/home/wrsroot/TEMP"
+        create_and_execute(file_path=dest_file, sudo=False)
+
+    LOG.tc_step("Ensure no IMA events are raised")
     events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
                                                  event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
                                                  fail_ok=True, strict=False)
-    assert events_found != [], "Expected IMA event not found"
+
+    assert not events_found, "Unexpected IMA events found"
+
+
+def _exec_cmd(cmd, con_ssh=None, sudo=False, fail_ok=True):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if sudo:
+        return con_ssh.exec_sudo_cmd(cmd, fail_ok=fail_ok)
+    else:
+        return con_ssh.exec_cmd(cmd, fail_ok=fail_ok)
 
 
 @mark.priorities('nightly', 'sx_nightly')
-def test_ima_append_monitored_file():
+@mark.parametrize(('operation', 'file_path'), [
+    ('edit_and_execute', '/usr/sbin/ntpq'),
+    ('append_and_execute', '/usr/sbin/logrotate'),
+    ('replace_library', '/lib64/libcrypt.so.1'),
+    ('create_and_execute', 'new_root_file')
+])
+def test_ima_event_generation(operation, file_path):
     """
-    This test appends some data to a monitored file.  This should trigger a
-    changing of the hash, and result in alarm.
+    Following IMA violation scenarios are covered:
+        - append/edit data to/of a monitored file, result in changing of the hash
+        - dynamic library changes
+        - create and execute a files as wrsroot
 
     Test Steps:
-    - Copy monitored file and preserve options
-    - Echo data to append to the end of the file
-    - Execute file via root user
-    - Check the alarms for IMA violation
+    - Perform specified file operations
+    - Check IMA violation event is logged
 
-    Maps to TC_17641/T_15808 from US105523 (Alter a monitored file by adding a
+    Maps to TC_17641/TC_17642/TC_17643/TC_17662/ from US105523 (Alter a monitored file by adding a
     line to it)
 
     This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
@@ -300,212 +287,56 @@ def test_ima_append_monitored_file():
 
     con_ssh = ControllerClient.get_active_controller()
     start_time = common.get_date_in_format()
-    host = system_helper.get_hostname()
 
-    source_file = "/usr/sbin/logrotate"
-    dest_file = "/usr/sbin/TEMP"
-    copy_file(source_file, dest_file)
+    source_file = file_path
+    backup_file = None
 
-    LOG.info("Append to copy of monitored file")
-    cmd = 'echo "output" | sudo -S tee -a /usr/sbin/TEMP'.format(HostLinuxCreds.get_password())
-    exitcode, msg = con_ssh.exec_cmd(cmd)
+    if operation in ('edit_and_execute', 'append_and_execute'):
+        dest_file = "/usr/sbin/TEMP"
+        copy_file(source_file, dest_file, cleanup='dest')
 
-    files_to_delete.append(dest_file)
+        if operation == 'edit_and_execute':
+            LOG.tc_step("Open copy of monitored file and save")
+            cmd = "vim {} '+:wq!'".format(dest_file)
+            con_ssh.exec_sudo_cmd(cmd, fail_ok=False)
+            execute_cmd = "{} -p".format(dest_file)
+        else:
+            LOG.tc_step("Append to copy of monitored file")
+            cmd = 'echo "output" | sudo -S tee -a /usr/sbin/TEMP'.format(HostLinuxCreds.get_password())
+            con_ssh.exec_cmd(cmd, fail_ok=False)
+            LOG.tc_step("Execute modified file")
+            con_ssh.exec_sudo_cmd(dest_file)
+            execute_cmd = "{}".format(dest_file)
 
-    LOG.info("Execute monitored file")
-    exitcode, msg = con_ssh.exec_sudo_cmd("{}".format(dest_file))
+        LOG.tc_step("Execute modified file")
+        con_ssh.exec_sudo_cmd(execute_cmd)
 
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found != [], "Expected IMA event not found"
+    elif operation == 'replace_library':
+        backup_file = "/root/{}".format(source_file.split('/')[-1])
+        dest_file_nocsum = "/root/TEMP"
 
+        LOG.info("Backup source file {} to {}".format(source_file, backup_file))
+        copy_file(source_file, backup_file)
+        LOG.info("Copy the library without the checksum")
+        copy_file(source_file, dest_file_nocsum, preserve=False)
+        LOG.info("Replace the library with the unsigned one")
+        move_file(dest_file_nocsum, source_file)
 
-@mark.priorities('nightly', 'sx_nightly')
-def test_ima_copy_file_noalarm():
-    """
-    This test validates that copying a root file with the proper IMA signature,
-    makes its execution to work without appraisal.
+    elif operation == 'create_and_execute':
+        dest_file = "/home/wrsroot/TEMP"
+        create_and_execute(file_path=dest_file, sudo=True)
 
-    Test Steps:
-    - Copy a monitored file
-    - Execute the copy
-    - Check for alarms (there should be none)
+    LOG.tc_step("Check for IMA event")
+    ima_events = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
+                                               event_log_id=EventLogID.IMA,
+                                               state='log', severity='major',
+                                               fail_ok=True, strict=False)
 
-    Maps to TC_17644 from US105523.
+    if backup_file:
+        LOG.info("Restore backup file {} to {}".format(backup_file, source_file))
+        move_file(backup_file, source_file)
 
-    This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
-    """
-
-    global files_to_delete
-
-    con_ssh = ControllerClient.get_active_controller()
-    start_time = common.get_date_in_format()
-
-    LOG.info("Copy a monitored file and preserve attributes")
-    source_file = "/usr/sbin/ntpq"
-    dest_file = "/usr/sbin/TEMP"
-    copy_file(source_file, dest_file)
-
-    files_to_delete.append(dest_file)
-
-    LOG.info("Execute the copied file")
-    exitcode, msg = con_ssh.exec_sudo_cmd("{} -p".format(dest_file))
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found == [], "Unexpected IMA events found"
-
-
-@mark.priorities('nightly', 'sx_nightly')
-def test_ima_dynamic_library_change():
-    """
-    This test validates that dynamic library changes are detected by the IMA
-    code.
-
-    Test Steps:
-    - Backup library with attributes
-    - Copy library without SHA checksum
-    - Replace original library with unsigned one
-    - After IMA appraisal has been detected, backup original library.
-
-    Maps to TC_17662 from US105523.
-
-    This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
-    """
-
-    con_ssh = ControllerClient.get_active_controller()
-    start_time = common.get_date_in_format()
-
-    source_file = "/lib64/libcrypt.so.1"
-    dest_file = "/root/libcrypt.so.1"
-    dest_file_nocsum = "/root/TEMP"
-
-    LOG.info("Backup source file {} to {}".format(source_file, dest_file))
-    copy_file(source_file, dest_file)
-
-    LOG.info("Copy the library without the checksum")
-    exitcode, msg = con_ssh.exec_sudo_cmd("cp {} {}".format(source_file, dest_file_nocsum))
-    assert exitcode == 0, "File copy failed"
-
-    LOG.info("Replace the library with the unsigned one")
-    move_file(dest_file_nocsum, source_file)
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found != [], "Expected IMA event not found"
-
-    LOG.info("Restore original library")
-    move_file(dest_file, source_file)
-
-
-@mark.priorities('nightly', 'sx_nightly')
-def test_create_and_execute_new_root_file():
-    """
-    This test creates a new file owned by root and executes it, resulting in an
-    IMA violation.
-
-    Test Steps:
-    - Create an executable script owned by root
-    - Add exec permission
-    - Execute it
-    - Look for IMA violations
-
-    This test maps to TC_17643/T_15803 from US105523 (Create a new file owned
-    by root and execute it)
-
-    This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
-    """
-
-    global files_to_delete
-
-    con_ssh = ControllerClient.get_active_controller()
-    start_time = common.get_date_in_format()
-
-    dest_file = "/home/wrsroot/TEMP"
-
-    LOG.info("Create new file")
-    cmd = "touch {}".format(dest_file)
-    exitcode, msg = con_ssh.exec_sudo_cmd(cmd)
-
-    LOG.info("Set file to be executable")
-    chmod_file(dest_file, "755")
-
-    files_to_delete.append(dest_file)
-
-    LOG.info("Append to file")
-    cmd = 'echo "ls" | sudo -S tee -a {}'.format(dest_file)
-    exitcode, msg = con_ssh.exec_cmd(cmd)
-    assert exitcode == 0, "Failed to append to file"
-
-    LOG.info("Execute file")
-    exitcode, msg = con_ssh.exec_sudo_cmd("{}".format(dest_file))
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found != [], "Expected IMA event not found"
-
-
-@mark.priorities('nightly', 'sx_nightly')
-def test_create_new_file_and_execute_as_non_root_user():
-    """
-    This creates a new file owned by the wrsroot user and attempts to execute
-    it.  This should not result in an IMA violation.
-
-    Test Steps:
-    - Create an executable script owned by root
-    - Add exec permission
-    - Execute it
-    - Ensure there are no IMA violations
-
-    This maps to TC_17902/T_17144 from US105523 (Create a new file owned by
-    wrsroot user and execute it (non-root)
-
-    This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
-    """
-
-    global files_to_delete
-
-    con_ssh = ControllerClient.get_active_controller()
-    start_time = common.get_date_in_format()
-
-    dest_file = "/home/wrsroot/TEMP"
-
-    LOG.info("Create new file")
-    cmd = "touch {}".format(dest_file)
-    exitcode, msg = con_ssh.exec_cmd(cmd)
-
-    LOG.info("Set file to be executable")
-    chmod_file(dest_file, "755", user_type="wrsroot")
-
-    # Should I make this more pythonic?
-    LOG.info("Append to copy of monitored file")
-    cmd = 'echo "ls" | tee -a {}'.format(dest_file)
-    exitcode, msg = con_ssh.exec_cmd(cmd)
-    assert exitcode == 0, "Failed to append to file"
-
-    files_to_delete.append(dest_file)
-
-    LOG.info("Execute file")
-    exitcode, msg = con_ssh.exec_cmd("{}".format(dest_file))
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found == [], "Unexpected IMA event found"
+    assert ima_events, "IMA event is not generated after {} on {}".format(operation, file_path)
 
 
 # CHECK TEST PROCEDURE - FAILS in the middle
@@ -532,7 +363,7 @@ def _test_dynamic_library_change_via_ld_preload_envvar_assignment():
     LOG.info("Make a copy of a library used by 'ls'")
     source_file = "/lib64/ld-linux-x86-64.so.2"
     dest_file = "/lib64/temp.so"
-    copy_file(source_file, dest_file)
+    copy_file(source_file, dest_file, cleanup='dest')
 
     ls_cmd = "/usr/bin/ls"
 
@@ -547,73 +378,9 @@ def _test_dynamic_library_change_via_ld_preload_envvar_assignment():
                                                  fail_ok=True, strict=False)
     assert events_found == [], "Unexpected IMA event found"
 
-    delete_file(dest_file)
-
 
 @mark.priorities('nightly', 'sx_nightly')
-def test_file_attribute_changes_ima_detection():
-    """
-    This test confirms that the user can make file attribute changes without
-    triggering IMA violations.  These changes include: chgrp, chown, chmod.
-
-    Test Steps:
-    - Modify group ownership of a file
-    - Ensure an IMA event is not triggered
-    - Modify permissions of a file
-    - Ensure an IMA event is not triggered
-    - Modify file ownership
-    - Ensure an IMA event is not triggered
-
-    This test maps to TC_17640/T_15806 from US105523 (File attribute changes
-    are not detected by IMA)
-
-    This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
-    """
-
-    global files_to_delete
-
-    start_time = common.get_date_in_format()
-
-    LOG.info("Copy monitored file")
-    source_file = "/usr/sbin/ntpq"
-    dest_file = "/usr/sbin/TEMP"
-    copy_file(source_file, dest_file)
-
-    LOG.info("Change permission of copy")
-    chmod_file(dest_file, "777")
-
-    files_to_delete.append(dest_file)
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found == [], "Unexpected IMA event found"
-
-    LOG.info("Changing group ownership of file")
-    chgrp_file(dest_file, "wrs")
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found == [], "Unexpected IMA event found"
-
-    LOG.info("Changing file ownership")
-    chown_file(dest_file, "wrsroot:wrs")
-
-    LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
-                                                 event_log_id=EventLogID.IMA,
-                                                 state='log', severity='major',
-                                                 fail_ok=True, strict=False)
-    assert events_found == [], "Unexpected IMA event found"
-
-
-@mark.priorities('nightly', 'sx_nightly')
-def test_ima_keyring_user_attacks():
+def test_ima_keyring_protection():
     """
     This test validates that the IMA keyring is safe from user space attacks.
 
