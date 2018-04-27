@@ -2,6 +2,7 @@ from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 from utils.horizon.regions import menus
+from utils.horizon import helper
 
 
 class HostAggregatesTable(tables.TableRegion):
@@ -61,12 +62,15 @@ class HostaggregatesPage(basepage.BasePage):
         return self.availability_zons_table.get_row(
             self.AVAILABILITY_ZONES_TABLE_NAME_COLUMN, name)
 
-    def create_host_aggregate(self, name, availability_zone=None):
+    def create_host_aggregate(self, name=None, availability_zone=None):
         create_host_aggregate_form = self.host_aggregates_table.create_host_aggregate()
+        if name is None:
+            name = helper.gen_resource_name('aggregate')
         create_host_aggregate_form.name.text = name
         if availability_zone is not None:
             create_host_aggregate_form.availability_zone.text = availability_zone
         create_host_aggregate_form.submit()
+        return name
 
     def delete_host_aggregate(self, name):
         row = self._get_host_aggregate_row_by_name(name)

@@ -54,6 +54,7 @@ class RowRegion(baseregion.BaseRegion):
 
 class TableRegion(baseregion.BaseRegion):
     """Basic class representing table object."""
+    name = None
 
     _heading_locator = (by.By.CSS_SELECTOR, 'h3.table_title')
     _columns_names_locator = (by.By.CSS_SELECTOR, 'thead > tr > th')

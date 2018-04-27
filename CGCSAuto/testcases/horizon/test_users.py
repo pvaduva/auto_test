@@ -4,6 +4,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestUser:
@@ -59,4 +60,5 @@ class TestUser:
 
         LOG.tc_step('Verify the user does not appear in the table after deletion')
         assert not users_pg.is_user_present(self.USER_NAME)
+        horizon.test_result = True
 

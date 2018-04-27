@@ -5,6 +5,7 @@ from utils.horizon.pages.admin.system import defaultspage
 from pytest import fixture
 from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
+from consts import horizon
 
 
 @fixture(scope='function')
@@ -38,6 +39,7 @@ def test_update_defaults(defaults_pg):
            Quota Defaults table
         - Updates default Quotas back to original status
     """
+
     add_up = random.randint(1, 10)
     default_quota_values = defaults_pg.quota_values
 
@@ -55,3 +57,4 @@ def test_update_defaults(defaults_pg):
     LOG.tc_step('Updates default Quotas back to original status')
     sleep(1)
     defaults_pg.update_defaults(-add_up)
+    horizon.test_result = True

@@ -5,6 +5,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import tenant_home_pg, driver
+from consts import horizon
 
 
 class TestVolumeSnapshots:
@@ -90,6 +91,7 @@ class TestVolumeSnapshots:
         assert not volumes_snapshot_pg.find_message_and_dismiss(messages.ERROR)
         assert volumes_snapshot_pg.is_volume_snapshot_deleted(
             new_name)
+        horizon.test_result = True
 
     def test_create_volume_from_snapshot(self, volumes_pg):
         """
@@ -144,6 +146,7 @@ class TestVolumeSnapshots:
         assert volumes_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
         assert volumes_pg.is_volume_deleted(new_volume)
+        horizon.test_result = True
 
 
 

@@ -5,6 +5,7 @@ from utils.horizon import helper
 from pytest import fixture
 from testfixtures.horizon import tenant_home_pg, admin_home_pg, driver
 from utils.tis_log import LOG
+from consts import horizon
 
 
 @fixture(scope='function')
@@ -60,6 +61,7 @@ def test_network_subnet_create_tenant(project_networks_pg):
 
     LOG.tc_step('Verify the network does not appear in the table after deletion')
     assert not project_networks_pg.is_network_present(network_name)
+    horizon.test_result = True
 
 
 @fixture(scope='function')
@@ -118,3 +120,4 @@ def test_network_subnet_create_admin(admin_networks_pg):
 
     LOG.tc_step('Verify the network does not appear in the table after deletion')
     assert not admin_networks_pg.is_network_present(network_name)
+    horizon.test_result = True

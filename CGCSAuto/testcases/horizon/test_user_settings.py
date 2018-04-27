@@ -5,6 +5,7 @@ from utils.horizon.pages.settings import usersettingspage
 from utils.horizon.pages.settings import changepasswordpage
 from pytest import fixture
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestDashboardHelp:
@@ -23,6 +24,7 @@ class TestDashboardHelp:
 
         admin_home_pg.close_window()
         admin_home_pg.switch_window()
+        horizon.test_result = True
 
 
 class TestPasswordChange:
@@ -60,6 +62,7 @@ class TestPasswordChange:
         password_change_pg.reset_to_default_password(self.NEW_PASSWORD2)
         home_pg = login_pg.login(self.TEST_USER_NAME, self.TEST_PASSWORD)
         assert home_pg.is_logged_in, "Failed to login with new password"
+        horizon.test_result = True
 
 
 class TestUserSettings:
@@ -84,6 +87,7 @@ class TestUserSettings:
         for (setting, expected, observed) in user_settings:
             assert expected == observed, "expected %s: %s, instead found: %s"\
                                          % (setting, expected, observed)
+        horizon.test_result = True
 
     def test_user_settings_change(self, user_setting_pg):
         """tests the user's settings options:
@@ -118,3 +122,4 @@ class TestUserSettings:
         user_setting_pg.return_to_default_settings()
         self.verify_user_settings_change(user_setting_pg,
                                          user_setting_pg.DEFAULT_SETTINGS)
+        horizon.test_result = True

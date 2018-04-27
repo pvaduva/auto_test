@@ -3,6 +3,7 @@ from utils.horizon.pages.admin.platform import faultmanagementpage
 from pytest import fixture, mark
 from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
+from consts import horizon
 
 
 @fixture(scope='function')
@@ -31,3 +32,4 @@ def test_suppress_event(fault_management_pg, event_id):
     fault_management_pg.unsuppress_event(event_id)
     assert fault_management_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not fault_management_pg.find_message_and_dismiss(messages.ERROR)
+    horizon.test_result = True

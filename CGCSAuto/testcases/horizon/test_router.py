@@ -5,6 +5,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestRouters:
@@ -68,6 +69,7 @@ class TestRouters:
         assert routers_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not routers_pg.find_message_and_dismiss(messages.ERROR)
         assert not routers_pg.is_router_present(self.ROUTER_NAME)
+        horizon.test_result = True
 
     def test_router_gateway(self, routers_pg_action):
         """
@@ -103,6 +105,7 @@ class TestRouters:
 
         LOG.tc_step('Verify the new set gateway appears in the gateway table')
         assert routers_pg_action.get_router_info(self.ROUTER_NAME, 'External Network') == 'external-net0'
+        horizon.test_result = True
 
     def test_router_add_delete_interface(self, routers_pg_action):
         """
@@ -145,6 +148,7 @@ class TestRouters:
 
         LOG.tc_step('Add a new interface and Verify the new interface is in the routers table')
         routers_pg_action.go_to_target_page()
+        horizon.test_result = True
 
     def test_router_overview_data(self, routers_pg_action):
         """
@@ -179,6 +183,7 @@ class TestRouters:
 
         LOG.tc_step('Back to project routers page and Delete router {}'.format(self.ROUTER_NAME))
         routers_pg_action.go_to_target_page()
+        horizon.test_result = True
 
     def test_router_admin_edit(self, routers_pg_action):
         """
@@ -215,5 +220,6 @@ class TestRouters:
         assert admin_routers_page.is_router_present(new_name)
         assert admin_routers_page.get_router_info(new_name, 'Status') == 'Active'
         self.ROUTER_NAME = new_name
+        horizon.test_result = True
 
 

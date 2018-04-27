@@ -6,6 +6,7 @@ from pytest import fixture
 from utils.horizon import helper
 from testfixtures.horizon import tenant_home_pg, driver, admin_home_pg
 from utils.tis_log import LOG
+from consts import horizon
 
 
 class TestImagesBasic:
@@ -61,6 +62,7 @@ class TestImagesBasic:
 
             LOG.tc_step('Verify the image does not appear in the table after deletion')
             assert not images_pg.is_image_present(self.IMAGE_NAME)
+            horizon.test_result = True
 
     def test_update_image_metadata(self, images_pg):
         """
@@ -97,6 +99,7 @@ class TestImagesBasic:
 
             LOG.tc_step('Delete the image {}.'.format(self.IMAGE_NAME))
             images_pg.delete_image(self.IMAGE_NAME)
+            horizon.test_result = True
 
     def test_remove_protected_image(self, images_pg):
         """
@@ -151,6 +154,7 @@ class TestImagesBasic:
 
             LOG.tc_step('Verify the image does not appear in the table after deletion')
             assert not images_pg.is_image_present(self.IMAGE_NAME)
+            horizon.test_result = True
 
     def test_edit_image_description_and_name(self, images_pg):
         """
@@ -199,6 +203,7 @@ class TestImagesBasic:
             images_pg.go_to_target_page()
             images_pg.delete_image(new_image_name)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
     def test_create_volume_from_image(self, images_pg):
         """
@@ -250,6 +255,7 @@ class TestImagesBasic:
             images_pg.go_to_target_page()
             images_pg.delete_image(self.IMAGE_NAME)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
     def test_filter_images(self, images_pg):
         """
@@ -297,6 +303,7 @@ class TestImagesBasic:
             LOG.tc_step('Delete image {}.'.format(self.IMAGE_NAME))
             admin_images_pg.delete_image(self.IMAGE_NAME)
             assert admin_images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
 
 class TestImagesAdvanced:
@@ -366,6 +373,7 @@ class TestImagesAdvanced:
             images_pg.go_to_target_page()
             images_pg.delete_image(self.IMAGE_NAME)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
 
 

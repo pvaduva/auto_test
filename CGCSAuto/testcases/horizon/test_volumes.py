@@ -8,6 +8,7 @@ from utils.horizon.pages.project.compute import instancespage
 from utils.tis_log import LOG
 from pytest import mark, raises
 from testfixtures.horizon import tenant_home_pg, driver
+from consts import horizon
 
 
 class TestVolumesBasic:
@@ -85,6 +86,7 @@ class TestVolumesBasic:
 
         LOG.tc_step('Check that the volume is absent in the list')
         assert volumes_pg.is_volume_deleted(self.VOLUME_NAME)
+        horizon.test_result = True
 
     def test_manage_volume_attachments(self, instances_pg):
         """
@@ -158,6 +160,7 @@ class TestVolumesBasic:
         instances_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
         assert instances_pg.is_instance_deleted(instance_name)
+        horizon.test_result = True
 
     @fixture(scope='function')
     def volumes_pg_action(self, tenant_home_pg, request):
@@ -218,6 +221,7 @@ class TestVolumesBasic:
         assert volumes_pg_action.is_volume_status(new_name, 'Available')
         assert volumes_pg_action.get_volume_info(new_name, 'Bootable') == 'Yes'
         self.VOLUME_NAME = new_name
+        horizon.test_result = True
 
     def test_volume_extend(self, volumes_pg_action):
         """
@@ -247,6 +251,7 @@ class TestVolumesBasic:
         LOG.tc_step('Check that the volume size is changed')
         new_size = int(volumes_pg_action.get_volume_info(self.VOLUME_NAME, 'Size')[:-3])
         assert orig_size < new_size
+        horizon.test_result = True
 
     def test_volume_upload_to_image(self, volumes_pg_action):
         """
@@ -291,6 +296,7 @@ class TestVolumesBasic:
             assert not images_pg.find_message_and_dismiss(messages.ERROR)
             assert not (images_pg.is_image_present(image_name))
             volumes_pg_action.go_to_target_page()
+        horizon.test_result = True
 
     def test_volume_launch_as_instance(self, volumes_pg_action):
         """
@@ -337,6 +343,7 @@ class TestVolumesBasic:
         assert instances_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
         assert instances_pg.is_instance_deleted(instance_name)
+        horizon.test_result = True
 
     def test_non_bootable_volume_launch_as_instance_negative(self, volumes_pg_action):
         """
@@ -362,3 +369,4 @@ class TestVolumesBasic:
         with raises(ValueError):
             volumes_pg_action.launch_as_instance(self.VOLUME_NAME, instance_name, delete_volume_on_instance_delete=True,
                                                  flavor_name='small', network_names=['tenant1-mgmt-net'])
+        horizon.test_result = True

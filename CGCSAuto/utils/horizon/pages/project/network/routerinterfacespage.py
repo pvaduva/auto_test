@@ -3,7 +3,6 @@ from selenium.webdriver.common import by
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
-from consts import horizon
 
 
 class InterfacesTable(tables.TableRegion):
@@ -34,7 +33,7 @@ class RouterInterfacesPage(basepage.BasePage):
 
     INTERFACES_TABLE_STATUS_COLUMN = 'Status'
     INTERFACES_TABLE_NAME_COLUMN = 'Name'
-    DEFAULT_SUBNET = horizon.DEFAULT_SUBNET
+    DEFAULT_SUBNET = 'external-net0'
 
     def _get_row_with_interface_name(self, name):
         return self.interfaces_table.get_row(

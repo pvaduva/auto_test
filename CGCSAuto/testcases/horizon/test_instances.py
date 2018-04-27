@@ -4,6 +4,7 @@ from pytest import fixture, mark
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import tenant_home_pg, driver
+from consts import horizon
 
 
 class TestInstances:
@@ -69,5 +70,6 @@ class TestInstances:
 
         LOG.tc_step('Verify the instance does not appear in the table after deletion')
         assert instances_pg.is_instance_deleted(self.INSTANCE_NAME)
+        horizon.test_result = True
 
 

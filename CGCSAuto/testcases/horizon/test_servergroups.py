@@ -4,6 +4,7 @@ from pytest import fixture, mark
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import tenant_home_pg, driver
+from consts import horizon
 
 
 class TestServerGroup:
@@ -56,3 +57,4 @@ class TestServerGroup:
         assert server_groups_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not server_groups_pg.find_message_and_dismiss(messages.ERROR)
         assert not server_groups_pg.is_server_group_present(self.GROUP_NAME)
+        horizon.test_result = True

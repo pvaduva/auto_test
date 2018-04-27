@@ -3,7 +3,7 @@ from utils.horizon.pages.project.compute import keypairspage
 from pytest import fixture
 from utils.tis_log import LOG
 from testfixtures.horizon import tenant_home_pg, driver
-
+from consts import horizon
 
 class TestKeypair:
 
@@ -51,3 +51,4 @@ class TestKeypair:
         assert keypairs_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not keypairs_pg.find_message_and_dismiss(messages.ERROR)
         assert not keypairs_pg.is_keypair_present(self.KEYPAIR_NAME)
+        horizon.test_result = True

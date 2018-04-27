@@ -1,3 +1,15 @@
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
 import collections
 from selenium.common import exceptions
 from selenium.webdriver.common import by
@@ -65,6 +77,7 @@ class BaseFormFieldRegion(baseregion.BaseRegion):
     def name(self):
         return self.element.get_attribute('name') \
                or self.element.get_attribute('id')
+        # some region in create instance form don't have attribute `name`, use `id` instead
 
     def is_required(self):
         classes = self.driver.get_attribute('class')
@@ -373,6 +386,7 @@ class FormRegion(BaseFormRegion):
             form_fields = {}
             for field in factory.fields():
                 if 'ThemableSelectFormFieldRegion' in str(field):
+                    # ThemableSelectFormFieldRegion is a special SelectFormFieldRegion
                     form_fields[field.name] = field
                 elif not field.name in form_fields:
                     form_fields[field.name] = field

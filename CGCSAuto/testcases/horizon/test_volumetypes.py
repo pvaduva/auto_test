@@ -4,6 +4,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestVolumeTypes:
@@ -74,6 +75,7 @@ class TestVolumeTypes:
         LOG.tc_step('Delete the volume type {} and Check that the volume type is absent in the list'
                     .format(self.VOLUME_TYPE_NAME))
         self._delete_volume_type(volume_types_pg, self.VOLUME_TYPE_NAME)
+        horizon.test_result = True
 
     def _create_qos_spec(self, volume_types_pg, qos_spec_name):
         volume_types_pg.create_qos_spec(qos_spec_name)
@@ -113,6 +115,7 @@ class TestVolumeTypes:
         LOG.tc_step('Delete QoS Spec {} and Verify the QoS Spec does not appear in the table after deletion'
                     .format(self.QOS_SPEC_NAME))
         self._delete_qos_spec(volume_types_pg, self.QOS_SPEC_NAME)
+        horizon.test_result = True
 
     def test_qos_spec_edit_consumer(self, volume_qos_spec_action):
         """
@@ -158,4 +161,5 @@ class TestVolumeTypes:
         assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
         LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
         assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == cinder_consumer
+        horizon.test_result = True
 

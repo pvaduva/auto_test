@@ -3,6 +3,7 @@ from utils.horizon.pages.admin.platform import hostinventorypage
 from pytest import fixture, mark
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 @fixture(scope='function')
@@ -57,5 +58,6 @@ def test_host_lock_unlock(host_inventory_pg, host_name):
 
     LOG.tc_step('Verify the host is available')
     assert host_inventory_pg.is_host_availability_state(host_name, 'Available')
+    horizon.test_result = True
 
 

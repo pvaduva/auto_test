@@ -5,6 +5,7 @@ from pytest import fixture
 from utils.horizon import helper
 from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
+from consts import horizon
 
 
 class TestFlavors:
@@ -66,6 +67,7 @@ class TestFlavors:
         assert flavors_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not flavors_pg.find_message_and_dismiss(messages.ERROR)
         assert not flavors_pg.is_flavor_present(self.FLAVOR_NAME)
+        horizon.test_result = True
 
     def test_flavor_update_info(self, flavors_pg_action):
         """
@@ -101,8 +103,9 @@ class TestFlavors:
         assert not old_vcpus == new_vcpus
 
         self.FLAVOR_NAME = newname
+        horizon.test_result = True
 
-    '''def test_flavor_update_access(self, flavors_pg_action):
+    '''def test_flavor_update_access(self, flavors_pg_action):     JIRA
         """
         Tests the flavor update access functionality:
 
@@ -129,7 +132,9 @@ class TestFlavors:
 
         LOG.tc_step('Update flavor access back to public and verify'.format(projects))
         flavors_pg_action.modify_access(self.FLAVOR_NAME, deallocate_projects=projects)
-        assert flavors_pg_action.get_flavor_info(self.FLAVOR_NAME, "Public") == "Yes"'''
+        assert flavors_pg_action.get_flavor_info(self.FLAVOR_NAME, "Public") == "Yes"
+        horizon.test_result = True
+        '''
 
     def test_create_flavor_with_excessive_vcpu_negative(self, flavors_pg):
         """
@@ -150,4 +155,5 @@ class TestFlavors:
         flavors_pg.create_flavor(self.FLAVOR_NAME, vcpus=129)
         assert not flavors_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not flavors_pg.is_flavor_present(self.FLAVOR_NAME)
+        horizon.test_result = True
 

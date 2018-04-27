@@ -138,11 +138,7 @@ class FlavorsPage(basepage.BasePage):
                 edit_flavor_form.members.deallocate_member(project)
         edit_flavor_form.submit()
 
-    def modify_access(self, name,
-                      allocate_projects=None, deallocate_projects=None,
-                      newname=None, flavor_id=None, vcpus=None, ram=None,
-                      root_disk=None, ephemeral_disk=None,
-                      swap_disk=None, rxtx_factor=None):
+    def modify_access(self, name, allocate_projects=None, deallocate_projects=None):
         row = self._get_row_by_flavor_name(name)
         edit_flavor_form = self.flavors_table.modify_access(row)
         if allocate_projects is not None:
@@ -151,23 +147,6 @@ class FlavorsPage(basepage.BasePage):
         if deallocate_projects is not None:
             for project in deallocate_projects:
                 edit_flavor_form.members.deallocate_member(project)
-        edit_flavor_form.switch_to(self.FLAVOR_INFORMATION_TAB_INDEX)
-        if newname is not None:
-            edit_flavor_form.name.text = name
-        if flavor_id is not None:
-            edit_flavor_form.flavor_id.text = flavor_id
-        if vcpus is not None:
-            edit_flavor_form.vcpus.value = vcpus
-        if ram is not None:
-            edit_flavor_form.memory_mb.value = ram
-        if root_disk is not None:
-            edit_flavor_form.disk_gb.value = root_disk
-        if ephemeral_disk is not None:
-            edit_flavor_form.eph_gb.value = ephemeral_disk
-        if swap_disk is not None:
-            edit_flavor_form.swap_mb.value = swap_disk
-        if rxtx_factor is not None:
-            edit_flavor_form.rxtx_factor = rxtx_factor
         edit_flavor_form.submit()
 
     def delete_flavor_by_row(self, name):

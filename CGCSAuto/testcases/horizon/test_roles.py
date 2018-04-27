@@ -4,6 +4,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestRole:
@@ -60,4 +61,5 @@ class TestRole:
         assert roles_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not roles_pg.find_message_and_dismiss(messages.ERROR)
         assert not roles_pg.is_role_present(self.ROLE_NAME)
+        horizon.test_result = True
 

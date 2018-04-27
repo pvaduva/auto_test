@@ -3,6 +3,7 @@ from utils.horizon.pages.admin.compute import hypervisorspage
 from pytest import fixture, mark
 from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
+from consts import horizon
 
 
 @fixture(scope='function')
@@ -29,3 +30,4 @@ def test_compute_host_disable_service_negative(hypervisors_pg, host_name):
 
     LOG.tc_step('Verify there is error message'.format(host_name))
     assert hypervisors_pg.find_message_and_dismiss(messages.ERROR)
+    horizon.test_result = True

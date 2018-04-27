@@ -4,6 +4,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestGroup:
@@ -67,6 +68,7 @@ class TestGroup:
         assert groups_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not groups_pg.find_message_and_dismiss(messages.ERROR)
         assert not groups_pg.is_group_present(self.GROUP_NAME)
+        horizon.test_result = True
 
     def test_edit_group(self, groups_pg_action):
         """
@@ -97,3 +99,4 @@ class TestGroup:
         assert not groups_pg_action.find_message_and_dismiss(messages.ERROR)
         assert groups_pg_action.is_group_present(new_group_name)
         self.GROUP_NAME = new_group_name
+        horizon.test_result = True

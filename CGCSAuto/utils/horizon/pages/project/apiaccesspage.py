@@ -33,10 +33,6 @@ class ApiAccessTable(tables.TableRegion):
 
 class ApiaccessPage(basepage.BaseNavigationPage):
 
-    def __init__(self, driver, conf):
-        super(ApiaccessPage, self).__init__(driver, conf)
-        self._page_title = "Access & Security"
-
     @property
     def apiaccess_table(self):
         return ApiAccessTable(self.driver, self.conf)

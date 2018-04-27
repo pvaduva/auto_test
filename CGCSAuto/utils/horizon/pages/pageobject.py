@@ -1,11 +1,11 @@
 from utils.horizon import basewebobject
-from consts.horizon import HORIZON_URL
+from consts.proj_vars import ProjVar
 from time import sleep
 
 
 class PageObject(basewebobject.BaseWebObject):
     """Base class for page objects."""
-    BASE_URL = HORIZON_URL
+    BASE_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
     PARTIAL_URL = None
 
     def __init__(self, driver):

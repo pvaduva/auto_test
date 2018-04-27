@@ -4,6 +4,7 @@ from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
 from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
 class TestProjects:
@@ -78,6 +79,7 @@ class TestProjects:
 
         LOG.tc_step('Verify the project does not appear in the table after deletion')
         assert not projects_pg.is_project_present(self.PROJECT_NAME)
+        horizon.test_result = True
 
     def test_add_member(self, projects_pg_action):
         """
@@ -106,4 +108,5 @@ class TestProjects:
         LOG.tc_step('Verify the users are added to the project')
         user_roles = projects_pg_action.get_member_roles_at_project(self.PROJECT_NAME, 'tenant1')
         assert user_roles == {'_member_'}
+        horizon.test_result = True
 

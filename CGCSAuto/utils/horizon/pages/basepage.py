@@ -1,7 +1,6 @@
 from selenium.webdriver.common import by
 from utils.horizon.pages import pageobject
 from utils.horizon.regions import bars
-from utils.horizon.regions import menus
 from utils.horizon.regions import messages
 
 
