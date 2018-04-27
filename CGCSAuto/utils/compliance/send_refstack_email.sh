@@ -2,12 +2,16 @@
 
 email=$1
 test_list=$2
+release_version=$3
+build_id=$4
 TODAY=`date +%d%b%Y`
 START=`date +%Y-%m-%d_%H%M%S`
 OUT=/tmp/refstack_result_$START.txt
 SUB="Refstack test result for test list - $test_list"
 echo -e "\nTest date: " $TODAY > $OUT
 echo -e "\nRefstack test list: " $test_list >> $OUT
+echo -e "\nSystem Software Version: " $release_version >> $OUT
+echo -e "\nSystem Load: " $build_id >> $OUT
 
 cd /sandbox/AUTOMATION_LOGS/refstack
 
