@@ -49,16 +49,16 @@ def restore_partitions_teardown(request):
         global partitions_to_restore
 
         for host in partitions_to_restore:
-            device_node, size_mib, uuid = partitions_to_restore[host][0:3]
-            available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
-            total_free = int(available_mib) - int(size_mib)
+            device_node, size_gib, uuid = partitions_to_restore[host][0:3]
+            available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
+            total_free = float(available_gib) - int(size_gib)
             LOG.info("Restoring deleted partition on host {} with device_node {} and size {}".format(
-                    host, device_node, size_mib))
-            rc, out = partition_helper.create_partition(host, device_node, size_mib)
+                    host, device_node, size_gib))
+            rc, out = partition_helper.create_partition(host, device_node, int(size_gib))
             assert rc == 0, "Partition creation failed"
-            mib_after_create = partition_helper.get_disk_info(host, device_node, "available_mib")
-            assert int(mib_after_create) == total_free, \
-                "Expected available_mib to be {} after creation but instead was {}".format(total_free, mib_after_create)
+            gib_after_create = partition_helper.get_disk_info(host, device_node, "available_gib")
+            assert float(gib_after_create) == total_free, \
+                "Expected available_gib to be {} after creation but instead was {}".format(total_free, gib_after_create)
 
     request.addfinalizer(teardown)
 
@@ -79,16 +79,16 @@ def delete_partitions_teardown(request):
                 device_node = device_node.rstrip(string.digits)
                 if device_node.startswith("/dev/nvme"):
                     device_node = device_node[:-1]
-                partition_mib = partition_helper.get_partition_info(host, uuid, "size_mib")
-                available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
-                total_free = int(available_mib) + int(partition_mib)
+                partition_gib = partition_helper.get_partition_info(host, uuid, "size_gib")
+                available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
+                total_free = float(available_gib) + float(partition_gib)
                 LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
                 rc, out = partition_helper.delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
-                mib_after_del = partition_helper.get_disk_info(host, device_node, "available_mib")
-                assert int(mib_after_del) == total_free, \
-                    "Expected available_mib to be {} after deletion but instead was {}".format(
-                            total_free, mib_after_del)
+                gib_after_del = partition_helper.get_disk_info(host, device_node, "available_gib")
+                assert float(gib_after_del) == total_free, \
+                    "Expected available_gib to be {} after deletion but instead was {}".format(
+                            total_free, gib_after_del)
 
     request.addfinalizer(teardown)
 
@@ -121,14 +121,14 @@ def test_delete_host_partitions():
             continue
 
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
-            partition_chunks = size_mib / 1024
+            size_gib = float(free_disks[disk_uuid])
+            partition_chunks = int(size_gib)
             if partition_chunks < 2:
                 LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
@@ -176,14 +176,14 @@ def test_increase_host_partition_size():
             continue
 
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
-            partition_chunks = size_mib / 1024
+            size_gib = float(free_disks[disk_uuid])
+            partition_chunks = int(size_gib)
             if partition_chunks < 2:
                 LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
@@ -195,12 +195,12 @@ def test_increase_host_partition_size():
             device_node = device_node.rstrip(string.digits)
             if device_node.startswith("/dev/nvme"):
                 device_node = device_node[:-1]
-            LOG.tc_step("Modifying partition {} from size 1024 to size {} from host {} on device node {}".format(
-                    uuid, size_mib, host, device_node))
-            partition_helper.modify_partition(host, uuid, str(size_mib))
-            new_disk_available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
-            assert new_disk_available_mib == "0", \
-                "Expected disk space to be consumed but instead we have {} available".format(new_disk_available_mib)
+            LOG.tc_step("Modifying partition {} from size 1 to size {} from host {} on device node {}".format(
+                    uuid, int(size_gib), host, device_node))
+            partition_helper.modify_partition(host, uuid, str(int(size_gib)))
+            new_disk_available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
+            assert int(float(new_disk_available_gib)) == 0, \
+                "Expected disk space to be consumed but instead we have {} available".format(new_disk_available_gib)
             # Only test one disk on each host
             break
 
@@ -246,16 +246,16 @@ def test_create_multiple_partitions_on_single_host():
             continue
 
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
-            partition_chunks = size_mib / 1024
+            size_gib = float(free_disks[disk_uuid])
+            partition_chunks = int(size_gib)
             if partition_chunks < 2:
                 LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
             usable_disks = True
             LOG.info("Creating first partition on {}".format(host))
-            rc1, out1 = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            rc1, out1 = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             LOG.info("Creating second partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=True)
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=True)
             assert rc != 0, "Partition creation was expected to fail but was instead successful"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out1), "uuid")
@@ -301,17 +301,17 @@ def test_create_many_small_host_partitions_on_a_single_host():
         if not free_disks:
             continue
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
+            size_gib = float(free_disks[disk_uuid])
             num_partitions = 5
-            if size_mib <= num_partitions:
+            if size_gib <= num_partitions:
                 LOG.info("Skipping disk {} due to insufficient space".format(disk_uuid))
                 continue
-            partition_chunks = size_mib / num_partitions
+            partition_chunks = int(size_gib / num_partitions)
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
             # partitions_to_restore[host] = []
             for i in range(0, num_partitions):
-                uuid = partition_helper.create_partition(host, disk_uuid, int(partition_chunks))[1]
+                uuid = partition_helper.create_partition(host, disk_uuid, partition_chunks)[1]
                 partitions_to_restore[host].append(uuid)
             # Only test one disk on each host
             break
@@ -363,14 +363,14 @@ def _test_create_partition_and_associate_with_pv_nova_local():
         if not free_disks:
             continue
         for uuid in free_disks:
-            size_mib = int(free_disks[uuid])
-            if size_mib <= 1024:
+            size_gib = float(free_disks[uuid])
+            if size_gib <= 1:
                 LOG.tc_step("Skip this disk due to insufficient space")
                 continue
             usable_disks = True
             host_helper.lock_host(host)
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, uuid, "1024")
+            rc, out = partition_helper.create_partition(host, uuid, "1")
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
@@ -439,12 +439,12 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
         if not free_disks:
             continue
         for uuid in free_disks:
-            size_mib = int(free_disks[uuid])
-            if size_mib <= 1024:
+            size_gib = float(free_disks[uuid])
+            if size_gib <= 1:
                 LOG.tc_step("Skip this disk due to insufficient space")
                 continue
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, uuid, "1024")
+            rc, out = partition_helper.create_partition(host, uuid, "1")
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
@@ -543,8 +543,8 @@ def test_attempt_host_unlock_during_partition_creation():
             continue
 
         for uuid in free_disks:
-            size_mib = int(free_disks[uuid])
-            if size_mib == 0:
+            size_gib = float(free_disks[uuid])
+            if size_gib == 0.0:
                 LOG.info("Skip this disk due to insufficient space")
                 continue
 
@@ -553,7 +553,7 @@ def test_attempt_host_unlock_during_partition_creation():
             host_helper.lock_host(host)
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, uuid, size_mib, wait=False)
+            rc, out = partition_helper.create_partition(host, uuid, int(size_gib), wait=False)
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
@@ -630,14 +630,14 @@ def test_decrease_host_partition_size():
             continue
 
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
-            partition_chunks = size_mib / 1024
+            size_gib = float(free_disks[disk_uuid])
+            partition_chunks = int(size_gib)
             if partition_chunks < 2:
                 LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
@@ -646,10 +646,10 @@ def test_decrease_host_partition_size():
             partitions_to_restore[host].append(uuid)
 
             device_node = partition_helper.get_partition_info(host, uuid, "device_node")
-            size_mib = partition_helper.get_partition_info(host, uuid, "size_mib")
-            total_size = int(size_mib) - 1
+            size_gib = partition_helper.get_partition_info(host, uuid, "size_gib")
+            total_size = int(size_gib) - 1
             LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(
-                        uuid, size_mib, str(total_size), host, device_node[:-1]))
+                        uuid, int(size_gib), str(total_size), host, device_node[:-1]))
             rc, out = partition_helper.modify_partition(host, uuid, str(total_size), fail_ok=True)
             assert rc != 0, "Expected partition modification to fail and instead it succeeded"
             # Only test one disk on each host
@@ -691,14 +691,14 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
             continue
 
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
-            partition_chunks = size_mib / 1024
+            size_gib = float(free_disks[disk_uuid])
+            partition_chunks = int(size_gib)
             if partition_chunks < 2:
                 LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
@@ -710,10 +710,10 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
             device_node = device_node.rstrip(string.digits)
             if device_node.startswith("/dev/nvme"):
                 device_node = device_node[:-1]
-            size_mib += 1
-            LOG.tc_step("Modifying partition {} from size 1024 to size {} from host {} on device node {}".format(
-                    uuid, size_mib, host, device_node))
-            rc, out = partition_helper.modify_partition(host, uuid, str(size_mib), fail_ok=True)
+            size_gib += 1
+            LOG.tc_step("Modifying partition {} from size 1 to size {} from host {} on device node {}".format(
+                    uuid, int(size_gib), host, device_node))
+            rc, out = partition_helper.modify_partition(host, uuid, str(int(size_gib)), fail_ok=True)
             assert rc != 0, "Expected partition modification to fail and instead it succeeded"
             # Only test one disk on each host
             break
@@ -763,7 +763,7 @@ def test_create_partition_using_valid_uuid_of_another_host():
 
     for uuid in free_disks:
         LOG.info("Creating partition on {} using disk from {}".format(sut, donor))
-        rc, out = partition_helper.create_partition(sut, uuid, free_disks[uuid], fail_ok=True)
+        rc, out = partition_helper.create_partition(sut, uuid, int(free_disks[uuid]), fail_ok=True)
         assert rc != 0, "Partition creation should be rejected but instead it was successful"
         # Break since we only need to do this once
         break
@@ -801,9 +801,9 @@ def test_modify_second_last_partition():
 
         partitions_to_restore[host] = []
         for disk_uuid in free_disks:
-            size_mib = int(free_disks[disk_uuid])
-            partition_size = "1024"
-            partition_chunks = size_mib / int(partition_size)
+            size_gib = float(free_disks[disk_uuid])
+            partition_size = "1"
+            partition_chunks = size_gib / int(partition_size)
             if partition_chunks < 3:
                 LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
                 continue
@@ -841,15 +841,15 @@ def test_create_partition_using_non_existent_device_node():
     # Safely hard-coded since we don't have enough physical slots for this to be
     # possible
     device_node = "/dev/sdz"
-    size_mib = "1"
+    size_gib = "1"
 
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     for host in hosts:
-        LOG.tc_step("Creating partition on host {} with size {} using device node {}".format(host, size_mib,
+        LOG.tc_step("Creating partition on host {} with size {} using device node {}".format(host, size_gib,
                                                                                              device_node))
-        rc, out = partition_helper.create_partition(host, device_node, size_mib, fail_ok=True)
+        rc, out = partition_helper.create_partition(host, device_node, size_gib, fail_ok=True)
         assert rc != 0, "Partition creation was successful"
 
 
@@ -880,7 +880,7 @@ def test_create_host_partition_on_storage():
         if not free_disks:
             continue
         for uuid in free_disks:
-            rc, out = partition_helper.create_partition(host, uuid, free_disks[uuid], fail_ok=True)
+            rc, out = partition_helper.create_partition(host, uuid, int(free_disks[uuid]), fail_ok=True)
             assert rc != 0, "Partition creation was successful"
 
 

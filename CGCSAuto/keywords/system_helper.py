@@ -2944,8 +2944,8 @@ def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None, ntype=None, 
 
 
 def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num=None,
-                    device_type=None, size_mib=None, 
-                    available_mib=None, rpm=None, serial_id=None, 
+                    device_type=None, size_gib=None,
+                    available_gib=None, rpm=None, serial_id=None,
                     device_path=None, auth_info=Tenant.ADMIN,
                     con_ssh=None, strict=True, regex=None,
                     **kwargs):
@@ -2958,8 +2958,8 @@ def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num
         device_node:
         device_num:
         device_type:
-        size_mib:
-        available_mib:
+        size_gib:
+        available_gib:
         rpm:
         serial_id:
         device_path:
@@ -2980,8 +2980,8 @@ def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num
         'device_node': device_node,
         'device_num': device_num,
         'device_type': device_type,
-        'size_mib': size_mib,
-        'available_mib': available_mib,
+        'size_gib': size_gib,
+        'available_gib': available_gib,
         'rpm': rpm,
         'serial_id': serial_id,
         'device_path': device_path

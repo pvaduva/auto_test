@@ -39,29 +39,29 @@ def ceph_post_install_info():
     controller0_disks = local_storage_helper.get_host_disks_values(controller0, rtn_val='device_node')
     controller1_disks = local_storage_helper.get_host_disks_values(controller1, rtn_val='device_node')
 
-    rootfs = host_helper.get_hostshow_value(controller0,"rootfs_device")
-    if '/dev/disk/by-path'  in rootfs:
+    rootfs = host_helper.get_hostshow_value(controller0, "rootfs_device")
+    if '/dev/disk/by-path' in rootfs:
         rootfs = local_storage_helper.get_host_disks_values(controller0, rtn_val='device_node', device_path=rootfs)[0]
     elif '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
 
-    size =  local_storage_helper.get_host_disk_size(controller0, disk=rootfs)
-    controller0_rootfs = [rootfs, int(size/1024)]
+    size = local_storage_helper.get_host_disk_size(controller0, disk=rootfs)
+    controller0_rootfs = [rootfs, int(size)]
 
-    rootfs = host_helper.get_hostshow_value(controller1,"rootfs_device")
-    if '/dev/disk/by-path'  in rootfs:
+    rootfs = host_helper.get_hostshow_value(controller1, "rootfs_device")
+    if '/dev/disk/by-path' in rootfs:
         rootfs = local_storage_helper.get_host_disks_values(controller1, rtn_val='device_node', device_path=rootfs)[0]
     elif '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
 
     size = local_storage_helper.get_host_disk_size(controller1, disk=rootfs)
 
-    controller1_rootfs = [rootfs, int(size/1024)]
+    controller1_rootfs = [rootfs, int(size)]
 
-    assert controller0_rootfs[0] in  controller0_disks, "Incorrect  controller-0 disk information: {}; rootfs: {} "\
+    assert controller0_rootfs[0] in controller0_disks, "Incorrect  controller-0 disk information: {}; rootfs: {} "\
         .format(controller0_disks, controller0_rootfs)
-    assert controller1_rootfs[0] in  controller1_disks, "Incorrect standby controller-1 disk information: {}; " \
-                                                        "rootfs: {} "\
+    assert controller1_rootfs[0] in controller1_disks, "Incorrect standby controller-1 disk information: {}; " \
+                                                       "rootfs: {} "\
         .format(controller1_disks, controller1_rootfs)
 
     backend_info = storage_helper.get_storage_backend_info('lvm')
@@ -81,13 +81,13 @@ def ceph_post_install_info():
         if len(common_ceph_mon_dev) > 0:
             size_0 = local_storage_helper.get_host_disk_size(controller0, disk=common_ceph_mon_dev[0])
             size_1 = local_storage_helper.get_host_disk_size(controller1, disk=common_ceph_mon_dev[0])
-            controller0_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_0/1024)]
-            controller1_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_1/1024)]
+            controller0_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_0)]
+            controller1_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_1)]
         else:
             size_0 = local_storage_helper.get_host_disk_size(controller0, disk=controller0_spare_devices[0])
             size_1 = local_storage_helper.get_host_disk_size(controller1, disk=controller1_spare_devices[0])
-            controller0_ceph_mon_dev = [controller0_spare_devices[0], int(size_0/1024)]
-            controller1_ceph_mon_dev = [controller1_spare_devices[0], int(size_1/1024)]
+            controller0_ceph_mon_dev = [controller0_spare_devices[0], int(size_0)]
+            controller1_ceph_mon_dev = [controller1_spare_devices[0], int(size_1)]
 
     ceph_mon_gib = InstallVars.get_install_var('CEPH_MON_GIB')
     if not ceph_mon_gib:

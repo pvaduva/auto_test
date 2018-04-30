@@ -61,14 +61,14 @@ def delete_partition(host, uuid, fail_ok=False, timeout=DP_TIMEOUT):
     return 0, "Partition successfully deleted"
 
 
-def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, timeout=CP_TIMEOUT):
+def create_partition(host, device_node, size_gib, fail_ok=False, wait=True, timeout=CP_TIMEOUT):
     """
     Create a partition on host.
 
     Arguments:
     * host(str) - hostname, e.g. controller-0
     * device_node(str) - device, e.g. /dev/sdh
-    * size_mib(str) - size of partition in mib
+    * size_gib(str) - size of partition in gib
     * wait(bool) - if True, wait for partition creation.  False, return
     * immediately.
     * timeout(int) - how long to wait for partition creation (sec)
@@ -76,7 +76,7 @@ def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, time
     Returns:
     * rc, out - return code and output of the host-disk-partition-command
     """
-    args = '{} {} {}'.format(host, device_node, size_mib)
+    args = '{} {} {}'.format(host, device_node, size_gib)
     rc, out = cli.system('host-disk-partition-add', args, rtn_list=True, fail_ok=fail_ok)
     if rc > 0 or not wait:
         return rc, out
@@ -86,21 +86,21 @@ def create_partition(host, device_node, size_mib, fail_ok=False, wait=True, time
     return 0, uuid
 
 
-def modify_partition(host, uuid, size_mib, fail_ok=False, timeout=MP_TIMEOUT):
+def modify_partition(host, uuid, size_gib, fail_ok=False, timeout=MP_TIMEOUT):
     """
     This test modifies the size of a partition.
 
     Arguments:
     * host(str) - hostname, e.g. controller-0
     * uuid(str) - uuid of the partition
-    * size_mib(str) - new partition size in mib
+    * size_gib(str) - new partition size in gib
     * timeout(int) - how long to wait for partition creation (sec)
 
     Returns:
     * rc, out - return code and output of the host-disk-partition-command
     """
 
-    args = '-s {} {} {}'.format(size_mib, host, uuid)
+    args = '-s {} {} {}'.format(size_gib, host, uuid)
     rc, out = cli.system('host-disk-partition-modify', args, rtn_list=True, fail_ok=fail_ok)
     if rc > 0:
         return 1, out
@@ -117,7 +117,7 @@ def get_partition_info(host, uuid, param=None):
     Arguments:
     * host(str) - hostname, e.g. controller-0
     * uuid(str) - uuid of partition
-    * param(str) - the parameter wanted, e.g. size_mib
+    * param(str) - the parameter wanted, e.g. size_gib
 
     Returns:
     * param_value(str) - the value of the desired parameter
@@ -128,8 +128,18 @@ def get_partition_info(host, uuid, param=None):
     rc, out = cli.system('host-disk-partition-show', args, fail_ok=True, rtn_list=True)
 
     if rc == 0:
+        convert_to_gib = False
+        if param == 'size_gib':
+            param = 'size_mib'
+            convert_to_gib = True
+
         table_ = table_parser.table(out)
         param_value = table_parser.get_value_two_col_table(table_, param)
+        if '_mib' in param:
+            param_value = float(param_value)
+
+        if convert_to_gib:
+            param_value = float(param_value) / 1024
 
     return param_value
 
@@ -174,7 +184,7 @@ def get_disk_info(host, device_node, param=None):
     Arguments:
     * host(str) - hostname, e.g. controller-0
     * device_node(str) - name of device, e.g. /dev/sda
-    * param(str) - desired parameter, e.g. available_mib
+    * param(str) - desired parameter, e.g. available_gib
 
     Returns:
     * param_value - value of parameter requested
@@ -224,9 +234,10 @@ def get_disks_with_free_space(host, disk_list):
     for disk in disk_list:
         LOG.info("Querying disk {} on host {}".format(disk, host))
         table_ = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk)))
-        available_space = table_parser.get_value_two_col_table(table_, "available_mib")
-        LOG.info("{} has disk {} with {} available".format(host, disk, available_space))
-        if int(available_space) <= 0:
+        available_space = table_parser.get_value_two_col_table(table_, "available_gib")
+        available_space = float(available_space)
+        LOG.info("{} has disk {} with {} gib available".format(host, disk, available_space))
+        if available_space <= 0:
             LOG.info("Removing disk {} from host {} due to insufficient space".format(disk, host))
         else:
             free_disks[disk] = available_space

@@ -452,18 +452,18 @@ def _test_increase_cinder():
 
     table_ = table_parser.table(cli.system("host-disk-list controller-0 --nowrap"))
     cont0_dev_node = table_parser.get_values(table_, "device_node", **{"device_path": cont0_devpath})
-    cont0_total_mib = table_parser.get_values(table_, "size_mib", **{"device_path": cont0_devpath})
-    cont0_avail_mib = table_parser.get_values(table_, "available_mib", **{"device_path": cont0_devpath})
+    cont0_total_gib = table_parser.get_values(table_, "size_gib", **{"device_path": cont0_devpath})
+    cont0_avail_gib = table_parser.get_values(table_, "available_gib", **{"device_path": cont0_devpath})
 
-    if cont0_total_mib[0] == cont0_avail_mib[0]:
+    if cont0_total_gib[0] == cont0_avail_gib[0]:
         skip("Insufficient disk space to execute test")
 
     LOG.info("The cinder device node for controller-0 is: {}".format(cont0_dev_node))
-    LOG.info("Total disk space in MiB is: {}".format(cont0_total_mib[0]))
-    LOG.info("Available free space in MiB is: {}".format(cont0_avail_mib[0]))
+    LOG.info("Total disk space in MiB is: {}".format(cont0_total_gib[0]))
+    LOG.info("Available free space in MiB is: {}".format(cont0_avail_gib[0]))
 
-    cont0_total_gib = math.trunc(int(cont0_total_mib[0]) / 1024)
-    cont0_avail_gib = math.trunc(int(cont0_avail_mib[0]) / 1024)
+    cont0_total_gib = math.trunc(int(cont0_total_gib[0]))
+    cont0_avail_gib = math.trunc(int(cont0_avail_gib[0]))
     LOG.info("Total disk space in GiB is: {}".format(cont0_total_gib))
     LOG.info("Available free space in GiB is: {}".format(cont0_avail_gib))
 

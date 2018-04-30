@@ -76,28 +76,30 @@ def get_host_disk_sizes(host=None, con_ssh=None):
 
     table = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), ssh_client=con_ssh))
     index_device_node = table['headers'].index('device_node')
-    index_size_mib = table['headers'].index('size_mib')
+    index_size_gib = table['headers'].index('size_gib')
 
     disk_sizes = {}
     for row in table['values']:
-        disk_sizes[row[index_device_node].strip()] = int(row[index_size_mib].strip())
+        disk_sizes[row[index_device_node].strip()] = float(row[index_size_gib].strip())
 
     return disk_sizes
 
 
-def get_host_disks_values(host, rtn_val='size_mib', dev_type=None, serial_id=None, dev_num=None, dev_node=None,
-                          size_mib=None, device_path=None,  strict=True, con_ssh=None):
+def get_host_disks_values(host, rtn_val='size_gib', dev_type=None, serial_id=None, dev_num=None, dev_node=None,
+                          size_gib=None, device_path=None, strict=True, con_ssh=None):
     assert host
     filters = {'device_node': dev_node,
                'device_num': dev_num,
                'device_type': dev_type,
-               'size_mib': size_mib,
+               'size_gib': size_gib,
                'serial_id': serial_id,
                'device_path': device_path
                }
     table_ = table_parser.table(cli.system('host-disk-list', '{} --nowrap'.format(host), ssh_client=con_ssh))
     vals = table_parser.get_values(table_, rtn_val, strict=strict, **filters)
-    if rtn_val in ['size_mib', 'dev_num']:
+    if rtn_val == 'size_gib':
+        vals = [float(val) for val in vals]
+    elif rtn_val == 'device_num':
         vals = [int(val) for val in vals]
 
     LOG.info("{} disk {} filtered: {}".format(host, rtn_val, vals))
@@ -109,11 +111,11 @@ def get_host_disk_size(host=None, disk=None, con_ssh=None):
         return 0
 
     table = table_parser.table(cli.system('host-disk-show {} {}'.format(host, disk), ssh_client=con_ssh))
-    size_mib = table_parser.get_value_two_col_table(table, 'size_mib')
-    if not size_mib:
+    size_gib = table_parser.get_value_two_col_table(table, 'size_gib')
+    if not size_gib:
         return 0
 
-    return int(size_mib)
+    return float(size_gib)
 
 
 def get_host_lvg_disk_size(host=None, lvg_name='nova-local', con_ssh=None):

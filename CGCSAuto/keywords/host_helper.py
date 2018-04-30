@@ -1983,7 +1983,7 @@ def get_expected_vswitch_port_engine_map(host_ssh):
     return expt_map
 
 
-def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
+def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False):
     """
     Get values for given fields in system host-lvg-show table
     Args:
@@ -1991,6 +1991,7 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
         fields (str|list|tuple):
         lvg (str): e.g., nova-local (compute nodes), cgts-vg (controller/storage nodes)
         con_ssh (SSHClient):
+        strict (bool)
 
     Returns:
 
@@ -2004,7 +2005,7 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
 
     vals = []
     for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field, merge_lines=True)
+        val = table_parser.get_value_two_col_table(table_, field, merge_lines=True, strict=strict)
         if field in fields_to_convert:
             val = eval(val)
         vals.append(val)
@@ -2054,7 +2055,8 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
         elif 'lvm' in inst_backing:
             inst_backing = 'lvm'
             if inst_lv_size is None and lvg == 'nova-local':
-                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh)[0]
+                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+                                                       strict=False)[0]
                 inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
                 if inst_lv_size < 5120:        # cannot be smaller than 5g
                     inst_lv_size = None
