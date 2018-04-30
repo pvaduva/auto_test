@@ -59,9 +59,8 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.tc_step('Changing admin password to {}'.format(post_pswd))
-    code, output = keystone_helper.update_user('admin', password=post_pswd)
+    keystone_helper.update_user('admin', password=post_pswd)
 
-    assert "Warning: 'admin' password changed. Please wait 5 minutes before Locking/Unlocking the controllers" in output
     LOG.tc_step("Sleep for 120 seconds after admin password change")
     time.sleep(120)  # CGTS-6928
 
