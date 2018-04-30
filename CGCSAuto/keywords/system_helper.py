@@ -2,13 +2,14 @@ import math
 import re
 import time
 
-from consts.auth import Tenant, HostLinuxCreds
+from consts.auth import Tenant, HostLinuxCreds, CliAuth
 from consts.cgcs import UUID, Prompt, Networks, SysType
 from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.ssh import ControllerClient
 from utils.tis_log import LOG
+from keywords import keystone_helper
 
 
 class System:
@@ -1021,7 +1022,7 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     if not kwargs:
         raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
 
-    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
+    attr_values_ = ['--{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
     code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
@@ -2768,6 +2769,51 @@ def disable_murano(con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
         return 1, output
 
     msg = "Enabled Murano Service"
+
+    return 0, msg
+
+
+def modify_https(enable_https=True, check_first=True, timeout=400, check_interval=20, con_ssh=None,
+                 auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Modify the state of the lab from HTTP/HTTPS through 'system modify https_enable=<bool>'
+    
+    Args:
+        enable_https (bool): True/False to enable https or not
+        check_first (bool): if user want to check if the lab is already in the state that user try to enable
+        timeout (int): seconds before CLI timeout
+        check_interval (int): seconds between each interval check
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool):
+
+    Returns:
+
+    """
+
+    if check_first:
+        lab_state = keystone_helper.is_https_lab()
+        if lab_state and enable_https:
+            return -1, "lab is already in https state"
+        elif not lab_state and not enable_https:
+            return -1, "lab is already in http state"
+
+    res, output = set_system_info(fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
+                                  https_enabled='{}'.format(str(enable_https).lower()))
+
+    if res == 1:
+        return 1, output
+
+    wait_for_alarm_gone("250.001", con_ssh=con_ssh, timeout=timeout, check_interval=check_interval, fail_ok=False)
+
+    if enable_https:
+        CliAuth.set_vars(HTTPS=True)
+        msg = "Enabled HTTPS on lab"
+        LOG.info('TODO: install certificate for https. There will be a warning msg if self-signed certificate is used')
+    else:
+        CliAuth.set_vars(HTTPS=False)
+        msg = "Enabled HTTP on lab"
+
 
     return 0, msg
 
