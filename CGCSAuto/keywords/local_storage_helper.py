@@ -16,7 +16,7 @@ def get_storprof_diskconfig(profile=None, con_ssh=None):
     disk_sizes = {}
     for disk_size in table_parser.get_value_two_col_table(table, 'diskconfig', strict=True, regex=False).split(';'):
         d, s = disk_size.split(': ')
-        disk_sizes[d.strip()] = int(s.strip())
+        disk_sizes[d.strip()] = float(s.split('GiB')[0].strip())
 
     return disk_sizes
 
