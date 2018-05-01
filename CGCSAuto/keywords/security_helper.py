@@ -7,10 +7,11 @@ from string import ascii_lowercase, ascii_uppercase, digits
 
 from pexpect import EOF
 from consts.cgcs import Prompt
-from consts.auth import Tenant, HostLinuxCreds
+from consts.auth import Tenant, HostLinuxCreds, CliAuth
 from utils.ssh import ControllerClient, SSHClient, SSHFromSSH
-
 from utils.tis_log import LOG
+
+from keywords import system_helper, keystone_helper
 
 MIN_LINUX_PASSWORD_LEN = 7
 SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
@@ -961,3 +962,48 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
         assert False, 'Unknown password rule:{}'.format(invalid_type)
 
     return ''.join(invalid_password)
+
+
+def modify_https(enable_https=True, check_first=True, timeout=400, check_interval=20, con_ssh=None,
+                 auth_info=Tenant.ADMIN, fail_ok=False):
+    """
+    Modify the state of the lab from HTTP/HTTPS through 'system modify https_enable=<bool>'
+
+    Args:
+        enable_https (bool): True/False to enable https or not
+        check_first (bool): if user want to check if the lab is already in the state that user try to enable
+        timeout (int): seconds before CLI timeout
+        check_interval (int): seconds between each interval check
+        con_ssh (SSHClient):
+        auth_info (dict):
+        fail_ok (bool):
+
+    Returns:
+
+    """
+
+    if check_first:
+        lab_state = keystone_helper.is_https_lab()
+        if lab_state and enable_https:
+            return -1, "lab is already in https state"
+        elif not lab_state and not enable_https:
+            return -1, "lab is already in http state"
+
+    res, output = system_helper.set_system_info(fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
+                                  https_enabled='{}'.format(str(enable_https).lower()))
+
+    if res == 1:
+        return 1, output
+
+    system_helper.wait_for_alarm_gone("250.001", con_ssh=con_ssh, timeout=timeout, check_interval=check_interval,
+                                      fail_ok=False)
+
+    if enable_https:
+        CliAuth.set_vars(HTTPS=True)
+        msg = "Enabled HTTPS on lab"
+        LOG.info('TODO: install certificate for https. There will be a warning msg if self-signed certificate is used')
+    else:
+        CliAuth.set_vars(HTTPS=False)
+        msg = "Enabled HTTP on lab"
+
+    return 0, msg

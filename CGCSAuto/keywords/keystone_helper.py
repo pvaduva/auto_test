@@ -5,7 +5,6 @@ from utils.tis_log import LOG
 from utils.ssh import ControllerClient
 
 from consts.auth import Tenant
-from keywords import common
 
 
 def get_role_ids(role_name, con_ssh=None):
@@ -258,7 +257,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
 
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
-    return 0, msg
+    return 0, output
 
 
 def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
