@@ -342,11 +342,15 @@ def get_system_health_query_upgrade_2(con_ssh=None):
                 failed[k.strip()] = v.strip()
             elif "Hosts missing placement configuration" in k:
                 failed[k.strip()] = v.strip()
+            elif "Incomplete configuration" in k:
+                failed[k.strip()] = v.strip()
+
 
         elif "Missing manifests" in line:
             failed[line] = line
         elif "alarms found" in line:
-            failed["managment affecting"] = int(line.split(',')[1].strip()[1])
+            if len (line.split(',')) > 1:
+                failed["managment affecting"] = int(line.split(',')[1].strip()[1])
 
 
     if len(failed) == 0:
@@ -369,7 +373,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
                 LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
                 actions["force_upgrade"] = [True, "Minor alarms present"]
 
-        elif "managment affecting"  in k:
+        elif "managment affecting" in k:
             if v == 0:
                 # non management affecting alarm present  use  foce upgrade
                 LOG.warn("System health query upgrade found non managment affecting alarms: {}"
@@ -378,7 +382,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
 
             else:
                 # major/critical alarm present,  management affecting
-                LOG.error("System health query upgrade found major or critical alarms: {}".format(alarm_severity_list))
+                LOG.error("System health query upgrade found major or critical alarms.")
                 return 1, failed, None
 
 
@@ -394,7 +398,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
 
             actions["lock_unlock"][1] += "Missing manifests;"
 
-        elif "Cinder configuration" in k:
+        elif any(s in k for s in ("Cinder configuration", "Incomplete configuration")):
             cinder_config = True
             actions["swact"][0] = True
             actions["swact"][1] += "Invalid Cinder configuration;"

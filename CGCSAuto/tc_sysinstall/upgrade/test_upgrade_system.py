@@ -38,6 +38,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
             if 'controller-0' in controller_nodes:
                 rc, output = upgrade_helper.upgrade_host_lock_unlock('controller-0')
                 assert rc == 0, "Failed to lock/unlock host {}: {}".format('controller-0', output)
+                time.sleep(60)
                 #system_upgrade_health[2]["swact"][0] = False
         if system_upgrade_health[2]["swact"][0]:
             LOG.info("Swact Required: {}".format(system_upgrade_health[2]["swact"][1]))
