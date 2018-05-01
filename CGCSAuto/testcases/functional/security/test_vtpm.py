@@ -1,11 +1,13 @@
 
 import re
 
-# from collections import OrderedDict
+from collections import defaultdict
 
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
+from consts.cgcs import VMStatus
+from consts.timeout import VMTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
 core_flavor_name = 'flavor_vtpm'
@@ -13,8 +15,9 @@ vtpm_base_dir = '/etc/nova/instances/{vm_id}/vtpm-{instance_name}/state'
 vtpm_file_name = 'tpm2-00.permall'
 vtpm_device = '/dev/tpm0'
 
-g_flavors = {}
-g_vms = {'vtpm': None, 'autorc': None, 'non_autorc': None}
+g_reusable = 0
+g_flavors = defaultdict(str)
+g_vms = defaultdict(dict)
 
 
 @fixture(scope='session', autouse=True)
@@ -22,17 +25,17 @@ def prepare_vms(request):
     global g_flavors, g_vms
 
     LOG.info('Prepare VMs for vTPM test')
+    g_vms.update(vtpm=None, autorc=None, non_autorc=None)
 
     def clean_up():
         LOG.info('Clean up: delete VMs, volumes, flavors and etc.')
 
         for vm_type in g_vms:
-            if 'id' in g_vms[vm_type]:
+            if g_vms[vm_type] and 'id' in g_vms[vm_type]:
                 vm_id = g_vms[vm_type]['id']
                 if vm_id:
-                    LOG.info('Deleting vm:{}'.format(vm_id))
                     vm_helper.delete_vms(vm_id)
-        nova_helper.delete_flavors(g_flavors.key())
+        nova_helper.delete_flavors(g_flavors.values())
 
     request.addfinalizer(clean_up)
 
@@ -120,12 +123,12 @@ def check_capabilities(ssh_con, after_operation=''):
 
 
 def vm_op_policy(vm_feature, vm_op, mem_type):
-    LOG.info('Check the values after operation:{}, vm features:{}'.format(vm_op, vm_feature))
+    LOG.info('Check the values after operation:{}, vm features:{}, mem_type:{}'.format(vm_op, vm_feature, mem_type))
 
-    no_keep = {
+    to_be_lost = {
         ('cold-migration', 'transient'),
         ('stop_start', 'transient'),
-        ('suspend_resume', 'transient'),
+        ('evacuate', 'transient'),
         ('resize_to_autorc', 'transient'),
         ('resize_to_non_autorc', 'transient'),
         ('resize_to_non_vtpm', 'non_volatile'),
@@ -133,8 +136,15 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('resize_to_non_vtpm', 'persistent'),
         ('soft_reboot', 'transient'),
         ('hard_reboot', 'transient'),
+        ('reboot_host', 'transient', 'vtpm'),
+        ('reboot_host', 'transient', 'autorc'),
+        ('reboot_host', 'transient', 'non_autorc'),
     }
-    if (vm_op, mem_type) in no_keep:
+
+    if (vm_op, mem_type, vm_feature) in to_be_lost:
+        return False
+
+    elif (vm_op, mem_type) in to_be_lost:
         return False
 
     return True
@@ -333,16 +343,34 @@ def create_nv_values(ssh_con, size=32, in_file=None):
 
 def check_nv_values(ssh_con, handle, size=32, expecting=True, fail_ok=False):
     LOG.info('check if nv content exists')
-    rc, output = run_cmd(ssh_con, 'nvread -ha {} -sz {}'.format(handle, size), output_handle=False, fail_ok=fail_ok)
-    if rc == 0:
-        assert expecting is True, 'Not-expecting but find the non_volatile contents for handle:' + str(handle)
-        LOG.info('OK, found the non_volatile contents:' + output + ' as epxected')
-        return handle, output
 
+    output = ''
+    try:
+        rc, output = run_cmd(ssh_con, 'nvread -ha {} -sz {}'.format(handle, size), output_handle=False, fail_ok=fail_ok)
+    except Exception as e:
+        LOG.info('Caught exception:{} when run cmd: "nvread -ha..."'.format(e))
+        rc = 1
+
+    if rc == 0:
+        if expecting is True:
+            LOG.info('Found the non_volatile contents:' + output + ' as epxected')
+            return True, output, handle
+        else:
+            LOG.info('Not expecting but find non-volatile contents for:{}'.format(handle))
+            if fail_ok:
+                return False, output, handle
+            else:
+                assert False, 'Not expecting but find non-volatile contents for:{}'.format(handle)
     else:
-        assert expecting is False, 'Expecting but failed to find non_volatile contents for handle:' + str(handle)
-        LOG.info('OK, did not find the NV content, this is expected.')
-        return rc, output
+        if expecting is False:
+            LOG.info('OK, did not find the NV content, this is expected.')
+            return True, output, handle
+        else:
+            LOG.warn('Did not find the NV content but expecting.')
+            if fail_ok:
+                return False, output, handle
+            else:
+                assert False, 'Expecting but failed to find non_volatile contents for handle:' + str(handle)
 
 
 def create_persistent_values(ssh_con, handle, to_handle=None, fail_ok=False):
@@ -359,18 +387,34 @@ def check_persistent_values(ssh_con, handle, expecting=True, fail_ok=False):
     LOG.info('Check if the value still existing for handle:{}'.format(handle))
 
     cli = 'getcapability -cap 1 -pr ' + str(handle)
-    output = run_cmd(ssh_con, cli, output_handle=False, fail_ok=fail_ok)[1]
+
+    output = ''
+    try:
+        output = run_cmd(ssh_con, cli, output_handle=False, fail_ok=fail_ok)[1]
+    except Exception as e:
+        LOG.warn('Caught exception: {}'.format(e))
 
     if str(handle) in output or str(handle)[2:] in output:
-        assert expecting is True, 'Not-expecting but find the persistent contents:' + str(handle)
-        LOG.info('OK, found the value in persistent memory, handle:' + handle + ' as expected')
-
-        return handle
+        if expecting is True:
+            LOG.info('OK, found the value in persistent memory, handle:' + handle + ' as expected')
+            return True, handle, output
+        else:
+            LOG.warn('Not expecting but got value for handle:{}, results:{}'.format(handle, output))
+            if fail_ok:
+                return False, output, handle
+            else:
+                assert False, 'Not-expecting but find the persistent contents:' + str(handle)
 
     else:
-        assert expecting is False, 'Cound not find the persistent values, while expecting them'
-        LOG.info('OK, did not find the value in persistent memory, handle:' + handle)
-        return ''
+        if expecting is True:
+            LOG.warn('Expecting but could not find the persistent values')
+            if fail_ok:
+                return False, output, handle
+            assert False, 'Could not find the persistent values, while expecting them'
+
+        else:
+            LOG.info('OK, as expected, no value in persistent memory, handle:' + handle)
+            return True, output, handle
 
 
 def create_testing_key(ssh_con, handle=None):
@@ -393,7 +437,7 @@ def create_testing_key(ssh_con, handle=None):
 
 
 def check_transient_values(ssh_con, handles=None, expecting=True, fail_ok=False):
-    LOG.info('Check if the values stored in volatile memory existing or not')
+    LOG.info('Check if the values stored in volatile memory existing or not, expecting: {}'.format(expecting))
 
     if handles:
         if isinstance(handles, list) or isinstance(handles, tuple):
@@ -407,25 +451,38 @@ def check_transient_values(ssh_con, handles=None, expecting=True, fail_ok=False)
     rc, values = get_volatile_content(ssh_con, fail_ok=fail_ok)
 
     if rc == 0 and values == to_check:
-        assert expecting is True, 'Failed, expecting nothing in transient memory, but got {}'.format(values)
-        LOG.info('OK, found transient contents as expected')
+        if expecting is True:
+            LOG.info('OK, found transient contents as expected')
+            return True, values, handles
+        else:
+            LOG.warn('Not expecting but find values for handles:{}, vaules:{}'.format(handles, values))
+            if fail_ok:
+                return False, values, handles
+            assert False, 'Failed, expecting nothing in transient memory, but got {}'.format(values)
 
     else:
-        assert expecting is False, 'Failed to find expected contents:{}'.format(to_check)
-        LOG.info('OK, as expected, no transient contents found')
+        if expecting is False:
+            LOG.info('OK, as expected, no transient contents found')
+            return True, values, handles
+        else:
+            LOG.warn('Expecting but failed to find values for handles:{}'.format(handles))
+            if fail_ok:
+                return True, values, handles
+            else:
+                assert False, 'Failed to find expected contents:{}'.format(to_check)
 
-        if rc != 0:
-            LOG.warn('Not even vTPM enabled?')
 
-    return rc, values
+def get_flavor_id(vm_type, flavor_type):
+    global g_flavors
+    return create_flavor(vm_type, flavor_type)
 
 
-def create_flavor(vm_type, name=core_flavor_name):
+def create_flavor(vm_type, flavor_type=None, name=core_flavor_name):
     global g_flavors
 
     extra_specs = {}
 
-    if 'non_vtpm' in vm_type:
+    if 'non_vtpm' in vm_type or (flavor_type and 'non_vtpm' in flavor_type):
         name += '_nonvtpm'
         extra_specs['sw:wrs:vtpm'] = 'false'
     else:
@@ -434,6 +491,7 @@ def create_flavor(vm_type, name=core_flavor_name):
     if 'non_autorc' in vm_type:
         name += '_nonrc'
         extra_specs['sw:wrs:auto_recovery'] = 'false'
+
     elif 'autorc' in vm_type:
         name += '_autorc'
         extra_specs['sw:wrs:auto_recovery'] = 'true'
@@ -441,7 +499,10 @@ def create_flavor(vm_type, name=core_flavor_name):
     flavor_id = nova_helper.create_flavor(name=name)[1]
     nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
 
-    g_flavors[vm_type] = flavor_id
+    if flavor_type is not None:
+        g_flavors[flavor_type] = flavor_id
+    else:
+        g_flavors[vm_type] = flavor_id
 
     return flavor_id
 
@@ -449,7 +510,6 @@ def create_flavor(vm_type, name=core_flavor_name):
 def create_flavors():
     global g_flavors
 
-    # vtpm, autorc, non_autorc
     types = ['vtpm', 'autorc', 'autorc2', 'non_autorc', 'non_autorc2', 'non_vtpm']
     for vm_type in types:
         create_flavor(vm_type)
@@ -503,7 +563,7 @@ def create_value(ssh_con, value_type='transient'):
     LOG.info('Create values for types:{}'.format(value_type))
 
     try:
-        if g_vms[value_type]['values']:
+        if g_vms[value_type] and g_vms[value_type]['values']:
             LOG.info('The values for the vm-type are already created, vm_type:{}, values:{}'.format(
                 value_type, g_vms[value_type]['values']))
             return g_vms[value_type]['values']
@@ -534,9 +594,9 @@ def create_value(ssh_con, value_type='transient'):
             LOG.info('-OK, successfully created transient values:{}'.format(key))
 
         LOG.info('-Create persistent values')
-        persist = create_persistent_values(ssh_con, key)
-        LOG.info('-OK, successfully created persistent value:{}'.format(persist))
-        return persist
+        persistent = create_persistent_values(ssh_con, key)
+        LOG.info('-OK, successfully created persistent value:{}'.format(persistent))
+        return persistent
 
     return ''
 
@@ -556,16 +616,13 @@ def resize_to(vm_type, vm_id):
 
 
 def rescue_vm(vm_type, vm_id):
-    if 'non_autorc' in vm_type or 'autorc' not in vm_type:
-        status = nova_helper.get_vm_status(vm_id)
-        if status != 'ERROR':
-            LOG.warn('VM got into ERROR status as expected')
-            LOG.warn('Attempting to rescure the VM:{}'.format(vm_id))
-            vm_helper.stop_vms(vm_id)
-            vm_helper.start_vms(vm_id)
-        else:
-            LOG.warn('VM should get in ERROR status, but actually in {}'.format(status))
-            assert False, 'VM should get in ERROR status, but actually in {}'.format(status)
+    if 'non_autorc' in vm_type:
+        vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ERROR, timeout=VMTimeout.AUTO_RECOVERY)
+
+        LOG.warn('VM got into ERROR status as expected')
+        LOG.warn('Attempting to rescure the VM:{}'.format(vm_id))
+        vm_helper.stop_vms(vm_id)
+        vm_helper.start_vms(vm_id)
 
 
 def reboot_hosting_node(vm_type, vm_id, force_reboot=False):
@@ -608,26 +665,27 @@ def perform_vm_operation(vm_type, vm_id, op='live_migration', extra_specs='vtpm'
     elif op == 'resize_to_autorc':
         if vm_type == 'autorc':
             LOG.info('resize from AUTO-RECOVERY to another AUTO-RECOVER flavor')
-        to_flavor_id = g_flavors['autorc2']
+
+        to_flavor_id = get_flavor_id(vm_type, 'autorc2')
+
+        LOG.info('TODO: {}, m_type={}, to_flavor_id={}'.format(to_flavor_id, vm_type, to_flavor_id))
+
         vm_helper.resize_vm(vm_id, to_flavor_id)
 
     elif op == 'resize_to_non_autorc':
         LOG.info('perform {} on type:{}, id:{}'.format(op, vm_type, vm_id))
         if vm_type == 'non_autorc2':
             LOG.warn('resize from AUTO-RECOVERY to another AUTO-RECOVER flavor')
-        to_flavor_id = g_flavors['non_autorc2']
+
+        to_flavor_id = get_flavor_id(vm_type, 'non_autorc2')
         vm_helper.resize_vm(vm_id, to_flavor_id)
 
     elif op == 'resize_to_non_vtpm':
         LOG.info('perform {} on type:{}, id:{}'.format(op, vm_type, vm_id))
-        to_flavor_id = g_flavors['non_vtpm']
-        vm_helper.resize_vm(vm_id, to_flavor_id)
 
-    # ('resize_to_autorc', 'vtpm,non_autorc'),
-    # ('resize_to_non_autorc', 'vtpm,non_autorc'),
-    # ('resize_to_non_vtpm', 'vtpm,non_autorc'),
-    # ('resize_to_autorc', 'vtpm,autorc'),
-    # ('resize_to_non_autorc', 'vtpm,autorc'),
+        to_flavor_id = get_flavor_id(vm_type, 'non_vtpm')
+
+        vm_helper.resize_vm(vm_id, to_flavor_id)
 
     else:
         LOG.fatal('Unsupported action: {}'.format(op))
@@ -638,31 +696,18 @@ def get_vm_id(vm_type, reuse=True):
     global g_vms, g_flavors
 
     LOG.info('Make sure the VM for the specified type exists, create if it does not')
-    vm_id = None
 
-    try:
-        if g_vms[vm_type]['id']:
-            vm_id = g_vms[vm_type]['id']
-            LOG.info('VM exists for type:{}, vm_id:{}'.format(vm_type, vm_id))
+    if g_vms[vm_type] and 'id' in g_vms[vm_type]:
+        vm_id = g_vms[vm_type]['id']
+        LOG.info('VM exists for type:{}, vm_id:{}'.format(vm_type, vm_id))
 
-    except (TypeError, KeyError):
-        LOG.info('No VM exists for type:{}'.format(vm_type))
-
-    if vm_id is not None:
         if reuse:
             return vm_id
+
         else:
             vm_helper.delete_vms(vm_id)
 
-    # current
-    flavor_id = None
-    try:
-        if g_flavors[vm_type]:
-            flavor_id = g_flavors[vm_type]
-    except (TypeError, KeyError):
-        pass
-
-    if flavor_id is None:
+    if not g_flavors[vm_type]:
         create_flavor(vm_type)
 
     vm_id = create_vm_values_for_type(vm_type)
@@ -670,8 +715,22 @@ def get_vm_id(vm_type, reuse=True):
     return vm_id
 
 
+def reuse_existing_vms(vm_operation, extra_specs):
+    global g_reusable
+
+    if not g_reusable:
+        return False
+
+    if 'reboot_host' == vm_operation or 'non_autorc' in extra_specs or 'non_vtpm' in extra_specs:
+        return False
+
+    return True
+
+
 @mark.parametrize(('vm_operation', 'extra_specs'), [
-    ('create', 'vtpm,autorc,non_autorc'),
+    ('create', 'vtpm'),
+    ('create', 'autorc'),
+    ('create', 'non_autorc'),
     ('live_migration', 'vtpm'),
     ('live_migration', 'autorc'),
     ('live_migration', 'non_autorc'),
@@ -687,7 +746,7 @@ def get_vm_id(vm_type, reuse=True):
     ('suspend_resume', 'vtpm'),
     ('suspend_resume', 'autorc'),
     ('suspend_resume', 'non_autorc'),
-    #
+
     ('pause_unpause', 'vtpm'),
     ('pause_unpause', 'autorc'),
     ('pause_unpause', 'non_autorc'),
@@ -707,7 +766,7 @@ def get_vm_id(vm_type, reuse=True):
     ('reboot_host', 'vtpm'),
     ('reboot_host', 'autorc'),  # fail
     ('reboot_host', 'non_autorc'),
-    #
+
     ('evacuate', 'vtpm'),
     ('evacuate', 'autorc'),
     ('evacuate', 'non_autorc'),
@@ -716,23 +775,25 @@ def get_vm_id(vm_type, reuse=True):
     ('resize_to_autorc', 'non_autorc'),
     ('resize_to_non_autorc', 'autorc'),
     ('resize_to_non_autorc', 'vtpm'),
-    ('resize_to_non_vtpm', 'vtpm'),
+
     ('resize_to_non_vtpm', 'vtpm'),
 ])
 def test_vtpm(vm_operation, extra_specs):
-    global g_vms
+    global g_vms, g_reusable
 
     LOG.tc_step('Verify vTPM is functioning on VMs right after they are: {}'.format(vm_operation))
     LOG.info('Will perform action:{}'.format(vm_operation))
 
     number_hypervisor = len(host_helper.get_up_hypervisors())
-    if number_hypervisor < 2:
-        skip('No hypervisor available')
+    if number_hypervisor < 2 and 'migrate' in vm_operation:
+        skip('Not enough hypervisors available for testing')
 
     vm_types = [vm_type for vm_type in extra_specs.split(',') if vm_type in g_vms]
 
     for vm_type in vm_types:
-        reuse = ('non_vtpm' not in vm_type)
+        reuse = reuse_existing_vms(vm_operation, extra_specs)
+        g_reusable = False
+
         vm_id = get_vm_id(vm_type, reuse=reuse)
         LOG.info('-check vTPM supports on hosting node for VM:' + vm_id + ', vm-type:' + vm_type)
 
@@ -745,26 +806,44 @@ def test_vtpm(vm_operation, extra_specs):
                 create_values(ssh_to_vm, vm_type)
 
         values = g_vms[vm_type]['values']
-        LOG.info('Running test on VM:{}, type:{}'.format(vm_id, vm_type))
+        LOG.info('Running test on VM:{}, type:{}, values:{}'.format(vm_id, vm_type, values))
 
-        fail_ok = (vm_operation == 'resize_to_non_vtpm')
+        # fail_ok = (vm_operation == 'resize_to_non_vtpm')
+        fail_ok = True
         perform_vm_operation(vm_type, vm_id, op=vm_operation, extra_specs=extra_specs)
 
-        with vm_helper.ssh_to_vm_from_natbox(vm_id) as ssh_to_vm:
+        with vm_helper.ssh_to_vm_from_natbox(vm_id, timeout=(int(VMTimeout.SSH_LOGIN * 1.3))) as ssh_to_vm:
             LOG.info('After VM operation:{}, check all types of contents'.format(vm_operation))
 
-            if 'non_volatile' in values:
-                check_nv_values(ssh_to_vm, values['non_volatile'],
-                                expecting=vm_op_policy(vm_type, vm_operation, 'non_volatile'),
-                                fail_ok=fail_ok)
+            passed = []
+            if 'persistent' in values:
+                if check_persistent_values(ssh_to_vm, values['persistent'],
+                                           expecting=vm_op_policy(vm_type, vm_operation, 'persistent'),
+                                           fail_ok=fail_ok)[0]:
+                    passed.append('persistent')
 
-            if 'persist' in values:
-                check_persistent_values(ssh_to_vm, values['persist'],
-                                        expecting=vm_op_policy(vm_type, vm_operation, 'persistent'),
-                                        fail_ok=fail_ok)
+            if 'non_volatile' in values:
+                if check_nv_values(ssh_to_vm, values['non_volatile'],
+                                expecting=vm_op_policy(vm_type, vm_operation, 'non_volatile'),
+                                fail_ok=fail_ok)[0]:
+                    passed.append('non_volatile')
 
             if 'transient' in values:
-                check_transient_values(ssh_to_vm,
+                if check_transient_values(ssh_to_vm,
                                        handles=values['transient'],
                                        expecting=vm_op_policy(vm_type, vm_operation, 'transient'),
-                                       fail_ok=fail_ok)
+                                       fail_ok=fail_ok)[0]:
+                    passed.append('transient')
+
+            if len(passed) < 3:
+                all_checks = ['persistent', 'non_volatile', 'transient']
+                message = 'Failed in verify {} contents'.format(', '.join(set(all_checks) - set(passed)))
+                assert False, message
+
+            if 'reboot_host' == vm_operation \
+                    or 'resize_to_non_vtpm' in vm_operation\
+                    or 'non_autorc' in extra_specs \
+                    or 'non_vtpm' in extra_specs:
+                g_reusable = False
+            else:
+                g_reusable = True
