@@ -26,7 +26,7 @@ def test_vm_meta_data_retrieval():
     _access_metadata_server_from_vm(vm_id=vm_id)
 
 
-def _test_vm_meta_data_access_after_delete_add_interfaces_router():
+def test_vm_meta_data_access_after_delete_add_interfaces_router():
     """
     VM meta-data retrieval
 
@@ -58,7 +58,6 @@ def _test_vm_meta_data_access_after_delete_add_interfaces_router():
 
     LOG.tc_step('Delete Router Interfaces')
     _delete_router_interfaces(router_id, router_subnets, ext_gateway_subnet)
-
     LOG.tc_step('Re-add Router Interfaces')
     _add_router_interfaces(router_id, router_subnets, ext_gateway_subnet)
 
@@ -69,16 +68,11 @@ def _test_vm_meta_data_access_after_delete_add_interfaces_router():
     network_helper.delete_router(router_id=router_id)
 
     LOG.tc_step('Create Router')
-    router_id = network_helper.create_router(name=router_name)[1]
-    LOG.info("Router Id: {}".format(router_id))
-
-    LOG.info("External Gateway Subnet Id: {}".format(ext_gateway_subnet))
-    LOG.info("Router {} external subnet id {}".format(router_name, ext_gateway_subnet))
-    network_helper.set_router_gateway(router_id=router_id, clear_first=False, fixed_ip=gateway_ip, enable_snat=False)
-    network_helper.update_router_distributed(router_id=router_id, distributed=is_dvr)
+    router_id = _create_router(ext_gateway_subnet, gateway_ip, is_dvr)
 
     LOG.tc_step('Re-add Router Interfaces')
     _add_router_interfaces(router_id, router_subnets, ext_gateway_subnet)
+
     LOG.tc_step('Retrieve vm meta_data within vm from metadata server after delete/create Router')
     _access_metadata_server_from_vm(vm_id=vm_id)
 
@@ -129,3 +123,15 @@ def _delete_router_interfaces(router_id, router_subnets, ext_gateway_subnet):
     for subnet in router_subnets:
         if subnet != ext_gateway_subnet:
             network_helper.delete_router_interface(router_id, subnet=subnet)
+
+
+def _create_router(ext_gateway_subnet, gateway_ip, is_dvr):
+    router_id = network_helper.create_router()[1]
+    LOG.info("Router Id: {}".format(router_id))
+
+    LOG.info("External Gateway Subnet Id: {}".format(ext_gateway_subnet))
+    LOG.info("Router {} external subnet id {}".format(router_id, ext_gateway_subnet))
+    network_helper.set_router_gateway(router_id=router_id, clear_first=False, fixed_ip=gateway_ip, enable_snat=False)
+    network_helper.update_router_distributed(router_id=router_id, distributed=is_dvr)
+
+    return router_id
