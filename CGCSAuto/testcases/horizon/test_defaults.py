@@ -11,15 +11,15 @@ from consts import horizon
 @fixture(scope='function')
 def defaults_pg(admin_home_pg, request):
     LOG.fixture_step('Go to Admin > System > Defaults')
-    defaults_pg = defaultspage.DefaultsPage(admin_home_pg.driver)
-    defaults_pg.go_to_target_page()
+    default_pg = defaultspage.DefaultsPage(admin_home_pg.driver)
+    default_pg.go_to_target_page()
 
     def teardown():
         LOG.fixture_step('Back to Defaults page')
-        defaults_pg.go_to_target_page()
+        default_pg.go_to_target_page()
 
     request.addfinalizer(teardown)
-    return defaults_pg
+    return default_pg
 
 
 def test_update_defaults(defaults_pg):

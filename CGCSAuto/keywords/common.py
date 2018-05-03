@@ -4,10 +4,11 @@
 
 import os
 import re
-import pexpect
 import time
 from datetime import datetime, timedelta
 from contextlib import contextmanager
+
+import pexpect
 
 from consts.cgcs import Prompt
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds

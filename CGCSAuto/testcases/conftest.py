@@ -36,8 +36,8 @@ def setup_test_session(global_setup):
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id, build_server = setups.get_build_info(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_server)
+    build_id, build_server, job = setups.get_build_info(con_ssh)
+    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_server, JOB=job)
 
     if ProjVar.get_var('KEYSTONE_DEBUG'):
         setups.enable_disable_keystone_debug(enable=True, con_ssh=con_ssh)

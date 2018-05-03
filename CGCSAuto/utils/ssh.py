@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import threading
 import time
 import getpass
@@ -13,8 +14,9 @@ from pexpect import pxssh
 from utils import exceptions, local_host
 from utils.tis_log import LOG, get_tis_logger
 
-from consts.auth import Guest, HostLinuxCreds
+from consts.auth import Guest, HostLinuxCreds, SvcCgcsAuto
 from consts.cgcs import Prompt, DATE_OUTPUT
+from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar
 from consts.lab import Labs, NatBoxes
 
@@ -234,6 +236,9 @@ class SSHClient:
         return self._session is not None and self._session.isalive()
 
     def _is_connected(self, fail_ok=True):
+        if not self._session:
+            return False
+
         # Connection is good if send and expect commands can be executed
         try:
             self.send()
@@ -899,7 +904,6 @@ class SSHClient:
         self.host = new_host
 
 
-
 class SSHFromSSH(SSHClient):
     """
     Base class for ssh to another node from an existing ssh session
@@ -1203,10 +1207,17 @@ class NATBoxClient:
 LOCAL_HOST = socket.gethostname()
 LOCAL_USER = getpass.getuser()
 LOCAL_PROMPT = re.escape('{}@{}$ '.format(LOCAL_USER, LOCAL_HOST))
+COUNT = 0
+
+
+def get_unique_name(name_str):
+    global COUNT
+    COUNT += 1
+    return '{}-{}'.format(name_str, COUNT)
 
 
 class LocalHostClient(SSHClient):
-    def __init__(self, initial_prompt=None, timeout=60, session=None, searchwindowsisze=None):
+    def __init__(self, initial_prompt=None, timeout=60, session=None, searchwindowsisze=None, name=None):
         """
 
         Args:
@@ -1220,6 +1231,9 @@ class LocalHostClient(SSHClient):
         """
         if not initial_prompt:
             initial_prompt = LOCAL_PROMPT
+        if not name:
+            name = 'localclient'
+        self.name = get_unique_name(name)
         super(LocalHostClient, self).__init__(host=LOCAL_HOST, user=LOCAL_USER, password=None, force_password=False,
                                               initial_prompt=initial_prompt, timeout=timeout, session=session,
                                               searchwindownsize=searchwindowsisze)
@@ -1303,6 +1317,151 @@ class LocalHostClient(SSHClient):
     #
     #     cmd_output = cmd_output.strip()
     #     return exit_code, cmd_output
+    def remove_virtualenv(self, venv_name=None, venv_dir=None, fail_ok=False, deactivate_first=True):
+        if not venv_name:
+            venv_name = ProjVar.get_var('RELEASE')
+        if not venv_dir:
+            venv_dir = ProjVar.get_var('LOG_DIR')
+            if not venv_dir:
+                venv_dir = '~'
+
+        if deactivate_first and venv_name in self.prompt:
+            self.deactivate_virtualenv(venv_name=venv_name)
+
+        LOG.info("Removing virtualenv {}/{}".format(venv_dir, venv_name))
+        cmd = "export WORKON_HOME={}; export VIRTUALENVWRAPPER_PYTHON={}; source virtualenvwrapper.sh; " \
+              "rmvirtualenv {}".format(venv_dir, sys.executable, venv_name)
+        code, output = self.exec_cmd(cmd=cmd, fail_ok=fail_ok)
+        if code == 0:
+            LOG.info('virtualenv {} removed successfully'.format(venv_name))
+            # todo: remove the created user_script files
+
+    def install_virtualenv(self, venv_name=None, venv_dir=None, activate=True, fail_ok=False):
+        if not venv_name:
+            venv_name = ProjVar.get_var('RELEASE')
+        if not venv_dir:
+            venv_dir = ProjVar.get_var('LOG_DIR')
+            if not venv_dir:
+                venv_dir = '~'
+
+        LOG.info("Installing virtualenv {}/{}".format(venv_dir, venv_name))
+        cmd = "cd {}; virtualenv --python={} {}".format(venv_dir, sys.executable, venv_name)
+        code = self.exec_cmd(cmd=cmd, fail_ok=fail_ok)[0]
+        if code == 0:
+            LOG.info('virtualenv {} created successfully'.format(venv_name))
+            if activate:
+                self.activate_virtualenv(venv_name=venv_name, venv_dir=venv_dir, fail_ok=fail_ok)
+
+    def activate_virtualenv(self, venv_name=None, venv_dir=None, fail_ok=False):
+        if not venv_name:
+            venv_name = ProjVar.get_var('RELEASE')
+        if not venv_dir:
+            venv_dir = ProjVar.get_var('LOG_DIR')
+            if not venv_dir:
+                venv_dir = '~'
+
+        LOG.info("Activating virtualenv {}/{}".format(venv_dir, venv_name))
+        code = self.exec_cmd('cd {}; source {}/bin/activate'.format(venv_dir, venv_name), fail_ok=fail_ok)[0]
+        if code == 0:
+            new_prompt = '\({}\) {}'.format(venv_name, self.get_prompt())
+            self.set_prompt(prompt=new_prompt)
+            LOG.info('virtualenv {} activated successfully'.format(venv_name))
+
+    def deactivate_virtualenv(self, venv_name=None, fail_ok=False):
+        if not venv_name:
+            venv_name = re.findall('\((.*)\) ', self.prompt)[0]
+
+        LOG.info("Deactivating virtualenv {}".format(venv_name))
+        new_prompt = self.prompt.split('\({}\) '.format(venv_name))[-1]
+        self.set_prompt(new_prompt)
+        code = self.exec_cmd('deactivate', fail_ok=fail_ok)[0]
+        if code == 0:
+            LOG.info('virtualenv {} deactivated successfully'.format(venv_name))
+
+
+class RemoteCLIClient:
+    """
+    Note: this should only be used on test server due to sudo permission needed to install/uninstall remote cli clients.
+    """
+    __remote_cli_client = {}
+
+    @classmethod
+    def get_remote_cli_client(cls, remote_cli_dir=None):
+        """
+        Get a localhost client with remote cli clients installed in virtualenv
+        Args:
+            remote_cli_dir (str):  absolute path to the remote clients installation folder
+
+        Returns:
+
+        """
+        if remote_cli_dir:
+            remote_cli_dir = os.path.abspath(remote_cli_dir)
+
+        if cls.__remote_cli_client:
+            for actual_dir in cls.__remote_cli_client:
+                if (not remote_cli_dir) or (remote_cli_dir in actual_dir):
+                    return cls.__remote_cli_client[actual_dir]
+
+        # no existing client or name mismatch, create new client
+        if remote_cli_dir:
+            venv_dir, dest_name = remote_cli_dir.rsplit('/', maxsplit=1)
+        else:
+            dest_name = 'wrs-remote-clients'
+            venv_dir = ProjVar.get_var('LOG_DIR')
+            remote_cli_dir = '{}/{}'.format(venv_dir, dest_name)
+        localclient = LocalHostClient()
+        localclient.connect()
+
+        LOG.info("SCP wrs-remote-clients sdk to localhost...")
+        source_path = '{}/{}/{}/export/cgts-sdk/wrs-remote-clients-*.tgz'.\
+            format(BuildServerPath.DEFAULT_WORK_SPACE, ProjVar.get_var('JOB'), ProjVar.get_var('BUILD_ID'))
+        dest_path = '{}/{}.tgz'.format(venv_dir, dest_name)
+        localclient.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=ProjVar.get_var('BUILD_SERVER'),
+                                source_pswd=SvcCgcsAuto.PASSWORD,
+                                source_path=source_path,
+                                dest_path=dest_path, timeout=300)
+
+        localclient.exec_cmd('cd {}; tar -vxzf {}.tgz'.format(venv_dir, dest_name), fail_ok=False)
+        localclient.exec_cmd('rm {}'.format(dest_path))
+        localclient.exec_cmd('mv {}* {}'.format(dest_name, dest_name))
+
+        LOG.info("Activating virtual environment...")
+        localclient.install_virtualenv(venv_name=ProjVar.get_var('RELEASE'), activate=True, venv_dir=venv_dir)
+
+        try:
+            LOG.info("Installing remote cli clients in virtualenv...")
+            localclient.password = '33yliu12'
+            localclient.exec_cmd('cd {}'.format(dest_name), fail_ok=False)
+            localclient.exec_sudo_cmd('-H ./install_clients.sh', fail_ok=False, expect_timeout=600)
+        except:
+            # Do the cleanup in case of remote cli clients install failure.
+            cls.remove_remote_cli_clients(**{remote_cli_dir: localclient})
+            raise
+
+        LOG.info("Remote cli clients installed successfully")
+        cls.__remote_cli_client[remote_cli_dir] = localclient
+        return localclient
+
+    @classmethod
+    def remove_remote_cli_clients(cls, **clients):
+
+        clients_to_rm = clients.copy() if clients else cls.__remote_cli_client.copy()
+
+        for remote_cli_dir_, localclient in clients_to_rm.items():
+            venv_dir, dest_name = remote_cli_dir_.rsplit('/', maxsplit=1)
+            LOG.info("Uninstalling remote cli clients in virtualenv...")
+            localclient.password = '33yliu12'
+            localclient.exec_cmd('cd {}'.format(remote_cli_dir_), fail_ok=False)
+            try:
+                localclient.exec_sudo_cmd('-H ./uninstall_clients.sh', fail_ok=False, expect_timeout=600)
+            finally:
+                # Remove virtualenv and non-txt files in remote cli directory to save disk space on localhost
+                if remote_cli_dir_ in cls.__remote_cli_client:
+                    cls.__remote_cli_client.pop(remote_cli_dir_)
+                localclient.exec_sudo_cmd('rm -rf $(ls -I "*.txt")')
+                localclient.remove_virtualenv(venv_dir=venv_dir)
+                localclient.close()
 
 
 class ControllerClient:

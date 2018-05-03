@@ -10,14 +10,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import logging
 import os
 import signal
 import subprocess
 from threading import Thread
 import time
 
-LOG = logging.getLogger(__name__)
+from utils.tis_log import LOG
 
 
 class VideoRecorder(object):

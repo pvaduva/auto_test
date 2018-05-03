@@ -5,6 +5,7 @@ from consts.filepaths import BuildServerPath, WRSROOT_HOME
 class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
+                  'JOB': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
                   'VSWITCH_INFO_HOSTS': [],
@@ -24,7 +25,9 @@ class ProjVar:
                   'TELNET_THREADS': None,
                   'SYS_TYPE': None,
                   'COLLECT_SYS_NET_INFO': False,
-                  'IS_VBOX': False
+                  'IS_VBOX': False,
+                  'RELEASE': 'R6',
+                  'REMOTE_CLI': False,
                   }
 
     @classmethod

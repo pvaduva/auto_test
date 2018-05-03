@@ -275,7 +275,9 @@ def get_build_info(con_ssh):
     if code != 0:
         build_id = ' '
         build_host = ' '
+        job = ' '
     else:
+        # get build_id
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
         if build_id and build_id[0] != 'n/a':
             build_id = build_id[0]
@@ -287,10 +289,14 @@ def get_build_info(con_ssh):
             else:
                 build_id = ' '
 
+        # get build_host
         build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
         build_host = build_host[0].split(sep='.')[0] if build_host else ' '
 
-    return build_id, build_host
+        # get jenkins job
+        job = re.findall('''JOB=\"(.*)\"''', output)
+        job = job[0] if job else ' '
+    return build_id, build_host, job
 
 
 def copy_files_to_con1():

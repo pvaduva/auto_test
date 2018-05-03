@@ -11,7 +11,7 @@ from consts.openstack_cli import NEUTRON_MAP
 
 def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
              flags='', fail_ok=False, cli_dir='', auth_info=None, source_creden_=None, err_only=False,
-             timeout=CLI_TIMEOUT, rtn_list=False):
+             timeout=CLI_TIMEOUT, rtn_list=False, remote_cli=None):
     """
 
     Args:
@@ -31,7 +31,9 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         cli_dir:
         err_only:
         timeout:
-        rtn_list:
+        rtn_list (bool):
+        remote_cli(bool|None): whether to use remote cli instead of ssh to run cmds.
+            When None, value in ProjVar will be used.
 
     Returns:
         if command executed successfully: return command_output
