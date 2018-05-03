@@ -4,6 +4,7 @@ from keywords import vm_helper, network_helper
 from consts.cgcs import METADATA_SERVER
 from consts.auth import Tenant
 
+
 @mark.sanity
 def test_vm_meta_data_retrieval():
     """
@@ -26,7 +27,50 @@ def test_vm_meta_data_retrieval():
     _access_metadata_server_from_vm(vm_id=vm_id)
 
 
-def test_vm_meta_data_access_after_delete_add_interfaces_router():
+
+REVERT_ROUTER = None
+@fixture()
+def _router_info():
+
+    LOG.fixture_step("Get router info.")
+    router_id = network_helper.get_tenant_router()
+    LOG.info("Router id: {}".format(router_id))
+    router_name = network_helper.get_router_info(router_id=router_id, field='name')
+    LOG.info("Router name: {}".format(router_name))
+    gateway_ip = network_helper.get_router_ext_gateway_subnet_ip_address(router_id=router_id)
+    LOG.info("Gateway IP used for router {} is {}".format(router_name, gateway_ip))
+    ext_gateway_info = network_helper.get_router_ext_gateway_info(router_id=router_id)
+    LOG.info("Gateway IP used for router {} is {}".format(router_name, ext_gateway_info))
+    router_subnets = network_helper.get_router_subnets(router_id=router_id, mgmt_only=True)
+    LOG.info("Router {} subnet ids {}".format(router_name, router_subnets))
+    ext_gateway_subnet = network_helper.get_router_ext_gateway_subnet(router_id)
+    LOG.info("Router {} external subnet id {}".format(router_name, ext_gateway_subnet))
+    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+    LOG.info("Router {} dvr enabled {}".format(router_name, is_dvr))
+
+    def recover():
+        LOG.fixture_step("Ensure tenant router exists")
+        try:
+            router_id = network_helper.get_tenant_router()
+        except:
+            router_id = network_helper.create_router()[1]
+
+        LOG.fixture_step("Ensure tenant router gateway recovered")
+        gateway_info = network_helper.get_router_ext_gateway_info(router_id=router_id)
+        if gateway_info != ext_gateway_info:
+
+        LOG.fixture_step()
+        subnets = network_helper.get_router_subnets(router_id=router_id, mgmt_only=True)
+        subnets_to_add = list(set(sorted(subnets)) - set(sorted(router_subnets)))
+        if subnets_to_add:
+          _add_router_interfaces()
+
+
+    return router_id, router_name, gateway_ip, ext_gateway_info, router_subnets, ext_gateway_subnet, is_dvr
+
+
+
+def _test_vm_meta_data_access_after_delete_add_interfaces_router(_router_info):
     """
     VM meta-data retrieval
 
@@ -44,6 +88,7 @@ def test_vm_meta_data_access_after_delete_add_interfaces_router():
     Test Teardown:
         - Delete created vm and flavor
     """
+    router_id, router_name, gateway_ip, ext_gateway_info, router_subnets, ext_gateway_subnet, is_dvr = _router_info
     vms = []
     LOG.tc_step("Launch a boot-from-image vm")
     vm_id = vm_helper.boot_vm(source='image', cleanup='function')[1]
@@ -52,9 +97,6 @@ def test_vm_meta_data_access_after_delete_add_interfaces_router():
 
     LOG.tc_step('Retrieve vm meta_data within vm from metadata server before Interface delete')
     _access_metadata_server_from_vm(vm_id=vm_id)
-
-    LOG.tc_step('Retrieve Router Info')
-    router_id, router_name, gateway_ip, ext_gateway_info, router_subnets, ext_gateway_subnet, is_dvr = _router_info(vm_id=vm_id)
 
     LOG.tc_step('Delete Router Interfaces')
     _delete_router_interfaces(router_id, router_subnets, ext_gateway_subnet)
@@ -90,27 +132,6 @@ def _access_metadata_server_from_vm(vm_id):
     metadata_uuid = eval(metadata)['uuid']
 
     assert vm_id == metadata_uuid, "VM UUID retrieved from metadata server is not the same as nova show"
-
-
-def _router_info(vm_id):
-
-    LOG.fixture_step("Get router info.")
-    #router_id = network_helper.get_tenant_router()
-    router_id = network_helper.get_tenant_routers_for_vms(vms=vm_id)[0]
-    LOG.info("Router id: {}".format(router_id))
-    router_name = network_helper.get_router_info(router_id=router_id, field='name')
-    LOG.info("Router name: {}".format(router_name))
-    gateway_ip = network_helper.get_router_ext_gateway_subnet_ip_address(router_id=router_id)
-    LOG.info("Gateway IP used for router {} is {}".format(router_name, gateway_ip))
-    ext_gateway_info = network_helper.get_router_ext_gateway_info(router_id=router_id)
-    LOG.info("Gateway IP used for router {} is {}".format(router_name, ext_gateway_info))
-    router_subnets = network_helper.get_router_subnets(router_id=router_id, mgmt_only=True)
-    LOG.info("Router {} subnet ids {}".format(router_name, router_subnets))
-    ext_gateway_subnet = network_helper.get_router_ext_gateway_subnet(router_id)
-    LOG.info("Router {} external subnet id {}".format(router_name, ext_gateway_subnet))
-    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
-    LOG.info("Router {} dvr enabled {}".format(router_name, is_dvr))
-    return router_id, router_name, gateway_ip, ext_gateway_info, router_subnets, ext_gateway_subnet, is_dvr
 
 
 def _add_router_interfaces(router_id, router_subnets, ext_gateway_subnet):
