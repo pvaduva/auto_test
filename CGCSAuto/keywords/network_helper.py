@@ -1395,7 +1395,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
 
     if name is None:
         name = 'router'
-    name = '-'.join([tenant, name, str(common.Count.get_router_count())])
+        name = '-'.join([tenant, name, str(common.Count.get_router_count())])
     args = name
 
     if str(admin_state_down).lower() == 'true':
