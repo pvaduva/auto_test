@@ -99,10 +99,8 @@ def test_vm_meta_data_access_after_delete_add_interfaces_router(_router_info):
         - Delete created vm and flavor
     """
     router_id, router_name, gateway_ip, ext_gateway_info, router_subnets, ext_gateway_subnet, is_dvr = _router_info
-    vms = []
     LOG.tc_step("Launch a boot-from-image vm")
     vm_id = vm_helper.boot_vm(source='image', cleanup='function')[1]
-    vms.append(vm_id)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     LOG.tc_step('Retrieve vm meta_data within vm from metadata server before Interface delete')
@@ -135,6 +133,8 @@ def test_vm_meta_data_access_after_delete_add_interfaces_router(_router_info):
 def _access_metadata_server_from_vm(vm_id):
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        ip_route = vm_ssh.exec_sudo_cmd('ip route')
+        LOG.info('ip route info {}'.format(ip_route))
         command = 'wget http://{}/openstack/latest/meta_data.json'.format(METADATA_SERVER)
         vm_ssh.exec_cmd(command, fail_ok=False)
         metadata = vm_ssh.exec_cmd('more meta_data.json', fail_ok=False)[1]
