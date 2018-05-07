@@ -116,11 +116,7 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     Args:
         nat_ssh (SSHClient): NATBox client
         keyfile_path (str): Natbox path to scp keyfile to
-<<<<<<< .merge_file_YjhgmY
         con_ssh (SSHClient):
-=======
-        con_ssh (SSHClient)
->>>>>>> .merge_file_B4i5qY
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
