@@ -72,7 +72,7 @@ def get(resource):
         ('GET','/storage_backend/usage'),
         ('GET','/storage_ceph'),
         ('GET','/storage_lvm'),
-        ('GET','/tpmconfig'),
+        # ('GET','/tpmconfig'),
         ('GET','/upgrade'),
         ('GET','/')
     ]

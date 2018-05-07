@@ -2343,7 +2343,10 @@ def main():
         run_config_complete = True
         if node_online or node_offline or node_degraded:
             run_config_complete = False
-            wait_state(controller0, AVAILABILITY, ONLINE)
+            if "duplex-direct" in system_mode:
+                wait_state(controller0, AVAILABILITY, DEGRADED)
+            else:
+                wait_state(controller0, AVAILABILITY, ONLINE)
             run_labsetup()
             unlock_node(nodes, selection_filter="controller-0", wait_done=False)
             controller0.ssh_conn.disconnect()

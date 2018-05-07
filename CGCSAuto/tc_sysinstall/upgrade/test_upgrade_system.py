@@ -14,6 +14,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     upgrade_version = upgrade_setup['upgrade_version']
     bld_server = upgrade_setup['build_server']
     missing_manifests = False
+    cinder_configuration = False
     force = False
     controller0 = lab['controller-0']
     if not host_helper.is_host_provisioned(controller0.name):
@@ -21,35 +22,73 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
         assert rc == 0, "Failed to lock/unlock host {}: {}".format(controller0.name, output)
 
     # update health query
-    system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
+    #system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
+    system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade_2())
 
     LOG.tc_step("Checking system health for upgrade .....")
     if system_upgrade_health[0] == 0:
         LOG.info("System health OK for upgrade......")
-    if system_upgrade_health[0] == 1:
+    elif system_upgrade_health[0] == 2:
+        if system_upgrade_health[2] and "lock_unlock" in system_upgrade_health[2].keys():
+            controller_nodes = system_upgrade_health[2]["lock_unlock"][0]
+            LOG.info("Locking/Unlocking required for {} ......".format(controller_nodes))
+            if 'controller-1' in controller_nodes:
+                rc, output = upgrade_helper.upgrade_host_lock_unlock('controller-1')
+                assert rc == 0, "Failed to lock/unlock host {}: {}".format('controller-1', output)
+            if 'controller-0' in controller_nodes:
+                rc, output = upgrade_helper.upgrade_host_lock_unlock('controller-0')
+                assert rc == 0, "Failed to lock/unlock host {}: {}".format('controller-0', output)
+                #system_upgrade_health[2]["swact"][0] = False
+        if system_upgrade_health[2]["swact"][0]:
+            LOG.info("Swact Required: {}".format(system_upgrade_health[2]["swact"][1]))
+            host_helper.swact_host('controller-0')
+            time.sleep(60)
+            host_helper.swact_host('controller-1')
+            time.sleep(60)
+        if system_upgrade_health[2]["force_upgrade"][0]:
+            LOG.info("{}; using --force option to start upgrade......"
+                     .format(system_upgrade_health[2]["force_upgrade"][1]))
+            force = True
+
+    else:
         assert False, "System health query upgrade failed: {}".format(system_upgrade_health[1])
 
-    if system_upgrade_health[0] == 4 or system_upgrade_health[0] == 2:
-        LOG.info("System health indicate missing manifests; lock/unlock controller-0 to resolve......")
-        missing_manifests = True
 
-    if system_upgrade_health[0] == 3 or system_upgrade_health[0] == 2:
-
-        LOG.info("System health indicate minor alarms; using --force option to start upgrade......")
-        force = True
-
-    if missing_manifests:
-        LOG.info("Locking/Unlocking to resolve missing manifests in controller......")
-
-        lock_unlock_hosts = []
-        if any("controller-1" in k for k in system_upgrade_health[1].keys()):
-            lock_unlock_hosts.append('controller-1')
-        if any("controller-0" in k for k in system_upgrade_health[1].keys()):
-            lock_unlock_hosts.append('controller-0')
-
-        for host in lock_unlock_hosts:
-            rc, output = upgrade_helper.upgrade_host_lock_unlock(host)
-            assert rc == 0, "Failed to lock/unlock host {}: {}".format(host, output)
+    # if system_upgrade_health[0] == 0:
+    #     LOG.info("System health OK for upgrade......")
+    # if system_upgrade_health[0] == 1:
+    #     assert False, "System health query upgrade failed: {}".format(system_upgrade_health[1])
+    #
+    # if system_upgrade_health[0] == 4 or system_upgrade_health[0] == 2:
+    #     LOG.info("System health indicate missing manifests; lock/unlock controller-0 to resolve......")
+    #     missing_manifests = True
+    #     if any("Cinder configuration" in k for k in system_upgrade_health[1].keys()):
+    #         cinder_configuration = True
+    #
+    # if system_upgrade_health[0] == 3 or system_upgrade_health[0] == 2:
+    #
+    #     LOG.info("System health indicate minor alarms; using --force option to start upgrade......")
+    #     force = True
+    #
+    # if missing_manifests:
+    #     LOG.info("Locking/Unlocking to resolve missing manifests in controller......")
+    #
+    #     lock_unlock_hosts = []
+    #     if any("controller-1" in k for k in system_upgrade_health[1].keys()):
+    #         lock_unlock_hosts.append('controller-1')
+    #     if any("controller-0" in k for k in system_upgrade_health[1].keys()):
+    #         lock_unlock_hosts.append('controller-0')
+    #         cinder_configuration = False
+    #
+    #     for host in lock_unlock_hosts:
+    #         rc, output = upgrade_helper.upgrade_host_lock_unlock(host)
+    #         assert rc == 0, "Failed to lock/unlock host {}: {}".format(host, output)
+    #
+    # if cinder_configuration:
+    #     LOG.info("Invalid Cinder configuration: Swact to controller-1 and back to synchronize.......")
+    #     host_helper.swact_host('controller-0')
+    #     time.sleep(60)
+    #     host_helper.swact_host('controller-1')
 
     LOG.tc_step("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
     upgrade_helper.system_upgrade_start(force=force)

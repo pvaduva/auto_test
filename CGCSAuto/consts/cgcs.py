@@ -90,7 +90,6 @@ class Networks:
     MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.[8|9]\d\.\d{1,3}'
     # external ip pattern
     EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
-
     # tenant-net ip pattern such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # internal-net ip pattern such as 10.1.1.44

@@ -55,14 +55,14 @@ def test_swact_20_times():
             LOG.tc_step("{}Check all services are up on active controller via sudo sm-dump".format(iter_str))
             host_helper.wait_for_sm_dump_desired_states(controller=standby, fail_ok=False)
 
-            LOG.tc_step("{}Ensure pre-exist vm still pingable post swact".format(iter_str))
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_base, timeout=30)
+            LOG.tc_step("{}Ensure pre-existed vm still pingable post swact".format(iter_str))
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_base, timeout=45)
 
             time.sleep(5)
             LOG.tc_step("{}Ensure writing from pre-existed vm resumes after swact".format(iter_str))
             assert base_vm_thread.res is True, "Writing in pre-existed vm stopped after {}".format(iter_str.lower())
 
-            LOG.tc_step("{}Attemp to boot new vm after 2 minutes of post swact and ensure it's pingable".
+            LOG.tc_step("{}Attempt to boot new vm after 2 minutes of post swact and ensure it's pingable".
                         format(iter_str))
             time.sleep(60)
             for j in range(3):

@@ -625,6 +625,9 @@ def download_lab_config_files(lab, server, load_path, custom_path=None):
     if 'vbox' in lab_name:
         return
 
+    if not load_path.endswith('/'):
+        load_path = load_path + '/'
+
     if custom_path:
         config_path = custom_path
     else:

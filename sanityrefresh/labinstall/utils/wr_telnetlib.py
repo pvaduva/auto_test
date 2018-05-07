@@ -880,6 +880,7 @@ class Telnet:
                     if password:
                         self.get_read_until(PASSWORD_PROMPT, TELNET_EXPECT_TIMEOUT)
                     self.write(str.encode(password + '\r\n'))
+                    #self.find_prompt()
                     break
                 elif index == 1:
                     log.info('User "{}" is already logged in.'.format(username))
@@ -1238,7 +1239,7 @@ class Telnet:
                     self.menu_selection(host_os, small_footprint, lowlat, usb, security, iso_install)
 
         elif bios_type == BIOS_TYPES[1] or "r430" in node.host_name or "r730" in node.host_name:
-            print("Hewlett-Packard BIOS")
+            print("Hewlett")
             if "r430" in node.host_name or "r730" in node.host_name:
                 bios_key = '\x1b@'
                 self.get_read_until("PXE Boot", 120)

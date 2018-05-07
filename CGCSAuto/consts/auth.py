@@ -192,6 +192,7 @@ class SvcCgcsAuto:
     HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
     HOSTNAME = 'yow-cgcs-test.wrs.com'
+    PROMPT = '[\[]?svc-cgcsauto@.*\$[ ]?'
 
 
 class CliAuth:

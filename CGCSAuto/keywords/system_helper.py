@@ -334,7 +334,7 @@ def get_active_standby_controllers(con_ssh=None, use_telnet=False, con_telnet=No
 
 
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-                     auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
+                     auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None, retry=0):
     """
     Get active alarms_and_events dictionary with given criteria
     Args:
@@ -347,6 +347,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         auth_info (dict):
         use_telnet
         con_telnet
+        retry (None|int): number of times to retry if the alarm-list cli got rejected
 
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
@@ -358,13 +359,24 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     if show_suppress:
         args += ' --include_suppress'
 
-    table_ = table_parser.table(cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info,
-                                           use_telnet=use_telnet, con_telnet=con_telnet),
-                                combine_multiline_entry=True)
+    fail_ok = True
+    if not retry:
+        fail_ok = False
+        retry = 0
 
-    table_ = _compose_alarm_table(table_, uuid=uuid)
+    output = None
+    for i in range(retry+1):
+        code, output = cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                  rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
+        if code == 0:
+            table_ = table_parser.table(output, combine_multiline_entry=True)
+            table_ = _compose_alarm_table(table_, uuid=uuid)
+            return table_
 
-    return table_
+        if i < retry:
+            time.sleep(5)
+    else:
+        raise exceptions.CLIRejected('system alarm-list cli got rejected after {} retries: {}'.format(retry, output))
 
 
 def _compose_alarm_table(output, uuid=False):
@@ -1930,7 +1942,7 @@ def get_service_parameter_values(rtn_value='value', service=None, section=None, 
     if name:
         kwargs['name'] = name
 
-    table_ = table_parser.table(cli.system('service-parameter-list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('service-parameter-list --nowrap', ssh_client=con_ssh))
     return table_parser.get_values(table_, rtn_value, **kwargs)
 
 
@@ -2114,7 +2126,7 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
                  "There may be cli errors when active controller's config updates")
         end_time = time.time() + timeout
         while time.time() < end_time:
-            table_ = get_alarms_table(uuid=True, con_ssh=con_ssh)
+            table_ = get_alarms_table(uuid=True, con_ssh=con_ssh, retry=3)
             alarms_tab = table_parser.filter_table(table_, **{'Alarm ID': alarm_id})
             alarms_tab = _compose_alarm_table(alarms_tab, uuid=True)
             uuids = table_parser.get_values(alarms_tab, 'uuid')
@@ -2318,6 +2330,7 @@ def get_upgrade_state(con_ssh=None):
 
 
 def wait_for_upgrade_activate_complete(timeout=300, check_interval=60, fail_ok=False):
+    upgrade_state = None
     end_time = time.time() + timeout
     while time.time() < end_time:
         upgrade_state = get_upgrade_state()
@@ -2445,7 +2458,7 @@ def get_imported_load_state(load_id, load_version=None, con_ssh=None, source_cre
     return (table_parser.get_values(table_, 'state')).pop()
 
 
-def get_imported_load_version( con_ssh=None, source_creden_=None):
+def get_imported_load_version(con_ssh=None, source_creden_=None):
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
     table_ = table_parser.filter_table(table_, state='imported')
 
@@ -2620,165 +2633,6 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
             raise exceptions.CLIRejected(err_msg)
 
 
-def get_host_device_list_values(host, field='name', con_ssh=None, auth_info=Tenant.ADMIN, strict=True, regex=False,
-                                **kwargs):
-    """
-    Get the parsed version of the output from system host-device-list <host>
-    Args:
-        host (str): host's name
-        field (str): field name to return value for
-        con_ssh (SSHClient):
-        auth_info (dict):
-        strict (bool): whether to perform strict search on filter
-        regex (bool): whether to use regular expression to search the value in kwargs
-        kwargs: key-value pairs to filter the table
-
-    Returns (list): output of system host-device-list <host> parsed by table_parser
-
-    """
-    table_ = table_parser.table(cli.system('host-device-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info))
-
-    return table_parser.get_values(table_, target_header=field, strict=strict, regex=regex, **kwargs)
-
-
-def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.ADMIN):
-    args = "{} {}".format(host, device)
-    table_ = table_parser.table(cli.system('host-device-show', args, ssh_client=con_ssh, auth_info=auth_info))
-
-    if isinstance(fields, str):
-        fields = [fields]
-
-    res = []
-    for field in fields:
-        res.append(table_parser.get_value_two_col_table(table_, field))
-
-    return res
-
-
-def get_host_device_pci_name(host, device,  con_ssh=None, auth_info=Tenant.ADMIN):
-    """
-    Gets host's Co-processor pci device name
-    Args:
-        host (str): The host id or hostname
-        device (str): is the pci device address
-        con_ssh:
-        auth_info:
-
-    Returns: (str)
-        The pci name of the device
-
-    """
-    return get_host_device_values(host, device, 'name', con_ssh=con_ssh, auth_info=auth_info)[0]
-
-
-def get_host_device_pci_status(host, device,  con_ssh=None, auth_info=Tenant.ADMIN):
-    """
-    Gets host's Co-processor pci device status
-    Args:
-        host (str): The host id or hostname
-        device (str): is the pci device address or name
-        con_ssh:
-        auth_info:
-
-    Returns: (str)
-        The pci device status
-
-    """
-    return get_host_device_values(host, device, 'enabled', con_ssh=con_ssh, auth_info=auth_info)[0]
-
-
-def modify_host_device_pci_name(host, device, name, con_ssh=None, fail_ok=False, check_first=True):
-    """
-    Modify a host device pci name
-    Args:
-        host (str): Required - the host id or hostname
-        device (str): Required - the pci address or pci name
-        name (str): Required - new pci name
-        con_ssh:
-        fail_ok:
-        check_first (bool): Check if the parameter exists first
-
-
-    Returns (tuple): (rtn_code, message)
-
-    """
-    if check_first:
-        val = get_host_device_values(host, device, 'name', con_ssh=con_ssh)
-        if not val:
-            msg = " Host {} does not have device {} listed".format(host, device)
-            LOG.info(msg)
-            return 1, msg
-
-        if val[0] == name:
-            msg = "The device pci name is already set to {}".format(val)
-            return 1, msg
-
-    LOG.info("Modifying device pci name")
-    args = " {} {} --name {}".format(host, device, name)
-
-    res, out = cli.system('host-device-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
-
-    if res == 1:
-        return 1, out
-
-    LOG.info("Verifying the host device new pci name")
-    val = get_host_device_values(host, name, 'name', con_ssh=con_ssh)
-    if not val:
-        msg = 'The host device pci name was not modified to the correct value'
-        if fail_ok:
-            return 2, msg
-        raise exceptions.SysinvError(msg)
-    msg = "Host device pci name modified to {}".format(name)
-    LOG.info(msg)
-    return 0, msg
-
-
-def modify_host_device_status(host, device, status,  con_ssh=None, fail_ok=False, check_first=True):
-    """
-    Modify a host device pci name
-    Args:
-        host (str): Required - the host id or hostname
-        device (str): Required - the pci address or pci name
-        status (str): Required - new pci status True or False
-        con_ssh:
-        fail_ok:
-        check_first (bool): Check if the parameter exists first
-
-
-    Returns (tuple): (rtn_code, message)
-
-    """
-    if check_first:
-        val = get_host_device_values(host, device, 'enabled', con_ssh=con_ssh)
-        if not val:
-            msg = " Host {} does not have device {} listed".format(host, device)
-            LOG.info(msg)
-            return 1, msg
-
-        if val[0] == status:
-            msg = "The device availability status is already set to {}".format(status)
-            return 1, msg
-
-    LOG.info("Modifying device availability status")
-    args = " {} {} --enabled {}".format(host, device, status)
-
-    res, out = cli.system('host-device-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
-
-    if res == 1:
-        return 1, out
-
-    LOG.info("Verifying the host device enabled status")
-    val = get_host_device_values(host, device, 'enabled', con_ssh=con_ssh)
-    if val[0] != status:
-        msg = 'The host device enabled status was not modified to the correct value'
-        if fail_ok:
-            return 2, msg
-        raise exceptions.SysinvError(msg)
-    msg = "Host device availability status is modified to {}".format(status)
-    LOG.info(msg)
-    return 0, msg
-
-
 def get_controller_fs_values(con_ssh=None, auth_info=Tenant.ADMIN):
 
     table_ = table_parser.table(cli.system('controllerfs-show',  ssh_client=con_ssh, auth_info=auth_info))
@@ -2804,6 +2658,7 @@ def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
 
     """
     LOG.info("Wait for services to be enabled-active in system service-list")
+    service_list_tab = None
     end_time = time.time() + timeout
     while time.time() < end_time:
         service_list_tab = table_parser.table(cli.system('service-list', ssh_client=con_ssh)[1])
@@ -2820,7 +2675,7 @@ def wait_for_services_enable(timeout=300, fail_ok=False, con_ssh=None):
     raise exceptions.SysinvError(msg)
 
 
-def is_infra_network_conifgured(con_ssh=None, auth_info=Tenant.ADMIN):
+def is_infra_network_configured(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Whether infra network is configured in the system
     Args:
@@ -2955,6 +2810,8 @@ def get_host_disks_table(host, con_ssh=None, use_telnet=False, con_telnet=None, 
     Args:
         host (str):
         con_ssh (SSHClient):
+        use_telnet
+        con_telnet
         auth_info (dict):
 
     Returns (dict):
@@ -2969,19 +2826,16 @@ def get_host_disks_table(host, con_ssh=None, use_telnet=False, con_telnet=None, 
     return table_
 
 
-def get_network_values(header='uuid', uuid=None, ntype=None, 
-                       mtu = None, link_capacity = None, 
-                       dynamic = None, vlan = None, pool_uuid = None,
-                       auth_info=Tenant.ADMIN, con_ssh = None, 
-                       strict = True, regex = None, **kwargs):
+def get_network_values(header='uuid', uuid=None, ntype=None, mtu=None, link_capacity=None,  dynamic=None, vlan=None,
+                       pool_uuid=None, auth_info=Tenant.ADMIN, con_ssh=None,  strict=True, regex=None, **kwargs):
     """
     Get
     Args:
         header: 'uuid' (default)
         uuid:
-        type: (mapped as ntype)
+        ntype: (mapped as ntype)
         mtu:
-        link-capacity:
+        link_capacity:
         dynamic:
         vlan:
         pool_uuid:
@@ -3089,17 +2943,12 @@ def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_host_lldp_agent_table(host, header='uuid', uuid=None, 
-                       local_port=None, status=None,
-                       chassis_id=None, port_id=None, 
-                       system_name=None, system_description=None, 
-                       auth_info=Tenant.ADMIN,
-                       con_ssh = None, strict = True, regex = None,
-                       **kwargs):
+def get_host_lldp_agent_table(host, header='uuid', uuid=None, local_port=None, status=None, chassis_id=None,
+                              port_id=None, system_name=None, system_description=None, auth_info=Tenant.ADMIN,
+                              con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get lldp agent table via system host-lldp-agent-list <host>
     Args:
@@ -3121,10 +2970,7 @@ def get_host_lldp_agent_table(host, header='uuid', uuid=None,
     Returns (list):
 
     """
-    table_ = table_parser.table(
-        cli.system('host-lldp-agent-list ' + host,
-        ssh_client=con_ssh,
-        auth_info=auth_info))
+    table_ = table_parser.table(cli.system('host-lldp-agent-list ' + host, ssh_client=con_ssh, auth_info=auth_info))
 
     args_temp = {
         'uuid': uuid,
@@ -3132,22 +2978,18 @@ def get_host_lldp_agent_table(host, header='uuid', uuid=None,
         'status': status,
         'chassis_id': chassis_id,
         'system_name': system_name,
-        'system_description': system_description
+        'system_description': system_description,
+        'port_id': port_id,
     }
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_host_lldp_neighbor_table(host, header='uuid', 
-                       uuid=None, local_port=None, remote_port=None,
-                       chassis_id=None, management_address=None, 
-                       system_name=None, system_description=None,
-                       auth_info=Tenant.ADMIN,
-                       con_ssh = None, strict = True, regex = None,
-                       **kwargs):
+def get_host_lldp_neighbor_table(host, header='uuid', uuid=None, local_port=None, remote_port=None, chassis_id=None,
+                                 management_address=None, system_name=None, system_description=None,
+                                 auth_info=Tenant.ADMIN, con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get lldp neighbour table via system host-lldp-neighbor-list <host>
     Args:
@@ -3184,19 +3026,16 @@ def get_host_lldp_neighbor_table(host, header='uuid',
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_service_list_table(header='id', id=None, service_name=None, hostname=None,
-                       state=None, auth_info=Tenant.ADMIN,
-                       con_ssh = None, strict = True, regex = None,
-                       **kwargs):
+def get_service_list_table(header='id', service_id=None, service_name=None, hostname=None, state=None,
+                           auth_info=Tenant.ADMIN, con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get service_list through service service-list command
     Args:
         header: 'id' (default value)
-        id:
+        service_id:
         service_name:
         hostname:
         state:
@@ -3213,7 +3052,7 @@ def get_service_list_table(header='id', id=None, service_name=None, hostname=Non
                                            ssh_client=con_ssh,
                                            auth_info=auth_info))
     args_temp = {
-        'id': id,
+        'id': service_id,
         'service_name': service_name,
         'hostname': hostname,
         'state': state
@@ -3221,23 +3060,18 @@ def get_service_list_table(header='id', id=None, service_name=None, hostname=Non
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_servicenodes_list_table(header='id', id=None, name=None, 
-                       operational=None,
-                       availability=None, 
-                       ready_state=None, 
-                       auth_info=Tenant.ADMIN,
-                       con_ssh = None, strict = True, regex = None,
-                       **kwargs):
+def get_servicenodes_list_table(header='id', servicenode_id=None, name=None, operational=None, availability=None,
+                                ready_state=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=True, regex=None,
+                                **kwargs):
     """
     Get servicenodes list through service servicenode-list
 
     Args:
         header: 'id' (default)
-        id:
+        servicenode_id:
         name:
         operational:
         availability:
@@ -3255,7 +3089,7 @@ def get_servicenodes_list_table(header='id', id=None, name=None,
                                            ssh_client=con_ssh,
                                            auth_info=auth_info))
     args_temp = {
-        'id': id,
+        'id': servicenode_id,
         'name': name,
         'operational': operational,
         'ready_state': ready_state,
@@ -3264,16 +3098,11 @@ def get_servicenodes_list_table(header='id', id=None, name=None,
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_servicegroups_list_table(header='uuid', uuid=None, 
-                       service_group_name=None, 
-                       hostname=None, state=None, 
-                       auth_info=Tenant.ADMIN,
-                       con_ssh = None, strict = True, regex = None,
-                       **kwargs):
+def get_servicegroups_list_table(header='uuid', uuid=None, service_group_name=None, hostname=None, state=None,
+                                 auth_info=Tenant.ADMIN, con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get servicegroups list through service servicegroup-list command
     Args:
@@ -3285,6 +3114,7 @@ def get_servicegroups_list_table(header='uuid', uuid=None,
         auth_info:
         con_ssh:
         strict:
+        regex
         **kwargs:
 
     Returns (list):
@@ -3302,8 +3132,8 @@ def get_servicegroups_list_table(header='uuid', uuid=None,
     for key, value in args_temp.items():
         if value is not None:
             kwargs[key] = value
-    return table_parser.get_values(table_, header, strict = strict,
-                                   regex = regex, **kwargs)
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
+
 
 def create_snmp_comm_string(comm_string=None, con_ssh=None, auth_info=Tenant.ADMIN):
     """
@@ -3386,9 +3216,10 @@ def get_oam_ips():
 def modify_oam_ips(arg_str, fail_ok=False):
     cmd = "oam-modify" + arg_str
     LOG.info('In modify_oam_ips. cmd:{}'.format(cmd))
-    code, output = cli.system(cmd, rtn_list=True, fail_ok=False)
+    code, output = cli.system(cmd, rtn_list=True, fail_ok=fail_ok)
     if code != 0:
-        assert output
+        return code, output
+
     msg = "OAM modified successfully."
     return 0, msg
-                          
+

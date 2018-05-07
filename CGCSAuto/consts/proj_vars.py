@@ -52,7 +52,7 @@ class ProjVar:
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
-            'KPI_PATH': logdir + '/kpi.ini'
+            'KPI_PATH': logdir + '/kpi.ini',
         })
 
     @classmethod
@@ -279,8 +279,6 @@ class PatchingVars:
                 raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
             else:
                 var_name = def_var_name
-        return cls.__var_dict[var_name]
-
         return cls.__var_dict[var_name]
 
     @classmethod

@@ -1,12 +1,12 @@
 import random
 
 from pytest import fixture, mark, skip
-
+import time
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, KPI_DATE_FORMAT
 from consts.reasons import SkipStorageBacking
-from consts.cgcs import VMStatus, MaxVmsSupported
+from consts.cgcs import VMStatus, SysType
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, host_helper, system_helper, common
 
@@ -77,7 +77,11 @@ class TestLockWithVMs:
         if len(target_hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
-        return storage_backing, target_hosts[0]
+        target_host = target_hosts[0]
+        if SysType.AIO_DX == system_helper.get_sys_type():
+            target_host = system_helper.get_standby_controller_name()
+
+        return storage_backing, target_host
 
     @mark.nightly
     @mark.kpi
@@ -141,12 +145,11 @@ class TestLockWithVMs:
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostLock.WITH_VM.format(storage_backing),
                                       host=None, log_path=HostLock.LOG_PATH, end_pattern=HostLock.END.format(host),
                                       start_pattern=HostLock.START.format(host), start_path=HostLock.START_PATH,
-                                      init_time=init_time, uptime=10)
+                                      init_time=init_time, uptime=5)
 
     @mark.sx_nightly
     def test_lock_with_max_vms_simplex(self, simplex_only):
-
-        vms_num = MaxVmsSupported.SX
+        vms_num = host_helper.get_max_vms_supported(host='controller-0')
         vm_helper.ensure_vms_quotas(vms_num=vms_num)
 
         LOG.tc_step("Boot {} vms with various storage settings".format(vms_num))
@@ -158,6 +161,8 @@ class TestLockWithVMs:
 
         LOG.tc_step("Ensure vms are in {} state after locked host come online".format(VMStatus.STOPPED))
         vm_helper.wait_for_vms_values(vms, values=VMStatus.STOPPED, fail_ok=False)
+        # TODO: TEMP delay for Chris F  must be reverted after
+        time.sleep(120)
 
         LOG.tc_step("Unlock host on simplex system")
         host_helper.unlock_host(host='controller-0')

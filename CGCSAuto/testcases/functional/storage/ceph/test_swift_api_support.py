@@ -7,9 +7,8 @@ from utils.ssh import ControllerClient
 from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, host_helper, system_helper, \
     storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
-from consts.cgcs import GuestImages, BackendState, BackendTask
+from consts.cgcs import GuestImages, BackendState, BackendTask, EventLogID
 from consts.auth import HostLinuxCreds
-from testfixtures.resource_mgmt import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 import time
 
@@ -58,6 +57,18 @@ def collect_object_files(request, ceph_backend_installed):
     request.addfinalizer(teardown)
 
 
+def clear_config_out_of_date_alarm():
+    hosts = ('controller-0', 'controller-1')
+    for host in hosts:
+        if system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=5, entity_id=host,
+                                        fail_ok=True)[0]:
+
+            host_helper.lock_host(host, swact=True)
+            time.sleep(60)
+            host_helper.unlock_host(host)
+            system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=False)
+
+
 @fixture(scope='function', autouse=True)
 def delete_swift_containers(request):
     """
@@ -70,6 +81,7 @@ def delete_swift_containers(request):
     """
 
     def teardown():
+        clear_config_out_of_date_alarm()
         output = swift_helper.get_swift_containers(fail_ok=True)[1]
         if len(output) > 0:
             swift_helper.delete_objects(delete_all=True)
@@ -136,16 +148,19 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
     object_pool_gib = None
     cinder_pool_gib = ceph_backend_info['cinder_pool_gib']
+
     if pool_size == 'default':
         if not ceph_backend_info['object_gateway']:
             LOG.tc_step("Enabling SWIFT object store .....")
 
     else:
-        assert pre_swift_check[0], pre_swift_check[1]
+        if not ceph_backend_info['object_gateway']:
+            skip("Swift is not provisioned")
 
-        unallocated_gib = int(ceph_backend_info['ceph_total_space_gib'] - cinder_pool_gib
-                              + ceph_backend_info['glance_pool_gib']
-                              + ceph_backend_info['ephemeral_pool_gib'])
+        unallocated_gib = (ceph_backend_info['ceph_total_space_gib']
+                           - cinder_pool_gib
+                           - ceph_backend_info['glance_pool_gib']
+                           - ceph_backend_info['ephemeral_pool_gib'])
         if unallocated_gib == 0:
             unallocated_gib = int(int(cinder_pool_gib) / 4)
             cinder_pool_gib = str(int(cinder_pool_gib) - unallocated_gib)
@@ -159,22 +174,25 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
                                                                      services='cinder,glance,swift')
 
     LOG.info("Verifying if swift object gateway is enabled...")
-    assert updated_backend_info['object_gateway'] == 'True', "Fail to enable Swift object gateway: {}"\
+    assert str(updated_backend_info['object_gateway']).lower() == 'true', "Fail to enable Swift object gateway: {}"\
         .format(updated_backend_info)
     LOG.info("Swift object gateway is enabled.")
+
     LOG.info("Verifying ceph task ...")
     state = storage_helper.get_storage_backend_state('ceph')
-    if system_helper.wait_for_alarm(alarm_id="250.001", timeout=10, fail_ok=True)[0]:
+    if system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=10, fail_ok=True,
+                                    entity_id='controller-')[0]:
         LOG.info("Verifying ceph task is set to 'add-object-gateway'...")
         assert BackendState.CONFIGURING == state, \
             "Unexpected ceph state '{}' after swift object gateway update ".format(state)
 
         LOG.info("Lock/Unlock controllers...")
-        active_controller = system_helper.get_active_controller_name()
-        standby_controller = system_helper.get_standby_controller_name()
+        active_controller, standby_controller = system_helper.get_active_standby_controllers()
         LOG.info("Active Controller is {}; Standby Controller is {}...".format(active_controller, standby_controller))
 
         for controller in [standby_controller, active_controller]:
+            if not controller:
+                continue
             HostsToRecover.add(controller)
             host_helper.lock_host(controller, swact=True)
             storage_helper.wait_for_storage_backend_vals(backend='ceph-store',
@@ -182,7 +200,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
                                                             'state': BackendState.CONFIGURING})
             host_helper.unlock_host(controller)
 
-        system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=False)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, fail_ok=False)
     else:
         assert BackendState.CONFIGURED == state, \
             "Unexpected ceph state '{}' after swift object gateway update ".format(state)
@@ -190,55 +208,30 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     LOG.info("Verifying Swift provisioning setups...")
     assert verify_swift_object_setup(), "Failure in swift setups"
 
-    guest_os = GuestImages.DEFAULT_GUEST
-    image_id = glance_helper.get_guest_image(guest_os=guest_os)
-
-    mgmt_net_id = network_helper.get_mgmt_net_id()
-    tenant_net_id = network_helper.get_tenant_net_id()
-    internal_net_id = network_helper.get_internal_net_id()
-
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
-
-    for i in range(1, 3):
-        vol_name = "vol_{}_{}".format(guest_os, i)
-        LOG.tc_step("Creating a volume {} from {} image {}".format(vol_name, guest_os, image_id))
-
-        code, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id, guest_image=guest_os,
-                                                   fail_ok=True)
-        ResourceCleanup.add('volume', vol_id)
-        assert 0 == code, "Fail to  creating volume {}".format(vol_name)
-
+    for i in range(3):
         vm_name = 'vm_swift_api_{}'.format(i)
-        LOG.tc_step("Boot a vm {} using flavor  and volume ")
-        vm_id = vm_helper.boot_vm(name=vm_name, nics=nics, source_id=vol_id, guest_os=guest_os, cleanup='function')[1]
+        LOG.tc_step("Boot vm {} and perform nova actions on it".format(vm_name))
+        vm_id = vm_helper.boot_vm(name=vm_name, cleanup='function')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-        LOG.tc_step("Attempting cold migrate VM {} ....".format(vm_name))
+        LOG.info("Cold migrate VM {} ....".format(vm_name))
         rc = vm_helper.cold_migrate_vm(vm_id=vm_id)[0]
-        LOG.info("Verifying cold migration succeeded...")
         assert rc == 0, "VM {} failed to cold migrate".format(vm_name)
 
-        LOG.tc_step("Attempting live migrate VM {} ....".format(vm_name))
+        LOG.info("Live migrate VM {} ....".format(vm_name))
         rc = vm_helper.live_migrate_vm(vm_id=vm_id)[0]
-        LOG.info("Verifying live migration succeeded...")
         assert rc == 0, "VM {} failed to live migrate".format(vm_name)
 
-        LOG.tc_step("Attempting to suspend VM {} ....".format(vm_name))
-        rc = vm_helper.suspend_vm(vm_id)[0]
-        LOG.info("Verifying vm suspended...")
-        assert rc == 0, "VM {} failed to suspend".format(vm_name)
+        LOG.info("Suspend VM {} ....".format(vm_name))
+        vm_helper.suspend_vm(vm_id)
 
-        LOG.tc_step("Attempting to resume VM {} ....".format(vm_name))
-        rc = vm_helper.resume_vm(vm_id)[0]
-        LOG.info("Verifying vm resumed...")
-        assert rc == 0, "VM {} failed to resume".format(vm_name)
+        LOG.info("Resume VM {} ....".format(vm_name))
+        vm_helper.resume_vm(vm_id)
 
     LOG.info("Checking overall system health...")
     assert system_helper.get_system_health_query(), "System health not OK after VMs"
 
-    LOG.tc_step("Verifying creating Swift container using swift post cli command ...")
+    LOG.tc_step("Create Swift container using swift post cli command ...")
     container_names = ["test_container_1", "test_container_2", "test_container_3"]
 
     for container in container_names:
@@ -247,19 +240,19 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         assert rc == 0, "Fail to create swift container {}".format(container)
         LOG.info("Create swift object container {} successfully".format(container))
 
-    LOG.tc_step("Verifying swift list to list containers ...")
+    LOG.tc_step("Verify swift list to list containers ...")
     container_list = swift_helper.get_swift_containers()[1]
     assert set(container_names) <= set(container_list), "Swift containers {} not listed in {}"\
         .format(container_names, container_list)
 
-    LOG.tc_step("Verifying swift delete a container...")
+    LOG.tc_step("Verify swift delete a container...")
     container_to_delete = container_names[2]
     rc, out = swift_helper.delete_swift_container(container_to_delete)
     assert rc == 0, "Swift delete container rejected: {}".format(out)
     assert container_to_delete not in swift_helper.get_swift_containers()[1], "Unable to delete swift container {}"\
         .format(container_to_delete)
 
-    LOG.tc_step("Verifying swift stat to show info of a single container...")
+    LOG.tc_step("Verify swift stat to show info of a single container...")
     container_to_stat = container_names[0]
     out = swift_helper.get_swift_container_stat_info(container_to_stat)
     assert out["Container"] == container_to_stat, "Unable to stat swift container {}"\

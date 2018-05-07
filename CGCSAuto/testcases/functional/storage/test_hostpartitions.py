@@ -76,14 +76,16 @@ def delete_partitions_teardown(request):
             for i in range(len(partitions_to_restore[host]) - 1, -1, -1):
                 uuid = partitions_to_restore[host][i]
                 device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+                device_node = device_node.rstrip(string.digits)
+                if device_node.startswith("/dev/nvme"):
+                    device_node = device_node[:-1]
                 partition_mib = partition_helper.get_partition_info(host, uuid, "size_mib")
-                device_node_nonum = device_node.rstrip(string.digits)
-                available_mib = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
+                available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
                 total_free = int(available_mib) + int(partition_mib)
                 LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
                 rc, out = partition_helper.delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
-                mib_after_del = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
+                mib_after_del = partition_helper.get_disk_info(host, device_node, "available_mib")
                 assert int(mib_after_del) == total_free, \
                     "Expected available_mib to be {} after deletion but instead was {}".format(
                             total_free, mib_after_del)
@@ -91,97 +93,21 @@ def delete_partitions_teardown(request):
     request.addfinalizer(teardown)
 
 
-@mark.usefixtures('restore_partitions_teardown')
+@mark.usefixtures('delete_partitions_teardown')
 def test_delete_host_partitions():
     """
-    This test deletes host partitions that are in Ready state.  The teardown
-    will re-create them.
+    This test creates host partitions and the teardown deletes them.
 
     Arguments:
     * None
 
-    Assumptions:
-    * There are some partitions present in Ready state.  If not, skip the test.
-
     Test Steps:
-    * Query the partitions on each host, and grab those hosts that have one
-      partition in Ready state.
-    * Delete those partitions
+    * Create a partition on each host
 
     Teardown:
     * Re-create those partitions
-
-    Enhancement Ideas:
-    * Create partitions (if possible) when there are none in Ready state
-    * Query hosts for last partition instead of picking hosts with one
-      partition.  Note, only the last partition can be modified.
-
     """
 
-    global partitions_to_restore
-    partitions_to_restore = {}
-
-    computes = host_helper.get_up_hypervisors()
-    hosts = list(set(system_helper.get_controllers() + computes))
-
-    LOG.tc_step("Find out which hosts have partitions in Ready state")
-    partitions_ready = partition_helper.get_partitions(hosts, "Ready")
-
-    hosts_partition_mod_ok = []
-    for host in hosts:
-        if len(partitions_ready[host]) == 1:
-            hosts_partition_mod_ok.append(host)
-
-    if not hosts_partition_mod_ok:
-        skip("Need some partitions in Ready state in order to run test")
-
-    for host in hosts_partition_mod_ok:
-        uuid = partitions_ready[host]
-        size_mib = partition_helper.get_partition_info(host, uuid[0], "size_mib")
-        device_node = partition_helper.get_partition_info(host, uuid[0], "device_node")
-        LOG.tc_step("Deleting partition {} of size {} from host {} on device node {}".format(
-                uuid[0], size_mib, host, device_node[:-1]))
-        partitions_to_restore[host] = []
-        partition_helper.delete_partition(host, uuid[0])
-        partitions_to_restore[host].append(device_node[:-1])
-        partitions_to_restore[host].append(size_mib)
-        partitions_to_restore[host].append(uuid[0])
-
-
-@mark.usefixtures('restore_partitions_teardown')
-def _test_increase_host_partition_size():
-    """
-    This test modifies the size of existing partitions that are in Ready state.
-    The partition will be deleted after modification, since decreasing the size
-    is not supported.  Teardown will re-create the partition with the original
-    values.
-
-    Arguments:
-    * None
-
-    Assumptions:
-    * There are some partitions present in Ready state.  If not, skip the test.
-
-    Test Steps:
-    * Query the partitions on each host, and grab those hosts that have one
-      partition in Ready state.
-    * Determine which partitions are on a disk with available space
-    * Modify the partition so we consume all available space on the disk
-    * Check that the disk available space goes to zero
-    * Delete the partition
-    * Check that the available space is freed
-
-    Teardown:
-    * Delete the partitions and then re-create it with the old size.
-
-    Enhancement Ideas:
-    * Create partitions (if possible) when there are none in Ready state
-    * Query hosts for last partition instead of picking hosts with one
-      partition.  Note, only the last partition can be modified.
-
-    DISABLING: Will fail on inactive controller Ready partition associated with
-    cinder.  It reports Ready but is not usable.  Talk to dev.
-    """
 
     global partitions_to_restore
     partitions_to_restore = {}
@@ -189,46 +115,98 @@ def _test_increase_host_partition_size():
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
-    LOG.tc_step("Find out which hosts have partitions in Ready state")
-    partitions_ready = partition_helper.get_partitions(hosts, "Ready")
-
-    hosts_partition_mod_ok = []
+    usable_disks = False
     for host in hosts:
-        if len(partitions_ready[host]) == 1:
-            hosts_partition_mod_ok.append(host)
+        disks = partition_helper.get_disks(host)
+        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        if not free_disks:
+            continue
 
-    if not hosts_partition_mod_ok:
-        skip("Need some partitions in Ready state in order to run test")
+        for disk_uuid in free_disks:
+            size_mib = int(free_disks[disk_uuid])
+            partition_chunks = size_mib / 1024
+            if partition_chunks < 2:
+                LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
+                continue
+            usable_disks = True
+            LOG.info("Creating partition on {}".format(host))
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            assert rc == 0, "Partition creation was expected to succeed but instead failed"
+            # Check that first disk was created
+            uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            partitions_to_restore[host] = []
+            partitions_to_restore[host].append(uuid)
+            # Only test one disk on each host
+            break
+
+    if not usable_disks:
+        skip("Did not find disks with sufficient space to test with.")
+
+
+@mark.usefixtures('delete_partitions_teardown')
+def test_increase_host_partition_size():
+    """
+    Create a partition and then modify it to consume the entire disk
+
+    Arguments:
+    * None
+
+
+    Test Steps:
+    * Create a partition
+    * Modify the partition so we consume all available space on the disk
+    * Check that the disk available space goes to zero
+    * Delete the partition
+    * Check that the available space is freed
+
+    Teardown:
+    * Delete the partitions
+
+    """
+
+
+    global partitions_to_restore
+    partitions_to_restore = {}
+
+    computes = system_helper.get_hostnames(personality="compute")
+    hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
-    LOG.tc_step("Find out which partitions on are on a disk with available space")
-    for host in hosts_partition_mod_ok:
-        uuid = partitions_ready[host]
-        device_node = partition_helper.get_partition_info(host, uuid[0], "device_node")
-        device_node_nonum = device_node.rstrip(string.digits)
-        size_mib = partition_helper.get_partition_info(host, uuid[0], "size_mib")
-        disk_available_mib = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
-        if disk_available_mib == "0":
+    for host in hosts:
+        disks = partition_helper.get_disks(host)
+        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        if not free_disks:
             continue
-        usable_disks = True
-        total_size = int(size_mib) + int(disk_available_mib)
-        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(
-                uuid[0], size_mib, str(total_size), host, device_node_nonum))
-        partition_helper.modify_partition(host, uuid[0], str(total_size))
-        new_disk_available_mib = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
-        assert new_disk_available_mib == "0", "Expected disk space to be consumed but instead we have {} available".\
-            format(new_disk_available_mib)
-        partitions_to_restore[host] = []
-        partitions_to_restore[host].append(device_node_nonum)
-        partitions_to_restore[host].append(size_mib)
-        partitions_to_restore[host].append(uuid[0])
-        LOG.tc_step("Deleting partition {} of size {} from host {} on device node {}".format(
-                uuid[0], total_size, host, device_node_nonum))
-        partition_helper.delete_partition(host, uuid[0])
-        new_disk_available_mib = partition_helper.get_disk_info(host, device_node_nonum, "available_mib")
-        assert new_disk_available_mib == str(total_size), \
-            "Expected {} in disk space to be freed but instead we have {} available".format(
-                    total_size, new_disk_available_mib)
+
+        for disk_uuid in free_disks:
+            size_mib = int(free_disks[disk_uuid])
+            partition_chunks = size_mib / 1024
+            if partition_chunks < 2:
+                LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
+                continue
+            usable_disks = True
+            LOG.info("Creating partition on {}".format(host))
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            assert rc == 0, "Partition creation was expected to succeed but instead failed"
+            # Check that first disk was created
+            uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            partitions_to_restore[host] = []
+            partitions_to_restore[host].append(uuid)
+
+            device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+            device_node = device_node.rstrip(string.digits)
+            if device_node.startswith("/dev/nvme"):
+                device_node = device_node[:-1]
+            LOG.tc_step("Modifying partition {} from size 1024 to size {} from host {} on device node {}".format(
+                    uuid, size_mib, host, device_node))
+            partition_helper.modify_partition(host, uuid, str(size_mib))
+            new_disk_available_mib = partition_helper.get_disk_info(host, device_node, "available_mib")
+            assert new_disk_available_mib == "0", "Expected disk space to be consumed but instead we have {} available".\
+                format(new_disk_available_mib)
+            # Only test one disk on each host
+            break
 
     if not usable_disks:
         skip("Did not find disks with sufficient space to test with.")
@@ -626,55 +604,68 @@ def test_create_zero_sized_host_partition():
             break
 
 
+@mark.usefixtures('delete_partitions_teardown')
 def test_decrease_host_partition_size():
     """
     This test attempts to decrease the size of an existing host partition.  It
     is expected to fail since decreasing the size of a partition is not
     supported.
 
-    Assumptions:
-    * Partitions are available in Ready state.
 
     Test Steps:
-    * Query hosts to determine Ready partitions
-    * Query the partition to get the partition size
+    * Create a partition 
     * Modify the partition to decrease its size
 
     Teardown:
-    * None
-
-    Enhancement Ideas:
-    * Create partitions (if possible) when there are none in Ready state
-    * Query hosts for last partition instead of picking hosts with one
-      partition.  Note, only the last partition can be modified.
+    * Delete created partition
 
     """
+
+
+    global partitions_to_restore
+    partitions_to_restore = {}
 
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
-    LOG.tc_step("Find out which hosts have partitions in Ready state")
-    partitions_ready = partition_helper.get_partitions(hosts, "Ready")
-
-    hosts_partition_mod_ok = []
+    usable_disks = False
     for host in hosts:
-        if len(partitions_ready[host]) == 1:
-            hosts_partition_mod_ok.append(host)
+        disks = partition_helper.get_disks(host)
+        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        if not free_disks:
+            continue
 
-    if not hosts_partition_mod_ok:
-        skip("Need some partitions in Ready state in order to run test")
+        for disk_uuid in free_disks:
+            size_mib = int(free_disks[disk_uuid])
+            partition_chunks = size_mib / 1024
+            if partition_chunks < 2:
+                LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
+                continue
+            usable_disks = True
+            LOG.info("Creating partition on {}".format(host))
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            assert rc == 0, "Partition creation was expected to succeed but instead failed"
+            # Check that first disk was created
+            uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            partitions_to_restore[host] = []
+            partitions_to_restore[host].append(uuid)
 
-    for host in hosts_partition_mod_ok:
-        uuid = partitions_ready[host]
-        device_node = partition_helper.get_partition_info(host, uuid[0], "device_node")
-        size_mib = partition_helper.get_partition_info(host, uuid[0], "size_mib")
-        total_size = int(size_mib) - 1
-        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(
-                uuid[0], size_mib, str(total_size), host, device_node[:-1]))
-        rc, out = partition_helper.modify_partition(host, uuid[0], str(total_size), fail_ok=True)
-        assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+            device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+            size_mib = partition_helper.get_partition_info(host, uuid, "size_mib")
+            total_size = int(size_mib) - 1
+            LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(
+                        uuid, size_mib, str(total_size), host, device_node[:-1]))
+            rc, out = partition_helper.modify_partition(host, uuid, str(total_size), fail_ok=True)
+            assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+            # Only test one disk on each host
+            break
+
+    if not usable_disks:
+        skip("Did not find disks with sufficient space to test with.")
 
 
+@mark.usefixtures('delete_partitions_teardown')
 def test_increase_host_partition_size_beyond_avail_disk_space():
     """
     This test attempts to increase the size of an existing host partition
@@ -684,44 +675,58 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
     * Partitions are available in Ready state.
 
     Test steps:
-    * Query hosts to determine Ready partitions
-    * Query the disk the partition is located on to get the available size
+    * Create partition
     * Modify the partition to consume over than the available disk space
 
     Teardown:
-    * None
-
-    Enhancement Ideas:
-    * Create partitions (if possible) when there are none in Ready state
-    * Query hosts for last partition instead of picking hosts with one
-      partition.  Note, only the last partition can be modified.
+    * Delete created partitions 
 
     """
+
+
+    global partitions_to_restore
+    partitions_to_restore = {}
 
     computes = system_helper.get_hostnames(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
-    LOG.tc_step("Find out which hosts have partitions in Ready state")
-    partitions_ready = partition_helper.get_partitions(hosts, "Ready")
-
-    hosts_partition_mod_ok = []
+    usable_disks = False
     for host in hosts:
-        if len(partitions_ready[host]) == 1:
-            hosts_partition_mod_ok.append(host)
+        disks = partition_helper.get_disks(host)
+        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        if not free_disks:
+            continue
 
-    if not hosts_partition_mod_ok:
-        skip("Need some partitions in Ready state in order to run test")
+        for disk_uuid in free_disks:
+            size_mib = int(free_disks[disk_uuid])
+            partition_chunks = size_mib / 1024
+            if partition_chunks < 2:
+                LOG.info("Skip disk {} due to insufficient space".format(disk_uuid))
+                continue
+            usable_disks = True
+            LOG.info("Creating partition on {}".format(host))
+            rc, out = partition_helper.create_partition(host, disk_uuid, "1024", fail_ok=False, wait=False)
+            assert rc == 0, "Partition creation was expected to succeed but instead failed"
+            # Check that first disk was created
+            uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            partitions_to_restore[host] = []
+            partitions_to_restore[host].append(uuid)
 
-    for host in hosts_partition_mod_ok:
-        uuid = partitions_ready[host]
-        device_node = partition_helper.get_partition_info(host, uuid[0], "device_node")
-        size_mib = partition_helper.get_partition_info(host, uuid[0], "size_mib")
-        disk_available_mib = partition_helper.get_disk_info(host, device_node[:-1], "available_mib")
-        total_size = int(size_mib) + int(disk_available_mib) + 1
-        LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(
-                uuid[0], size_mib, str(total_size), host, device_node[:-1]))
-        rc, out = partition_helper.modify_partition(host, uuid[0], str(total_size), fail_ok=True)
-        assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+            device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+            device_node = device_node.rstrip(string.digits)
+            if device_node.startswith("/dev/nvme"):
+                device_node = device_node[:-1]
+            size_mib = size_mib + 1
+            LOG.tc_step("Modifying partition {} from size 1024 to size {} from host {} on device node {}".format(
+                    uuid, size_mib, host, device_node))
+            rc, out = partition_helper.modify_partition(host, uuid, str(size_mib), fail_ok=True)
+            assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+            # Only test one disk on each host
+            break
+
+    if not usable_disks:
+        skip("Did not find disks with sufficient space to test with.")
 
 
 def test_create_partition_using_valid_uuid_of_another_host():

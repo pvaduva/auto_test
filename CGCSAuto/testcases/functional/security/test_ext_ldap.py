@@ -15,10 +15,11 @@ def router_info(request):
             if dict_['action'] == 'delete':
                 code, msg = system_helper.delete_service_parameter(uuid=dict_['uuid'])
                 assert code == 0, "Couldn't delete service param {}".format(dict_['uuid'])
-                system_helper.apply_service_parameters(service='identity')
             elif dict_['action'] == 'modify':
                 system_helper.modify_service_parameter(service=dict_['service'], section=dict_['section'],
-                                                       name=dict_['name'], value=dict_['val'], apply=True)
+                                                       name=dict_['name'], value=dict_['val'], apply=False)
+        system_helper.apply_service_parameters(service='identity')
+
     request.addfinalizer(teardown)
 
     return 0

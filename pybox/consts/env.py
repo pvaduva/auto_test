@@ -95,11 +95,11 @@ class Licenses:
 
 class Lab:
     VBOX = {
-        'short_name': 'vbox',
-        'name': 'vbox',
-        'floating_ip': '10.10.10.3',
-        'controller-0_ip': '10.10.10.1',
-        'controller-1_ip': '10.10.10.2',
+        'short_name': 'lvm',
+        'name': 'lvm',
+        'floating_ip': '10.10.10.7',
+        'controller-0_ip': '10.10.10.8',
+        'controller-1_ip': '10.10.10.9',
         'username': 'wrsroot',
         'password': 'Li69nux*',
     }
@@ -109,15 +109,15 @@ class Files:
     R5={
         'setup': [
             # TODO Need to find a way to update based on build or use generic CGCS_DEV
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
+            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
         ],
-        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0032/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
+        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
     }
     R4 = {
         'setup': [

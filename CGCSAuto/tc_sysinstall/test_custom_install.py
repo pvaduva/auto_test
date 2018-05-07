@@ -185,7 +185,7 @@ def test_config_controller(install_setup):
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     lab_files_dir = install_setup["directories"]["lab_files"]
-    build_dir = install_setup["directories"]["build"]
+    build_dir = install_setup["directories"]["build"] + "/"
     guest_path = install_setup["paths"]["guest_img"]
     license_path = install_setup["paths"]["license"]
 

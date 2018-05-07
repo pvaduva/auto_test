@@ -174,8 +174,8 @@ class TestSharedCpuDisabled:
         mark.p1((2, 'dedicated', 1, 1, 1)),
         mark.p2((2, 'dedicated', 2, None, 1)),
         mark.p1((3, 'dedicated', 1, 1, 0)),
-        mark.p3((64, 'dedicated', 1, 1, 2)),
-        mark.p3((64, 'dedicated', 1, 1, 63)),   # Assuming quota for cores for tenant under test is less than 63
+        mark.p3((5, 'dedicated', 1, 1, 2)),
+        # mark.p3((64, 'dedicated', 1, 1, 63)),   # No host supports this many vcpus atm
     ])
     def test_launch_vm_shared_cpu_setting_negative(self, vcpus, cpu_policy, numa_nodes, numa_node0, shared_vcpu,
                                                    remove_shared_cpu):
@@ -377,13 +377,13 @@ class TestSharedCpuEnabled:
         # live migrate
         LOG.tc_step("Live migrate vm and then ping vm from NatBox")
         vm_helper.live_migrate_vm(vm_id)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes)
 
         # cold migrate
         LOG.tc_step("Cold migrate vm and then ping vm from NatBox")
         vm_helper.cold_migrate_vm(vm_id)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes)
 
     # TC2922

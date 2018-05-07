@@ -500,7 +500,7 @@ class Labs:
 
     WCP_113_121 = {
         'short_name': 'wcp_113_121',
-        'name': 'yow-cgcs-wildcat-113-121',
+        'name': 'yow-cgcs-wildcat-113_121',
         'floating ip': '128.224.150.45',
         'controller-0 ip': '128.224.150.191',
         'controller-1 ip': '128.224.150.57',
@@ -539,6 +539,16 @@ class Labs:
         'system_type': 'CPE',
         'system_mode': 'simplex',
         'bios_type': b"Hewlett"
+    }
+
+    WP_15 = {
+        'short_name': 'wp_15',
+        'name': 'yow-cgcs-wolfpass-15',
+        'floating ip': '128.224.150.245',
+        'controller-0 ip': '128.224.150.245',
+        'controller_nodes': [59865],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     VBOX = {

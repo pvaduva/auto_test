@@ -14,7 +14,7 @@ from utils.multi_thread import MThread, Events
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec
+    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
@@ -751,7 +751,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         return 0, vm_ids, "VMs are booted successfully"
 
 
-def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=None, use_fip=False):
+def wait_for_vm_pingable_from_natbox(vm_id, timeout=200, fail_ok=False, con_ssh=None, use_fip=False):
     """
     Wait for ping vm from natbox succeeds.
 
@@ -769,7 +769,7 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=180, fail_ok=False, con_ssh=
     while time.time() < ping_end_time:
         if ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True, con_ssh=con_ssh, num_pings=3, use_fip=use_fip)[0]:
             # give it sometime to settle after vm booted and became pingable
-            time.sleep(3)
+            time.sleep(5)
             return True
     else:
         msg = "Ping from NatBox to vm {} failed for {} seconds.".format(vm_id, timeout)
@@ -3702,13 +3702,6 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
                 if nova_helper.get_vm_host(vm) == host:
                     vms_host_err.append(vm)
 
-        if inactive_vms:
-            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-            if fail_ok:
-                LOG.warning(err_msg)
-                return 1, inactive_vms
-            raise exceptions.VMError(err_msg)
-
         if vms_host_err:
             if post_host:
                 err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
@@ -3719,7 +3712,14 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
             if fail_ok:
                 LOG.warning(err_msg)
-                return 2, vms_host_err
+                return 1, vms_host_err
+            raise exceptions.VMError(err_msg)
+
+        if inactive_vms:
+            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 2, inactive_vms
             raise exceptions.VMError(err_msg)
 
         if ping_vms:
@@ -4100,6 +4100,7 @@ def collect_guest_logs(vm_id):
                 local_log_path = '{}/{}_{}'.format(ProjVar.get_var('GUEST_LOGS_DIR'), log_name, vm_id)
                 current_user = local_host.get_user()
                 if current_user == SvcCgcsAuto.USER:
+                    vm_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(log_path), fail_ok=True)
                     vm_ssh.scp_files_to_local_host(source_file=log_path, dest_user=current_user,
                                                    dest_password=SvcCgcsAuto.PASSWORD, dest_path=local_log_path)
                 else:
@@ -4165,3 +4166,79 @@ def wait_for_vcpu_count(vm_id, current_cpu, min_cpu=None, max_cpu=None, time_out
         return False
 
     raise exceptions.VMTimeout(msg)
+
+
+def get_vim_events(vm_id, event_ids=None, controller=None, con_ssh=None):
+    """
+    Get vim events from nfv-vim-events.log
+    Args:
+        vm_id (str):
+        event_ids (None|str|list|tuple): return only given vim events when specified
+        controller (None|str): controller where vim log is on. Use current active controller if None.
+        con_ssh (SSHClient):
+
+    Returns (list): list of dictionaries, each dictionary is one event. e.g.,:
+        [{'log-id': '47', 'event-id': 'instance-live-migrate-begin', ... , 'timestamp': '2018-03-04 01:34:28.915008'},
+        {'log-id': '49', 'event-id': 'instance-live-migrated', ... , 'timestamp': '2018-03-04 01:35:34.043094'}]
+
+    """
+    if not controller:
+        controller = system_helper.get_active_controller_name()
+
+    if isinstance(event_ids, str):
+        event_ids = [event_ids]
+
+    with host_helper.ssh_to_host(controller, con_ssh=con_ssh) as controller_ssh:
+        vm_logs = controller_ssh.exec_cmd('grep --color=never -A 4 -B 6 -E "entity .*{}" /var/log/nfv-vim-events.log'.
+                                          format(vm_id))[1]
+
+    log_lines = vm_logs.splitlines()
+    vm_events = []
+    vm_event = {}
+    for line in log_lines:
+        if re.search(' = ', line):
+            if line.startswith('log-id') and vm_event:
+                if not event_ids or vm_event['event-id'] in event_ids:
+                    vm_events.append(vm_event)
+
+                vm_event = {}
+            key, val = re.findall('(.*)= (.*)', line)[0]
+            vm_event[key.strip()] = val.strip()
+
+    if vm_event and (not event_ids or vm_event['event-id'] in event_ids):
+        vm_events.append(vm_event)
+
+    LOG.info("VM events: {}".format(vm_events))
+    return vm_events
+
+
+def get_live_migrate_duration(vm_id, con_ssh=None):
+    LOG.info("Get live migration duration from nfv-vim-events.log for vm {}".format(vm_id))
+    events = (VimEventID.live_migrate_begin, VimEventID.live_migrate_end)
+    live_mig_begin, live_mig_end = get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
+
+    start_time = live_mig_begin['timestamp']
+    end_time = live_mig_end['timestamp']
+    duration = common.get_timedelta_for_isotimes(time1=start_time, time2=end_time).total_seconds()
+    LOG.info("Live migration for vm {} took {} seconds".format(vm_id, duration))
+
+    return duration
+
+
+def get_cold_migrate_duration(vm_id, con_ssh=None):
+    LOG.info("Get cold migration duration from vim-event-log for vm {}".format(vm_id))
+    events = (VimEventID.cold_migrate_begin, VimEventID.cold_migrate_end,
+              VimEventID.cold_migrate_confirm_begin, VimEventID.cold_migrate_confirmed)
+    cold_mig_begin, cold_mig_end, cold_mig_confirm_begin, cold_mig_confirm_end = \
+        get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
+
+    duration_cold_mig = common.get_timedelta_for_isotimes(time1=cold_mig_begin['timestamp'],
+                                                          time2=cold_mig_end['timestamp']).total_seconds()
+
+    duration_confirm = common.get_timedelta_for_isotimes(time1=cold_mig_confirm_begin['timestamp'],
+                                                         time2=cold_mig_confirm_end['timestamp']).total_seconds()
+
+    duration = duration_cold_mig + duration_confirm
+    LOG.info("Cold migrate and confirm for vm {} took {} seconds".format(vm_id, duration))
+
+    return duration

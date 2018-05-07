@@ -18,7 +18,6 @@ from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
-
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, install_helper, \
     common, network_helper
 from keywords.common import scp_to_local
@@ -34,16 +33,15 @@ def setup_tis_ssh(lab):
 
     if con_ssh is None:
         try:
-            con_ssh = SSHClient(lab['controller-0 ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+            con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                 CONTROLLER_PROMPT)
             con_ssh.connect(retry=True, retry_timeout=30)
+            ControllerClient.set_active_controller(con_ssh)
         except:
             if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
                 LOG.error("SSH to lab fip failed. Collecting lab network info.")
                 collect_sys_net_info(lab=ProjVar.get_var('LAB'))
             raise
-
-        ControllerClient.set_active_controller(con_ssh)
     # if 'auth_url' in lab:
     #     Tenant._set_url(lab['auth_url'])
     return con_ssh
@@ -118,7 +116,11 @@ def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     Args:
         nat_ssh (SSHClient): NATBox client
         keyfile_path (str): Natbox path to scp keyfile to
+<<<<<<< .merge_file_YjhgmY
         con_ssh (SSHClient):
+=======
+        con_ssh (SSHClient)
+>>>>>>> .merge_file_B4i5qY
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
@@ -493,8 +495,8 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         installconf.read(installconf_path)
 
         # Parse lab info
-        lab_info = installconf['LAB']
-        lab_name = lab_info['LAB_NAME']
+        lab_info_ = installconf['LAB']
+        lab_name = lab_info_['LAB_NAME']
         vbox = True if 'vbox' in lab_name.lower() else False
         if vbox:
             LOG.info("The test lab is a VBOX TiS setup")
@@ -502,15 +504,15 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
             lab_to_install = get_lab_dict(lab_name)
 
         if lab_to_install:
-            con0_ip = lab_info['CONTROLLER0_IP']
+            con0_ip = lab_info_['CONTROLLER0_IP']
             if con0_ip:
                 lab_to_install['controller-0 ip'] = con0_ip
 
-            con1_ip = lab_info['CONTROLLER1_IP']
+            con1_ip = lab_info_['CONTROLLER1_IP']
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
 
-            float_ip = lab_info['FLOATING_IP']
+            float_ip = lab_info_['FLOATING_IP']
             if float_ip:
                 lab_to_install['floating ip'] = float_ip
 
@@ -794,7 +796,10 @@ def set_sys_type(con_ssh):
     sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
     ProjVar.set_var(SYS_TYPE=sys_type)
 
-
+# TODO: currently no support for installing lab as a single controller node
+# Fix: overwrite the controller nodes in the lab with supplied ones
+# Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
+# Should we have the user create their own install configuration file if they want to install a lab with only 1 controller?
 def write_installconf(lab, controller, lab_files_server, lab_files_dir, build_server, tis_build_dir, compute, storage,
                       license_path, guest_image, heat_templates, boot, iso_path):
     """
@@ -1115,4 +1120,3 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
             return 2, err_msg
     else:
         return 0, output
-

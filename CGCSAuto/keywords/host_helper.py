@@ -3526,6 +3526,18 @@ def get_max_vms_supported(host, con_ssh=None):
     return max_count
 
 
+def get_max_vms_supported(host, con_ssh=None):
+    max_count = 10
+    cpu_model = get_host_cpu_model(host=host, con_ssh=con_ssh)
+    if proj_vars.ProjVar.get_var('IS_VBOX'):
+        max_count = MaxVmsSupported.VBOX
+    elif re.search('Xeon.* CPU D-[\d]+', cpu_model):
+        max_count = MaxVmsSupported.XEON_D
+
+    LOG.info("Max number vms supported on {}: {}".format(host, max_count))
+    return max_count
+
+
 def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, storage_backing=None, con_ssh=None):
     """
     Get hypervisors with specified configurations
@@ -3689,6 +3701,7 @@ def power_on_host(host, fail_ok=False, timeout=HostTimeout.REBOOT, unlock=True, 
         msg += ' and unlocked'
 
     return 0, msg
+
 
 def clear_local_storage_cache(host, con_ssh=None):
     with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:

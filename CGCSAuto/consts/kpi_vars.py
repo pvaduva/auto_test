@@ -37,10 +37,8 @@ class SystemInstall:
 
 class NodeInstall:
     NAME = '{}_install'
-    LOG_PATH = '/var/log/mtclogd.log'
-    START = 'setting system clock to'
-    START_PATH = '/var/log/anaconda/journal.log'
-    END = 'initial_config_complete'
+    LOG_PATH = '/var/log/anaconda/anaconda.log'
+    TIMESTAMP_PATTERN = '(\d{2}:\d{2}:\d{2},\d{3}) INFO'
 
 
 class HostLock:
@@ -125,10 +123,12 @@ class SwactUncontrolled:
 
 class LiveMigrate:
     NAME = 'live_migrate_{}'
+    NOVA_NAME = 'live_migrate_nova_{}'
 
 
 class ColdMigrate:
     NAME = 'cold_migrate_{}'
+    NOVA_NAME = 'cold_migrate_nova_{}'
 
 
 class Rebuild:

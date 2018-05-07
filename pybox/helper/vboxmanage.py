@@ -52,7 +52,7 @@ def vboxmanage_list(option="vms"):
     return vms_list
 
 
-def vboxmanage_showinfo(host="controller-0"):
+def vboxmanage_showinfo(host):
     """
     This returns info about the host 
     """
@@ -151,8 +151,8 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
             cmd.extend(['{}'.format(env.PORT)])
             env.PORT += 1
         else:
-            if hostname == 'controller-0':
-                cmd.extend(['{}controller0_serial'.format(uartpath)])
+            if 'controller-0' in hostname:
+                cmd.extend(['{}{}_serial'.format(uartpath, hostname)])
             else:
                 cmd.extend(['{}{}'.format(uartpath, hostname)])
     if nicbootprio2:
@@ -166,7 +166,11 @@ def vboxmanage_modifyvm(hostname=None, cpus=None, memory=None, nic=None, nictype
     result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
 
+<<<<<<< HEAD
 def vboxmanage_storagectl(hostname=None, storectl="sata"):
+=======
+def vboxmanage_storagectl(hostname=None, storectl="sata", hostiocache="off"):
+>>>>>>> develop
     """
     This creates a storage controller on the host.
     """
@@ -174,11 +178,15 @@ def vboxmanage_storagectl(hostname=None, storectl="sata"):
     assert hostname, "Hostname is required"
     assert storectl, "Type of storage controller is required"
     LOG.info("Creating {} storage controller on VM {}".format(storectl, hostname))
-    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl],
+    result = subprocess.check_output(['vboxmanage', 'storagectl', hostname, '--name', storectl, '--add', storectl, '--hostiocache', hostiocache],
                                      stderr=subprocess.STDOUT)
 
 
+<<<<<<< HEAD
 def vboxmanage_storageattach(hostname="controller-0", storectl="sata", storetype="hdd", disk=None, port_num="0",
+=======
+def vboxmanage_storageattach(hostname=None, storectl="sata", storetype="hdd", disk=None, port_num="0",
+>>>>>>> develop
                              device_num="0"):
     """
     This attaches a disk to a controller.
@@ -195,7 +203,7 @@ def vboxmanage_storageattach(hostname="controller-0", storectl="sata", storetype
     return result
 
 
-def vboxmanage_createmedium(hostname=None, disk_list=None):
+def vboxmanage_createmedium(hostname=None, disk_list=None, vbox_home_dir='/home'):
     """
     This creates the required disks.
     """
@@ -212,10 +220,15 @@ def vboxmanage_createmedium(hostname=None, disk_list=None):
     disk_count = 1
     for disk in disk_list:
         if platform == 'win32' or platform == 'win64':
+            ## TODO (WEI) fix it
             file_name = "C:\\Users\\" + username + "\\vbox_disks\\" + hostname + "_disk_{}".format(disk_count)
         else:
+<<<<<<< HEAD
 #            file_name = "/home/" + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
             file_name = disk_dir + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+=======
+            file_name = vbox_home_dir + '/' + username + "/vbox_disks/" + hostname + "_disk_{}".format(disk_count)
+>>>>>>> develop
         LOG.info("Creating disk {} with size {} on VM {} on device {} port {}".format(file_name, disk, hostname, device_num, port_num))
 
         result = subprocess.check_output(['vboxmanage', 'createmedium', 'disk', '--size', str(disk), '--filename',

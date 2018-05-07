@@ -31,9 +31,9 @@ def is_ceph_healthy(con_ssh=None):
 
     health_ok = 'HEALTH_OK'
     health_warn = 'HEALTH_WARN'
+    health_err = "HEALTH_ERR"
     cmd = 'ceph -s'
 
-    # TODO: Get con_ssh if None
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -41,9 +41,14 @@ def is_ceph_healthy(con_ssh=None):
 
     if health_ok in out:
         msg = 'CEPH cluster is healthy'
+        LOG.info(msg)
         return True, msg
     elif health_warn in out:
         msg = 'CEPH cluster is in health warn state'
+        LOG.info(msg)
+        return False, msg
+    elif health_err in out:
+        msg = 'CEPH cluster is in health error state'
         return False, msg
 
     msg = 'Cannot determine CEPH health state'
@@ -548,12 +553,14 @@ def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=N
     if not expt_values:
         raise ValueError("At least one key/value pair has to be provided via expt_values")
 
+    LOG.info("Wait for storage backend {} to reach: {}".format(backend, expt_values))
     end_time = time.time() + timeout
     dict_to_check = expt_values.copy()
     stor_backend_info = None
     while time.time() < end_time:
         stor_backend_info = get_storage_backend_info(backend=backend, keys=list(dict_to_check.keys()), con_ssh=con_ssh)
-        for key, expt_val in dict_to_check.items():
+        dict_to_iter = dict_to_check.copy()
+        for key, expt_val in dict_to_iter.items():
             actual_val = stor_backend_info[key]
             if str(expt_val) == str(actual_val):
                 dict_to_check.pop(key)

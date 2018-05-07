@@ -21,19 +21,19 @@ def sftp_get(source, remote_host, destination):
 
     Note, keys must be setup for this to work.
     """
-    username = getpass.getuser()
+    username = 'svc-cgcsauto'
     if platform == 'win32' or platform == 'win64':
         privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
         pass
     else:
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
-    mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
+    #mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
 
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
 
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username)
     sftp_client = ssh_client.open_sftp()
     LOG.info("Getting file from {} to {}".format(source, destination))
     sftp_client.get(source, destination)
@@ -41,7 +41,7 @@ def sftp_get(source, remote_host, destination):
     sftp_client.close()
     ssh_client.close()
 
-def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
+def sftp_send(source, remote_host, destination, username, password):
     """
     Send files to remote server, usually controller-0
     args:
@@ -51,9 +51,6 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the file locally: /tmp/bootimage.iso
     """
-    username = 'wrsroot'
-    password = 'Li69nux*'
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
 
     ssh_client = paramiko.SSHClient()
@@ -78,7 +75,7 @@ def sftp_send(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     ssh_client.close()
     
     
-def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
+def send_dir(source, remote_host, destination, username, password):
     """
     Send directory contents to remote server, usually controller-0
     Note: does not send nested directories only files.
@@ -89,9 +86,6 @@ def send_dir(source, remote_host='10.10.10.3', destination='/home/wrsroot/'):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the file on host: /home/wrsroot/
     """
-    username = 'wrsroot'
-    password = 'Li69nux*'
-
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -131,17 +125,17 @@ def get_dir(source, remote_host, destination, patch=False, setup=False):
     e.g. yow-cgts4-lx.wrs.com
     - destination: where to store the files locally: e.g. /tmp/files/
     """
-    username = getpass.getuser()
+    username = 'svc-cgcsauto'
     if platform == 'win32' or platform == 'win64':
         privatekeyfile = os.path.expanduser('C:\\Users\\{}\\.ssh\\'.format(username))
         pass
     else:
         privatekeyfile = os.path.expanduser('~/.ssh/id_rsa')
-    mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
+    #mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
     LOG.info("Connecting to server {} with username {}".format(remote_host, username))
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(remote_host, username=username, pkey=mykey)
+    ssh_client.connect(remote_host, username=username)
     sftp_client = ssh_client.open_sftp()
     LOG.info(sftp_client.listdir(source))
     path = ''
