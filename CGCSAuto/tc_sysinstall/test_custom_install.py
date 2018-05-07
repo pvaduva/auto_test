@@ -293,10 +293,6 @@ def test_duplex_install(install_setup):
     LOG.tc_step("Run lab setup for CPE lab")
     install_helper.run_lab_setup()
 
-    LOG.tc_step("Bulk add hosts for CPE lab")
-    rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml")
-    assert rc == 0, msg
-
     LOG.tc_step("Run lab setup for CPE lab")
     install_helper.run_lab_setup()
 
@@ -435,11 +431,6 @@ def test_storage_install(install_setup):
 
     LOG.tc_step("Run lab setup")
     install_helper.run_lab_setup()
-
-    LOG.tc_step("Bulk add hosts")
-    rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml")
-    assert rc == 0, msg
-    # assert added_hosts[0] + added_hosts[1] + added_hosts[2] == hosts, "hosts_bulk_add failed to add all hosts
 
     LOG.tc_step("Boot other lab hosts")
     for hostname in hosts:
