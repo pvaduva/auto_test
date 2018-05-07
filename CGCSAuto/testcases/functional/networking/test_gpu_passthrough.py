@@ -27,7 +27,7 @@ def setup_alias(request):
         LOG.fixture_step("Delete service parameter uuid {} ".format(user_uuid))
         system_helper.delete_service_parameter(uuid=user_uuid)
 
-        system_helper.apply_service_parameters(service, wait_for_config=False)
+        system_helper.apply_service_parameters(service, wait_for_config=True)
 
     request.addfinalizer(revert_alias_setup)
 
