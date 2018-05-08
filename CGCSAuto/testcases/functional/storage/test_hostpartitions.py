@@ -86,9 +86,10 @@ def delete_partitions_teardown(request):
                 rc, out = partition_helper.delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
                 gib_after_del = partition_helper.get_disk_info(host, device_node, "available_gib")
-                assert float(gib_after_del) == total_free, \
+                gib_after_del2 = round(float(gib_after_del), 3)
+                assert gib_after_del2 == total_free, \
                     "Expected available_gib to be {} after deletion but instead was {}".format(
-                            total_free, gib_after_del)
+                            total_free, gib_after_del2)
 
     request.addfinalizer(teardown)
 
@@ -302,7 +303,7 @@ def test_create_many_small_host_partitions_on_a_single_host():
             continue
         for disk_uuid in free_disks:
             size_gib = float(free_disks[disk_uuid])
-            num_partitions = 5
+            num_partitions = 2
             if size_gib <= num_partitions:
                 LOG.info("Skipping disk {} due to insufficient space".format(disk_uuid))
                 continue
@@ -316,7 +317,8 @@ def test_create_many_small_host_partitions_on_a_single_host():
             # Only test one disk on each host
             break
         # Only test one host (otherwise takes too long)
-        break
+        if usable_disks:
+            break
 
     if not usable_disks:
         skip("Did not find disks with sufficient space to test with.")
