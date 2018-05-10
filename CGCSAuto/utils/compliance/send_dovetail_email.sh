@@ -13,7 +13,7 @@ echo -e "\nTest Parameter: " $test_parameter >> $OUT
 echo -e "\nSystem Software Version: " $release_version >> $OUT
 echo -e "\nSystem Load: " $build_id >> $OUT
 
-cd /sandbox/AUTOMATION_LOGS/refstack
+cd /sandbox/AUTOMATION_LOGS/dovetail
 
 export LAST_LOG=`ls -td -- * | head -n 1`
 
