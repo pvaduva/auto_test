@@ -16,7 +16,7 @@
 import pexpect
 import argparse
 
-from utils.jenkins_utils.create_log_dir import create_refstack_log_dir
+from utils.jenkins_utils.create_log_dir import create_test_log_dir
 from utils.ssh import SSHClient
 
 TEST_SERVER_PROMPT = '$'
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         TEST_LOCAL_DIR = args.refstack_install_directory
         local_log_directory = args.local_log_directory
 
-        local_dir = create_refstack_log_dir(local_log_directory)
+        local_dir = create_test_log_dir("refstack", local_log_directory)
 
         TEST_LOG_DIR = TEST_LOCAL_DIR + "/.tempest/.testrepository"
         TEST_LIST_file = TEST_LOCAL_DIR + "/test-list.txt"
