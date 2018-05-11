@@ -2024,7 +2024,7 @@ def is_host_with_instance_backing(host, storage_type='image', con_ssh=None):
     return storage_type in host_lvg_inst_backing
 
 
-def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None, concurrent_ops=None, lock=True,
+def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size="5", concurrent_ops=None, lock=True,
                     unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Modify host lvg
@@ -2054,12 +2054,13 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
             inst_backing = 'image'
         elif 'lvm' in inst_backing:
             inst_backing = 'lvm'
-            if inst_lv_size is None and lvg == 'nova-local':
-                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
-                                                       strict=False)[0]
-                inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
-                if inst_lv_size < 5120:        # cannot be smaller than 5g
-                    inst_lv_size = None
+            #if inst_lv_size is None and lvg == 'nova-local':
+            #    lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+            #                                           strict=False)[0]
+            #inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
+            #    if inst_lv_size < 5120:        # cannot be smaller than 5g
+            #        inst_lv_size = None
+            inst_lv_size_mib = int(inst_lv_size) * 1024
         elif 'remote' in inst_backing:
             inst_backing = 'remote'
         else:
@@ -2075,10 +2076,10 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
             if inst_backing != post_inst_backing:
                 err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
 
-        if inst_lv_size is not None:
+        if inst_backing == 'lvm':
             post_inst_lv_size = params.get('instances_lv_size_mib', 0)
-            if int(inst_lv_size) != int(post_inst_lv_size):
-                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
+            if inst_lv_size_mib != int(post_inst_lv_size):
+                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size_mib)
 
         if concurrent_ops is not None:
             post_concurrent_ops = params['concurrent_disk_operations']
@@ -2088,9 +2089,9 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
         return err_msg
 
     args_dict = {
-        '--instance_backing': inst_backing,
-        '--instances_lv_size_mib': inst_lv_size,
-        '--concurrent_disk_operations': concurrent_ops
+        '-b': inst_backing,
+        '-s': inst_lv_size,
+        '-c': concurrent_ops
     }
     args = ''
 

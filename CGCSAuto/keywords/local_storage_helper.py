@@ -23,12 +23,16 @@ def get_storprof_diskconfig(profile=None, con_ssh=None):
 
 def is_storprof_applicable_to(host=None, profile=None, con_ssh=None):
     profile_disk_sizes = get_storprof_diskconfig(profile=profile, con_ssh=con_ssh)
+
+    LOG.info("Profile disk sizes is: {}".format(profile_disk_sizes))
+
     if not profile_disk_sizes:
         LOG.warn('empty profile disk sizes:{}'.format(profile_disk_sizes))
         return False
 
     applicable = True
     host_disk_sizes = get_host_disk_sizes(host=host)
+    LOG.info("Disk sizes is {} for {}".format(host_disk_sizes, host))
     for disk in profile_disk_sizes.keys():
         if disk not in host_disk_sizes.keys():
             LOG.warn('host does not have disk:{} '.format(host, disk))
@@ -75,7 +79,7 @@ def get_host_disk_sizes(host=None, con_ssh=None):
         return {}
 
     table = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), ssh_client=con_ssh))
-    index_device_node = table['headers'].index('device_node')
+    index_device_node = table['headers'].index('device_path')
     index_size_gib = table['headers'].index('size_gib')
 
     disk_sizes = {}
