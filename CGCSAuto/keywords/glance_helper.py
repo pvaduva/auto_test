@@ -11,7 +11,7 @@ from consts.timeout import ImageTimeout
 from keywords import common, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
-from utils.clients.ssh import ControllerClient, NATBoxClient
+from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
 from utils.tis_log import LOG
 
 
@@ -553,6 +553,8 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=No
     dest_name = GuestImages.IMAGE_FILES[img_os][2]
     source_name = GuestImages.IMAGE_FILES[img_os][0]
     source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
+    if con_ssh is None:
+        con_ssh = get_cli_client()
     dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_path, dest_dir=dest_dir,
                                                              dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
     if not con_ssh.file_exists(dest_path):
