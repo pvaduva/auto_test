@@ -9,9 +9,9 @@ from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper
     host_helper, common, system_helper
 
 from consts.heat import Heat, HeatUpdate
-from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH, HeatStackStatus
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -142,7 +142,7 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
     update_params = getattr(HeatUpdate, t_name)['params']
     update_vals = getattr(HeatUpdate, t_name)['new_vals']
 
-    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
+    template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_PATH, template_name)
     cmd_list = [" -f %s " % template_path]
 
     for i in range(len(update_params)):
@@ -211,7 +211,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     names = table_parser.get_values(table_, 'stack_name')
     stack_name = common.get_unique_name(t_name, existing_names=names)
 
-    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
+    template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
 
     if params is not None:

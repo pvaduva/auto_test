@@ -1,20 +1,19 @@
 import random
-import time
 import string
+import time
+from functools import wraps
 
-from pytest import mark, skip
 from pytest import fixture
+from pytest import mark, skip
 
-from utils import cli, table_parser
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import SystemType
 from consts.timeout import SysInvTimeout
-from keywords import system_helper
 from keywords import network_helper
-
-from functools import wraps
+from keywords import system_helper
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def id_gen(val):

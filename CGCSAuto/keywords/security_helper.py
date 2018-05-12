@@ -1,14 +1,13 @@
-
+import random
 import re
 import time
-import random
-
 from string import ascii_lowercase, ascii_uppercase, digits
 
 from pexpect import EOF
-from consts.cgcs import Prompt
 from consts.auth import Tenant, HostLinuxCreds, CliAuth
-from utils.ssh import ControllerClient, SSHClient, SSHFromSSH
+from consts.cgcs import Prompt
+from utils.clients.ssh import ControllerClient, SSHClient, SSHFromSSH
+
 from utils.tis_log import LOG
 
 from keywords import system_helper, keystone_helper
@@ -990,7 +989,7 @@ def modify_https(enable_https=True, check_first=True, timeout=400, check_interva
             return -1, "lab is already in http state"
 
     res, output = system_helper.set_system_info(fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
-                                  https_enabled='{}'.format(str(enable_https).lower()))
+                                                https_enabled='{}'.format(str(enable_https).lower()))
 
     if res == 1:
         return 1, output

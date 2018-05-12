@@ -1,27 +1,26 @@
+import configparser
 import os
 import re
 import threading
 import time
 from contextlib import contextmanager
 
+import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
+from consts.auth import Tenant, CliAuth
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts.timeout import HostTimeout
 from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperState, EventLogID
+    PREFIX_CLONED_IMAGE_FILE
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
+from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread
-from utils.ssh import SSHClient, ControllerClient
+from utils.clients.ssh import SSHClient, ControllerClient
+from utils.node import create_node_boot_dict, create_node_dict
 from utils.tis_log import LOG
-from utils.node import create_node_boot_dict, create_node_dict, Node
-from consts.auth import Tenant, CliAuth
-import setups
-import configparser
-
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 UPGRADE_LOAD_SIG_FILE = "bootimage.sig"

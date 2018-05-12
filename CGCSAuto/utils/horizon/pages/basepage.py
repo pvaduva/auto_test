@@ -39,7 +39,7 @@ class BasePage(pageobject.PageObject):
         self.topbar.user_dropdown_menu.click_on_rc_v2()
 
     def download_rc_v3(self):
-        self.topbar.user_dropdown_menu.click_on_rc_v2()
+        self.topbar.user_dropdown_menu.click_on_rc_v3()
 
     def go_to_help_page(self):
         self.topbar.user_dropdown_menu.click_on_help()

@@ -1,14 +1,14 @@
 import time
+
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
-from consts.proj_vars import ProjVar
-from utils.tis_log import LOG
-from utils.ssh import NATBoxClient
 from consts.cgcs import VMStatus, FlavorSpec
-from keywords import vm_helper, nova_helper, host_helper, network_helper, system_helper, common
+from keywords import vm_helper, nova_helper, host_helper, network_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
+from utils.clients.ssh import NATBoxClient
+from utils.tis_log import LOG
 
 
 @fixture(scope='module', autouse=True, params=['distributed', 'centralized'])

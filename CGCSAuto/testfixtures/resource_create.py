@@ -1,8 +1,9 @@
 from pytest import fixture
 
-from utils.tis_log import LOG
 from consts.cgcs import GuestImages
+from consts.proj_vars import ProjVar
 from keywords import nova_helper, glance_helper, keystone_helper
+from utils.tis_log import LOG
 
 
 # Session fixture to add affinitiy and anti-affinity server group
@@ -126,13 +127,14 @@ def __create_image(img_os, scope):
 
     LOG.fixture_step("({}) Get or create a glance image with {} guest OS".format(scope, img_os))
     img_info = GuestImages.IMAGE_FILES[img_os]
-    if img_info[0] is not None:
-        image_path = glance_helper._scp_guest_image(img_os=img_os)
-    else:
-        image_path = "{}/{}".format(GuestImages.IMAGE_DIR, img_info[2])
-
     img_id = glance_helper.get_image_id_from_name(img_os, strict=True)
     if not img_id:
+        if img_info[0] is not None:
+            image_path = glance_helper._scp_guest_image(img_os=img_os)
+        else:
+            img_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+            image_path = "{}/{}".format(img_dir, img_info[2])
+
         disk_format = 'raw' if img_os in ['cgcs-guest', 'tis-centos-guest', 'vxworks'] else 'qcow2'
         img_id = glance_helper.create_image(name=img_os, source_image_file=image_path, disk_format=disk_format,
                                             container_format='bare')[1]

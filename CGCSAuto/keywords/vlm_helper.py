@@ -2,12 +2,11 @@ import multiprocessing as mp
 from multiprocessing import Process, Queue
 
 from consts.proj_vars import InstallVars
-from consts.vlm import VlmAction, VLM_TOOL
 from consts.timeout import HostTimeout
-
+from consts.vlm import VlmAction
 from keywords import host_helper, system_helper
 from utils import exceptions, local_host
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 

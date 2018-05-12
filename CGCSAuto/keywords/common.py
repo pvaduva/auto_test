@@ -5,19 +5,46 @@
 import os
 import re
 import time
-from datetime import datetime, timedelta
 from contextlib import contextmanager
+from datetime import datetime
 
 import pexpect
 
-from consts.cgcs import Prompt
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.proj_vars import ProjVar
-from utils import exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient, SSHClient
+from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
-from keywords import system_helper, security_helper
+from consts.proj_vars import ProjVar
+from keywords import security_helper
+from utils import exceptions
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
+from utils.tis_log import LOG
+
+
+def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+    if con_ssh is None:
+        con_ssh = get_cli_client()
+    if dest_name is None:
+        dest_name = source_path.split(sep='/')[-1]
+
+    if ProjVar.get_var('USER_FILE_DIR') == ProjVar.get_var('TEMP_DIR'):
+        LOG.info("Copy file from test server to localhost")
+        source_server = SvcCgcsAuto.SERVER
+        source_user = SvcCgcsAuto.USER
+        source_password = SvcCgcsAuto.PASSWORD
+        dest_path = dest_dir if not dest_name else dest_dir + dest_name
+        LOG.info('Check if file already exists on TiS')
+        if con_ssh.file_exists(file_path=dest_path):
+            LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+            return dest_path
+
+        os.makedirs(dest_dir, exist_ok=True)
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
+                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
+        return dest_path
+    else:
+        LOG.info("Copy file from test server to active controller")
+        return scp_from_test_server_to_active_controller(source_path=source_path, dest_dir=dest_dir,
+                                                         dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
 
 
 def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
@@ -29,7 +56,6 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         dest_dir (str): destination directory. should end with '/'
         dest_name (str): destination file name if not dir
         timeout (int):
-        is_dir (bool):
         con_ssh:
 
     Returns (str|None): destination file/dir path if scp successful else None

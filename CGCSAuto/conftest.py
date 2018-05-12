@@ -1,21 +1,16 @@
 import logging
 import os
-import threading    # Used for formatting logger
-
 from time import strftime, gmtime
 
 import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
-from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
-# from consts.build_server import Server, get_build_server_info
 from consts import cgcs
+from consts.proj_vars import ProjVar, InstallVars
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
-from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
-
 
 tc_start_time = None
 tc_end_time = None
@@ -270,6 +265,7 @@ def pytest_configure(config):
     bootvms_arg = config.getoption('bootvms')
     openstack_cli = config.getoption('openstackcli')
     horizon_visible = config.getoption('horizon_visible')
+    remote_cli = config.getoption('remote_cli')
     global change_admin
     change_admin = config.getoption('changeadmin')
     global repeat_count
@@ -301,9 +297,11 @@ def pytest_configure(config):
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
     horizon_visible = True if horizon_visible else False
+    remote_cli = True if remote_cli else False
+    if remote_cli:
+        ProjVar.set_var(REMOTE_CLI=True)
     if collect_netinfo:
         ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
-
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
     if keystone_debug:
@@ -400,6 +398,7 @@ def pytest_addoption(parser):
                   "e.g., creating vm on RegionTwo from RegionOne"
     telnetlog_help = "Collect telnet logs throughout the session"
     horizon_visible_help = "Display horizon on screen"
+    remote_cli_help = 'Run testcases using remote CLI'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -431,12 +430,13 @@ def pytest_addoption(parser):
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
-
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
+    parser.addoption('--horizon-visible', '--horizon_visible', action='store_true', dest='horizon_visible',
+                     help=horizon_visible_help)
+    parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
+                     help=remote_cli_help)
 
-    parser.addoption('--horizon_visible', '--horizon_visible', '--horizon_visible', action='store_true',
-                     dest='horizon_visible', help=horizon_visible_help)
 
     ##################################
     # Lab install or upgrade options #
@@ -675,7 +675,7 @@ def pytest_unconfigure(config):
         LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
     # Below needs con_ssh to be initialized
     try:
-        from utils.ssh import ControllerClient
+        from utils.clients.ssh import ControllerClient
         con_ssh = ControllerClient.get_active_controller()
     except:
         LOG.warning("No con_ssh found")
@@ -773,7 +773,6 @@ def pytest_generate_tests(metafunc):
     #         metafunc.fixturenames.remove(config_fixture)
     #         metafunc.fixturenames.insert(index, config_fixture)
 
-    pass
     # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
     # Stress fixture
     # global count
@@ -784,6 +783,10 @@ def pytest_generate_tests(metafunc):
     #
     # print(str(count))
     # print("{}".format(metafunc.fixturenames))
+
+    # Prefix 'remote_cli' to test names so they are reported as a different testcase
+    if ProjVar.get_var('REMOTE_CLI'):
+        metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
 
 
 ##############################################################
@@ -825,6 +828,11 @@ def c1_fixture(config_host_module):
 
 @pytest.fixture(scope='class', autouse=True)
 def c2_fixture(config_host_class):
+    return
+
+
+@pytest.fixture(scope='session', autouse=True)
+def prefix_remote_cli():
     return
 
 

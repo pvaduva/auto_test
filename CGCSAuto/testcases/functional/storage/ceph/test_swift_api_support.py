@@ -2,21 +2,25 @@
 This file contains SWIFT API related storage test cases.
 """
 
-from pytest import mark, fixture, skip
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-from keywords import glance_helper, vm_helper, host_helper, system_helper, \
-    storage_helper, keystone_helper, cinder_helper, network_helper, swift_helper
-from consts.cgcs import GuestImages, BackendState, BackendTask, EventLogID
-from consts.auth import HostLinuxCreds
-from testfixtures.recover_hosts import HostsToRecover
 import time
 
+from pytest import mark, fixture, skip
+
+from consts.auth import HostLinuxCreds
+from consts.cgcs import GuestImages, BackendState, BackendTask, EventLogID
+from consts.proj_vars import ProjVar
+from keywords import glance_helper, vm_helper, host_helper, system_helper, storage_helper, keystone_helper, swift_helper
+from testfixtures.recover_hosts import HostsToRecover
+from utils.clients.ssh import ControllerClient, get_cli_client
+from utils.tis_log import LOG
 
 TEST_OBJ_DIR = "test_objects"
-TEST_OBJ_PATH = "/home/wrsroot/" + TEST_OBJ_DIR
-TEST_OBJ_DOWNLOAD_PATH = "/home/wrsroot/downloads"
 OBJ_POOL_GIB = 100
+
+
+def get_obj_dir():
+    return ProjVar.get_var('USER_FILE_DIR')
+
 
 SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.control', 'default.rgw.data.root',
                'default.rgw.gc', 'default.rgw.log']
@@ -47,12 +51,15 @@ def ceph_backend_installed():
 @fixture(scope="module", autouse=True)
 def collect_object_files(request, ceph_backend_installed):
     cmd = "cd; mkdir {}; cp *.sh {}".format(TEST_OBJ_DIR, TEST_OBJ_DIR)
-    con_ssh = ControllerClient.get_active_controller()
-    con_ssh.exec_cmd(cmd)
+    obj_dir = get_obj_dir()
+    client = get_cli_client()
+    client.exec_cmd(cmd)
 
     def teardown():
-        delete_object_file(TEST_OBJ_PATH, rm_dir=True)
-        delete_object_file(TEST_OBJ_DOWNLOAD_PATH, rm_dir=True)
+        obj_path = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
+        download_path = '{}/downloads'.format(obj_dir)
+        delete_object_file(obj_path, rm_dir=True, client=client)
+        delete_object_file(download_path, rm_dir=True, client=client)
 
     request.addfinalizer(teardown)
 
@@ -110,21 +117,22 @@ def pre_swift_check():
 
 
 def get_large_img_file():
-    cmd = "df -h ~ | awk ' {print $4}'"
-    ctl_ssh = ControllerClient.get_active_controller()
-    rc, output = ctl_ssh.exec_cmd(cmd)
-
-    if rc == 0:
-        avail = output.split('\n')[1]
-        g = avail[len(avail)-1:]
-        s = avail[:len(avail)-1]
-        if g != 'G' or eval(s) - 8 < 1:
-
+    client = get_cli_client()
+    if not ProjVar.get_var('REMOTE_CLI'):
+        cmd = "df -h ~ | awk ' {print $4}'"
+        rc, output = client.exec_cmd(cmd)
+        if rc == 0:
+            avail = output.split('\n')[1]
+            g = avail[len(avail)-1:]
+            s = avail[:len(avail)-1]
+            if g != 'G' or eval(s) - 8 < 1:
+                return None
+        else:
             return None
-    else:
-        return None
 
-    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=TEST_OBJ_PATH, timeout=300)
+    obj_dir = get_obj_dir()
+    dest_dir = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
+    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300, con_ssh=client)
     large_filename = GuestImages.IMAGE_FILES['win_2012'][2]
     large_file_info = get_test_obj_file_names(pattern=large_filename)
     return large_file_info
@@ -263,7 +271,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
 @mark.parametrize("tc", ['small', 'large'])
 def test_swift_cli_interaction(tc, pre_swift_check):
-
+    test_obj_path = '{}/{}'.format(get_obj_dir(), TEST_OBJ_DIR)
     if not pre_swift_check[0]:
         skip(msg=pre_swift_check[1])
 
@@ -297,7 +305,7 @@ def test_swift_cli_interaction(tc, pre_swift_check):
     LOG.tc_step("Verifying {} object{} upload {} to Swift container ..."
                 .format(tc, 's' if tc is 'multiple' else '', 'by segments' if tc is 'large' else ''))
     upload_object = test_objects_info[0][0]
-    src_obj = "{}/{}".format(TEST_OBJ_PATH, upload_object)
+    src_obj = "{}/{}".format(test_obj_path, upload_object)
 
     segment_size = '2G'
     LOG.info("uploading {} object file {} with size {}   ...".format(tc, upload_object, test_objects_info[0][1]))
@@ -344,7 +352,7 @@ def test_swift_cli_interaction(tc, pre_swift_check):
         .format(stat_object_info["Content Length"], test_objects_info[0][1])
 
     LOG.tc_step("Verifying download of  {} object file from container ...".format(tc))
-    output_file = "{}/download_{}".format(TEST_OBJ_PATH, upload_object)
+    output_file = "{}/download_{}".format(test_obj_path, upload_object)
     out = swift_helper.download_objects(container=container, objects=upload_object, out_file=output_file)[1]
     assert any(upload_object in o for o in out), "Downloaded object {} not in {}".format(upload_object, out)
 
@@ -372,6 +380,10 @@ def test_swift_cli_interaction(tc, pre_swift_check):
 
 
 def test_swift_cli_multiple_object_upload(pre_swift_check):
+    client = get_cli_client()
+    obj_dir = get_cli_client()
+    TEST_OBJ_PATH = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
+    TEST_OBJ_DOWNLOAD_PATH = '{}/downloads'.format(obj_dir)
 
     if not pre_swift_check[0]:
         skip(msg=pre_swift_check[1])
@@ -570,7 +582,7 @@ def test_swift_cli_update_metadata(pre_swift_check):
     LOG.info("Container {} metadata are successfully deleted : {}".format(container, out))
 
     LOG.tc_step("Creating object with following meta data: {} ...".format(object_metedata))
-    src_obj = "{}/{}".format(TEST_OBJ_PATH, upload_object)
+    src_obj = "{}/{}/{}".format(get_obj_dir(), TEST_OBJ_DIR, upload_object)
 
     rc, out = swift_helper.upload_objects(container, src_obj, object_name=upload_object)
     assert rc == 0, "Fail to upload object file {}: {}".format(upload_object, out)
@@ -671,7 +683,7 @@ def test_swift_basic_object_copy(tc, ceph_backend_installed, pre_swift_check):
         .format(container, container_list)
 
     LOG.tc_step("Uploading object {} to container {}  ...".format(upload_object, container))
-    src_obj = "{}/{}".format(TEST_OBJ_PATH, upload_object)
+    src_obj = "{}/{}/{}".format(get_obj_dir(), TEST_OBJ_DIR, upload_object)
     rc, out = swift_helper.upload_objects(container, src_obj, object_name=upload_object)
     assert rc == 0, "Fail to upload object file {}: {}".format(upload_object, out)
 
@@ -823,8 +835,8 @@ def verify_swift_object_setup():
 
 def get_test_obj_file_names(directory=TEST_OBJ_DIR, pattern='.sh'):
 
-    con_ssh = ControllerClient.get_active_controller()
-    cmd = "test -d /home/wrsroot/{}".format(directory)
+    con_ssh = get_cli_client()
+    cmd = "test -d {}/{}".format(ProjVar.get_var('USER_FILE_DIR'), directory)
     rc, output = con_ssh.exec_cmd(cmd)
     if rc != 0:
         cmd = "cd; mkdir {}; cp *.sh {}".format(directory, directory)
@@ -844,22 +856,23 @@ def get_test_obj_file_names(directory=TEST_OBJ_DIR, pattern='.sh'):
     return obj_files
 
 
-def delete_object_file(object_path, rm_dir=False):
-    cmd = "ls {}".format(object_path)
-    con_ssh = ControllerClient.get_active_controller()
-    rc, output = con_ssh.exec_cmd(cmd)
-    if rc == 0:
-        cmd = 'rm {} {}'.format('-r' if rm_dir else '', object_path)
-        con_ssh.exec_cmd(cmd)
-        LOG.info("Files deleted {}: {}".format(object_path, output))
-    standby_controller = system_helper.get_standby_controller_name()
-    with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(),
-                                 password=HostLinuxCreds.get_password()) as standby_ssh:
+def delete_object_file(object_path, rm_dir=False, client=None):
+    def _delete_on_client(client_):
         cmd = "ls {}".format(object_path)
-        rc, output = standby_ssh.exec_cmd(cmd)
+        rc, output = client_.exec_cmd(cmd)
         if rc == 0:
             cmd = 'rm {} {}'.format('-r' if rm_dir else '', object_path)
-            standby_ssh.exec_cmd(cmd)
+            client_.exec_cmd(cmd)
             LOG.info("Files deleted {}: {}".format(object_path, output))
+
+    if not client:
+        client = get_cli_client()
+    _delete_on_client(client_=client)
+
+    if not ProjVar.get_var('REMOTE_CLI'):
+        standby_controller = system_helper.get_standby_controller_name()
+        with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(),
+                                     password=HostLinuxCreds.get_password()) as standby_ssh:
+            _delete_on_client(client_=standby_ssh)
 
     return True

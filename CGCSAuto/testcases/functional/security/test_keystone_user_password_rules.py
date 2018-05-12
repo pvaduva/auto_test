@@ -1,18 +1,16 @@
+import copy
+import random
 import re
 import time
-import random
-import copy
-
 from string import ascii_lowercase, ascii_uppercase, digits, ascii_letters
 
 from pytest import mark, skip, fixture
 
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from utils.cli import openstack, system
 from consts.auth import Tenant
 from keywords import keystone_helper
-
+from utils.cli import openstack, system
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 TEST_USER_NAME = 'keystoneuser'
 

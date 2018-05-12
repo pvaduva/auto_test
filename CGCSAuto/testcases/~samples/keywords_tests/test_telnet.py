@@ -1,6 +1,6 @@
 import time
-from utils.ssh import TelnetClient
-from telnetlib import Telnet
+
+from utils.clients.telnet import TelnetClient
 
 
 def check_alarms():

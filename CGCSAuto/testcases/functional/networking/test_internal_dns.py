@@ -1,15 +1,12 @@
 import time
-import datetime
-from copy import copy
-from pytest import fixture, mark, skip
-from keywords import nova_helper, host_helper, system_helper, network_helper, vm_helper, common
+
+from pytest import fixture, mark
+
+from consts.auth import Tenant
+from consts.cgcs import EventLogID
+from keywords import nova_helper, host_helper, system_helper, network_helper, vm_helper
 from utils import table_parser, cli
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from consts.cgcs import EventLogID
-from consts.proj_vars import ProjVar
-from consts.auth import Tenant
-from testfixtures.fixture_resources import ResourceCleanup
 
 DEFAULT_DNS_SERVERS = ['147.11.57.133', '128.224.144.130', '147.11.57.128']
 UNRESTORED_DNS_SERVERS = []

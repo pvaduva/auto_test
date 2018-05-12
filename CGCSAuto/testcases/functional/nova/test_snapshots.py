@@ -1,11 +1,13 @@
 import math
-from pytest import mark, skip, fixture
-from utils import cli
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
+
+from pytest import skip
+
 from consts.cgcs import ImageStatus
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import cli
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def test_create_snapshot_using_boot_from_image_vm():

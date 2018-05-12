@@ -3,18 +3,18 @@ import time
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
-from utils.tis_log import LOG
-from utils import telnet as telnetlib
+from consts import proj_vars
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
-from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts import proj_vars
 from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
+from utils import cli, exceptions, table_parser
+from utils import telnet as telnetlib
+from utils.clients.ssh import ControllerClient, SSHFromSSH, SSHClient
+from utils.tis_log import LOG
 
 
 @contextmanager
@@ -48,15 +48,20 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     if not prompt:
         prompt = '.*' + hostname + '\:~\$'
     original_host = con_ssh.get_hostname()
-    host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
-    host_ssh.connect()
-    current_host = host_ssh.get_hostname()
-    if not current_host == hostname:
-        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+    if original_host != hostname:
+        host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
+        host_ssh.connect(prompt=prompt)
+        current_host = host_ssh.get_hostname()
+        if not current_host == hostname:
+            raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+        close = True
+    else:
+        close = False
+        host_ssh = con_ssh
     try:
         yield host_ssh
     finally:
-        if current_host != original_host:
+        if close:
             host_ssh.close()
 
 

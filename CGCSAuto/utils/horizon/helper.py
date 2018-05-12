@@ -3,6 +3,11 @@ import tempfile
 import os
 import time
 
+from selenium import webdriver
+
+from consts.proj_vars import ProjVar
+from utils.tis_log import LOG
+
 
 @contextlib.contextmanager
 def gen_temporary_file(name='', suffix='.qcow2', size=10485760):
@@ -34,3 +39,40 @@ def gen_resource_name(resource="", timestamp=True):
         tstamp = time.strftime("%d-%m-%H-%M-%S")
         fields.append(tstamp)
     return "_".join(fields)
+
+
+class HorizonDriver:
+    driver_info = []
+
+    @classmethod
+    def get_driver(cls):
+        if cls.driver_info:
+            return cls.driver_info[0]
+
+        LOG.info("Setting Firefox download preferences")
+        profile = webdriver.FirefoxProfile()
+        # Change default download directory to automation logs dir
+        # 2 - download to custom folder
+        horizon_dir = ProjVar.get_var('LOG_DIR') + '/horizon'
+        os.makedirs(horizon_dir, exist_ok=True)
+        profile.set_preference("browser.download.folderList", 2)
+        profile.set_preference("browser.download.manager.showWhenStarting", False)
+        profile.set_preference("browser.download.dir", horizon_dir)
+        profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/plain,application/x-shellscript")
+        # profile.update_preferences()
+
+        driver_ = webdriver.Firefox(firefox_profile=profile)
+        # driver_.maximize_window()
+        cls.driver_info.append(driver_)
+        LOG.info("Web driver created with download preference set")
+        return driver_
+
+    @classmethod
+    def quit_driver(cls):
+        if cls.driver_info:
+            driver_ = cls.driver_info[0]
+            driver_.quit()
+            cls.driver_info = []
+            profile = webdriver.FirefoxProfile()
+            profile.set_preference("browser.download.folderList", 1)
+            LOG.info("Quit web driver and reset Firefox download folder to default")

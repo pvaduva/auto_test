@@ -3,10 +3,11 @@
 import re
 
 from pytest import fixture, skip, mark
+
 from consts import timeout
 from keywords import host_helper, system_helper
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 
 
 @fixture(scope='module')

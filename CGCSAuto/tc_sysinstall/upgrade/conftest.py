@@ -1,18 +1,16 @@
-import pytest
 import os
-import setups
+
+import pytest
+
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import install_helper,  patching_helper, upgrade_helper, common
-from utils.ssh import ControllerClient, SSHClient
-from utils import table_parser, cli
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES
-
-# Import test fixtures that are applicable to upgrade test
+from consts.filepaths import BuildServerPath
+from consts.proj_vars import InstallVars, UpgradeVars
+from keywords import install_helper,  patching_helper, upgrade_helper, common
 from testfixtures.pre_checks_and_configs import *
-
+from utils import table_parser, cli
+from utils.clients.ssh import SSHClient
 
 natbox_ssh = None
 con_ssh = None

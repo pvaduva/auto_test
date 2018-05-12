@@ -1,20 +1,19 @@
-import os.path
-import time
 import datetime
-import threading
+import os.path
 import random
 import re
+import threading
+import time
 
 from pytest import mark, fixture, skip
 
-from consts.timeout import HostTimeout
-
-from utils import cli, table_parser
-from utils.tis_log import LOG
-from utils.ssh import SSHClient, ControllerClient
-from consts.proj_vars import ProjVar
-from keywords import mtc_helper, system_helper, host_helper
 from consts.auth import HostLinuxCreds
+from consts.proj_vars import ProjVar
+from consts.timeout import HostTimeout
+from keywords import mtc_helper, system_helper, host_helper
+from utils import cli, table_parser
+from utils.clients.ssh import SSHClient, ControllerClient
+from utils.tis_log import LOG
 
 _tested_procs = []
 _final_processes_status = {}

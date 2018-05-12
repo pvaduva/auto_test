@@ -1,22 +1,19 @@
-import re
 import os
 import random
+import re
 import string
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
 
 from pytest import mark, fixture, skip
 
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-from utils import cli, table_parser
-from consts.cgcs import VMStatus, VMMetaData
 from consts.auth import Tenant
-
+from consts.cgcs import VMStatus, VMMetaData
 from keywords import vm_helper, host_helper, nova_helper, patching_helper, keystone_helper
-
 from testfixtures.fixture_resources import ResourceCleanup
-
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 NUM_VM = 5
 DEF_PRIORITY = 3

@@ -1,16 +1,16 @@
-
-import time
 import random
+import time
 from collections import defaultdict, deque
-from pytest import fixture, mark, skip
-from utils import lab_info
-from utils.ssh import ControllerClient
-from consts.auth import HostLinuxCreds,Tenant
-from consts.cgcs import HostAvailState, Prompt
-from keywords import security_helper, host_helper, system_helper
-from utils.tis_log import LOG
 
 from pexpect import pxssh, spawn, TIMEOUT
+from pytest import fixture, mark, skip
+
+from consts.auth import HostLinuxCreds
+from consts.cgcs import HostAvailState, Prompt
+from keywords import security_helper, host_helper, system_helper
+from utils import lab_info
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 theLdapUserManager = security_helper.get_ldap_user_manager()
 

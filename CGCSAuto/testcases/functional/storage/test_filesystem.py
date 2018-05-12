@@ -1,19 +1,16 @@
 import ast
-import re
 import math
+import re
 import time
 
 from pytest import fixture, skip, mark
 
-from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailState
 from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from testfixtures.recover_hosts import HostsToRecover
-
 
 DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']

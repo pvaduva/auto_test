@@ -1,28 +1,29 @@
+import copy
+import math
+import os
 import random
 import re
 import time
-import copy
-import math
-import pexpect
 from contextlib import contextmanager
 
-from utils import exceptions, cli, table_parser, multi_thread
-from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
-from utils import local_host
-from utils.tis_log import LOG
-from utils.multi_thread import MThread, Events
+import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID, MigStatus
+    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
-
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
     vlm_helper, storage_helper, ceilometer_helper
-from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
+from utils import exceptions, cli, table_parser, multi_thread
+from utils import local_host
+from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
+from utils.clients.local import LocalHostClient
+from utils.multi_thread import MThread, Events
+from utils.tis_log import LOG
 
 
 def _set_vm_meta(vm_id, action, meta_data, check_after_set=False, con_ssh=None, fail_ok=False):
@@ -807,14 +808,16 @@ def get_any_keypair(auth_info=None, con_ssh=None):
     """
     if auth_info is None:
         auth_info = Tenant.get_primary()
-    tenant = auth_info['tenant']
+    user = auth_info['user']
     table_keypairs = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
-    key_name = 'keypair-' + tenant
+    key_name = 'keypair-' + user
 
     if key_name in table_parser.get_column(table_keypairs, 'Name'):
         LOG.debug("{} already exists. Return existing key.".format(key_name))
     else:
-        args_ = '--pub-key /home/wrsroot/.ssh/id_rsa.pub keypair-' + tenant
+        pubkey_dir = ProjVar.get_var('USER_FILE_DIR')
+        pubkey_path = '{}/key.pub'.format(pubkey_dir)
+        args_ = '--pub-key {} keypair-{}'.format(pubkey_path, user)
         table_ = table_parser.table(cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh))
         if key_name not in table_parser.get_column(table_, 'Name'):
             raise exceptions.CLIRejected("Failed to add {}".format(key_name))
@@ -3014,9 +3017,9 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
 
 
 def _scp_net_config_cloud_init(guest_os):
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
+    dest_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
 
-    dest_dir = '/home/wrsroot/userdata/'
     if 'ubuntu' in guest_os:
         dest_name = 'ubuntu_cloud_init_if_conf.sh'
     elif 'centos' in guest_os:
@@ -3024,7 +3027,7 @@ def _scp_net_config_cloud_init(guest_os):
     else:
         raise ValueError("Unknown guest_os")
 
-    dest_path = dest_dir + dest_name
+    dest_path = '{}/{}'.format(dest_dir, dest_name)
 
     if con_ssh.file_exists(file_path=dest_path):
         LOG.info('userdata {} already exists. Return existing path'.format(dest_path))
@@ -3055,6 +3058,8 @@ def _scp_net_config_cloud_init(guest_os):
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
 
+    return dest_dir
+
 
 def _create_cloud_init_if_conf(guest_os, nics_num):
     """
@@ -3075,7 +3080,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
 
     """
 
-    file_dir = TiSPath.USERDATA
+    file_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
     guest_os = guest_os.lower()
 
     # default eth_path for non-ubuntu image
@@ -3094,7 +3099,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
     file_path = file_dir + file_name
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
@@ -3103,7 +3108,9 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     cmd = 'mkdir -p {}'.format(file_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
+    tmp_dir = '{}/userdata'.format(ProjVar.get_var('TEMP_DIR'))
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_file = tmp_dir + file_name
 
     # No longer need to specify bash using cloud-config
     # if 'centos_7' in guest_os:
@@ -3131,7 +3138,8 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
                 f.write(" - sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
                 f.write(' - ifup {}\n'.format(ethi_name))
 
-    common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+    if not ProjVar.get_var('REMOTE_CLI'):
+        common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
 
     LOG.info("Userdata file created: {}".format(file_path))
     return file_path
@@ -3148,29 +3156,23 @@ def _get_cloud_config_add_user(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.USERDATA
+    file_dir = ProjVar.get_var('USER_FILE_DIR')
     file_name = UserData.ADDUSER_WRSROOT
     file_path = file_dir + file_name
 
     if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+        con_ssh = get_cli_client()
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
 
-    LOG.debug('Create userdata directory if not already exists')
-    cmd = 'mkdir -p {}'.format(file_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
     source_file = TestServerPath.USER_DATA + file_name
-
-    dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                 dest_name=file_name, con_ssh=con_ssh)
-
+    dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_file, dest_dir=file_dir,
+                                                             dest_name=file_name, con_ssh=con_ssh)
     if dest_path is None:
-        raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
+        raise exceptions.CommonError("userdata file {} does not exist after download".format(dest_path))
 
-    return file_path
+    return dest_path
 
 
 def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, time_to_stay=1, check_interval=3,

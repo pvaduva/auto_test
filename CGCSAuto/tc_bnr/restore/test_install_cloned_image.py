@@ -1,16 +1,17 @@
-import pytest
 import re
 import time
-from utils.tis_log import LOG
-from keywords import install_helper, host_helper, system_helper
-from consts.proj_vars import InstallVars, ProjVar
-from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, EventLogID
-from utils.ssh import ControllerClient
-from consts.filepaths import BuildServerPath
-from consts.build_server import Server, get_build_server_info
+
+import pytest
+
 from consts.auth import SvcCgcsAuto
-from consts.timeout import HostTimeout
+from consts.build_server import Server, get_build_server_info
+from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt
+from consts.filepaths import BuildServerPath
+from consts.proj_vars import InstallVars, ProjVar
+from keywords import install_helper, host_helper, system_helper
 from utils import node, local_host
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @pytest.fixture(scope='session')

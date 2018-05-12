@@ -1,13 +1,13 @@
+import os
 import re
 import subprocess
-import os
 import sys
 
-from utils.ssh import SSHClient, CONTROLLER_PROMPT
+from consts.auth import Tenant, HostLinuxCreds
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
-from consts.auth import Tenant, HostLinuxCreds
 from keywords import system_helper
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT
 
 
 def get_lab_floating_ip(labname=None):

@@ -3,13 +3,14 @@ This module provides helper functions for host upgrade functions
 """
 
 import time
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
-from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
+
 from consts.auth import Tenant, HostLinuxCreds
+from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
 from consts.timeout import HostTimeout
+from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
@@ -894,7 +895,7 @@ def get_upgraded_hosts(upgrade_version, con_ssh=None, fail_ok=False, source_cred
     """
 
     table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh, fail_ok=fail_ok,
-                                           source_creden_=source_creden_))
+                                           source_openrc=source_creden_))
     table_ = table_parser.filter_table(table_, **{'running_release': upgrade_version})
     return table_parser.get_values(table_, 'hostname')
 

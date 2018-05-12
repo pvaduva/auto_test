@@ -7,7 +7,7 @@ from consts.cgcs import UUID, Prompt, Networks, SysType
 from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
@@ -2157,7 +2157,7 @@ def get_hosts_by_personality(con_ssh=None, source_admin=False):
 
     """
     source_cred = Tenant.ADMIN if source_admin else None
-    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_creden_=source_cred))
+    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_openrc=source_cred))
     controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
     computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
     storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')
@@ -2399,13 +2399,14 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
 
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None, upgrade_ver=None):
+    # TODO: Need to support remote_cli. i.e., no hardcoded load_path, etc
     if upgrade_ver >= '17.07':
         load_path = '/home/wrsroot/bootimage.sig'
         rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
-                                source_creden_=source_creden_)
+                                source_openrc=source_creden_)
     else:
         rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True,
-                                source_creden_=source_creden_)
+                                source_openrc=source_creden_)
     if rc == 0:
         table_ = table_parser.table(output)
         id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()
@@ -2439,7 +2440,7 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_cred
 
 
 def get_imported_load_id(load_version=None, con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
     if load_version:
         table_ = table_parser.filter_table(table_, state='imported', software_version=load_version)
     else:
@@ -2449,7 +2450,7 @@ def get_imported_load_id(load_version=None, con_ssh=None, source_creden_=None):
 
 
 def get_imported_load_state(load_id, load_version=None, con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
     if load_version:
         table_ = table_parser.filter_table(table_, id=load_id, software_version=load_version)
     else:
@@ -2459,14 +2460,14 @@ def get_imported_load_state(load_id, load_version=None, con_ssh=None, source_cre
 
 
 def get_imported_load_version(con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
     table_ = table_parser.filter_table(table_, state='imported')
 
     return table_parser.get_values(table_, 'software_version')
 
 
 def get_active_load_id(con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
 
     table_ = table_parser.filter_table(table_, state="active")
     return table_parser.get_values(table_, 'id')
@@ -2475,7 +2476,7 @@ def get_active_load_id(con_ssh=None, source_creden_=None):
 def get_software_loads(rtn_vals=('id', 'state', 'software_version'), sw_id=None, state=None, software_version=None,
                        strict=False, con_ssh=None, source_creden_=None):
 
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
 
     kwargs_dict = {
         'id': sw_id,
@@ -2507,7 +2508,7 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_
     load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, source_creden_=source_creden_)
 
     rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh,
-                            fail_ok=True, source_creden_=source_creden_)
+                            fail_ok=True, source_openrc=source_creden_)
     if rc == 1:
         return 1, output
 

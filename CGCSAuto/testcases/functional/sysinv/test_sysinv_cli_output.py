@@ -1,13 +1,13 @@
 import re
-from pytest import mark
 from decimal import Decimal
 
-from utils import cli, table_parser
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
+from pytest import mark
 
 from consts.cgcs import UUID
 from keywords import system_helper
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @mark.p3

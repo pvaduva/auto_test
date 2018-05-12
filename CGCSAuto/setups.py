@@ -1,25 +1,27 @@
-import re
-import os
-import time
 import configparser
+import os
+import re
 import threading
+import time
+
 import pexpect
 
 import setup_consts
-from utils.tis_log import LOG
-from utils import exceptions, lab_info
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    TelnetClient, TELNET_LOGIN_PROMPT, SSHFromSSH
-from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
-from utils import local_host
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, REGION_MAP
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
-
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper
-from keywords.common import scp_to_local
+from keywords.common import scp_to_local, scp_from_active_controller
+from utils import exceptions, lab_info
+from utils import local_host
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
+    SSHFromSSH
+from utils.clients.local import RemoteCLIClient
+from utils.clients.telnet import TELNET_LOGIN_PROMPT, TelnetClient
+from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
+from utils.tis_log import LOG
 
 
 def less_than_two_controllers():
@@ -65,7 +67,9 @@ def setup_vbox_tis_ssh(lab):
 
 
 def set_env_vars(con_ssh):
-    # TODO: delete this after source to bash issue is fixed on centos
+    # This is no longer needed
+    return
+
     con_ssh.exec_cmd("bash")
 
     prompt_cmd = con_ssh.exec_cmd("echo $PROMPT_COMMAND")[1]
@@ -105,11 +109,37 @@ def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
     nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
     ProjVar.set_var(natbox_ssh=nat_ssh)
 
-    __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
+    _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
+    _copy_pubkey()
     return nat_ssh
 
 
-def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
+def _copy_pubkey():
+    with host_helper.ssh_to_host('controller-0') as con_0_ssh:
+        pubkey_path = '{}/key.pub'.format(WRSROOT_HOME)
+        if not con_0_ssh.file_exists(pubkey_path):
+            try:
+                LOG.info("Attempt to copy public key to both controllers and localhost if applicable")
+                # copy public key to key.pub
+                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path))
+
+                if not system_helper.is_simplex():
+                    # copy publickey to controller-1
+                    con_0_ssh.scp_on_source(source_path=pubkey_path, dest_path=pubkey_path,
+                                            dest_ip='controller-1',
+                                            dest_user=HostLinuxCreds.get_user(),
+                                            dest_password=HostLinuxCreds.get_password(), timeout=30)
+            except:
+                pass
+
+        # copy public key to localhost
+        if ProjVar.get_var('REMOTE_CLI') and con_0_ssh.file_exists(pubkey_path):
+            dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'key.pub')
+            scp_from_active_controller(source_path=pubkey_path, dest_path=dest_path, timeout=60)
+            LOG.info("Public key file copied to localhost")
+
+
+def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -299,7 +329,7 @@ def get_build_info(con_ssh):
     return build_id, build_host, job
 
 
-def copy_files_to_con1():
+def _rsync_files_to_con1():
     if less_than_two_controllers():
         LOG.info("Less than two controllers on system. Skip copying file to controller-1.")
         return
@@ -322,13 +352,11 @@ def copy_files_to_con1():
           "/home/wrsroot/* controller-1:/home/wrsroot/"
 
     timeout = 1800
-
     with host_helper.ssh_to_host("controller-0") as con_0_ssh:
         LOG.info("rsync files from controller-0 to controller-1...")
         con_0_ssh.send(cmd)
 
         end_time = time.time() + timeout
-
         while time.time() < end_time:
             index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout,
                                      searchwindowsize=100)
@@ -348,6 +376,10 @@ def copy_files_to_con1():
 
         else:
             raise exceptions.TimeoutException("Timed out rsync files to controller-1")
+
+
+def copy_test_files():
+    _rsync_files_to_con1()
 
 
 def get_auth_via_openrc(con_ssh):
@@ -648,7 +680,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
 
 
 def is_https(con_ssh):
-    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_admin=True)
+    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=True)
 
 
 def scp_vswitch_log(con_ssh, hosts, log_path=None):
@@ -879,3 +911,29 @@ def collect_sys_net_info(lab):
 
         source_ssh.close()
         LOG.info("Lab networking info collected: {}".format(res_))
+
+
+def setup_remote_cli_client():
+    """
+    Download openrc files from horizon and install remote cli clients to virtualenv
+    Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
+
+    Returns (RemoteCliClient)
+
+    """
+    from keywords import horizon_helper
+    # download openrc files
+    horizon_helper.download_openrc_files()
+
+    # install remote cli clients
+    client = RemoteCLIClient.get_remote_cli_client()
+
+    # copy test files
+    LOG.info("Copy test files from controller to localhost for remote cli tests")
+    for dir_name in ('images/', 'heat/', 'userdata/'):
+        dest_path = '{}/{}'.format(ProjVar.get_var('TEMP_DIR'), dir_name)
+        os.makedirs(dest_path, exist_ok=True)
+        common.scp_from_active_controller(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
+                                          dest_path=dest_path, is_dir=True)
+
+    return client

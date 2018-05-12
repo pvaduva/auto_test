@@ -13,11 +13,13 @@
 # Connect to Test server, run pre-checks, run test list, collect logs and store them to
 # Jenkins server
 
-import pexpect
 import argparse
 
 from utils.jenkins_utils.create_log_dir import create_test_log_dir
-from utils.ssh import SSHClient
+import pexpect
+from utils.clients.ssh import SSHClient
+from utils.jenkins_utils.create_log_dir import create_refstack_log_dir
+
 
 TEST_SERVER_PROMPT = '$'
 TEST_LOG_DIR = ""

@@ -1,14 +1,16 @@
-import time, random
+import random
+import time
+
 from pytest import fixture, skip, mark
 
-from utils.tis_log import LOG
-from utils import table_parser, exceptions, cli
-from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
-from consts.cgcs import VMStatus, GuestImages
 from consts.auth import Tenant
+from consts.cgcs import VMStatus, GuestImages
+from consts.proj_vars import ProjVar
+from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.verify_fixtures import check_alarms
-from utils.ssh import ControllerClient
+from utils import table_parser, exceptions, cli
+from utils.tis_log import LOG
+from utils.clients.ssh import get_cli_client
 
 
 @fixture(scope='module', autouse=True)
@@ -505,16 +507,16 @@ def get_user_data_file():
 
     auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
-    user_data_file = "/home/wrsroot/userdata/{}_test_userdata.txt".format(tenant)
-    controller_ssh = ControllerClient.get_active_controller()
+    user_data_file = "{}/userdata/{}_test_userdata.txt".format(ProjVar.get_var('USER_FILE_DIR'), tenant)
+    client = get_cli_client()
     cmd = "test -e {}".format(user_data_file)
-    rc = controller_ssh.exec_cmd(cmd)[0]
+    rc = client.exec_cmd(cmd)[0]
     if rc != 0:
         cmd = "cat <<EOF > {}\n" \
               "#cloud-config\n\nruncmd: \n - /etc/init.d/sshd restart\n" \
               "EOF".format(user_data_file)
         print(cmd)
-        code, output = controller_ssh.exec_cmd(cmd)
+        code, output = client.exec_cmd(cmd)
         LOG.info("Code: {} output: {}".format(code, output))
 
     return user_data_file

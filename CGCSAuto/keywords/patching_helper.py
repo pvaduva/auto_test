@@ -1,14 +1,14 @@
-import re
-import os
-import time
 import functools
+import os
+import re
+import time
 from datetime import datetime
 
-from utils import cli
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from utils import table_parser
 from keywords import host_helper, system_helper
+from utils import cli
+from utils import table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 PATCH_CMDS = {
     'apply': {

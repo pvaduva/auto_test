@@ -6,12 +6,12 @@ from collections import Counter
 
 from consts.auth import Tenant
 from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID
-from consts.filepaths import UserData, TiSPath
+from consts.filepaths import UserData
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
-from utils.ssh import NATBoxClient, ControllerClient
+from utils.clients.ssh import NATBoxClient, get_cli_client
 from utils.tis_log import LOG
 
 
@@ -1073,7 +1073,10 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
 
     tenant = auth_info['tenant']
     mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])
-    return _get_net_ids(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)[0]
+    mgmt_ids = _get_net_ids(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)
+    if not mgmt_ids:
+        raise exceptions.TiSError("No {} found via 'neutron net-list'. Please set up system".format(mgmt_net_name))
+    return mgmt_ids[0]
 
 
 def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
@@ -3928,12 +3931,12 @@ def get_dpdk_user_data(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.USERDATA
+    file_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
     file_name = UserData.DPDK_USER_DATA
     file_path = file_dir + file_name
 
     if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+        con_ssh = get_cli_client()
 
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))

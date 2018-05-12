@@ -1,14 +1,14 @@
 import re
+
 from pytest import fixture, mark, skip
 
-from utils import cli, table_parser
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
-
 from keywords import nova_helper, vm_helper, host_helper, keystone_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def get_failed_live_migrate_action_id(vm_id):

@@ -1,10 +1,12 @@
-from utils.tis_log import LOG
+import re
+import time
+
+from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from keywords import vm_helper, nova_helper, common, heat_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
-from utils.ssh import ControllerClient
 from utils import exceptions
-import re, time
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def _get_stress_ng_heat(con_ssh=None):

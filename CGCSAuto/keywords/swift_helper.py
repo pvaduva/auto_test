@@ -3,11 +3,14 @@ This module provides helper functions for swift client based testing, with a foc
 on SWIFT object-storage related helper functions.
 """
 
-from utils import cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from keywords import keystone_helper, html_helper
 from consts.auth import Tenant
+from keywords import keystone_helper, html_helper
+from utils import cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
+
+
+# TODO: Any usage of localfile to upload/create objects need to be updated to adapt to remote_cli case.
 
 
 def upload_objects(container, file_or_directory, segment_size=None, segment_container=None, leave_segments=False,

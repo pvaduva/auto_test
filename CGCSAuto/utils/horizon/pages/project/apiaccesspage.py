@@ -15,29 +15,32 @@ from os.path import isfile
 from os.path import join
 from re import search
 
-from openstack_dashboard.test.integration_tests.pages import basepage
-from openstack_dashboard.test.integration_tests.regions import tables
+from utils.horizon.pages import basepage
+from utils.horizon.regions import tables
 
 
 class ApiAccessTable(tables.TableRegion):
     name = "endpoints"
 
+    # FIXME: following methods do not work. Only view credentials button can be found in bind_table_action
+
     @tables.bind_table_action('download_openrc_v2')
     def download_openstack_rc_v2(self, download_button):
-        download_button.click()
+        download_button.contextClick()
 
     @tables.bind_table_action('download_openrc')
     def download_openstack_rc_v3(self, download_button):
-        download_button.click()
+        download_button.contextclick()
 
 
-class ApiaccessPage(basepage.BaseNavigationPage):
+class ApiAccessPage(basepage.BasePage):
+    PARTIAL_URL = 'project/api_access'
 
     @property
     def apiaccess_table(self):
-        return ApiAccessTable(self.driver, self.conf)
+        return ApiAccessTable(self.driver)
 
-    def download_openstack_rc_file(self, version, directory, template):
+    def download_openstack_rc_file(self, version=3):
         if version == 2:
             self.apiaccess_table.download_openstack_rc_v2()
         elif version == 3:
@@ -60,6 +63,8 @@ class ApiaccessPage(basepage.BaseNavigationPage):
         elif version == 3:
             tenant_name_re = r'export OS_PROJECT_NAME="([^"]+)"'
             tenant_id_re = r'export OS_PROJECT_ID=(.+)'
+        else:
+            raise ValueError("Unknown version: {}. Valid versions: 2, 3 ".format(version))
         username = search(username_re, content).group(1)
         tenant_name = search(tenant_name_re, content).group(1)
         tenant_id = search(tenant_id_re, content).group(1)

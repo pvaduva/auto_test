@@ -203,3 +203,7 @@ class RestoreSystem(TiSError):
 
 class StorageError(TiSError):
     message = 'Storage error.'
+
+
+class HorizonError(TiSError):
+    message = 'Horizon error.'

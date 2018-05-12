@@ -4,7 +4,7 @@ import time
 from pytest import mark
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
-from consts.filepaths import WRSROOT_HOME
+from consts.proj_vars import ProjVar
 from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.tis_log import LOG
@@ -29,7 +29,7 @@ def launch_cpu_scaling_stack(vcpus, min_vcpus):
     stack_name = template_name.split('.')[0]
     vm_name = 'vm_cpu_scale'
     image = GuestImages.DEFAULT_GUEST
-    template_path = os.path.join(WRSROOT_HOME, HEAT_SCENARIO_PATH, template_name)
+    template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_SCENARIO_PATH, template_name)
     key_pair = vm_helper.get_any_keypair()
     net_id = network_helper.get_mgmt_net_id()
     network = network_helper.get_net_name_from_id(net_id=net_id)

@@ -33,8 +33,6 @@ def create_test_log_dir(testname, logs_dir=None):
 
     return session_dir
 
-
-
 if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-d', '--dir', action='store', type='string', dest='logs_dir',

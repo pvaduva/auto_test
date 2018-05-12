@@ -190,6 +190,8 @@ class Prompt:
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
+    TENANT_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_{}\)\]\$ '   # general prompt. Need to fill in tenant name
+    REMOTE_CLI_PROMPT = '\(keystone_{}\)\]\$ '     # remote cli prompt
 
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'

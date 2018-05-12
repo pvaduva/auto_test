@@ -5,19 +5,18 @@
 # of an applicable Wind River license agreement.
 
 import re
-
 import time
-import sys
-from pytest import fixture, mark
+
+from pytest import fixture
+
+from consts.auth import Tenant
+from consts.cgcs import FlavorSpec, EventLogID
+from consts.timeout import EventLogTimeout
+from keywords import nova_helper, vm_helper, host_helper, system_helper
+from testfixtures.fixture_resources import ResourceCleanup
 from utils import cli
 from utils import table_parser
-from utils.ssh import NATBoxClient
 from utils.tis_log import LOG
-from consts.timeout import VMTimeout, EventLogTimeout
-from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
-from consts.auth import Tenant
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def flavor_(request):

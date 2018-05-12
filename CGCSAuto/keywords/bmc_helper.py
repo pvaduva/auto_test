@@ -13,12 +13,12 @@ system can take a node, and verifies that it is correct.
 """
 import re
 
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from utils import table_parser, cli, exceptions
 from consts.auth import Tenant
 from consts.filepaths import WRSROOT_HOME, BMCPath
 from keywords import system_helper, host_helper
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def suppress_sensor(sensorgroup_name, host):

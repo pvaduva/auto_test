@@ -28,6 +28,7 @@ class ProjVar:
                   'IS_VBOX': False,
                   'RELEASE': 'R6',
                   'REMOTE_CLI': False,
+                  'USER_FILE_DIR': WRSROOT_HOME,
                   }
 
     @classmethod

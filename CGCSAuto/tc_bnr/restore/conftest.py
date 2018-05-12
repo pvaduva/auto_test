@@ -1,14 +1,8 @@
-
-import pytest
-
 import setups
-from consts.proj_vars import InstallVars, ProjVar, RestoreVars
+from consts.proj_vars import InstallVars, RestoreVars
 from keywords import vlm_helper
-from utils.ssh import ControllerClient
-from utils import node
-
-# Import test fixtures that are applicable to upgrade test
 from testfixtures.pre_checks_and_configs import *
+from utils import node
 
 
 ########################

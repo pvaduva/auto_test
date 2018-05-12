@@ -1,4 +1,5 @@
 from utils.horizon import basewebobject
+from utils.horizon.helper import HorizonDriver
 from consts.proj_vars import ProjVar
 from time import sleep
 
@@ -7,8 +8,9 @@ class PageObject(basewebobject.BaseWebObject):
     """Base class for page objects."""
     BASE_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
     PARTIAL_URL = None
+    DEFAULT_DRIVER = HorizonDriver.get_driver()
 
-    def __init__(self, driver):
+    def __init__(self, driver=DEFAULT_DRIVER):
         super(PageObject, self).__init__(driver)
         self._page_title = None
 

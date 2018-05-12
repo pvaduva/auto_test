@@ -1,4 +1,3 @@
-
 import os
 import re
 import time
@@ -7,15 +6,12 @@ from pytest import skip, fixture, mark
 
 from consts import build_server
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
-from consts.cgcs import Prompt
+from consts.cgcs import Prompt, EventLogID
 from consts.filepaths import SecurityPath, BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar
-from consts.cgcs import EventLogID
-
 from utils import cli, lab_info, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH
+from utils.clients.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
-
 from keywords import system_helper, keystone_helper, host_helper
 
 
@@ -30,6 +26,22 @@ tpm_modes = {
 default_ssl_file = '/etc/ssl/private/server-cert.pem'
 backup_ssl_file = 'server-cert.pem.bk'
 cert_id_line = r'^\|\s* uuid \s*\|\s* ([a-z0-9-]+) \s*\|$'
+fmt_password = r'{password}'
+
+expected_install = (
+    ('Password: ', fmt_password),
+    ('Enter password for the CA-Signed certificate file \[Enter <CR> for no password\]', fmt_password),
+    ('Enter \[sudo\] password for wrsroot', fmt_password),
+    ('Installing certificate file ', ''),
+    ('WARNING, Installing an invalid or expired certificate', ''),
+    ('OK to Proceed\? \(yes/NO\)', 'yes'),
+    ('In {mode} mode...', ''),
+    ('WARNING, For security reasons, the original certificate', ''),
+    ('OK to Proceed\? \(yes/NO\)', 'yes'),
+    ('Configuring TPM on all enabled controller hosts...', ''),
+    ('Auditing TPM configuration state...', ''),
+    ('^done$', ''),
+)
 
 
 @fixture(scope='session', autouse=True)

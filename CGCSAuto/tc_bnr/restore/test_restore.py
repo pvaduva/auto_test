@@ -1,20 +1,22 @@
-import pytest
 import os
 import re
 import time
-from utils.tis_log import LOG
-from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
-from consts.proj_vars import InstallVars, RestoreVars, ProjVar
+
+import pytest
+
+from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from consts.build_server import Server, get_build_server_info
 from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
-from utils.ssh import ControllerClient
 from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
-from consts.build_server import Server, get_build_server_info
-from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.timeout import HostTimeout
-from utils import node
-from utils import cli
+from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from setups import collect_tis_logs
+from utils import cli
+from utils import node
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def collect_logs(con_ssh, fail_ok=True):

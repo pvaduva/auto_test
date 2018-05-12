@@ -1,20 +1,22 @@
 import os
+import random
 import re
 import time
-import random
 
 from pytest import fixture, skip, mark
-from consts.build_server import DEFAULT_BUILD_SERVER
-from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
-from consts.proj_vars import ProjVar
-from consts.cgcs import FlavorSpec, GuestImages
-from consts.kpi_vars import CyclicTest
-from utils import cli, table_parser
-from utils.kpi import kpi_log_parser
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-from keywords import common, host_helper, system_helper, patching_helper, glance_helper, nova_helper, vm_helper
 
+from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
+from consts.build_server import DEFAULT_BUILD_SERVER
+from consts.cgcs import FlavorSpec, GuestImages
+from consts.filepaths import WRSROOT_HOME
+from consts.kpi_vars import CyclicTest
+from consts.proj_vars import ProjVar
+from keywords import common, host_helper, system_helper, patching_helper, glance_helper, nova_helper, vm_helper
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.clients.local import LocalHostClient
+from utils.kpi import kpi_log_parser
+from utils.tis_log import LOG
 
 CYCLICTEST_EXE = '/folk/svc-cgcsauto/cyclictest/cyclictest'
 CYCLICTEST_DIR = '/home/wrsroot/cyclictest/'
@@ -52,6 +54,18 @@ result1_len = 5
 histfile_format = r'''^\d+(\s+\d+)+\s*'''
 
 testable_hypervisors = {}
+
+
+@fixture(scope='module', autouse=True)
+def disable_remote_cli(request):
+    if ProjVar.get_var('REMOTE_CLI'):
+        ProjVar.set_var(REMOTE_CLI=False)
+        ProjVar.set_var(USER_FILE_DIR=WRSROOT_HOME)
+
+        def revert():
+            ProjVar.set_var(REMOTE_CLI=True)
+            ProjVar.set_var(USER_FILE_DIR=ProjVar.get_var('TEMP_DIR'))
+        request.addfinalizer(revert)
 
 
 @fixture(scope='session')

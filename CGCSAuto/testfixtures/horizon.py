@@ -1,29 +1,28 @@
-from selenium import webdriver
+import os
+import datetime
+from pytest import fixture
 from pyvirtualdisplay import Display
+
 from utils.horizon.pages import loginpage
 from utils.horizon import video_recorder
-from pytest import fixture
+from utils.horizon.helper import HorizonDriver
 from utils.tis_log import LOG
-import os
-from consts.proj_vars import ProjVar
-import datetime
+
 from consts import horizon
+from consts.proj_vars import ProjVar
 
 
 @fixture(scope="session")
 def driver(request):
-    os.makedirs(ProjVar.get_var('LOG_DIR') + '/horizon', exist_ok=True)
     display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
     display.start()
-    driver = webdriver.Firefox()
-    driver.maximize_window()
+    driver_ = HorizonDriver.get_driver()
 
     def teardown():
-        driver.quit()
+        HorizonDriver.quit_driver()
         display.stop()
     request.addfinalizer(teardown)
-
-    return driver
+    return driver_
 
 
 @fixture(scope='function')

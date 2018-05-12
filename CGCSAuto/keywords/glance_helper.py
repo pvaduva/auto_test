@@ -1,19 +1,18 @@
-import random
-import time
-import re
 import json
+import re
+import time
 
 from pytest import skip
 
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.timeout import ImageTimeout
-from consts.cgcs import Prompt, GuestImages
+from consts.cgcs import GuestImages
 from consts.proj_vars import ProjVar
-from keywords import common, storage_helper, system_helper, host_helper
+from consts.timeout import ImageTimeout
+from keywords import common, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient, NATBoxClient
+from utils.tis_log import LOG
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -266,7 +265,11 @@ def create_image(name=None, image_id=None, source_image_file=None,
     # Use source image url if url is provided. Else use local img file.
 
     default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
-    file_path = source_image_file if source_image_file else "{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
+
+    file_path = source_image_file
+    if not file_path:
+        img_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+        file_path = "{}/{}".format(img_dir, default_guest_img)
     if 'win' in file_path and 'os_type' not in properties:
         properties['os_type'] = 'windows'
     elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
@@ -527,7 +530,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=3600, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
     """
 
     Args:
@@ -543,50 +546,17 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     if img_os not in valid_img_os_types:
         raise ValueError("Invalid image OS type provided. Valid values: {}".format(valid_img_os_types))
 
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+    if not dest_dir:
+        dest_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
 
+    LOG.info("Downloading guest image from test server...")
     dest_name = GuestImages.IMAGE_FILES[img_os][2]
     source_name = GuestImages.IMAGE_FILES[img_os][0]
-
-    if dest_dir.endswith('/'):
-        dest_dir = dest_dir[:-1]
-
-    dest_path = '{}/{}'.format(dest_dir, dest_name)
-
-    if con_ssh.file_exists(file_path=dest_path):
-        LOG.info('image file {} already exists. Return existing image path'.format(dest_path))
-        return dest_path
-
-    LOG.debug('Create directory for image storage if not already exists')
-    cmd = 'mkdir -p {}'.format(dest_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
     source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
-    source_ip = SvcCgcsAuto.SERVER
-    source_user = SvcCgcsAuto.USER
-
-    nat_name = ProjVar.get_var('NATBOX').get('name')
-    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
-        nat_dest_path = '/tmp/{}'.format(dest_name)
-        nat_ssh = NATBoxClient.get_natbox_client()
-        if not nat_ssh.file_exists(nat_dest_path):
-            LOG.info("scp image from test server to NatBox: {}".format(nat_name))
-            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
-                                dest_path=nat_dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
-
-        LOG.info('scp image from natbox {} to active controller'.format(nat_name))
-        dest_user = HostLinuxCreds.get_user()
-        dest_pswd = HostLinuxCreds.get_password()
-        dest_ip = ProjVar.get_var('LAB').get('floating ip')
-        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
-                              dest_password=dest_pswd, timeout=timeout)
-        if not con_ssh.file_exists(dest_path):
-            raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
-    else:
-        LOG.info('scp image from test server to active controller')
-        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
-                            dest_path=dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
+    dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_path, dest_dir=dest_dir,
+                                                             dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
+    if not con_ssh.file_exists(dest_path):
+        raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path

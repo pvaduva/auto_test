@@ -3,15 +3,16 @@ This is for gathering key performance metrics related to installation.
 """
 import re
 import time
+
 from pytest import fixture, skip, mark
-from utils.kpi import kpi_log_parser
+
 from consts.cgcs import TIMESTAMP_PATTERN
-from consts.proj_vars import ProjVar
 from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, NodeInstall, Idle
+from consts.proj_vars import ProjVar
 from keywords import system_helper, host_helper, vm_helper, common
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
+from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
-from testfixtures.pre_checks_and_configs import no_simplex
 
 
 @fixture(scope='session')

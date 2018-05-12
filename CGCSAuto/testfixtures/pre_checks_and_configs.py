@@ -1,14 +1,15 @@
 import time
+
 from pytest import fixture, skip
 
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from consts.auth import Tenant
+from consts.cgcs import EventLogID, HostAvailState
+from consts.filepaths import HeatTemplate
 from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType
-from consts.cgcs import EventLogID, HostAvailState
-from consts.filepaths import WRSROOT_HOME, HeatTemplate
 from keywords import system_helper, host_helper, keystone_helper, security_helper
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @fixture(scope='session')

@@ -1,16 +1,14 @@
 import random
 import time
 
-from utils import table_parser, cli, exceptions
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-
 from consts.auth import Tenant
-from consts.timeout import VolumeTimeout
 from consts.cgcs import GuestImages, Prompt
-
+from consts.timeout import VolumeTimeout
 from keywords import common, glance_helper, keystone_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
