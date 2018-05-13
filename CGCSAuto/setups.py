@@ -814,6 +814,15 @@ def set_sys_type(con_ssh):
     ProjVar.set_var(SYS_TYPE=sys_type)
 
 
+def arp_for_fip(lab, con_ssh):
+    fip = lab['floating ip']
+    code, output = con_ssh.exec_cmd('ip addr | grep -B 4 {} | grep --color=never BROADCAST'.format(fip))
+    if output:
+        target_str = output.splitlines()[-1]
+        dev = target_str.split(sep=': ')[1].split('@')[0]
+        con_ssh.exec_cmd('arping -c 3 -A -q -I {} {}'.format(dev, fip))
+
+
 def collect_sys_net_info(lab):
     """
     Collect networking related info on system if system cannot be reached.
@@ -836,6 +845,7 @@ def collect_sys_net_info(lab):
     source_prompt = SvcCgcsAuto.PROMPT
 
     dest_info_collected = False
+    arp_sent = False
     for source_server in ('natbox', 'ts'):
         source_ip = NatBoxes.NAT_BOX_HW['ip'] if source_server == 'natbox' else SvcCgcsAuto.SERVER
         source_ssh = SSHClient(source_ip, source_user, source_pwd, initial_prompt=source_prompt)
@@ -905,12 +915,29 @@ def collect_sys_net_info(lab):
                                                                             ssh_client=nat_ssh_, fail_ok=True)[0]
                                 res_['ping_default_gateway_from_natbox'] = True if \
                                     pkt_loss_rate_ < 100 else False
+
+                            # send arp if unable to ping fip from natbox
+                            if res_.get('ping_fip_from_natbox') is False:
+                                arp_for_fip(lab=lab, con_ssh=dest_ssh)
+                                arp_sent = True
                         dest_ssh.close()
                     except:
                         LOG.warning('Failed to ssh to lab {} from {}'.format(ip_type_, source_server))
 
         source_ssh.close()
-        LOG.info("Lab networking info collected: {}".format(res_))
+
+    if arp_sent:
+        source_ip = NatBoxes.NAT_BOX_HW['ip']
+        nat_ssh = SSHClient(source_ip, source_user, source_pwd, initial_prompt=source_prompt)
+        nat_ssh.connect()
+        pkt_loss_rate_ = network_helper.ping_server(server=lab['floating ip'], ssh_client=nat_ssh, fail_ok=True)[0]
+        if pkt_loss_rate_ == 100:
+            LOG.warning('Failed to ping lab fip from natbox after arp')
+            res_['ping_fip_from_natbox_after_arp'] = False
+        else:
+            res_['ping_fip_from_natbox_after_arp'] = True
+
+    LOG.info("Lab networking info collected: {}".format(res_))
 
 
 def setup_remote_cli_client():
