@@ -278,6 +278,6 @@ class TelnetClient(Telnet):
 
     def close(self):
         is_closed = False if self.sock else True
-        super(TelnetClient, self).close()
         if not is_closed:
-            self.logger.info("Telnet socket closed")
+            self.logger.info("Closing telnet socket")
+        super(TelnetClient, self).close()
