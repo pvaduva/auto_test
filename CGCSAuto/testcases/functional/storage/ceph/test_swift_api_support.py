@@ -65,8 +65,8 @@ def collect_object_files(request, ceph_backend_installed):
 
 
 def clear_config_out_of_date_alarm():
-    hosts = system_helper.get_active_standby_controllers()
-    for host in hosts:
+    active, standby = system_helper.get_active_standby_controllers()
+    for host in (standby, active):
         if host and system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=5, entity_id=host,
                                                  fail_ok=True)[0]:
             host_helper.lock_host(host, swact=True)
