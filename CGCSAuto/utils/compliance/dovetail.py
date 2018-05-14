@@ -19,7 +19,7 @@ import pexpect
 import argparse
 
 from utils.jenkins_utils.create_log_dir import create_test_log_dir
-from utils.ssh import SSHClient
+from utils.clients.ssh import SSHClient
 
 SERVER_PROMPT = '$'
 DOCKER_PROMPT = '#'

@@ -11,7 +11,7 @@ from pytest import fixture
 from consts.cgcs import LocalStorage
 from consts.filepaths import WRSROOT_HOME
 
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils import cli
 from keywords import common

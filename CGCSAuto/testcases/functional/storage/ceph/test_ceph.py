@@ -761,8 +761,6 @@ def test_import_with_cache_raw():
         until RAW image is available
     """
     con_ssh = get_cli_client()
-
-    img_dest = '~/images'
     size = 10
     vm_list = []
 
@@ -771,12 +769,12 @@ def test_import_with_cache_raw():
 
     LOG.tc_step('Import qcow2 images into glance')
     for image in image_names:
-        source_image_loc = img_dest + "/" + image
+        source_image_loc = img_dir + "/" + image
         img_name = 'testimage_{}'.format(image)
         ret = glance_helper.create_image(source_image_file=source_image_loc,
                                          disk_format='qcow2',
                                          container_format='bare',
-                                         cache_raw=True, wait=True)
+                                         cache_raw=True, wait=True, name=img_name)
         ResourceCleanup.add('image', ret[1])
         LOG.info("ret {}".format(ret))
         assert ret[0] == 0, ret[2]
@@ -849,7 +847,7 @@ def test_import_with_cache_raw():
 
 
 def __get_images_on_client(client, img_name=None, img_type='all'):
-    LOG.tc_step('Determine what qcow2 images we have available')
+    LOG.tc_step('Determine {} images we have available'.format(img_type))
     image_names, img_dir = storage_helper.find_images(client, image_type=img_type, image_name=img_name)
 
     if not image_names:

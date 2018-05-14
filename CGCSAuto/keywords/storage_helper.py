@@ -361,7 +361,7 @@ def find_images(con_ssh=None, image_type='qcow2', image_name=None, location=None
     image_list = out.split()
     LOG.info('Found the following files: {}'.format(image_list))
     if image_type == 'all' and not image_name:
-        return image_list
+        return image_list, location
 
     # Return a list of image names where the image type matches what the user
     # is looking for, e.g. qcow2
@@ -375,7 +375,7 @@ def find_images(con_ssh=None, image_type='qcow2', image_name=None, location=None
             image_names.append(image)
 
     LOG.info('{} images available: {}'.format(image_type, image_names))
-    return location, image_names
+    return image_names, location
 
 
 def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
