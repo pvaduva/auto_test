@@ -271,10 +271,10 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
 @mark.parametrize("tc", ['small', 'large'])
 def test_swift_cli_interaction(tc, pre_swift_check):
-    test_obj_path = '{}/{}'.format(get_obj_dir(), TEST_OBJ_DIR)
     if not pre_swift_check[0]:
         skip(msg=pre_swift_check[1])
 
+    test_obj_path = '{}/{}'.format(get_obj_dir(), TEST_OBJ_DIR)
     if tc == 'large':
         test_objects_info = get_large_img_file()
         if not test_objects_info:
@@ -380,13 +380,13 @@ def test_swift_cli_interaction(tc, pre_swift_check):
 
 
 def test_swift_cli_multiple_object_upload(pre_swift_check):
-    client = get_cli_client()
-    obj_dir = get_obj_dir()
-    TEST_OBJ_PATH = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
-    TEST_OBJ_DOWNLOAD_PATH = '{}/downloads'.format(obj_dir)
 
     if not pre_swift_check[0]:
         skip(msg=pre_swift_check[1])
+
+    obj_dir = get_obj_dir()
+    TEST_OBJ_PATH = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
+    TEST_OBJ_DOWNLOAD_PATH = '{}/downloads'.format(obj_dir)
 
     LOG.tc_step("Creating Swift container using swift post cli command ...")
     container = "test_container"
@@ -661,7 +661,13 @@ def test_swift_basic_object_copy(tc, ceph_backend_installed, pre_swift_check):
     if not pre_swift_check[0]:
         skip(msg=pre_swift_check[1])
 
-    upload_object_info = get_test_obj_file_names()[0] if tc == 'small' else get_large_img_file()[0]
+    if tc == 'large':
+        obj = get_large_img_file()
+        if not obj:
+            skip('No room to scp large file to target')
+        upload_object_info = obj[0]
+    else:
+        upload_object_info = get_test_obj_file_names()[0]
     container = "test_container"
     dest_container = "copy_container"
     upload_object = upload_object_info[0]
