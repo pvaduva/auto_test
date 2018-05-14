@@ -9,7 +9,9 @@ class PageObject(basewebobject.BaseWebObject):
     BASE_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
     PARTIAL_URL = None
 
-    def __init__(self, driver=HorizonDriver.get_driver()):
+    def __init__(self, driver=None):
+        if not driver:
+            driver = HorizonDriver.get_driver()
         super(PageObject, self).__init__(driver)
         self._page_title = None
 
