@@ -14,7 +14,7 @@ from testfixtures.recover_hosts import HostsToRecover
 from utils.clients.ssh import ControllerClient, get_cli_client
 from utils.tis_log import LOG
 
-TEST_OBJ_DIR = "test_objects"
+TEST_OBJ_DIR = "test_objects/"
 OBJ_POOL_GIB = 100
 
 
@@ -381,7 +381,7 @@ def test_swift_cli_interaction(tc, pre_swift_check):
 
 def test_swift_cli_multiple_object_upload(pre_swift_check):
     client = get_cli_client()
-    obj_dir = get_cli_client()
+    obj_dir = get_obj_dir()
     TEST_OBJ_PATH = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
     TEST_OBJ_DOWNLOAD_PATH = '{}/downloads'.format(obj_dir)
 
