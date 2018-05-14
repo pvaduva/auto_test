@@ -65,15 +65,14 @@ def collect_object_files(request, ceph_backend_installed):
 
 
 def clear_config_out_of_date_alarm():
-    hosts = ('controller-0', 'controller-1')
+    hosts = system_helper.get_active_standby_controllers()
     for host in hosts:
-        if system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=5, entity_id=host,
-                                        fail_ok=True)[0]:
-
+        if host and system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=5, entity_id=host,
+                                                 fail_ok=True)[0]:
             host_helper.lock_host(host, swact=True)
             time.sleep(60)
             host_helper.unlock_host(host)
-            system_helper.wait_for_alarm_gone(alarm_id="250.001", fail_ok=False)
+            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=host, fail_ok=False)
 
 
 @fixture(scope='function', autouse=True)
@@ -111,7 +110,7 @@ def pre_swift_check():
     if not ceph_backend_info['object_gateway']:
         return False, "Swift is NOT  enabled"
     if swift_helper.get_swift_containers(fail_ok=True)[0] != 0:
-            return False, "Swift enabled but NOT properly configured in the system"
+        return False, "Swift enabled but NOT properly configured in the system"
 
     return True, 'Swift enabled and configured'
 
