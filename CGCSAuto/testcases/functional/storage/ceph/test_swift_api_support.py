@@ -164,13 +164,16 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         if not ceph_backend_info['object_gateway']:
             skip("Swift is not provisioned")
 
-        unallocated_gib = (ceph_backend_info['ceph_total_space_gib']
+        total_gib = ceph_backend_info['ceph_total_space_gib']
+        unallocated_gib = (total_gib
                            - cinder_pool_gib
                            - ceph_backend_info['glance_pool_gib']
                            - ceph_backend_info['ephemeral_pool_gib'])
         if unallocated_gib == 0:
             unallocated_gib = int(int(cinder_pool_gib) / 4)
             cinder_pool_gib = str(int(cinder_pool_gib) - unallocated_gib)
+        elif unallocated_gib < 0:
+            skip("Unallocated gib < 0. System is in unknown state.")
 
         object_pool_gib = str(unallocated_gib)
         LOG.tc_step("Enabling SWIFT object store and setting object pool size to {}.....".format(object_pool_gib))
