@@ -86,10 +86,11 @@ def delete_partitions_teardown(request):
                 rc, out = partition_helper.delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
                 gib_after_del = partition_helper.get_disk_info(host, device_node, "available_gib")
-                gib_after_del2 = round(float(gib_after_del), 3)
-                assert gib_after_del2 == total_free, \
+                LOG.info("GIB Before: {}".format(total_free))
+                LOG.info("GIB After: {}".format(gib_after_del))
+                assert float(gib_after_del) == total_free, \
                     "Expected available_gib to be {} after deletion but instead was {}".format(
-                            total_free, gib_after_del2)
+                            total_free, gib_after_del)
 
     request.addfinalizer(teardown)
 
