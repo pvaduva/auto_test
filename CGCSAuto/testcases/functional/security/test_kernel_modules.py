@@ -21,9 +21,14 @@ def test_kernel_module_signatures():
 
     for host in hosts:
         with host_helper.ssh_to_host(host) as host_ssh:
-            LOG.tc_step("Check kernel modules on {}".format(host))
+            LOG.tc_step("Check for unassigned kernel modules on {}".format(host))
             output = host_ssh.exec_cmd('cat /proc/sys/kernel/tainted', fail_ok=False)[1]
-            if output != '4096':
+            output_binary = '{0:b}'.format(int(output))
+            unassigned_module_bit = '0'
+            # 14th bit is to flag unassigned module
+            if len(output_binary) >= 14:
+                unassigned_module_bit = output_binary[-14]
+            if unassigned_module_bit != '0':
                 LOG.error("Kernel module verification(s) failed on {}. Collecting more info".format(host))
 
                 LOG.tc_step("Check kern.log for modules with failed verification")
