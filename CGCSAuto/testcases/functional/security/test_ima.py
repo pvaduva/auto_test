@@ -399,9 +399,9 @@ def test_ima_keyring_protection():
 
     con_ssh = ControllerClient.get_active_controller()
 
-    LOG.info("Extract key ID")
-    exitcode, msg = con_ssh.exec_sudo_cmd("cat /proc/keys")
-    raw_key_id = msg.split(" ")[0]
+    LOG.info("Extract ima key ID")
+    exitcode, msg = con_ssh.exec_sudo_cmd("cat /proc/keys | grep _ima")
+    raw_key_id = msg.split(" ", maxsplit=1)[0]
     key_id = "0x{}".format(raw_key_id)
     LOG.info("Extracted key is: {}".format(key_id))
 
