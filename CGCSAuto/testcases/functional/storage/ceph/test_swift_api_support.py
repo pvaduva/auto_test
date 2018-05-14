@@ -450,7 +450,7 @@ def test_swift_cli_multiple_object_upload(pre_swift_check):
 
     LOG.info("Object list: {}".format(swift_helper.get_swift_container_object_list(container)))
     for img in object_files:
-        upload_object = "multiple_/{}".format(img[0])
+        upload_object = "multiple_{}".format(img[0])
         object_size = img[1]
 
         stat_object_info = swift_helper.get_swift_container_stat_info(container, upload_object)
@@ -855,12 +855,12 @@ def get_test_obj_file_names(directory=TEST_OBJ_DIR, pattern='.sh'):
     rc, output = con_ssh.exec_cmd(cmd)
     obj_files = []
     if rc == 0:
-        objects = output.split('\n')
+        objects = output.splitlines()
         for obj in objects:
-            size = obj.split(' ')[0]
-            name = obj.split(' ')[1]
-            obj_files.append([name, size])
+            size, name = obj.split(' ')[0:2]
+            obj_files.append([name.strip(), size.strip()])
 
+    LOG.debug("obj_files: {}".format(obj_files))
     return obj_files
 
 

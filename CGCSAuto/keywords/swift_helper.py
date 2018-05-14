@@ -395,8 +395,6 @@ def get_swift_container_stat_info(container=None, object_=None, con_ssh=None):
         for pair in value_pairs:
             key_value = pair.split(':')
             stat_values[key_value[0].strip()] = key_value[1].strip()
-
-        LOG.info("swift stat output: {}".format(stat_values))
     else:
         msg = "Fail to get status of swift container/object {}:{}".\
             format(container + "/" + object if object else container, out)
