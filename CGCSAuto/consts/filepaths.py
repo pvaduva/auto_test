@@ -28,6 +28,8 @@ class UserData:
 class HeatTemplate:
     STRESS_NG = 'stress_ng.yaml'
     HEAT_DIR = '{}heat/hot/'.format(WRSROOT_HOME)
+    LARGE_HEAT = 'upgrade_heat_template'
+    LARGE_HEAT_NAME = 'upgrade_stack'
 
 
 class TestServerPath:

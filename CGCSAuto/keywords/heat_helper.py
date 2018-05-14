@@ -181,7 +181,7 @@ def get_heat_params(param_name=None):
 
 def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None, cleanup='function'):
     """
-    Delete the given heat stack for a given tenant.
+    Create the given heat stack for a given tenant.
 
     Args:
         con_ssh (SSHClient): If None, active controller ssh will be used.
@@ -214,4 +214,38 @@ def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
         return 2, msg
 
     LOG.info("Stack {} created successfully".format(stack_name))
+    return 0, stack_name
+
+
+def update_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None, timeout=300):
+    """
+    Update the given heat stack for a given tenant.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        fail_ok (bool):
+        params_string: Parameters to pass to the heat create cmd. ex: -f <stack.yaml> -P IMAGE=tis <stack_name>
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        stack_name (str): Given name for the heat stack
+
+    Returns (tuple): Status and msg of the heat deletion.
+    """
+
+    if not params_string:
+        raise ValueError("Parameters not provided.")
+
+    LOG.info("Create Heat Stack %s", params_string)
+    exitcode, output = cli.heat('stack-update', params_string, ssh_client=con_ssh, auth_info=auth_info,
+                                fail_ok=fail_ok, rtn_list=True)
+    if exitcode == 1:
+        LOG.warning("Create heat stack request rejected.")
+        return 1, output
+
+    LOG.info("Wait for Heat Stack Status to reach UPDATE_COMPLETE for stack %s", stack_name)
+    res, msg = wait_for_heat_status(stack_name=stack_name, status=HeatStackStatus.UPDATE_COMPLETE,
+                                    auth_info=auth_info, fail_ok=fail_ok,timeout=timeout)
+    if not res:
+        return 2, msg
+
+    LOG.info("Stack {} updated successfully".format(stack_name))
     return 0, stack_name
