@@ -3854,7 +3854,7 @@ def enable_disable_hosts_devices(hosts, devices, enable=True):
         states = get_host_device_list_values(host=host_, field='enabled', list_all=True, **{key: devices})
         if (not enable) in states:
             try:
-                lock_host(host=host_)
+                lock_host(host=host_, swact=True)
                 for i in range(len(states)):
                     if states[i] is not enable:
                         device = devices[i]
