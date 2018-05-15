@@ -1,10 +1,11 @@
 import time
 
-from keywords import network_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-
-from consts.cgcs import GuestImages, HeatStackStatus
+from utils.clients.ssh import get_cli_client
+from consts.cgcs import GuestImages, HeatStackStatus, HEAT_CUSTOM_TEMPLATES
+from consts.filepaths import TestServerPath
+from keywords import network_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -249,3 +250,32 @@ def update_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
 
     LOG.info("Stack {} updated successfully".format(stack_name))
     return 0, stack_name
+
+
+def get_custom_heat_files(file_name, file_dir=HEAT_CUSTOM_TEMPLATES, cli_client=None):
+    """
+
+    Args:
+        file_name:
+        file_dir:
+        cli_client:
+
+    Returns:
+
+    """
+    file_path = '{}/{}'.format(file_dir, file_name)
+
+    if cli_client is None:
+        cli_client = get_cli_client()
+
+    if not cli_client.file_exists(file_path=file_path):
+        LOG.debug('Create userdata directory if not already exists')
+        cmd = 'mkdir -p {}'.format(file_dir)
+        cli_client.exec_cmd(cmd, fail_ok=False)
+        source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
+        dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_file, dest_dir=file_dir,
+                                                                 dest_name=file_name, timeout=300, con_ssh=cli_client)
+        if dest_path is None:
+            raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))
+
+    return file_path

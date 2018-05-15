@@ -26,6 +26,7 @@ METADATA_SERVER = '169.254.169.254'
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 HEAT_FLAVORS = ['small_ded', 'small_float']
+HEAT_CUSTOM_TEMPLATES = 'custom_heat_templates'
 
 # special NIC patterns
 MELLANOX_DEVICE = 'MT27500|MT27710'
