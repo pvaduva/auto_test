@@ -3866,3 +3866,10 @@ def enable_disable_hosts_devices(hosts, devices, enable=True):
         assert not ((not enable) in post_states), "Some devices enabled!={} after unlock".format(enable)
 
     LOG.info("enabled={} set successfully for following devices on hosts {}: {}".format(enable, hosts, devices))
+
+
+def get_host_cmdline_options(host, con_ssh=None):
+    with ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_cmd('cat /proc/cmdline')[1]
+
+    return output

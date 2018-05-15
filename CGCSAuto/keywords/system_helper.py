@@ -1,6 +1,7 @@
 import math
 import re
 import time
+from pytest import skip
 
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType
@@ -1035,12 +1036,12 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
         pass
 
 
-def get_system_name(fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=None):
+def get_system_value(field='name', fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=None):
 
     table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet,
                                            con_telnet=con_telnet, fail_ok=fail_ok)[1])
-    system_name = table_parser.get_value_two_col_table(table_, 'name')
-    return system_name
+    value = table_parser.get_value_two_col_table(table_, field=field)
+    return value
 
 
 def set_retention_period(period, name='metering_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
@@ -3224,3 +3225,69 @@ def modify_oam_ips(arg_str, fail_ok=False):
     msg = "OAM modified successfully."
     return 0, msg
 
+
+def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=True, con_ssh=None, fail_ok=False):
+    """
+    Modify spectre meltdown version
+    Args:
+        version (str): valid values: spectre_meltdown_v1, spectre_meltdown_all.
+            Other values will be rejected by system modify cmd.
+        check_first (bool):
+        con_ssh:
+        fail_ok (bool):
+
+    Returns (tuple):
+        (-1, "Security feature already set to <version>. Do nothing")
+        (0, "System security_feature is successfully modified to: <version>")
+        (1, <std_err>)
+
+    """
+    current_version = get_system_value(field='security_feature')
+    if not current_version:
+        skip('spectre_meltdown update feature is unavailable in current load')
+
+    if check_first and version == current_version:
+        msg = 'Security feature already set to {}. Do nothing.'.format(current_version)
+        LOG.info(msg)
+        return -1, msg
+
+    code, output = cli.system('modify -S {}'.format(version), ssh_client=con_ssh, fail_ok=fail_ok,
+                              rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    LOG.info("Lock unlock hosts after modify spectre_meltdown version")
+    active_controller = get_active_controller_name(con_ssh=con_ssh)
+    hosts = get_hostnames(con_ssh=con_ssh)
+    hosts.remove(active_controller)
+
+    from keywords import host_helper
+    try:
+        for host in hosts:
+            host_helper.lock_host(host=host, con_ssh=con_ssh)
+    finally:
+        host_helper.unlock_hosts(hosts=hosts, fail_ok=False, con_ssh=con_ssh)
+        host_helper.wait_for_hosts_ready(hosts=hosts, con_ssh=con_ssh)
+
+    try:
+        host_helper.lock_host(host=active_controller, swact=True, con_ssh=con_ssh)
+    finally:
+        host_helper.unlock_host(host=active_controller, con_ssh=con_ssh)
+
+    LOG.info("Check 'system show' is updated to {}".format(version))
+    post_version = get_system_value(field='security_feature')
+    assert version == post_version, 'Value is not {} after system modify'.format(version)
+
+    LOG.info('Check cmdline options are updated on each host via /proc/cmdline')
+    check_val = 'nopti nospectre_v2'
+    hosts.append(active_controller)
+    for host in hosts:
+        options = host_helper.get_host_cmdline_options(host=host)
+        if 'v1' in version:
+            assert check_val in options, '{} not in cmdline options after set to {}'.format(check_val, version)
+        else:
+            assert check_val not in options, '{} in cmdline options after set to {}'.format(check_val, version)
+
+    msg = 'System spectre meltdown version is successfully modified to: {}'.format(version)
+    LOG.info(msg)
+    return 0, msg
