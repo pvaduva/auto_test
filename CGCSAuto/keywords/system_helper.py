@@ -219,7 +219,7 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
                'operational': operational,
                'availability': availability}
     hostnames = table_parser.get_values(table_, 'hostname', strict=strict, exclude=exclude, **filters)
-    LOG.info("Filtered hostnames: {}".format(hostnames))
+    LOG.debug("Filtered hostnames: {}".format(hostnames))
 
     return hostnames
 
