@@ -5,6 +5,7 @@ import threading    # Used for formatting logger
 from time import strftime, gmtime
 
 import pytest   # Don't remove. Used in eval
+import html
 
 import setup_consts
 import setups
@@ -90,13 +91,18 @@ def _write_results(res_in_tests, test_name):
 
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
+            global tracebacks
             try:
-                from utils.cgcs_reporter import upload_results
+                from utils.cgcs_reporter import upload_results, parse_log
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
-                                                  parse_name=True)
+                                                  traceback=tracebacks, parse_name=True)
             except Exception:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
+
+            finally:
+                if repeat_count <= 0:
+                    tracebacks = []
 
         try:
             upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
@@ -161,6 +167,8 @@ def pytest_runtest_makereport(item, call, __multicall__):
     if repeat_count > 0:
         for key, val in res.items():
             if val[0] == 'Failed':
+                global tc_end_time
+                tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
                 _write_results(res_in_tests='Failed', test_name=test_name)
                 TestRes.FAILNUM += 1
                 if ProjVar.get_var('PING_FAILURE'):
