@@ -1,12 +1,12 @@
 from pytest import mark
 from utils.tis_log import LOG
-from keywords import network_helper, vm_helper
+from keywords import  vm_helper
 
 
 @mark.parametrize(('nova_action', 'hard'), [
-     (['reboot'], 1),
-     (['reboot'], 0),
-     (['stop', 'start'], 0)
+     ('reboot', 'hard'),
+     ('reboot', 'soft'),
+     ('stop_start', None)
 ])
 def test_send_acpi_signal_on_shutdown(nova_action, hard):
     """
@@ -22,31 +22,22 @@ def test_send_acpi_signal_on_shutdown(nova_action, hard):
         - Delete created vm, volume
 
     """
+    nova_action = nova_action.split('_')
+    hard = 1 if 'hard' == hard else 0
 
-    internal_net_id = network_helper.get_internal_net_id()
-    mgmt_net_id = network_helper.get_mgmt_net_id()
-    tenant_net_id = network_helper.get_tenant_net_id()
-
-    mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
-    nics = [mgmt_nic,
-            {'net-id': internal_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
-
-    kwargs = {'hard': False}
-    if hard == 1:
-        kwargs = {'hard': True}
     LOG.info("hard option: {}".format(hard))
     LOG.tc_step("Boot a vm")
-    vm_under_test = vm_helper.boot_vm(name='send_acpi_signal_to_vm', nics=nics, cleanup='function')[1]
+    vm_under_test = vm_helper.boot_vm(name='send_acpi_signal_to_vm', cleanup='function')[1]
+
     LOG.tc_step("Modify gyest acpi file file")
     _modify_guest_acpi_file(vm_id=vm_under_test)
 
+    kwargs = {}
+    if hard == 1:
+        kwargs = {'hard': True}
     for action in nova_action:
         LOG.tc_step("Perform nova action: {}".format(action))
-        if action == 'reboot':
-            vm_helper.perform_action_on_vm(vm_under_test, action=action, **kwargs)
-        else:
-            vm_helper.perform_action_on_vm(vm_under_test, action=action)
+        vm_helper.perform_action_on_vm(vm_under_test, action=action, **kwargs)
 
     LOG.tc_step("Verify /var/log/messages file")
     _check_log_messages(vm_id=vm_under_test, hard=hard)
@@ -67,5 +58,3 @@ def _check_log_messages(vm_id, hard):
         LOG.info("Output: {}".format(output))
         LOG.info("Result code: {}".format(code))
         assert hard == code, "There should not be any output if reboot or stop with hard"
-
-
