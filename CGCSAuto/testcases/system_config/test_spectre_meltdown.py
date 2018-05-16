@@ -10,5 +10,5 @@ from utils.tis_log import LOG
 def test_set_spectre_meltdown_version(version):
     version = 'spectre_meltdown_{}'.format(version)
 
-    LOG.tc_step('Set spectre_meltdown security_feature to {} is not already done.'.format(version))
+    LOG.tc_step('Set spectre_meltdown security_feature to {} if not already done.'.format(version))
     system_helper.modify_spectre_meltdown_version(version=version)

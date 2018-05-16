@@ -1035,22 +1035,20 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     while time.time() < cli_enable_end_time:
         try:
             LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
-
             check_sysinv_cli(con_ssh_=con_ssh, use_telnet_=use_telnet, con_telnet_=con_telnet)
             return True
 
         except:
-            if use_telnet:
-                pass
-            if not con_ssh._is_connected():
-                if reconnect:
-                    LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
-                    con_ssh.connect(retry_timeout=timeout)
-                else:
-                    LOG.error("system disconnected")
-                    if fail_ok:
-                        return False
-                    raise
+            if not use_telnet:
+                if not con_ssh._is_connected():
+                    if reconnect:
+                        LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
+                        con_ssh.connect(retry_timeout=timeout)
+                    else:
+                        LOG.error("system disconnected")
+                        if fail_ok:
+                            return False
+                        raise
 
             time.sleep(check_interval)
 
