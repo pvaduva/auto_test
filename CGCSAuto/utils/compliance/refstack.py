@@ -14,11 +14,9 @@
 # Jenkins server
 
 import argparse
-
-from utils.jenkins_utils.create_log_dir import create_test_log_dir
 import pexpect
 from utils.clients.ssh import SSHClient
-from utils.jenkins_utils.create_log_dir import create_refstack_log_dir
+from utils.jenkins_utils.create_log_dir import create_test_log_dir
 
 
 TEST_SERVER_PROMPT = '$'

@@ -16,12 +16,9 @@
 # Jenkins server
 
 import argparse
-
-from utils.jenkins_utils.create_log_dir import create_test_log_dir
 import pexpect
-
 from utils.clients.ssh import SSHClient
-from utils.jenkins_utils.create_log_dir import create_functest_log_dir
+from utils.jenkins_utils.create_log_dir import create_test_log_dir
 
 
 FUNCTEST_SERVER_PROMPT = '$'
