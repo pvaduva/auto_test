@@ -745,16 +745,16 @@ def wait_state(nodes, attr_type, expected_state, sut=None, exit_on_find=False, f
     else:
         nodes = copy.copy(nodes)
     count = 0
-    if attr_type not in STATE_TYPE_DICT:
-        msg = "Type of state can only be one of: " + \
-              str(list(STATE_TYPE_DICT.keys()))
-        log.error(msg)
-        wr_exit()._exit(1, msg)
-    if expected_state not in STATE_TYPE_DICT[attr_type]:
-        msg = "Expected {} state can only be on one of: {}" \
-            .format(attr_type, str(STATE_TYPE_DICT[attr_type]))
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+    #if attr_type not in STATE_TYPE_DICT:
+    #    msg = "Type of state can only be one of: " + \
+    #          str(list(STATE_TYPE_DICT.keys()))
+    #    log.error(msg)
+    #    wr_exit()._exit(1, msg)
+    #if expected_state not in STATE_TYPE_DICT[attr_type]:
+    #    msg = "Expected {} state can only be on one of: {}" \
+    #        .format(attr_type, str(STATE_TYPE_DICT[attr_type]))
+    #    log.error(msg)
+    #    wr_exit()._exit(1, msg)
 
     expected_state_count = 0
     search_attempts = MAX_SEARCH_ATTEMPTS
@@ -2344,11 +2344,18 @@ def main():
         if node_online or node_offline or node_degraded:
             run_config_complete = False
             if "duplex-direct" in system_mode:
-                wait_state(controller0, AVAILABILITY, DEGRADED)
+                wait_state(controller0, AVAILABILITY, "degraded|online")
             else:
                 wait_state(controller0, AVAILABILITY, ONLINE)
+            #if "duplex-direct" in system_mode:
+            #    wait_state(controller0, AVAILABILITY, DEGRADED)
+            #else:
+            #    wait_state(controller0, AVAILABILITY, ONLINE)
             run_labsetup()
-            unlock_node(nodes, selection_filter="controller-0", wait_done=False)
+            # Test if the node is locked before attempting an unlock
+            node_locked = test_state(controller0, ADMINISTRATIVE, LOCKED)
+            if node_locked:
+                unlock_node(nodes, selection_filter="controller-0", wait_done=False)
             controller0.ssh_conn.disconnect()
             time.sleep(60)
             controller0.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
