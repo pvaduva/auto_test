@@ -29,7 +29,7 @@ def telnet_logger(host):
 
 TELNET_REGEX = '(.*-\d+)( login:|:~\$)'
 TELNET_LOGIN_PROMPT = '(controller|compute|storage)-\d+ login:'
-
+NEWPASSWORD_PROMPT = ''
 
 class TelnetClient(Telnet):
 
@@ -101,6 +101,25 @@ class TelnetClient(Telnet):
             self.expect(PASSWORD_PROMPT)
             self.send(self.password)
             self.expect()
+        elif index < 0:
+            self.logger.warning("System is not in login page and default prompt is not found either")
+            code = 1
+        return code
+
+    def initial_login(self, new_password, expect_prompt_timeout=3, fail_ok=False):
+        self.send('\r\n\r\n')
+        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
+        self.flush()
+        code = 0
+        if index == 0:
+            self.send(self.user)
+            self.expect(PASSWORD_PROMPT)
+            self.send(self.password)
+            self.expect(PASSWORD_PROMPT)
+            self.send(new_password)
+            self.expect(PASSWORD_PROMPT)
+            self.send(new_password)
+            self.password = new_password
         elif index < 0:
             self.logger.warning("System is not in login page and default prompt is not found either")
             code = 1
