@@ -93,6 +93,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     LOG.tc_step("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
     upgrade_helper.system_upgrade_start(force=force)
+    upgrade_helper.wait_for_upgrade_states("started")
     LOG.info("upgrade started successfully......")
 
     # upgrade standby controller
