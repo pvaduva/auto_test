@@ -4,7 +4,6 @@
 from pytest import mark
 
 from utils.tis_log import LOG
-
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import VCPUSchedulerErr        # Do not remove this import. Used in eval()
 from keywords import nova_helper, vm_helper, host_helper
