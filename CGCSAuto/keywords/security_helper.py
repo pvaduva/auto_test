@@ -225,7 +225,7 @@ class LdapUserManager(object, metaclass=Singleton):
             ),
             (
                 '',
-                (Prompt.CONTROLLER_PROMPT,),
+                (self.ssh_con.get_prompt(),),
                 ('Failed in last step of first-time login as LDAP User:{}'.format(user_name),)
             ),
         ]
@@ -523,12 +523,7 @@ class LdapUserManager(object, metaclass=Singleton):
                     'Updating password expiry to {} days'.format(password_expiry_warn_days),
                 ),
                 (),
-            ),
-            (
-                '',
-                (Prompt.CONTROLLER_PROMPT, ),
-                (),
-            ),
+            )
         ]
 
         created = True
@@ -563,7 +558,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
         return code, user_info
 
-    def login_as_ldap_user(self, user_name, password, host=None, pre_store=False, disconnect_after=False):
+    def login_as_ldap_user(self, user_name, password, shell=2, host=None, pre_store=False, disconnect_after=False):
         """
         Login as the specified user name and password onto the specified host
 
@@ -588,57 +583,78 @@ class LdapUserManager(object, metaclass=Singleton):
         hostname_ip = 'controller-1' if host is None else host
 
         prompt_keystone_user_name = 'Enter Keystone username \[{}\]: '.format(user_name)
-        cmd_expected = (
-            (
-                'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
-                ('Are you sure you want to continue connecting \(yes/no\)\?',),
-                ('ssh: Could not resolve hostname {}: Name or service not known'.format(hostname_ip),),
-            ),
-            (
-                'yes',
-                ('{}@{}\'s password: '.format(user_name, hostname_ip),),
-                (),
-            ),
-            (
-                '{}'.format(password),
-                ('Pre-store Keystone user credentials for this session\? \(y/N\): ',),
-                ('Permission denied, please try again\.',),
-            ),
-            (
-                '{}'.format('y' if pre_store else 'N'),
+        if shell==1:
+            cmd_expected = (
                 (
-                    prompt_keystone_user_name,
-                    Prompt.CONTROLLER_PROMPT,
+                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
+                    ('Are you sure you want to continue connecting \(yes/no\)\?',),
+                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(hostname_ip),),
                 ),
-                (),
-            ),
-            (
-                '{}'.format(self.KEYSTONE_USER_NAME),
-                ('Enter Keystone user domain name: ',),
-                (),
-            ),
-            (
-                '{}'.format(self.KEYSTONE_USER_DOMAIN_NAME),
-                ('Enter Project name: ',),
-                (),
-            ),
-            (
-                '{}'.format(self.PROJECT_NAME),
-                ('Enter Project domain name: ',),
-                (),
-            ),
-            (
-                '{}'.format(self.PROJECT_DOMAIN_NAME),
-                ('Enter Keystone password:',),
-                (),
-            ),
-            (
-                '{}'.format(password),
-                ('Keystone credentials preloaded\!.*\[{}@{} \({}\)\]\$'.format(
-                    user_name, hostname_ip, self.KEYSTONE_USER_NAME),),
-                (),
-            ),
-        )
+                (
+                    'yes',
+                    ('{}@{}\'s password: '.format(user_name, hostname_ip),),
+                    (),
+                ),
+                (
+                    '{}'.format(password),
+                    ( prompt_keystone_user_name, Prompt.CONTROLLER_PROMPT,),
+                    ('Permission denied, please try again\.',),
+                ),
+            )
+
+        elif shell ==2:
+
+            cmd_expected = (
+                (
+                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
+                    ('Are you sure you want to continue connecting \(yes/no\)\?',),
+                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(hostname_ip),),
+                ),
+                (
+                    'yes',
+                    ('{}@{}\'s password: '.format(user_name, hostname_ip),),
+                    (),
+                ),
+                (
+                    '{}'.format(password),
+                    ('Pre-store Keystone user credentials for this session\? \(y/N\): ',),
+                    ('Permission denied, please try again\.',),
+                ),
+                (
+                    '{}'.format('y' if pre_store else 'N'),
+                    (
+                        prompt_keystone_user_name,
+                        Prompt.CONTROLLER_PROMPT,
+                    ),
+                    (),
+                ),
+                (
+                    '{}'.format(self.KEYSTONE_USER_NAME),
+                    ('Enter Keystone user domain name: ',),
+                    (),
+                ),
+                (
+                    '{}'.format(self.KEYSTONE_USER_DOMAIN_NAME),
+                    ('Enter Project name: ',),
+                    (),
+                ),
+                (
+                    '{}'.format(self.PROJECT_NAME),
+                    ('Enter Project domain name: ',),
+                    (),
+                ),
+                (
+                    '{}'.format(self.PROJECT_DOMAIN_NAME),
+                    ('Enter Keystone password:',),
+                    (),
+                ),
+                (
+                    '{}'.format(password),
+                    ('Keystone credentials preloaded\!.*\[{}@{} \({}\)\]\$'.format(
+                        user_name, hostname_ip, self.KEYSTONE_USER_NAME),),
+                    (),
+                ),
+            )
 
         logged_in = False
         self.ssh_con.flush()
@@ -797,7 +813,7 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
         ),
         (
             new_password,
-            (': all authentication tokens updated successfully.', Prompt.CONTROLLER_PROMPT),
+            (': all authentication tokens updated successfully.', Prompt.CONTROLLER_PROMPT,),
             (),
         ),
     )
@@ -1006,3 +1022,43 @@ def modify_https(enable_https=True, check_first=True, timeout=400, check_interva
         msg = "Enabled HTTP on lab"
 
     return 0, msg
+
+
+def set_ldap_user_password(user_name, new_password, check_if_existing=True, fail_ok=False):
+    """
+    Set ldap user password use ldapsetpasswd
+
+    Args:
+        user_name (str):
+            -   name of the LDAP User
+
+        new_password (str):
+            -   new password to change to
+
+        check_if_existing (bool):
+            -   True:   check if the user already existing first
+                False:  change the password without checking the existence of the user
+
+        host (str):
+            -   The host to log into
+
+        disconnect_after (bool)
+            -   True:   disconnect the ssh connection after changing the password
+            -   False:  keep the ssh connection
+
+    Returns (bool):
+            True if successful, False otherwise
+    """
+
+    if check_if_existing:
+        found, user_info = LdapUserManager.find_ldap_user(user_name)
+        if not found:
+            return False
+
+    ssh_client = ControllerClient.get_active_controller()
+    rc, output = ssh_client.exec_sudo_cmd('ldapsetpasswd {} {}'.format(user_name, new_password), fail_ok=fail_ok)
+    if rc > 1:
+        return 1, output
+
+    return rc, output
+
