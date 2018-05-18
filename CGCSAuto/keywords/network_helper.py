@@ -3301,7 +3301,7 @@ def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Ten
     if kwargs:
         table_ = table_parser.filter_table(table_, **kwargs)
 
-    return table_parser.row_dict_table(table_, key_header='pci alias')
+    return table_parser.row_dict_table(table_, key_header=header_key)
 
 
 def get_tenant_routers_for_vms(vms, con_ssh=None):
