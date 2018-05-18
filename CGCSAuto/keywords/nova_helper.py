@@ -1,6 +1,7 @@
 import random
 import re
 import math
+import ast
 
 from utils import cli, exceptions
 from utils import table_parser
@@ -1203,25 +1204,38 @@ def _get_vm_volumes(novashow_table):
     return [volume['id'] for volume in volumes]
 
 
-def get_quotas(quotas=None, con_ssh=None, auth_info=None):
+def get_quotas(quotas=None, detail=None, con_ssh=None, auth_info=None):
     """
     Get limit for given quota(s) via nova quota-show
     Args:
         quotas (list|str): name of the quota(s), e.g., 'instances', ['instances', 'cores']
+        detail(str): name of the detail requested. Valid details: 'limit', 'reserved', 'in_use'
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (list): list of limit(s) of given quota(s)
 
     """
+    valid_details = ['limit', 'reserved', 'in_use']
+    args_ = ''
     if not quotas:
         quotas = 'instances'
     if isinstance(quotas, str):
         quotas = [quotas]
-    table_ = table_parser.table(cli.nova('quota-show', ssh_client=con_ssh, auth_info=auth_info))
+    if detail:
+        if detail not in valid_details:
+            raise ValueError("Please specify a valid detail. Valid details: {}".format(valid_details))
+        else:
+            args_ += '--detail'
+
+    table_ = table_parser.table(cli.nova('quota-show', args_, ssh_client=con_ssh, auth_info=auth_info))
     values = []
+
     for item in quotas:
-        values.append(int(table_parser.get_value_two_col_table(table_, item)))
+        if detail:
+            values.append(ast.literal_eval(table_parser.get_value_two_col_table(table_, item))[detail])
+        else:
+            values.append(int(table_parser.get_value_two_col_table(table_, item)))
 
     return values
 
