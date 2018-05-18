@@ -3283,7 +3283,7 @@ def get_host_co_processor_pci_list(hostname):
     host_pci_info = []
     with ssh_to_host(hostname) as host_ssh:
         LOG.info("Getting the Co-processor pci list for host {}".format(hostname))
-        cmd = " lspci -nnm | grep Co-processor | awk ' !/Virtual/'"
+        cmd = "lspci -nnm | grep Co-processor | grep -v 'Device \[0000\]' | grep -v Virtual"
         rc, output = host_ssh.exec_cmd(cmd)
         if rc != 0:
             return host_pci_info
