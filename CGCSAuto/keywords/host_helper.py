@@ -951,7 +951,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     if not fail_ok:
         for host in res:
-            if res[host][0] not in [0, 4]:
+            if res[host][0] not in [-1, 0, 4]:
                 raise exceptions.HostPostCheckFailed(" Not all host(s) unlocked successfully. Detail: {}".format(res))
 
     LOG.info("Results for unlocking hosts: {}".format(res))
