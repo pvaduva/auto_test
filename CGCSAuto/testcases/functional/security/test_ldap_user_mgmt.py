@@ -1,15 +1,21 @@
 import uuid
+import time
 
-from pytest import mark, skip
+from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
-from keywords import security_helper
+from utils.clients.telnet import TelnetClient
+from utils import node
+from keywords import security_helper, system_helper
+from consts.proj_vars import InstallVars, ProjVar
+from consts.cgcs import Prompt
+from consts.filepaths import WRSROOT_HOME
 
 
 theLdapUserManager = security_helper.get_ldap_user_manager()
 
 
-def _make_sure_user_exist(user_name, shell=2, secondary_group=False, password_expiry_days=90,
+def _make_sure_user_exist(user_name, shell=2, sudoer=False, secondary_group=False, password_expiry_days=90,
                           password_expiry_warn_days=2, delete_if_existing=True):
     """
     Make sure there is a LDAP User with the specified name existing, create one if not.
@@ -20,6 +26,7 @@ def _make_sure_user_exist(user_name, shell=2, secondary_group=False, password_ex
         shell (int):
                                     1   -   bash
                                     2   -   lshell (limited shell)
+        sudoer (bol):               create sudoer or not
         secondary_group (str):
                                     the second group the user belongs to
         password_expiry_days (int):
@@ -35,7 +42,7 @@ def _make_sure_user_exist(user_name, shell=2, secondary_group=False, password_ex
     """
 
     code, user_info = theLdapUserManager.create_ldap_user(
-        user_name, check_if_existing=True, delete_if_existing=delete_if_existing, shell=shell,
+        user_name, check_if_existing=True, delete_if_existing=delete_if_existing, shell=shell, sudoer=sudoer,
         secondary_group=secondary_group, password_expiry_days=password_expiry_days,
         password_expiry_warn_days=password_expiry_warn_days)
 
@@ -275,3 +282,177 @@ def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days
         assert False, msg
 
     LOG.info('OK, successfully created the LDAP User {}'.format(user_name))
+
+
+@fixture(scope='function')
+def ldap_user_for_test(request):
+
+    user_name = 'ldapuser04'
+    LOG.fixture_step('Make sure the specified LDAP User existing:{}, create it if not exist'.format(user_name))
+    created, user_info = _make_sure_user_exist(user_name, delete_if_existing=True)
+
+    if not created:
+        skip('No LDAP User:{} existing to delete'.format(user_name))
+        return
+
+    def _delete_ldap_user():
+        theLdapUserManager.rm_ldap_user(user_name)
+    request.addfinalizer(_delete_ldap_user)
+
+    return user_name
+
+
+def test_ldap_user_password(ldap_user_for_test):
+    """
+
+    Args:
+        ldap_user_for_test:
+
+    CGTS-6468
+    Test Steps:
+        create a ldapuser
+        login as the ldapuser
+        try to set a new simple password it should fail
+        try to set a new complex password it should pass
+    Teardown:
+        remove ldapuser
+
+    """
+    user_name = ldap_user_for_test
+    simple_password = 'test123'
+    complex_password = 'Fa43sby!'
+
+    LOG.tc_step('Get the password of the user {}'.format(user_name))
+    password = theLdapUserManager.get_ldap_user_password(user_name)
+    LOG.debug('The password of the user: {}'.format(password))
+
+    # change password to simple using ssh_con verify it fail
+    LOG.tc_step('Set the new simple password should fail: {}'.format(simple_password))
+    rc, output = security_helper.set_ldap_user_password(user_name, simple_password, check_if_existing=False, fail_ok=True)
+    # change password to complex using ssh_con and verify it pass
+    assert 'Error' in output, 'Expect to {} but see {} instead'.format('Error', output )
+    LOG.info('OK, succeeded  as the LDAP User: {}, password: {}'.format(user_name, password))
+
+    # change password to complex using ssh_con verify it fail
+    LOG.tc_step('Set the new complex password should work: {}'.format(complex_password))
+    rc, output = security_helper.set_ldap_user_password(user_name, complex_password, check_if_existing=False, fail_ok=True)
+    # change password to complex using ssh_con and verify it pass
+    assert 'Success' in output, 'Expect to {} but see {} instead'.format('Success', output )
+    LOG.info('OK, succeeded  as the LDAP User: {}, password: {}'.format(user_name, complex_password))
+
+
+@mark.parametrize(('user_name','shell_type'), [
+    mark.p1(('ldapuser06', 'bash')),
+    mark.p1(('ldapuser07', 'lshell')),
+])
+def test_cmds_login_as_ldap_user(user_name, shell_type):
+    """
+    this test cover both CGTS-4909 and CGTS-6623
+    Args:
+        user_name: username of the ldap user should be admin for thist test
+        shell_type: create the user under bash or lshell
+
+    Test Steps:
+        - created ldap user for /bash/lshell
+        - execute sudo user command for user under bash
+        - execute openstack user list command for lshell user
+
+    Teardowns:
+        - delete created ldap user
+
+    """
+
+    if shell_type == 'bash':
+        shell_code = 1
+    elif shell_type == 'lshell':
+        shell_code = 2
+
+    LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not exist'.format(user_name))
+    created, user_info = _make_sure_user_exist(user_name, sudoer=True, shell=shell_code, delete_if_existing=True)
+
+    LOG.tc_step('Get the password of the user {}'.format(user_name))
+    password = theLdapUserManager.get_ldap_user_password(user_name)
+    LOG.debug('The password of the user: {}'.format(password))
+
+    LOG.tc_step('Login as the LDAP User:{}'.format(user_name))
+    logged_in, password, ssh_con = theLdapUserManager.login_as_ldap_user(user_name, password, shell=shell_code,
+                                                                         disconnect_after=False)
+
+    try:
+        if user_name == 'ldapuser06':
+            LOG.tc_step("Execute sudo command 'sudo ls'")
+            ssh_con.send("sudo ls && $?")
+            ssh_con.expect(Prompt.PASSWORD_PROMPT)
+            ssh_con.send(password)
+            index = ssh_con.expect('0')
+            LOG.info('index {}'.format(index))
+            assert index == 0, 'cannot sudo as a sudoer new user on the user login'
+
+        elif user_name == 'ldapuser07':
+            # lshell_env_setup are set to run openstack user list
+            LOG.tc_step("Execute openstack command 'openstack user list'")
+            ssh_con.send("openstack user list && $?")
+            index = ssh_con.expect('0')
+            LOG.info('index {}'.format(index))
+            assert index == 0, 'cannot execute openstack user list cli as a lshell ldap user'
+            # send exit output to return to  wrsroot@controller-0 and flush output.
+    finally:
+        if logged_in:
+            ssh_con.send('exit') # exit from user login
+            ssh_con.flush()
+
+
+@mark.parametrize('user_name', [
+    mark.p1('admin'),
+    # mark.p1(('operator', 'operator', 'controller-0')),
+])
+def test_telnet_ldap_admin_access(user_name):
+    '''
+
+    Args:
+        user_name: username of the ldap user should be admin for thist test
+        hostname: the name of the host for this test.
+
+
+    Test Steps:
+        - telnet to active controller
+        - login as admin password admin.
+        - verify that it can ls /home/wrsroot
+
+    Teardowns:
+        - Disconnect telnet
+    """
+    '''
+
+    if ProjVar.get_var('COLLECT_TELNET'):
+        skip('Telnet is in use for collect log. This test which require telnet will be skipped')
+
+    lab = ProjVar.get_var('LAB')
+    nodes_info = node.create_node_dict(lab['controller_nodes'], 'controller')
+    hostname = system_helper.get_active_controller_name()
+    controller_node = nodes_info[hostname]
+    password = "admin"
+    new_password = "Li69nux*"
+
+    telnet = TelnetClient(host=controller_node.telnet_ip, port=controller_node.telnet_port, hostname=hostname,
+                          user=user_name, password=password, timeout=10)
+    try:
+        LOG.tc_step("Telnet to lab as {} user with password {}".format(user_name, password))
+        code = telnet.initial_login(new_password, fail_ok=True)
+
+        if code == 1:
+            # if initial_login failed which means password is already set
+            # TODO: this section need to be redone once new telnet.login() is updated for first time login
+            LOG.tc_step("Telnet to lab as {} user with password {}".format(user_name, new_password))
+            telnet.send(user_name)
+            telnet.expect(Prompt.PASSWORD_PROMPT)
+            telnet.send(new_password)
+            telnet.expect()
+
+        telnet.flush()
+        code, output = telnet.exec_cmd('ls {}'.format(WRSROOT_HOME), fail_ok=False)
+        LOG.info('output from test {}'.format(output))
+        assert not '*** forbidden' in output, 'not able to ls to /home/wrsroot as admin user'
+    finally:
+        telnet.send('exit')
+        telnet.close()
