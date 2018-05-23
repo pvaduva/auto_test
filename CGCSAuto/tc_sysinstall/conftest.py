@@ -13,8 +13,6 @@ from consts.cgcs import Prompt
 from utils.tis_log import LOG
 from utils import lab_info
 
-
-LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
 #
 #
 # con_ssh = None
@@ -64,7 +62,6 @@ def pytest_configure(config):
     controller1_ceph_mon_device = config.getoption('ceph_mon_dev_controller_1')
     ceph_mon_gib = config.getoption('ceph_mon_gib')
     install_conf = config.getoption('installconf')
-    lab_file_server = config.getoption("file_server")
     lab_file_dir = config.getoption('file_dir')
     build_server = config.getoption('build_server')
     tis_build_dir = config.getoption('tis_build_dir')
@@ -81,7 +78,7 @@ def pytest_configure(config):
 
     if not install_conf:
         install_conf = setups.write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
-                                                lab_files_dir=lab_file_dir, lab_files_server=lab_file_server,
+                                                lab_files_dir=lab_file_dir,
                                                 tis_build_dir=tis_build_dir, build_server=build_server,
                                                 license_path=install_license, guest_image=guest_image,
                                                 heat_templates=heat_templates, boot=boot_type, iso_path=iso_path)

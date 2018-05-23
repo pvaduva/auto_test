@@ -14,10 +14,8 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
-from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread
-from utils import exceptions, local_host
-from utils import local_host, cli
-from utils.ssh import SSHClient, ControllerClient
+from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
+from utils.ssh import SSHClient, ControllerClient, TelnetClient
 from utils.tis_log import LOG
 from utils.node import create_node_boot_dict, create_node_dict, Node
 from consts.auth import Tenant, CliAuth
@@ -253,15 +251,14 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
             raise exceptions.InvalidStructure(err_msg)
 
 
-def bring_node_console_up(node, boot_device, install_output_dir,
+def bring_node_console_up(node, boot_device,
                           boot_usb=False,
                           low_latency=False,
                           upgrade=False,
                           vlm_power_on=False,
                           close_telnet_conn=True,
                           small_footprint=False,
-                          clone_install=False,
-                          log_file_prefix=''):
+                          clone_install=False,):
     """
     Initiate the boot and installation operation.
     Args:
@@ -277,26 +274,16 @@ def bring_node_console_up(node, boot_device, install_output_dir,
         LOG.error("Cannot bring vlm console for {} without valid mgmt boot device: {}".format(node.name, boot_device))
         return 1
 
-    log_path = "{}/{}{}.telnet.log".format(install_output_dir, log_file_prefix, node.name)
-
     if node.telnet_conn is None:
-        node.telnet_conn = telnetlib.connect(node.telnet_ip,
-                                             int(node.telnet_port),
-                                             negotiate=node.telnet_negotiate,
-                                             port_login=True if node.telnet_login_prompt else False,
-                                             vt100query=node.telnet_vt100query,
-                                             log_path=log_path)
+        node.telnet_conn = open_telnet_session(node)
 
     if vlm_power_on:
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device,
-                             usb=boot_usb,
-                             upgrade=upgrade,
-                             small_footprint=small_footprint,
-                             low_latency=low_latency,
-                             clone_install=clone_install)
+    install(node, boot_device,
+            low_latency=low_latency,
+            small_footprint=small_footprint)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -310,15 +297,10 @@ def get_non_controller_system_hosts():
     return storages + computes
 
 
-def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
+def open_telnet_session(node_obj):
 
-    _telnet_conn = telnetlib.connect(node_obj.telnet_ip,
-                                      int(node_obj.telnet_port),
-                                      negotiate=node_obj.telnet_negotiate,
-                                      port_login=True if node_obj.telnet_login_prompt else False,
-                                      vt100query=node_obj.telnet_vt100query,\
-                                      log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
-                                      ".telnet.log", debug=False)
+    _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
+    _telnet_conn.send("\r\n")
 
     return _telnet_conn
 
@@ -374,7 +356,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
                     hostname = node_obj.host_ip
 
                 cmd = "ping -w {} -c 4 {}".format(HostTimeout.PING_TIMEOUT, hostname)
-                if (controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.PING_TIMEOUT +
+                if (controller0_node.telnet_conn.exec_cmd(cmd, expect_timeout=HostTimeout.PING_TIMEOUT +
                                               HostTimeout.TIMEOUT_BUFFER)[0] != 0):
                     LOG.info("Node {} not responding. Skipping wipedisk process".format(hostname))
 
@@ -482,6 +464,7 @@ def power_off_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
         LOG.info("Node {} is turned off".format(node.name))
+
 
 # TODO: To be replaced by function in vlm_helper
 def power_on_host(hosts, wait_for_hosts_state_=True):
@@ -672,6 +655,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
                           lab['floating ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
+
 def bulk_add_hosts(lab, hosts_xml_file):
     controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
     cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
@@ -682,6 +666,7 @@ def bulk_add_hosts(lab, hosts_xml_file):
             return rc, None, msg
         hosts = system_helper.get_hosts_by_personality()
         return 0, hosts, ''
+
 
 
 def add_storages(lab, server, load_path):
@@ -2213,13 +2198,8 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         lab = InstallVars.get_install_var("LAB")
 
     controller0 = lab["controller-0"]
-    install_output_dir = ProjVar.get_var("LOG_DIR")
-    log_file_prefix = ''
-    if lab['short_name'] not in install_output_dir:
-        log_file_prefix += "{}_".format(lab['short_name'])
-
     if controller0.telnet_conn is None:
-        controller0.telnet_conn = open_telnet_session(controller0, install_output_dir, log_file_prefix=log_file_prefix)
+        controller0.telnet_conn = open_telnet_session(controller0)
 
     boot_interfaces = lab['boot_device_dict']
 
@@ -2231,7 +2211,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    bring_node_console_up(controller0, boot_interfaces, install_output_dir,
+    bring_node_console_up(controller0, boot_interfaces,
                           boot_usb=boot_usb,
                           small_footprint=small_footprint,
                           low_latency=low_latency,
@@ -2244,7 +2224,22 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     if clone_install:
         reset = False
 
-    controller0.telnet_conn.login(reset=reset)
+    if reset:
+        controller0.telnet_conn.send('\r\n\r\n')
+        controller0.telnet_conn.expect(["ogin:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_user())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_user())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_user())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_password())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_password())
+        controller0.telnet_conn.expect()
+    else:
+        controller0.telnet_conn.login()
+    # controller0.telnet_conn.set_prompt(controller0.host_name + ':~\$ ')
 
     time.sleep(20)
 
@@ -2972,7 +2967,7 @@ def get_git_name(lab_name):
 
 # TODO: figure out what config_region is and if we have to support it
 # TODO: add support for banners and branding
-def controller_system_config(active_controller=None, telnet_conn=None):
+def controller_system_config(active_controller=None, telnet_conn=None, config_file="TiS_config.ini_centos"):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -2984,7 +2979,6 @@ def controller_system_config(active_controller=None, telnet_conn=None):
     """
     lab = InstallVars.get_install_var("LAB")
     output_dir = ProjVar.get_var('LOG_DIR')
-    config_file = "TiS_config.ini_centos"
     wrsroot_etc_profile = "/etc/profile.d/custom.sh"
 
     if active_controller is None:
@@ -3003,30 +2997,24 @@ def controller_system_config(active_controller=None, telnet_conn=None):
     connection.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
     connection.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
     connection.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
-
     connection.exec_cmd("export USER=wrsroot")
-
-#    system_files = connection.exec_cmd('ls /home/wrsroot | tr -d "[:blank:]"')[1].splitlines()
-#    print("The system files are: \n {}".format(system_files))
-#    for file in system_files:
-#        if "TiS_config.ini" in file or "system_config" in file:
-#            config_file = file
-#            print("The controller config file is: {}".format(config_file))
-#            break
 
     rc = connection.exec_cmd("test -f {}".format(config_file))[0]
     if rc == 0:
         cmd = 'echo "{}" | sudo -S config_controller --config-file {}'.format(HostLinuxCreds.get_password(), config_file)
         os.environ["TERM"] = "xterm"
-        rc, output = connection.exec_cmd(cmd, timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
+        rc, output = connection.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
+        # TODO: doesn't return bad return code
         if rc == 0:
             LOG.info("Controller configured")
+            host_helper.wait_for_hosts_states(active_controller.name, availability=HostAvailState.ONLINE,
+                                              use_telnet=True, con_telnet=active_controller.telnet_conn)
+            active_controller.ssh_conn.connect(prompt=Prompt.CONTROLLER_PROMPT, retry=True, retry_timeout=30)
         else:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
             raise exceptions.CLIRejected(err_msg)
     else:
-        # TODO: possibly list the files that are there. Possibly use pwd command to ensure we're in the right directory
         err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, active_controller.name)
         LOG.error(err_msg)
         raise exceptions.CLIRejected(err_msg)
@@ -3089,6 +3077,7 @@ def post_install(active_controller=None):
     connection.exec_cmd("cat /etc/build.info")
 
     return rc, msg
+
 
 def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_first=True):
@@ -3154,8 +3143,6 @@ def set_network_boot_feed(bld_server_conn, load_path):
     Returns:
 
     """
-
-
     if load_path is None:
         load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
 
@@ -3223,3 +3210,111 @@ def set_network_boot_feed(bld_server_conn, load_path):
     tuxlab_conn.close()
 
     return True
+
+
+def enter_bios_option(node_obj, bios_option, reboot=False):
+    if node_obj.telnet_conn is None:
+        node_obj.telnet_conn = open_telnet_session(node_obj)
+    if reboot:
+        vlm_helper.power_off_hosts(node_obj.name)
+        vlm_helper.power_on_hosts(node_obj.name, wait_for_hosts_state_=False)
+    node_obj.telnet_conn.expect([str.encode(bios_option.name)], 360)
+    for i in range(0, 5):
+        bios_option.enter(node_obj.telnet_conn)
+        time.sleep(1)
+
+
+def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, fail_ok=False, boot_device_pattern=None):
+    if usb is None:
+        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
+    if boot_device_pattern:
+        boot_device_regex = boot_device_pattern
+    elif usb:
+        LOG.info("Looking for USB device")
+        boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
+    else:
+        boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                  if key == node_obj.name or key == node_obj.personality), None)
+    if boot_device_regex is None:
+        msg = "Failed to determine boot device for: " + node_obj.name
+        LOG.error(msg)
+        if fail_ok:
+            return False
+        else:
+            raise exceptions.TelnetException(msg)
+    LOG.info("Boot device is: " + str(boot_device_regex))
+
+    node_obj.telnet_conn.expect([str.encode(boot_device_menu.get_prompt())], 60)
+    boot_device_menu.select(node_obj.telnet_conn, pattern=re.compile(boot_device_regex))
+
+
+def select_install_option(node_obj, boot_menu, index=None, low_latency=False, usb=None, clone_install=False,
+                          small_footprint=False, timeout=2400):
+    node_obj.telnet_conn.expect([str.encode(boot_menu.get_prompt())], 120)
+    if usb is None:
+        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
+    if usb:
+        if not clone_install:
+            if isinstance(index, int):
+                boot_menu.select(node_obj.telnet_conn, index=index)
+            elif low_latency:
+                boot_menu.menus[0].select(node_obj.telnet_conn, index=2)
+            elif small_footprint:
+                boot_menu.menus[0].select(node_obj.telnet_conn, index=1)
+            else:
+                boot_menu.menus[0].select(node_obj.telnet_conn, index=0)
+            time.sleep(1)
+            boot_menu.sub_menus[0].select(node_obj.telnet_conn, index=0)
+            time.sleep(1)
+            boot_menu.sub_menus[1].select(node_obj.telnet_conn, index=0)
+        else:
+            LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
+            timeout = 4800
+
+    # UEFI menu does not have WRL options
+    elif "uefi" in boot_menu.get_name():
+        if low_latency:
+            boot_menu.select(node_obj.telnet_conn, pattern="lowlatency")
+        elif small_footprint:
+            boot_menu.select(node_obj.telnet_conn, pattern="All-in-one")
+        else:
+            boot_menu.select(node_obj.telnet_conn, pattern="CentOS")
+    else:
+        # New pxeboot cfg menu
+        # 0) Boot from hard drive
+        # 1) WRL Serial Controller Install
+        # 2) CentOS Serial Controller Install
+        # 3) WRL Serial CPE Install
+        # 4) CentOS Serial CPE Install
+        # 6) CentOS Serial CPE Install (low latency)
+
+        # if hasattr(node_obj, "host_kickstart_menu_selection"):
+        #    selection_menu_option = getattr(node_obj, "host_kickstart_menu_selection")
+        #    if selection_menu_option != "6":
+        #        boot_menu.select(int(selection_menu_option), node_obj.telnet_conn)
+        #    else:
+        #        boot_menu.select(5, node_obj.telnet_conn)
+        if small_footprint:
+            if low_latency:
+                boot_menu.select(node_obj.telnet_conn, pattern="CentOS")
+            else:
+                # TODO: extra 2 spaces at the end are to ensure it doesn't match lowlatency option. Need a better pattern
+                boot_menu.select(node_obj.telnet_conn, pattern='CentOS Serial CPE Install  ')
+        else:
+            boot_menu.select(node_obj.telnet_conn, pattern='CentOS Serial Controller')
+
+    node_obj.telnet_conn.expect([str.encode("ogin:")], timeout)
+    LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
+    return 0
+
+
+def install(node_obj, boot_device_dict, small_footprint=False, low_latency=False):
+    bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
+    bios_option = bios_menu.get_boot_option()
+    kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name)
+
+    enter_bios_option(node_obj, bios_option)
+    if "hp" not in node_obj.host_name and "ml350" not in node_obj.host_name:
+        boot_device_menu = menu.BootDeviceMenu()
+        select_boot_device(node_obj, boot_device_menu, boot_device_dict)
+    select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency)

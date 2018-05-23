@@ -463,9 +463,9 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                          "has to be provided")
     elif not installconf_path:
         installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
-                                             lab_files_server=BuildServerPath.DEFAULT_BUILD_SERVER, lab_files_dir=None,
-                                             build_server=BuildServerPath.DEFAULT_BUILD_SERVER, compute=None,
-                                             storage=None, license_path=None, guest_image=None, heat_templates=None)
+                                             lab_files_dir=None, build_server=BuildServerPath.DEFAULT_BUILD_SERVER,
+                                             compute=None, storage=None, license_path=None, guest_image=None,
+                                             heat_templates=None)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -796,14 +796,13 @@ def set_sys_type(con_ssh):
 # Fix: overwrite the controller nodes in the lab with supplied ones
 # Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
 # Should we have the user create their own install configuration file if they want to install a lab with only 1 controller?
-def write_installconf(lab, controller, lab_files_server, lab_files_dir, build_server, tis_build_dir, compute, storage,
+def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage,
                       license_path, guest_image, heat_templates, boot, iso_path):
     """
     Writes a file in ini format of the install variables
     Args:
         lab: Str name of the lab to install
         controller: Str comma separated list of controller node barcodes
-        lab_files_server: Str name of a valid build server. Default is build_server
         lab_files_dir: Str path to the directory containing the lab files
         build_server: Str name of a valid build server. Default is yow-cgts4-lx
         tis_build_dir: Str path to the desired build directory. Default is the latest
@@ -824,9 +823,25 @@ def write_installconf(lab, controller, lab_files_server, lab_files_dir, build_se
     storage_nodes = storage.split(',') if storage is not None and storage is not '' else None
     __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
     host_build_dir = tis_build_dir if tis_build_dir and tis_build_dir != "" else BuildServerPath.DEFAULT_HOST_BUILD_PATH
-    files_server = lab_files_server if lab_files_server and lab_files_server != "" else __build_server
-    files_dir = lab_files_dir if lab_files_dir and lab_files_dir != "" else None
-    iso_path = iso_path if iso_path else host_build_dir + '/export/bootimage.iso'
+    files_server = __build_server
+
+    if lab_files_dir:
+        files_dir = lab_files_dir if lab_files_dir is not '' else None
+        if files_dir.find(":/") != -1:
+            files_server = files_dir[:files_dir.find(":/")]
+            files_dir = files_dir[files_dir.find(":"):]
+    else:
+        files_dir = None
+
+    if iso_path:
+        iso_path = iso_path if iso_path is not '' else host_build_dir + '/export/bootimage.iso'
+        if iso_path.find(":/") != -1:
+            iso_server = iso_path[:files_dir.find(":/")]
+            iso_path = iso_path[iso_path.find(":"):]
+        else:
+            iso_server = __build_server
+    else:
+        iso_path = iso_path if iso_path else host_build_dir + '/export/bootimage.iso'
 
     # Get lab info
     if files_server and files_dir:

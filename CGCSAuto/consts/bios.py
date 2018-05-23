@@ -1,70 +1,136 @@
-from utils.tis_log import LOG
-
-class BiosTypes:
-    American_Megatrends = {
-        "name": b"American Megatrends",
-        "timeout": 2400,
-        "boot_device": b"\\x1b\[\d;\d\d;\d\dm.*\|\s(.*?)\|"
-
+class TerminalKeys:
+    Keys = {
+        "Enter": '\r\r',
+        "Return": '\r\r',
+        "Esc": '\x1b',
+        "Escape": '\x1b',
+        "Ctrl": 'placeholder',
+        "Control": "placeholder",
+        "Insert": "placeholder",
+        "Del": "placeholder",
+        "Delete": "placeholder",
+        "F1": '\x1b' + '[OP',
+        "F2": '\x1b' + '[OQ',
+        "F3": '\x1b' + '[OR',
+        "F4": '\x1b' + '[OS',
+        "F5": None,
+        "F6": '\x1b' + '[17~',
+        "F7": '\x1b' + '[18~',
+        "F8": '\x1b' + '[19~',
+        "F9": '\x1b' + '[20~',
+        "F10": '\x1b' + '[21~',
+        "F11": '\x1b' + '[23~',
+        "F12": '\x1b' + '[24~',
+        "Down": '\x1b' + '[B',
+        "Up": '\x1b' + '[A'
     }
 
-    Hewlett = {
-        "name": b"Hewlett",
-        "system_utilities": ['ESC+O+p', '\x1b' + 'O' + 'p'],
-        "intelligent_provisioning": ['ESC+O+m', '\x1b' + 'O' + 'm'],
-        "one_time_boot_menu": ['ESC+!', '\x1b' + '!'],
-        "network_boot": ['ESC+@', '\x1b' + '@'],
-        "timeout": 2400
+
+class BiosMenus:
+    Supermicro = {
+        "name": "American Megatrends",
+        "options": [{'name': 'Setup', 'index': 0, 'key': 'Del'},
+                    {'name': 'Boot Menu', 'index': 1, 'key': ['Esc', '!']},
+                    {'name': 'PXE/LAN', 'index': 2, 'key': 'F12'}],
+        "wrap_around": False
+    }
+
+    American_Megatrends = {
+        "name": "American Megatrends",
+        "options": [{'name': 'direct boot', 'index': 0, 'key': 'Enter'},
+                    {'name': 'setup', 'index': 1, 'key': 'F2'},
+                    {'name': 'boot menu', 'index': 2, 'key': 'F6'},
+                    {'name': 'network boot', 'index': 3, 'key': 'F12'}],
+        "wrap_around": False
+    }
+
+    Ironpass = {
+        "name": "American Megatrends",
+        "options": [{'name': 'direct boot', 'index': 0, 'key': 'Enter'},
+                    {'name': 'setup', 'index': 1, 'key': 'F2'},
+                    {'name': 'Boot Menu', 'index': 2, 'key': 'F6'},
+                    {'name': 'network boot', 'index': 3, 'key': 'F12'}],
+        "wrap_around": False
+    }
+
+    HP = {
+        "name": "Hewlett-Packard",
+        "options": [{'name': 'continue', 'index': 0, 'key': ['Esc', '1']},
+                    {'name': 'Setup', 'index': 1, 'key': ['Esc', '9']},
+                    {'name': 'Intelligent Provisioning', 'index': 2, 'key': ['ESC', '0']},
+                    {'name': 'Boot Override', 'index': 3, 'key': ['ESC', '!']},
+                    {'name': 'Network Boot', 'index': 4, 'key': ['ESC', '@']}],
+        "wrap_around": False
+    }
+
+    ml350 = {
+        "name": "Hewlett",
+        "options": [{'name': 'System Utilities', 'index': 0, 'key': ['ESC', 'O', 'p']},
+                    {'name': 'Intelligent Provisioning', 'index': 2, 'key': ['ESC', '0']},
+                    {'name': 'One Time Boot', 'index': 3, 'key': ['ESC', '!']},
+                    {'name': 'Network Boot', 'index': 4, 'key': ['ESC', '@']}],
+        "wrap_around": False
+    }
+    # TODO: double check options
+    PowerEdge = {
+        "name": "PowerEdge",
+        "options": [{"name": "system setup", "index": 0, 'key': 'F2'},
+                    {"name": "lifecycle controller", "index": 1, "key": 'F10'},
+                    {"name": "boot manager", "index": 2, "key": 'F11'},
+                    {"name": "pxe boot", "index": 3, "key": 'F12'}],
+        "wrap_around": False
     }
 
     Phoenix = {
-        "name": b"Phoenix",
-        "timeout": 2400,
-        "boot_device": b"\x1B\(B(.*)\x1B\(0x"
-
-    }
-
-    PowerEdge = {
-        "name": b"PowerEdge",
-        "system_setup": ['F2', '\x1b' + '[14~'],
-        "lifecycle_controller": ['F10', '\x1b' + '[22~'],
-        "boot_manager": ['F11', '\x1b' + '[23~'],
-        "pxe_boot": ['F12', '\x1b' + '[24~'],
-        "timeout": 2400
+        "name": "Phoenix",
+        "options": [{"name": "Boot Menu", "index": 0, "key": 'F12'}],
+        "wrap_around": False
     }
 
 
-def get_install_key(bios_name):
-    if bios_name == b"American Megatrends":
-        return ('\x1b' + '[17~')
-    elif bios_name == b"Hewlett":
-        return BiosTypes.Hewlett["network_boot"]
-    elif bios_name == b"Phoenix":
-        return ('\x1b' + '[24~')
-    elif bios_name == b"PowerEdge":
-        return BiosTypes.PowerEdge["pxe_boot"]
-    else:
-        return None
+class BootMenus:
 
+    Boot_Device = {
+        "name": "boot device",
+        "prompt": "Please select boot device",
+        "wrap_around": True
+    }
 
+    PXE_Boot = {
+        "name": "PXE Boot Menu",
+        "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+        "wrap_around": True
+    }
 
-def get_bios_type(lab):
-    if 'bios_type' in lab.keys():
-        bios_types = [getattr(BiosTypes, item) for item in dir(BiosTypes) if not item.startswith('__')]
-        for bios in bios_types:
-            if lab['bios_type'] in bios["name"]:
-                return bios
-        return None
-    else:
-        if 'ironpass' in lab["name"] or 'supermicro' in lab["name"] or "wildcat" in lab["name"]:
-            return BiosTypes.American_Megatrends
-        elif 'r730' or 'r430' in lab["name"]:
-            LOG.info(lab["name"])
-            return BiosTypes.PowerEdge
-        elif 'ml350' in lab["name"] or 'hp' in lab["name"]:
-            return BiosTypes.Hewlett
-        elif "r720" in lab["name"]:
-            return BiosTypes.Phoenix
-        else:
-            return None
+    UEFI_Boot = {
+        "name": "UEFI Boot Menu",
+        "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+        "wrap_around": True
+    }
 
+    class USB:
+        Kernel = {
+            "name": "kernel options",
+            "index": 0,
+            "prompt": "Select kernel options and boot kernel",
+            "options": [{'name': 'Standard Controller Configuration', 'index': 0, 'key': ['Enter', str.encode("\r\r")]},
+                        {'name': 'All-in-one Controller Configuration', 'index': 1, 'key': ['Enter', str.encode("\r\r")]},
+                        {'name': 'All-in-one (lowlatency) Controller Configuration', 'index': 2, 'key': ['Enter', str.encode("\r\r")]}],
+            "wrap_around": True
+    }
+
+        Controller_Configuration = {
+            "name": "Controller Configuration",
+            "index": 1,
+            "options": [{'name': 'Serial Console', 'index': 0, 'key': ['Enter', str.encode("\r\r")]},
+                    {'name': 'Graphical Console', 'index': 1, 'key': ['Enter', str.encode("\r\r")]}],
+            "wrap_around": True
+        },
+
+        Serial_Console = {
+            "name": "Serial Console",
+            "index": 2,
+            "options": [{'name': 'STANDARD Security Boot Profile', 'index': 0, 'key': ['Enter', str.encode("\r\r")]},
+                    {'name': 'EXTENDED Security Boot Profile', 'index': 1, 'key': ['Enter', str.encode("\r\r")]}],
+            "wrap_around": True
+        }

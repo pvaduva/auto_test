@@ -479,15 +479,12 @@ def pytest_addoption(parser):
     controller_help = "Comma-separated list of VLM barcodes for controllers"
     compute_help = "Comma-separated list of VLM barcodes for computes"
     storage_help = "Comma-separated list of VLM barcodes for storage nodes"
-    file_server_help = "The server that holds the lab file directory. Default is the build server"
     guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
 
     # Custom install options
-    parser.addoption('--lab_file_server', '--lab-file-server', dest='file_server',
-                     action='store', default=build_server_consts.DEFAULT_BUILD_SERVER['name'], help=file_server_help)
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
                      action='store', metavar='DIR', help=file_dir_help)
     parser.addoption('--controller', dest='controller',

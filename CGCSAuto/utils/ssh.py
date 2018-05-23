@@ -16,7 +16,9 @@ from utils.tis_log import LOG, get_tis_logger
 from consts.auth import Guest, HostLinuxCreds
 from consts.cgcs import Prompt, DATE_OUTPUT
 from consts.proj_vars import ProjVar
+from consts.proj_vars import InstallVars
 from consts.lab import Labs, NatBoxes
+from consts import bios
 
 # setup color.format strings
 colorred = "\033[1;31m{0}\033[00m"
@@ -493,6 +495,7 @@ class SSHClient:
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=30)
+        LOG.debug("Return Code: {}".format(self.cmd_output))
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
         return int(matches[-1])
 
@@ -787,7 +790,7 @@ class SSHClient:
         """
         end_time = time.time() + timeout
         while time.time() < end_time:
-            code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout, blob=blob)
+            code, output = self.exec_cmd(cmd, expect_timeout=expt_timeout, blob=blob, get_exit_code=False)
             if not non_zero_rtn_ok and code > 0:
                 raise exceptions.SSHExecCommandFailed("Get non-zero return code for command: {}".format(cmd))
 
@@ -1466,6 +1469,7 @@ def telnet_logger(host):
 
 TELNET_REGEX = '(.*-[\d]+)[ login:|:~\$]'
 TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
+NEWPASSWORD_PROMPT = ''
 
 
 class TelnetClient(Telnet):
@@ -1473,20 +1477,23 @@ class TelnetClient(Telnet):
     def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
                  password=HostLinuxCreds.get_password()):
 
+        self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
-
+        # newlines for: login_prompt, port message
+        self.send('\r\n\r\n\r\n')
         if not prompt and not hostname:
             prompt = ':~\$ '
-            self.send()
             index = self.expect(TELNET_REGEX, fail_ok=True)
             if index == 0:
-                hostname = self.cmd_output
+                hostname = re.search(TELNET_REGEX, self.cmd_output).group(1)
+                prompt = '{}:~\$ '.format(hostname)
+
         elif not prompt:
             prompt = '{}:~\$ '.format(hostname)
         elif not hostname:
-            found = re.findall(TELNET_REGEX, prompt)
-            if found:
-                hostname = found[0]
+            hostname = re.search(TELNET_REGEX, prompt).group(0)
+
+        self.flush()
         self.logger = telnet_logger(hostname) if hostname else telnet_logger(host)
         self.hostname = hostname
         self.prompt = prompt
@@ -1520,6 +1527,33 @@ class TelnetClient(Telnet):
             self.logger.warning("System is not in login page and default prompt is not found either")
             code = 1
         return code
+
+    def initial_login(self, new_password, expect_prompt_timeout=3, fail_ok=False):
+        self.send('\r\n\r\n')
+        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
+        self.flush()
+        code = 0
+        expect_index = 0
+        if index == 0:
+            self.send(self.user)
+            self.expect(PASSWORD_PROMPT, fail_ok=fail_ok)
+            self.send(self.password)
+            self.expect(PASSWORD_PROMPT, fail_ok=fail_ok)
+            self.send(new_password)
+            self.expect(PASSWORD_PROMPT, fail_ok=fail_ok)
+            self.send(new_password)
+            expect_index = self.expect(fail_ok=fail_ok)
+        elif index < 0:
+            self.logger.warning("System is not in login page and default prompt is not found either")
+            return 1
+
+        if fail_ok and expect_index != 0:
+            self.logger.warning("System did not login in successfully")
+            return 1
+
+        self.password = new_password
+
+        return 0
 
     def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
         if reconnect:
