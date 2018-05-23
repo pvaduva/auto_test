@@ -492,20 +492,23 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     return 0, srv_grp_id
 
 
-def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=False, regex=False,
-                      all_=True, **kwargs):
+def get_server_groups(name=None, project_id=None, policies=None, members=None, best_effort=None,
+                      auth_info=Tenant.ADMIN, con_ssh=None, strict=False, regex=False,
+                      all_=True):
     """
     Get server groups ids based on the given criteria
 
     Args:
         name (str): filter out server groups with given name
         project_id (str): filter out server groups for given tenant id
+        policies (str|list):
+        members (str|list):
+        best_effort (bool):
         auth_info (dict):
         con_ssh (SSHClient):
-        strict (bool): whether to do strict search for name and value(s) in kwargs
-        regex (bool): whether or not to use regex
+        strict (bool): whether to do strict search for given name
+        regex (bool): whether or not to use regex when for given name
         all_(bool): whether to append '--a' to cli
-        **kwargs: extra key/value pair(s) to filter the table. e.g., Policies = 'affinity'
 
     Returns (list): list of server groups ids
 
@@ -520,17 +523,51 @@ def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ss
     if project_id is not None:
         table_ = table_parser.filter_table(table_, strict=True, **{"Project Id": project_id})
 
-    return table_parser.get_values(table_, 'Id', strict=strict, regex=regex, **kwargs)
+    groups = table_parser.get_values(table_, 'Id')
+    if policies or members or (best_effort is not None):
+        if policies:
+            policies = [policies] if isinstance(policies, str) else policies
+        if members:
+            members = [members] if isinstance(members, str) else members
+        if best_effort is not None:
+            best_effort = 'true' if best_effort else 'false'
+
+        groups_to_check = list(groups)
+        table_dict = table_parser.row_dict_table(table_, key_header='Id')
+        for group in groups_to_check:
+            if policies:
+                actual_policies = eval(table_dict[group]['policies'])
+                if not set(policies).issubset(set(actual_policies)):
+                    groups.remove(group)
+                    continue
+
+            if members:
+                actual_members = eval(table_dict[group]['members'])
+                if not set(members).issubset(set(actual_members)):
+                    groups.remove(group)
+                    continue
+
+            if best_effort:
+                actual_flag = eval(table_dict[group]['metadata'])['wrs-sg:best_effort']
+                if best_effort != actual_flag:
+                    groups.remove(group)
+
+    LOG.info("Server groups found: {}".format(groups))
+    return groups
 
 
-def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None, strict=False, **kwargs):
+def get_server_groups_info(server_groups=None, header='Policies', policies=None, members=None, best_effort=None,
+                           auth_info=None, con_ssh=None, strict=False, **kwargs):
     """
     Get a server group(s) info as a list
 
     Args:
         server_groups (str|list): id(s) of server group(s).
         header (str): header string for info. such as 'Member', 'Metadata', 'Policies'
-        strict
+        policies (str|list): If not None, return only server groups that use given policy(s)
+        members (str|list): If not None, return only server groups that include given member(s)
+        best_effort (bool): If not None, return only server groups with best_effort flag set to given value
+        strict (bool)
         auth_info (dict):
         con_ssh (SSHClient):
 

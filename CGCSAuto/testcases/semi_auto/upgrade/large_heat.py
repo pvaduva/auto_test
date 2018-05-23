@@ -5,14 +5,33 @@ from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from utils.clients.ssh import ControllerClient
 from consts.auth import HostLinuxCreds, Tenant
 from consts.cgcs import GuestImages, HeatStackStatus
+from consts.proj_vars import ProjVar
+
+
+@fixture(scope='function')
+def check_alarms():
+    pass
 
 
 @fixture(scope='module', autouse=True)
-def adjust_quota():
+def pre_check(request):
     """
     This is to adjust the quota
     return: code 0/1
     """
+    hypervisors = host_helper.get_up_hypervisors()
+    if len(hypervisors) < 3:
+        skip('Large heat tests require 3+ hypervisors')
+
+    # disable remote cli for these testcases
+    remote_cli = ProjVar.get_var('REMOTE_CLI')
+    if remote_cli:
+        ProjVar.set_var(REMOTE_CLI=False)
+
+        def revert():
+            ProjVar.set_var(REMOTE_CLI=remote_cli)
+        request.addfinalizer(revert)
+
     network_helper.update_quotas(network=100)
     vm_helper.ensure_vms_quotas(cores_num=100, vols_num=100, vms_num=100)
 
@@ -57,57 +76,51 @@ def launch_heat_stack():
     Returns (code): 0/1 pass/fail
 
     """
-
+    # TODO: Update this to use a different stack for labs with only 1 or 2 hypervisors.
     # check if the heat stack is already launched
     stack_id = heat_helper.get_stacks(name=HeatTemplate.LARGE_HEAT_NAME)
 
     if stack_id:
         LOG.tc_step("Stack is already there")
-        return 0
+        return
+
     # make sure heat templates are there in Tis
-    heat_file = _get_large_heat()
+    _get_large_heat()
 
     file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.LARGE_HEAT
     heat_template_file = file_dir + file_name + "/"
 
-    LOG.tc_step("Get the heat file name to use")
-
     LOG.tc_step("Creating pre-request heat stack to create images and flavors")
     default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
-    file_path = "file://{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
-    template_path = heat_template_file + "pre_req.yaml"
-    stack_name = "pre_req"
-    params_string = '-f {} -P LOCATION={} {}'.format(template_path, file_path, stack_name)
+    image_file_path = "file://{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
+    pre_req_template_path = heat_template_file + "pre_req.yaml"
+    pre_req_stack_name = "pre_req"
+    pre_req_params = '-f {} -P LOCATION={} {}'.format(pre_req_template_path, image_file_path, pre_req_stack_name)
     LOG.info("Creating heat stack for pre-req, images and flavors")
-    code, msg = heat_helper.create_stack(stack_name=stack_name, params_string=params_string,
-                                         auth_info=Tenant.ADMIN, cleanup=None)
-    assert code == 0, "Failed to create heat stack"
+    heat_helper.create_stack(stack_name=pre_req_stack_name, params_string=pre_req_params,
+                             auth_info=Tenant.ADMIN, cleanup=None)
 
     LOG.tc_step("Creating Tenant key via heat stack")
-
-    heat_template = 'Tenant1_Keypair.yaml'
-    heat_stack_name = 'Tenant1_Keypair'
-    heat_template = '{}/{}'.format(heat_template_file, heat_template)
-    params_string = '-f {} {}'.format(heat_template, heat_stack_name)
-    LOG.tc_step("Creating heat stack for Tenant key")
-    heat_helper.create_stack(stack_name=heat_stack_name, params_string=params_string, cleanup=None)
+    keypair_template = 'Tenant1_Keypair.yaml'
+    keypair_stack_name = 'Tenant1_Keypair'
+    keypair_template = '{}/{}'.format(heat_template_file, keypair_template)
+    keypair_params = '-f {} {}'.format(keypair_template, keypair_stack_name)
+    heat_helper.create_stack(stack_name=keypair_stack_name, params_string=keypair_params, cleanup=None)
 
     # Now create the large-stack
-    stack_template = heat_template_file + "rnc_heat.yaml"
-    env_file = heat_template_file + "rnc_heat.env"
-    params_string = '-e {} -f {} {}'.format(env_file, stack_template, HeatTemplate.LARGE_HEAT_NAME)
     LOG.tc_step("Creating heat stack to launch networks, ports, volumes, and vms")
-    heat_helper.create_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, params_string=params_string, cleanup=None)
-
-    return 0
+    large_heat_template = heat_template_file + "rnc_heat.yaml"
+    env_file = heat_template_file + "rnc_heat.env"
+    large_heat_params = '-e {} -f {} {}'.format(env_file, large_heat_template, HeatTemplate.LARGE_HEAT_NAME)
+    heat_helper.create_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, params_string=large_heat_params, cleanup=None)
 
 
 def check_vm_hosts(vms, policy='affinity', best_effort=False):
     vm_hosts = []
     for vm in vms:
-        LOG.info("Vm is {}".format(vm))
         vm_host = nova_helper.get_vm_host(vm_id=vm)
+        LOG.info("Vm {} is hosted on: {}".format(vm, vm_host))
         vm_hosts.append(vm_host)
 
     vm_hosts = list(set(vm_hosts))
@@ -124,25 +137,18 @@ def check_vm_hosts(vms, policy='affinity', best_effort=False):
     return vm_hosts
 
 
-def test_heat_stack_update(con_ssh=None):
+def test_heat_stack_update():
     """
     Update heat stack that was already launched.
     It checks if the heat stack is already launched if not it will launch  the heat stack.
     It will check the status of the heat stack to be in good state (create complete/update complete)
     It will update the heat stack
-
-    Args:
-        con_ssh (SSHClient):
-
-    Returns (code): 0/1
-
     """
     file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.LARGE_HEAT
     file_path = file_dir + file_name + '/update_env.sh'
 
-    res = launch_heat_stack()
-    assert res == 0, "Failed to create heat stack"
+    launch_heat_stack()
 
     heat_status = [HeatStackStatus.CREATE_COMPLETE, HeatStackStatus.UPDATE_COMPLETE]
     current_status = heat_helper.get_stack_status(stack_name=HeatTemplate.LARGE_HEAT_NAME)[0]
@@ -150,8 +156,7 @@ def test_heat_stack_update(con_ssh=None):
     if current_status not in heat_status:
         skip("Heat stack Status is not in create_complete or update_complete")
 
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+    con_ssh = ControllerClient.get_active_controller()
 
     LOG.info("Check if file already exists on TiS")
     if con_ssh.file_exists(file_path=file_path):
@@ -163,11 +168,7 @@ def test_heat_stack_update(con_ssh=None):
     env_file = file_dir + file_name + '/rnc_heat.env'
     params_string = '-e {} -f {} {}'.format(env_file, stack_template, HeatTemplate.LARGE_HEAT_NAME)
     LOG.tc_step("Updating heat stack")
-    code, msg = heat_helper.update_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, params_string=params_string)
-
-    assert code == 0, "Failed to update heat stack"
-
-    return 1
+    heat_helper.update_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, params_string=params_string, fail_ok=False)
 
 
 def test_migrate_anti_affinity_vms():
@@ -175,39 +176,24 @@ def test_migrate_anti_affinity_vms():
     cold-migrate and live-migrate vms from anti-affinity group
     It will check if the heat stack is launched already if not it will launche the stack
     find the vms in anti-affinity group and will do cold and live migration
-    TO_DO: you can make it work for best_effort by checking the server-group meta-data, now we only care about
-     best-effort false.
-
-    Returns (code): 0/1
 
     """
     # First make sure heat stack is there:
-    result = launch_heat_stack()
-    assert result == 0, "Failed to update heat stack"
+    launch_heat_stack()
 
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
-
-    if len(hosts) < 3:
-        skip("Not enough compute hosts to support anti-affinity")
-
-    server_group_ids = nova_helper.get_server_groups()
+    server_group_ids = nova_helper.get_server_groups(policies='anti-affinity', best_effort=False)
     if not server_group_ids:
-        skip("There are no server groups configured in the system")
+        skip("There are no anti-affinity server groups configured in the system")
 
     members = []
     for server_grp_id in server_group_ids:
-        policy = nova_helper.get_server_group_info(group_id=server_grp_id, header='Policies')
-        LOG.info("Policy is {}".format(policy))
-        if str(policy).find('anti-affinity'):
-            members.extend(nova_helper.get_server_group_info(group_id=server_grp_id, header='Members'))
-            if members is not None:
-                break
-
-    if not members:
-        skip("There are no vms in the server group")
+        members = nova_helper.get_server_group_info(group_id=server_grp_id, header='Members')
+        if members:
+            break
+    else:
+        skip("There are no vms in any anti-affinity server group")
 
     check_vm_hosts(vms=members, policy='anti_affinity')
-
     for vm_id in members:
         vm_helper.wait_for_vm_status(vm_id=vm_id, check_interval=10)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
@@ -215,4 +201,4 @@ def test_migrate_anti_affinity_vms():
         vm_helper.cold_migrate_vm(vm_id=vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
-    return 0
+    check_vm_hosts(vms=members, policy='anti_affinity')
