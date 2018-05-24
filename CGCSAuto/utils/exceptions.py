@@ -207,3 +207,7 @@ class StorageError(TiSError):
 
 class HorizonError(TiSError):
     message = 'Horizon error.'
+
+
+class IxiaError(TiSError):
+    message = 'Ixia error.'

@@ -576,3 +576,8 @@ class MigStatus:
     PREPARING = 'preparing'
     PRE_MIG = 'pre-migrating'
     POST_MIG = 'post-migrating'
+
+
+class IxiaServerIP:
+    tcl_server_ip = '128.224.151.42'
+    chassis_ip = '128.224.151.109'
