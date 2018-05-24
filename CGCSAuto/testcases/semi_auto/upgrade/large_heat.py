@@ -174,7 +174,7 @@ def test_heat_stack_update():
 def test_migrate_anti_affinity_vms():
     """
     cold-migrate and live-migrate vms from anti-affinity group
-    It will check if the heat stack is launched already if not it will launche the stack
+    It will check if the heat stack is launched already if not it will launch the stack
     find the vms in anti-affinity group and will do cold and live migration
 
     """
