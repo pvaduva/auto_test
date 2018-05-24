@@ -3272,6 +3272,11 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=
     if code > 0:
         return 1, output
 
+    conf_storage0 = False
+    if 'storage-0' in hosts:
+        hosts.remove('storage-0')
+        conf_storage0 = True
+
     active_controller = get_active_controller_name(con_ssh=con_ssh)
     conf_active = False
     if active_controller in hosts:
@@ -3286,6 +3291,13 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=
         finally:
             host_helper.unlock_hosts(hosts=hosts, fail_ok=False, con_ssh=con_ssh)
             host_helper.wait_for_hosts_ready(hosts=hosts, con_ssh=con_ssh)
+
+    if conf_storage0:
+        LOG.info("Lock/unlock storage-0")
+        try:
+            host_helper.lock_host(host='storage-0', con_ssh=con_ssh)
+        finally:
+            host_helper.unlock_host(host='storage-0', con_ssh=con_ssh)
 
     if conf_active:
         LOG.info("Lock/unlock active controller (swact first if needed): {}".format(active_controller))
