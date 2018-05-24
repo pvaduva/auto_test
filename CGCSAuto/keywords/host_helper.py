@@ -3,18 +3,18 @@ import time
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
-from utils.tis_log import LOG
-from utils import telnet as telnetlib
+from consts import proj_vars
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
-from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts import proj_vars
 from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
+from utils import cli, exceptions, table_parser
+from utils import telnet as telnetlib
+from utils.clients.ssh import ControllerClient, SSHFromSSH, SSHClient
+from utils.tis_log import LOG
 
 
 @contextmanager
@@ -48,15 +48,20 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     if not prompt:
         prompt = '.*' + hostname + '\:~\$'
     original_host = con_ssh.get_hostname()
-    host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
-    host_ssh.connect()
-    current_host = host_ssh.get_hostname()
-    if not current_host == hostname:
-        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+    if original_host != hostname:
+        host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
+        host_ssh.connect(prompt=prompt)
+        current_host = host_ssh.get_hostname()
+        if not current_host == hostname:
+            raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+        close = True
+    else:
+        close = False
+        host_ssh = con_ssh
     try:
         yield host_ssh
     finally:
-        if current_host != original_host:
+        if close:
             host_ssh.close()
 
 
@@ -707,8 +712,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         return 1, output
 
     if is_simplex:
-         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-                                timeout=HostTimeout.CONTROLLER_UNLOCK)
+        _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                    timeout=HostTimeout.CONTROLLER_UNLOCK)
 
     if not wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
@@ -947,7 +952,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     if not fail_ok:
         for host in res:
-            if res[host][0] not in [0, 4]:
+            if res[host][0] not in [-1, 0, 4]:
                 raise exceptions.HostPostCheckFailed(" Not all host(s) unlocked successfully. Detail: {}".format(res))
 
     LOG.info("Results for unlocking hosts: {}".format(res))
@@ -1031,22 +1036,20 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     while time.time() < cli_enable_end_time:
         try:
             LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
-
             check_sysinv_cli(con_ssh_=con_ssh, use_telnet_=use_telnet, con_telnet_=con_telnet)
             return True
 
         except:
-            if use_telnet:
-                pass
-            if not con_ssh._is_connected():
-                if reconnect:
-                    LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
-                    con_ssh.connect(retry_timeout=timeout)
-                else:
-                    LOG.error("system disconnected")
-                    if fail_ok:
-                        return False
-                    raise
+            if not use_telnet:
+                if not con_ssh._is_connected():
+                    if reconnect:
+                        LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
+                        con_ssh.connect(retry_timeout=timeout)
+                    else:
+                        LOG.error("system disconnected")
+                        if fail_ok:
+                            return False
+                        raise
 
             time.sleep(check_interval)
 
@@ -1984,7 +1987,7 @@ def get_expected_vswitch_port_engine_map(host_ssh):
     return expt_map
 
 
-def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
+def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False):
     """
     Get values for given fields in system host-lvg-show table
     Args:
@@ -1992,6 +1995,7 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
         fields (str|list|tuple):
         lvg (str): e.g., nova-local (compute nodes), cgts-vg (controller/storage nodes)
         con_ssh (SSHClient):
+        strict (bool)
 
     Returns:
 
@@ -2005,7 +2009,7 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
 
     vals = []
     for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field, merge_lines=True)
+        val = table_parser.get_value_two_col_table(table_, field, merge_lines=True, strict=strict)
         if field in fields_to_convert:
             val = eval(val)
         vals.append(val)
@@ -2024,7 +2028,7 @@ def is_host_with_instance_backing(host, storage_type='image', con_ssh=None):
     return storage_type in host_lvg_inst_backing
 
 
-def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None, concurrent_ops=None, lock=True,
+def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size="5", concurrent_ops=None, lock=True,
                     unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Modify host lvg
@@ -2054,11 +2058,13 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
             inst_backing = 'image'
         elif 'lvm' in inst_backing:
             inst_backing = 'lvm'
-            if inst_lv_size is None and lvg == 'nova-local':
-                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh)[0]
-                inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
-                if inst_lv_size < 5120:        # cannot be smaller than 5g
-                    inst_lv_size = None
+            #if inst_lv_size is None and lvg == 'nova-local':
+            #    lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+            #                                           strict=False)[0]
+            #inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
+            #    if inst_lv_size < 5120:        # cannot be smaller than 5g
+            #        inst_lv_size = None
+            inst_lv_size_mib = int(inst_lv_size) * 1024
         elif 'remote' in inst_backing:
             inst_backing = 'remote'
         else:
@@ -2074,10 +2080,10 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
             if inst_backing != post_inst_backing:
                 err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
 
-        if inst_lv_size is not None:
+        if inst_backing == 'lvm':
             post_inst_lv_size = params.get('instances_lv_size_mib', 0)
-            if int(inst_lv_size) != int(post_inst_lv_size):
-                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
+            if inst_lv_size_mib != int(post_inst_lv_size):
+                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size_mib)
 
         if concurrent_ops is not None:
             post_concurrent_ops = params['concurrent_disk_operations']
@@ -2087,9 +2093,9 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
         return err_msg
 
     args_dict = {
-        '--instance_backing': inst_backing,
-        '--instances_lv_size_mib': inst_lv_size,
-        '--concurrent_disk_operations': concurrent_ops
+        '-b': inst_backing,
+        '-s': inst_lv_size,
+        '-c': concurrent_ops
     }
     args = ''
 
@@ -3278,53 +3284,56 @@ def get_host_co_processor_pci_list(hostname):
     host_pci_info = []
     with ssh_to_host(hostname) as host_ssh:
         LOG.info("Getting the Co-processor pci list for host {}".format(hostname))
-        cmd = " lspci -nnm | grep Co-processor | awk ' !/Virtual/'"
+        cmd = "lspci -nnm | grep Co-processor | grep --color=never -v -A 1 -E 'Device \[0000\]|Virtual'"
         rc, output = host_ssh.exec_cmd(cmd)
         if rc != 0:
             return host_pci_info
 
-        for pci_line in output.splitlines():
-            pci_attributes = pci_line.split('"')
-            while ' ' in pci_attributes:
-                pci_attributes.remove(' ')
-            while '' in pci_attributes:
-                pci_attributes.remove('')
+        # sample output:
+        # wcp7-12:
+        # 09:00.0 "Co-processor [0b40]" "Intel Corporation [8086]" "DH895XCC Series QAT [0435]" "Intel Corporation [8086]" "Device [35c5]"
+        # 09:01.0 "Co-processor [0b40]" "Intel Corporation [8086]" "DH895XCC Series QAT Virtual Function [0443]" "Intel Corporation [8086]" "Device [0000]"
 
-            pci_address = ("0000:{}".format(pci_attributes[0])).strip()
+        # wolfpass-13_14:
+        # 3f:00.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c8]" -r04 "Intel Corporation [8086]" "Device [35cf]"
+        # 3f:01.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c9]" -r04 "Intel Corporation [8086]" "Device [0000]"
+        # --
+        # da:00.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c8]" -r04 "Intel Corporation [8086]" "Device [35cf]"
+        # da:01.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c9]" -r04 "Intel Corporation [8086]" "Device [0000]"
+        dev_sets = output.split('--\n')
+        for dev_set in dev_sets:
+            pdev_line, vdev_line = dev_set.strip().splitlines()
+            class_id, vendor_id, device_id = re.findall('\[([0-9a-fA-F]{4})\]', pdev_line)[0:3]
+            vf_class_id, vf_vendor_id, vf_device_id = re.findall('\[([0-9a-fA-F]{4})\]', vdev_line)[0:3]
+            assert vf_class_id == class_id
+            assert vf_vendor_id == vendor_id
+            assert device_id != vf_device_id
+
+            vendor_name = re.findall('\"([^\"]+) \[{}\]'.format(vendor_id), pdev_line)[0]
+            pci_alias = re.findall('\"([^\"]+) \[{}\]'.format(device_id), pdev_line)[0]
+            if pci_alias == 'Device':
+                pci_alias = None
+            else:
+                pci_alias = 'qat-{}-vf'.format(pci_alias.lower())
+            pci_address = ("0000:{}".format(pdev_line.split(sep=' "', maxsplit=1)[0]))
             pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
-            class_id = re.findall("Co-processor\s\[(.*)\]", pci_attributes[1])[0]
             # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
-            num_zero = 6 - len(class_id)
-            if num_zero > 0:
-                class_id += ''.join(['0']*num_zero)
-            vendor_name = pci_attributes[2].split(' [')[0]
-            LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
-            vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
-            pci_alias = pci_attributes[3].split(' ')[0]
-            device_name = pci_attributes[3].split(' [')[0]
-            device_id = pci_attributes[3].split(' [')[1].replace(']', '')
+            class_id = ('00000' + class_id)[-6:]
+
+            LOG.info("pci_name={} device_id={}".format(pci_name, device_id))
             pci_info = {'pci_address': pci_address,
                         'pci_name': pci_name,
                         'vendor_name': vendor_name,
                         'vendor_id': vendor_id,
                         'device_id': device_id,
                         'class_id': class_id,
-                        'pci-alias': 'qat-{}-vf'.format(pci_alias.lower()),
+                        'pci-alias': pci_alias,
+                        'vf_device_id': vf_device_id,
                         }
-            cmd2 = " lspci -nnm | grep Co-processor | grep \"{}\" | awk 'NR == 2'".format(device_name)
-            rc, vf_line = host_ssh.exec_cmd(cmd2)
-
-            if rc == 0:
-                vf_line_attr = vf_line.split('"')
-                while ' ' in vf_line_attr:
-                    vf_line_attr.remove(' ')
-                while '' in vf_line_attr:
-                    vf_line_attr.remove('')
-                vf_device_id = vf_line_attr[3].split(' [')[1].replace(']', '')
-                pci_info['vf_device_id'] = vf_device_id
 
             host_pci_info.append(pci_info)
-            LOG.info("The Co-processor pci list for host {}: {}".format(hostname, pci_info))
+
+        LOG.info("The Co-processor pci list for host {}: {}".format(hostname, host_pci_info))
 
     return host_pci_info
 
@@ -3513,17 +3522,6 @@ def get_host_cpu_model(host, con_ssh=None):
 
     LOG.info("CPU Model for {}: {}".format(host, cpu_model))
     return cpu_model
-
-def get_max_vms_supported(host, con_ssh=None):
-    max_count = 10
-    cpu_model = get_host_cpu_model(host=host, con_ssh=con_ssh)
-    if proj_vars.ProjVar.get_var('IS_VBOX'):
-        max_count = MaxVmsSupported.VBOX
-    elif re.search('Xeon.* CPU D-[\d]+', cpu_model):
-        max_count = MaxVmsSupported.XEON_D
-
-    LOG.info("Max number vms supported on {}: {}".format(host, max_count))
-    return max_count
 
 
 def get_max_vms_supported(host, con_ssh=None):
@@ -3858,7 +3856,7 @@ def enable_disable_hosts_devices(hosts, devices, enable=True):
         states = get_host_device_list_values(host=host_, field='enabled', list_all=True, **{key: devices})
         if (not enable) in states:
             try:
-                lock_host(host=host_)
+                lock_host(host=host_, swact=True)
                 for i in range(len(states)):
                     if states[i] is not enable:
                         device = devices[i]
@@ -3870,3 +3868,10 @@ def enable_disable_hosts_devices(hosts, devices, enable=True):
         assert not ((not enable) in post_states), "Some devices enabled!={} after unlock".format(enable)
 
     LOG.info("enabled={} set successfully for following devices on hosts {}: {}".format(enable, hosts, devices))
+
+
+def get_host_cmdline_options(host, con_ssh=None):
+    with ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_cmd('cat /proc/cmdline')[1]
+
+    return output

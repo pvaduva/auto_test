@@ -3,12 +3,14 @@
 ###
 
 
-from pytest import fixture, mark
-from utils.tis_log import LOG
-from keywords import host_helper, system_helper, keystone_helper
-from utils.ssh import ControllerClient
-from consts.cgcs import EventLogID, HostAvailState, HostOperState, SpareIP
 import time
+
+from pytest import fixture, mark
+
+from consts.cgcs import EventLogID, HostAvailState, HostOperState, SpareIP
+from keywords import host_helper, system_helper, keystone_helper
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 original_ip0 = "0.0.0.0"
 original_ip1 = "0.0.0.0"

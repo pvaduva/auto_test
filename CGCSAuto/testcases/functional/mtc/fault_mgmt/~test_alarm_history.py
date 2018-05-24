@@ -4,16 +4,13 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-import time
 import re
+import time
 
-from pytest import fixture, mark, skip, raises, fail
-from consts.auth import Tenant
-from utils.tis_log import LOG
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, ssh_to_controller0
+from keywords import system_helper, host_helper
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
+from utils import cli, table_parser
+from utils.tis_log import LOG
 
 
 # Remove below test as it's already covered in test_system_alarms_and_events_on_lock_unlock_compute

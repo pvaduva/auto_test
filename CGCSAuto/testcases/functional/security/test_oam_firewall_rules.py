@@ -3,14 +3,16 @@
 ##############################
 import time
 
+from pytest import fixture
 from consts.cgcs import EventLogID, Prompt
-from consts.filepaths import TestServerPath, WRSROOT_HOME
+from consts.filepaths import TestServerPath
+from consts.proj_vars import ProjVar
 from keywords import host_helper, system_helper, common, html_helper, keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
+from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient
 
 
 def test_status_firewall_reboot():
@@ -112,7 +114,19 @@ def _check_ports_with_netstat(con_ssh, active_controller, ports):
     assert False, "Timed out waiting for ports {} to be listed in netstat. Expected to be open.".format(failed_ports)
 
 
-def test_firewall_rules_custom():
+@fixture(scope='module')
+def get_custom_firewall_rule():
+    custom_name = 'iptables.rules'
+    source = TestServerPath.TEST_SCRIPT + custom_name
+    user_file_dir = ProjVar.get_var('USER_FILE_DIR')
+    custom_path = common.scp_from_test_server_to_user_file_dir(source_path=source, dest_dir=user_file_dir,
+                                                               dest_name=custom_name)
+    assert custom_path is not None
+
+    return custom_path
+
+
+def test_firewall_rules_custom(get_custom_firewall_rule):
     """
     Verify specified ports from the custom firewall rules are open and non-specified ports are closed.
 
@@ -131,14 +145,8 @@ def test_firewall_rules_custom():
         - Swact and check ports that are in the custom firewall rules are no longer open
     """
     # The following ports must be in the iptables.rules file or the test will fail
+    firewall_rules_path= get_custom_firewall_rule
     custom_ports = [1111, 1996, 1998, 1545]
-
-    LOG.tc_step("SCP iptables.rules file from the test server")
-    file_name = 'iptables.rules'
-    source = TestServerPath.TEST_SCRIPT + file_name
-    destination = WRSROOT_HOME
-    firewall_rules_path = common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=destination)
-    assert firewall_rules_path is not None
 
     LOG.tc_step("Installing custom firewall rules")
     _modify_firewall_rules(firewall_rules_path)
@@ -168,9 +176,11 @@ def test_firewall_rules_custom():
         _verify_port_from_natbox(con_ssh, port + 1, port_expected_open=False)
 
     LOG.tc_step("Removing custom firewall rules")
-    empty_firewall_rules_path = WRSROOT_HOME + "iptables-empty.rules"
-    con_ssh.exec_cmd("touch {}".format(empty_firewall_rules_path))
-    _modify_firewall_rules(empty_firewall_rules_path)
+    user_file_dir = ProjVar.get_var('USER_FILE_DIR')
+    empty_path = user_file_dir + "iptables-empty.rules"
+    client = get_cli_client()
+    client.exec_cmd('touch {}'.format(empty_path))
+    _modify_firewall_rules(empty_path)
 
     LOG.tc_step("Verify custom ports on {}".format(active_controller))
     for port in custom_ports:

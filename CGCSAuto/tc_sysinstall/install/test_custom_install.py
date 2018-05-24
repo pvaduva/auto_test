@@ -1,7 +1,7 @@
 import pytest
 
 from keywords import install_helper
-from utils.ssh import SSHClient, ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 

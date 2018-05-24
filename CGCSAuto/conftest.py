@@ -8,14 +8,13 @@ import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
+from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server as build_server_consts
-# from consts.build_server import Server, get_build_server_info
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
-from consts.filepaths import BuildServerPath
 
 
 tc_start_time = None
@@ -270,6 +269,8 @@ def pytest_configure(config):
     tenant_arg = config.getoption('tenant')
     bootvms_arg = config.getoption('bootvms')
     openstack_cli = config.getoption('openstackcli')
+    horizon_visible = config.getoption('horizon_visible')
+    remote_cli = config.getoption('remote_cli')
     global change_admin
     change_admin = config.getoption('changeadmin')
     global repeat_count
@@ -300,9 +301,12 @@ def pytest_configure(config):
     always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+    horizon_visible = True if horizon_visible else False
+    remote_cli = True if remote_cli else False
+    if remote_cli:
+        ProjVar.set_var(REMOTE_CLI=True)
     if collect_netinfo:
         ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
-
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
     if keystone_debug:
@@ -330,7 +334,7 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
-                     always_collect=always_collect)
+                     always_collect=always_collect, horizon_visible=horizon_visible)
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
@@ -408,6 +412,8 @@ def pytest_addoption(parser):
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
     telnetlog_help = "Collect telnet logs throughout the session"
+    horizon_visible_help = "Display horizon on screen"
+    remote_cli_help = 'Run testcases using remote CLI'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -442,6 +448,10 @@ def pytest_addoption(parser):
 
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
+    parser.addoption('--horizon-visible', '--horizon_visible', action='store_true', dest='horizon_visible',
+                     help=horizon_visible_help)
+    parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
+                     help=remote_cli_help)
 
     ##################################
     # Lab install or upgrade options #
@@ -459,7 +469,6 @@ def pytest_addoption(parser):
                      help=boot_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
-
     # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
@@ -622,7 +631,7 @@ def pytest_addoption(parser):
                                           "setup feed from scratch")
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
-                                                "This will be helpful if the lab was/will be in customized way.")
+                                               "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
                      action='store_true', help="Restore a low-latency lab")
 
@@ -686,6 +695,7 @@ def pytest_unconfigure(config):
         build_server = ProjVar.get_var('BUILD_SERVER')
         session_id = ProjVar.get_var('SESSION_ID')
         session_tag = ProjVar.get_var('REPORT_TAG')
+        system_config = ProjVar.get_var('SYS_TYPE')
         session_str = 'Session Tag: {}\nSession ID: {}\n'.format(session_tag, session_id) if session_id else ''
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
         # pass_rate = fail_rate = '0'
@@ -697,11 +707,12 @@ def pytest_unconfigure(config):
                 f.write('\n\nLab: {}\n'
                         'Build ID: {}\n'
                         'Build Server: {}\n'
+                        'System Type: {}\n'
                         'Automation LOGs DIR: {}\n'
                         'Ends at: {}\n'
                         '{}'    # test session id and tag
-                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    tc_end_time, session_str, version_and_patch))
+                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, system_config,
+                                    ProjVar.get_var('LOG_DIR'), tc_end_time, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
@@ -715,7 +726,7 @@ def pytest_unconfigure(config):
         LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
     # Below needs con_ssh to be initialized
     try:
-        from utils.ssh import ControllerClient
+        from utils.clients.ssh import ControllerClient
         con_ssh = ControllerClient.get_active_controller()
     except:
         LOG.warning("No con_ssh found")
@@ -813,7 +824,6 @@ def pytest_generate_tests(metafunc):
     #         metafunc.fixturenames.remove(config_fixture)
     #         metafunc.fixturenames.insert(index, config_fixture)
 
-    pass
     # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
     # Stress fixture
     # global count
@@ -824,6 +834,10 @@ def pytest_generate_tests(metafunc):
     #
     # print(str(count))
     # print("{}".format(metafunc.fixturenames))
+
+    # Prefix 'remote_cli' to test names so they are reported as a different testcase
+    if ProjVar.get_var('REMOTE_CLI'):
+        metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
 
 
 ##############################################################
@@ -865,6 +879,11 @@ def c1_fixture(config_host_module):
 
 @pytest.fixture(scope='class', autouse=True)
 def c2_fixture(config_host_class):
+    return
+
+
+@pytest.fixture(scope='session', autouse=True)
+def prefix_remote_cli():
     return
 
 

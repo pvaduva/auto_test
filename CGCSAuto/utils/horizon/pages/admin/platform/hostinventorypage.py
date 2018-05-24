@@ -2,6 +2,7 @@ from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 
+
 class HostsTable(tables.TableRegion):
 
     @tables.bind_row_action('update')
@@ -60,16 +61,8 @@ class HostInventoryPage(basepage.BasePage):
     PARTIAL_URL = 'admin/inventory'
 
     HOSTS_TABLE_NAME_COLUMN = 'Host Name'
-    HOSTS_TABLE_PERSONALITY_COLUMN = 'Personality'
     HOSTS_TABLE_ADMIN_STATE_COLUMN = 'Admin State'
-    HOSTS_TABLE_OPERATIONAL_STATE_COLUMN = 'Operational State'
     HOSTS_TABLE_AVAILABILITY_STATE_COLUMN = 'Availability State'
-    HOSTS_TABLE_UPTIME_COLUMN = 'Uptime'
-    HOSTS_TABLE_STATUS_COLUMN = 'Status'
-
-    def __init__(self, driver):
-        super(HostInventoryPage, self).__init__(driver)
-        self._page_title = "HostInventory"
 
     def _get_row_with_host_name(self, name):
         return self.hosts_table(name).get_row(
@@ -112,3 +105,7 @@ class HostInventoryPage(basepage.BasePage):
             return row and row.cells[self.HOSTS_TABLE_AVAILABILITY_STATE_COLUMN]
 
         return bool(self.hosts_table(name).wait_cell_status(cell_getter, state))
+
+    def get_host_info(self, host_name, header):
+        row = self._get_row_with_host_name(host_name)
+        return row.cells[header].text

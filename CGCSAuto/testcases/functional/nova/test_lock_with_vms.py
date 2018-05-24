@@ -176,7 +176,7 @@ class TestLockWithVMs:
 @mark.p2
 class TestLockWithVMsNegative:
     @fixture()
-    def target_hosts_negative(self, request):
+    def target_hosts_negative(self, no_simplex, request):
         self.hosts_locked = []
 
         storages_to_test = []

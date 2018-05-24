@@ -26,6 +26,7 @@ METADATA_SERVER = '169.254.169.254'
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 HEAT_FLAVORS = ['small_ded', 'small_float']
+HEAT_CUSTOM_TEMPLATES = 'custom_heat_templates'
 
 # special NIC patterns
 MELLANOX_DEVICE = 'MT27500|MT27710'
@@ -48,6 +49,18 @@ REGION_MAP = {'RegionOne': '',
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
 
+class NtpPool:
+    NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
+    NTP_POOL_2 = '"1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org"'
+    NTP_POOL_3 = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org"'
+    NTP_POOL_TOO_LONG = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,\
+    1.com,2.com,3.com"'
+    NTP_NAME_TOO_LONG = '"garbage_garbage_garbage_garbage_garbage\
+    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
+    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
+    _garbage_garbage"'
+
+
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
     IMAGE_DIR_REMOTE = '/sandbox/images'
@@ -62,18 +75,19 @@ class GuestImages:
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),
         'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2', 0.3),
         'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2', 0.7),
+        'centos_gpu': ('centos-67-cloud-gpu.img', 16, 'centos-67-cloud-gpu.img', 0.7),
         'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2', 0.9),
-        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 1.5),                # OVP img
-        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 1.1),               # OVP img
-        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2', 1.2),     # OVP img
-        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2', 1.6),      # OVP img
+        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 1.5),  # OVP img
+        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 1.1),  # OVP img
+        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2', 1.2),  # OVP img
+        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2', 1.6),  # OVP img
         'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2', 0.3),
         # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
         # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
         'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2', 6.6),  # MattP
         'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 7.5),
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
-        'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
+        'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),  # wrl-6
         'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
         'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5)
@@ -90,6 +104,7 @@ class Networks:
     MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.[8|9]\d\.\d{1,3}'
     # external ip pattern
     EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
+
     # tenant-net ip pattern such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # internal-net ip pattern such as 10.1.1.44
@@ -188,6 +203,8 @@ class Prompt:
     ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
+    TENANT_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_{}\)\]\$ '  # general prompt. Need to fill in tenant name
+    REMOTE_CLI_PROMPT = '\(keystone_{}\)\]\$ '  # remote cli prompt
 
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
@@ -280,7 +297,7 @@ class InstanceTopology:
     NODE = 'node:(\d),'
     PGSIZE = 'pgsize:(\d{1,3}),'
     VCPUS = 'vcpus:(\d{1,2}),'
-    PCPUS = 'pcpus:(\d{1,2}),\s'     # find a string separated by ',' if multiple numa nodes
+    PCPUS = 'pcpus:(\d{1,2}),\s'  # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
     SIBLINGS = 'siblings:(.*),'
     THREAD_POLICY = 'thr:(.*)$|thr:(.*),'
@@ -296,7 +313,7 @@ class EventLogID:
     HEARTBEAT_ENABLED = '700.211'
     HEARTBEAT_DISABLED = '700.015'
     HEARTBEAT_CHECK_FAILED = '700.215'
-    REBOOT_VM_ISSUED = '700.181'    # soft-reboot or hard-reboot in reason text
+    REBOOT_VM_ISSUED = '700.181'  # soft-reboot or hard-reboot in reason text
     REBOOT_VM_INPROGRESS = '700.182'
     REBOOT_VM_COMPLETE = '700.186'
     GUEST_HEALTH_CHECK_FAILED = '700.215'
@@ -372,7 +389,7 @@ class HTTPPort:
     SYS_PORT = 6385
     SYS_VER = "v1"
     CINDER_PORT = 8776
-    CINDER_VER = "v2"   # v1 is also supported
+    CINDER_VER = "v2"  # v1 is also supported
     GLANCE_PORT = 9292
     GLANCE_VER = "v2"
     HEAT_PORT = 8004
@@ -380,7 +397,7 @@ class HTTPPort:
     HEAT_CFN_PORT = 8000
     HEAT_CFN_VER = "v1"
     NOVA_PORT = 8774
-    NOVA_VER = "v2"     # v3 also supported
+    NOVA_VER = "v2"  # v3 also supported
     NOVA_EC2_PORT = 8773
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491
@@ -547,9 +564,17 @@ class HeatStackStatus:
 
 
 class VimEventID:
-    live_migrate_begin = 'instance-live-migrate-begin'
-    live_migrate_end = 'instance-live-migrated'
-    cold_migrate_begin = 'instance-cold-migrate-begin'
-    cold_migrate_end = 'instance-cold-migrated'
-    cold_migrate_confirm_begin = 'instance-cold-migrate-confirm-begin'
-    cold_migrate_confirmed = 'instance-cold-migrate-confirmed'
+    LIVE_MIG_BEGIN = 'instance-live-migrate-begin'
+    LIVE_MIG_END = 'instance-live-migrated'
+    COLD_MIG_BEGIN = 'instance-cold-migrate-begin'
+    COLD_MIG_END = 'instance-cold-migrated'
+    COLD_MIG_CONFIRM_BEGIN = 'instance-cold-migrate-confirm-begin'
+    COLD_MIG_CONFIRMED = 'instance-cold-migrate-confirmed'
+
+
+class MigStatus:
+    COMPLETED = 'completed'
+    RUNNING = 'running'
+    PREPARING = 'preparing'
+    PRE_MIG = 'pre-migrating'
+    POST_MIG = 'post-migrating'

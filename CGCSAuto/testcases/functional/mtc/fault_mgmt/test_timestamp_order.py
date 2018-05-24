@@ -5,12 +5,13 @@
 # of an applicable Wind River license agreement.
 
 import time
-from pytest import fixture, mark, skip, raises, fail
+
+from pytest import fixture, mark
+
+from keywords import system_helper
+from utils import table_parser
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, ssh_to_controller0
-from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
 def check_timestamps_order(table_):

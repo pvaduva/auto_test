@@ -1,14 +1,15 @@
 import time
+
 from pytest import fixture, skip
 
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from consts.auth import Tenant
+from consts.cgcs import EventLogID, HostAvailState
+from consts.filepaths import HeatTemplate
 from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType
-from consts.cgcs import EventLogID, HostAvailState
-from consts.filepaths import WRSROOT_HOME, HeatTemplate
 from keywords import system_helper, host_helper, keystone_helper, security_helper
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @fixture(scope='session')
@@ -76,7 +77,7 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
 
     def _lock_unlock_controllers():
         LOG.fixture_step("Sleep for 120 seconds after admin password change")
-        time.sleep(120)  # CGTS-6928
+        time.sleep(300)  # CGTS-6928
         if more_than_one_controllers:
             active, standby = system_helper.get_active_standby_controllers()
             if standby:

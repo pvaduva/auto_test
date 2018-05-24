@@ -1,13 +1,13 @@
 import pytest
 
-from utils.ssh import SSHClient, ControllerClient
-from utils.tis_log import LOG
-from keywords import install_helper, system_helper
-from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto
+from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt
-from consts.proj_vars import ProjVar, InstallVars
 from consts.filepaths import BuildServerPath
+from consts.proj_vars import ProjVar, InstallVars
+from keywords import install_helper, system_helper
+from utils.clients.ssh import SSHClient, ControllerClient
+from utils.tis_log import LOG
 
 
 @pytest.fixture(scope='function')

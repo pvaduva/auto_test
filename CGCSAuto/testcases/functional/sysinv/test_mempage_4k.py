@@ -3,18 +3,15 @@
 # Launch VMs using 4k-memory-pages, cold and live migrate the vm
 ###
 
-import time
-
 from pytest import fixture, mark, skip
 
-from utils.ssh import ControllerClient
-from utils import table_parser
 from consts.cgcs import FlavorSpec
-from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.verify_fixtures import check_alarms_module
+from utils import table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @fixture(autouse=True)

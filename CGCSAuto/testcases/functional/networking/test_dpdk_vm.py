@@ -1,13 +1,10 @@
 from pytest import mark, skip
 
-from utils.tis_log import LOG
-from keywords import vm_helper, network_helper, nova_helper, common, host_helper, glance_helper, cinder_helper
-from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import FlavorSpec
 from consts.reasons import SkipHypervisor
-from consts.filepaths import TiSPath, UserData
-from utils.ssh import ControllerClient
-from consts.proj_vars import ProjVar
+from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper
+from testfixtures.fixture_resources import ResourceCleanup
+from utils.tis_log import LOG
 
 
 def _get_dpdk_user_data(con_ssh=None):
@@ -21,29 +18,7 @@ def _get_dpdk_user_data(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.USERDATA
-    file_name = UserData.DPDK_USER_DATA
-    file_path = file_dir + file_name
-
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    if con_ssh.file_exists(file_path=file_path):
-        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
-        return file_path
-
-    LOG.debug('Create userdata directory if not already exists')
-    cmd = 'mkdir -p {}'.format(file_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
-    with open(tmp_file, mode='a') as f:
-        f.write("#wrs-config\n")
-        f.write("FUNCTIONS=hugepages,avr\n")
-
-    common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
-
-    return file_path
+    return network_helper.get_dpdk_user_data(con_ssh=con_ssh)
 
 
 def image_with_vif_multiq():

@@ -1,22 +1,31 @@
-
 import os
+import re
 import time
 
 from pytest import skip, fixture, mark
 
 from consts import build_server
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
-from consts.cgcs import Prompt
-from consts.filepaths import SecurityPath, BuildServerPath
+from consts.cgcs import Prompt, EventLogID
+from consts.filepaths import SecurityPath, BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar
-
 from utils import cli, lab_info, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH
+from utils.clients.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
-
 from keywords import system_helper, keystone_helper, host_helper
 
 
+tpm_modes = {
+    'enabled': 'tpm_mode',
+    'tpm_mode': 'tpm_mode',
+    'ssl': 'ssl',
+    'disabled': 'ssl',
+    'murano': 'murano',
+    'murano_ca': 'murano_ca',
+}
+default_ssl_file = '/etc/ssl/private/server-cert.pem'
+backup_ssl_file = 'server-cert.pem.bk'
+cert_id_line = r'^\|\s* uuid \s*\|\s* ([a-z0-9-]+) \s*\|$'
 fmt_password = r'{password}'
 
 expected_install = (
@@ -43,6 +52,11 @@ def check_lab_status():
 
     if not keystone_helper.is_https_lab():
         skip('Non-HTTPs lab, skip the test.')
+
+    ssh_client = ControllerClient.get_active_controller()
+    working_ssl_file = os.path.join(WRSROOT_HOME, backup_ssl_file)
+    LOG.info('backup default ssl pem file to:' + working_ssl_file)
+    ssh_client.exec_sudo_cmd('cp -f ' + default_ssl_file + ' ' + backup_ssl_file)
 
 
 def fetch_cert_file(ssh_client, search_path=None):
@@ -128,107 +142,21 @@ def verify_cert_file(ssh_client, certificate_file, expect_existing=False):
         assert expect_existing, message
 
 
-def check_after_tpm_operation(ssh_client, certificate_file=SecurityPath.DEFAULT_CERT_PATH, to_enable=True):
-
-    expecting_status = 'enabled' if to_enable else 'disabled'
-    LOG.info('Check TPM/system states after {} TPM'.format('enabling' if to_enable else 'disabling'))
-
-    wait_cert_in_tpm(ssh_client=ssh_client, expecting_status=expecting_status)
-
-    verify_cert_file(ssh_client, certificate_file, expect_existing=False)
-
-
-def check_tpm_states(state, ssh_client=None, expecting_state='tpm-config-applied', not_in_state_ok=False):
-
-    if not state:
-        assert not_in_state_ok, 'No controllers is TPM state:{}'.format(expecting_state)
-        return 1
-
-    controllers = system_helper.get_controllers(con_ssh=ssh_client)
-    count_out_of_state = 0
-
-    for controller in controllers:
-        if state[controller].lower() != expecting_state:
-            LOG.error('TPM is not in state:{} for controller:{}'.format(expecting_state, controller))
-            count_out_of_state += 1
-
-    if count_out_of_state > 0:
-        message = 'total {} out of {} controllers NOT in expected state:{}'.format(count_out_of_state,
-                                                                               len(controllers),
-                                                                               expecting_state)
-        LOG.info('state:{}'.format(state))
-        assert not_in_state_ok, message
-
-        return count_out_of_state
-
-    else:
-        LOG.info('all controllers are in state:{}'.format(expecting_state))
-        return 0
-
-
-def wait_cert_in_tpm(ssh_client=None, expecting_status='any', wait_gap=5, empty_output_count=2, timeout=300):
-    check_count = 0
-    wait_till = time.time() + timeout
-
-    show_cmd = 'tpmconfig-show'
-
-    while time.time() < wait_till:
-        time.sleep(wait_gap)
-
-        check_count += 1
-
-        return_code, result = cli.system(show_cmd, ssh_client=ssh_client, rtn_list=True, fail_ok=False)
-
-        if result:
-            table = table_parser.table(result)
-            uuid = table_parser.get_value_two_col_table(table, 'uuid')
-            tpm_path = table_parser.get_value_two_col_table(table, 'tpm_path')
-            state = eval(table_parser.get_value_two_col_table(table, 'state'))
-            LOG.debug('output:{}, code:{}\n'.format(table, return_code))
-
-            expecting_state = 'tpm-config-applied'
-            count_not_in_state = check_tpm_states(state,
-                                                  ssh_client=ssh_client,
-                                                  expecting_state=expecting_state,
-                                                  not_in_state_ok=True)
-            if count_not_in_state == 0:
-                assert expecting_status != 'disabled', \
-                    'TPM applied on all controllers but expecting them be DISABLED,\n{}'.format(result)
-
-                return 0, {'uuid': uuid, 'tpm_path': tpm_path, 'state': state}
-
-            LOG.debug('{} controllers are not in expecting state:{}, keep waiting and checking, output:\n{}'.format(
-                count_not_in_state, expecting_state, result))
-
-        else:
-            message = 'TPM is disabled (No TPM configured), empty output from CMD:' + show_cmd
-            LOG.debug(message)
-
-            if check_count > empty_output_count:
-                assert expecting_status != 'enabled', message
-
-                return 1, {}
-
-    else:
-        assert False, \
-            'TPM state is not stabilized (enabled + applied nor disabled) after checking {} times in {} seconds'.format(
-                check_count, timeout)
-
-
 def remove_cert_from_tpm(ssh_client,
                          cert_file=SecurityPath.DEFAULT_CERT_PATH,
                          alt_cert_file=SecurityPath.ALT_CERT_PATH,
                          check_first=True,
                          fail_ok=False):
-    return __install_uninstall_cert_into_tpm(ssh_client,
-                                             installing=False,
-                                             cert_file=cert_file,
-                                             alt_cert_file=alt_cert_file,
-                                             check_first=check_first,
-                                             fail_ok=fail_ok)
+    return install_uninstall_cert_into_tpm(ssh_client,
+                                           installing=False,
+                                           cert_file=cert_file,
+                                           alt_cert_file=alt_cert_file,
+                                           check_first=check_first,
+                                           fail_ok=fail_ok)
 
 
-def prepare_cert_file(con_ssh, primary_cert_file = SecurityPath.DEFAULT_CERT_PATH, alt_cert_file = SecurityPath.ALT_CERT_PATH):
+def prepare_cert_file(con_ssh,
+                      primary_cert_file=SecurityPath.DEFAULT_CERT_PATH, alt_cert_file=SecurityPath.ALT_CERT_PATH):
     check_cmd = 'test -e {}'.format(primary_cert_file)
     return_code, result = con_ssh.exec_cmd(check_cmd, fail_ok=True)
     if return_code != 0:
@@ -267,81 +195,144 @@ def prepare_cert_file(con_ssh, primary_cert_file = SecurityPath.DEFAULT_CERT_PAT
 def store_cert_into_tpm(ssh_client,
                         cert_file=SecurityPath.DEFAULT_CERT_PATH,
                         alt_cert_file=SecurityPath.ALT_CERT_PATH,
+                        pem_password=None,
                         check_first=True,
                         fail_ok=False):
-    return __install_uninstall_cert_into_tpm(ssh_client,
-                                             cert_file=cert_file,
-                                             alt_cert_file=alt_cert_file,
-                                             check_first=check_first,
-                                             installing=True,
-                                             fail_ok=fail_ok)
+    return install_uninstall_cert_into_tpm(ssh_client,
+                                           cert_file=cert_file,
+                                           alt_cert_file=alt_cert_file,
+                                           pem_password=pem_password,
+                                           check_first=check_first,
+                                           installing=True,
+                                           fail_ok=fail_ok)
 
 
-def __install_uninstall_cert_into_tpm(ssh_client,
-                                      cert_file=None,
-                                      alt_cert_file=None,
-                                      check_first=True,
-                                      installing=True,
-                                      fail_ok=False):
+def get_cert_id(output):
+    pat = re.compile(cert_id_line)
+    for line in output.splitlines():
+        m = re.match(pat, line)
+        if m and len(m.groups()) >= 1:
+            return m.group(1)
+
+    LOG.warn('No certificate id found from output:' + output)
+
+    return ''
+
+
+def get_cert_info(cert_id, con_ssh=None):
+    LOG.info('check the status of the current certificate')
+    cmd = 'certificate-show ' + cert_id
+    output = cli.system(cmd, fail_ok=False, ssh_client=con_ssh)
+    if output:
+        table = table_parser.table(output)
+        if table:
+            actual_id = table_parser.get_value_two_col_table(table, 'uuid')
+            actual_type = table_parser.get_value_two_col_table(table, 'certtype')
+            actual_details = table_parser.get_value_two_col_table(table, 'details')
+            actual_states = ''
+            if not actual_details:
+                # CGTS-9529
+                LOG.fatal('No details in output of certificate-show')
+                LOG.fatal('Ignore it until the known issue CGTS-9529 fixed, output:' + output)
+                # assert False, 'No details in output of certificate-show'
+            else:
+                LOG.debug('details from output of certificate-show: ' + actual_details)
+                actual_states = eval(actual_details)
+                LOG.debug('states: ' + actual_states)
+            LOG.info('')
+            return actual_id, actual_type, actual_states
+
+    return 0, ''
+
+
+def get_current_cert(con_ssh=None):
+    LOG.info('query certificates information of the system')
+    cmd = 'certificate-list'
+    output = cli.system(cmd, fail_ok=False, ssh_client=con_ssh)
+    if output:
+        table = table_parser.table(output)
+        if table:
+            cert_id, cert_type = table_parser.get_columns(table, ['uuid', 'certtype'])[0]
+            return cert_id, cert_type
+    return 0, ''
+
+
+def get_tpm_status(con_ssh):
+    cert_id, cert_type = get_current_cert(con_ssh=con_ssh)
+    if cert_type == tpm_modes['enabled'] and cert_id:
+        return 0, cert_id, cert_type
+
+    return 1, cert_id, cert_type
+
+
+def install_uninstall_cert_into_tpm(ssh_client,
+                                    cert_file=None,
+                                    alt_cert_file=None,
+                                    pem_password=None,
+                                    check_first=True,
+                                    installing=True,
+                                    fail_ok=False):
 
     if check_first:
-        code, output = wait_cert_in_tpm(ssh_client)
-        if installing and code == 0:
-            msg = 'TPM is already configured, skip the installation test, current TPM status:{}'.format(output)
+        rc, cert_id, cert_type = get_tpm_status(ssh_client)
+        if installing and rc == 0:
+            msg = 'TPM is already configured, skip the installation test, current TPM:{}, type:{}'.format(
+                cert_id, cert_type)
             skip(msg)
-        elif not installing and not output:
+        elif not installing and rc != 0:
             msg = 'TPM is NOT configured, skip the uninstall test'
             skip(msg)
 
-    cert_file_to_test = prepare_cert_file(ssh_client, primary_cert_file=cert_file, alt_cert_file=alt_cert_file)
+    if not installing:
+        cert_file_to_test = os.path.join(WRSROOT_HOME, os.path.splitext(backup_ssl_file)[0])
+        if ssh_client.file_exists(backup_ssl_file):
+            ssh_client.exec_sudo_cmd('cp -f ' + backup_ssl_file + ' ' + cert_file_to_test)
+        elif ssh_client.file_exists(default_ssl_file):
+            ssh_client.exec_sudo_cmd('cp -f ' + default_ssl_file + ' ' + backup_ssl_file + ' ' + cert_file_to_test)
 
-    settings = {'mode': 'TPM' if installing else 'regular', 'password': HostLinuxCreds.get_password()}
-    expected_outputs = [expected.format(**settings) for expected, _ in expected_install]
-    expected_outputs += [Prompt.CONTROLLER_PROMPT, Prompt.ADMIN_PROMPT]
-    total_outputs = len(expected_outputs)
-
-    user_inputs = [user_input.format(**settings) for _, user_input in expected_install]
-    total_inputs = len(user_inputs)
-
-    LOG.info('cert-file:{}'.format(cert_file_to_test))
-
-    cmd = 'sudo https-certificate-install --cert {} {}'.format(cert_file_to_test, '--tpm' if installing else '')
-    ssh_client.send(cmd)
-
-    for _ in range(total_outputs):
-        index = ssh_client.expect(blob_list=expected_outputs, timeout=60)
-
-        if 0 <= index < total_inputs:
-            output = expected_outputs[index]
-
-            if output.strip() == 'done':
-                LOG.info('CLI completed, output:{}, index:{}'.format(output, index))
-                break
-            else:
-                to_send = user_inputs[index]
-                if to_send:
-                    ssh_client.send(to_send)
-
-        elif total_inputs <= index < len(expected_outputs):
-            output = expected_outputs[index]
-            LOG.info('CLI completed, output:{}, index:{}'.format(output, index))
-            break
-
-        else:
-            LOG.error('failed to execute CLI:{}'.format(cmd))
+        ssh_client.exec_sudo_cmd('chmod a+rw ' + cert_file_to_test)
     else:
-        msg = 'CLI:{} failed'.format(cmd)
-        LOG.info(msg)
-        assert fail_ok, msg
+        cert_file_to_test = prepare_cert_file(ssh_client, primary_cert_file=cert_file, alt_cert_file=alt_cert_file)
 
-        return 1, msg
+    cmd = 'certificate-install '
+    msg = ''
+    if installing:
+        expected_mode = tpm_modes['enabled']
+        cmd += ' -m ' + expected_mode
+        msg += '-enabling/install certificate into TPM'
 
-    msg = 'CLI:{} successfully executed'.format(cmd)
-    LOG.info(msg)
+    else:  # if expected_mode == 'ssl':
+        expected_mode = tpm_modes['disabled']
+        cmd += ' -m ' + expected_mode
+        msg += '-unisntall certificate from TPM'
 
-    check_after_tpm_operation(ssh_client, certificate_file=cert_file_to_test, to_enable=installing)
+    if pem_password is not None and installing:
+        cmd += ' -p "' + pem_password + '"'
+        msg += ', with password:' + pem_password
+    else:
+        msg += ', without any password'
 
-    return 0, msg
+    cmd += ' ' + cert_file_to_test
+
+    rc, output = cli.system(cmd, fail_ok=True)
+    if 0 == rc:
+        LOG.debug('-succeeded:' + msg + ', cmd: ' + cmd + ', output:' + output)
+        cert_id = get_cert_id(output)
+        LOG.info('current cert-id is:' + cert_id)
+
+        actual_id, actual_mode, actual_states = get_cert_info(cert_id, con_ssh=ssh_client)
+        assert actual_id == cert_id, 'Wrong certificate id, expecting:{}, actual:{}'.format(cert_id, actual_id)
+        assert actual_mode == expected_mode, msg
+        # CGTS-9529
+        # for state in actual_states['states'].values:
+        #     pass
+
+        return 0, msg
+    else:
+        LOG.debug('-failed:' + msg + ', cmd: ' + cmd)
+        assert fail_ok, 'msg:' + msg + ', cmd:' + cmd
+
+        return -1, msg
 
 
 @mark.parametrize(('swact_first'), [
@@ -352,28 +343,42 @@ def test_enable_tpm(swact_first):
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Check if TPM is already configured')
-    code, tpm_info = wait_cert_in_tpm(con_ssh)
+    code, cert_id, cert_type = get_tpm_status(con_ssh)
 
-    if code == 0 and tpm_info:
-        LOG.info('TPM already configured on the lab')
+    if code == 0:
+        LOG.info('TPM already configured on the lab, cert_id:{}, cert_type:{}'.format(cert_id, cert_type))
 
         LOG.tc_step('disable TPM first in order to test enabling TPM')
         code, output = remove_cert_from_tpm(con_ssh, fail_ok=False, check_first=False)
         assert 0 == code, 'failed to disable TPM'
+        time.sleep(30)
+
+        LOG.info('Waiting alarm: out-of-config cleaned up')
+        system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE)
 
     else:
         LOG.info('TPM is NOT configured on the lab')
+        LOG.info('-code:{}, cert_id:{}, cert_type:{}'.format(code, cert_id, cert_type))
 
     if swact_first:
         LOG.tc_step('Swact the active controller as instructed')
-        num_controllers = len([c for c in system_helper.get_controllers()])
-        if num_controllers < 2:
+
+        if len(system_helper.get_controllers()) < 2:
             LOG.info('Less than 2 controllers, skip swact')
         else:
             host_helper.swact_host(fail_ok=False)
 
     LOG.tc_step('Install HTTPS Certificate into TPM')
-    store_cert_into_tpm(con_ssh, fail_ok=False)
+    code, output = store_cert_into_tpm(con_ssh,
+                                       check_first=False,
+                                       fail_ok=False,
+                                       pem_password=HostLinuxCreds.get_password())
+    assert 0 == code, 'Failed to instll certificate into TPM, cert-file'
+
+    LOG.info('OK, certificate is installed into TPM')
+
+    LOG.info('Wait the out-of-config alarm cleared')
+    system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE)
 
 
 @mark.parametrize(('swact_first'), [
@@ -383,23 +388,25 @@ def test_enable_tpm(swact_first):
 def test_disable_tpm(swact_first):
     ssh_client = ControllerClient.get_active_controller()
 
-    LOG.tc_step('Check if TPM is configured')
-    code, tpm_info = wait_cert_in_tpm(ssh_client)
+    LOG.tc_step('Check if TPM is already configured')
+    code, cert_id, cert_type = get_tpm_status(ssh_client)
 
-    if code == 0 and tpm_info:
+    if code == 0:
         LOG.info('TPM is configured on the lab')
 
         if swact_first:
             LOG.tc_step('Swact the active controller as instructed')
-            num_controllers = len([c for c in system_helper.get_controllers()])
-            if num_controllers < 2:
+            if len(system_helper.get_controllers()) < 2:
                 LOG.info('Less than 2 controllers, skip swact')
             else:
                 host_helper.swact_host(fail_ok=False)
 
-        LOG.tc_step('disable TPM first in order to test enabling TPM')
+        LOG.tc_step('Disabling TPM')
         code, output = remove_cert_from_tpm(ssh_client, fail_ok=False, check_first=False)
         assert 0 == code, 'failed to disable TPM'
+
+        LOG.info('Wait the out-of-config alarm cleared')
+        system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE)
 
     else:
         LOG.info('TPM is NOT configured on the lab, skip the test')

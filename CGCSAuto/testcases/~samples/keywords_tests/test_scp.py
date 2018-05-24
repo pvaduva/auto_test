@@ -1,7 +1,9 @@
 import os
+
 from keywords import common
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+
 
 def test_scp_from_local():
     srcfile = os.path.join(os.path.expanduser('~'),

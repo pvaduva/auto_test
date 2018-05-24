@@ -42,6 +42,8 @@ class UserDropDownMenuRegion(DropDownMenuRegion):
                           'ul#editor_list li:nth-of-type(2) > a')
     _logout_link_locator = (by.By.CSS_SELECTOR,
                             'a[href*="/auth/logout/"]')
+    _rc_v3_link_locator = (by.By.CSS_SELECTOR,
+                           'a[href*="api_access/openrc/"]')
 
     def _theme_picker_locator(self, theme_name):
         return (by.By.CSS_SELECTOR,

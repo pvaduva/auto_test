@@ -1,16 +1,17 @@
 import os
 
-from utils import exceptions
-from utils import ssh
-from utils.ssh import ControllerClient
-from consts.timeout import CLI_TIMEOUT
 from consts.auth import Tenant, CliAuth
-from consts.proj_vars import ProjVar
+from consts.cgcs import Prompt
 from consts.openstack_cli import NEUTRON_MAP
+from consts.proj_vars import ProjVar
+from consts.timeout import CLI_TIMEOUT
+from utils import exceptions
+from utils.clients.ssh import ControllerClient
+from utils.clients.local import RemoteCLIClient
 
 
 def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
-             flags='', fail_ok=False, cli_dir='', auth_info=None, source_creden_=None, err_only=False,
+             flags='', fail_ok=False, cli_dir='', auth_info=None, source_openrc=None, err_only=False,
              timeout=CLI_TIMEOUT, rtn_list=False):
     """
 
@@ -31,7 +32,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         cli_dir:
         err_only:
         timeout:
-        rtn_list:
+        rtn_list (bool):
 
     Returns:
         if command executed successfully: return command_output
@@ -41,10 +42,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
     """
     lab = ProjVar.get_var('LAB')
     if use_telnet and con_telnet is None:
-        raise ValueError("No Telenet session provided")
-
-    if ssh_client is None and not use_telnet:
-        ssh_client = ControllerClient.get_active_controller()
+        raise ValueError("No Telnet session provided")
 
     if auth_info is None:
         auth_info = Tenant.get_primary()
@@ -55,22 +53,28 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)
 
-    if source_creden_ is None:
-        source_creden_ = ProjVar.get_var('SOURCE_CREDENTIAL')
+    use_remote_cli = False
+    remote_cli_flag = ProjVar.get_var('REMOTE_CLI')
+    if not use_telnet:
+        if remote_cli_flag:
+            remote_client = RemoteCLIClient.get_remote_cli_client(create_new=False)
+            if remote_client:
+                ssh_client = remote_client
+                source_openrc = True
+                use_remote_cli = True
+        if not ssh_client:
+            ssh_client = ControllerClient.get_active_controller()
 
-    if source_creden_:
-        if source_creden_ is Tenant.TENANT2:
-            cmd = "source /home/wrsroot/openrc.tenant2; " + cmd
-            if not use_telnet:
-                ssh_client.set_prompt(prompt=ssh.TENANT2_PROMPT)
-        elif source_creden_ is Tenant.TENANT1:
-            cmd = "source /home/wrsroot/openrc.tenant1; " + cmd
-            if not use_telnet:
-                ssh_client.set_prompt(prompt=ssh.TENANT1_PROMPT)
+    if source_openrc is None:
+        source_openrc = ProjVar.get_var('SOURCE_CREDENTIAL')
+
+    if source_openrc:
+        source_file = _get_rc_path(tenant=auth_info['tenant'], remote_cli=use_remote_cli)
+        if use_telnet:
+            cmd = 'source {}; {}'.format(source_file, cmd)
         else:
-            cmd = "source /etc/nova/openrc; " + cmd
-            if not use_telnet:
-                ssh_client.set_prompt(prompt=ssh.ADMIN_PROMPT)
+            source_openrc_file(ssh_client=ssh_client, auth_info=auth_info, rc_file=source_file, fail_ok=fail_ok,
+                               remote_cli=use_remote_cli)
     else:
         if auth_info:
             auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {}"
@@ -88,14 +92,14 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             flags = (auth_args + ' ' + flags).strip()
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
     if use_telnet:
-        exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, expect_timeout=timeout)
+        exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, timeout=timeout)
     else:
         exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
                                                     searchwindowsize=100)
-    if source_creden_:
-        if not use_telnet:
-            ssh_client.set_prompt()
-            ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
+    # if source_openrc:
+    #     if not use_telnet:
+    #         ssh_client.set_prompt()
+    #         ssh_client.exec_cmd("export PS1='\\u@\\h:~\\$ '")
 
     if fail_ok:
         if exit_code == 0:
@@ -122,35 +126,67 @@ def __convert_args(args):
     return args.strip()
 
 
-def source_admin(ssh_client=None, fail_ok=False):
+def _get_rc_path(tenant, remote_cli=False):
+    if remote_cli:
+        openrc_path = os.path.join(ProjVar.get_var('LOG_DIR'), 'horizon', '{}-openrc.sh'.format(tenant))
+    else:
+        openrc_path = '/etc/nova/openrc' if 'admin' in tenant else '~/openrc.{}'.format(tenant)
+
+    return openrc_path
+
+
+def source_openrc_file(ssh_client, auth_info, rc_file, fail_ok=False, remote_cli=False):
     """
-    run 'source /etc/nova/openrc' to grant keystone admin privileges. Update the ssh_client prompt after sourcing.
-
-    Warnings: It is discouraged to source in automation unless necessary
-
+    Source to the given openrc file on the ssh client.
     Args:
-        ssh_client: ssh client to send the command to
-        fail_ok: whether to throw the exception upon fail to send command
+        ssh_client:
+        auth_info:
+        rc_file:
+        fail_ok:
 
-    Returns: exit code (int), command output (str)
+    Returns:
+        (-1, None)    # Already sourced, no action done
+        (0, <cmd_output>)   # sourced to openrc file successfully
+        (1, <err_output>)   # Failed to source
 
-    Raises: SSHExecCommandFailed
     """
-    cmd = "source /etc/nova/openrc"
-    prompt = ssh.ADMIN_PROMPT
-    return _source_user(ssh_client, fail_ok, cmd, prompt)
+    exit_code, cmd_output = -1, None
+    user = auth_info['user']
 
+    if 'keystone_{}'.format(user) not in ssh_client.prompt:
+        tenant = auth_info['tenant']
+        password = auth_info['password']
+        new_prompt = Prompt.REMOTE_CLI_PROMPT.format(user) if remote_cli else Prompt.TENANT_PROMPT.format(user)
 
-def _source_user(ssh_client, fail_ok, cmd, prompt):
-    if ssh_client is None:
-        ssh_client = ControllerClient.get_active_controller()
-    original_prompt = ssh_client.get_prompt()
-    ssh_client.set_prompt(prompt)
-    exit_code, cmd_output = ssh_client.exec_cmd(cmd)
-    if not exit_code == 0:
-        ssh_client.set_prompt(original_prompt)
-        if not fail_ok:
-            raise exceptions.SSHExecCommandFailed("Failed to Source.")
+        cmd = 'source {}'.format(rc_file)
+        ssh_client.send(cmd)
+        prompts = [new_prompt]
+        if remote_cli:
+            prompts += ['Password for project {} as user {}:'.format(tenant, user),
+                        'if you are not using HTTPS:'
+                        ]
+        index = ssh_client.expect(prompts, fail_ok=False)
+
+        if index == 2:
+            ssh_client.send()
+            index = ssh_client.expect(prompts[0:3])
+        if index == 1:
+            ssh_client.send(password)
+            index = ssh_client.expect(prompts[0:2])
+
+        if index == 0:
+            ssh_client.set_prompt(new_prompt)
+            exit_code = ssh_client.get_exit_code()
+        else:
+            cmd_output = ssh_client.cmd_output
+            ssh_client.send_control()
+            ssh_client.expect()
+            exit_code = 1
+
+        if exit_code != 0:
+            print("exit code: {}".format(exit_code))
+            if not fail_ok:
+                raise exceptions.SSHExecCommandFailed("Failed to Source. Output: {}".format(cmd_output))
 
     return exit_code, cmd_output
 
@@ -165,23 +201,22 @@ def nova(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli
                     con_telnet=con_telnet)
 
 
-def openstack(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_admin_=False):
-    source_cred_ = Tenant.ADMIN if source_admin_ else None
+def openstack(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
+              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_openrc=False):
     flags += ' --os-identity-api-version 3'
 
     return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_creden_=source_cred_)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_openrc)
 
 
 def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
-           flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_creden_=None, err_only=False,
+           flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_openrc=None, err_only=False,
            timeout=CLI_TIMEOUT, rtn_list=False):
 
     return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
-                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_creden_=source_creden_,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
@@ -234,7 +269,7 @@ def swift(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cl
 
     return exec_cli('swift', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def glance(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
@@ -251,7 +286,7 @@ def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, 
     source_cred_ = Tenant.ADMIN if source_admin_ else None
     return exec_cli('keystone', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_creden_=source_cred_)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_cred_)
 
 
 def qemu_img(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
@@ -259,7 +294,7 @@ def qemu_img(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False,
 
     return exec_cli('qemu-img', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def sw_manager(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN,
@@ -267,7 +302,7 @@ def sw_manager(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=Fals
 
     return exec_cli('sw-manager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_creden_=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def murano(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',

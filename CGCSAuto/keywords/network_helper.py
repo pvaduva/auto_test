@@ -6,12 +6,12 @@ from collections import Counter
 
 from consts.auth import Tenant
 from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID
-from consts.filepaths import UserData, TiSPath
+from consts.filepaths import UserData
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
-from utils.ssh import NATBoxClient, ControllerClient
+from utils.clients.ssh import NATBoxClient, get_cli_client
 from utils.tis_log import LOG
 
 
@@ -1073,7 +1073,10 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
 
     tenant = auth_info['tenant']
     mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])
-    return _get_net_ids(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)[0]
+    mgmt_ids = _get_net_ids(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)
+    if not mgmt_ids:
+        raise exceptions.TiSError("No {} found via 'neutron net-list'. Please set up system".format(mgmt_net_name))
+    return mgmt_ids[0]
 
 
 def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
@@ -1395,7 +1398,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
 
     if name is None:
         name = 'router'
-    name = '-'.join([tenant, name, str(common.Count.get_router_count())])
+        name = '-'.join([tenant, name, str(common.Count.get_router_count())])
     args = name
 
     if str(admin_state_down).lower() == 'true':
@@ -3298,7 +3301,7 @@ def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Ten
     if kwargs:
         table_ = table_parser.filter_table(table_, **kwargs)
 
-    return table_parser.row_dict_table(table_, key_header='pci alias')
+    return table_parser.row_dict_table(table_, key_header=header_key)
 
 
 def get_tenant_routers_for_vms(vms, con_ssh=None):
@@ -3886,7 +3889,7 @@ def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, hos
     return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
 
 
-def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=300,
+def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=600,
                                            fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     args = []
     if host:
@@ -3904,17 +3907,29 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
 
     if wait_for_test:
         LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
+        prev_vals = None
         end_time = time.time() + timeout
         while time.time() < end_time:
-            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
+            vals = get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh,
+                                                             rtn_val='segmentation_ids')
+            if vals and vals == prev_vals:
                 LOG.info("providernet connectivity test scheduled successfully.")
                 return 0, audit_id
+
+            prev_vals = vals
+            time.sleep(30)
+
         else:
-            if fail_ok:
-                return 1, "Failed to find results with scheduled UUID"
-            raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
-                                          "seconds after running 'neutron providernet-connectivity-test-schedule'".
-                                          format(audit_id, timeout))
+            if prev_vals:
+                LOG.warning("providernet connectivity test scheduled, but did not reach stable output in {} seconds".
+                            format(timeout))
+                return 2, audit_id
+            else:
+                if fail_ok:
+                    return 1, "Failed to find results with scheduled UUID"
+                raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
+                                              "seconds after running 'neutron providernet-connectivity-test-schedule'".
+                                              format(audit_id, timeout))
 
 
 def get_dpdk_user_data(con_ssh=None):
@@ -3928,12 +3943,12 @@ def get_dpdk_user_data(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.USERDATA
+    file_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
     file_name = UserData.DPDK_USER_DATA
     file_path = file_dir + file_name
 
     if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+        con_ssh = get_cli_client()
 
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))

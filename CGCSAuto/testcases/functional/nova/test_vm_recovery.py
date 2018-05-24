@@ -1,17 +1,16 @@
 import time
 
-from pytest import mark, fixture
+from pytest import mark
 
-from utils import exceptions
-from utils.ssh import NATBoxClient
-from utils.tis_log import LOG
-from utils.kpi import kpi_log_parser
-from consts.kpi_vars import VMRecoveryNova, VMRecoveryNetworking
-from consts.feature_marks import Features
-from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
+from consts.feature_marks import Features
+from consts.kpi_vars import VMRecoveryNova, VMRecoveryNetworking
+from consts.timeout import VMTimeout, EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+from utils.clients.ssh import NATBoxClient
+from utils.kpi import kpi_log_parser
+from utils.tis_log import LOG
 
 
 # Note auto recovery metadata in image will not passed to vm if vm is booted from Volume

@@ -1,10 +1,12 @@
 import threading
-import traceback
 import time
-from utils.tis_log import LOG
-from utils.exceptions import ThreadingError
-from utils.ssh import SSHClient, ControllerClient, NATBoxClient
+import traceback
+
 from consts.proj_vars import ProjVar
+from utils.clients.ssh import SSHClient, ControllerClient, NATBoxClient
+from utils.clients.local import RemoteCLIClient
+from utils.exceptions import ThreadingError
+from utils.tis_log import LOG
 
 TIMEOUT_ERR = "Thread did not terminate within timeout. Thread details: {} {} {}"
 EVENT_TIMEOUT = "Event did not occur within timeout."
@@ -105,6 +107,9 @@ class MThread(threading.Thread):
             con_ssh.connect(use_current=False)
             ControllerClient.set_active_controller(con_ssh)
             NATBoxClient.set_natbox_client()
+            if ProjVar.get_var('REMOTE_CLI'):
+                RemoteCLIClient.get_remote_cli_client()
+
             LOG.info("Execute function {}({}, {})".format(self.func.__name__, self.args, self.kwargs))
             self._output = self.func(*self.args, **self.kwargs)
             LOG.info("{} returned: {}".format(self.func.__name__, self._output.__str__()))
@@ -118,6 +123,8 @@ class MThread(threading.Thread):
             LOG.info("Terminating thread: {}".format(self.thread_id))
             ControllerClient.get_active_controller().close()
             NATBoxClient.get_natbox_client().close()
+            if ProjVar.get_var('REMOTE_CLI'):
+                RemoteCLIClient.get_remote_cli_client().close()
             LOG.debug("{} has finished".format(self.name))
             MThread.running_threads.remove(self)
 

@@ -64,7 +64,7 @@ class CMDTimeout:
 
 
 class ImageTimeout:
-    CREATE = 600
+    CREATE = 1800
     STATUS_CHANGE = 60
     DELETE = 120
 

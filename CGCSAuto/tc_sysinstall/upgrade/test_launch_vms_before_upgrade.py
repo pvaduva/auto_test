@@ -1,6 +1,6 @@
 import time
 from pytest import mark, fixture, skip
-from utils.ssh import SSHClient, ControllerClient
+from utils.clients.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 from keywords import install_helper, host_helper, system_helper, cinder_helper, \
     storage_helper,  local_storage_helper, glance_helper, vm_helper, nova_helper, common

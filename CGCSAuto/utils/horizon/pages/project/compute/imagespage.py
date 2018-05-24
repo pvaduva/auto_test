@@ -1,29 +1,9 @@
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
-#
-#         http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
-from selenium.webdriver.common import by
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 from utils.horizon.pages.project.compute import instancespage
 from utils.horizon.pages.project.volumes.volumespage import VolumesPage
-
-
-DEFAULT_IMAGE_SOURCE = 'file'
-DEFAULT_IMAGE_FORMAT = 'qcow2'
-DEFAULT_ACCESSIBILITY = False
-DEFAULT_PROTECTION = False
-IMAGES_TABLE_NAME_COLUMN = 'Image Name'
-IMAGES_TABLE_STATUS_COLUMN = 'Status'
-IMAGES_TABLE_FORMAT_COLUMN = 'Format'
+from time import sleep
 
 
 class ImagesTable(tables.TableRegion):
@@ -38,16 +18,6 @@ class ImagesTable(tables.TableRegion):
     CREATE_VOLUME_FROM_IMAGE_FORM_FIELDS = (
         "name", "description", "image_source",
         "type", "size", "availability_zone")
-
-    LAUNCH_INSTANCE_FROM_FIELDS = ((
-        "availability_zone", "name", "flavor",
-        "count", "source_type", "instance_snapshot_id",
-        "volume_id", "volume_snapshot_id", "image_id", "volume_size",
-        "vol_delete_on_instance_delete"),
-        ("keypair", "groups"),
-        ("script_source", "script_upload", "script_data"),
-        ("disk_config", "config_drive")
-    )
 
     EDIT_IMAGE_FORM_FIELDS = (
         "name", "description", "disk_format", "minimum_disk",
@@ -66,6 +36,11 @@ class ImagesTable(tables.TableRegion):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
+    @tables.bind_row_action('delete')
+    def delete_image_by_row(self, delete_button, row):
+        delete_button.click()
+        return forms.BaseFormRegion(self.driver)
+
     @tables.bind_row_action('create_volume_from_image')
     def create_volume(self, create_volume, row):
         create_volume.click()
@@ -75,19 +50,14 @@ class ImagesTable(tables.TableRegion):
             field_mappings=self.CREATE_VOLUME_FROM_IMAGE_FORM_FIELDS)
 
     @tables.bind_row_action('launch_image_ng')
-    def launch_instance(self, launch_instance, row):
-        launch_instance.click()
+    def launch_instance(self, launch_button, row):
+        launch_button.click()
         return instancespage.LaunchInstanceForm(self.driver)
 
     @tables.bind_row_action('update_metadata')
     def update_metadata(self, metadata_button, row):
         metadata_button.click()
         return forms.MetadataFormRegion(self.driver)
-
-    @tables.bind_row_action('delete')
-    def delete_image_via_row_action(self, delete_button, row):
-        delete_button.click()
-        return forms.BaseFormRegion(self.driver)
 
     @tables.bind_row_action('edit')
     def edit_image(self, edit_button, row):
@@ -96,35 +66,30 @@ class ImagesTable(tables.TableRegion):
         return forms.FormRegion(self.driver,
                                 field_mappings=self.EDIT_IMAGE_FORM_FIELDS)
 
-    @tables.bind_row_anchor_column(IMAGES_TABLE_NAME_COLUMN)
+    @tables.bind_row_anchor_column('Image Name')
     def go_to_image_description_page(self, row_link, row):
         row_link.click()
         return forms.ItemTextDescription(self.driver)
 
 
 class ImagesPage(basepage.BasePage):
-    PARTIAL_URL = 'project/images'
-    VOLUME_SIZE = '2'
 
-    def __init__(self, driver):
-        super(ImagesPage, self).__init__(driver)
-        self._page_title = "Images"
+    PARTIAL_URL = 'project/images'
+
+    IMAGES_TABLE_NAME_COLUMN = 'Image Name'
+    IMAGES_TABLE_STATUS_COLUMN = 'Status'
 
     def _get_row_with_image_name(self, name):
-        return self.images_table.get_row(IMAGES_TABLE_NAME_COLUMN, name)
+        return self.images_table.get_row(self.IMAGES_TABLE_NAME_COLUMN, name)
 
     @property
     def images_table(self):
         return ImagesTable(self.driver)
 
-    def create_image(self, name, description=None,
-                     image_file=None,
-                     image_format=None,
-                     architecture=None,
-                     minimum_disk=None,
-                     minimum_ram=None,
-                     is_public=DEFAULT_ACCESSIBILITY,
-                     is_protected=DEFAULT_PROTECTION):
+    def create_image(self, name, description=None, image_file=None,
+                     image_format=None, architecture=None,
+                     minimum_disk=None, minimum_ram=None,
+                     is_public=None, is_protected=None):
         create_image_form = self.images_table.create_image()
         create_image_form.name.text = name
         if description is not None:
@@ -138,10 +103,14 @@ class ImagesPage(basepage.BasePage):
             create_image_form.minimum_disk.value = minimum_disk
         if minimum_ram is not None:
             create_image_form.minimum_disk.value = minimum_ram
-        if is_public:
+        if is_public is True:
             create_image_form.is_public.mark()
-        if is_protected:
+        if is_public is False:
+            create_image_form.is_public.unmark()
+        if is_protected is True:
             create_image_form.protected.mark()
+        if is_protected is False:
+            create_image_form.protected.unmark()
         create_image_form.submit()
 
     def delete_image(self, name):
@@ -149,6 +118,11 @@ class ImagesPage(basepage.BasePage):
         row.mark()
         confirm_delete_images_form = self.images_table.delete_image()
         confirm_delete_images_form.submit()
+
+    def delete_image_by_row(self, name):
+        row = self._get_row_with_image_name(name)
+        delete_image_form = self.images_table.delete_image_by_row(row)
+        delete_image_form.submit()
 
     def add_custom_metadata(self, name, metadata):
         row = self._get_row_with_image_name(name)
@@ -174,38 +148,25 @@ class ImagesPage(basepage.BasePage):
                    minimum_ram=None, public=None, protected=None):
         row = self._get_row_with_image_name(name)
         confirm_edit_images_form = self.images_table.edit_image(row)
-
         if new_name is not None:
             confirm_edit_images_form.name.text = new_name
-
         if description is not None:
             confirm_edit_images_form.description.text = description
-
         if disk_format is not None:
             confirm_edit_images_form.disk_format = disk_format
-
         if minimum_disk is not None:
             confirm_edit_images_form.minimum_disk.value = minimum_disk
-
         if minimum_ram is not None:
             confirm_edit_images_form.minimum_ram.value = minimum_ram
-
         if public is True:
             confirm_edit_images_form.public.mark()
-        elif public is False:
+        if public is False:
             confirm_edit_images_form.public.unmark()
-
         if protected is True:
             confirm_edit_images_form.protected.mark()
-        elif protected is False:
+        if protected is False:
             confirm_edit_images_form.protected.unmark()
-
         confirm_edit_images_form.submit()
-
-    def delete_image_via_row_action(self, name):
-        row = self._get_row_with_image_name(name)
-        delete_image_form = self.images_table.delete_image_via_row_action(row)
-        delete_image_form.submit()
 
     def is_image_present(self, name):
         return bool(self._get_row_with_image_name(name))
@@ -213,51 +174,66 @@ class ImagesPage(basepage.BasePage):
     def is_image_active(self, name):
         def cell_getter():
             row = self._get_row_with_image_name(name)
-            return row and row.cells[IMAGES_TABLE_STATUS_COLUMN]
-
+            return row and row.cells[self.IMAGES_TABLE_STATUS_COLUMN]
         return bool(self.images_table.wait_cell_status(cell_getter, 'Active'))
 
     def wait_until_image_active(self, name):
         self._wait_until(lambda x: self.is_image_active(name))
 
-    def get_image_format(self, name):
-        row = self._get_row_with_image_name(name)
-        return row.cells[IMAGES_TABLE_FORMAT_COLUMN].text
+    def get_image_info(self, image_name, header):
+        row = self._get_row_with_image_name(image_name)
+        return row.cells[header].text
 
-    def create_volume_from_image(self, name, volume_name=None,
-                                 description=None,
-                                 volume_size=None):
-        row = self._get_row_with_image_name(name)
+    def create_volume_from_image(self, image_name, volume_name=None,
+                                 description=None, type=None,
+                                 volume_size=None, availability_zone=None):
+        row = self._get_row_with_image_name(image_name)
         create_volume_form = self.images_table.create_volume(row)
         if volume_name is not None:
             create_volume_form.name.text = volume_name
         if description is not None:
             create_volume_form.description.text = description
-        create_volume_form.image_source = name
-        create_volume_form.size.value = volume_size if volume_size \
-            else '2'
-        create_volume_form.availability_zone.value = 'nova'
+        if type is not None:
+            create_volume_form.type.text = type
+        if volume_size is not None:
+            create_volume_form.size.value = volume_size
+        if availability_zone is not None:
+            create_volume_form.availability_zone.text = availability_zone
         create_volume_form.submit()
         return VolumesPage(self.driver)
 
-    def launch_instance_from_image(self, name, instance_name,
-                                   instance_count=1, flavor=None):
+    def launch_instance_from_image(self, name, instance_name, availability_zone=None, count=None,
+                                   boot_source_type=None, create_new_volume=None,
+                                   delete_volume_on_instance_delete=None, volume_size=None,
+                                   source_name=None, flavor_name=None, network_names=None):
         row = self._get_row_with_image_name(name)
         instance_form = self.images_table.launch_instance(row)
-        instance_form.FIELDS['name'].text = instance_name
+        instance_form.fields['name'].text = instance_name
+        if availability_zone is not None:
+            instance_form.fields['availability-zone'].text = availability_zone
+        if count is not None:
+            instance_form.fields['instance-count'].value = count
         instance_form.switch_to(1)
-        instance_form.FIELDS['Delete Volume on Instance Delete'].click_yes()
+        if boot_source_type is not None:
+            instance_form.fields['boot-source-type'].text = boot_source_type
+        sleep(1)
+        instance_form._init_tab_fields(1)
+        if create_new_volume is True:
+            instance_form.fields['Create New Volume'].click_yes()
+            if delete_volume_on_instance_delete is True:
+                instance_form.fields['Delete Volume on Instance Delete'].click_yes()
+            if delete_volume_on_instance_delete is False:
+                instance_form.fields['Delete Volume on Instance Delete'].click_no()
+        if create_new_volume is False:
+            instance_form.fields['Create New Volume'].click_no()
+        if volume_size is not None:
+            instance_form.fields['volume-size'].value = volume_size
+        if source_name is not None:
+            instance_form.addelement('Name', source_name)
         instance_form.switch_to(2)
-        instance_form.addelement('Name', 'small')
+        instance_form.addelement('Name', flavor_name)
         instance_form.switch_to(3)
-        instance_form.addelement('Network', 'tenant1-net0')
+        instance_form.addelements('Network', network_names)
         instance_form.submit()
 
 
-class ImagesPageNG(ImagesPage):
-    _resource_page_header_locator = (by.By.CSS_SELECTOR,
-                                     'hz-resource-panel hz-page-header h1')
-
-    @property
-    def header(self):
-        return self._get_element(*self._resource_page_header_locator)

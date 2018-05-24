@@ -1,6 +1,6 @@
 import time
 
-from pytest import mark, fixture
+from pytest import mark, fixture, skip
 
 from utils.tis_log import LOG
 
@@ -57,19 +57,29 @@ def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err)
 
 @fixture(scope='module')
 def ht_and_nonht_hosts():
-    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
-    nova_hosts = host_helper.get_up_hypervisors()
-    ht_hosts = []
-    non_ht_hosts = []
-    for host in nova_hosts:
+    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts, get VMs cores for each host")
+    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+    ht_hosts = {}
+    non_ht_hosts = {}
+    max_vcpus_proc0 = 0
+    max_vcpus_proc1 = 0
+    for host in target_hosts:
+        vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, function='VMs', thread=None)
+        max_vcpus_proc0 = max(max_vcpus_proc0, len(vm_cores_per_proc[0]))
+        max_vcpus_proc1 = max(max_vcpus_proc1, len(vm_cores_per_proc.get(1, [])))
+
+        host_helper.get_host_cpu_cores_for_function(host, function='VMs')
         if system_helper.is_hyperthreading_enabled(host):
-            ht_hosts.append(host)
+            ht_hosts[host] = vm_cores_per_proc
         else:
-            non_ht_hosts.append(host)
+            non_ht_hosts[host] = vm_cores_per_proc
+
+    LOG.fixture_step("Increase quota of allotted cores")
+    vm_helper.ensure_vms_quotas(cores_num=(max(max_vcpus_proc0, max_vcpus_proc1) + 1))
 
     LOG.fixture_step('Hyper-threading enabled hosts: {}; Hyper-threading disabled hosts: {}'.
                      format(ht_hosts, non_ht_hosts))
-    return ht_hosts, non_ht_hosts
+    return ht_hosts, non_ht_hosts, {0: max_vcpus_proc0, 1: max_vcpus_proc1}, storage_backing
 
 
 @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
@@ -93,10 +103,14 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     Returns:
 
     """
-    ht_hosts, non_ht_hosts = ht_and_nonht_hosts
+    ht_hosts, non_ht_hosts, max_vcpus_per_proc, storage_backing = ht_and_nonht_hosts
+    max_vcpus = max(max_vcpus_per_proc[0], max_vcpus_per_proc[1]) if numa_0 is None else max_vcpus_per_proc[numa_0]
+    if max_vcpus < vcpus:
+        proc = 'processor {}'.format(numa_0) if numa_0 is not None else 'any processor'
+        skip("Test requires {} vcpus on {} while only {} available".format(vcpus, proc, max_vcpus))
 
     LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
-    flavor_id = nova_helper.create_flavor(name='cpu_scale', vcpus=vcpus)[1]
+    flavor_id = nova_helper.create_flavor(name='cpu_scale', vcpus=vcpus, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
@@ -218,25 +232,8 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     GuestLogs.remove(vm_id)
 
 
-@fixture(scope='module')
-def find_numa_node_and_cpu_count():
-    LOG.fixture_step("Find suitable vm host and cpu count and backing of host")
-    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
-    vm_host = target_hosts[0]
-    thread_count = host_helper.get_host_threads_count(vm_host)
-    cpu_dict = host_helper.get_host_cpu_cores_for_function(vm_host, function='VMs', thread=None)
-    cpu_count = len(cpu_dict[0])
-    LOG.info('vm_host: {}, cpu count: {}'.format(vm_host, cpu_count))
-
-    # increase quota
-    LOG.fixture_step("Increase quota of allotted cores")
-    vm_helper.ensure_vms_quotas(cores_num=(cpu_count + 1))
-
-    return storage_backing, vm_host, cpu_count
-
-
 # TC5157 + TC5159
-def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
+def test_scaling_vm_negative(ht_and_nonht_hosts, add_admin_role_func):
     """
         Tests the following:
             - that the resizing of a scaled-down vm to an unscalable flavor is rejected (TC5157)
@@ -264,12 +261,25 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
 
         """
 
-    inst_backing, vm_host, cpu_count = find_numa_node_and_cpu_count
+    ht_hosts, non_ht_hosts, max_vcpus_per_proc, storage_backing = ht_and_nonht_hosts
+    if max_vcpus_per_proc[0] < 4:
+        skip("Less than 4 VMs cores on processor 0 of any hypervisor")
+
+    proc0_vm_cores = vm_host = None
+    for hosts_info in (non_ht_hosts, ht_hosts):
+        for host in hosts_info:
+            vm_cores_per_proc = hosts_info[host]
+            proc0_vm_cores = len(vm_cores_per_proc[0])
+            if proc0_vm_cores >= 4:
+                vm_host = host
+                break
+        if vm_host:
+            break
 
     # make vm (4 vcpus)
     LOG.tc_step("Create flavor with 4 vcpus")
     first_specs = {FlavorSpec.MIN_VCPUS: 1, FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
-    flavor_1 = nova_helper.create_flavor(vcpus=4, storage_backing=inst_backing)[1]
+    flavor_1 = nova_helper.create_flavor(vcpus=4, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_1)
     nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
     LOG.tc_step("Boot a vm with above flavor")
@@ -286,7 +296,7 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
 
     # resize to unscalable flavor
     LOG.tc_step("Create an unscalable flavor")
-    unscale_flavor = nova_helper.create_flavor(vcpus=4, storage_backing=inst_backing)[1]
+    unscale_flavor = nova_helper.create_flavor(vcpus=4, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', unscale_flavor)
     unscale_flavor_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
     nova_helper.set_flavor_extra_specs(unscale_flavor, **unscale_flavor_specs)
@@ -307,9 +317,9 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
 
     # make another vm
     LOG.tc_step("Create a flavor to occupy vcpus ")
-    occupy_amount = cpu_count - 3
+    occupy_amount = proc0_vm_cores - 3
     second_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
-    flavor_2 = nova_helper.create_flavor(vcpus=occupy_amount, storage_backing=inst_backing)[1]
+    flavor_2 = nova_helper.create_flavor(vcpus=occupy_amount, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_2)
     nova_helper.set_flavor_extra_specs(flavor_2, **second_specs)
 
@@ -326,7 +336,7 @@ def test_scaling_vm_negative(find_numa_node_and_cpu_count, add_admin_role_func):
     # scale first vm up again (fail). TC5159 condition tested here.
     LOG.tc_step("Scale up the first vm a second time, expect an appropiate error message")
     exit_code, output = vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=True)
-    expt_upscale_error = "Insufficient compute resources: no free pcpu available on NUMA node."
+    expt_upscale_error = "Insufficient compute resources: no free pcpu available on "
     assert exit_code == 1, "Scale VM up was successful when rejection was expected"
     assert expt_upscale_error in output, "Error message incorrect: expected {} in output when output is {}"\
         .format(expt_upscale_error, output)

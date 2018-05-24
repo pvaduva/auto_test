@@ -1,16 +1,14 @@
 import time
-import pexpect
-import pytest
 
+import pexpect
 from pexpect import pxssh
 from pytest import fail
 
-from utils import ssh
-from utils.ssh import SSHClient
-from utils.ssh import SSHFromSSH
-from utils.tis_log import LOG
-
 from consts.auth import HostLinuxCreds
+from utils.clients import ssh
+from utils.clients.ssh import SSHClient
+from utils.clients.ssh import SSHFromSSH
+from utils.tis_log import LOG
 
 username = HostLinuxCreds.get_user()
 password = HostLinuxCreds.get_password()

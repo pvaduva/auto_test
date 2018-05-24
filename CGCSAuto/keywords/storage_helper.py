@@ -5,15 +5,13 @@ on CEPH-related helper functions.
 
 import re
 import time
-import ast
 
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from keywords import system_helper, host_helper
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient, get_cli_client
+from utils.tis_log import LOG
 
 
 def is_ceph_healthy(con_ssh=None):
@@ -330,10 +328,9 @@ def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
         LOG.info("Downloading centos image")
         _wget(centos_image_location)
 
-    #return image_names
 
-def find_images(con_ssh, image_type='qcow2', location='~/images'):
-    '''
+def find_images(con_ssh=None, image_type='qcow2', image_name=None, location=None):
+    """
     This function finds all images of a given type, in the given location.
     This is designed to save test time, to prevent downloading images if not
     necessary.
@@ -351,20 +348,26 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
         - image_names(list): list of image names of a given type, e.g.
           'cgcs-guest.img' or all images if the user specified 'all' as the
           argument to image_type.
-    '''
+    """
 
     image_names = []
+    if not location:
+        location = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+    if not con_ssh:
+        con_ssh = get_cli_client()
 
     cmd = 'ls {}'.format(location)
     rtn_code, out = con_ssh.exec_cmd(cmd)
     image_list = out.split()
     LOG.info('Found the following files: {}'.format(image_list))
-    if image_type == 'all':
-        return image_list
+    if image_type == 'all' and not image_name:
+        return image_list, location
 
     # Return a list of image names where the image type matches what the user
     # is looking for, e.g. qcow2
     for image in image_list:
+        if image_name and image_name not in image:
+            continue
         image_path = location + "/" + image
         cmd = 'qemu-img info {}'.format(image_path)
         rtn_code, out = con_ssh.exec_cmd(cmd)
@@ -372,7 +375,7 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
             image_names.append(image)
 
     LOG.info('{} images available: {}'.format(image_type, image_names))
-    return image_names
+    return image_names, location
 
 
 def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):

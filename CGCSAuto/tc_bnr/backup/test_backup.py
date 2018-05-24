@@ -1,18 +1,17 @@
-
-import re
 import os
-# import socket
+import re
+
 from pytest import fixture, skip
-from utils.tis_log import LOG
-from keywords import install_helper, cinder_helper, glance_helper, common, system_helper
-from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore
+
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from utils.ssh import ControllerClient
-# from CGCSAuto.utils import local_host
-from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from consts.build_server import Server
+from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from keywords import html_helper
+from keywords import install_helper, cinder_helper, glance_helper, common, system_helper
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @fixture(scope='function')
@@ -247,4 +246,3 @@ def backup_load_iso_image(backup_info):
         common.scp_from_active_controller_to_test_server(os.path.join(WRSROOT_HOME, "bootimage.iso"), backup_dest_path)
         LOG.info(" The backup build iso file copied to local test server: {}".format(backup_dest_path))
         return True
-

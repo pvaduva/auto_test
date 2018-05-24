@@ -1,16 +1,16 @@
-
-import time
 import random
+import time
 from collections import defaultdict, deque
-from pytest import fixture, mark, skip
-from utils import lab_info
-from utils.ssh import ControllerClient
-from consts.auth import HostLinuxCreds,Tenant
-from consts.cgcs import HostAvailState, Prompt
-from keywords import security_helper, host_helper, system_helper
-from utils.tis_log import LOG
 
 from pexpect import pxssh, spawn, TIMEOUT
+from pytest import fixture, mark, skip
+
+from consts.auth import HostLinuxCreds
+from consts.cgcs import HostAvailState, Prompt
+from keywords import security_helper, host_helper, system_helper
+from utils import lab_info
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 theLdapUserManager = security_helper.get_ldap_user_manager()
 
@@ -370,6 +370,16 @@ def test_wrsroot_password_propagation():
 
     for other_host in hosts:
         login_as_linux_user(user, new_password, host=other_host, expecting_fail=False)
+
+    LOG.tc_step('Try to change the password again using the original password')
+    # try to change the password again using the original password
+    LOG.info('Change password from  {} to {} again should not be successful'.format(password, new_password))
+    changed, changed_password = security_helper.change_linux_user_password(
+        password, new_password, user='wrsroot', host=current_host)
+
+    assert not changed, \
+        'Password change from {} to {} on host {} should fail'.format(password, new_password, current_host)
+
 
 
 def swact_host_after_reset_wrsroot_raw(connect, active_controller_name):
@@ -800,6 +810,3 @@ def test_linux_user_lockout():
     LOG.info('verify we can login again after waiting for 5 minutes')
     connect = log_in_raw(host, user, password, expect_fail=False)
     assert connect, 'Failed to login again after waiting for 5 minutes.' + message
-
-
-

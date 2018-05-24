@@ -1,20 +1,19 @@
 import random
-import time
 import string
+import time
+from functools import wraps
 
-from pytest import mark, skip
 from pytest import fixture
+from pytest import mark, skip
 
-from utils import cli, table_parser
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import SystemType
 from consts.timeout import SysInvTimeout
-from keywords import system_helper
 from keywords import network_helper
-
-from functools import wraps
+from keywords import system_helper
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def id_gen(val):
@@ -98,7 +97,7 @@ def test_system_type_is_readonly():
     if cur_system_type == SystemType.CPE:
         change_to_system_type = SystemType.STANDARD
     code, msg = system_helper.set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
-                                              system_type='"{}"'.format(change_to_system_type))
+                                              system_mode='{}'.format(change_to_system_type))
 
     LOG.tc_step('Verify system rejected to change System Type to {}'.format(change_to_system_type))
     assert 1 == code, msg

@@ -4,22 +4,50 @@
 
 import os
 import re
-import pexpect
 import time
-from datetime import datetime, timedelta
 from contextlib import contextmanager
+from datetime import datetime
 
-from consts.cgcs import Prompt
+import pexpect
+
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.proj_vars import ProjVar
-from utils import exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient, SSHClient
+from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
-from keywords import system_helper, security_helper
+from consts.proj_vars import ProjVar
+from keywords import security_helper
+from utils import exceptions
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
+from utils.tis_log import LOG
 
 
-def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=120, con_ssh=None):
+def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+    if con_ssh is None:
+        con_ssh = get_cli_client()
+    if dest_name is None:
+        dest_name = source_path.split(sep='/')[-1]
+
+    if ProjVar.get_var('USER_FILE_DIR') == ProjVar.get_var('TEMP_DIR'):
+        LOG.info("Copy file from test server to localhost")
+        source_server = SvcCgcsAuto.SERVER
+        source_user = SvcCgcsAuto.USER
+        source_password = SvcCgcsAuto.PASSWORD
+        dest_path = dest_dir if not dest_name else '{}/{}'.format(dest_dir, dest_name)
+        LOG.info('Check if file already exists on TiS')
+        if con_ssh.file_exists(file_path=dest_path):
+            LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+            return dest_path
+
+        os.makedirs(dest_dir, exist_ok=True)
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
+                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
+        return dest_path
+    else:
+        LOG.info("Copy file from test server to active controller")
+        return scp_from_test_server_to_active_controller(source_path=source_path, dest_dir=dest_dir,
+                                                         dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
+
+
+def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
     """
     SCP file or files under a directory from test server to TiS server
 
@@ -28,7 +56,6 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         dest_dir (str): destination directory. should end with '/'
         dest_name (str): destination file name if not dir
         timeout (int):
-        is_dir (bool):
         con_ssh:
 
     Returns (str|None): destination file/dir path if scp successful else None
@@ -74,7 +101,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
                               dest_password=dest_pswd, timeout=timeout)
 
-    else: # if not a VBox lab, scp from test server directly to TiS server
+    else:   # if not a VBox lab, scp from test server directly to TiS server
         LOG.info("scp file(s) from test server to tis server")
         con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
                             dest_path=dest_path, source_pswd=source_password, timeout=timeout)
@@ -82,7 +109,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     return dest_path
 
 
-def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=180, is_dir=False,
+def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
                                               multi_files=False, con_ssh=None):
 
     """
@@ -132,7 +159,7 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
 def scp_to_active_controller(source_path, dest_path='',
                              dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                             timeout=60, is_dir=False):
+                             timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -143,7 +170,7 @@ def scp_to_active_controller(source_path, dest_path='',
 
 def scp_from_active_controller(source_path, dest_path='',
                                src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
-                               timeout=60, is_dir=False):
+                               timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -154,7 +181,7 @@ def scp_from_active_controller(source_path, dest_path='',
 
 def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
                    dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                   timeout=60, is_dir=False):
+                   timeout=900, is_dir=False):
     """
     Scp file(s) from localhost (i.e., from where the automated tests are executed).
 
@@ -178,7 +205,7 @@ def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
 
 def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
                  source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
-                 timeout=60, is_dir=False):
+                 timeout=900, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
 
@@ -202,7 +229,7 @@ def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
     _scp_base(cmd, remote_password=source_password, timeout=timeout)
 
 
-def _scp_base(cmd, remote_password, logdir=None, timeout=60):
+def _scp_base(cmd, remote_password, logdir=None, timeout=900):
     LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')

@@ -4,7 +4,7 @@ import threading
 import time
 
 from keywords import host_helper, system_helper, install_helper, vlm_helper
-from utils.ssh import SSHClient, ControllerClient
+from utils.clients.ssh import SSHClient, ControllerClient
 from setups import setup_tis_ssh, setup_heat
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt
 from utils.tis_log import LOG

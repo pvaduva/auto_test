@@ -15,11 +15,11 @@
 # Connect to Test server, run pre-checks, run test list, collect logs and store them to
 # Jenkins server
 
-import pexpect
 import argparse
+import pexpect
+from utils.clients.ssh import SSHClient
+from utils.jenkins_utils.create_log_dir import create_test_log_dir
 
-from utils.jenkins_utils.create_log_dir import create_functest_log_dir
-from utils.ssh import SSHClient
 
 FUNCTEST_SERVER_PROMPT = '$'
 FUNCTEST_DOCKER_PROMPT = ':~#'
@@ -201,7 +201,7 @@ if __name__ == "__main__":
         functest_tuple = tuple(item for item in functest_test_list.split(',') if item.strip())
         functest_dict = build_functest_dict(functest_tuple)
 
-        local_dir = create_functest_log_dir(local_log_directory)
+        local_dir = create_test_log_dir("functest", local_log_directory)
 
         # connect to functest Server and verify if Functest Docker container is running
         connect_functest(functest_host, username, password)

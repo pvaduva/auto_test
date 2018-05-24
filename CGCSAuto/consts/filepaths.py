@@ -28,6 +28,8 @@ class UserData:
 class HeatTemplate:
     STRESS_NG = 'stress_ng.yaml'
     HEAT_DIR = '{}heat/hot/'.format(WRSROOT_HOME)
+    LARGE_HEAT = 'upgrade_heat_template'
+    LARGE_HEAT_NAME = 'upgrade_stack'
 
 
 class TestServerPath:
@@ -74,10 +76,10 @@ class BuildServerPath:
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
-                       '17.00': DEFAULT_PATCH_DIR + '17.06',
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
                        '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/last_build_with_test_patches/test_patches',
                        }
+
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
                          '17.06':

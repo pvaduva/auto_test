@@ -1,18 +1,20 @@
 import time
-from pytest import mark, fixture, skip
-from utils.ssh import SSHClient, ControllerClient
-from utils.tis_log import LOG
-from keywords import install_helper, host_helper, system_helper, cinder_helper, \
-    storage_helper,  local_storage_helper, glance_helper, vm_helper, nova_helper, common
-from consts.cgcs import EventLogID, GuestImages
-from consts.build_server import Server, get_build_server_info
+
+from pytest import fixture, skip
+
 from consts.auth import SvcCgcsAuto, Tenant
+from consts.build_server import Server, get_build_server_info
+from consts.cgcs import EventLogID
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar, InstallVars
+from keywords import install_helper, host_helper, system_helper, cinder_helper, \
+    storage_helper,  local_storage_helper, glance_helper, vm_helper
 from testfixtures.resource_mgmt import ResourceCleanup
-
+from utils.clients.ssh import SSHClient
+from utils.tis_log import LOG
 
 MINIMUM_CEPH_MON_GIB = 20
+
 
 @fixture(scope='session', autouse=True)
 def pre_ceph_install_check():
@@ -23,11 +25,11 @@ def pre_ceph_install_check():
     #     skip("ceph backend is already configured  in the system {}".format(lab['name']))
 
     LOG.fixture_step('Verify system {} includes storage nodes'.format(lab['name']))
-    if  'storage_nodes' not in lab:
+    if 'storage_nodes' not in lab:
         skip("ceph backend is already configured  in the system {}".format(lab['name']))
 
     LOG.fixture_step('Verify lvm backend is currently configured in system: {}'.format(lab['name']))
-    if 'lvm' not in  backend_info:
+    if 'lvm' not in backend_info:
         skip("lvm backend is not configured  in the system {}".format(lab['name']))
 
 
@@ -39,29 +41,29 @@ def ceph_post_install_info():
     controller0_disks = local_storage_helper.get_host_disks_values(controller0, rtn_val='device_node')
     controller1_disks = local_storage_helper.get_host_disks_values(controller1, rtn_val='device_node')
 
-    rootfs = host_helper.get_hostshow_value(controller0,"rootfs_device")
-    if '/dev/disk/by-path'  in rootfs:
+    rootfs = host_helper.get_hostshow_value(controller0, "rootfs_device")
+    if '/dev/disk/by-path' in rootfs:
         rootfs = local_storage_helper.get_host_disks_values(controller0, rtn_val='device_node', device_path=rootfs)[0]
     elif '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
 
-    size =  local_storage_helper.get_host_disk_size(controller0, disk=rootfs)
-    controller0_rootfs = [rootfs, int(size/1024)]
+    size = local_storage_helper.get_host_disk_size(controller0, disk=rootfs)
+    controller0_rootfs = [rootfs, int(size)]
 
-    rootfs = host_helper.get_hostshow_value(controller1,"rootfs_device")
-    if '/dev/disk/by-path'  in rootfs:
+    rootfs = host_helper.get_hostshow_value(controller1, "rootfs_device")
+    if '/dev/disk/by-path' in rootfs:
         rootfs = local_storage_helper.get_host_disks_values(controller1, rtn_val='device_node', device_path=rootfs)[0]
     elif '/dev/' not in rootfs:
         rootfs = '/dev/{}'.format(rootfs)
 
     size = local_storage_helper.get_host_disk_size(controller1, disk=rootfs)
 
-    controller1_rootfs = [rootfs, int(size/1024)]
+    controller1_rootfs = [rootfs, int(size)]
 
-    assert controller0_rootfs[0] in  controller0_disks, "Incorrect  controller-0 disk information: {}; rootfs: {} "\
+    assert controller0_rootfs[0] in controller0_disks, "Incorrect  controller-0 disk information: {}; rootfs: {} "\
         .format(controller0_disks, controller0_rootfs)
-    assert controller1_rootfs[0] in  controller1_disks, "Incorrect standby controller-1 disk information: {}; " \
-                                                        "rootfs: {} "\
+    assert controller1_rootfs[0] in controller1_disks, "Incorrect standby controller-1 disk information: {}; " \
+                                                       "rootfs: {} "\
         .format(controller1_disks, controller1_rootfs)
 
     backend_info = storage_helper.get_storage_backend_info('lvm')
@@ -81,13 +83,13 @@ def ceph_post_install_info():
         if len(common_ceph_mon_dev) > 0:
             size_0 = local_storage_helper.get_host_disk_size(controller0, disk=common_ceph_mon_dev[0])
             size_1 = local_storage_helper.get_host_disk_size(controller1, disk=common_ceph_mon_dev[0])
-            controller0_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_0/1024)]
-            controller1_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_1/1024)]
+            controller0_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_0)]
+            controller1_ceph_mon_dev = [common_ceph_mon_dev[0], int(size_1)]
         else:
             size_0 = local_storage_helper.get_host_disk_size(controller0, disk=controller0_spare_devices[0])
             size_1 = local_storage_helper.get_host_disk_size(controller1, disk=controller1_spare_devices[0])
-            controller0_ceph_mon_dev = [controller0_spare_devices[0], int(size_0/1024)]
-            controller1_ceph_mon_dev = [controller1_spare_devices[0], int(size_1/1024)]
+            controller0_ceph_mon_dev = [controller0_spare_devices[0], int(size_0)]
+            controller1_ceph_mon_dev = [controller1_spare_devices[0], int(size_1)]
 
     ceph_mon_gib = InstallVars.get_install_var('CEPH_MON_GIB')
     if not ceph_mon_gib:
@@ -109,24 +111,24 @@ def ceph_post_install_info():
     bld_server_attr['ssh_conn'] = bld_server_conn
     bld_server_obj = Server(**bld_server_attr)
 
-    ceph_post_install_info = dict()
+    ceph_post_install_info_ = dict()
 
-    ceph_post_install_info['controller-0'] = {'disks': controller0_disks,
-                                              'rootfs': controller0_rootfs,
-                                              'ceph_mon_dev': controller0_ceph_mon_dev,
-                                              }
-    ceph_post_install_info['controller-1'] = {'disks': controller1_disks,
-                                              'rootfs': controller1_rootfs,
-                                              'ceph_mon_dev': controller1_ceph_mon_dev,
-                                              }
+    ceph_post_install_info_['controller-0'] = {'disks': controller0_disks,
+                                               'rootfs': controller0_rootfs,
+                                               'ceph_mon_dev': controller0_ceph_mon_dev,
+                                               }
+    ceph_post_install_info_['controller-1'] = {'disks': controller1_disks,
+                                               'rootfs': controller1_rootfs,
+                                               'ceph_mon_dev': controller1_ceph_mon_dev,
+                                               }
 
-    ceph_post_install_info['ceph_mon_gib'] = ceph_mon_gib
-    ceph_post_install_info['cinder_device'] = cinder_device
-    ceph_post_install_info['load_path'] = load_path
-    ceph_post_install_info['build_server'] = bld_server_obj
+    ceph_post_install_info_['ceph_mon_gib'] = ceph_mon_gib
+    ceph_post_install_info_['cinder_device'] = cinder_device
+    ceph_post_install_info_['load_path'] = load_path
+    ceph_post_install_info_['build_server'] = bld_server_obj
 
-    LOG.info("Ceph post install info: {}".format(ceph_post_install_info))
-    return ceph_post_install_info
+    LOG.info("Ceph post install info: {}".format(ceph_post_install_info_))
+    return ceph_post_install_info_
 
 
 def is_infra_network_configured():
@@ -178,7 +180,7 @@ def test_ceph_post_install(ceph_post_install_info):
         size = ceph_post_install_info[host]['ceph_mon_dev'][1]
         assert size >= ceph_mon_gib, \
             "Not sufficient space left for ceph-mon in {}; Available space = {} GiB in {}; Required = {} GiB"\
-                .format(host, size, disk, ceph_mon_gib)
+            .format(host, size, disk, ceph_mon_gib)
 
     LOG.info("Verified enough space for ceph-mon")
 
@@ -248,20 +250,19 @@ def test_ceph_post_install(ceph_post_install_info):
     assert rc == 0, "System health check failed: {}".format(output)
 
     LOG.info('Verifying image creation using lvm and ceph backends ......')
-    conn_ssh = ControllerClient.get_active_controller()
-    current_images = storage_helper.find_images(conn_ssh, image_type='all')
+    current_images, img_dir = storage_helper.find_images(image_type='all')
     LOG.tc_step("Verifying all current images use lvm backend....")
     image_names = glance_helper.get_images(rtn_val='name')
     for name in image_names:
-        id = glance_helper.get_image_id_from_name(name=name)
-        store = glance_helper.get_image_properties(id, ['store'])
+        id_ = glance_helper.get_image_id_from_name(name=name)
+        store = glance_helper.get_image_properties(id_, ['store'])
         assert 'store' in store and store['store'] == 'file', "Unexpected store value {} for image {}"\
             .format(store, name)
 
     LOG.tc_step("Creating  image, volume and VM using ceph backend ....")
-    #for image_file in current_images:
+    # for image_file in current_images:
     new_img_name = '{}_rbd_store'.format(current_images[0].split('.')[0])
-    source_image = '{}/{}'.format(GuestImages.IMAGE_DIR, current_images[0])
+    source_image = '{}/{}'.format(img_dir, current_images[0])
     rc, image_id_rbd, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image)
     ResourceCleanup.add("image", image_id_rbd)
     assert rc == 0, "Fail to create image {} ceph as backend storage: {}".format(new_img_name, msg)
@@ -284,15 +285,15 @@ def test_ceph_post_install(ceph_post_install_info):
     vm_name = 'vm_{}'.format(new_img_name)
     rc, vm_id, msg, new_vol_id = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id,
                                                    auth_info=Tenant.TENANT2, cleanup='function')
-    assert rc == 0, "VM {} boot failed: {}".format(vm_name,msg)
+    assert rc == 0, "VM {} boot failed: {}".format(vm_name, msg)
 
     LOG.info("Created  images, volumes and Vms  successfully  ceph as backend ....")
 
-    LOG.tc_step("Creating  image, volume and Vm  using lvm as backend ....")
-
+    # LOG.tc_step("Creating  image, volume and Vm  using lvm as backend ....")
     # new_img_name = '{}_file_store'.format(current_images[0].split('.')[0])
     # source_image = '{}/{}'.format(GuestImages.IMAGE_DIR, current_images[0])
-    # rc, image_id_file, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image, store='file')
+    # rc, image_id_file, msg = glance_helper.create_image(name=new_img_name,
+    # source_image_file=source_image, store='file')
     # ResourceCleanup.add("image", image_id_rbd)
     # assert rc == 0, "Fail to create image {} lvm as backend storage: {}".format(new_img_name, msg)
     # store = glance_helper.get_image_properties(image_id_file, 'store')['store']

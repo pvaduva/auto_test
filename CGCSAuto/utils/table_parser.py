@@ -157,6 +157,7 @@ def __table_columns(first_table_row):
         start = end + 1
     return positions
 
+
 ###################################################################
 #  Above are contents from tempest_lib. Below are extended by us. #
 ###################################################################
@@ -775,6 +776,7 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None, low
         unique_key (bool): if key_header is unique for each row, such as UUID, then value for each key will be dict
             instead of list of dict
         eliminate_keys (None|str|list): columns to eliminate
+        lower_case (bool): Return the dictionary in lowercase
 
     Returns (dict): dictionary with value of the key_header as key, and the complete row as the value.
         The value itself is a list, number of items in the list depends on how many rows has the same value for
@@ -910,3 +912,22 @@ def convert_value_to_dict_cinder(value):
         value = [value]
     d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
     return d
+
+
+def get_columns(table_, headers):
+    if not isinstance(headers, list) and not isinstance(headers, set):
+        headers = [headers]
+
+    all_headers = table_['headers']
+    if not set(headers).issubset(all_headers):
+        LOG.error('Unknown column:{}'.format(
+                list(set(all_headers) - set(headers)) + list(set(headers) - set(all_headers)))
+        )
+        return []
+
+    selected_column_positions = [i for i, header in enumerate(all_headers) if header in headers]
+    results = []
+    for row in table_['values']:
+        results.append([row[i] for i in selected_column_positions])
+
+    return results

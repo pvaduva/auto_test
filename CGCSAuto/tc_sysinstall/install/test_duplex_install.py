@@ -1,19 +1,11 @@
 import pytest
-import os
-import threading
-import time
 
-from keywords import host_helper, system_helper, install_helper, vlm_helper
-from utils.ssh import SSHClient, ControllerClient
-from setups import setup_tis_ssh, setup_heat
-from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt
+from keywords import host_helper, install_helper, vlm_helper
+from utils.clients.ssh import ControllerClient
+from setups import setup_heat
+from consts.cgcs import HostAvailState, Prompt
 from utils.tis_log import LOG
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import TuxlabServerPath
-from consts.build_server import Server, get_build_server_info, get_tuxlab_server_info
-from consts.auth import SvcCgcsAuto
-from consts.filepaths import BuildServerPath
-from consts.auth import Tenant
 
 
 def test_config_controller(install_setup):

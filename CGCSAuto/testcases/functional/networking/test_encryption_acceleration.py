@@ -53,7 +53,8 @@ def _flavors(hosts_pci_device_info):
     """
     Creates all flavors required for this test module
     """
-    pci_alias = list(hosts_pci_device_info.values())[0][0]['pci-alias']
+    device_id = list(hosts_pci_device_info.values())[0][0]['vf_device_id']
+    pci_alias = network_helper.get_pci_device_list_values(field='PCI Alias', **{'Device Id': device_id})[0]
     flavor_parms = {'flavor_qat_vf_1': [2, 1024, 2, 1],
                     'flavor_resize_qat_vf_1': [4, 2048, 2, 1],
                     'flavor_qat_vf_4': [2, 1024, 2, 4],

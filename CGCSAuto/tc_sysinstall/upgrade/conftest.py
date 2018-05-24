@@ -4,7 +4,7 @@ import setups
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
 from keywords import install_helper,  patching_helper, upgrade_helper, common
-from utils.ssh import ControllerClient, SSHClient
+from utils.clients.ssh import ControllerClient, SSHClient
 from utils import table_parser, cli
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info

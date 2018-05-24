@@ -191,7 +191,6 @@ class Labs:
         'controller_nodes': [67160],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'bios_type': b"PowerEdge"
     }
 
     R430_1_2 = {
@@ -538,7 +537,17 @@ class Labs:
         'controller_nodes': [55836],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'bios_type': b"Hewlett"
+    }
+
+    WP_13_14 = {
+        'short_name': 'wp_13_14',
+        'name': 'yow-cgcs-wolfpass-13_14',
+        'floating ip': '128.224.150.165',
+        'controller-0 ip': '128.224.150.164',
+        'controller-1 ip': '128.224.150.236',
+        'controller_nodes': [37879, 77147],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     WP_15 = {
@@ -549,6 +558,16 @@ class Labs:
         'controller_nodes': [59865],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+    }
+
+    WP_08_12 = {
+        'short_name': 'wp_08_12',
+        'name': 'yow-cgcs-wolfpass-08_12',
+        'floating ip': '128.224.150.149',
+        'controller-0 ip': '128.224.150.200',
+        'controller-1 ip': '128.224.150.190',
+        'controller_nodes': [28894, 36242],
+        'compute_nodes': [67712, 94178, 80778],
     }
 
     VBOX = {
@@ -622,6 +641,28 @@ class Labs:
 def edit_lab_entry():
     # TODO
     raise NotImplementedError
+
+
+def get_lab_dict(lab, key='short_name'):
+    """
+
+    Args:
+        lab: lab name or fip
+        key: unique identifier to locate a lab. Valid values: short_name, name, floating ip
+
+    Returns (dict|None): lab dict or None if no matching lab found
+    """
+    __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
+    __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
+    __lab_list = [lab for lab in __lab_list if isinstance(lab, dict)]
+
+    lab_info = None
+    for lab_ in __lab_list:
+        if lab.lower().replace('-', '_') == lab_.get(key).lower().replace('-', '_'):
+            lab_info = lab_
+            break
+
+    return lab_info
 
 
 def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwargs):

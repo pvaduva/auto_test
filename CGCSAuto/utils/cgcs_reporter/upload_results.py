@@ -16,7 +16,8 @@ DB_NAME = 'TestHistory'
 def open_conn_and_get_cur(dbname, user, host, password, autocommit=True, close_cur=True, close_conn=True):
     conn = cursor = None
     try:
-        conn = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(dbname, user, host, password))
+        conn = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(dbname, user, host, password),
+                                connect_timeout= 60)
         if autocommit:
             conn.set_session(autocommit=True)
         cursor = conn.cursor()

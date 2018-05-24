@@ -2,8 +2,7 @@ import re
 
 from pytest import fixture, mark, skip
 
-from utils import table_parser, cli
-from utils.ssh import ControllerClient
+from utils import table_parser
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr
@@ -365,7 +364,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
 
     # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
     # numa nodes for the vm
-    assert numa_nodes == len(instance_topology) , \
+    assert numa_nodes == len(instance_topology), \
         "Number of numa node entries for vm {} is different than number of NUMA nodes set in flavor".format(vm_id)
 
     expected_node_vals = [int(val) for val in [numa_node0, numa_node1] if val is not None]
@@ -393,7 +392,6 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
     assert numa_nodes == nodelist_len, \
         "nodelist for vm {} in libvirt view does not match number of numa nodes set in flavor".format(vm_id)
 
-
     # TC5069
     LOG.tc_step("Check that all NICs are associated with the host NUMA node that guest NUMA-0 is mapped to")
     host = nova_helper.get_vm_host(vm_id)
@@ -401,6 +399,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
     with host_helper.ssh_to_host(host) as compute_ssh:
         for nic in actual_nics:
             port_id = list(nic.values())[0]['port_id']
-            ports_tab = table_parser.table(compute_ssh.exec_cmd("vshell port-show {}".format(port_id), fail_ok=False)[1])
+            ports_tab = table_parser.table(compute_ssh.exec_cmd("vshell port-show {}".format(port_id),
+                                                                fail_ok=False)[1])
             socket_id = int(table_parser.get_value_two_col_table(ports_tab, field='socket-id'))
             assert socket_id == numa_node0, "NIC is not associated with numa-node0"

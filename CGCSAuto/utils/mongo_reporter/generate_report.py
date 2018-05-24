@@ -212,7 +212,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
     lab = build = build_server = ''
     first_rec = last_records[0]
     for attr in first_rec['attributes']:
-        if attr[0] == 'board_name':
+        if attr[0] in ('system', 'board_name'):
             lab = attr[1]
         elif attr[0] == 'build':
             build = attr[1]

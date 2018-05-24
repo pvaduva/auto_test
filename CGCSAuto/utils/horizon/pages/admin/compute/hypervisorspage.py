@@ -24,10 +24,11 @@ class ComputeHostTable(tables.TableRegion):
 class HypervisorsPage(basepage.BasePage):
 
     PARTIAL_URL = 'admin/hypervisors'
+
     HYPERVISOR_TAB_INDEX = 0
     COMPUTEHOST_TAB_INDEX = 1
     HYPERVISOR_TABLE_NAME_COLUMN = 'Hostname'
-    COMPUTEHOST_TABLE_NAME_COLUMN = 'Host'
+    COMPUTE_HOST_TABLE_NAME_COLUMN = 'Host'
 
     @property
     def hypervisor_table(self):
@@ -41,13 +42,21 @@ class HypervisorsPage(basepage.BasePage):
         return self.hypervisor_table.get_row(self.HYPERVISOR_TABLE_NAME_COLUMN, name)
 
     def _get_row_with_compute_host_name(self, name):
-        return self.compute_host_table.get_row(self.COMPUTEHOST_TABLE_NAME_COLUMN, name)
+        return self.compute_host_table.get_row(self.COMPUTE_HOST_TABLE_NAME_COLUMN, name)
 
     def is_hypervisor_present(self, name):
         return bool(self._get_row_with_hypervisor_name(name))
 
+    def get_hypervisor_info(self, name, header):
+        row = self._get_row_with_hypervisor_name(name)
+        return row.cells[header].text
+
     def is_compute_host_present(self, name):
         return bool(self._get_row_with_compute_host_name(name))
+
+    def get_compute_host_info(self, name, header):
+        row = self._get_row_with_compute_host_name(name)
+        return row.cells[header].text
 
     def disable_service(self, name, reason=None):
         row = self._get_row_with_compute_host_name(name)

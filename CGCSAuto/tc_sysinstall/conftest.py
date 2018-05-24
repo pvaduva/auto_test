@@ -1,17 +1,9 @@
 import pytest
-import os
-
 
 import setups
 from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar, InstallVars
-from consts.build_server import Server, get_build_server_info
-from utils.ssh import ControllerClient, SSHClient
-from consts import build_server as build_server_consts
-from consts.filepaths import BuildServerPath
-from consts.cgcs import Prompt
-from utils.tis_log import LOG
-from utils import lab_info
+from utils.clients.ssh import SSHClient
 
 #
 #
@@ -116,10 +108,10 @@ def setup_test_session(global_setup):
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    con_ssh.set_prompt()
+    # con_ssh.set_prompt()
     setups.set_env_vars(con_ssh)
-    setups.copy_files_to_con1()
-    con_ssh.set_prompt()
+    setups.copy_test_files()
+    # con_ssh.set_prompt()
 
     global natbox_ssh
     natbox = ProjVar.get_var('NATBOX')
@@ -130,9 +122,10 @@ def setup_test_session(global_setup):
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id, build_server = setups.get_build_info(con_ssh)
+    build_id, build_server, job = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id)
     ProjVar.set_var(BUILD_SERVER=build_server)
+    ProjVar.set_var(JOB=job)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 
     setups.set_session(con_ssh=con_ssh)
@@ -177,4 +170,3 @@ def pytest_runtest_teardown(item):
     if not con_ssh._is_connected():
         con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
-

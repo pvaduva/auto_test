@@ -59,7 +59,8 @@ def test_ping_between_two_vms(guest_os, vifs):
         - Delete vms, volumes, flavor created
 
     """
-    image_id = glance_helper.get_guest_image(guest_os)
+    cleanup = 'function' if 'ubuntu' in guest_os else None
+    image_id = glance_helper.get_guest_image(guest_os, cleanup=cleanup)
 
     LOG.tc_step("Create a favor dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated', guest_os=guest_os)[1]

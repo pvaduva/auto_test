@@ -1,13 +1,14 @@
 import math
 import re
 import time
+from pytest import skip
 
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType
 from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
@@ -218,7 +219,7 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
                'operational': operational,
                'availability': availability}
     hostnames = table_parser.get_values(table_, 'hostname', strict=strict, exclude=exclude, **filters)
-    LOG.info("Filtered hostnames: {}".format(hostnames))
+    LOG.debug("Filtered hostnames: {}".format(hostnames))
 
     return hostnames
 
@@ -1021,7 +1022,7 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
     if not kwargs:
         raise ValueError("Please specify at least one systeminfo_attr=value pair via kwargs.")
 
-    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
+    attr_values_ = ['--{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
     code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
@@ -1035,12 +1036,12 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
         pass
 
 
-def get_system_name(fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=None):
+def get_system_value(field='name', fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=None):
 
     table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet,
                                            con_telnet=con_telnet, fail_ok=fail_ok)[1])
-    system_name = table_parser.get_value_two_col_table(table_, 'name')
-    return system_name
+    value = table_parser.get_value_two_col_table(table_, field=field)
+    return value
 
 
 def set_retention_period(period, name='metering_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
@@ -2157,7 +2158,7 @@ def get_hosts_by_personality(con_ssh=None, source_admin=False):
 
     """
     source_cred = Tenant.ADMIN if source_admin else None
-    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_creden_=source_cred))
+    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_openrc_=source_cred))
     controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
     computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
     storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')
@@ -2399,13 +2400,14 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
 
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None, upgrade_ver=None):
+    # TODO: Need to support remote_cli i.e. no hardcoded load_path, etc
     if upgrade_ver >= '17.07':
         load_path = '/home/wrsroot/bootimage.sig'
         rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True,
-                                source_creden_=source_creden_)
+                                source_openrc_=source_creden_)
     else:
         rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True,
-                                source_creden_=source_creden_)
+                                source_openrc_=source_creden_)
     if rc == 0:
         table_ = table_parser.table(output)
         id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()
@@ -2439,7 +2441,7 @@ def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_cred
 
 
 def get_imported_load_id(load_version=None, con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
     if load_version:
         table_ = table_parser.filter_table(table_, state='imported', software_version=load_version)
     else:
@@ -2449,7 +2451,7 @@ def get_imported_load_id(load_version=None, con_ssh=None, source_creden_=None):
 
 
 def get_imported_load_state(load_id, load_version=None, con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
     if load_version:
         table_ = table_parser.filter_table(table_, id=load_id, software_version=load_version)
     else:
@@ -2459,14 +2461,14 @@ def get_imported_load_state(load_id, load_version=None, con_ssh=None, source_cre
 
 
 def get_imported_load_version(con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
     table_ = table_parser.filter_table(table_, state='imported')
 
     return table_parser.get_values(table_, 'software_version')
 
 
 def get_active_load_id(con_ssh=None, source_creden_=None):
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
 
     table_ = table_parser.filter_table(table_, state="active")
     return table_parser.get_values(table_, 'id')
@@ -2475,7 +2477,7 @@ def get_active_load_id(con_ssh=None, source_creden_=None):
 def get_software_loads(rtn_vals=('id', 'state', 'software_version'), sw_id=None, state=None, software_version=None,
                        strict=False, con_ssh=None, source_creden_=None):
 
-    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_creden_=source_creden_))
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
 
     kwargs_dict = {
         'id': sw_id,
@@ -2507,7 +2509,7 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_
     load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh, source_creden_=source_creden_)
 
     rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh,
-                            fail_ok=True, source_creden_=source_creden_)
+                            fail_ok=True, source_openrc=source_creden_)
     if rc == 1:
         return 1, output
 
@@ -2898,8 +2900,8 @@ def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None, ntype=None, 
 
 
 def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num=None,
-                    device_type=None, size_mib=None, 
-                    available_mib=None, rpm=None, serial_id=None, 
+                    device_type=None, size_gib=None,
+                    available_gib=None, rpm=None, serial_id=None,
                     device_path=None, auth_info=Tenant.ADMIN,
                     con_ssh=None, strict=True, regex=None,
                     **kwargs):
@@ -2912,8 +2914,8 @@ def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num
         device_node:
         device_num:
         device_type:
-        size_mib:
-        available_mib:
+        size_gib:
+        available_gib:
         rpm:
         serial_id:
         device_path:
@@ -2934,8 +2936,8 @@ def get_disk_values(host, header='uuid', uuid=None, device_node=None, device_num
         'device_node': device_node,
         'device_num': device_num,
         'device_type': device_type,
-        'size_mib': size_mib,
-        'available_mib': available_mib,
+        'size_gib': size_gib,
+        'available_gib': available_gib,
         'rpm': rpm,
         'serial_id': serial_id,
         'device_path': device_path
@@ -3223,3 +3225,88 @@ def modify_oam_ips(arg_str, fail_ok=False):
     msg = "OAM modified successfully."
     return 0, msg
 
+
+def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=True, con_ssh=None, fail_ok=False):
+    """
+    Modify spectre meltdown version
+    Args:
+        version (str): valid values: spectre_meltdown_v1, spectre_meltdown_all.
+            Other values will be rejected by system modify cmd.
+        check_first (bool):
+        con_ssh:
+        fail_ok (bool):
+
+    Returns (tuple):
+        (-1, "Security feature already set to <version>. Do nothing")
+        (0, "System security_feature is successfully modified to: <version>")
+        (1, <std_err>)
+
+    """
+    current_version = get_system_value(field='security_feature')
+    if not current_version:
+        skip('spectre_meltdown update feature is unavailable in current load')
+
+    from keywords import host_helper
+    hosts = get_hostnames(con_ssh=con_ssh)
+    check_val = 'nopti nospectre_v2'
+    if check_first and version == current_version:
+        LOG.info("{} already set in 'system show'. Checking actual cmdline options on each host.".format(version))
+        hosts_to_configure = []
+        for host in hosts:
+            cmdline_options = host_helper.get_host_cmdline_options(host=host)
+            if 'v1' in version:
+                if check_val not in cmdline_options:
+                    hosts_to_configure.append(host)
+            elif check_val in cmdline_options:
+                hosts_to_configure.append(host)
+
+        hosts = hosts_to_configure
+        if not hosts_to_configure:
+            msg = 'Security feature already set to {}. Do nothing.'.format(current_version)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info("Set spectre_meltdown version to {}".format(version))
+    code, output = cli.system('modify -S {}'.format(version), ssh_client=con_ssh, fail_ok=fail_ok,
+                              rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    active_controller = get_active_controller_name(con_ssh=con_ssh)
+    conf_active = False
+    if active_controller in hosts:
+        hosts.remove(active_controller)
+        conf_active = True
+
+    if hosts:
+        LOG.info("Lock/unlock unconfigured hosts other than active controller: {}".format(hosts))
+        try:
+            for host in hosts:
+                host_helper.lock_host(host=host, con_ssh=con_ssh)
+        finally:
+            host_helper.unlock_hosts(hosts=hosts, fail_ok=False, con_ssh=con_ssh)
+            host_helper.wait_for_hosts_ready(hosts=hosts, con_ssh=con_ssh)
+
+    if conf_active:
+        LOG.info("Lock/unlock active controller (swact first if needed): {}".format(active_controller))
+        try:
+            host_helper.lock_host(host=active_controller, swact=True, con_ssh=con_ssh)
+        finally:
+            host_helper.unlock_host(host=active_controller, con_ssh=con_ssh)
+
+    LOG.info("Check 'system show' is updated to {}".format(version))
+    post_version = get_system_value(field='security_feature')
+    assert version == post_version, 'Value is not {} after system modify'.format(version)
+
+    LOG.info('Check cmdline options are updated on each host via /proc/cmdline')
+    hosts.append(active_controller)
+    for host in hosts:
+        options = host_helper.get_host_cmdline_options(host=host)
+        if 'v1' in version:
+            assert check_val in options, '{} not in cmdline options after set to {}'.format(check_val, version)
+        else:
+            assert check_val not in options, '{} in cmdline options after set to {}'.format(check_val, version)
+
+    msg = 'System spectre meltdown version is successfully modified to: {}'.format(version)
+    LOG.info(msg)
+    return 0, msg

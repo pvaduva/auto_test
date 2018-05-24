@@ -342,7 +342,7 @@ class TestVmPCIOperations:
 
         return self.numa_node
 
-    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=3):
+    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=20):
 
         LOG.tc_step('Check PCIPT/SRIOV numa/irq-cpu-affinity/alias on VM afer {}'.format(msg_prefx))
 
@@ -413,8 +413,6 @@ class TestVmPCIOperations:
             while not cpus_matched and count < retries:
                 count += 1
 
-                time.sleep(retry_interval)
-
                 indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
 
                 vm_pcpus = []
@@ -429,12 +427,14 @@ class TestVmPCIOperations:
                         LOG.warn(
                             'Mismatched CPU list after {}: expected/affin-mask cpu list:{}, actual:{}, '
                             'pci_info:{}'.format(msg_prefx, expected_pcpus_for_irqs, pci_info['cpulist'], pci_info))
+
                         LOG.warn('retries:{}'.format(count))
                         cpus_matched = False
                         break
                 vm_pci_infos.clear()
                 vm_topology.clear()
 
+                time.sleep(retry_interval)
                 vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
                 # vm_pci_infos.pop('pci_addr_list')
 
@@ -654,5 +654,21 @@ class TestVmPCIOperations:
         vm_helper.reboot_vm(self.vm_id, hard=True)
         LOG.tc_step("Check vm still pingable over mgmt and {} nets after nova reboot hard".format(self.net_type))
         self.wait_check_vm_states(step='hard-reboot')
+        vm_helper.ping_vms_from_vm(
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+
+        LOG.fixture_step("Create a flavor with dedicated cpu policy")
+        resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048)[1]
+        ResourceCleanup.add('flavor', resize_flavor, scope='module')
+
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+        nova_helper.set_flavor_extra_specs(flavor=resize_flavor, **extra_specs)
+
+        origin_host = nova_helper.get_vm_host(vm_id=vm_id)
+        LOG.info("Orignal host where VM {} hosted is {}".format(vm_id, origin_host))
+        LOG.tc_step("Resize the vm and verify if it becomes Active")
+        vm_helper.resize_vm(self.vm_id, resize_flavor)
+        new_host = nova_helper.get_vm_host(self.vm_id)
+        LOG.info("New host where VM {} resized {}".format(vm_id, new_host))
         vm_helper.ping_vms_from_vm(
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)

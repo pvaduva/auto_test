@@ -73,7 +73,7 @@ Order for imports
 
  #3. CGCSAuto utils imports
  from utils import cli, exceptions, table_parser
- from utils.ssh import ControllerClient, SSHFromSSH
+ from utils.clients.ssh import ControllerClient, SSHFromSSH
  from utils.tis_log import LOG
 
  #4. CGCSAuto consts and keywords

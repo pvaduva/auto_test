@@ -1,12 +1,11 @@
-import random
 import time
 
 from consts.auth import Tenant
-from utils import table_parser, cli
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from utils import exceptions
 from consts.timeout import CMDTimeout, CeilTimeout
+from utils import exceptions
+from utils import table_parser, cli
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def get_alarms(name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):

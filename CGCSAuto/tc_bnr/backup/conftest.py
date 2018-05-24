@@ -39,15 +39,14 @@ def setup_test_session(global_setup):
     ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    con_ssh.set_prompt()
     setups.set_env_vars(con_ssh)
-    setups.copy_files_to_con1()
-    con_ssh.set_prompt()
+    setups.copy_test_files()
 
     # set build id to be used to upload/write test results
-    build_id, build_server = setups.get_build_info(con_ssh)
+    build_id, build_server, job = setups.get_build_info(con_ssh)
     ProjVar.set_var(BUILD_ID=build_id)
     ProjVar.set_var(BUILD_SERVER=build_server)
+    ProjVar.set_var(JOB=job)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 
     setups.set_session(con_ssh=con_ssh)

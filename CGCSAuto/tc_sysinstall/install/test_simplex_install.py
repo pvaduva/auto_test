@@ -1,7 +1,7 @@
 import pytest
 
 from keywords import host_helper, install_helper
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from setups import setup_tis_ssh, setup_heat
 from consts.cgcs import HostAvailState
 from utils.tis_log import LOG

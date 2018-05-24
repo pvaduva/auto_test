@@ -2,13 +2,13 @@ import os
 import time
 
 from pytest import mark, fixture
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages, VMStatus
-from consts.filepaths import WRSROOT_HOME
+from consts.proj_vars import ProjVar
 from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 VM_SCALE_STACK = 'NestedAutoScale'
 
@@ -52,7 +52,7 @@ def __launch_vm_scale_stack():
     template_name = '{}.yaml'.format(stack_name)
     image = GuestImages.DEFAULT_GUEST
     high_val = 50
-    template_path = os.path.join(WRSROOT_HOME, HEAT_SCENARIO_PATH, template_name)
+    template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_SCENARIO_PATH, template_name)
     key_pair = vm_helper.get_any_keypair()
     net_id = network_helper.get_mgmt_net_id()
     network = network_helper.get_net_name_from_id(net_id=net_id)

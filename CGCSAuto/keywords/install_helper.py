@@ -1,26 +1,26 @@
+import configparser
 import os
 import re
 import threading
 import time
 from contextlib import contextmanager
 
-from consts.auth import HostLinuxCreds, SvcCgcsAuto
-from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS, TUXLAB_SERVERS
-from consts.timeout import HostTimeout
-from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
+import setups
+from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant, CliAuth
+from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, HostAdminState, HostOperState, EventLogID
+    PREFIX_CLONED_IMAGE_FILE
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
+from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
-from utils.ssh import SSHClient, ControllerClient, TelnetClient
-from utils.tis_log import LOG
+from utils.clients.ssh import SSHClient, ControllerClient
+from utils.clients.telnet import TelnetClient
 from utils.node import create_node_boot_dict, create_node_dict, Node
-from consts.auth import Tenant, CliAuth
-import setups
-import configparser
+from utils.tis_log import LOG
 
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
@@ -32,6 +32,7 @@ CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ", "compute-config in progress ...")
 
 lab_ini_info = {}
+
 
 def get_ssh_public_key():
     return local_host.get_ssh_key()
@@ -124,40 +125,6 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
 
     return dest_path
-
-
-def install_license(license_path, timeout=30, con_ssh=None):
-    """
-    Installs upgrade license on controller-0
-    Args:
-        con_ssh (SSHClient): " SSH connection to controller-0"
-        license_path (str): " license full path in controller-0"
-        timeout (int);
-
-    Returns (int): 0 - success; 1 - failure
-
-    """
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    cmd = "sudo license-install " + license_path
-    con_ssh.send(cmd)
-    end_time = time.time() + timeout
-    rc = 1
-    while time.time() < end_time:
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.Y_N_PROMPT], timeout=timeout)
-        if index == 2:
-            con_ssh.send('y')
-
-        if index == 1:
-            con_ssh.send(HostLinuxCreds.get_password())
-
-        if index == 0:
-            rc = con_ssh.exec_cmd("echo $?")[0]
-            con_ssh.flush()
-            break
-
-    return rc
 
 
 def download_upgrade_load(lab, server, load_path, upgrade_ver):
@@ -513,7 +480,6 @@ def lock_hosts(hosts):
         host_helper.lock_host(host)
 
 
-
 @contextmanager
 def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
                         prompt=None):
@@ -608,15 +574,11 @@ def download_lab_config_files(lab, server, load_path, custom_path=None):
     if 'vbox' in lab_name:
         return
 
-    if not load_path.endswith('/'):
-        load_path = load_path + '/'
-
     if custom_path:
         config_path = custom_path
     else:
         config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
     script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
-
 
     cmd = "test -e " + config_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
@@ -666,7 +628,6 @@ def bulk_add_hosts(lab, hosts_xml_file):
             return rc, None, msg
         hosts = system_helper.get_hosts_by_personality()
         return 0, hosts, ''
-
 
 
 def add_storages(lab, server, load_path):
@@ -2176,6 +2137,84 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     return 0, None
 
 
+def set_network_boot_feed(bld_server_conn, load_path):
+    """
+    Sets the network feed for controller-0 in default taxlab
+    Args:
+        bld_server_conn:
+        load_path:
+
+    Returns:
+
+    """
+    if load_path is None:
+        load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
+
+    if bld_server_conn is None:
+        raise ValueError("Build server connection must be provided")
+
+    if load_path[-1:] == '/':
+        load_path = load_path[:-1]
+
+    tis_bld_dir = os.path.basename(load_path)
+    if tis_bld_dir == 'latest_build':
+        cmd = "readlink " + load_path
+        load_path = bld_server_conn.exec_cmd(cmd)[1]
+
+    LOG.info("Load path is {}".format(load_path))
+    cmd = "test -d " + load_path
+    if bld_server_conn.exec_cmd(cmd)[0] != 0:
+        msg = "Load path {} not found".format(load_path)
+        LOG.error(msg)
+        return False
+
+    lab = InstallVars.get_install_var("LAB")
+
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    controller0 = lab["controller-0"]
+    LOG.info("Set feed for {} network boot".format(controller0.barcode))
+    tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(load_path)
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
+
+    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        msg = "Failed to cd to: " + tuxlab_barcode_dir
+        LOG.error(msg)
+        return False
+
+    LOG.info("Copy load into feed directory")
+    feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
+    tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
+
+    # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
+    # bld_server_conn.exec_cmd("cd " + load_path)
+    pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
+    bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force"], pre_opts=pre_opts)
+    bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts )
+    #extra_opts=["--delete", "--force"]
+    LOG.info("Create new symlink to feed directory")
+    if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
+        msg = "Failed to remove feed"
+        LOG.error(msg)
+        return False
+
+    if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
+        msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
+        LOG.error(msg)
+        return False
+
+    tuxlab_conn.close()
+
+    return True
+
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
                     small_footprint=False,  clone_install=False, system_restore=False):
     """
@@ -3131,85 +3170,6 @@ def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_onl
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
-
-
-def set_network_boot_feed(bld_server_conn, load_path):
-    """
-    Sets the network feed for controller-0 in default taxlab
-    Args:
-        bld_server_conn:
-        load_path:
-
-    Returns:
-
-    """
-    if load_path is None:
-        load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
-
-    if bld_server_conn is None:
-        raise ValueError("Build server connection must be provided")
-
-    if load_path[-1:] == '/':
-        load_path = load_path[:-1]
-
-    tis_bld_dir = os.path.basename(load_path)
-    if tis_bld_dir == 'latest_build':
-        cmd = "readlink " + load_path
-        load_path = bld_server_conn.exec_cmd(cmd)[1]
-
-    LOG.info("Load path is {}".format(load_path))
-    cmd = "test -d " + load_path
-    if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        msg = "Load path {} not found".format(load_path)
-        LOG.error(msg)
-        return False
-
-    lab = InstallVars.get_install_var("LAB")
-
-    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
-    controller0 = lab["controller-0"]
-    LOG.info("Set feed for {} network boot".format(controller0.barcode))
-    tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(load_path)
-    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
-
-    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
-                                           initial_prompt=tuxlab_prompt)
-    tuxlab_conn.deploy_ssh_key()
-
-    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
-
-    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
-        msg = "Failed to cd to: " + tuxlab_barcode_dir
-        LOG.error(msg)
-        return False
-
-    LOG.info("Copy load into feed directory")
-    feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
-    tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
-    tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
-
-    # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
-    # bld_server_conn.exec_cmd("cd " + load_path)
-    pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
-    bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force"], pre_opts=pre_opts)
-    bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts )
-    #extra_opts=["--delete", "--force"]
-    LOG.info("Create new symlink to feed directory")
-    if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
-        msg = "Failed to remove feed"
-        LOG.error(msg)
-        return False
-
-    if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
-        msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
-        LOG.error(msg)
-        return False
-
-    tuxlab_conn.close()
-
-    return True
 
 
 def enter_bios_option(node_obj, bios_option, reboot=False):

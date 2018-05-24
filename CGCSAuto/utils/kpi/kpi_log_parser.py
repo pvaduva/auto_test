@@ -1,16 +1,15 @@
-import re
 import os
-
+import re
 from configparser import ConfigParser
 from optparse import OptionParser
 
 from consts.auth import HostLinuxCreds, Tenant
-from consts.proj_vars import ProjVar
 from consts.cgcs import TIMESTAMP_PATTERN
 from consts.kpi_vars import KPI_DATE_FORMAT
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
-from utils import lab_info
+from consts.proj_vars import ProjVar
 from keywords import host_helper, common
+from utils import lab_info
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 
 
 def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None,

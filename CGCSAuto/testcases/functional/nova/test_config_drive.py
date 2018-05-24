@@ -1,12 +1,11 @@
-
 from pytest import fixture, skip, mark
 
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-
+from consts.proj_vars import ProjVar
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
+from utils.tis_log import LOG
+from utils.clients.ssh import get_cli_client
 
 TEST_STRING = 'Config-drive test file content'
 
@@ -50,7 +49,8 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
 
     block_device = 'source=volume,dest=volume,id={},device=vda'.format(volume_id)
     block_device_mapping = 'vda={}:::0'.format(volume_id)
-    file = "/home/wrsroot/ip.txt={}".format(get_test_file())
+    test_file, file_dir = get_test_file()
+    file = "{}/ip.txt={}".format(file_dir, test_file)
 
     vm_id = vm_helper.boot_vm(name='config_drive', config_drive=True, block_device=block_device, file=file,
                               cleanup='function', guest_os=guest_os)[1]
@@ -114,20 +114,19 @@ def get_test_file():
     Returns:(str) - the file path of the userdata text file
 
     """
+    file_dir = ProjVar.get_var('USER_FILE_DIR')
+    test_file = "{}/test.txt".format(file_dir)
+    client = get_cli_client()
 
-    test_file = "/home/wrsroot/test.txt"
-    controller_ssh = ControllerClient.get_active_controller()
-    cmd = "test -e {}".format(test_file)
-    rc = controller_ssh.exec_cmd(cmd)[0]
-    if rc != 0:
+    if not client.file_exists(test_file):
         cmd = "cat <<EOF > {}\n" \
               "{}\n" \
               "EOF".format(test_file, TEST_STRING)
         print(cmd)
-        code, output = controller_ssh.exec_cmd(cmd)
+        code, output = client.exec_cmd(cmd)
         LOG.info("Code: {} output: {}".format(code, output))
 
-    return test_file
+    return test_file, file_dir
 
 
 def check_vm_config_drive_data(vm_id):

@@ -125,6 +125,8 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
         total = table_parser.get_column(pre_computes_tab, header)[0]
         if isinstance(total, list):
             total = sum([int(item) for item in total if item != ''])
+        elif isinstance(total, str):
+            total = int(total) if total else 0
         pre_avail_mems += total
     # pre_avail_mems = [int(mem) for mem in pre_avail_mems]
 

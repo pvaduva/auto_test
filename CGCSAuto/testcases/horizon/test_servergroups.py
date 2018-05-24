@@ -3,18 +3,19 @@ from utils.horizon.pages.project.compute import servergroupspage
 from pytest import fixture, mark
 from utils.horizon import helper
 from utils.tis_log import LOG
-from time import sleep
+from testfixtures.horizon import tenant_home_pg, driver
+from consts import horizon
 
 
-class TestServerGroup(helper.TenantTestCase):
+class TestServerGroup:
 
     GROUP_NAME = None
 
     @fixture(scope='function')
-    def server_groups_pg(self, home_pg, request):
+    def server_groups_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Server Groups')
         self.GROUP_NAME = helper.gen_resource_name('groups')
-        groups_pg = servergroupspage.ServerGroupsPage(home_pg.driver)
+        groups_pg = servergroupspage.ServerGroupsPage(tenant_home_pg.driver)
         groups_pg.go_to_target_page()
 
         def teardown():
@@ -27,7 +28,7 @@ class TestServerGroup(helper.TenantTestCase):
     @mark.parametrize(('policy', 'is_best_effort', 'group_size'),
                       [('affinity', True, 10),
                        ('anti-affinity', None, None)])
-    def test_create_delete_group(self, server_groups_pg, policy, is_best_effort, group_size):
+    def test_create_delete_server_group(self, server_groups_pg, policy, is_best_effort, group_size):
         """
         Tests the server group creation and deletion functionality:
 
@@ -45,14 +46,15 @@ class TestServerGroup(helper.TenantTestCase):
             - Delete the newly created server group
             - Verify the server group does not appear in the table after deletion
         """
-        server_groups_pg.create_group(name=self.GROUP_NAME,
-                                      policy=policy,
-                                      is_best_effort=is_best_effort,
-                                      group_size=group_size)
+        server_groups_pg.create_server_group(name=self.GROUP_NAME,
+                                             policy=policy,
+                                             is_best_effort=is_best_effort,
+                                             group_size=group_size)
         assert not server_groups_pg.find_message_and_dismiss(messages.ERROR)
-        assert server_groups_pg.is_group_present(self.GROUP_NAME)
+        assert server_groups_pg.is_server_group_present(self.GROUP_NAME)
 
-        server_groups_pg.delete_group(name=self.GROUP_NAME)
+        server_groups_pg.delete_server_group(name=self.GROUP_NAME)
         assert server_groups_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not server_groups_pg.find_message_and_dismiss(messages.ERROR)
-        assert not server_groups_pg.is_group_present(self.GROUP_NAME)
+        assert not server_groups_pg.is_server_group_present(self.GROUP_NAME)
+        horizon.test_result = True

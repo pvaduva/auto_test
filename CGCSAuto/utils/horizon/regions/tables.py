@@ -54,6 +54,7 @@ class RowRegion(baseregion.BaseRegion):
 
 class TableRegion(baseregion.BaseRegion):
     """Basic class representing table object."""
+    name = None
 
     _heading_locator = (by.By.CSS_SELECTOR, 'h3.table_title')
     _columns_names_locator = (by.By.CSS_SELECTOR, 'thead > tr > th')
@@ -258,9 +259,11 @@ def bind_table_action(action_name):
         @functools.wraps(method)
         def wrapper(table):
             actions = table._get_elements(*_actions_locator)
+            print('{}'.format(actions))
             action_element = None
             for action in actions:
                 target_action_id = '%s__action_%s' % (table.name, action_name)
+                print('target id: {}. Actual id: {}'.format(target_action_id, action.get_attribute('id')))
                 if action.get_attribute('id') == target_action_id:
                     action_element = action
                     break

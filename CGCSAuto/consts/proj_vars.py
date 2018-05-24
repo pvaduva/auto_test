@@ -5,6 +5,7 @@ from consts.filepaths import BuildServerPath, WRSROOT_HOME
 class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
+                  'JOB': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
                   'VSWITCH_INFO_HOSTS': [],
@@ -24,12 +25,15 @@ class ProjVar:
                   'TELNET_THREADS': None,
                   'SYS_TYPE': None,
                   'COLLECT_SYS_NET_INFO': False,
-                  'IS_VBOX': False
+                  'IS_VBOX': False,
+                  'RELEASE': 'R6',
+                  'REMOTE_CLI': False,
+                  'USER_FILE_DIR': WRSROOT_HOME,
                   }
 
     @classmethod
     def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli,
-                 always_collect):
+                 always_collect, horizon_visible):
 
         labname = lab['short_name']
 
@@ -53,6 +57,7 @@ class ProjVar:
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
             'KPI_PATH': logdir + '/kpi.ini',
+            'HORIZON_VISIBLE': horizon_visible
         })
 
     @classmethod
