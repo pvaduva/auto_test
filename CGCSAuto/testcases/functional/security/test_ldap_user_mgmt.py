@@ -2,14 +2,16 @@ import uuid
 import time
 
 from pytest import mark, skip, fixture
+from consts.auth import Tenant
 
 from utils.tis_log import LOG
 from utils.clients.telnet import TelnetClient
-from utils import node
+from utils import node, cli
 from keywords import security_helper, system_helper
 from consts.proj_vars import InstallVars, ProjVar
 from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
+from utils.clients.ssh import ControllerClient
 
 
 theLdapUserManager = security_helper.get_ldap_user_manager()
@@ -47,7 +49,7 @@ def _make_sure_user_exist(user_name, shell=2, sudoer=False, secondary_group=Fals
         password_expiry_warn_days=password_expiry_warn_days)
 
     if 0 != code and 1 != code:
-        LOG.error('Failed to make sure the LDAP User {} exist'.format(user_name))
+        LOG.error('Failed to make sure the LDAP User {} exist with code {}'.format(user_name, code))
         return False, user_info
 
     return True, user_info
@@ -341,11 +343,11 @@ def test_ldap_user_password(ldap_user_for_test):
     LOG.info('OK, succeeded  as the LDAP User: {}, password: {}'.format(user_name, complex_password))
 
 
-@mark.parametrize(('user_name','shell_type'), [
-    mark.p1(('ldapuser06', 'bash')),
-    mark.p1(('ldapuser07', 'lshell')),
+@mark.parametrize(('user_name','shell_type','sudo_type'), [
+    mark.p1(('ldapuser06', 'bash', True)),
+    mark.p1(('ldapuser07', 'lshell', False)),
 ])
-def test_cmds_login_as_ldap_user(user_name, shell_type):
+def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
     """
     this test cover both CGTS-4909 and CGTS-6623
     Args:
@@ -361,44 +363,51 @@ def test_cmds_login_as_ldap_user(user_name, shell_type):
         - delete created ldap user
 
     """
-
+    hostname = system_helper.get_active_controller_name()
     if shell_type == 'bash':
         shell_code = 1
-    elif shell_type == 'lshell':
+        # sudo user is only support in Bash
+        prompt = Prompt.CONTROLLER_PROMPT
+    else:
         shell_code = 2
+        prompt = '\[{}@{} \({}\)\]\$'.format(user_name, hostname, Tenant.ADMIN['user'])
 
     LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not exist'.format(user_name))
-    created, user_info = _make_sure_user_exist(user_name, sudoer=True, shell=shell_code, delete_if_existing=True)
+    created, user_info = _make_sure_user_exist(user_name, sudoer=sudo_type, shell=shell_code, delete_if_existing=True)
 
     LOG.tc_step('Get the password of the user {}'.format(user_name))
     password = theLdapUserManager.get_ldap_user_password(user_name)
     LOG.debug('The password of the user: {}'.format(password))
 
     LOG.tc_step('Login as the LDAP User:{}'.format(user_name))
+
+    original_con = ControllerClient.get_active_controller()
+    original_prompt = original_con.get_prompt()
+    original_password = original_con.password
     logged_in, password, ssh_con = theLdapUserManager.login_as_ldap_user(user_name, password, shell=shell_code,
+                                                                         host=hostname, pre_store=True,
                                                                          disconnect_after=False)
 
     try:
-        if user_name == 'ldapuser06':
-            LOG.tc_step("Execute sudo command 'sudo ls'")
-            ssh_con.send("sudo ls && $?")
-            ssh_con.expect(Prompt.PASSWORD_PROMPT)
-            ssh_con.send(password)
-            index = ssh_con.expect('0')
-            LOG.info('index {}'.format(index))
-            assert index == 0, 'cannot sudo as a sudoer new user on the user login'
+        # set password/prompt for ldap user login
+        ssh_con.set_prompt(prompt)
+        ssh_con.password = password
+        ssh_con.flush()
 
-        elif user_name == 'ldapuser07':
-            # lshell_env_setup are set to run openstack user list
-            LOG.tc_step("Execute openstack command 'openstack user list'")
-            ssh_con.send("openstack user list && $?")
-            index = ssh_con.expect('0')
-            LOG.info('index {}'.format(index))
-            assert index == 0, 'cannot execute openstack user list cli as a lshell ldap user'
-            # send exit output to return to  wrsroot@controller-0 and flush output.
+        if sudo_type:
+            LOG.tc_step("Execute sudo command 'sudo ls'")
+            ssh_con.exec_sudo_cmd("ls", fail_ok=False)
+
+        # lshell_env_setup are set to run openstack user list
+        LOG.tc_step("Execute openstack command 'openstack user list'")
+        cli.openstack('user list', auth_info=Tenant.ADMIN, ssh_client=ssh_con)
+
     finally:
         if logged_in:
+            # reset password/prompt back to original
             ssh_con.send('exit') # exit from user login
+            ssh_con.set_prompt(original_prompt)
+            ssh_con.password = original_password
             ssh_con.flush()
 
 
@@ -449,7 +458,6 @@ def test_telnet_ldap_admin_access(user_name):
             telnet.send(new_password)
             telnet.expect()
 
-        telnet.flush()
         code, output = telnet.exec_cmd('ls {}'.format(WRSROOT_HOME), fail_ok=False)
         LOG.info('output from test {}'.format(output))
         assert not '*** forbidden' in output, 'not able to ls to /home/wrsroot as admin user'
