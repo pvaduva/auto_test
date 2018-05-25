@@ -557,60 +557,76 @@ def get_server_groups(name=None, project_id=None, policies=None, members=None, b
     return groups
 
 
-def get_server_groups_info(server_groups=None, header='Policies', policies=None, members=None, best_effort=None,
-                           auth_info=None, con_ssh=None, strict=False, **kwargs):
+def get_server_groups_info(server_groups=None, headers=('Policies', 'Members'), auth_info=None, con_ssh=None,
+                           strict=False, **kwargs):
     """
     Get a server group(s) info as a list
 
     Args:
         server_groups (str|list): id(s) of server group(s).
-        header (str): header string for info. such as 'Member', 'Metadata', 'Policies'
-        policies (str|list): If not None, return only server groups that use given policy(s)
-        members (str|list): If not None, return only server groups that include given member(s)
-        best_effort (bool): If not None, return only server groups with best_effort flag set to given value
-        strict (bool)
+        headers (str|list|tuple): header string for info. such as 'Member', 'Metadata', 'Policies'
         auth_info (dict):
         con_ssh (SSHClient):
+        strict
+        kwargs
 
-    Returns (list): server group(s) info as a list
+    Returns (dict): server group(s) info in dict. server group id as key, and values of specified headers as value.
+        Examples: {<server_group1>: [['affinity'], [<vm_id1>, <vm_id2>, ...]],
+                    <server_group2>: ['anti-affinity', []]}
 
     """
     table_ = table_parser.table(cli.nova('server-group-list', '--a', ssh_client=con_ssh, auth_info=auth_info))
 
-    filters = kwargs
-    if server_groups:
-        filters['Id'] = server_groups
+    if isinstance(headers, str):
+        headers = [headers]
 
-    return table_parser.get_values(table_, target_header=header, merge_lines=True, strict=strict, **filters)
+    if not server_groups:
+        server_groups = table_parser.get_column(table_, 'Id')
+    elif isinstance(server_groups, str):
+        server_groups = [server_groups]
+
+    srv_groups_info = {}
+    for group in server_groups:
+        group_table = table_parser.filter_table(table_, Id=group)
+        vals = []
+        for header in headers:
+            val = table_parser.get_values(group_table, target_header=header, merge_lines=True, strict=strict,
+                                          **kwargs)[0]
+            if header.lower() in ('policies', 'members', 'metadata'):
+                val = eval(val)
+            vals.append(val)
+
+        srv_groups_info[group] = vals
+
+    return srv_groups_info
 
 
-def get_server_group_info(group_id=None, group_name=None, header='Members', strict=False, auth_info=None, con_ssh=None):
+def get_server_group_info(group_id=None, group_name=None, headers=('Policies', 'Members'), strict=False,
+                          auth_info=None, con_ssh=None):
     """
     Get server group info for specified server group
     Args:
         group_id:
         group_name:
-        header:
+        headers (str|list|tuple):
         auth_info:
         strict
         con_ssh:
 
-    Returns (str|list|dict):
+    Returns (list):
 
     """
     filters = {}
     if group_name:
         filters['Name'] = group_name
 
-    values = get_server_groups_info(server_groups=group_id, header=header, auth_info=auth_info, strict=strict,
-                                    con_ssh=con_ssh, **filters)
-    assert len(values) == 1, "More than 1 server group filtered"
+    group_info = get_server_groups_info(server_groups=group_id, headers=headers, auth_info=auth_info, strict=strict,
+                                        con_ssh=con_ssh, **filters)
+    assert len(group_info) == 1, "More than 1 server group filtered"
 
-    value = values[0]
-    if header.lower() in ('policies', 'members', 'metadata'):
-        value = eval(value)
+    values = list(group_info.values())[0]
 
-    return value
+    return values
 
 
 def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh=None, **metadata):

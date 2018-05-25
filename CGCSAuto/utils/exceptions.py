@@ -181,7 +181,7 @@ class VLMError(TiSError):
     message = "VLM Operation Error."
 
 
-class SWiftError(TiSError):
+class SwiftError(TiSError):
     message = "Swift error."
 
 

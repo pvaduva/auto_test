@@ -134,7 +134,7 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
                                   avail_zone='cgcsauto', fail_ok=False, cleanup='function')[1]
 
         LOG.tc_step("Check vm {} is in server group {}".format(vm_id, srv_grp_id))
-        members = nova_helper.get_server_group_info(srv_grp_id, header='Members')
+        members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
         assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id, srv_grp_id)
 
         server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
@@ -358,5 +358,5 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
 
     # if code == 0:
     LOG.tc_step("Check vms are in server group {}: {}".format(srv_grp_id, vms))
-    members = nova_helper.get_server_group_info(srv_grp_id, header='Members')
+    members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
     assert set(vms) <= set(members), "Some vms are not in srv group"
