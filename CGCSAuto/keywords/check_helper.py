@@ -66,8 +66,8 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
 
 
 def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
-                         expt_increase=None, min_vcpus=None, current_vcpus=None, prev_siblings=None, con_ssh=None,
-                         guest=None):
+                         expt_increase=None, min_vcpus=None, current_vcpus=None, prev_siblings=None, shared_vcpu=None,
+                         con_ssh=None, guest=None):
     """
     Check vm has the correct topology based on the number of vcpus, cpu policy, cpu threads policy, number of numa nodes
 
@@ -85,6 +85,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
         expt_increase (int): expected total vcpu increase on vm host compared to prev_total_cpus
         prev_siblings (list): list of siblings total. Usually used when checking vm topology after live migration
         con_ssh (SSHClient)
+        shared_vcpu (int): which vcpu is shared
 
     """
     cpu_pol = cpu_pol if cpu_pol else 'shared'
@@ -128,16 +129,17 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
     LOG.tc_step('Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
                 'show')
-    pcpus_total, siblings_total = _check_vm_topology_via_vm_topology(
+    pcpus_total, siblings_total, shared_pcpus = _check_vm_topology_via_vm_topology(
             vm_id, vcpus=vcpus, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
             numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host,
-            current_vcpus=current_vcpus)
+            current_vcpus=current_vcpus, shared_vcpu=shared_vcpu)
 
     LOG.info("{}Check vm vcpus, pcpus on vm host via nova-compute.log and virsh vcpupin".format(SEP))
     # Note: floating vm pcpus will not be checked via virsh vcpupin
     _check_vm_topology_on_host(vm_id, vcpus=vcpus, vm_pcpus=pcpus_total, prev_total_cpus=prev_total_cpus,
-                               expt_increase=expt_increase, vm_host=vm_host, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol,
-                               host_log_core_siblings=log_cores_siblings)
+                               expt_increase=expt_increase, vm_host=vm_host, cpu_pol=cpu_pol,
+                               cpu_thr_pol=cpu_thr_pol, host_log_core_siblings=log_cores_siblings,
+                               shared_vcpu=shared_vcpu, vm_shared_pcpus=shared_pcpus)
 
     LOG.info("{}Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/thread_siblings_list".
              format(SEP))
@@ -149,7 +151,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
 
 def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host,
                                        host_log_core_siblings=None, is_ht=None, current_vcpus=None,
-                                       vcpus_on_numa=None, con_ssh=None):
+                                       shared_vcpu=None, vcpus_on_numa=None, con_ssh=None):
     """
 
     Args:
@@ -195,7 +197,7 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
 
     pcpus_total = []
     siblings_total = []
-    shared_pcpu_total = 0
+    shared_pcpu_total = []
 
     if not vcpus_on_numa:
         vcpus_on_numa = {}
@@ -212,8 +214,8 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         vcpus_per_numa = vcpus_on_numa[node_id]
 
         shared_pcpu = topology_on_numa_node['shared_pcpu']
-        shared_pcpu_num = 0 if shared_pcpu is None else 1
-        shared_pcpu_total += shared_pcpu_num
+        shared_pcpu_total += shared_pcpu
+        shared_pcpu_num = len(shared_pcpu)
 
         assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is {} instead of {} in vm-topology".\
             format(topology_on_numa_node['pol'], expt_cpu_pol)
@@ -317,22 +319,20 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
                 siblings_total += actual_siblings
 
     if pcpus_total:
-        assert max_vcpus == len(pcpus_total) + shared_pcpu_total, \
+        assert max_vcpus == len(pcpus_total) + len(shared_pcpu_total), \
             "Max vcpus: {}, pcpus list: {}".format(max_vcpus, pcpus_total)
 
-        # if it can scale (current!= max), then shared_pcpu must be 0
-        assert current_vcpus == len(set(pcpus_total)) + shared_pcpu_total, \
+        assert current_vcpus == len(set(pcpus_total + shared_pcpu_total)), \
             "Current vcpus: {}, pcpus: {}".format(max_vcpus, pcpus_total)
-
     if not siblings_total:
         siblings_total = [[vcpu_] for vcpu_ in range(current_vcpus)]
 
     LOG.info("vm {} on {} - pcpus total: {}; siblings total: {}".format(vm_id, vm_host, pcpus_total, siblings_total))
-    return pcpus_total, siblings_total
+    return pcpus_total, siblings_total, shared_pcpu_total
 
 
 def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total_cpus, vm_host, cpu_pol, cpu_thr_pol,
-                               host_log_core_siblings):
+                               host_log_core_siblings, shared_vcpu, vm_shared_pcpus):
 
     # Check host side info such as nova-compute.log and virsh pcpupin
     LOG.tc_step('Check vm topology from vm_host via: nova-compute.log, virsh vcpupin, taskset')
@@ -360,8 +360,12 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
             all_cpus = []
             for cpus in vcpus_for_vm.values():
                 all_cpus += cpus
-            assert sorted(vm_pcpus) == sorted(all_cpus), 'pcpus from vm-topology - {} is different than ' \
-                                                         'virsh vcpupin - {}'.format(sorted(vm_pcpus), sorted(all_cpus))
+            if vm_shared_pcpus:
+                assert sorted(vm_pcpus + vm_shared_pcpus) == sorted(all_cpus), 'pcpus from vm-topology - {} is different than ' \
+                                                             'virsh vcpupin - {}'.format(sorted(vm_pcpus), sorted(all_cpus))
+            else:
+                assert sorted(vm_pcpus) == sorted(all_cpus), 'pcpus from vm-topology - {} is different than ' \
+                                                             'virsh vcpupin - {}'.format(sorted(vm_pcpus), sorted(all_cpus))
         else:
             LOG.warning('Skip pcpus check in virsh vcpupin for floating vm')
 
@@ -391,6 +395,16 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
             err_msg = "Affined cpus for vm: {}, Unpinned cpus on vm host: {}".format(affined_cpus, unpinned_cpus)
             assert affined_cpus == unpinned_cpus, 'Affined cpus for floating vm are different than unpinned cpus ' \
                                                   'on vm host {} numa {}\n{}'.format(vm_host, numa_nodes, err_msg)
+        if shared_vcpu:
+            if vm_shared_pcpus:
+                instance_name = nova_helper.get_vm_nova_show_value(vm_id, 'OS-EXT-SRV-ATTR:instance_name', strict=True)
+                vcpu_pins = host_helper.get_vcpu_pinnings_for_instance_via_virsh(host_ssh=host_ssh,
+                                                                                 instance_name=instance_name)
+                for item in vcpu_pins:
+                    if int(item['vcpu']) == shared_vcpu:
+                        assert int(item['cpuset']) in vm_shared_pcpus
+                    else:
+                        assert not int(item['cpuset']) in vm_shared_pcpus
 
 
 def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None):
@@ -453,7 +467,6 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
                     sib_for_cpu = common.parse_cpus_list(actual_sibs_for_cpu)
                     if sib_for_cpu not in actual_sibs:
                         actual_sibs.append(sib_for_cpu)
-
                 assert sorted(actual_sibs) in expt_sibs_list, "Expt sib lists: {}, actual sib list: {}".\
                     format(expt_sibs_list, sorted(actual_sibs))
 

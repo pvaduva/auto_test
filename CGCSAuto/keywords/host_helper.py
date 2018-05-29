@@ -2547,6 +2547,12 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     return vcpus
 
 
+def get_vcpu_pinnings_for_instance_via_virsh(host_ssh, instance_name):
+    vcpu_pins = get_values_virsh_xmldump(instance_name=instance_name, host_ssh=host_ssh,
+                                         tag_paths='cputune/vcpupin', target_type='dict')
+    return vcpu_pins
+
+
 def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     """
     Get hosts for each possible storage backing
