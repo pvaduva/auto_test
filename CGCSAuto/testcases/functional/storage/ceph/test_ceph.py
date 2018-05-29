@@ -14,7 +14,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
-from utils import exceptions
+from utils import exceptions, cli, table_parser
 from utils.clients.ssh import ControllerClient, get_cli_client
 from utils.multi_thread import Events
 from utils.tis_log import LOG
@@ -646,17 +646,26 @@ def test_storgroup_semantic_checks():
     """
 
     con_ssh = ControllerClient.get_active_controller()
-    storage_nodes = system_helper.get_storage_nodes(con_ssh)
-    LOG.info("The following storage hosts are on the system: {}".format(storage_nodes))
+
+    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
+    capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
+    replication = ast.literal_eval(capabilities)
+    replication_factor = replication['replication']
+    LOG.info("The replication factor is: {}".format(replication_factor))
+
+    # We want to test storage-0 since it is a ceph monitor
+    # Then we want to test another storage host in another group.  The choice
+    # depends on the replication factor.
+    storage_nodes = ["storage-0"]
+    if replication_factor == "3":
+        storage_nodes.append("storage-3")
+    else:
+        storage_nodes.append("storage-2")
+
+    LOG.info("Storage hosts under test are: {}".format(storage_nodes))
 
     for host in storage_nodes:
-        peers = host_helper.get_hostshow_values(host, 'peers')
-        peers = ast.literal_eval(list(peers.values())[0])
-        hosts = peers['hosts']
-        hosts.remove(host)
-        storage_group = peers['name']
-
-        LOG.tc_step('Lock {} in the {} group:'.format(host, storage_group))
+        LOG.tc_step('Lock {}:'.format(host))
         HostsToRecover.add(host, scope='function')
         rtn_code, out = host_helper.lock_host(host)
         assert rtn_code == 0, out
@@ -686,6 +695,7 @@ def test_storgroup_semantic_checks():
         assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
             "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
 
+        hosts = []
         if host == 'storage-0':
             hosts.append('controller-0')
             hosts.append('controller-1')
