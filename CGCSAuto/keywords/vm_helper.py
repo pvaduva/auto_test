@@ -4351,3 +4351,122 @@ def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, exp
         return False, prev_state
     else:
         raise exceptions.VMError(msg)
+
+
+def get_vms_ports_info(vms):
+    """
+    Get VMs' ports' (ip_addr, cidr, mac_addr).
+
+    Args:
+        vms (str|list):
+            vm_id, or a list of vm_ids
+
+    Returns (dict):
+        {vms[0]: [(ip_addr, cidr, mac_addr), ...], vms[1]: [...], ...}
+    """
+    if not issubclass(type(vms), (list, tuple)):
+        vms = [vms]
+
+    info = dict()
+    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.ADMIN))
+    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.ADMIN))
+    for vm in vms:
+        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.ADMIN))
+        nics = table_parser.get_value_two_col_table(table, "wrs-if:nics")
+        if not issubclass(type(nics), list):
+            nics = [nics]
+        for nic in nics:
+            nic = eval(nic)
+            nic = nic[list(nic.keys())[0]]
+            fixed_ips = table_parser.get_values(port_table, 'fixed_ips', id=nic['port_id'])
+            mac = nic['mac_address']
+            if not issubclass(type(fixed_ips), list):
+                fixed_ips = [fixed_ips]
+            for fixed_ip in fixed_ips:
+                fixed_ip = eval(fixed_ip)
+                cidr = table_parser.get_values(subnet_table, 'cidr', id=fixed_ip['subnet_id'])[0]
+                if vm not in info:
+                    info[vm] = list()
+                info[vm].append((fixed_ip['ip_address'], cidr, mac))
+                LOG.info("VM {} interface {} ip={} cidr={}".format(vm, mac, fixed_ip['ip_address'], cidr))
+    return info
+
+
+def _set_vm_route(vm_id, target_subnet, via_ip, dev_or_mac, persist=True):
+    # the os on vm must be managed by network-scripts
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        if ':' in dev_or_mac:
+            dev = network_helper.get_eth_for_mac(ssh_client, dev_or_mac)
+        else:
+            dev = dev_or_mac
+        param = target_subnet, via_ip, dev
+        LOG.info("Routing {} via {} on interface {}".format(*param))
+        ssh_client.exec_sudo_cmd("route add -net {} gw {} {}".format(*param), fail_ok=False)
+        if persist:
+            LOG.info("Setting persistent route")
+            ssh_client.exec_sudo_cmd(
+                "echo -e \"{} via {}\" > /etc/sysconfig/network-scripts/route-{}".format(*param),
+                fail_ok=False)
+
+
+def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
+    """
+    Route the pair of VMs' data interfaces through internal interfaces
+    If multiple interfaces available on either of the VMs, the last one is used
+    If no interfaces available for data/internal network for either VM, raises IndexError
+    The internal interfaces for the pair VM must be on the same gateway
+
+    Args:
+        vm1 (str):
+            vm_id, src if bidirectional=False
+        vm2 (str):
+            vm_id, dest if bidirectional=False
+        bidirectional (bool):
+            if True, also routes from vm2 to vm1
+        validate (bool):
+            validate pings between the pair over the data network
+        persist (bool):
+            keep the route after possible VM reboots
+
+    Returns (dict):
+        the interfaces used for routing,
+        {vm_id: {'data': {'ip', 'cidr', 'mac'}, 'internal':{'ip', 'cidr', 'mac'}}}
+    """
+    if vm1 == vm2:
+        raise ValueError("cannot route to a VM itself")
+
+    LOG.info("Collecting VMs' networks")
+    interfaces = {
+        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.ADMIN),
+              "internal": network_helper.get_internal_ips_for_vms(vm1)},
+        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.ADMIN),
+              "internal": network_helper.get_internal_ips_for_vms(vm2)},
+    }
+
+    for vm, info in get_vms_ports_info([vm1, vm2]).items():
+        for ip, cidr, mac in info:
+            # expect one data and one internal
+            if ip in interfaces[vm]['data']:
+                interfaces[vm]['data'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
+            elif ip in interfaces[vm]['internal']:
+                interfaces[vm]['internal'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
+
+    if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
+        raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
+
+    _set_vm_route(
+        vm1,
+        interfaces[vm2]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm1]['internal']['mac'])
+
+    if bidirectional:
+        _set_vm_route(
+            vm2,
+            interfaces[vm1]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm2]['internal']['mac'])
+
+    if validate:
+        LOG.info("Validating route(s) across data")
+        ping_vms_from_vm(vm2, vm1, net_types='data')
+        if bidirectional:
+            ping_vms_from_vm(vm1, vm2, net_types='data')
+
+    return interfaces
