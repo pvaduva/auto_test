@@ -693,11 +693,13 @@ class IxiaSession(object):
             or None if 'view' cannot be matched with a view identifier
             or None if fail_ok=True and timeout occurred and no other match possible
         """
-        for view_obj in self.statistics_views():
+        for view_obj in self._statistics_views():
             if view.lower() not in view_obj.lower():
                 continue
 
             view = view_obj
+            
+            LOG.info("matched with view {}".format(view))
 
             self._ixnet.execute("refresh", view)
             succ, val = common.wait_for_val_from_func('true', timeout, 1, self.getAttribute, view+"/page", 'isReady')
