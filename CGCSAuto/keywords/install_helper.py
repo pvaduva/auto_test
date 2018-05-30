@@ -204,7 +204,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
     node_thread = threading.Thread(target=bring_node_console_up,
                                    name=node.name,
-                                   args=(node, boot_device, output_dir),
+                                   args=(node, boot_device),
                                    kwargs={'upgrade': upgrade, 'vlm_power_on': vlm_power_on,
                                            'close_telnet_conn': close_telnet_conn,'small_footprint':small_footprint})
 
@@ -219,12 +219,13 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
 
 def bring_node_console_up(node, boot_device,
-                          boot_usb=False,
+                          boot_usb=None,
                           low_latency=False,
                           upgrade=False,
                           vlm_power_on=False,
                           close_telnet_conn=True,
                           small_footprint=False,
+                          security="standard",
                           clone_install=False,):
     """
     Initiate the boot and installation operation.
@@ -248,9 +249,11 @@ def bring_node_console_up(node, boot_device,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    install(node, boot_device,
+    install_node(node, boot_device,
             low_latency=low_latency,
-            small_footprint=small_footprint)
+            small_footprint=small_footprint,
+            security=security,
+            usb=boot_usb)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -623,7 +626,7 @@ def bulk_add_hosts(lab, hosts_xml_file):
     cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
     if controller_ssh.exec_cmd(cmd)[0] == 0:
         rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True)
-        if rc != 0 or  "Configuration failed" in output:
+        if rc != 0 or "Configuration failed" in output:
             msg = "system host-bulk-add failed"
             return rc, None, msg
         hosts = system_helper.get_hosts_by_personality()
@@ -2216,7 +2219,7 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
-                    small_footprint=False,  clone_install=False, system_restore=False):
+                    small_footprint=False, security="standard", clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2226,6 +2229,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         boot_usb:
         small_footprint:
         lowlat:
+        security:
         clone_install:
         system_restore:
 
@@ -2241,7 +2245,6 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn = open_telnet_session(controller0)
 
     boot_interfaces = lab['boot_device_dict']
-
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))
     rc, output = local_host.reserve_vlm_console(controller0.barcode)
     if rc != 0:
@@ -2254,6 +2257,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           boot_usb=boot_usb,
                           small_footprint=small_footprint,
                           low_latency=low_latency,
+                          security=security,
                           vlm_power_on=True,
                           close_telnet_conn=False,
                           clone_install=clone_install)
@@ -2890,7 +2894,7 @@ def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,
 def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_path=None, con_ssh=None,
                              fail_ok=False):
     if lab_dict is None or not isinstance(lab_dict, dict):
-        raise ValueError("The Lab atribute value dictinary must be provided")
+        raise ValueError("The Lab atribute value dictionary must be provided")
     if 'controller-0' not in lab_dict.keys():
         raise ValueError("The Lab controller-0 node object must be provided")
 
@@ -3046,7 +3050,8 @@ def controller_system_config(active_controller=None, telnet_conn=None, config_fi
         # TODO: doesn't return bad return code
         if rc == 0:
             LOG.info("Controller configured")
-            host_helper.wait_for_hosts_states(active_controller.name, availability=HostAvailState.ONLINE,
+            host_helper.wait_for_hosts_states(active_controller.name,
+                                              availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                               use_telnet=True, con_telnet=active_controller.telnet_conn)
             active_controller.ssh_conn.connect(prompt=Prompt.CONTROLLER_PROMPT, retry=True, retry_timeout=30)
         else:
@@ -3177,8 +3182,8 @@ def enter_bios_option(node_obj, bios_option, reboot=False):
         node_obj.telnet_conn = open_telnet_session(node_obj)
     if reboot:
         vlm_helper.power_off_hosts(node_obj.name)
-        vlm_helper.power_on_hosts(node_obj.name, wait_for_hosts_state_=False)
-    node_obj.telnet_conn.expect([str.encode(bios_option.name)], 360)
+        power_on_host(node_obj.name, wait_for_hosts_state_=False)
+    node_obj.telnet_conn.expect([bios_option.name], 360)
     for i in range(0, 5):
         bios_option.enter(node_obj.telnet_conn)
         time.sleep(1)
@@ -3204,77 +3209,226 @@ def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, f
             raise exceptions.TelnetException(msg)
     LOG.info("Boot device is: " + str(boot_device_regex))
 
-    node_obj.telnet_conn.expect([str.encode(boot_device_menu.get_prompt())], 60)
+    node_obj.telnet_conn.expect([boot_device_menu.get_prompt()], 60)
     boot_device_menu.select(node_obj.telnet_conn, pattern=re.compile(boot_device_regex))
 
 
-def select_install_option(node_obj, boot_menu, index=None, low_latency=False, usb=None, clone_install=False,
+def select_install_option(node_obj, boot_menu, index=None, low_latency=False, security="standard", usb=None,
                           small_footprint=False, timeout=2400):
-    node_obj.telnet_conn.expect([str.encode(boot_menu.get_prompt())], 120)
+    node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
     if usb is None:
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
-    if usb:
-        if not clone_install:
-            if isinstance(index, int):
-                boot_menu.select(node_obj.telnet_conn, index=index)
-            elif low_latency:
-                boot_menu.menus[0].select(node_obj.telnet_conn, index=2)
-            elif small_footprint:
-                boot_menu.menus[0].select(node_obj.telnet_conn, index=1)
-            else:
-                boot_menu.menus[0].select(node_obj.telnet_conn, index=0)
-            time.sleep(1)
-            boot_menu.sub_menus[0].select(node_obj.telnet_conn, index=0)
-            time.sleep(1)
-            boot_menu.sub_menus[1].select(node_obj.telnet_conn, index=0)
-        else:
-            LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
-            timeout = 4800
-
-    # UEFI menu does not have WRL options
-    elif "uefi" in boot_menu.get_name():
-        if low_latency:
-            boot_menu.select(node_obj.telnet_conn, pattern="lowlatency")
-        elif small_footprint:
-            boot_menu.select(node_obj.telnet_conn, pattern="All-in-one")
-        else:
-            boot_menu.select(node_obj.telnet_conn, pattern="CentOS")
+    if small_footprint:
+        tag = "cpe"
     else:
-        # New pxeboot cfg menu
-        # 0) Boot from hard drive
-        # 1) WRL Serial Controller Install
-        # 2) CentOS Serial Controller Install
-        # 3) WRL Serial CPE Install
-        # 4) CentOS Serial CPE Install
-        # 6) CentOS Serial CPE Install (low latency)
+        tag = "standard"
+    if low_latency:
+        tag = "lowlat"
+    LOG.info("Choosing centOS {} install option".format(tag))
 
-        # if hasattr(node_obj, "host_kickstart_menu_selection"):
-        #    selection_menu_option = getattr(node_obj, "host_kickstart_menu_selection")
-        #    if selection_menu_option != "6":
-        #        boot_menu.select(int(selection_menu_option), node_obj.telnet_conn)
-        #    else:
-        #        boot_menu.select(5, node_obj.telnet_conn)
-        if small_footprint:
-            if low_latency:
-                boot_menu.select(node_obj.telnet_conn, pattern="CentOS")
-            else:
-                # TODO: extra 2 spaces at the end are to ensure it doesn't match lowlatency option. Need a better pattern
-                boot_menu.select(node_obj.telnet_conn, pattern='CentOS Serial CPE Install  ')
+    if usb:
+        if isinstance(index, int):
+            boot_menu.select(node_obj.telnet_conn, index=index)
         else:
-            boot_menu.select(node_obj.telnet_conn, pattern='CentOS Serial Controller')
+            boot_menu.select(node_obj.telnet_conn, tag=tag)
+        if boot_menu.sub_menus:
+            sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
+            try:
+                menus_navigated = 0
+                while len(sub_menu_prompts) > 0:
+                    index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                    sub_menu = boot_menu.sub_menus[index + menus_navigated]
+                    LOG.debug("index: {}, sub_menu {}, prompt: {}".format(index, sub_menu.name, sub_menu_prompts[index]))
+                    if sub_menu.name == "Controller Configuration":
+                        sub_menu.select(node_obj.telnet_conn, pattern="erial")
+                    elif sub_menu.name == "Serial Console":
+                        sub_menu.select(node_obj.telnet_conn, pattern=security.upper())
+                    sub_menu_prompts.pop(index)
+                    menus_navigated += 1
+            except exceptions.TelnetTimeout:
+                pass
+    else:
+        if isinstance(index, int):
+            boot_menu.select(node_obj.telnet_conn, index=index)
+        elif security == "extended":
+            security_menu = boot_menu.get_sub_menu("Security", strict=False)
+            if security_menu:
+                boot_menu.select(node_obj.telnet_conn, tag="security")
+                node_obj.telnet_conn.expect([security_menu.prompt], 60)
+                security_menu.select(node_obj.telnet_conn, tag=tag)
+            else:
+                msg = "Node does not have a security menu"
+                raise exceptions.TelnetException(msg)
+        else:
+            boot_menu.select(node_obj.telnet_conn, tag=tag)
 
-    node_obj.telnet_conn.expect([str.encode("ogin:")], timeout)
-    LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
     return 0
 
 
-def install(node_obj, boot_device_dict, small_footprint=False, low_latency=False):
+def install_node(node_obj, boot_device_dict, small_footprint=False, low_latency=False, security="standard", usb=None):
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
-    kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name)
+    if usb is None:
+        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
+    if usb:
+        kickstart_menu = menu.USBBootMenu()
+    else:
+        kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name, security=security)
 
     enter_bios_option(node_obj, bios_option)
     if "hp" not in node_obj.host_name and "ml350" not in node_obj.host_name:
         boot_device_menu = menu.BootDeviceMenu()
         select_boot_device(node_obj, boot_device_menu, boot_device_dict)
-    select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency)
+    if node_obj.name == "controller-0":
+        select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                              security=security)
+    node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
+    LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
+
+
+def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True, fail_ok=False):
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    if 'controller-0' not in lab_dict.keys():
+        raise ValueError("The Lab controller-0 node object must be provided")
+    if iso_full_path is None:
+        iso_full_path = InstallVars.get_install_var("ISO_PATH")
+
+    iso_dest_path = WRSROOT_HOME + os.path.basename(iso_full_path)
+    dest_lab_name = lab_dict['short_name']
+    controller0_node = lab_dict['controller-0']
+
+    LOG.info("Transferring boot image iso file to lab: {}".format(dest_lab_name))
+    if not local_host.ping_to_host(controller0_node.host_ip):
+        msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
+        if boot_lab:
+            LOG.info("{} ; Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
+            boot_controller(lab=lab_dict)
+            if not local_host.ping_to_host(controller0_node.host_ip):
+
+                err_msg = "Cannot ping destination lab {} controller-0 after install".format(dest_lab_name)
+                LOG.warn(err_msg)
+                if fail_ok:
+                    return 1, err_msg
+                else:
+                    raise exceptions.BackupSystem(err_msg)
+            LOG.info("Lab {}: controller-0  booted successfully".format(dest_lab_name))
+        else:
+            LOG.warn(msg)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.BackupSystem(msg)
+
+    cmd = "test -f " + iso_full_path
+    assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
+    node_ssh = controller0_node.ssh_conn
+    if node_ssh is None:
+        node_ssh = SSHClient(lab_dict['controller-0 ip'])
+        node_ssh.connect(retry=True, retry_timeout=30)
+
+    node_ssh.exec_cmd("ls")
+    # Burn the iso image file to USB
+    usb_device = get_usb_device_name(con_ssh=node_ssh)
+
+    if usb_device:
+        LOG.info("Burning the system cloned image iso file to usb flash drive {}".format(usb_device))
+
+        iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
+                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
+
+        # Write the ISO to USB
+        cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
+            .format(HostLinuxCreds.get_password(), iso_dest_path, usb_device)
+
+        rc,  output = node_ssh.exec_cmd(cmd, expect_timeout=900)
+        if rc != 0:
+            err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 3, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+        LOG.info(" The cloned image iso file copied to USB: {}".format(output))
+
+        LOG.info("Deleting system cloned image iso file from the dest lab folder ")
+        node_ssh.exec_sudo_cmd("rm -f {}".format(iso_dest_path))
+
+        LOG.info("Cloned image iso file transfer to dest lab {} completed successfully".format(lab_dict['short_name']))
+
+    else:
+        err_msg = "No USB device found in destination lab {}".format(dest_lab_name)
+        LOG.info(err_msg)
+        if fail_ok:
+            return 4, err_msg
+        else:
+            raise exceptions.BackupSystem(err_msg)
+
+    return 0, None
+
+
+def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail_ok=False):
+    if iso_full_path is None:
+        iso_full_path = InstallVars.get_install_var("ISO_PATH")
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    barcode = lab_dict["controller_nodes"][0]
+    iso_dest_path = "/tmp/iso/{}".format(barcode)
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    LOG.info("Transferring boot image iso file to boot server: {}".format(tuxlab_server))
+    if not local_host.ping_to_host(tuxlab_server):
+        msg = "{} is not reachable.".format(tuxlab_server)
+        LOG.warn(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.BackupSystem(msg)
+
+    cmd = "test -f " + iso_full_path
+    assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
+    iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path,
+                            dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
+    tuxlab_conn.close()
+    return 0, None
+
+
+def mount_boot_server_iso(lab_dict=None):
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    barcode = lab_dict["controller_nodes"][0]
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    cmd = "sudo chmod -R 777 /tmp/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "sudo umount /media/iso/{}; echo if we fail we ignore it".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "sudo rm -rf /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "mkdir -p /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "sudo mount -o remount,exec,dev /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "sudo rm -rf /export/pxeboot/pxelinux.cfg/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{} -t /export/pxeboot/pxelinux.cfg/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "sudo umount /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+
+    tuxlab_conn.close()
+
+    return 0, None

@@ -459,7 +459,7 @@ def pytest_addoption(parser):
     LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
 
     # Install
-    parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
+    parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
     parser.addoption('--skip', dest='skiplist', action='store',
                      help=skip_help)
@@ -469,6 +469,7 @@ def pytest_addoption(parser):
                      help=boot_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+    parser.addoption('--security', dest='security', action='store', default='standard')
     # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
@@ -632,8 +633,8 @@ def pytest_addoption(parser):
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
-    parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
-                     action='store_true', help="Restore a low-latency lab")
+    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
+                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
 
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',

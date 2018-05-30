@@ -96,41 +96,42 @@ class BootMenus:
         "wrap_around": True
     }
 
-    PXE_Boot = {
-        "name": "PXE Boot Menu",
-        "prompt": "Automatic Anaconda / Kickstart Boot Menu",
-        "wrap_around": True
-    }
+    class Kickstart:
 
-    UEFI_Boot = {
-        "name": "UEFI Boot Menu",
-        "prompt": "Automatic Anaconda / Kickstart Boot Menu",
-        "wrap_around": True
-    }
+        PXE_Boot = {
+            "name": "PXE Boot Menu",
+            "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+            "wrap_around": True
+        }
+
+        UEFI_Boot = {
+            "name": "UEFI Boot Menu",
+            "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+            "wrap_around": True
+        }
+
+        Security = {
+            "name": "PXE Security Menu",
+            "prompt": "Security Profile Enabled Boot Options",
+            "wrap_around": True
+        }
 
     class USB:
+
         Kernel = {
             "name": "kernel options",
-            "index": 0,
-            "prompt": "Select kernel options and boot kernel",
-            "options": [{'name': 'Standard Controller Configuration', 'index': 0, 'key': ['Enter', str.encode("\r\r")]},
-                        {'name': 'All-in-one Controller Configuration', 'index': 1, 'key': ['Enter', str.encode("\r\r")]},
-                        {'name': 'All-in-one (lowlatency) Controller Configuration', 'index': 2, 'key': ['Enter', str.encode("\r\r")]}],
+            "prompt": b"Select kernel options and boot kernel",
             "wrap_around": True
-    }
+        }
 
         Controller_Configuration = {
             "name": "Controller Configuration",
-            "index": 1,
-            "options": [{'name': 'Serial Console', 'index': 0, 'key': ['Enter', str.encode("\r\r")]},
-                    {'name': 'Graphical Console', 'index': 1, 'key': ['Enter', str.encode("\r\r")]}],
+            "prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
+            "index": 0,
             "wrap_around": True
-        },
+        }
 
         Serial_Console = {
             "name": "Serial Console",
-            "index": 2,
-            "options": [{'name': 'STANDARD Security Boot Profile', 'index': 0, 'key': ['Enter', str.encode("\r\r")]},
-                    {'name': 'EXTENDED Security Boot Profile', 'index': 1, 'key': ['Enter', str.encode("\r\r")]}],
             "wrap_around": True
         }

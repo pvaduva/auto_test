@@ -102,14 +102,25 @@ class InstallVars:
                          iso_path=None,
                          controller0_ceph_mon_device=None,
                          controller1_ceph_mon_device=None,
-                         ceph_mon_gib=None):
+                         ceph_mon_gib=None,
+                         low_latency=False,
+                         security="standard"):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
         __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH
         __files_server = files_server if files_server else __build_server
         __files_dir = files_dir if files_dir else \
             "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
-        __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
+        if iso_path is not None:
+            __iso_path = iso_path if iso_path is not '' else __host_build_dir + '/export/bootimage.iso'
+            if iso_path.find(":/") != -1:
+                iso_server = iso_path[:files_dir.find(":")]
+                __iso_path = iso_path[iso_path.find(":"):]
+            else:
+                iso_server = __build_server
+        else:
+            __iso_path = iso_path if iso_path else host_build_dir + '/export/bootimage.iso'
+            iso_server = __build_server
 
         cls.__var_dict = {
             'LAB': lab,
@@ -128,9 +139,12 @@ class InstallVars:
             'FILES_SERVER': __files_server,
             'LAB_FILES_DIR': __files_dir,
             'ISO_PATH': __iso_path,
+            'ISO_HOST': iso_server,
             # Default tuxlab for boot
             'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
-            'BOOT_TYPE': boot_type,
+            'BOOT_TYPE': boot_type.lower().strip(),
+            'LOW_LATENCY': low_latency,
+            'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
 

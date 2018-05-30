@@ -500,7 +500,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device,
-                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path):
+                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency):
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
@@ -508,7 +508,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
                                              lab_files_dir=None, build_server=BuildServerPath.DEFAULT_BUILD_SERVER,
                                              compute=None, storage=None, license_path=None, guest_image=None,
-                                             heat_templates=None)
+                                             heat_templates=None, security=security, low_latency=low_latency)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -696,7 +696,10 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  out_put_dir=out_put_dir,
                                  controller0_ceph_mon_device=controller0_ceph_mon_device,
                                  controller1_ceph_mon_device=controller1_ceph_mon_device,
-                                 ceph_mon_gib=ceph_mon_gib
+                                 ceph_mon_gib=ceph_mon_gib,
+                                 security=security,
+                                 boot_type=boot,
+                                 low_latency=low_latency
                                  )
 
 
@@ -991,7 +994,7 @@ def collect_sys_net_info(lab):
 # Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
 # Should we have the user create their own install configuration file if they want to install a lab with only 1 controller?
 def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage,
-                      license_path, guest_image, heat_templates, boot, iso_path):
+                      license_path, guest_image, heat_templates, boot, iso_path, low_latency, security):
     """
     Writes a file in ini format of the install variables
     Args:
@@ -1026,16 +1029,6 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
             files_dir = files_dir[files_dir.find(":"):]
     else:
         files_dir = None
-
-    if iso_path:
-        iso_path = iso_path if iso_path is not '' else host_build_dir + '/export/bootimage.iso'
-        if iso_path.find(":/") != -1:
-            iso_server = iso_path[:files_dir.find(":/")]
-            iso_path = iso_path[iso_path.find(":"):]
-        else:
-            iso_server = __build_server
-    else:
-        iso_path = iso_path if iso_path else host_build_dir + '/export/bootimage.iso'
 
     # Get lab info
     if files_server and files_dir:
@@ -1240,3 +1233,24 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
             return 2, err_msg
     else:
         return 0, output
+
+
+def setup_networking(controller0):
+    nic_interface = controller0.host_nic
+    if not controller0.telnet_conn:
+        controller0.telnet_conn = TelnetClient(host=controller0.telnet_ip, port=int(controller0.telnet_port))
+        controller0.telnet_conn.send("\r\n")
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip addr add {}/23 dev {}".format(controller0.telnet_conn.password,
+                                                                                      controller0.host_ip,
+                                                                                       nic_interface))
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip link set dev {} up".format(controller0.telnet_conn.password,
+                                                                                      nic_interface))
+    time.sleep(2)
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S route add default gw 128.224.150.1".format(
+        controller0.telnet_conn.password))
+    ping = network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
+    if not ping:
+        time.sleep(120)
+        network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
+
+    return 0

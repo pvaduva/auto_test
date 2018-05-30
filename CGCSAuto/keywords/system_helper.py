@@ -2158,7 +2158,7 @@ def get_hosts_by_personality(con_ssh=None, source_admin=False):
 
     """
     source_cred = Tenant.ADMIN if source_admin else None
-    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_openrc_=source_cred))
+    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_openrc=source_cred))
     controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
     computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
     storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')

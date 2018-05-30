@@ -23,7 +23,7 @@ def pytest_configure(config):
 
     setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None, wipedisk=False,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None,
-                              boot="pxe", iso_path=None)
+                              boot="pxe", iso_path=None, security="standard", low_latency=low_latency)
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path,
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)
 

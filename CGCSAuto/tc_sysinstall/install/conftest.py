@@ -19,7 +19,7 @@ def install_setup():
     lab = InstallVars.get_install_var("LAB")
     lab_type = lab["system_mode"]
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
-
+    skip_feed = InstallVars.get_install_var("SKIP_FEED")
     con_ssh = setup_tis_ssh(lab)
     active_con_name = "controller-0"
     active_con = lab[active_con_name]
@@ -38,7 +38,7 @@ def install_setup():
             license_path = license_paths[0]
         InstallVars.set_install_var(license=license_path)
 
-    if InstallVars.get_install_var("SKIP_FEED"):
+    if skip_feed:
 
         if InstallVars.get_install_var("TIS_BUILD_DIR") == BuildServerPath.DEFAULT_HOST_BUILD_PATH:
             host_build_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[system_version]
@@ -79,6 +79,21 @@ def install_setup():
         file_server['ssh_conn'] = bld_server_conn
         file_server_obj = Server(**file_server)
 
+    # TODO: support a server that isn't one of the build servers
+    iso_host = InstallVars.get_install_var("ISO_HOST")
+    if iso_host == bld_server["name"]:
+        iso_host_obj = bld_server_obj
+    else:
+        iso_host = get_build_server_info(iso_host)
+        iso_host["prompt"] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', iso_host['name'])
+        iso_host_conn = SSHClient(iso_host['name'], user=SvcCgcsAuto.USER,
+                                     password=SvcCgcsAuto.PASSWORD, initial_prompt=iso_host['prompt'])
+        iso_host_conn.connect()
+        iso_host_conn.set_prompt(bld_server['prompt'])
+        iso_host_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
+        iso_host['ssh_conn'] = bld_server_conn
+        iso_host_obj = Server(**iso_host)
+
     servers = {
                "build": bld_server_obj,
                "lab_files": file_server_obj
@@ -91,39 +106,34 @@ def install_setup():
     paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),
              "license": InstallVars.get_install_var("LICENSE")}
 
-    skips = {"lab_setup": InstallVars.get_install_var("SKIP_LABSETUP"),
-             "feed": InstallVars.get_install_var("SKIP_FEED"),
-             "pxebootcfg": InstallVars.get_install_var("SKIP_PXEBOOTCFG"),
-             "boot_type": InstallVars.get_install_var("BOOT_TYPE")}
-
+    boot = {"boot_type": InstallVars.get_install_var("BOOT_TYPE"),
+            "security": InstallVars.get_install_var("SECURITY"),
+            "low_latency": InstallVars.get_install_var("LOW_LATENCY")}
 
     _install_setup = {"lab": lab,
                       "servers": servers,
                       "directories": directories,
                       "paths": paths,
-                      "skips": skips,
+                      "boot": boot,
+                      "skip_labsetup": InstallVars.get_install_var("SKIP_LABSETUP"),
                       "active_controller": active_con}
 
     bld_srv = servers["build"]
 
-    LOG.info("Setting up {} boot".format(skips["boot_type"]))
-    if "pxe" in skips["boot_type"] and not skips["feed"]:
+    LOG.info("Setting up {} boot".format(boot["boot_type"]))
+    if "pxe" in boot["boot_type"] and not skip_feed:
         load_path = directories["build"]
-        install_helper.set_network_boot_feed(bld_srv.ssh_conn, load_path), "Failed to setup network boot feed"
+        install_helper.set_network_boot_feed(bld_srv.ssh_conn, load_path)
 
-    elif "burn" in skips["boot_type"]:
-        iso_path = InstallVars.get_install_var('ISO_PATH')
-        install_helper.scp_cloned_image_to_another(lab, boot_lab=False, clone_image_iso_full_path=iso_path,
-                                                   con_ssh=bld_srv.ssh_conn)
+    elif "burn" in boot["boot_type"]:
+        install_helper.burn_image_to_usb(iso_host_obj)
 
-    elif "iso" in skips["boot_type"]:
-        raise NotImplementedError("iso installs are not yet supported")
+    elif "iso" in boot["boot_type"]:
+        install_helper.rsync_image_to_boot_server(iso_host_obj)
+        install_helper.mount_boot_server_iso(lab)
 
     if InstallVars.get_install_var("WIPEDISK"):
         LOG.info("wiping disks")
         install_helper.wipe_disk_hosts(lab["hosts"])
-    if "burn" not in skips["boot_type"]:
-        LOG.info("powering off hosts ...")
-        vlm_helper.power_off_hosts(lab["hosts"])
 
     return _install_setup

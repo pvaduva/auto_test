@@ -1,10 +1,10 @@
 import pytest
 
-from keywords import host_helper, install_helper
+from keywords import host_helper, install_helper, vlm_helper
 from utils.clients.ssh import ControllerClient
-from setups import setup_tis_ssh, setup_heat
-from consts.cgcs import HostAvailState
+from setups import setup_heat, setup_networking
 from utils.tis_log import LOG
+
 
 def test_simplex_install(install_setup):
     """
@@ -24,17 +24,23 @@ def test_simplex_install(install_setup):
              - run lab setup script if specified
              - Setup heat resources
          """
-    skip_lab_setup = install_setup["skips"]["lab_setup"]
-    active_con = install_setup["active_controller"]
     lab = install_setup["lab"]
     active_controller = install_setup["active_controller"]
+    skip_labsetup = install_setup["skip_labsetup"]
     controller_name = active_controller.name
-    boot_type = install_setup["skips"]["boot_type"]
-    is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
-    usb = ('usb' in boot_type) or ('burn' in boot_type)
-    LOG.tc_step("Install Controller")
-    install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb)
+    boot_type = install_setup["boot"]["boot_type"]
 
+    LOG.tc_step("Install Controller")
+    security = install_setup["boot"]["security"]
+    usb = ('usb' in boot_type) or ('burn' in boot_type)
+    is_cpe = (lab.get('system_type', 'Standard') == 'CPE')
+    low_lat = install_setup["boot"]["low_latency"]
+    vlm_helper.power_off_hosts(lab["hosts"])
+    install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb, security=security, low_latency=low_lat)
+    if usb:
+        setup_networking(active_controller)
+
+    LOG.tc_step("Download lab files")
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     lab_files_dir = install_setup["directories"]["lab_files"]
@@ -42,7 +48,6 @@ def test_simplex_install(install_setup):
     guest_path = install_setup["paths"]["guest_img"]
     license_path = install_setup["paths"]["license"]
 
-    LOG.tc_step("Download lab files")
     LOG.info("Downloading lab config files")
     install_helper.download_lab_config_files(lab, lab_files_server, load_path, custom_path=lab_files_dir)
     LOG.info("Downloading heat templates")
@@ -54,18 +59,18 @@ def test_simplex_install(install_setup):
 
     LOG.tc_step("Configure controller")
     rc, output = install_helper.controller_system_config(active_controller, telnet_conn=active_controller.telnet_conn)
-    host_helper.wait_for_hosts_states(controller_name, availability=HostAvailState.ONLINE,
-                                      use_telnet=True, con_telnet=active_controller.telnet_conn)
+    LOG.info("running lab setup for simplex lab")
+    install_helper.run_lab_setup()
     LOG.info("unlocking {}".format(controller_name))
     install_helper.unlock_controller(controller_name, con_ssh=active_controller.ssh_conn)
 
-    if not skip_lab_setup:
+    if not skip_labsetup:
         LOG.tc_step("Run lab setup for simplex lab")
         install_helper.run_lab_setup()
         install_helper.run_lab_setup()
     else:
         LOG.info("--skip_lab_setup specified. Skipping lab setup")
-    host_helper.wait_for_hosts_ready(active_con.name)
+    host_helper.wait_for_hosts_ready(controller_name)
     LOG.tc_step("Check heat resources")
     setup_heat()
     host_helper.wait_for_hosts_ready(["controller-0"])
