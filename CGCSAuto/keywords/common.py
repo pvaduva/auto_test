@@ -31,7 +31,7 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
         source_server = SvcCgcsAuto.SERVER
         source_user = SvcCgcsAuto.USER
         source_password = SvcCgcsAuto.PASSWORD
-        dest_path = dest_dir if not dest_name else '{}/{}'.format(dest_dir, dest_name)
+        dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
         LOG.info('Check if file already exists on TiS')
         if con_ssh.file_exists(file_path=dest_path):
             LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
@@ -69,7 +69,7 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
     if dest_name is None:
         dest_name = source_path.split(sep='/')[-1]
 
-    dest_path = dest_dir if not dest_name else dest_dir + dest_name
+    dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
 
     LOG.info('Check if file already exists on TiS')
     if con_ssh.file_exists(file_path=dest_path):
@@ -128,14 +128,14 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     source_user = SvcCgcsAuto.USER
     source_password = SvcCgcsAuto.PASSWORD
 
-    _scp_from_remote_server_to_active_controller(source_server=source_server,
-                                                 source_path=source_path,
-                                                 dest_dir=dest_dir,
-                                                 dest_name=dest_name,
-                                                 source_user=source_user,
-                                                 source_password=source_password,
-                                                 timeout=timeout,
-                                                 con_ssh=con_ssh)
+    return _scp_from_remote_server_to_active_controller(source_server=source_server,
+                                                        source_path=source_path,
+                                                        dest_dir=dest_dir,
+                                                        dest_name=dest_name,
+                                                        source_user=source_user,
+                                                        source_password=source_password,
+                                                        timeout=timeout,
+                                                        con_ssh=con_ssh)
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
@@ -163,7 +163,7 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     dest_user = SvcCgcsAuto.USER
     dest_password = SvcCgcsAuto.PASSWORD
 
-    dest_path = dest_dir if not dest_name else dest_dir + dest_name
+    dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
 
     scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
         dir_option, source_path, dest_user, dest_server, dest_path)

@@ -3320,7 +3320,7 @@ def get_host_co_processor_pci_list(hostname):
             pci_address = ("0000:{}".format(pdev_line.split(sep=' "', maxsplit=1)[0]))
             pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
             # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
-            class_id = ('00000' + class_id)[-6:]
+            class_id = (class_id + '000000')[0:6]
 
             LOG.info("pci_name={} device_id={}".format(pci_name, device_id))
             pci_info = {'pci_address': pci_address,
