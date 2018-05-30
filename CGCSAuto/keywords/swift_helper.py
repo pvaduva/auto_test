@@ -10,7 +10,7 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-# TODO: Any usage of localfile to upload/create objects needs to be updated to adapt to remote_cli case.
+# TODO: Any usage of localfile to upload/create objects need to be updated to adapt to remote_cli case.
 
 
 def upload_objects(container, file_or_directory, segment_size=None, segment_container=None, leave_segments=False,
@@ -82,7 +82,7 @@ def upload_objects(container, file_or_directory, segment_size=None, segment_cont
         if fail_ok:
             return rc, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def delete_objects(container=None, objects=None, delete_all=False, leave_segments=False, header=None,
@@ -124,7 +124,7 @@ def delete_objects(container=None, objects=None, delete_all=False, leave_segment
             if fail_ok:
                 return rc, msg
             else:
-                raise exceptions.SWiftError(msg)
+                raise exceptions.SwiftError(msg)
     else:
         if leave_segments:
             args_ += " --leave-segments"
@@ -161,7 +161,7 @@ def delete_objects(container=None, objects=None, delete_all=False, leave_segment
                     if fail_ok:
                         return 2, msg
                     else:
-                        raise exceptions.SWiftError(msg)
+                        raise exceptions.SwiftError(msg)
 
                 else:
                     return 0, "Container {} deleted successfully".format(container)
@@ -171,7 +171,7 @@ def delete_objects(container=None, objects=None, delete_all=False, leave_segment
             if fail_ok:
                 return rc, msg
             else:
-                raise exceptions.SWiftError(msg)
+                raise exceptions.SwiftError(msg)
 
 
 def delete_swift_container(container, con_ssh=None, fail_ok=False):
@@ -211,7 +211,7 @@ def create_swift_container(container, con_ssh=None, fail_ok=False):
         if fail_ok:
             return 1, None
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
     try:
         cli.swift('post', container, ssh_client=con_ssh)
 
@@ -227,7 +227,7 @@ def create_swift_container(container, con_ssh=None, fail_ok=False):
             LOG.warning(msg)
             return 2, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def post(container=None, object_=None, read_acl=None, write_acl=None, sync_to=None, sync_key=None,
@@ -284,7 +284,7 @@ def post(container=None, object_=None, read_acl=None, write_acl=None, sync_to=No
         if fail_ok:
             return rc, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def copy(container=None, object_=None, dest_container=None, dest_object=None, fresh_metadata=False,
@@ -349,7 +349,7 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
         if fail_ok:
             return rc, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def get_swift_containers(con_ssh=None, fail_ok=False):
@@ -481,7 +481,7 @@ def download_objects(container=None, objects=None, download_all=False, out_file=
             if fail_ok:
                 return rc, [], msg
             else:
-                raise exceptions.SWiftError(msg)
+                raise exceptions.SwiftError(msg)
 
 
 def get_swift_public_url():

@@ -31,7 +31,7 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
         source_server = SvcCgcsAuto.SERVER
         source_user = SvcCgcsAuto.USER
         source_password = SvcCgcsAuto.PASSWORD
-        dest_path = dest_dir if not dest_name else '{}/{}'.format(dest_dir, dest_name)
+        dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
         LOG.info('Check if file already exists on TiS')
         if con_ssh.file_exists(file_path=dest_path):
             LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
@@ -45,6 +45,66 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
         LOG.info("Copy file from test server to active controller")
         return scp_from_test_server_to_active_controller(source_path=source_path, dest_dir=dest_dir,
                                                          dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
+
+
+def _scp_from_remote_server_to_active_controller(source_server, source_path, dest_dir, dest_name=None,
+                                                 source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
+                                                 timeout=900, con_ssh=None):
+    """
+    SCP file or files under a directory from remote server to TiS server
+
+    Args:
+        source_path (str): remote server file path or directory path
+        dest_dir (str): destination directory. should end with '/'
+        dest_name (str): destination file name if not dir
+        timeout (int):
+        con_ssh:
+
+    Returns (str|None): destination file/dir path if scp successful else None
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if dest_name is None:
+        dest_name = source_path.split(sep='/')[-1]
+
+    dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
+
+    LOG.info('Check if file already exists on TiS')
+    if con_ssh.file_exists(file_path=dest_path):
+        LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+        return dest_path
+
+    LOG.info('Create destination directory on tis server if not already exists')
+    cmd = 'mkdir -p {}'.format(dest_dir)
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
+        LOG.info('VBox detected, performing intermediate scp')
+
+        nat_dest_path = '/tmp/{}'.format(dest_name)
+        nat_ssh = NATBoxClient.get_natbox_client()
+
+        if not nat_ssh.file_exists(nat_dest_path):
+            LOG.info("scp file from {} to NatBox: {}".format(nat_name, source_server))
+            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
+                                dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout)
+
+        LOG.info('scp file from natbox {} to active controller'.format(nat_name))
+        dest_user = HostLinuxCreds.get_user()
+        dest_pswd = HostLinuxCreds.get_password()
+        dest_ip = ProjVar.get_var('LAB').get('floating ip')
+        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
+                              dest_password=dest_pswd, timeout=timeout)
+
+    else:   # if not a VBox lab, scp from remote server directly to TiS server
+        LOG.info("scp file(s) from {} to tis".format(source_server))
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
+                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
+
+    return dest_path
 
 
 def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
@@ -68,45 +128,14 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     source_user = SvcCgcsAuto.USER
     source_password = SvcCgcsAuto.PASSWORD
 
-    if dest_name is None:
-        dest_name = source_path.split(sep='/')[-1]
-
-    dest_path = dest_dir if not dest_name else dest_dir + dest_name
-
-    LOG.info('Check if file already exists on TiS')
-    if con_ssh.file_exists(file_path=dest_path):
-        LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
-        return dest_path
-
-    LOG.info('Create destination directory on tis server if not already exists')
-    cmd = 'mkdir -p {}'.format(dest_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    nat_name = ProjVar.get_var('NATBOX').get('name')
-    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
-        LOG.info('VBox detected, performing intermediate scp')
-
-        nat_dest_path = '/tmp/{}'.format(dest_name)
-        nat_ssh = NATBoxClient.get_natbox_client()
-
-        if not nat_ssh.file_exists(nat_dest_path):
-            LOG.info("scp file from test server to NatBox: {}".format(nat_name))
-            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                                dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout)
-
-        LOG.info('scp file from natbox {} to active controller'.format(nat_name))
-        dest_user = HostLinuxCreds.get_user()
-        dest_pswd = HostLinuxCreds.get_password()
-        dest_ip = ProjVar.get_var('LAB').get('floating ip')
-        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
-                              dest_password=dest_pswd, timeout=timeout)
-
-    else:   # if not a VBox lab, scp from test server directly to TiS server
-        LOG.info("scp file(s) from test server to tis server")
-        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
-
-    return dest_path
+    return _scp_from_remote_server_to_active_controller(source_server=source_server,
+                                                        source_path=source_path,
+                                                        dest_dir=dest_dir,
+                                                        dest_name=dest_name,
+                                                        source_user=source_user,
+                                                        source_password=source_password,
+                                                        timeout=timeout,
+                                                        con_ssh=con_ssh)
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
@@ -134,7 +163,7 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     dest_user = SvcCgcsAuto.USER
     dest_password = SvcCgcsAuto.PASSWORD
 
-    dest_path = dest_dir if not dest_name else dest_dir + dest_name
+    dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
 
     scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
         dir_option, source_path, dest_user, dest_server, dest_path)
@@ -157,9 +186,9 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     return dest_path
 
 
-def scp_to_active_controller(source_path, dest_path='',
-                             dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                             timeout=900, is_dir=False):
+def scp_from_localhost_to_active_controller(source_path, dest_path='',
+                                            dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
+                                            timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -168,9 +197,9 @@ def scp_to_active_controller(source_path, dest_path='',
                           timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_active_controller(source_path, dest_path='',
-                               src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
-                               timeout=900, is_dir=False):
+def scp_from_active_controller_to_localhost(source_path, dest_path='',
+                                            src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
+                                            timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -268,7 +297,7 @@ def get_tenant_name(auth_info=None):
 def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
                        telnet_session=None):
     """
-    ssh to a external node from sshclient.
+    ssh to a exterbal node from sshclient.
 
     Args:
         host (str|None): hostname or ip address of remote node to ssh to.

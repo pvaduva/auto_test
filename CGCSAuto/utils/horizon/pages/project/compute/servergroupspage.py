@@ -66,5 +66,3 @@ class ServerGroupsPage(basepage.BasePage):
     def get_server_group_info(self, name, header):
         row = self._get_row_with_server_group_name(name)
         return row.cells[header].text
-
-

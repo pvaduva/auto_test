@@ -71,7 +71,7 @@ def download_upgrade_license(lab, server, license_path):
                                   dest_user=lab['local_user'], dest_password=lab['local_password'],
                                   pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
                                             dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
 
             # server.ssh_conn.rsync("-L " + license_path, external_ip,
@@ -111,7 +111,7 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
                                   dest_user=lab['local_user'], dest_password=lab['local_password'],
                                   pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, "{}.lic".format(dest_name)),
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "{}.lic".format(dest_name)),
                                             dest_path=os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name)))
 
             # server.ssh_conn.rsync("-L " + license_path, external_ip,
@@ -152,7 +152,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
             server.ssh_conn.rsync(iso_file_path, local_ip,
                                   os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
                                             dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
 
     else:
@@ -545,7 +545,7 @@ def download_image(lab, server, guest_path):
                               dest_user=lab['local_user'],
                               dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, image_file),
                                         dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
@@ -3278,10 +3278,10 @@ def install_node(node_obj, boot_device_dict, small_footprint=False, low_latency=
     enter_bios_option(node_obj, bios_option)
     if "hp" not in node_obj.host_name and "ml350" not in node_obj.host_name:
         boot_device_menu = menu.BootDeviceMenu()
-        select_boot_device(node_obj, boot_device_menu, boot_device_dict)
+        select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb)
     if node_obj.name == "controller-0":
         select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-                              security=security)
+                              security=security, usb=usb)
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
     LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
 

@@ -79,27 +79,32 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
     raise exceptions.HeatError(err_msg)
 
 
-def get_stacks(name=None, con_ssh=None, auth_info=None):
+def get_stacks(name=None, con_ssh=None, auth_info=None, all_=True):
     """
     Get the stacks list based on name if given for a given tenant.
 
     Args:
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        all_ (bool): whether to display all stacks for admin user
         name (str): Given name for the heat stack
 
     Returns (str): Heat stack id of a specific tenant.
 
     """
-
-    table_ = table_parser.table(cli.heat('stack-list', ssh_client=con_ssh, auth_info=auth_info))
+    args = ''
+    if auth_info is not None:
+        if auth_info['user'] == 'admin' and all_:
+            args = '--a'
+    table_ = table_parser.table(cli.openstack('stack list', positional_args=args, ssh_client=con_ssh,
+                                              auth_info=auth_info))
     if name is not None:
         return table_parser.get_values(table_, 'id', stack_name=name)
     else:
         return table_parser.get_column(table_, 'id')
 
 
-def get_stack_status(stack_name, con_ssh=None, auth_info=None):
+def get_stack_status(stack_name, con_ssh=None, auth_info=None, all_=True):
     """
     Get the stacks status based on name if given for a given tenant.
 
@@ -107,13 +112,35 @@ def get_stack_status(stack_name, con_ssh=None, auth_info=None):
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         stack_name (str): Given name for the heat stack
+        all_ (bool): Whether to list all stacks for admin user
 
     Returns (str): Heat stack status of a specific tenant.
 
     """
-
-    table_ = table_parser.table(cli.heat('stack-list', ssh_client=con_ssh, auth_info=auth_info))
+    args = ''
+    if auth_info is not None:
+        if auth_info['user'] == 'admin' and all_:
+            args = '--a'
+    table_ = table_parser.table(cli.openstack('stack list', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'stack_status', stack_name=stack_name)
+
+
+def get_stack_resources(stack, rtn_val='resource_name', auth_info=None, con_ssh=None, **kwargs):
+    """
+
+    Args:
+        stack (str): id (or name) for the heat stack. ID is required if admin user is used to display tenant resource.
+        rtn_val: values to return
+        auth_info:
+        con_ssh:
+        kwargs: key/value pair to filer out the values to return
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('stack resource list --long', stack, auth_info=auth_info,
+                                              ssh_client=con_ssh))
+    return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
 
 
 def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, auth_info=None):

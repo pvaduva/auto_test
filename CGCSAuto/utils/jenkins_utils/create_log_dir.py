@@ -28,11 +28,10 @@ def create_test_log_dir(testname, logs_dir=None):
     if not logs_dir.endswith('/'):
         logs_dir += '/'
 
-    session_dir = logs_dir + "AUTOMATION_LOGS/" + testname + strftime('%Y%m%d%H%M')
+    session_dir = logs_dir + "AUTOMATION_LOGS/" + testname + '/' + strftime('%Y%m%d%H%M')
     os.makedirs(session_dir, exist_ok=True)
 
     return session_dir
-
 
 if __name__ == '__main__':
     parser = OptionParser()

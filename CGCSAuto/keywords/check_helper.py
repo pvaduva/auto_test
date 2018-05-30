@@ -10,6 +10,8 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
+from utils.rest import Rest
+from utils.clients.local import RemoteCLIClient
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from testfixtures.fixture_resources import ResourceCleanup
@@ -95,10 +97,10 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     assert expt_vcpus_all == actual_vcpus, "Actual min/current/max vcpus in nova show: {}; Expected: {}".\
         format(actual_vcpus, expt_vcpus_all)
 
-    log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
-
     if vm_host is None:
         vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+
+    log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
     if numa_num is None:
         numa_num = 1
@@ -579,14 +581,14 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
     """
     Check the files on vm after specified action. This is to check the disks in the basic nova matrix table.
     Args:
-        vm_id (str): 
+        vm_id (str):
         storage_backing (str): local_image, local_lvm, or remote
         root (int): root disk size in flavor. e.g., 2, 5
-        ephemeral (int): e.g., 0, 1 
+        ephemeral (int): e.g., 0, 1
         swap (int): e.g., 0, 512
-        vm_type (str): image, volume, image_with_vol, vol_with_vol 
-        file_paths (list): list of file paths to check 
-        content (str): content of the files (assume all files have the same content) 
+        vm_type (str): image, volume, image_with_vol, vol_with_vol
+        file_paths (list): list of file paths to check
+        content (str): content of the files (assume all files have the same content)
         vm_action (str|None): live_migrate, cold_migrate, resize, evacuate, None (expect no data loss)
         prev_host (None|str): vm host prior to vm_action. This is used to check if vm host has changed when needed.
         post_host (None|str): vm host after vm_action.
@@ -821,3 +823,18 @@ def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
             output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
             assert 'error' not in output.lower(), "cpa_sample_code test failed"
             LOG.info("cpa_sample_code test completed successfully")
+
+
+def check_rest_api():
+    LOG.info("Check sysinv REST API")
+    sysinv_rest = Rest('sysinv')
+    resource = '/controller_fs'
+    status_code, text = sysinv_rest.get(resource=resource, auth=True)
+    message = "Retrieved: status_code: {} message: {}"
+    LOG.debug(message.format(status_code, text))
+
+    LOG.info("Check status_code of 200 is received")
+    message = "Expected status_code of 200 - received {} and message {}"
+    assert status_code == 200, message.format(status_code, text)
+
+    # TODO: Test other services besides sysinv.

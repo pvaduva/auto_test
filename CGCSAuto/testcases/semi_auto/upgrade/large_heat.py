@@ -35,6 +35,15 @@ def pre_check(request):
     network_helper.update_quotas(network=100)
     vm_helper.ensure_vms_quotas(cores_num=100, vols_num=100, vms_num=100)
 
+    def list_status():
+        LOG.fixture_step("Listing heat resources and nova migrations")
+        stacks = heat_helper.get_stacks(auth_info=Tenant.ADMIN)
+        for stack in stacks:
+            heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.ADMIN)
+
+        nova_helper.get_migration_list_table()
+    request.addfinalizer(list_status)
+
 
 def _get_large_heat(con_ssh=None):
     """
@@ -116,7 +125,20 @@ def launch_heat_stack():
     heat_helper.create_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, params_string=large_heat_params, cleanup=None)
 
 
+def check_server_group_vms_hosts(server_grp_id):
+    policies, metadata, members = nova_helper.get_server_group_info(group_id=server_grp_id,
+                                                                    headers=('Policies', 'Metadata', 'Members'))
+    vm_hosts = []
+    if members:
+        best_effort = str(metadata['wrs-sg:best_effort']).lower()
+        best_effort = False if 'false' in best_effort else True
+        vm_hosts = check_vm_hosts(vms=members, policy=policies[0], best_effort=best_effort)
+
+    return vm_hosts
+
+
 def check_vm_hosts(vms, policy='affinity', best_effort=False):
+    LOG.tc_step("Check hosts for {} vms with best_effort={}".format(policy, best_effort))
     vm_hosts = []
     for vm in vms:
         vm_host = nova_helper.get_vm_host(vm_id=vm)
@@ -174,31 +196,29 @@ def test_heat_stack_update():
 def test_migrate_anti_affinity_vms():
     """
     cold-migrate and live-migrate vms from anti-affinity group
-    It will check if the heat stack is launched already if not it will launche the stack
+    It will check if the heat stack is launched already if not it will launch the stack
     find the vms in anti-affinity group and will do cold and live migration
 
     """
     # First make sure heat stack is there:
     launch_heat_stack()
 
-    server_group_ids = nova_helper.get_server_groups(policies='anti-affinity', best_effort=False)
-    if not server_group_ids:
-        skip("There are no anti-affinity server groups configured in the system")
-
-    members = []
-    for server_grp_id in server_group_ids:
-        members = nova_helper.get_server_group_info(group_id=server_grp_id, header='Members')
-        if members:
+    srv_grps_info = nova_helper.get_server_groups_info(headers=('Policies', 'Metadata', 'Members'))
+    vms = []
+    for group in srv_grps_info:
+        policies, metadata, members = srv_grps_info[group]
+        if members and 'anti-affinity' in policies and metadata['wrs-sg:best_effort'] == 'false':
+            vms = members
             break
     else:
-        skip("There are no vms in any anti-affinity server group")
+        skip("There are no VMs in anti-affinity server group")
 
-    check_vm_hosts(vms=members, policy='anti_affinity')
-    for vm_id in members:
+    check_vm_hosts(vms=vms, policy='anti_affinity')
+    for vm_id in vms:
         vm_helper.wait_for_vm_status(vm_id=vm_id, check_interval=10)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
         vm_helper.live_migrate_vm(vm_id=vm_id)
         vm_helper.cold_migrate_vm(vm_id=vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
-    check_vm_hosts(vms=members, policy='anti_affinity')
+    check_vm_hosts(vms=vms, policy='anti_affinity')

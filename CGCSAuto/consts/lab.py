@@ -558,6 +558,7 @@ class Labs:
         'controller_nodes': [59865],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+
     }
 
     WP_08_12 = {
@@ -568,6 +569,7 @@ class Labs:
         'controller-1 ip': '128.224.150.190',
         'controller_nodes': [28894, 36242],
         'compute_nodes': [67712, 94178, 80778],
+
     }
 
     VBOX = {

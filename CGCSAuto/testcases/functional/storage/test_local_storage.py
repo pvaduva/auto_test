@@ -619,7 +619,7 @@ class TestLocalStorage:
 
         LOG.tc_step('Apply the storage-profile via CLI profile-import {}'.format(local_file))
         remote_file = self.get_remote_storprofile_file(local_storage_type=local_storage_type)
-        common.scp_to_active_controller(local_file, remote_file)
+        common.scp_from_localhost_to_active_controller(local_file, remote_file)
 
         rtn_code, output = self.import_storprofile_profile(profile_file=remote_file)
         assert 0 == rtn_code, 'Failed to import storage-profile'.format(remote_file)

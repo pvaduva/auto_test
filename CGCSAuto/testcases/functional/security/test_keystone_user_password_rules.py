@@ -53,6 +53,8 @@ def cleanup_users(request):
         users_to_delete = [user for user in USERS_INFO if user not in white_list]
         LOG.info('Deleting users after testing: {}\n'.format(users_to_delete))
         delete_users(users_to_delete)
+        for user in users_to_delete:
+            USERS_INFO.pop(user, None)
 
     request.addfinalizer(_cleanup_users)
 

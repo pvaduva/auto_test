@@ -48,7 +48,6 @@ REGION_MAP = {'RegionOne': '',
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
-
 class NtpPool:
     NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
     NTP_POOL_2 = '"1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org"'
@@ -59,7 +58,6 @@ class NtpPool:
     _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
     _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
     _garbage_garbage"'
-
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
@@ -104,7 +102,6 @@ class Networks:
     MGMT_IP = r'192.168.\d{3}\.\d{1,3}|192.168.[8|9]\d\.\d{1,3}'
     # external ip pattern
     EXT_IP = r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
-
     # tenant-net ip pattern such as 172.16.1.11
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # internal-net ip pattern such as 10.1.1.44
@@ -578,3 +575,14 @@ class MigStatus:
     PREPARING = 'preparing'
     PRE_MIG = 'pre-migrating'
     POST_MIG = 'post-migrating'
+    live_migrate_begin = 'instance-live-migrate-begin'
+    live_migrate_end = 'instance-live-migrated'
+    cold_migrate_begin = 'instance-cold-migrate-begin'
+    cold_migrate_end = 'instance-cold-migrated'
+    cold_migrate_confirm_begin = 'instance-cold-migrate-confirm-begin'
+    cold_migrate_confirmed = 'instance-cold-migrate-confirmed'
+
+
+class IxiaServerIP:
+    tcl_server_ip = '128.224.151.42'
+    chassis_ip = '128.224.151.109'

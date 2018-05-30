@@ -85,12 +85,14 @@ def delete_partitions_teardown(request):
                 LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
                 rc, out = partition_helper.delete_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
+                # Wait a few seconds for disk space release
                 gib_after_del = partition_helper.get_disk_info(host, device_node, "available_gib")
                 LOG.info("GIB Before: {}".format(total_free))
                 LOG.info("GIB After: {}".format(gib_after_del))
-                assert round(float(gib_after_del), 3) == round(total_free, 3), \
-                    "Expected available_gib to be {} after deletion but instead was {}".format(
-                            total_free, gib_after_del)
+                gib_after_del = float(gib_after_del)
+                offset = 1
+                assert total_free - offset <= gib_after_del <= total_free + offset, \
+                    "Expected available_gib to be {} after deletion but instead was {}".format(total_free, gib_after_del)
 
     request.addfinalizer(teardown)
 
@@ -718,6 +720,7 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
                     uuid, int(size_gib), host, device_node))
             rc, out = partition_helper.modify_partition(host, uuid, str(int(size_gib)), fail_ok=True)
             assert rc != 0, "Expected partition modification to fail and instead it succeeded"
+            LOG.info(out)
             # Only test one disk on each host
             break
 
