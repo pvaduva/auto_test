@@ -13,7 +13,7 @@ from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper
-from keywords.common import scp_to_local, scp_from_active_controller
+from keywords.common import scp_to_local, scp_from_active_controller_to_localhost
 from utils import exceptions, lab_info
 from utils import local_host
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
@@ -135,7 +135,7 @@ def _copy_pubkey():
         # copy public key to localhost
         if ProjVar.get_var('REMOTE_CLI') and con_0_ssh.file_exists(pubkey_path):
             dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'key.pub')
-            scp_from_active_controller(source_path=pubkey_path, dest_path=dest_path, timeout=60)
+            scp_from_active_controller_to_localhost(source_path=pubkey_path, dest_path=dest_path, timeout=60)
             LOG.info("Public key file copied to localhost")
 
 
@@ -960,7 +960,7 @@ def setup_remote_cli_client():
     for dir_name in ('images/', 'heat/', 'userdata/'):
         dest_path = '{}/{}'.format(ProjVar.get_var('TEMP_DIR'), dir_name)
         os.makedirs(dest_path, exist_ok=True)
-        common.scp_from_active_controller(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
-                                          dest_path=dest_path, is_dir=True)
+        common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
+                                                       dest_path=dest_path, is_dir=True)
 
     return client

@@ -333,8 +333,8 @@ def apply_patches(lab, server, patch_dir):
                                   temp_path, dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-                common.scp_to_active_controller(temp_path,
-                                            dest_path=patch_dest_dir, is_dir=True)
+                common.scp_from_localhost_to_active_controller(temp_path,
+                                                               dest_path=patch_dest_dir, is_dir=True)
 
         else:
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,

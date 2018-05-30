@@ -96,3 +96,4 @@ class BMCPath:
 class SecurityPath:
     DEFAULT_CERT_PATH = '/home/wrsroot/server-with-key.pem'
     ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'
+    CA_CERT_PATH = '/home/wrsroot/ca-cert.pem'

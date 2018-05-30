@@ -231,12 +231,12 @@ def fetch_results_from_target(target_ssh, target_host, active_con_name=None, run
     local_dest_path = '{}/cyclictest/'.format(ProjVar.get_var('LOG_DIR'))
     os.makedirs(local_dest_path, exist_ok=True)
 
-    common.scp_from_active_controller('{}/*.txt'.format(CYCLICTEST_DIR),
-                                      dest_path=local_dest_path,
-                                      src_user=user,
-                                      src_password=password,
-                                      timeout=1800,
-                                      )
+    common.scp_from_active_controller_to_localhost('{}/*.txt'.format(CYCLICTEST_DIR),
+                                                   dest_path=local_dest_path,
+                                                   src_user=user,
+                                                   src_password=password,
+                                                   timeout=1800,
+                                                   )
     local_run_log = os.path.join(local_dest_path, os.path.basename(run_log))
     assert os.path.isfile(local_run_log), 'Failed to fetch run log:{}'.format(run_log)
 

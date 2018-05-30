@@ -3139,7 +3139,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
                 f.write(' - ifup {}\n'.format(ethi_name))
 
     if not ProjVar.get_var('REMOTE_CLI'):
-        common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+        common.scp_from_localhost_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
 
     LOG.info("Userdata file created: {}".format(file_path))
     return file_path

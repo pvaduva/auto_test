@@ -69,8 +69,8 @@ def download_upgrade_license(lab, server, license_path):
                                   dest_user=lab['local_user'], dest_password=lab['local_password'],
                                   pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-                                            dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+                                                           dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
 
             # server.ssh_conn.rsync("-L " + license_path, external_ip,
             #                       os.path.join(temp_path, "upgrade_license.lic"),
@@ -110,8 +110,8 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
             server.ssh_conn.rsync(iso_file_path, local_ip,
                                   os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
-                                            dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
+                                                           dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
 
     else:
         server.ssh_conn.rsync(iso_file_path,
@@ -515,8 +515,8 @@ def download_image(lab, server, guest_path):
                               dest_user=lab['local_user'],
                               dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-            common.scp_to_active_controller(source_path=os.path.join(temp_path, image_file),
-                                        dest_path=TiSPath.IMAGES)
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, image_file),
+                                                           dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
                               lab['controller-0 ip'],

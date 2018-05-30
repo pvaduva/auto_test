@@ -47,12 +47,14 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
                                                          dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
 
 
-def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+def _scp_from_remote_server_to_active_controller(source_server, source_path, dest_dir, dest_name=None,
+                                                 source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
+                                                 timeout=900, con_ssh=None):
     """
-    SCP file or files under a directory from test server to TiS server
+    SCP file or files under a directory from remote server to TiS server
 
     Args:
-        source_path (str): test server file path or directory path
+        source_path (str): remote server file path or directory path
         dest_dir (str): destination directory. should end with '/'
         dest_name (str): destination file name if not dir
         timeout (int):
@@ -63,10 +65,6 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-
-    source_server = SvcCgcsAuto.SERVER
-    source_user = SvcCgcsAuto.USER
-    source_password = SvcCgcsAuto.PASSWORD
 
     if dest_name is None:
         dest_name = source_path.split(sep='/')[-1]
@@ -90,7 +88,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         nat_ssh = NATBoxClient.get_natbox_client()
 
         if not nat_ssh.file_exists(nat_dest_path):
-            LOG.info("scp file from test server to NatBox: {}".format(nat_name))
+            LOG.info("scp file from {} to NatBox: {}".format(nat_name, source_server))
             nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
                                 dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout)
 
@@ -101,12 +99,43 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
                               dest_password=dest_pswd, timeout=timeout)
 
-    else:   # if not a VBox lab, scp from test server directly to TiS server
-        LOG.info("scp file(s) from test server to tis server")
+    else:   # if not a VBox lab, scp from remote server directly to TiS server
+        LOG.info("scp file(s) from {} to tis".format(source_server))
         con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
                             dest_path=dest_path, source_pswd=source_password, timeout=timeout)
 
     return dest_path
+
+
+def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+    """
+    SCP file or files under a directory from test server to TiS server
+
+    Args:
+        source_path (str): test server file path or directory path
+        dest_dir (str): destination directory. should end with '/'
+        dest_name (str): destination file name if not dir
+        timeout (int):
+        con_ssh:
+
+    Returns (str|None): destination file/dir path if scp successful else None
+
+    """
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    source_server = SvcCgcsAuto.SERVER
+    source_user = SvcCgcsAuto.USER
+    source_password = SvcCgcsAuto.PASSWORD
+
+    _scp_from_remote_server_to_active_controller(source_server=source_server,
+                                                 source_path=source_path,
+                                                 dest_dir=dest_dir,
+                                                 dest_name=dest_name,
+                                                 source_user=source_user,
+                                                 source_password=source_password,
+                                                 timeout=timeout,
+                                                 con_ssh=con_ssh)
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
@@ -157,9 +186,9 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     return dest_path
 
 
-def scp_to_active_controller(source_path, dest_path='',
-                             dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                             timeout=900, is_dir=False):
+def scp_from_localhost_to_active_controller(source_path, dest_path='',
+                                            dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
+                                            timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 
@@ -168,9 +197,9 @@ def scp_to_active_controller(source_path, dest_path='',
                           timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_active_controller(source_path, dest_path='',
-                               src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
-                               timeout=900, is_dir=False):
+def scp_from_active_controller_to_localhost(source_path, dest_path='',
+                                            src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
+                                            timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
 

@@ -10,6 +10,8 @@ import copy
 from pytest import skip
 
 from utils.tis_log import LOG
+from utils.rest import Rest
+from utils.clients.local import RemoteCLIClient
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from testfixtures.fixture_resources import ResourceCleanup
@@ -821,3 +823,18 @@ def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
             output = vm_ssh.exec_sudo_cmd('cpa_sample_code signOfLife=1', fail_ok=False, expect_timeout=timeout)[1]
             assert 'error' not in output.lower(), "cpa_sample_code test failed"
             LOG.info("cpa_sample_code test completed successfully")
+
+
+def check_rest_api():
+    LOG.info("Check sysinv REST API")
+    sysinv_rest = Rest('sysinv')
+    resource = '/controller_fs'
+    status_code, text = sysinv_rest.get(resource=resource, auth=True)
+    message = "Retrieved: status_code: {} message: {}"
+    LOG.debug(message.format(status_code, text))
+
+    LOG.info("Check status_code of 200 is received")
+    message = "Expected status_code of 200 - received {} and message {}"
+    assert status_code == 200, message.format(status_code, text)
+
+    # TODO: Test other services besides sysinv.

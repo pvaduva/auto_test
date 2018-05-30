@@ -1,16 +1,18 @@
 import random
 import re
+import os
 import time
+from pexpect import EOF
 from string import ascii_lowercase, ascii_uppercase, digits
 
-from pexpect import EOF
 from consts.auth import Tenant, HostLinuxCreds, CliAuth
 from consts.cgcs import Prompt
-from utils.clients.ssh import ControllerClient, SSHClient, SSHFromSSH
-
+from consts.proj_vars import ProjVar
+from consts.filepaths import SecurityPath, BuildServerPath, WRSROOT_HOME
 from utils.tis_log import LOG
-
+from utils.clients.ssh import ControllerClient, SSHClient, SSHFromSSH
 from keywords import system_helper, keystone_helper
+
 
 MIN_LINUX_PASSWORD_LEN = 7
 SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
@@ -1062,3 +1064,81 @@ def set_ldap_user_password(user_name, new_password, check_if_existing=True, fail
 
     return rc, output
 
+
+def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=None,
+                    search_dir=None):
+    """
+    fetch cert file from build server. scp to TiS.
+    Args:
+        cert (str): valid values: ca-cert, server-with-key
+        scp_to_local (bool): Whether to scp cert file to localhost as well.
+        con_ssh (SSHClient): active controller ssh client
+        bld_server
+        search_dir
+
+    Returns (str|None):
+        cert file path on localhost if scp_to_local=True, else cert file path on TiS system.
+        If no certificate found, return None.
+
+    """
+    valid_certs = ('ca-cert', 'server-with-key')
+    if not cert in valid_certs:
+        raise ValueError("Please set cert to one of the following: {}".format(valid_certs))
+
+    cert_name = '{}.pem'.format(cert)
+    cert_on_tis = '{}/{}'.format(WRSROOT_HOME, cert_name)
+
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    from keywords import common, host_helper
+    if not con_ssh.file_exists(cert_on_tis):
+        if not bld_server:
+            bld_server = ProjVar.get_var('BUILD_SERVER')
+        with host_helper.ssh_to_build_server(bld_srv=bld_server) as bs_ssh:
+            if not search_dir:
+                search_dir = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE,
+                                          ProjVar.get_var('JOB'),
+                                          ProjVar.get_var('BUILD_ID'),
+                                          BuildServerPath.CONFIG_LAB_REL_PATH,
+                                          'yow')
+            if not bs_ssh.file_exists(search_dir):
+                LOG.warning('{} does not exist on {}'.format(search_dir, bld_server))
+                return None
+
+            if cert == 'ca-cert':
+                search_path = '{}/cert/'.format(search_dir)
+            else:
+                lab_name = ProjVar.get_var('lab')['name'].lower().split('yow-')[-1]
+                search_path = '{}/*{}*/'.format(search_dir, lab_name)
+
+            from_server = bs_ssh.host
+            search_cmd = "find {} -type f -name '{}'".format(search_path, cert_name)
+            code, output = bs_ssh.exec_cmd(search_cmd, fail_ok=True)
+            if code !=0 or not output:
+                msg = 'failed to fetch cert-file from build server, tried path:{}, server:{}'.format(
+                        search_path, from_server)
+                LOG.warn(msg)
+                return None
+            cert_file_on_bs = output.splitlines()[0]
+
+        LOG.info('found cert-file on build server, trying to scp to current active controller\ncert-file:{}'.format(
+            cert_file_on_bs))
+        common._scp_from_remote_server_to_active_controller(source_server=from_server,
+                                                            source_path=cert_file_on_bs,
+                                                            dest_dir=WRSROOT_HOME,
+                                                            dest_name=cert_name,
+                                                            timeout=120,
+                                                            con_ssh=con_ssh)
+        assert con_ssh.file_exists(cert_on_tis), "{} does not exist after scp from build server".format(cert_on_tis)
+
+    LOG.info("Cert file is on TiS at: {}".format(cert_on_tis))
+    cert_path = cert_on_tis
+
+    if scp_to_local:
+        dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), cert_name)
+        common.scp_from_active_controller_to_localhost(source_path=cert_on_tis, dest_path=dest_path, timeout=120)
+        cert_path = dest_path
+        LOG.info("Cert file copied to {} on localhost".format(dest_path))
+
+    return cert_path

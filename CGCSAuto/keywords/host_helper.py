@@ -3208,7 +3208,7 @@ def wait_for_sm_dump_desired_states(controller, item_names=None, timeout=60, str
 
 # This is a copy from installer_helper due to blocking issues in installer_helper on importing non-exist modules
 @contextmanager
-def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+def ssh_to_build_server(bld_srv=None, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
                         prompt=None):
     """
     ssh to given build server.
@@ -3227,6 +3227,9 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
 
     """
     # Get build_server dict from bld_srv param.
+    if bld_srv is None:
+        bld_srv = DEFAULT_BUILD_SERVER
+
     if isinstance(bld_srv, str):
         for bs in BUILD_SERVERS:
             if bs['name'] in bld_srv or bs['ip'] == bld_srv:
