@@ -550,6 +550,17 @@ class Labs:
         'system_mode': 'simplex',
     }
 
+    WP_16_17 = {
+        'short_name': 'wp_16_17',
+        'name': 'yow-cgcs-wolfpass-16_17',
+        'floating ip': '128.224.150.248',
+        'controller-0 ip': '128.224.150.247',
+        'controller-1 ip': '128.224.150.251',
+        'controller_nodes': [98812, 32981],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+    }
+
     WP_08_12 = {
         'short_name': 'wp_08_12',
         'name': 'yow-cgcs-wolfpass-08_12',
