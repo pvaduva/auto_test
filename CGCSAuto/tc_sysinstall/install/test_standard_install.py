@@ -99,8 +99,6 @@ def test_standard_install(install_setup):
     # TODO: Figure out how skiplabsetup is supposed to work here
     LOG.tc_step("Run lab setup")
     install_helper.run_lab_setup()
-    # TODO: why twice?
-    LOG.tc_step("Run lab setup")
     install_helper.run_lab_setup()
     LOG.tc_step("Unlock other hosts")
     host_helper.unlock_hosts([host for host in hosts if active_con.name not in host])

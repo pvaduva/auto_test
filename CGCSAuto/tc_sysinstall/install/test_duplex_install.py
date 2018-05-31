@@ -84,8 +84,7 @@ def test_duplex_install(install_setup):
 
     LOG.tc_step("Run lab setup for CPE lab")
     install_helper.run_lab_setup()
-
-    LOG.tc_step("Run lab setup for CPE lab")
+    # TODO: Find out if necessary
     install_helper.run_lab_setup()
 
     LOG.tc_step("Boot standby controller for CPE lab")
@@ -98,8 +97,6 @@ def test_duplex_install(install_setup):
 
     LOG.tc_step("Run lab setup for CPE lab")
     install_helper.run_lab_setup()
-
-    LOG.tc_step("Run lab setup for CPE lab")
     install_helper.run_lab_setup()
 
     LOG.tc_step("Unlock standby controller for CPE lab")
