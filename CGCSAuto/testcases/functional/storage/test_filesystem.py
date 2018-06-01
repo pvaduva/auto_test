@@ -46,7 +46,7 @@ def freespace_check():
     free_space = out.rstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
     free_space = int(ast.literal_eval(free_space))
-    if free_space <= 10:
+    if free_space <= 20:
         skip("Not enough free space to complete test.")
 
 
@@ -487,6 +487,7 @@ def _test_increase_cinder():
     assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
 
 
+@mark.usefixtures("freespace_check")
 @mark.usefixtures("storage_precheck")
 def test_increase_ceph_mon():
     """
