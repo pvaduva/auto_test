@@ -1101,7 +1101,7 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     return net_ids[0]
 
 
-def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
+def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, rtn_val='id'):
     """
     Get a list of tenant network ids that match the given net_names for a specific tenant.
 
@@ -1109,6 +1109,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         net_names (str or list): list of tenant network name(s) to get id(s) for
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
+        rtn_val (str): id or name
 
     Returns (list): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
 
@@ -1122,7 +1123,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         if isinstance(net_names, str):
             net_names = [net_names]
         table_ = table_parser.filter_table(table_, name=net_names, strict=False)
-        return table_parser.get_column(table_, 'id')
+        return table_parser.get_column(table_, rtn_val)
 
 
 def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None):
