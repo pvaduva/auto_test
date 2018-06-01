@@ -370,6 +370,11 @@ class TestSharedCpuEnabled:
         if error:
             LOG.tc_step("Check vm boot fail")
             assert 1 == code, "Expect error vm. Actual result: {}".format(output)
+            LOG.tc_step("Ensure vm is in error state with expected fault message in nova show")
+            vm_helper.wait_for_vm_values(vm_id, 10, status='ERROR', fail_ok=False)
+            actual_fault = nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='fault')
+            expt_fault = 'shared vcpu with 0 requested dedicated vcpus is not allowed'
+            assert expt_fault in actual_fault, "Expected fault message mismatch"
             return
 
         LOG.tc_step("Check vm booted successfully and shared cpu indicated in vm-topology")
