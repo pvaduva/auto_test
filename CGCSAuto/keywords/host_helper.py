@@ -529,7 +529,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if swact:
         if is_active_controller(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
                 and len(system_helper.get_controllers()) > 1:
-            LOG.info("{} is active controller, swact first before attempt to lock.")
+            LOG.info("{} is active controller, swact first before attempt to lock.".format(host))
             swact_host(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
             if is_aio_dup:
                 time.sleep(90)

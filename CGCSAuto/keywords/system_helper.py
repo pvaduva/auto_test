@@ -1432,15 +1432,14 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
         return 0, "4k memory is modified to {} in pending.".format(smallpage_num)
 
 
-def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_mem_values(host, headers, proc_id, wait_for_update=True, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get host memory values
     Args:
         host (str): hostname
         headers (list):
         proc_id (int|str): such as 0, '1'
-        wait_for_avail_update (bool): wait for mem_avail to be smaller than mem_total in case host just unlocked as per
-            CGTS-7499
+        wait_for_update (bool): wait for vm_hp_pending_2M and vm_hp_pending_1G to be None (CGTS-7499)
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -1451,20 +1450,20 @@ def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_
     cmd = 'host-memory-list --nowrap'
     table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
 
-    if wait_for_avail_update:
+    if wait_for_update:
         end_time = time.time() + 300
         while time.time() < end_time:
-            total_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_total(MiB)')]
-            avail_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_avail(MiB)')]
+            pending_2m = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_2M')]
+            pending_1g = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_1G')]
 
-            for i in range(len(total_mems)):
-                if total_mems[i] <= avail_mems[i]:
+            for i in range(len(pending_2m)):
+                if pending_2m[i] or pending_1g[i]:
                     break
             else:
-                LOG.debug("mem_total is larger than mem_avail")
+                LOG.debug("No pending 2M or 1G mem pages")
                 break
 
-            LOG.info("mem_total is no larger than mem_avail, wait for mem_avail to update")
+            LOG.info("Pending 2M or 1G pages, wait for mem page to update")
             time.sleep(30)
             table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
         else:
