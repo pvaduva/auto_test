@@ -665,13 +665,22 @@ def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh
         return 1, output
 
     post_set_metadata = eval(table_parser.get_values(table_parser.table(output), 'Metadata', Id=srv_grp_id)[0])
-    for key, value in metadata_to_check.items():
-        if not post_set_metadata[key] == value:
-            msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
-            if fail_ok:
-                LOG.warning(msg)
-                return 2, msg
-            raise exceptions.NovaError(msg)
+    for key, value in metadata_to_check.copy().items():
+        if value == '':
+            if key in post_set_metadata:
+                msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
+                if fail_ok:
+                    LOG.warning(msg)
+                    return 2, msg
+                raise exceptions.NovaError(msg)
+            else:
+                metadata_to_check.pop(key) 
+        elif not post_set_metadata[key] == value:
+                msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
+                if fail_ok:
+                    LOG.warning(msg)
+                    return 2, msg
+                raise exceptions.NovaError(msg)
 
     msg = "Server group metadata successfully set: {}".format(metadata_to_check)
     LOG.info(msg)

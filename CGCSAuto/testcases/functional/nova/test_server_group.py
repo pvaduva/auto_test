@@ -6,10 +6,11 @@ from pytest import mark, skip, fixture
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
+from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, ServerGroupMetadata
 from consts.reasons import SkipHypervisor
 from consts.cli_errs import SrvGrpErr
-from keywords import nova_helper, vm_helper, system_helper
+from keywords import nova_helper, vm_helper, system_helper, keystone_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
@@ -72,16 +73,21 @@ def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=
     return flavor_id, srv_grp_msg_flv, srv_grp_id
 
 
-# TC2915 + TC2915
+# TC2915 + TC2915 + TC_6566 + TC2917
 @mark.parametrize(('srv_grp_msging', 'policy', 'group_size', 'best_effort', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((None, 'affinity', 4, None, 2)),
     mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
     mark.nightly(('srv_grp_msg_true', 'anti_affinity', 4, None, 3)),    # negative res for last vm
-    ('srv_grp_msg_true', 'affinity', 2, True, 2)
+    ('srv_grp_msg_true', 'affinity', 2, True, 2),
+    (None, 'anti_affinity', 2, True, 2),
+    (None, 'anti_affinity', 2, None, 2)
+
 ])
 def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, vms_num, check_system):
     """
     Test server group policy and messaging
+    Test live migration with anti-affinity server group (TC6566)
+    Test changing size of existing server group via CLI (TC2917)
 
     Args:
         srv_grp_msging (str): server group messaging flavor spec
@@ -105,6 +111,10 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
             - vms receive notification when other vm is paused
         - Attempt to delete the server group and make sure if fails due to having members
         - If server group messaging is off, verify server_group_app is not included in vm
+        - If server group has enough hosts, check live migration_id
+            - Try to live migrate one of the vms
+            - If anti_affinity, migration should not succeeds
+            - If affinity, migration should succeed
 
     Teardown:
         - Delete created vms, flavor, server group
@@ -118,7 +128,6 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
 
     flavor_id, srv_grp_msg_flv, srv_grp_id = create_flavor_and_server_group(storage_backing, srv_grp_msging, policy,
                                                                             group_size, best_effort)
-
     vm_hosts = []
     members = []
     failed_num = 0
@@ -127,7 +136,7 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         vms_num = 2
 
     LOG.tc_step("Boot {} vm(s) with flavor {} in server group {} and ensure they are successfully booted.".
-                format(flavor_id, srv_grp_id, vms_num))
+                format(vms_num, flavor_id, srv_grp_id))
 
     for i in range(vms_num):
         vm_id = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
@@ -184,6 +193,29 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     else:
         LOG.tc_step("Check server group message is not enabled")
         check_server_group_messaging_disabled(vms=members)
+
+    # TC2917 verified here
+    LOG.tc_step("Attempt to resize server group")
+    metadata = {}
+    metadata[ServerGroupMetadata.GROUP_SIZE] = group_size-1
+    if best_effort is not None:
+        metadata[ServerGroupMetadata.BEST_EFFORT] = best_effort
+    code, output = nova_helper.set_server_group_metadata(srv_grp_id, fail_ok=True, **metadata)
+    if len(members) < group_size:
+        assert code == 0
+    else:
+        expt_error = "Action would result in server group %(uuid)s number of members %(num)d exceeding  group size %(size)d"
+        assert code == 1, "CLI command was not rejected as expected. Exit code is {}, msg is {}".format(code, output)
+        assert expt_error in output, "Error message incorrect: expected {} in output when output is {}"\
+            .format(expt_error, output)
+
+    # TC6566 verified here
+    LOG.tc_step("Attempt to live migrate VM")
+    code, output = vm_helper.live_migrate_vm(members[0], fail_ok=True)
+    if best_effort or len(members) < 2:
+        assert code == 0, "CLI command was not successful as expected. Exit code is {}, msg is {}".format(code, output)
+    else:
+        assert code == 2, "CLI command was not rejected as expected. Exit code is {}, msg is {}".format(code, output)
 
     if srv_grp_msging:
         for vm in members:
@@ -358,5 +390,54 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
 
     # if code == 0:
     LOG.tc_step("Check vms are in server group {}: {}".format(srv_grp_id, vms))
-    members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
+    members = nova_helper.get_server_group_info(srv_grp_id, header='Members')[0]
     assert set(vms) <= set(members), "Some vms are not in srv group"
+
+
+@mark.parametrize(('policy', 'best_effort'), [
+    ('affinity', False)
+])
+def test_server_group_remove_metadata(policy, best_effort):
+    """
+    remove metadata key on server group (TC2910)
+    test display of server group project ID (TC2914)
+
+    Args:
+        policy (str): affinity or anti_affinity
+        best_effort (bool|None): best_effort flag to set
+
+    Setups:
+        - Add admin role to tenant under test (module)
+        - Add two hosts to cgcsauto zone to limit the vms on two hosts only; add one if simplex system detected (module)
+
+    Test Steps
+        - Create a server group with given server group policy, group size and best effort flag
+        - Add metadata to the group
+        - Verify:
+            - running "nova server-group-set-metadata <key>=" removes metadata
+            - that server group id is the same as primary tenant id
+
+    Teardown:
+        - Delete created server group
+        - Remove cgcsauto hosts from aggregate  (module)
+        - Remove admin role from tenant under test  (module)
+
+    """
+    LOG.tc_step("Create server group")
+    srv_grp_id = nova_helper.create_server_group(policy=policy)[1]
+    ResourceCleanup.add(resource_type='server_group', resource_id=srv_grp_id)
+
+    LOG.tc_step("Check tenant ID")
+    project_id = nova_helper.get_server_groups_info(srv_grp_id, auth_info=Tenant.ADMIN, headers='Project Id')[srv_grp_id][0]
+    tenant_id = keystone_helper.get_tenant_ids()[0]
+    assert project_id == tenant_id
+
+    # configure metadata to set
+    metadata = {}
+    metadata[ServerGroupMetadata.BEST_EFFORT] = best_effort
+    LOG.tc_step("Add server group metadata: {}".format(metadata))
+    nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
+
+    LOG.tc_step("Attempt to remove metadata and verify it was removed")
+    metadata[ServerGroupMetadata.BEST_EFFORT] = ""
+    nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
