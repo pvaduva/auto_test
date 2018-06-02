@@ -26,12 +26,13 @@ def flavor_2g(add_1g_and_4k_pages):
 
 def parse_mem_modify_error(err, origin_avail):
     current_2g_pattern = 'Max 1G pages is \d+ when 2M is (\d+)'
-    current_2g = int(re.findall(current_2g_pattern, err)[0])
+    max_2m_res = re.findall(current_2g_pattern, err)
+    assert max_2m_res, "system host-memory-modify failed with unexpected error: {}".format(err)
+    current_2g = int(max_2m_res[0])
     
     max_2m_pattern = 'Max 2M pages is (\d+) when 1G is (\d+)'
-    res = re.findall(max_2m_pattern, err)
-    assert res, "system host-memory-modify failed with unexpected error: {}".format(err)
-    max_2m, current_1g = [int(i) for i in res][0:2]
+    res = re.findall(max_2m_pattern, err)[0]
+    max_2m, current_1g = [int(i) for i in res]
     
     origin_total = int(origin_avail/2)
     current_total = max_2m + current_1g*512
