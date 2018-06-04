@@ -61,9 +61,12 @@ class HorizonDriver:
         profile.set_preference("browser.download.dir", horizon_dir)
         profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/plain,application/x-shellscript")
         # profile.update_preferences()
-
-        display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
-        display.start()
+        display = None
+        try:
+            display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
+            display.start()
+        except:
+            pass
         driver_ = webdriver.Firefox(firefox_profile=profile)
         # driver_.maximize_window()
         cls.driver_info.append((driver_, display))
@@ -75,7 +78,8 @@ class HorizonDriver:
         if cls.driver_info:
             driver_, display_ = cls.driver_info[0]
             driver_.quit()
-            display_.stop()
+            if display_:
+                display_.stop()
             cls.driver_info = []
             profile = webdriver.FirefoxProfile()
             profile.set_preference("browser.download.folderList", 1)

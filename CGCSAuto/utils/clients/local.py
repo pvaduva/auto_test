@@ -137,7 +137,7 @@ class LocalHostClient(SSHClient):
         venv_dir = _get_virtualenv_dir(venv_dir)
 
         if check_first:
-            if self.file_exists(os.path.join(venv_dir, 'bin', 'activate')):
+            if self.file_exists(os.path.join(venv_dir, venv_name, 'bin', 'activate')):
                 if activate:
                     self.activate_virtualenv(venv_name=venv_name, venv_dir=venv_dir, fail_ok=fail_ok)
                 return
