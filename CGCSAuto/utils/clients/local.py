@@ -267,7 +267,7 @@ class RemoteCLIClient:
                                     dest_path=dest_path, timeout=300)
 
             localclient.exec_cmd('cd {}; tar xvf {}.tgz'.format(dest_dir, dest_name), fail_ok=False)
-            localclient.exec_cmd('rm {}'.format(dest_path))
+            localclient.exec_cmd('rm -f {}'.format(dest_path))
             localclient.exec_cmd('mv {}* {}'.format(dest_name, dest_name))
 
             if not venv_dir:
