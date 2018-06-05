@@ -168,8 +168,13 @@ class LocalHostClient(SSHClient):
             new_prompt = '\({}\) {}'.format(venv_name, self.get_prompt())
             self.set_prompt(prompt=new_prompt)
             LOG.info('virtualenv {} activated successfully'.format(venv_name))
-        output = self.exec_cmd('pip -V')[1]
-        LOG.info("'pip -V' output: {}".format(output))
+
+        time.sleep(3)
+        code, output = self.exec_cmd('pip -V')
+        if code != 0:
+            LOG.warning('pip is not working properly. Listing env variables.')
+            all_env = self.exec_cmd('declare -p')[1]
+            LOG.info("declare -p: \n{}".format(all_env))
 
     def deactivate_virtualenv(self, venv_name, new_prompt=None):
         # determine on the new prompt
