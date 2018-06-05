@@ -22,6 +22,7 @@ import configparser
 import datetime
 import os
 import re
+import sys
 
 import pexpect
 
@@ -32,6 +33,8 @@ from utils.tis_log import LOG
 
 LOCAL_PATH = os.path.dirname(__file__)
 WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
+# WASSP_LIB = os.path.join(WASSP_PATH, '.venv_wassp', 'lib', 'python3.3', 'site-packages')
+# sys.path.append(WASSP_LIB)
 
 
 def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None, build_server=None):

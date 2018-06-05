@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import pexpect
 import glob
@@ -10,6 +11,8 @@ LOCAL_PATH = os.path.dirname(__file__)
 WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
 WASSP_REPORTER = os.path.join(WASSP_PATH, "wassp/host/tools/report/testReportManual.py")
 WASSP_PYTHON = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
+# WASSP_LIB = os.path.join(WASSP_PATH, '.venv_wassp', 'lib', 'python3.3', 'site-packages')
+# sys.path.append(WASSP_LIB)
 
 
 def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=None, skip_uploaded=True):
