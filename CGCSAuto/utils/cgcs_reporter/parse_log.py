@@ -1,6 +1,10 @@
 import re
 
 
+write_command_pattern = "^(?!.*(show|list|echo \$\?|whoami|hostname|exit|stat|ls|Send '')).*"
+test_steps_pattern = "^=+ (Setup|Test|Teardown) Step \d+"
+
+
 def _get_failed_test_names(log_dir):
     """
         Parses test_results for names of failed tests
@@ -16,7 +20,7 @@ def _get_failed_test_names(log_dir):
         failed_tests = []
 
         for line in file:
-            if re.search("^(FAIL)", line):
+            if line.startswith("FAIL"):
                 test_name = 'test_' + line.split('::test_', 1)[1].replace('\n', '')
                 failed_tests.append(test_name)
 
@@ -142,3 +146,73 @@ def get_parsed_failure(traceback, traceback_lines=10):
                     del error[1:lines_size-traceback_lines]
 
     return ''.join(error)
+
+
+def parse_test_steps(log_dir, failures_only=True):
+    """
+        Parses TIS_AUTOMATION for test steps
+
+        Args:
+            log_dir (str):          Directory the log is located
+            failures_only (bool):   True  - Parses only failed tests
+                                    False - Parses all tests
+
+    """
+    if failures_only:
+        failed_tests = _get_failed_test_names(log_dir)
+    test_found = False
+    test_steps_length = 0
+    test_steps = []
+
+    with open("{}/TIS_AUTOMATION.log".format(log_dir), 'r') as file, \
+            open("{}/test_steps.log".format(log_dir), 'w') as log:
+        for line in file:
+
+            if test_steps_length >= 1000:
+                log.write(''.join(test_steps))
+                test_steps_length = 0
+                test_steps = []
+
+            if not test_found:
+                if "Setup started for:" in line:
+                    if failures_only:
+                        split_line = line.split('::test_', 1)
+                        if len(split_line) is 2:
+                            test_name = 'test_' + split_line[1].replace('\n', '')
+                            if test_name in failed_tests:
+                                test_found = True
+                                test_steps.append(line)
+                                test_steps_length += 1
+                    else:
+                        test_found = True
+                        test_steps.append(line)
+                        test_steps_length += 1
+                continue
+
+            if ":: Send " in line:
+                if re.search(write_command_pattern, line):
+                    test_steps.append(line)
+                    test_steps_length += 1
+                continue
+
+            if " started for:" in line:
+                test_steps.append("\n" + line)
+                test_steps_length += 1
+                continue
+
+            if "***Failure at" in line:
+                test_steps.append("\n" + line)
+                test_steps_length += 1
+                continue
+
+            if re.search(test_steps_pattern, line):
+                test_steps.append(line)
+                test_steps_length += 1
+                continue
+
+            if "Test Result for:" in line:
+                test_found = False
+                test_steps.append("\n\n\n\n\n\n")
+                test_steps_length += 6
+
+        log.write(''.join(test_steps))
