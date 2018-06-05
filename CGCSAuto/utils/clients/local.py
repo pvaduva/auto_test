@@ -287,7 +287,8 @@ class RemoteCLIClient:
                 cls.__remote_cli_info['remote_cli_dir'] = remote_cli_dir
             except:
                 # Do the cleanup in case of remote cli clients install failure.
-                cls.remove_remote_cli_clients(remote_cli_dir=remote_cli_dir, venv_dir=venv_dir)
+                if not ProjVar.get_var('NO_TEARDOWN'):
+                    cls.remove_remote_cli_clients(remote_cli_dir=remote_cli_dir, venv_dir=venv_dir)
                 raise
         else:
             localclient.activate_virtualenv(venv_dir=venv_dir, venv_name=venv_name)

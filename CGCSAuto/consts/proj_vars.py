@@ -29,6 +29,7 @@ class ProjVar:
                   'RELEASE': 'R6',
                   'REMOTE_CLI': False,
                   'USER_FILE_DIR': WRSROOT_HOME,
+                  'NO_TEARDOWN': False,
                   }
 
     @classmethod

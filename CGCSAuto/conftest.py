@@ -292,6 +292,8 @@ def pytest_configure(config):
 
     global no_teardown
     no_teardown = config.getoption('noteardown')
+    if repeat_count > 0 or no_teardown:
+        ProjVar.set_var(NO_TEARDOWN=True)
     keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
     global region
