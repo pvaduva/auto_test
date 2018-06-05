@@ -34,7 +34,6 @@ def test_storage_install(install_setup):
     lab_type = lab["system_mode"]
     active_con = install_setup["active_controller"]
     boot_device = lab['boot_device_dict']
-    output_dir = ProjVar.get_var("LOG_DIR")
     threads = []
     active_controller = install_setup["active_controller"]
     controller_name = active_controller.name
@@ -129,13 +128,10 @@ def test_storage_install(install_setup):
         rc, msg = host_helper.lock_unlock_controllers()
         assert rc == 0, msg
 
-
-def test_post_install():
-    connection = ControllerClient.get_active_controller()
-
-    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0]
+    LOG.tc_step("Run post-install scripts (if any)")
+    rc = active_controller.ssh_conn.exec_cmd("test -d /home/wrsroot/postinstall/")
     if rc != 0:
-        pytest.skip("No post install directory")
+        LOG.info("no post-install directory on {}".format(active_controller.name))
     else:
         rc, msg = install_helper.post_install()
         assert rc == 0, msg

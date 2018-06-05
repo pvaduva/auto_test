@@ -18,7 +18,7 @@ from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
-from utils.clients.telnet import TelnetClient
+from utils.clients.telnet import TelnetClient, TELNET_LOGIN_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict, Node
 from utils.tis_log import LOG
 
@@ -270,7 +270,11 @@ def get_non_controller_system_hosts():
 def open_telnet_session(node_obj):
 
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
-    _telnet_conn.send("\r\n")
+    if node_obj.telnet_login_prompt:
+        _telnet_conn.send("\r\n")
+    _telnet_conn.login(fail_ok=True)
+    while _telnet_conn.expect(fail_ok=True, timeout=10) == 0:
+        pass
 
     return _telnet_conn
 
@@ -278,7 +282,6 @@ def open_telnet_session(node_obj):
 def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
     lab = InstallVars.get_install_var("LAB")
-    install_output_dir = ProjVar.get_var('LOG_DIR')
 
     LOG.info("LAB info:  {}".format(lab))
     if len(hosts) < 1:
@@ -297,7 +300,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
     if controller0_node.telnet_conn is None:
         try:
-            controller0_node.telnet_conn = open_telnet_session(controller0_node, install_output_dir)
+            controller0_node.telnet_conn = open_telnet_session(controller0_node)
             controller0_node.telnet_conn.login()
         except:
             LOG.info("Telnet Login failed. skipping wipedisk")
@@ -319,7 +322,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
                 node_obj = lab[hostname]
                 if node_obj:
 
-                    prompt = '.*{}\:~\$ ' + '|' +  Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
+                    prompt = '.*{}\:~\$ ' + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
                 else:
                     prompt = Prompt.TIS_NODE_PROMPT_BASE.format(hostname)
                 if hostname == controller0_node.name:
@@ -2140,7 +2143,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     return 0, None
 
 
-def set_network_boot_feed(bld_server_conn, load_path):
+def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     """
     Sets the network feed for controller-0 in default taxlab
     Args:
@@ -2195,6 +2198,11 @@ def set_network_boot_feed(bld_server_conn, load_path):
     tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
     tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
 
+    cfg_link = tuxlab_conn.exec_cmd("readlink pxeboot.cfg")[1]
+    if cfg_link != "pxeboot.cfg.gpt" and not skip_cfg:
+        LOG.info("Changing pxeboot.cfg symlink to pxeboot.cfg.gpt")
+        tuxlab_conn.exec_cmd("ln -s pxeboot.cfg.gpt pxeboot.cfg")
+
     # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
@@ -2243,6 +2251,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     controller0 = lab["controller-0"]
     if controller0.telnet_conn is None:
         controller0.telnet_conn = open_telnet_session(controller0)
+        controller0.telnet_conn.set_prompt(".*\$ ")
 
     boot_interfaces = lab['boot_device_dict']
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))
@@ -2279,6 +2288,12 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn.send(HostLinuxCreds.get_password())
         controller0.telnet_conn.expect(["assword:"])
         controller0.telnet_conn.send(HostLinuxCreds.get_password())
+        host_name_split = controller0.host_name.split("-")
+        if host_name_split[-1].startswith("0"):
+            host_name_split[-1] = host_name_split[-1].replace("0", "", 1)
+        host_name = '-'.join(host_name_split)
+        controller0.telnet_conn.hostname = "(" + host_name + "|localhost" + ")"
+        controller0.telnet_conn.set_prompt('{}:~\$ '.format(host_name))
         controller0.telnet_conn.expect()
     else:
         controller0.telnet_conn.login()
@@ -3031,7 +3046,6 @@ def controller_system_config(active_controller=None, telnet_conn=None, config_fi
         connection = telnet_conn
     else:
         active_controller.telnet_conn = open_telnet_session(active_controller, output_dir)
-        active_controller.telnet_conn.login()
         connection = active_controller.telnet_conn
 
     connection.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
@@ -3047,9 +3061,12 @@ def controller_system_config(active_controller=None, telnet_conn=None, config_fi
         cmd = 'echo "{}" | sudo -S config_controller --config-file {}'.format(HostLinuxCreds.get_password(), config_file)
         os.environ["TERM"] = "xterm"
         rc, output = connection.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
+        connection.set_prompt(Prompt.CONTROLLER_PROMPT)
         # TODO: doesn't return bad return code
         if rc == 0:
             LOG.info("Controller configured")
+            admin_prompt = "\[wrsroot@{} ~\(keystone_admin\)\]\$ ".format(connection.hostname)
+            connection.set_prompt(admin_prompt)
             host_helper.wait_for_hosts_states(active_controller.name,
                                               availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                               use_telnet=True, con_telnet=active_controller.telnet_conn)
@@ -3282,6 +3299,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=False, low_latency=
     if node_obj.name == "controller-0":
         select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                               security=security, usb=usb)
+    LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
     LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
 

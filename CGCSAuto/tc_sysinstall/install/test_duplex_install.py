@@ -109,13 +109,10 @@ def test_duplex_install(install_setup):
     setup_heat()
     host_helper.wait_for_hosts_ready(hosts)
 
-
-def test_post_install():
-    connection = ControllerClient.get_active_controller()
-
-    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0]
+    LOG.tc_step("Run post-install scripts (if any)")
+    rc = active_controller.ssh_conn.exec_cmd("test -d /home/wrsroot/postinstall/")
     if rc != 0:
-        pytest.skip("No post install directory")
+        LOG.info("no post-install directory on {}".format(active_controller.name))
     else:
         rc, msg = install_helper.post_install()
         assert rc == 0, msg

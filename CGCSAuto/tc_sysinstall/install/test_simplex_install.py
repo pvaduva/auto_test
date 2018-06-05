@@ -67,22 +67,18 @@ def test_simplex_install(install_setup):
     if not skip_labsetup:
         LOG.tc_step("Run lab setup for simplex lab")
         install_helper.run_lab_setup()
-        install_helper.run_lab_setup()
     else:
         LOG.info("--skip_lab_setup specified. Skipping lab setup")
     host_helper.wait_for_hosts_ready(controller_name)
+
     LOG.tc_step("Check heat resources")
     setup_heat()
     host_helper.wait_for_hosts_ready(["controller-0"])
-    # TODO: double check if it's installed as simplex
 
-
-def test_post_install():
-    connection = ControllerClient.get_active_controller()
-
-    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0]
+    LOG.tc_step("Run post-install scripts (if any)")
+    rc = active_controller.ssh_conn.exec_cmd("test -d /home/wrsroot/postinstall/")
     if rc != 0:
-        pytest.skip("No post install directory")
+        LOG.info("no post-install directory on {}".format(active_controller.name))
     else:
         rc, msg = install_helper.post_install()
         assert rc == 0, msg

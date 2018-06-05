@@ -39,10 +39,9 @@ class TelnetClient(Telnet):
         self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
         # newlines for: login_prompt, port message
-        self.send('\r\n\r\n\r\n')
         if not prompt and not hostname:
-            # TODO: temporary fix
-            prompt = ".*\$ "
+            prompt = ':~\$ '
+            self.send('\r\n\r\n')
             index = self.expect(TELNET_REGEX, fail_ok=True)
             if index == 0:
                 hostname = re.search(TELNET_REGEX, self.cmd_output).group(1)
@@ -129,6 +128,7 @@ class TelnetClient(Telnet):
             self.logger.info("Send: {}".format(cmd))
 
         self.cmd_sent = cmd
+        LOG.debug("cmd sent: {}".format(self.cmd_sent))
         if not cmd.endswith('\n'):
             cmd = '{}\n'.format(cmd)
         # self.set_debuglevel(2)
@@ -242,8 +242,9 @@ class TelnetClient(Telnet):
         return
 
     def _process_exec_result(self, cmd, rm_date=False, get_exit_code=True):
-
+        LOG.debug("cmd output: {}".format(self.cmd_output))
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
+        LOG.debug("cmd output list: {}".format(cmd_output_list))
         # LOG.info("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
 
@@ -268,7 +269,9 @@ class TelnetClient(Telnet):
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=10)
+        LOG.debug("echo output: {}".format(self.cmd_output))
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
+        LOG.debug("matches: {}".format(matches))
         return int(matches[-1])
 
     def __force_end(self, force):

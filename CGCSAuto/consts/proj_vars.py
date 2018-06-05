@@ -114,8 +114,8 @@ class InstallVars:
         if iso_path is not None:
             __iso_path = iso_path if iso_path is not '' else __host_build_dir + '/export/bootimage.iso'
             if iso_path.find(":/") != -1:
-                iso_server = iso_path[:files_dir.find(":")]
-                __iso_path = iso_path[iso_path.find(":"):]
+                iso_server = iso_path[:iso_path.find(":")]
+                __iso_path = iso_path[iso_path.find("/"):]
             else:
                 iso_server = __build_server
         else:

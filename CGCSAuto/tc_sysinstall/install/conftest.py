@@ -12,7 +12,6 @@ from consts.auth import SvcCgcsAuto
 from consts.filepaths import BuildServerPath
 from consts.auth import Tenant
 
-
 @pytest.fixture(scope='session')
 def install_setup():
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
@@ -69,30 +68,26 @@ def install_setup():
     if file_server == bld_server["name"]:
         file_server_obj = bld_server_obj
     else:
-        file_server = get_build_server_info(file_server)
-        file_server["prompt"] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', file_server['name'])
-        file_server_conn = SSHClient(file_server['name'], user=SvcCgcsAuto.USER,
-                                password=SvcCgcsAuto.PASSWORD, initial_prompt=file_server['prompt'])
+        file_server_prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', file_server)
+        file_server_conn = SSHClient(file_server, user=SvcCgcsAuto.USER,
+                                password=SvcCgcsAuto.PASSWORD, initial_prompt=file_server_prompt)
         file_server_conn.connect()
-        file_server_conn.set_prompt(bld_server['prompt'])
         file_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
-        file_server['ssh_conn'] = bld_server_conn
-        file_server_obj = Server(**file_server)
+        file_server_dict = {"name": file_server, "prompt": file_server_prompt, "ssh_conn": file_server_conn}
+        file_server_obj = Server(file_server_dict)
 
     # TODO: support a server that isn't one of the build servers
     iso_host = InstallVars.get_install_var("ISO_HOST")
     if iso_host == bld_server["name"]:
         iso_host_obj = bld_server_obj
     else:
-        iso_host = get_build_server_info(iso_host)
-        iso_host["prompt"] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', iso_host['name'])
-        iso_host_conn = SSHClient(iso_host['name'], user=SvcCgcsAuto.USER,
-                                     password=SvcCgcsAuto.PASSWORD, initial_prompt=iso_host['prompt'])
+        iso_host_prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', iso_host)
+        iso_host_conn = SSHClient(iso_host, user=SvcCgcsAuto.USER,
+                                     password=SvcCgcsAuto.PASSWORD, initial_prompt=iso_host_prompt)
         iso_host_conn.connect()
-        iso_host_conn.set_prompt(bld_server['prompt'])
         iso_host_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
-        iso_host['ssh_conn'] = bld_server_conn
-        iso_host_obj = Server(**iso_host)
+        iso_host_dict = {"name": iso_host, "prompt": iso_host_prompt, "ssh_conn": iso_host_conn}
+        iso_host_obj = Server(**iso_host_dict)
 
     servers = {
                "build": bld_server_obj,
@@ -121,19 +116,29 @@ def install_setup():
     bld_srv = servers["build"]
 
     LOG.info("Setting up {} boot".format(boot["boot_type"]))
-    if "pxe" in boot["boot_type"] and not skip_feed:
-        load_path = directories["build"]
-        install_helper.set_network_boot_feed(bld_srv.ssh_conn, load_path)
 
-    elif "burn" in boot["boot_type"]:
+    if "burn" in boot["boot_type"]:
         install_helper.burn_image_to_usb(iso_host_obj)
 
     elif "iso" in boot["boot_type"]:
         install_helper.rsync_image_to_boot_server(iso_host_obj)
         install_helper.mount_boot_server_iso(lab)
 
+    elif not skip_feed:
+        load_path = directories["build"]
+        skip_cfg = InstallVars.get_install_var("SKIP_PXEBOOTCFG")
+        install_helper.set_network_boot_feed(bld_srv.ssh_conn, load_path, skip_cfg=skip_cfg)
+
     if InstallVars.get_install_var("WIPEDISK"):
         LOG.info("wiping disks")
         install_helper.wipe_disk_hosts(lab["hosts"])
 
     return _install_setup
+
+
+def pytest_runtest_teardown(item):
+    lab = InstallVars.get_install_var("LAB")
+
+    # LOG.debug("Teardown at test step: ", LOG.test_step)
+    vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+

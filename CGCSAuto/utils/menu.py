@@ -230,7 +230,7 @@ class Option(object):
                     tag = "standard"
             if "security" in option_name:
                 tag = "security"
-            if "lowlatency" in option_name:
+            if "lowlat" in option_name or "low lat" in option_name or "low_lat" in option_name:
                 tag = "lowlatency"
 
         self.tag = tag

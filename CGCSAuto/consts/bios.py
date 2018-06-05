@@ -83,7 +83,7 @@ class BiosMenus:
 
     Phoenix = {
         "name": "Phoenix",
-        "options": [{"name": "Boot Menu", "index": 0, "key": 'F12'}],
+        "options": [{"name": "PXE", "index": 0, "key": 'F12'}],
         "wrap_around": False
     }
 

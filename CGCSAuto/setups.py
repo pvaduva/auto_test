@@ -699,7 +699,8 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  ceph_mon_gib=ceph_mon_gib,
                                  security=security,
                                  boot_type=boot,
-                                 low_latency=low_latency
+                                 low_latency=low_latency,
+                                 iso_path=iso_path
                                  )
 
 
