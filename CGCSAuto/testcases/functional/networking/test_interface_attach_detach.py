@@ -271,27 +271,28 @@ def test_interface_attach_detach_on_paused_vm(base_vm, guest_os, if_attach_arg, 
 
     LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
     _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1)
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                "after {}".format('pause'))
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
+    _ping_vm_data(vm_under_test, base_vm_id, action='pause')
 
     for i in range(live_migrations):
-        LOG.tc_step("Perform following action(s) on vm {}: {} {} time".format(vm_under_test, 'force-live-migrate', i))
+        LOG.tc_step("Perform following action(s) on vm {}: {} {} time".format(vm_under_test, 'live migrate --force', i))
         _force_live_migrate(vm_id=vm_under_test)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                    "after {}".format('force-live-migrate'))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
+        _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
 
         vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                    "after {}".format('live migrate'))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
+        _ping_vm_data(vm_under_test, base_vm_id, action='live migrate')
 
     LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
     for tenant_port_id in tenant_port_ids:
         vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
+
+    vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)
+
+    for i in range(live_migrations):
+        vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+        _ping_vm_data(vm_under_test, base_vm_id, action='live migrate')
 
     LOG.tc_step("Remove the dhclient leases cache after detach")
     _remove_dhclient_cache(vm_id=vm_under_test)
@@ -300,34 +301,24 @@ def test_interface_attach_detach_on_paused_vm(base_vm, guest_os, if_attach_arg, 
     assert not res, "Ping from base_vm to vm via detached interface still works"
 
 
-@mark.parametrize(('guest_os', 'if_attach_arg', 'boot_source', 'vifs', 'live_migrations'), [
-    ('tis-centos-guest', 'net_id', 'image', [('avp', 14)], 1),
-    # ('tis-centos-guest', 'port_id', 'volume', [('avp', 1), ('virtio', 1)], 2)
+@mark.parametrize(('guest_os', 'if_attach_arg', 'boot_source'), [
+    ('tis-centos-guest', 'port_id', 'image')
 ], ids=id_gen)
-def test_vm_with_max_interface_during_boot(base_vm, guest_os, if_attach_arg, boot_source, vifs, live_migrations):
+def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg, boot_source):
     """
-    Sample test case for interface attach/detach on stopped vm
     Args:
         base_vm (tuple): (base_vm_id, mgmt_nic, internal_net_id)
         guest_os (string): type of guest os
         if_attach_arg (str): whether to attach via port_id or net_id
         boot_source: image or volume
-        vif_model (str): vif_model to pass to interface-attach cli, or None
-        live_migrations: Number of times you want to live migrate
 
     Setups:
         - Boot a base vm with mgmt net and tenant_port_id (module)
 
     Test Steps:
-        - Boot a vm with mgmt and avp port interface
-        - Pause the vm
-        - Attach an vifs to vm with given if_attach_arg and vif_model
-        - perform force live migration and live migration action
-        - unpause the vm
-        - Bring up the interface from vm
+        - Boot a vm with mgmt and 15 avp Interface
+        - Perform nova action (live migrate --force, live migrate, rebuild, reboot hard/soft, resize revert, resize)
         - ping between base_vm and vm_under_test over mgmt & tenant network
-        - detach all the tenant interface
-        - Verify ping to tenant interfaces fail
 
     Teardown:
         - Delete created vm, volume, port (if any)  (func)
@@ -349,7 +340,7 @@ def test_vm_with_max_interface_during_boot(base_vm, guest_os, if_attach_arg, boo
     if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
         ResourceCleanup.add('image', image_id, scope='module')
 
-    LOG.tc_step("Create a flavor with 2 vcpus")
+    LOG.tc_step("Create a flavor with 1 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
@@ -363,88 +354,60 @@ def test_vm_with_max_interface_during_boot(base_vm, guest_os, if_attach_arg, boo
         source_id = vol_id
 
     nics = [mgmt_nic,
-            {'port-id': initial_port_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+            {'port-id': initial_port_id, 'vif-model': 'avp'}]
+    for i in range(14):
+        nics.append({'net-id': tenant_net_id, 'vif-model': 'avp'})
 
     LOG.tc_step("Boot a {} vm and flavor from {} with a mgmt and a data interface".format(guest_os, boot_source))
     vm_under_test = vm_helper.boot_vm('if_attach-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
                                       nics=nics, source=boot_source, source_id=source_id, guest_os=guest_os,
                                       cleanup='function')[1]
 
-    # LOG.tc_step("Pause vm {} before attaching interfaces".format(vm_under_test))
-    # vm_helper.perform_action_on_vm(vm_under_test, action='pause')
-    #
-    # LOG.tc_step("Attach maximum number of vnics to the VM")
-    # tenant_port_ids = [initial_port_id]
-    # vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-    # LOG.info("current nic no {}".format(vnics_attached))
-    # expt_vnics = 2
-    # new_vnics = 0
-    # for vif in vifs:
-    #     vif_model, vif_count = vif
-    #     expt_vnics += vif_count
-    #     LOG.info("iter {}".format(vif_count))
-    #     for i in range(vif_count):
-    #         tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
-    #         new_vnics += 1
-    #         tenant_port_ids.append(tenant_port_id)
-    #     LOG.info("Attached new vnics to the VM {}".format(tenant_port_ids))
-
-    # vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-    # LOG.info("vnics attached to VM: {}".format(vnics_attached))
-    # assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
-    #
-    # if expt_vnics == 16:
-    #     res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
-    #     assert res == 1, "vnics attach exceed maximum limit"
-
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live_migrate and unpause'))
-    vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
-    # vm_helper.perform_action_on_vm(vm_under_test, action='unpause')
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+    vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+    expt_vnics = 16
+    LOG.info("vnics attached to VM: {}".format(vnics_attached))
+    assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
 
-    # LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
-    # _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1)
-    # LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-    #             "after {}".format('pause'))
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'rebuild'))
+    vm_helper.rebuild_vm(vm_id=vm_under_test)
+    _ping_vm_data(vm_under_test, base_vm_id, action='rebuild')
+
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate --force'))
+    destination_host = vm_helper.get_dest_host_for_live_migrate(vm_id=vm_under_test)
+    vm_helper.live_migrate_vm(vm_id=vm_under_test, destination_host=destination_host, force=True)
+    _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
+
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate'))
+    vm_helper.live_migrate_vm(vm_id=vm_under_test)
+    _ping_vm_data(vm_under_test, base_vm_id, action='live-migrate')
+
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'hard reboot'))
+    vm_helper.reboot_vm(vm_id=vm_under_test, hard=True)
+    _ping_vm_data(vm_under_test, base_vm_id, action='hard reboot')
+
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'soft reboot'))
+    vm_helper.reboot_vm(vm_id=vm_under_test)
+    _ping_vm_data(vm_under_test, base_vm_id, action='soft rebuild')
+
+    LOG.tc_step('Create destination flavor')
+    dest_flavor_id = nova_helper.create_flavor(name='dest_flavor', vcpus=2, guest_os=guest_os)[1]
+
+    LOG.tc_step('Resize vm to dest flavor and revert')
+    vm_helper.resize_vm(vm_under_test, dest_flavor_id, revert=True, fail_ok=False)
+    _ping_vm_data(vm_under_test, base_vm_id, action='resize revert')
+
+    LOG.tc_step('Resize vm to dest flavor and revert False')
+    vm_helper.resize_vm(vm_under_test, dest_flavor_id, fail_ok=False)
+    _ping_vm_data(vm_under_test, base_vm_id, action='resize')
+
+
+def _ping_vm_data(vm_under_test, base_vm_id, action):
+    LOG.tc_step("Verify ping from base_vm to vm_under_test over management & data networks still works "
+                "after {}".format(action))
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
 
-    for i in range(live_migrations):
-        LOG.tc_step("Perform following action(s) on vm {}: {} {} time".format(vm_under_test, 'force-live-migrate', i))
-        _force_live_migrate(vm_id=vm_under_test)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                    "after {}".format('force-live-migrate'))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
-
-        vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management networks still works "
-                    "after {}".format('live migrate'))
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
-
-    # LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
-    # for tenant_port_id in tenant_port_ids:
-    #     vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
-
-    # LOG.tc_step("Remove the dhclient leases cache after detach")
-    # _remove_dhclient_cache(vm_id=vm_under_test)
-    res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
-                                     net_types=['data'])[0]
-    assert not res, "Ping from base_vm to vm via detached interface still works"
 
 def _remove_dhclient_cache(vm_id):
     dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
@@ -486,6 +449,6 @@ def _force_live_migrate(vm_id):
         if value:
             kwargs[key] = value
 
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_id, 'force-live-migrate'))
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_id, 'live-migrate --force'))
     vm_helper.perform_action_on_vm(vm_id, action='live_migrate', **kwargs)
     return 0
