@@ -13,6 +13,7 @@ from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP,
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
 from consts.proj_vars import ProjVar
+from consts.scripts import GuestServiceScript
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
     vlm_helper, storage_helper, ceilometer_helper
@@ -4415,6 +4416,7 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
     If multiple interfaces available on either of the VMs, the last one is used
     If no interfaces available for data/internal network for either VM, raises IndexError
     The internal interfaces for the pair VM must be on the same gateway
+    no fail_ok option, since if failed, the vm's state is undefined
 
     Args:
         vm1 (str):
@@ -4470,3 +4472,50 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
             ping_vms_from_vm(vm1, vm2, net_types='data')
 
     return interfaces
+
+
+def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
+    """
+    Setup kernel routing function for the specified VM
+    replciates the operation as in wrs_guest_setup.sh
+    in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
+    the script could be located on the VM at /etc/init.d/tis_automation_setup_kernel_routing.sh
+    no fail_ok option, since if failed, the vm's state is undefined
+
+    Args:
+        vm_id (str):
+            the VM to be configured
+        low_latency (bool):
+            if the VM is configured for low_latency,
+            when True, cpu0 is not used for netif_multiqueue
+        ssh_args (dict):
+            kwargs for ssh_to_vm_from_natbox
+
+    """
+    LOG.info("Setting up kernel routing for VM {}, low_latency={}".format(vm_id, low_latency))
+
+    with ssh_to_vm_from_natbox(vm_id, **ssh_args) as ssh_client:
+        r, msg = ssh_client.exec_cmd("cat /proc/sys/net/ipv4/ip_forward", fail_ok=False)
+        if msg == "1":
+            LOG.warn("VM {} has ip_forward enabled already, skipping".format(vm_id))
+
+        if low_latency:
+            low_latency = "'yes'"
+        else:
+            low_latency = "'no'"
+
+        script = GuestServiceScript.generate_script(LOW_LATENCY=low_latency)
+        ssh_client.exec_sudo_cmd(
+            "cat > %s << 'EOT'\n%s\nEOT" % (GuestServiceScript.script_path, script), fail_ok=False)
+        ssh_client.exec_sudo_cmd("chmod a+x %s" % GuestServiceScript.script_path, fail_ok=False)
+
+        # assuming the guest os is managed by systemctl
+        ssh_client.exec_sudo_cmd(
+            "cat > %s << 'EOT'\n%s\nEOT" % (GuestServiceScript.service_path, GuestServiceScript.service),
+            fail_ok=False)
+        ssh_client.exec_sudo_cmd(
+            "systemctl daemon-reload", fail_ok=False)
+        ssh_client.exec_sudo_cmd(
+            "systemctl enable %s" % (GuestServiceScript.service_name), fail_ok=False)
+        ssh_client.exec_sudo_cmd(
+            "systemctl start %s" % (GuestServiceScript.service_name), fail_ok=False)
