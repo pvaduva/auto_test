@@ -1,4 +1,5 @@
 import re
+import os
 import time
 from contextlib import contextmanager
 from xml.etree import ElementTree
@@ -6,6 +7,7 @@ from xml.etree import ElementTree
 from consts import proj_vars
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
@@ -2570,7 +2572,15 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     return hosts
 
 
-def get_coredumps_and_crashreports():
+def get_coredumps_and_crashreports(move=True):
+    """
+    Get core dumps and crash reports from every host
+    Args:
+        move: whether to move coredumps and crashreports to local automation dir
+
+    Returns (dict):
+
+    """
     LOG.info("Getting existing system crash reports from /var/crash/ and coredumps from /var/lib/systemd/coredump/")
 
     hosts_tab = table_parser.table(cli.system('host-list'))
@@ -2586,14 +2596,59 @@ def get_coredumps_and_crashreports():
                     format(set(all_hosts) - set(hosts_to_check)))
 
     core_dumps_and_reports = {}
+    active_con = system_helper.get_active_controller_name()
+    con_ssh = ControllerClient.get_active_controller()
+    con_dir = '{}/coredumps_and_crashreports/'.format(WRSROOT_HOME)
+    con_ssh.exec_cmd('mkdir -p {}'.format(con_dir))
+    scp_to_local = False
+    ls_cmd = 'ls -l --time-style=+%Y-%d-%m_%H-%M-%S {} | cat'
+    core_dump_dir = '/var/lib/systemd/coredump/'
+    crash_report_dir = '/var/crash/'
     for host in hosts_to_check:
         with ssh_to_host(hostname=host) as host_ssh:
-            core_dump_output = host_ssh.exec_cmd('ls -l /var/lib/systemd/coredump/', fail_ok=False)[1]
+            core_dump_output = host_ssh.exec_cmd(ls_cmd.format(core_dump_dir), fail_ok=False)[1]
             core_dumps = core_dump_output.splitlines()[1:]
-            crash_report_output = host_ssh.exec_cmd('ls -l /var/crash/', fail_ok=False)[1]
+            crash_report_output = host_ssh.exec_cmd(ls_cmd.format(crash_report_dir), fail_ok=False)[1]
             crash_reports = crash_report_output.splitlines()[1:]
-
             core_dumps_and_reports[host] = core_dumps, crash_reports
+
+            if move:
+                if core_dumps:
+                    for line in core_dumps:
+                        timestamp, name = line.split(sep=' ')[-2:]
+                        new_name = '_'.join((host, timestamp, name))
+                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(core_dump_dir, name, core_dump_dir, new_name))
+
+                    scp_to_local = True
+                    host_ssh.scp_on_source(source_path='{}/*'.format(core_dump_dir),
+                                           dest_user=HostLinuxCreds.get_user(),
+                                           dest_ip=active_con, dest_path=con_dir,
+                                           dest_password=HostLinuxCreds.get_password())
+                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(core_dump_dir))
+
+                if crash_reports:
+                    for line in crash_reports:
+                        timestamp, name = line.split(sep=' ')[-2:]
+                        new_name = '_'.join((host, timestamp, name))
+                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(crash_report_dir, name, crash_report_dir,
+                                                                       new_name))
+
+                    scp_to_local = True
+                    host_ssh.scp_on_source(source_path='{}/*'.format(crash_report_dir),
+                                           dest_user=HostLinuxCreds.get_user(),
+                                           dest_ip=active_con, dest_path=con_dir,
+                                           dest_password=HostLinuxCreds.get_password())
+                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(crash_report_dir))
+
+    if scp_to_local:
+        con_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(con_dir))
+
+        log_dir = proj_vars.ProjVar.get_var('LOG_DIR')
+        coredump_and_crashreport_dir = os.path.join(log_dir, 'coredumps_and_crashreports')
+        os.makedirs(coredump_and_crashreport_dir, exist_ok=True)
+        source_path = '{}/*'.format(con_dir)
+        common.scp_from_active_controller_to_localhost(source_path=source_path, dest_path=coredump_and_crashreport_dir)
+        con_ssh.exec_cmd('rm -f {}/*'.format(con_dir))
 
     LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
     return core_dumps_and_reports
