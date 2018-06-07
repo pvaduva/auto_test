@@ -247,7 +247,7 @@ class IxiaSession(object):
             # Unable to release ownership is ok when the configuration is blanked already
             pass
 
-    def connect_ports(self, ports, chassis=None, clear_ownership=True, existing=False):
+    def connect_ports(self, ports, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
         """
         Connect physical ports on the chassis to virtual ports.
         In order to use the existing setups from ixncfgs, mark existing=True.
@@ -265,11 +265,13 @@ class IxiaSession(object):
             existing (bool):
                 whether or not to use existing vports in the configuration
                 (instead of creating new vports)
+            rtn_dict (bool):
+                returns a dictionary mapping, from (card, port) to vport associated
 
-        Returns (list):
+        Returns (list|dict):
             vports created/existed in the configuration now
-            the order of vports is the same as specified in 'ports'
-            (ports[i] is assigned to vports[i])
+            the order of vports is the same as specified in 'ports' (ports[i] is assigned to vports[i])
+            if rtn_dict is True, return a dictionary from port to vport associated
         """
         if chassis is None:
             chassis = self._chassis
@@ -289,7 +291,9 @@ class IxiaSession(object):
         else:
             vports = self.getList(self._ixnet.getRoot(), 'vport')
 
+        vport_map = dict()
         for vport, (card, port) in zip(vports, ports):
+            vport_map[(card, port)] = vport
             port_id = self.__craft_port_id(card, port, chassis)
             self._port_map[port_id] = vport
             LOG.info("Connecting port: {}, vport = {}".format(port_id, vport))
@@ -298,7 +302,10 @@ class IxiaSession(object):
         LOG.info("Rebooting port(s) (~40s)")
         self._ixnet.commit()
 
-        return vports
+        if rtn_dict:
+            return vport_map
+        else:
+            return vports
 
     def configure_protocol_interface(self, port, ipv4=None, ipv6=None,
                                      vlan_id=None, mac_address=None,

@@ -4,6 +4,7 @@ import os
 import random
 import re
 import time
+import ipaddress
 from contextlib import contextmanager
 
 import pexpect
@@ -11,12 +12,12 @@ import pexpect
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
 from consts.scripts import GuestServiceScript
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
-    vlm_helper, storage_helper, ceilometer_helper
+    vlm_helper, storage_helper, ceilometer_helper, ixia_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 from utils import exceptions, cli, table_parser, multi_thread
@@ -4354,13 +4355,15 @@ def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, exp
         raise exceptions.VMError(msg)
 
 
-def get_vms_ports_info(vms):
+def get_vms_ports_info(vms, rtn_subnet_id=False):
     """
     Get VMs' ports' (ip_addr, cidr, mac_addr).
 
     Args:
         vms (str|list):
             vm_id, or a list of vm_ids
+        rtn_subnet_id (bool):
+            replaces cidr with subnet_id in result
 
     Returns (dict):
         {vms[0]: [(ip_addr, cidr, mac_addr), ...], vms[1]: [...], ...}
@@ -4385,11 +4388,17 @@ def get_vms_ports_info(vms):
                 fixed_ips = [fixed_ips]
             for fixed_ip in fixed_ips:
                 fixed_ip = eval(fixed_ip)
-                cidr = table_parser.get_values(subnet_table, 'cidr', id=fixed_ip['subnet_id'])[0]
+                if rtn_subnet_id:
+                    cidr = fixed_ip['subnet_id']
+                    LOG.info("VM {} interface {} ip={} subnet_id={}".format(vm, mac, fixed_ip['ip_address'], cidr))
+                else:
+                    cidr = table_parser.get_values(subnet_table, 'cidr', id=fixed_ip['subnet_id'])[0]
+                    LOG.info("VM {} interface {} ip={} cidr={}".format(vm, mac, fixed_ip['ip_address'], cidr))
+
                 if vm not in info:
                     info[vm] = list()
                 info[vm].append((fixed_ip['ip_address'], cidr, mac))
-                LOG.info("VM {} interface {} ip={} cidr={}".format(vm, mac, fixed_ip['ip_address'], cidr))
+
     return info
 
 
@@ -4458,12 +4467,12 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
 
     _set_vm_route(
         vm1,
-        interfaces[vm2]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm1]['internal']['mac'])
+        interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
 
     if bidirectional:
         _set_vm_route(
             vm2,
-            interfaces[vm1]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm2]['internal']['mac'])
+            interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm2]['internal']['mac'])
 
     if validate:
         LOG.info("Validating route(s) across data")
@@ -4498,6 +4507,7 @@ def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
         r, msg = ssh_client.exec_cmd("cat /proc/sys/net/ipv4/ip_forward", fail_ok=False)
         if msg == "1":
             LOG.warn("VM {} has ip_forward enabled already, skipping".format(vm_id))
+            return
 
         if low_latency:
             low_latency = "'yes'"
@@ -4519,3 +4529,194 @@ def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
             "systemctl enable %s" % (GuestServiceScript.service_name), fail_ok=False)
         ssh_client.exec_sudo_cmd(
             "systemctl start %s" % (GuestServiceScript.service_name), fail_ok=False)
+
+
+@contextmanager
+def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=1000):
+    """
+    Create traffic between VMs during 'operation'
+    Statistics can be retrieved through ixia_session.get_statistics
+
+    Args:
+        vm_pairs (list)
+            list of tuple(s)
+                [0]: src: vm_id / (ip, vm_id)
+                [1]: dst: vm_id / (ip, vm_id)
+                using get_data_ips_for_vms[0] if only supplying vm_id s
+        ixia_session (IxiaSession|None):
+            IxiaSession object, must be connected
+            or None, released upon context ends
+        bidirectional (bool):
+            if the traffic is bidirectional
+        fps (int):
+            frames per second
+            if the traffic is bidirectional, this value is implicitly halved
+
+    Returns (context):
+        (IxiaSession) with traffic started
+        stopped upon context ends, released if ixia_session is None
+    """
+    LOG.info("Setting up traffic for pairs {}".format(vm_pairs))
+
+    src = dict()
+    dest = dict()
+    for source, destination in vm_pairs:
+        if issubclass(type(source), (list, tuple)):
+            ip, vm_id = source
+            ipaddress.ip_address(ip)     # verify if the IP supplied is legal, raises ValueError
+        else:
+            vm_id = source
+            ip = network_helper.get_data_ips_for_vms(vm_id)[0]
+        src[ip] = vm_id
+        LOG.info("src: vm_id={} ip={}".format(vm_id, ip))
+
+        if issubclass(type(destination), (list, tuple)):
+            ip, vm_id = destination
+            ipaddress.ip_address(ip)
+        else:
+            vm_id = destination
+            ip = network_helper.get_data_ips_for_vms(vm_id)[0]
+        dest[ip] = vm_id
+        LOG.info("dst: vm_id={} ip={}".format(vm_id, ip))
+
+    LOG.info("Getting VLANs associated")
+    for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=True).items():
+        for ip, subnet_id, mac in ports:
+            if ip in src or ip in dest:
+                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.ADMIN))
+                cidr = table_parser.get_value_two_col_table(table, "cidr")
+                net_type = table_parser.get_value_two_col_table(table, "wrs-provider:network_type")
+                seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
+                if ip in src:
+                    LOG.info("src: network_type={} seg_id={}".format(net_type, seg_id))
+                    src[ip] = int(seg_id), cidr
+                if ip in dest:
+                    LOG.info("dst: network_type={} seg_id={}".format(net_type, seg_id))
+                    dest[ip] = int(seg_id), cidr
+
+                if net_type != "vlan":
+                    LOG.warn("network type is not vlan, this setup might be incorrect")
+
+    # value: vm_id(str) -> tuple(vlan(int), cidr(str))
+    assert all(map(isinstance, src.values(), [tuple]*len(src))) and \
+        all(map(isinstance, dest.values(), [tuple]*len(src))), \
+        "at least one network is not resolved"
+
+    # determining the port bindings to the interfaces
+    ixia_ports = ProjVar.get_var("LAB")['ixia_ports']
+    all_ports = set([(d['port'], d['range']) for d in ixia_ports])
+    src_ports = dict()
+    dest_ports = dict()
+    for ip, (vlan, cidr) in src.items():
+        for d in ixia_ports:    # ordered as a list
+            if vlan in range(*d['range']):
+                src_ports[(ip, vlan)] = d['port']
+
+                # if a port is used for pair1, it should not be used for pair2
+                if (d['port'], d['range']) in all_ports:
+                    all_ports.remove((d['port'], d['range']))
+
+                # each ip/vlan is bind to 1 port max.
+                break
+
+    # ensuring the order, so if multiple ports support pair2 interfaces, use 1 port only
+    all_ports = list(all_ports)
+    all_ports.sort()
+
+    for ip, (vlan, cidr) in dest.items():
+        for port, rg in all_ports:  # ordered, rest of avail. ports
+            if vlan in range(*rg):
+                dest_ports[(ip, vlan)] = port
+                break
+
+    LOG.info("Port matching complete src_ports={} dest_ports={}".format(src_ports, dest_ports))
+    assert len(set(src_ports.values()).intersection(set(dest_ports.values()))) == 0, \
+        "at least one src-dest pair shares the same ixia port (i.e., self-destined)"
+    assert len(src_ports) and len(dest_ports), "at least one of the pairs cannot be associated with an ixia port"
+
+    unavailable_ips = set()
+    for ports in network_helper.get_ports('fixed_ips', merge_lines=False):
+        if not issubclass(type(ports), list):
+            ports = [ports]
+        for port in ports:
+            port = eval(port)
+            unavailable_ips.add(ipaddress.ip_address(port["ip_address"]))
+
+    session_managed = False
+    if ixia_session is None:
+        LOG.info("ixia_session not supplied, creating")
+        ixia_session = ixia_helper.IxiaSession()
+        session_managed = True
+        ixia_session.connect()
+    traffic_started = False
+
+    try:
+        ixia_session.load_config(IxiaPath.CFG_500FPS)
+        ixia_session.add_chassis(clear=True)
+        vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
+                                            existing=True, rtn_dict=True)
+
+        # create new interfaces
+        source_ifs = list()
+        for ip, vlan in src_ports:
+            port = src_ports[(ip, vlan)]
+            cidr = src[ip][1]
+            for ip_in_subnet in ipaddress.ip_network(cidr).hosts():
+                if ip_in_subnet not in unavailable_ips:
+                    unavailable_ips.add(ip_in_subnet)
+                    iface_ip = ip_in_subnet
+                    break
+            else:
+                raise ValueError("No available IPs in subnet")
+            if ipaddress.ip_address(ip).version == 4:
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+            else:
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
+            source_ifs.append(iface)
+
+        dest_ifs = list()
+        for ip, vlan in dest_ports:
+            port = dest_ports[(ip, vlan)]
+            cidr = dest[ip][1]
+            for ip_in_subnet in ipaddress.ip_network(cidr).hosts():
+                if ip_in_subnet not in unavailable_ips:
+                    unavailable_ips.add(ip_in_subnet)
+                    iface_ip = ip_in_subnet
+                    break
+            else:
+                raise ValueError("No available IPs in subnet")
+            if ipaddress.ip_address(ip).version == 4:
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+            else:
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
+            dest_ifs.append(iface)
+
+        # assuming the configuration only has one trafficItem in it
+        trafficItem = ixia_session.getList(ixia_session.getRoot()+'/traffic', 'trafficItem')[0]
+        if bidirectional:
+            ixia_session.configure(trafficItem, biDirectional='true')
+            fps /= 2
+        else:
+            ixia_session.configure(trafficItem, biDirectional='false')
+
+        # enable only newly created interfaces for traffic
+        endpointSet = ixia_session.getList(trafficItem, 'endpointSet')[0]
+        ixia_session.configure_endpoint_set(endpointSet, source_ifs, dest_ifs, append=False)
+
+        # traffic not started yet, use configElements to adjust settings
+        configElement = ixia_session.getList(trafficItem, 'configElement')[0]
+        ixia_session.configure(configElement+'/frameRate', rate=fps)
+
+        ixia_session.traffic_start()
+        traffic_started = True
+
+        yield ixia_session
+    finally:
+        try:
+            if traffic_started:
+                ixia_session.traffic_stop()
+        finally:
+            # must ensure the session is disconnected no matter what, as it locks the service port
+            if session_managed:
+                LOG.info("releasing ixia_session created")
+                ixia_session.disconnect()

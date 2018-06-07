@@ -3176,7 +3176,7 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
 
 def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr=None, subnet_id=None, strict=False,
-              auth_info=Tenant.ADMIN, con_ssh=None):
+              auth_info=Tenant.ADMIN, con_ssh=None, merge_lines=True):
     """
     Get a list of ports with given arguments
     Args:
@@ -3211,7 +3211,7 @@ def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr
         if value:
             kwargs[key] = value
 
-    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=merge_lines, **kwargs)
     return ports
 
 
