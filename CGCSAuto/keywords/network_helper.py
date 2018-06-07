@@ -3868,6 +3868,23 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
                                               pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
                                               con_ssh=None, strict=True, **filters):
+    """
+
+    Args:
+        rtn_val (str|tuple|list):
+        seg_id:
+        host:
+        pnet_id:
+        pnet_name:
+        audit_id:
+        auth_info:
+        con_ssh:
+        strict:
+        **filters:
+
+    Returns:
+
+    """
     args = []
     if audit_id:
         args.append('--audit-uuid {}'.format(audit_id))
@@ -3887,7 +3904,21 @@ def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, hos
         return None
 
     table_ = table_parser.table(out)
-    return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
+
+    is_str = False
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+        is_str = True
+
+    vals = []
+    table_ = table_parser.filter_table(table_=table_, strict=strict, **filters)
+    for field in rtn_val:
+        vals.append(table_parser.get_values(table_, field, merge_lines=True))
+
+    if is_str:
+        vals = vals[0]
+
+    return vals
 
 
 def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=600,
@@ -3931,6 +3962,9 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
                 raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
                                               "seconds after running 'neutron providernet-connectivity-test-schedule'".
                                               format(audit_id, timeout))
+
+    else:
+        return -1, audit_id
 
 
 def get_dpdk_user_data(con_ssh=None):
