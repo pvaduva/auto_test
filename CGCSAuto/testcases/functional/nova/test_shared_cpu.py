@@ -319,7 +319,7 @@ class TestSharedCpuEnabled:
                 if len(shared_cpu_hosts) >= 2:
                     break
 
-        return storage_backing
+        return storage_backing, shared_cpu_hosts
 
     # TC2920, TC2921
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'error'), [
@@ -348,9 +348,9 @@ class TestSharedCpuEnabled:
             - Ensure vm is booted successfully
             - Validate the shared cpu
             - Live migrate the vm
-            - Revalidate the shared cpu
+            - Re-validate the shared cpu
             - Cold migrate the vm
-            - Revalidate the shared cpu
+            - Re-validate the shared cpu
 
         Teardown:
             - Delete created vm if any (function)
@@ -358,9 +358,10 @@ class TestSharedCpuEnabled:
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
 
         """
+        storage_backing, shared_cpu_hosts = add_shared_cpu
         LOG.tc_step("Create a flavor with given number of vcpus")
 
-        flavor = create_shared_flavor(vcpus, storage_backing=add_shared_cpu, numa_nodes=numa_nodes, node0=numa_node0,
+        flavor = create_shared_flavor(vcpus, storage_backing=storage_backing, numa_nodes=numa_nodes, node0=numa_node0,
                                       shared_vcpu=shared_vcpu)
 
         LOG.tc_step("Boot a vm with above flavor")
@@ -426,12 +427,14 @@ class TestSharedCpuEnabled:
             - Delete created volume if any (module)
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
         """
+        storage_backing, shared_cpu_hosts = add_shared_cpu
+
         LOG.tc_step("Create a flavor with given number of vcpus")
         f1_vcpus = 2
         f1_numa_nodes = 1
         f1_node0 = 1
         f1_shared_vcpu = 1
-        flavor = create_shared_flavor(vcpus=f1_vcpus, storage_backing=add_shared_cpu, numa_nodes=f1_numa_nodes,
+        flavor = create_shared_flavor(vcpus=f1_vcpus, storage_backing=storage_backing, numa_nodes=f1_numa_nodes,
                                       node0=f1_node0, shared_vcpu=f1_shared_vcpu)
 
         LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
@@ -495,6 +498,8 @@ class TestSharedCpuEnabled:
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
 
         """
+        storage_backing, shared_cpu_hosts = add_shared_cpu
+
         flv1_args = {
             'numa_nodes': 1,
             'node0': 0,
@@ -503,11 +508,11 @@ class TestSharedCpuEnabled:
             'node0': 1,
         }
 
-        _flv_args = {'vcpus': 2, 'storage_backing': add_shared_cpu, 'shared_vcpu': 1}
+        _flv_args = {'vcpus': 2, 'storage_backing': storage_backing, 'shared_vcpu': 1}
         flv1_args.update(_flv_args)
         flv2_args.update(_flv_args)
 
-        target_host = None
+        target_host = shared_cpu_hosts[0]
         vms = {}
         for flv_arg in (flv1_args, flv2_args):
             LOG.tc_step("Create a flavor with following specs and launch a vm with this flavor: {}".format(flv_arg))
@@ -520,8 +525,6 @@ class TestSharedCpuEnabled:
             check_shared_vcpu(vm=vm_id, numa_node0=flv_arg.get('node0', None),
                               numa_nodes=flv_arg.get('numa_nodes', None))
             vms[vm_id] = flv_arg
-            if not target_host:
-                target_host = nova_helper.get_vm_host(vm_id)
 
         LOG.tc_step("Evacuate vms")
         vm_helper.evacuate_vms(target_host, vms_to_check=list(vms.keys()), ping_vms=True)
