@@ -180,7 +180,7 @@ def setup_host_install(request, get_patch_name):
         con_ssh.exec_sudo_cmd('sw-patch remove {}'.format(patch_name))
         con_ssh.exec_sudo_cmd('sw-patch delete {}'.format(patch_name))
         LOG.fixture_step("Reinstalling {} to revert the patch".format(patch_name))
-        con_ssh.exec_sudo_cmd('sw-patch host-install {}'.format(host), expect_timeout=timeout.CLI_TIMEOUT)
+        con_ssh.exec_sudo_cmd('sw-patch host-fresh_install {}'.format(host), expect_timeout=timeout.CLI_TIMEOUT)
         host_helper.unlock_host(host)
 
     request.addfinalizer(delete_patch)
@@ -206,28 +206,28 @@ def test_patch_log_host_install(setup_host_install):
         - Upload and apply a patch
 
     Test Steps:
-        - Execute 'sw-patch host-install'
+        - Execute 'sw-patch host-fresh_install'
         - Check the log files for the expected logs
 
     Teardown:
         - Remove and delete the patch
-        - Execute 'sw-patch host-install' again to update it to having no patches
+        - Execute 'sw-patch host-fresh_install' again to update it to having no patches
         - Unlock compute
 
     """
     patch_name, host = setup_host_install
     con_ssh = ControllerClient.get_active_controller()
 
-    con_ssh.exec_sudo_cmd('sw-patch host-install {}'.format(host), expect_timeout=timeout.CLI_TIMEOUT)
+    con_ssh.exec_sudo_cmd('sw-patch host-fresh_install {}'.format(host), expect_timeout=timeout.CLI_TIMEOUT)
     res = check_install(host)
     assert res, "FAIL: The patch was not in \"sw-patch query-hosts\""
 
-    search_for = ['sw-patch-controller-daemon.*INFO: Running host-install for {}'.format(host),
+    search_for = ['sw-patch-controller-daemon.*INFO: Running host-fresh_install for {}'.format(host),
                   'sw-patch-controller-daemon.*INFO.*Patch installation request sent to {}'.format(host)]
     res = check_logs(search_for, lines=50, api=False)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching.log"
 
     search_for = ['sw-patch-controller-daemon.*INFO: User: wrsroot/admin '
-                  'Action: Running host-install for {}'.format(host)]
+                  'Action: Running host-fresh_install for {}'.format(host)]
     res = check_logs(search_for, lines=25, api=True)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching-api.log"

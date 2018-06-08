@@ -74,7 +74,7 @@ def test_ceilometer_meters_exist(meters):
     current_isotime = datetime.utcnow().isoformat(sep='T')
 
     if common.get_timedelta_for_isotimes(time_create, current_isotime) > timedelta(hours=24):
-        skip("Over a day since install. Meters no longer exist.")
+        skip("Over a day since fresh_install. Meters no longer exist.")
 
     # Check meter for routers
     LOG.tc_step("Check number of 'router.create.end' events is at least the number of existing routers")

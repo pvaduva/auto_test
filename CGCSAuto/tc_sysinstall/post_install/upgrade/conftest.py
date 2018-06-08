@@ -145,7 +145,7 @@ def upgrade_setup(pre_check_upgrade):
     LOG.tc_step("Installing the target release {} license file".format(upgrade_version))
     rc = system_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                                                con_ssh=controller0_conn)
-    assert rc == 0, "Unable to install upgrade license file in Controller-0"
+    assert rc == 0, "Unable to fresh_install upgrade license file in Controller-0"
     LOG.info("Target release license installed......")
 
     # Check load already imported if not  get upgrade load iso file

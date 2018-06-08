@@ -237,7 +237,7 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
                 LOG.warn('Unknown personality:{} of host:{}'.format(personality, host))
 
     if not controllers and not storages and not computes:
-        LOG.info('No hosts to install')
+        LOG.info('No hosts to fresh_install')
         return
 
     for host in computes:
@@ -530,14 +530,14 @@ def _install_impacted_hosts(applied_patches, con_ssh=None):
     hosts_need_install = [h for h in all_hosts if not states['host_states'][h]['patch-current']]
 
     if not hosts_need_install:
-        LOG.info('All hosts are "patch-current", no need to install, states:\n"{}"'.format(states))
+        LOG.info('All hosts are "patch-current", no need to fresh_install, states:\n"{}"'.format(states))
         if not applied_patches:
             LOG.info('OK, test is done, no patches applied hence no hosts need to be installed')
         else:
-            LOG.warn('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
+            LOG.warn('No patches applied but there are hosts need to fresh_install, hosts:\n"{}"'.format(hosts_need_install))
     else:
         if not applied_patches:
-            LOG.warn('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
+            LOG.warn('No patches applied but there are hosts need to fresh_install, hosts:\n"{}"'.format(hosts_need_install))
 
         LOG.info('Install impacted hosts')
         install_impacted_hosts(applied_patches, current_states=states, con_ssh=con_ssh)
@@ -561,7 +561,7 @@ def test_install_impacted_hosts(con_ssh=None):
 
         2   Apply all the patches uploaded
 
-        3   Do host-install on all the hosts impacted
+        3   Do host-fresh_install on all the hosts impacted
 
     """
     LOG.tc_step('Check if any patches are in Partial "Partial-Apply" or "Partial-Remove" states')
@@ -570,7 +570,7 @@ def test_install_impacted_hosts(con_ssh=None):
 
     if not partial_applied_patches:
         LOG.warn('No patches in "Partial-Apply" nor "Partial-Remove" states, '
-                 'continue to check if any host needs to install')
+                 'continue to check if any host needs to fresh_install')
     else:
         LOG.info('OK, found patches in "Partial-Apply/Remove" states: "{}"'.format(partial_applied_patches))
 
@@ -697,7 +697,7 @@ def test_upload_patch_files(patch_types, download_if_not_found=True, con_ssh=Non
 
 
 def test_install_patch_dir_file():
-    """Test install patches from the specified directory on the specified server.
+    """Test fresh_install patches from the specified directory on the specified server.
 
     Test Steps:
         1   Upload the patch files into the patching system on the lab
@@ -706,7 +706,7 @@ def test_install_patch_dir_file():
 
         2   Apply all the patches uploaded
 
-        3   Do host-install on all the hosts impacted
+        3   Do host-fresh_install on all the hosts impacted
 
     """
 
@@ -740,7 +740,7 @@ class TestPatches:
         'other'
     ])
     def test_patching(self, upload_test_patches, patch):
-        """Test install test patches from build server.
+        """Test fresh_install test patches from build server.
 
         Test Steps:
             1   Upload the patch files into the patching system on the lab
@@ -749,7 +749,7 @@ class TestPatches:
 
             2   Apply all the patches uploaded
 
-            3   Do host-install on all the hosts impacted
+            3   Do host-fresh_install on all the hosts impacted
 
         """
 
@@ -804,7 +804,7 @@ def test_remove_patches(patch_type, con_ssh=None):
 
     Steps:
         1   Remove all applied patches in Applied or Partial-Applied states
-        2   Do host-install on all impacted hosts in the order: compute, storage, standby-controller
+        2   Do host-fresh_install on all impacted hosts in the order: compute, storage, standby-controller
             and active-controller
 
     """

@@ -53,8 +53,6 @@ class BuildServerPath:
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
     CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
-    # TODO: Find an actual place for this
-    INSTALL_CONFIG_PATH = '/folk/ebarrett/temp'
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
@@ -106,3 +104,6 @@ class SecurityPath:
 class TuxlabServerPath:
     DEFAULT_TUXLAB_SERVER = 'yow-tuxlab2'
     DEFAULT_BARCODES_DIR = '/export/pxeboot/vlm-boards'
+
+class InstallPaths:
+    INSTALL_TEMP_DIR = '/folk/cgts/lab/new-installer/temp'

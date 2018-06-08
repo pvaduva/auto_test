@@ -51,7 +51,7 @@ class ComputeHostsTable(HostsTable):
                              ("boot_device", "rootfs_device", "install_output", "console"),
                              ("bm_type", "bm_ip", "bm_username", "bm_password", "bm_confirm_password"))
 
-    @tables.bind_table_action('install-async')
+    @tables.bind_table_action('fresh_install-async')
     def install_paches(self, install_button):
         install_button.click()
 

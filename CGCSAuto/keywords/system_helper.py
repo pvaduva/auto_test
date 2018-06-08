@@ -32,7 +32,7 @@ class System:
         system['alarms_and_events'] = alarms
         # TODO: add networks, providernets, interfaces, flavors, images, volumes, vms info?
 
-    # TODO: add methods to set nodes for install delete tests
+    # TODO: add methods to set nodes for fresh_install delete tests
 
 
 def get_hostname(con_ssh=None):
@@ -1177,7 +1177,7 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
         with_action_option: whether invoke the CLI with or without "action" option
                             - None      no "action" option at all
                             - apply     system dns-modify <> action=apply
-                            - install   system dns-modify <> action=install
+                            - fresh_install   system dns-modify <> action=fresh_install
                             - anystr    system dns-modify <> action=anystring...
     Returns:
 
@@ -2561,7 +2561,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = "sudo license-install " + license_path
+    cmd = "sudo license-fresh_install " + license_path
     con_ssh.send(cmd)
     end_time = time.time() + timeout
     rc = 1

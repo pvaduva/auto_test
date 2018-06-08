@@ -10,7 +10,7 @@ from utils import node
 ########################
 
 def pytest_configure(config):
-    # Lab install params
+    # Lab fresh_install params
     lab_arg = config.getoption('lab')
     use_usb = config.getoption('use_usb')
     backup_src_path = config.getoption('backup_path')

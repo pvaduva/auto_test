@@ -1018,7 +1018,7 @@ def modify_https(enable_https=True, check_first=True, timeout=400, check_interva
     if enable_https:
         CliAuth.set_vars(HTTPS=True)
         msg = "Enabled HTTPS on lab"
-        LOG.info('TODO: install certificate for https. There will be a warning msg if self-signed certificate is used')
+        LOG.info('TODO: fresh_install certificate for https. There will be a warning msg if self-signed certificate is used')
     else:
         CliAuth.set_vars(HTTPS=False)
         msg = "Enabled HTTP on lab"

@@ -30,12 +30,12 @@ def pre_infra_install_check():
     if rc:
          skip("infra network is already configured  in the system {}".format(lab['name']))
 
-    LOG.fixture_step('Verify if lab infra post install script and config file exist')
+    LOG.fixture_step('Verify if lab infra post fresh_install script and config file exist')
     cmd = "test -f {}".format(WRSROOT_HOME + INFRA_POST_INSTALL_SCRIPT)
     con_ssh = ControllerClient.get_active_controller()
     rc,  output = con_ssh.exec_cmd(cmd)
     if rc != 0:
-        LOG.info("Down load infra post install script from test server")
+        LOG.info("Down load infra post fresh_install script from test server")
         source_file = TestServerPath.TEST_SCRIPT + INFRA_POST_INSTALL_SCRIPT
         common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=WRSROOT_HOME)
         rc,  output = con_ssh.exec_cmd(cmd)
@@ -55,7 +55,7 @@ def pre_infra_install_check():
 
     # rc, output =  system_helper.get_system_health_query()
     # if rc != 0:
-    #     msg = "System {} is not healthy for adding infra post initial install: {}".format(lab['name'], output)
+    #     msg = "System {} is not healthy for adding infra post initial fresh_install: {}".format(lab['name'], output)
     #     LOG.info(msg)
     #     return False, lab_type
 
@@ -91,7 +91,7 @@ I             INFRA_INTERFACES="ethernet|<PCIADDR+PCIDEV>|${INFRAMTU}|none"
 
     """
     LOG.info("Checking overall system health...")
-    assert pre_infra_install_check[0], "System health must be OK for adding infra post initial install"
+    assert pre_infra_install_check[0], "System health must be OK for adding infra post initial fresh_install"
 
     system_type = pre_infra_install_check[1]
     LOG.tc_step("Locking all nodes expect active controller")
@@ -114,9 +114,9 @@ I             INFRA_INTERFACES="ethernet|<PCIADDR+PCIDEV>|${INFRAMTU}|none"
     assert rc, "Fail to add infra network to the system: {}".format(output)
 
 
-    LOG.tc_step("Running infra post install script to add infra interface on controllers ...")
+    LOG.tc_step("Running infra post fresh_install script to add infra interface on controllers ...")
     rc, output = install_helper.run_infra_post_install_setup()
-    assert rc == 0,  "The infra post install setup script failed: {}".format(output)
+    assert rc == 0,  "The infra post fresh_install setup script failed: {}".format(output)
 
     LOG.tc_step("Rebooting standby controller ...")
     host_helper.reboot_hosts(standby_controller)
@@ -129,9 +129,9 @@ I             INFRA_INTERFACES="ethernet|<PCIADDR+PCIDEV>|${INFRAMTU}|none"
 
     if system_type != "cpe":
         hosts = system_helper.get_hostnames(administrative="locked")
-        LOG.tc_step("Running infra post install script to add infra interface on {} ...".format(hosts))
+        LOG.tc_step("Running infra post fresh_install script to add infra interface on {} ...".format(hosts))
         rc, output = install_helper.run_infra_post_install_setup()
-        assert rc == 0,  "The infra post install setup script failed: {}".format(output)
+        assert rc == 0,  "The infra post fresh_install setup script failed: {}".format(output)
         LOG.tc_step("Unlocking remaining hosts: {} ...".format(hosts))
         for host in hosts:
             host_helper.unlock_host(host)

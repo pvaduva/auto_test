@@ -204,7 +204,7 @@ def _modify_firewall_rules(firewall_rules_path):
     """
     start_time = common.get_date_in_format()
     time.sleep(1)
-    cli.system('firewall-rules-install', firewall_rules_path)
+    cli.system('firewall-rules-fresh_install', firewall_rules_path)
     system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
                                   **{'Entity Instance ID': 'host=controller-0',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})

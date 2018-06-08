@@ -525,7 +525,7 @@ def findChildren(pid, recursive=True):
         else:
             # Windows
             # currently requires psutil to find child processes
-            # pip install psutil
+            # pip fresh_install psutil
             import psutil
 
             parent = psutil.Process(int(pid))

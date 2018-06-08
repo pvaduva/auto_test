@@ -308,8 +308,8 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
                                          con_ssh=con_ssh)
 
     if expt_avail_hosts:
-        hypervisors = list(set(get_hypervisors()) & set(hosts))
-        controllers = list(set(system_helper.get_controllers()) & set(hosts))
+        hypervisors = list(set(get_hypervisors(con_ssh=con_ssh)) & set(hosts))
+        controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh)) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
         res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
@@ -332,7 +332,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
 
             if check_task_affinity:
                 for host in hypervisors:
-                    res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok)
+                    res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok, con_ssh=con_ssh)
                     res_unlock = res_unlock and res_4
 
     return res_lock and res_unlock

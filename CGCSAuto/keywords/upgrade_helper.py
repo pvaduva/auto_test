@@ -598,7 +598,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = "sudo license-install " + license_path
+    cmd = "sudo license-fresh_install " + license_path
     con_ssh.send(cmd)
     end_time = time.time() + timeout
     rc = 1

@@ -198,7 +198,7 @@ def _get_virtualenv_dir(venv_dir=None):
 
 class RemoteCLIClient:
     """
-    Note: this should only be used on test server due to sudo permission needed to install/uninstall remote cli clients.
+    Note: this should only be used on test server due to sudo permission needed to fresh_install/uninstall remote cli clients.
     """
     REMOTE_CLI_FOLDER = 'wrs-remote-clients'
     __remote_cli_info = {'remote_cli_dir': None, 'venv_dir': None}
@@ -210,7 +210,7 @@ class RemoteCLIClient:
         if not python_executable:
             python_executable = client.exec_cmd('which python2')[1]
             if not python_executable:
-                raise ValueError('python2 is not installed on system. Please install python2 first.')
+                raise ValueError('python2 is not installed on system. Please fresh_install python2 first.')
         return python_executable
 
     @classmethod
@@ -246,7 +246,7 @@ class RemoteCLIClient:
 
         # no existing client or name mismatch, create new client
         # venv shared for same lab. Assuming only one remote cli test session should be run on same lab.
-        # remote cli install script should be able to auto remove the old clients if exist in the venv
+        # remote cli fresh_install script should be able to auto remove the old clients if exist in the venv
         localclient = LocalHostClient()
         localclient.connect(use_current=False)
 
@@ -284,7 +284,7 @@ class RemoteCLIClient:
                 localclient.exec_cmd('./install_clients.sh', fail_ok=False, expect_timeout=600)
                 cls.__remote_cli_info['remote_cli_dir'] = remote_cli_dir
             except:
-                # Do the cleanup in case of remote cli clients install failure.
+                # Do the cleanup in case of remote cli clients fresh_install failure.
                 cls.remove_remote_cli_clients(remote_cli_dir=remote_cli_dir, venv_dir=venv_dir)
                 raise
         else:

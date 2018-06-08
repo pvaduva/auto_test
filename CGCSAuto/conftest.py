@@ -238,7 +238,7 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 ########################
 # Command line options #
 ########################
-
+@pytest.mark.tryfirst
 def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
@@ -392,19 +392,19 @@ def pytest_addoption(parser):
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,pxeboot,feed \n" \
-                "labsetup: Do not run lab_setup post lab install \n" \
+    skip_help = "Comma seperated list of parts of the fresh_install to skip. Usage: --skip=labsetup,pxeboot,feed \n" \
+                "labsetup: Do not run lab_setup post lab fresh_install \n" \
                 "pxeboot: Don't modify pxeboot.cfg \n" \
                 "feed: skip setup of network feed"
-    installconf_help = "Full path of lab install configuration file. Template location: " \
+    installconf_help = "Full path of lab fresh_install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
-    resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
+    resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed'
     wipedisk_help = 'Wipe the disk(s) on the hosts'
     boot_help = 'Select how to boot the lab. Default is pxe. Options are: \n' \
                 'pxe: boot from the network using pxeboot \n' \
                 'burn: burn the USB using iso-path and boot from it \n' \
                 'usb: Boot from load existing on USB \n' \
-                'iso: iso install flag'
+                'iso: iso fresh_install flag'
     iso_path_help = 'Full path to ISO file. Default is <build-dir'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
@@ -452,12 +452,12 @@ def pytest_addoption(parser):
                      help=remote_cli_help)
 
     ##################################
-    # Lab install or upgrade options #
+    # Lab fresh_install or upgrade options #
     ##################################
     LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
 
     # Install
-    parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store_true',
+    parser.addoption('--resumeinstall', '--resume-fresh_install', '--resume_install', dest='resumeinstall', action='store_true',
                      help=resumeinstall_help)
     parser.addoption('--skip', dest='skiplist', action='store',
                      help=skip_help)
@@ -465,7 +465,7 @@ def pytest_addoption(parser):
                      help=wipedisk_help)
     parser.addoption('--boot', dest='boot_list', action='store', default='pxe',
                      help=boot_help)
-    parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
+    parser.addoption('--installconf', '--fresh_install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
     parser.addoption('--security', dest='security', action='store', default='standard')
     # Ceph Post Install
@@ -480,7 +480,7 @@ def pytest_addoption(parser):
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
 
-    # Custom install help
+    # Custom fresh_install help
     file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
                     "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
@@ -492,7 +492,7 @@ def pytest_addoption(parser):
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
 
-    # Custom install options
+    # Custom fresh_install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
                      action='store', metavar='DIR', help=file_dir_help)
     parser.addoption('--controller', dest='controller',
@@ -509,7 +509,7 @@ def pytest_addoption(parser):
                      action='store', help=storage_help)
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
-    # Note --lab is also a lab install option, when config file is not provided.
+    # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
     #  Upgrade options #

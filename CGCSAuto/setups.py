@@ -424,10 +424,10 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
         lab_info_ = installconf['LAB']
         lab_name = lab_info_['LAB_NAME']
         if not lab_name:
-            raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
+            raise ValueError("Either --lab=<lab_name> or --fresh_install-conf=<full path of fresh_install configuration file> "
                              "has to be provided")
         if lab_arg and lab_arg.lower() != lab_name.lower():
-            LOG.warning("Conflict in --lab={} and install conf file LAB_NAME={}. LAB_NAME in conf file will be used".
+            LOG.warning("Conflict in --lab={} and fresh_install conf file LAB_NAME={}. LAB_NAME in conf file will be used".
                         format(lab_arg, lab_name))
         lab_arg = lab_name
 
@@ -502,7 +502,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device,
                        controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency):
     if not lab and not installconf_path:
-        raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
+        raise ValueError("Either --lab=<lab_name> or --fresh_install-conf=<full path of fresh_install configuration file> "
                          "has to be provided")
     elif not installconf_path:
         installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
@@ -966,7 +966,7 @@ def collect_sys_net_info(lab):
 
     def setup_remote_cli_client():
         """
-        Download openrc files from horizon and install remote cli clients to virtualenv
+        Download openrc files from horizon and fresh_install remote cli clients to virtualenv
         Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
 
         Returns (RemoteCliClient)
@@ -976,7 +976,7 @@ def collect_sys_net_info(lab):
         # download openrc files
         horizon_helper.download_openrc_files()
 
-        # install remote cli clients
+        # fresh_install remote cli clients
         client = RemoteCLIClient.get_remote_cli_client()
 
         # copy test files
@@ -993,13 +993,13 @@ def collect_sys_net_info(lab):
 # TODO: currently no support for installing lab as a single controller node
 # Fix: overwrite the controller nodes in the lab with supplied ones
 # Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
-# Should we have the user create their own install configuration file if they want to install a lab with only 1 controller?
+# Should we have the user create their own fresh_install configuration file if they want to fresh_install a lab with only 1 controller?
 def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage,
                       license_path, guest_image, heat_templates, boot, iso_path, low_latency, security):
     """
-    Writes a file in ini format of the install variables
+    Writes a file in ini format of the fresh_install variables
     Args:
-        lab: Str name of the lab to install
+        lab: Str name of the lab to fresh_install
         controller: Str comma separated list of controller node barcodes
         lab_files_dir: Str path to the directory containing the lab files
         build_server: Str name of a valid build server. Default is yow-cgts4-lx
@@ -1037,19 +1037,15 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
             lab_info = get_info_from_lab_files(files_server, files_dir)
             lab_dict = get_lab_dict(install_helper.get_git_name(lab_info["system_name"]))
         except exceptions.BuildServerError:
-            LOG.error("--file_server must be a valid build server. "
-                          "Checking --{} argument for lab information".format("controller" if controller_nodes else "lab"))
-            files_server = build_server_consts.DEFAULT_BUILD_SERVER['name']
+            LOG.error("--file_server must be a valid build server. ")
+            raise
         except ValueError:
-            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
-                          "configuration and try again. "
-                          "Checking --{} argument for lab information".format("controller" if controller_nodes else "lab"))
-            files_dir = None
+            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write fresh_install "
+                          "configuration and try again. ")
+            raise
         except AssertionError:
-            LOG.error("Please ensure --file_dir was entered correctly and exists in {}. "
-                      "Checking --{} argument for lab information".format(files_server,
-                                                                          "controller" if controller_nodes else "lab"))
-            files_dir = None
+            LOG.error("Please ensure --file_dir was entered correctly and exists in {}. ".format(files_server))
+            raise
 
     if controller_nodes and not lab_dict:
         labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
@@ -1114,11 +1110,16 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
     config["BUILD"] = build_dict
     config["CONF_FILES"] = files_dict
 
-    # currently storing in /folk/ebarrett/temp
     install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
-    install_config_path = "{}/{}".format(BuildServerPath.INSTALL_CONFIG_PATH, install_config_name)
-    with install_helper.ssh_to_build_server() as install_file_server:
-        with open(install_config_path, "w") as install_config_file:
+    install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name
+    try:
+        with open(install_config_path, "w+") as install_config_file:
+            os.chmod(install_config_path, 0o777)
+            config.write(install_config_file)
+            install_config_file.close()
+    except FileNotFoundError:
+        os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+        with open(install_config_path, "w+") as install_config_file:
             os.chmod(install_config_path, 0o777)
             config.write(install_config_file)
             install_config_file.close()
@@ -1236,25 +1237,27 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
         return 0, output
 
 
-def setup_networking(controller0):
+def setup_networking(controller0, usb=None):
     nic_interface = controller0.host_nic
     if not controller0.telnet_conn:
         controller0.telnet_conn = TelnetClient(host=controller0.telnet_ip, port=int(controller0.telnet_port))
         controller0.telnet_conn.send("\r\n")
+
     controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip addr add {}/23 dev {}".format(controller0.telnet_conn.password,
-                                                                                      controller0.host_ip,
-                                                                                       nic_interface))
+                                                                                             controller0.host_ip,
+                                                                                             nic_interface))
     controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip link set dev {} up".format(controller0.telnet_conn.password,
-                                                                                      nic_interface))
+                                                                                          nic_interface))
     time.sleep(2)
     controller0.telnet_conn.exec_cmd("echo {} | sudo -S route add default gw 128.224.150.1".format(
-        controller0.telnet_conn.password))
+                                     controller0.telnet_conn.password))
     ping = network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
     if not ping:
         time.sleep(120)
         network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
 
     return 0
+
 
 def collect_sys_net_info(lab):
     LOG.warning("Collecting system network info upon session setup failure")

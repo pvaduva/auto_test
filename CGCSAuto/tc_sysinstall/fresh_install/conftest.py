@@ -1,60 +1,32 @@
 import pytest
+import os
+import re
 
 from keywords import install_helper, vlm_helper
 from utils.clients.ssh import SSHClient, ControllerClient
-from setups import setup_tis_ssh
-from consts.cgcs import Prompt
 from utils.tis_log import LOG
+from consts.cgcs import Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import TuxlabServerPath
+from consts.filepaths import TuxlabServerPath, InstallPaths
 from consts.build_server import Server, get_build_server_info
 from consts.auth import SvcCgcsAuto
 from consts.filepaths import BuildServerPath
 from consts.auth import Tenant
 
+
 @pytest.fixture(scope='session')
 def install_setup():
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     lab = InstallVars.get_install_var("LAB")
     lab_type = lab["system_mode"]
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
     skip_feed = InstallVars.get_install_var("SKIP_FEED")
-    con_ssh = setup_tis_ssh(lab)
-    active_con_name = "controller-0"
-    active_con = lab[active_con_name]
-    active_con.ssh_conn = con_ssh
+    active_con = lab["controller-0"]
+    build_server = InstallVars.get_install_var('BUILD_SERVER')
+    build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
 
-    # Change default paths according to system version if skipping feed
-    system_version = install_helper.get_current_system_version()
-
-    if InstallVars.get_install_var("LICENSE") == BuildServerPath.DEFAULT_LICENSE_PATH:
-        license_paths = BuildServerPath.TIS_LICENSE_PATHS[system_version]
-        if "simplex" in lab_type:
-            license_path = license_paths[2] if len(license_paths) > 2 else license_paths[1]
-        elif "duplex" in lab_type:
-            license_path = license_paths[1]
-        else:
-            license_path = license_paths[0]
-        InstallVars.set_install_var(license=license_path)
-
-    if skip_feed:
-
-        if InstallVars.get_install_var("TIS_BUILD_DIR") == BuildServerPath.DEFAULT_HOST_BUILD_PATH:
-            host_build_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[system_version]
-            InstallVars.set_install_var(tis_build_dir=host_build_path)
-
-        if InstallVars.get_install_var("GUEST_IMAGE") == BuildServerPath.DEFAULT_GUEST_IMAGE_PATH:
-            guest_image_path = BuildServerPath.GUEST_IMAGE_PATHS[system_version]
-            InstallVars.set_install_var(guest_image=guest_image_path)
-
-    # Reserve nodes
-    vlm_helper.unreserve_hosts(lab["hosts"])
     vlm_helper.reserve_hosts(lab["hosts"])
-
     # Initialise servers
-    # TODO: support different users and passwords
-    # TODO: get_build_server_info might return None
-    bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
+    bld_server = get_build_server_info(build_server)
     bld_server['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
     bld_server_conn = SSHClient(bld_server['name'], user=SvcCgcsAuto.USER,
                                 password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server['prompt'])
@@ -74,9 +46,8 @@ def install_setup():
         file_server_conn.connect()
         file_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
         file_server_dict = {"name": file_server, "prompt": file_server_prompt, "ssh_conn": file_server_conn}
-        file_server_obj = Server(file_server_dict)
+        file_server_obj = Server(**file_server_dict)
 
-    # TODO: support a server that isn't one of the build servers
     iso_host = InstallVars.get_install_var("ISO_HOST")
     if iso_host == bld_server["name"]:
         iso_host_obj = bld_server_obj
@@ -89,12 +60,21 @@ def install_setup():
         iso_host_dict = {"name": iso_host, "prompt": iso_host_prompt, "ssh_conn": iso_host_conn}
         iso_host_obj = Server(**iso_host_dict)
 
+    # set project variables for reporting
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(BUILD_SERVER=build_server + '.wrs.com')
+    job_regex = "(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
+    job = re.search(job_regex, build_dir)
+    ProjVar.set_var(JOB=job.group(0)) if job is not None else ProjVar.set_var(JOB='')
+    build_id = bld_server_conn.exec_cmd("readlink {}".format(build_dir + "/"))[1]
+    ProjVar.set_var(BUILD_ID=build_id)
+
     servers = {
                "build": bld_server_obj,
                "lab_files": file_server_obj
                }
 
-    directories = {"build": InstallVars.get_install_var("TIS_BUILD_DIR"),
+    directories = {"build": build_dir,
                    "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
                    "lab_files": InstallVars.get_install_var("LAB_FILES_DIR")}
 
@@ -136,9 +116,17 @@ def install_setup():
     return _install_setup
 
 
+@pytest.mark.tryfirst
 def pytest_runtest_teardown(item):
+# Try first so that the failed tc_step can be written
     lab = InstallVars.get_install_var("LAB")
+    progress_dir = InstallPaths.INSTALL_TEMP_DIR
+    progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
+    LOG.info("unreserving hosts and writing install step to {}".format(progress_dir))
 
-    # LOG.debug("Teardown at test step: ", LOG.test_step)
-    vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
-
+    # vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+    with open(progress_file_path, "w") as progress_file:
+        os.chmod(progress_file_path, 0o777)
+        progress_file.write(item.nodeid + "\n")
+        progress_file.write("End step: {}".format(str(LOG.test_step)))
+        progress_file.close()

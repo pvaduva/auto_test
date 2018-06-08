@@ -213,7 +213,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
     if wait_for_thread:
         node_thread.join(HostTimeout.SYSTEM_RESTORE)
         if node_thread.is_alive():
-            err_msg = "Host {} failed to install within the {} seconds".format(node.name, HostTimeout.SYSTEM_RESTORE)
+            err_msg = "Host {} failed to fresh_install within the {} seconds".format(node.name, HostTimeout.SYSTEM_RESTORE)
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
@@ -272,9 +272,9 @@ def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
     if node_obj.telnet_login_prompt:
         _telnet_conn.send("\r\n")
-    _telnet_conn.login(fail_ok=True)
-    while _telnet_conn.expect(fail_ok=True, timeout=10) == 0:
-        pass
+    _telnet_conn.connect(fail_ok=True)
+    while _telnet_conn.expect(fail_ok=True, timeout=3) == 0:
+        continue
 
     return _telnet_conn
 
@@ -299,22 +299,27 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
         return
 
     if controller0_node.telnet_conn is None:
-        try:
-            controller0_node.telnet_conn = open_telnet_session(controller0_node)
-            controller0_node.telnet_conn.login()
-        except:
-            LOG.info("Telnet Login failed. skipping wipedisk")
-            return
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+    # Check if controller is online
+    if not local_host.ping_to_host(controller0_node.host_ip):
+        LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
+        return
+    #try:
+    #    controller0_node.telnet_conn.send()
+    #    controller0_node.telnet_conn.expect(timeout=3)
+    #except exceptions.TelnetTimeout:
+    #    LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
+    #    return
 
     if controller0_node.telnet_conn:
         # Run the wipedisk_via_helper utility if the nodes are accessible
         cmd = "test -f " + "/home/wrsroot/wipedisk_helper "
-        if controller0_node.telnet_conn.exec_cmd(cmd)[0] == 0:
+        if controller0_node.telnet_conn.exec_cmd(cmd, blob=controller0_node.telnet_conn.prompt, fail_ok=True)[0] == 0:
             cmd = "chmod 755 wipedisk_helper"
             controller0_node.telnet_conn.exec_cmd(cmd)
             for hostname in hosts:
                 cmd = "./wipedisk_helper {}".format(hostname)
-                if controller0_node.telnet_conn.exec_cmd(cmd)[0] == 0:
+                if controller0_node.telnet_conn.exec_cmd(cmd, fail_ok=True)[0] == 0:
                     LOG.info("All disks wiped for host {}".format(hostname))
         else:
             LOG.info("wipedisk_via_helper files are not on the load, will use  wipedisk command directly")
@@ -624,15 +629,18 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
                           WRSROOT_HOME, pre_opts=pre_opts)
 
 
-def bulk_add_hosts(lab, hosts_xml_file):
-    controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
+def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
+    if con_ssh is None:
+        controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
+    else:
+        controller_ssh=con_ssh
     cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
     if controller_ssh.exec_cmd(cmd)[0] == 0:
-        rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True)
+        rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True, ssh_client=con_ssh)
         if rc != 0 or "Configuration failed" in output:
             msg = "system host-bulk-add failed"
             return rc, None, msg
-        hosts = system_helper.get_hosts_by_personality()
+        hosts = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
         return 0, hosts, ''
 
 
@@ -744,7 +752,7 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
 
 def launch_vms_post_install():
     """
-    Launchs VMs using the launch scripts generated after running lab_setup.sh post install. Verifies the created
+    Launchs VMs using the launch scripts generated after running lab_setup.sh post fresh_install. Verifies the created
     VMs are pingable.
     Returns(list): list of VM ids that are generated
 
@@ -753,7 +761,7 @@ def launch_vms_post_install():
     existing_vms_count = len(vms)
 
     if existing_vms_count > 0:
-        LOG.info("VMs exist; may be already launched as part of install: {} ".format(vms))
+        LOG.info("VMs exist; may be already launched as part of fresh_install: {} ".format(vms))
     else:
         # check if vm launch scripts exist in the lab
         active_controller = ControllerClient.get_active_controller()
@@ -777,7 +785,7 @@ def launch_vms_post_install():
     if len(vms) > 0:
         LOG.info("Verifying VMs are pingable : {} ".format(vms))
         vm_helper.ping_vms_from_natbox(vm_ids=vms)
-        LOG.info("VMs launched successfully post install")
+        LOG.info("VMs launched successfully post fresh_install")
     return vms
 
 
@@ -1347,7 +1355,6 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
-        controller0_node.telnet_conn.login()
 
     connection = controller0_node.telnet_conn
     cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
@@ -1468,7 +1475,6 @@ def restore_controller_system_images(images_backup, tel_net_session=None, fail_o
 
         if controller0_node.telnet_conn is None:
             controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
-            controller0_node.telnet_conn.login()
 
         tel_net_session = controller0_node.telnet_conn
 
@@ -2226,6 +2232,7 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
 
     return True
 
+
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
                     small_footprint=False, security="standard", clone_install=False, system_restore=False):
     """
@@ -2292,8 +2299,9 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         if host_name_split[-1].startswith("0"):
             host_name_split[-1] = host_name_split[-1].replace("0", "", 1)
         host_name = '-'.join(host_name_split)
-        controller0.telnet_conn.hostname = "(" + host_name + "|localhost" + ")"
-        controller0.telnet_conn.set_prompt('{}:~\$ '.format(host_name))
+        host_name_regex = "(" + host_name + "|localhost" + ")"
+        controller0.telnet_conn.hostname = host_name_regex
+        controller0.telnet_conn.set_prompt('{}:~\$ '.format(host_name_regex))
         controller0.telnet_conn.expect()
     else:
         controller0.telnet_conn.login()
@@ -2462,7 +2470,6 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
 
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
-        controller0_node.telnet_conn.login()
 
     telnet_client = controller0_node.telnet_conn
 
@@ -2584,7 +2591,7 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
 
 def check_clone_status(tel_net_session=None, con_ssh=None, fail_ok=False):
     """
-    Checks the install-clone status after system is booted from cloned image.
+    Checks the fresh_install-clone status after system is booted from cloned image.
     Args:
         tel_net_session:
         con_ssh:
@@ -2602,7 +2609,6 @@ def check_clone_status(tel_net_session=None, con_ssh=None, fail_ok=False):
     if controller0_node.telnet_conn is None:
         LOG.info("Setting up telnet connection ...")
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
-        controller0_node.telnet_conn.login()
         controller0_node.telnet_conn.exec_cmd("xterm")
 
     cmd = 'config_controller --clone-status'.format(HostLinuxCreds.get_password())
@@ -2656,13 +2662,13 @@ def check_cloned_hardware_status(host, fail_ok=False):
     LOG.info("Executing system show on cloned system")
     table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
     system_name = table_parser.get_value_two_col_table(table_, 'name')
-    assert "Cloned_system" in system_name, "Unexpected system name {} after install-clone".format(system_name)
+    assert "Cloned_system" in system_name, "Unexpected system name {} after fresh_install-clone".format(system_name)
 
     system_type = table_parser.get_value_two_col_table(table_, 'system_type')
-    assert "All-in-one" in system_type, "Unexpected system type {} after install-clone".format(system_type)
+    assert "All-in-one" in system_type, "Unexpected system type {} after fresh_install-clone".format(system_type)
 
     system_desc = table_parser.get_value_two_col_table(table_, 'description')
-    assert "Cloned_from" in system_desc, "Unexpected system description {} after install-clone".format(system_desc)
+    assert "Cloned_from" in system_desc, "Unexpected system description {} after fresh_install-clone".format(system_desc)
 
     software_version = table_parser.get_value_two_col_table(table_, 'software_version')
 
@@ -2670,16 +2676,16 @@ def check_cloned_hardware_status(host, fail_ok=False):
     table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     host_name = table_parser.get_value_two_col_table(table_, 'hostname')
-    assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
+    assert host == host_name, "Unexpected hostname {} after fresh_install-clone".format(host_name)
     if system_mode == 'duplex':
         host_mgmt_ip = table_parser.get_value_two_col_table(table_, 'mgmt_ip')
-        assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after install-clone"\
+        assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after fresh_install-clone"\
             .format(host_mgmt_ip, host)
 
     host_mgmt_mac = table_parser.get_value_two_col_table(table_, 'mgmt_mac')
 
     host_software_load = table_parser.get_value_two_col_table(table_, 'software_load')
-    assert host_software_load == software_version, "Unexpected software load {} in host {} after install-clone"\
+    assert host_software_load == software_version, "Unexpected software load {} in host {} after fresh_install-clone"\
         .format(host_software_load, host)
 
     LOG.info("Executing system host ethernet port list on cloned system host {}".format(host))
@@ -2694,11 +2700,11 @@ def check_cloned_hardware_status(host, fail_ok=False):
     table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
-        "No data interface type found in Host {} after system clone-install".format(host)
+        "No data interface type found in Host {} after system clone-fresh_install".format(host)
     assert len(table_parser.filter_table(table_, **{'network type':'mgmt'})['values']) >= 1, \
-        "No mgmt interface type found in Host {} after system clone-install".format(host)
+        "No mgmt interface type found in Host {} after system clone-fresh_install".format(host)
     assert len(table_parser.filter_table(table_, **{'network type':'oam'})['values']) >= 1, \
-        "No oam interface type found in Host {} after system clone-install".format(host)
+        "No oam interface type found in Host {} after system clone-fresh_install".format(host)
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
@@ -2714,7 +2720,6 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
 
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
-        controller0_node.telnet_conn.login()
 
     host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
     LOG.info("Locking {} for  oam IP configuration update".format(host))
@@ -2930,7 +2935,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
                 boot_controller(lab=lab_dict)
                 if not local_host.ping_to_host(controller0_node.host_ip):
 
-                    err_msg = "Cannot ping destination lab {} controller-0 after install".format(dest_lab_name)
+                    err_msg = "Cannot ping destination lab {} controller-0 after fresh_install".format(dest_lab_name)
                     LOG.warn(err_msg)
                     if fail_ok:
                         return 1, err_msg
@@ -3045,7 +3050,7 @@ def controller_system_config(active_controller=None, telnet_conn=None, config_fi
     if telnet_conn:
         connection = telnet_conn
     else:
-        active_controller.telnet_conn = open_telnet_session(active_controller, output_dir)
+        active_controller.telnet_conn = open_telnet_session(active_controller)
         connection = active_controller.telnet_conn
 
     connection.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
@@ -3070,7 +3075,6 @@ def controller_system_config(active_controller=None, telnet_conn=None, config_fi
             host_helper.wait_for_hosts_states(active_controller.name,
                                               availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                               use_telnet=True, con_telnet=active_controller.telnet_conn)
-            active_controller.ssh_conn.connect(prompt=Prompt.CONTROLLER_PROMPT, retry=True, retry_timeout=30)
         else:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
@@ -3085,15 +3089,15 @@ def controller_system_config(active_controller=None, telnet_conn=None, config_fi
 
 def post_install(active_controller=None):
     """
-    runs post install scripts if there are any
+    runs post fresh_install scripts if there are any
     Args:
         active_controller: a Node object representing the active controller of the lab.
 
     Returns tuple of a return code a message
     -1: Unable to execute one of the scripts
-    0: succesfully ran post install scripts
-    1: there was no directory containing any post install scripts to run
-    2: The post install directory was empty
+    0: succesfully ran post fresh_install scripts
+    1: there was no directory containing any post fresh_install scripts to run
+    2: The post fresh_install directory was empty
 
 
     """
@@ -3115,7 +3119,7 @@ def post_install(active_controller=None):
     assert connection, "Could not establish a connection to {}".format(active_controller.name)
 
     if connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0] != 0:
-        rc, msg = 1, "No post install directory"
+        rc, msg = 1, "No post fresh_install directory"
 
     else:
         scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
@@ -3132,7 +3136,7 @@ def post_install(active_controller=None):
                     rc, msg = -1, 'Unable to execute {}'.format(script)
                     break
         else:
-            rc, msg = 2, "No post install scripts in the directory"
+            rc, msg = 2, "No post fresh_install scripts in the directory"
 
     connection.exec_cmd("source /etc/nova/openrc; system alarm-list")
     connection.exec_cmd("cat /etc/build.info")
@@ -3162,7 +3166,7 @@ def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_onl
     if exitcode == 1:
         return 1, output
 
-    host_helper._wait_for_simplex_reconnect()
+    host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
     if not host_helper.wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
@@ -3194,19 +3198,21 @@ def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_onl
     return 0, "Host is unlocked and in available state."
 
 
-def enter_bios_option(node_obj, bios_option, reboot=False):
-    if node_obj.telnet_conn is None:
+def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
+    if node_obj.telnet_conn is None and not expect_prompt:
         node_obj.telnet_conn = open_telnet_session(node_obj)
     if reboot:
         vlm_helper.power_off_hosts(node_obj.name)
         power_on_host(node_obj.name, wait_for_hosts_state_=False)
-    node_obj.telnet_conn.expect([bios_option.name], 360)
+    if expect_prompt:
+        node_obj.telnet_conn.expect([bios_option.name], 360)
     for i in range(0, 5):
         bios_option.enter(node_obj.telnet_conn)
         time.sleep(1)
 
 
-def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, fail_ok=False, boot_device_pattern=None):
+def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, fail_ok=False, boot_device_pattern=None,
+                       expect_prompt=True):
     if usb is None:
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
     if boot_device_pattern:
@@ -3226,13 +3232,15 @@ def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, f
             raise exceptions.TelnetException(msg)
     LOG.info("Boot device is: " + str(boot_device_regex))
 
-    node_obj.telnet_conn.expect([boot_device_menu.get_prompt()], 60)
+    if expect_prompt:
+        node_obj.telnet_conn.expect([boot_device_menu.get_prompt()], 60)
     boot_device_menu.select(node_obj.telnet_conn, pattern=re.compile(boot_device_regex))
 
 
 def select_install_option(node_obj, boot_menu, index=None, low_latency=False, security="standard", usb=None,
-                          small_footprint=False, timeout=2400):
-    node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
+                          small_footprint=False, timeout=2400, expect_prompt=True):
+    if expect_prompt:
+        node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
     if usb is None:
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
     if small_footprint:
@@ -3241,7 +3249,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
         tag = "standard"
     if low_latency:
         tag = "lowlat"
-    LOG.info("Choosing centOS {} install option".format(tag))
+    LOG.info("Choosing centOS {} fresh_install option".format(tag))
 
     if usb:
         if isinstance(index, int):
@@ -3255,7 +3263,6 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                 while len(sub_menu_prompts) > 0:
                     index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
                     sub_menu = boot_menu.sub_menus[index + menus_navigated]
-                    LOG.debug("index: {}, sub_menu {}, prompt: {}".format(index, sub_menu.name, sub_menu_prompts[index]))
                     if sub_menu.name == "Controller Configuration":
                         sub_menu.select(node_obj.telnet_conn, pattern="erial")
                     elif sub_menu.name == "Serial Console":
@@ -3285,26 +3292,50 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 def install_node(node_obj, boot_device_dict, small_footprint=False, low_latency=False, security="standard", usb=None):
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
+    boot_device_menu = menu.BootDeviceMenu()
     if usb is None:
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
     if usb:
         kickstart_menu = menu.USBBootMenu()
     else:
         kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name, security=security)
+    if node_obj.telnet_conn is None:
+        node_obj.telnet_conn = open_telnet_session(node_obj)
 
-    enter_bios_option(node_obj, bios_option)
-    if "hp" not in node_obj.host_name and "ml350" not in node_obj.host_name:
-        boot_device_menu = menu.BootDeviceMenu()
-        select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb)
-    if node_obj.name == "controller-0":
-        select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-                              security=security, usb=usb)
+    menu_prompts = [bios_option.name, boot_device_menu.prompt, kickstart_menu.prompt]
+    while len(menu_prompts) > 0:
+        index = node_obj.telnet_conn.expect(menu_prompts, 360, fail_ok=True)
+        if index < 0:
+            break
+
+        elif menu_prompts[index] == bios_option.name:
+            enter_bios_option(node_obj, bios_option, expect_prompt=False)
+
+        elif menu_prompts[index] == boot_device_menu.prompt:
+            select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
+            if node_obj.name != "controller-0":
+                break
+
+        elif menu_prompts[index] == kickstart_menu.prompt:
+            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                                  security=security, usb=usb, expect_prompt=False)
+            break
+        menu_prompts.pop(index)
+
+    # enter_bios_option(node_obj, bios_option)
+    # if "hp" not in node_obj.host_name and "ml350" not in node_obj.host_name:
+    #    boot_device_menu = menu.BootDeviceMenu()
+    #    select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb)
+    #if node_obj.name == "controller-0":
+    #    select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+    #                          security=security, usb=usb)
+
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
     LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
 
 
-def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True, fail_ok=False):
+def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True, fail_ok=False, close_conn=False):
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
     if 'controller-0' not in lab_dict.keys():
@@ -3324,7 +3355,7 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
             boot_controller(lab=lab_dict)
             if not local_host.ping_to_host(controller0_node.host_ip):
 
-                err_msg = "Cannot ping destination lab {} controller-0 after install".format(dest_lab_name)
+                err_msg = "Cannot ping destination lab {} controller-0 after fresh_install".format(dest_lab_name)
                 LOG.warn(err_msg)
                 if fail_ok:
                     return 1, err_msg
@@ -3342,8 +3373,9 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
     assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
     node_ssh = controller0_node.ssh_conn
     if node_ssh is None:
-        node_ssh = SSHClient(lab_dict['controller-0 ip'])
+        node_ssh = SSHClient(lab_dict['controller-0 ip'], initial_prompt=".*\$ ")
         node_ssh.connect(retry=True, retry_timeout=30)
+        close_conn = True
 
     node_ssh.exec_cmd("ls")
     # Burn the iso image file to USB
@@ -3382,6 +3414,9 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
             return 4, err_msg
         else:
             raise exceptions.BackupSystem(err_msg)
+
+    if close_conn:
+        node_ssh.close()
 
     return 0, None
 
@@ -3450,3 +3485,28 @@ def mount_boot_server_iso(lab_dict=None):
     tuxlab_conn.close()
 
     return 0, None
+
+
+def apply_branding(telnet_conn, fail_ok=True):
+    branding_dir = "{}/branding".format(WRSROOT_HOME)
+    branding_dest = "{}/opt/branding".format(WRSROOT_HOME)
+    rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir))[0]
+
+    if rc != 0:
+        msg = "Branding directory does not exist"
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.TelnetException(msg)
+
+    else:
+        cmd = "echo {} | sudo -S cp -r {}/* {}".format(HostLinuxCreds.get_password(), branding_dir, branding_dest)
+        rc = telnet_conn.exec_cmd(cmd)[0]
+
+        if rc != 0:
+            msg = "failed to copy branding files from {} to {}".format(branding_dir, branding_dest)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.TelnetException(msg)
+    return 0, ''

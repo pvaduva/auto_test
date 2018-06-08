@@ -127,7 +127,7 @@ def ceph_post_install_info():
     ceph_post_install_info_['load_path'] = load_path
     ceph_post_install_info_['build_server'] = bld_server_obj
 
-    LOG.info("Ceph post install info: {}".format(ceph_post_install_info_))
+    LOG.info("Ceph post fresh_install info: {}".format(ceph_post_install_info_))
     return ceph_post_install_info_
 
 
@@ -138,7 +138,7 @@ def is_infra_network_configured():
 
 
 def test_negative_ceph_post_install(ceph_post_install_info):
-    LOG.info("Ceph post install: {}".format(ceph_post_install_info))
+    LOG.info("Ceph post fresh_install: {}".format(ceph_post_install_info))
     pass
 
 
@@ -184,13 +184,13 @@ def test_ceph_post_install(ceph_post_install_info):
 
     LOG.info("Verified enough space for ceph-mon")
 
-    LOG.tc_step("Verifying the provisioning of ceph backend post install ...")
+    LOG.tc_step("Verifying the provisioning of ceph backend post fresh_install ...")
 
     rc, output = storage_helper.add_storage_backend(backend='ceph', ceph_mon_gib=ceph_mon_gib,
                                                     ceph_mon_dev=ceph_mon_dev,
                                                     ceph_mon_dev_controller_0_uuid=uuid_0,
                                                     ceph_mon_dev_controller_1_uuid=uuid_1)
-    assert rc == 0, "Fail to add ceph backend post install: {}".format(output)
+    assert rc == 0, "Fail to add ceph backend post fresh_install: {}".format(output)
 
     LOG.tc_step('Checking ceph is added and the task is set to reconfig-controller ...')
 
@@ -233,10 +233,10 @@ def test_ceph_post_install(ceph_post_install_info):
     bld_server = ceph_post_install_info['build_server']
     load_path = ceph_post_install_info['load_path']
     rc, output = install_helper.add_storages(lab, bld_server, load_path)
-    assert rc == 0, "Fail to add storage nodes after ceph post install"
+    assert rc == 0, "Fail to add storage nodes after ceph post fresh_install"
 
     LOG.tc_step('Verifying ceph status after addition on storages ......')
-    assert storage_helper.is_ceph_healthy(), "Ceph not healthy after ceph post install"
+    assert storage_helper.is_ceph_healthy(), "Ceph not healthy after ceph post fresh_install"
 
     LOG.tc_step('Verifying system health after addition of storage nodes ......')
     end_time = time.time() + 120
