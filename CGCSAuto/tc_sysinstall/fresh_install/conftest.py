@@ -124,7 +124,7 @@ def pytest_runtest_teardown(item):
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
     LOG.info("unreserving hosts and writing install step to {}".format(progress_dir))
 
-    # vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+    vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
     with open(progress_file_path, "w") as progress_file:
         os.chmod(progress_file_path, 0o777)
         progress_file.write(item.nodeid + "\n")
