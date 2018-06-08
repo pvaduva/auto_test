@@ -313,7 +313,7 @@ class Labs:
     WCP_13 = {
         'short_name': 'wcp_13',
         'name': 'yow-cgcs-wildcat-13',
-        'floating ip': '128.224.151.229',
+        'floating ip': '128.224.150.133',
         'controller-0 ip': '128.224.150.133',
         'controller_nodes': [23213],
     }
@@ -321,7 +321,7 @@ class Labs:
     WCP_14 = {
         'short_name': 'wcp_14',
         'name': 'yow-cgcs-wildcat-14',
-        'floating ip': '128.224.151.217',
+        'floating ip': '128.224.150.136',
         'controller-0 ip': '128.224.150.136',
         'controller_nodes': [23214],
     }
