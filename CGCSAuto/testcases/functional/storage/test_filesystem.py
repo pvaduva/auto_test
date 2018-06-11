@@ -12,7 +12,7 @@ from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
-DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
+DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
 @fixture()
@@ -305,7 +305,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     1.  Increase the size of backup to allow for test to proceed.
     2.  Wait for alarms to clear and then check the underlying filesystem is
     updated
-    2.  Attempt to resize the cgcs filesystem.  This should be successful.
+    2.  Attempt to resize the glance filesystem.  This should be successful.
     3.  Attempt to resize cgcs again immediately.  This should be rejected.
 
     Assumptions:
@@ -374,7 +374,7 @@ def _test_modify_drdb():
 
     """
 
-    drbdfs = ['backup', 'cgcs', 'database', 'img-conversions']
+    drbdfs = ['backup', 'glance', 'database', 'img-conversions']
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step("Determine the available free space on the system")
@@ -394,7 +394,7 @@ def _test_modify_drdb():
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
 
-    LOG.tc_step("Increase the size of the backup and cgcs filesystem")
+    LOG.tc_step("Increase the size of the backup and glance filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
     if float(free_space) > 10:
@@ -404,7 +404,7 @@ def _test_modify_drdb():
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
-    partition_name = "cgcs"
+    partition_name = "glance"
     partition_value = drbdfs_val[partition_name]
     cgcs_free_space = math.trunc(backup_freespace / 2)
     new_partition_value = backup_freespace + int(partition_value)
