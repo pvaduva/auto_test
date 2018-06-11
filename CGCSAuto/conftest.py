@@ -357,7 +357,8 @@ def pytest_configure(config):
 
     InstallVars.set_install_var(lab=lab)
 
-    if config.getoption('capture').lower() == 'no':
+    print(str(config.getoption('capture')))
+    if config.getoption('noconsolelog'):
         global console_log
         console_log = False
 
@@ -420,6 +421,7 @@ def pytest_addoption(parser):
     telnetlog_help = "Collect telnet logs throughout the session"
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
+    no_console_log = 'Print minimal console logs'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -457,6 +459,8 @@ def pytest_addoption(parser):
                      help=horizon_visible_help)
     parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
                      help=remote_cli_help)
+    parser.addoption('--noconsolelog', '--noconsole', '--no-console-log', '--no_console_log', '--no-console',
+                     '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
 
 
     ##################################
