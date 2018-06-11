@@ -300,7 +300,7 @@ def __is_table_two_column(table_):
     return True if table_['headers'] in TWO_COLUMN_TABLE_HEADERS else False
 
 
-def get_column(table_, header):
+def get_column(table_, header, merge_lines=False):
     """
     Get a whole column with customized header as a list. The header itself is excluded.
 
@@ -311,6 +311,7 @@ def get_column(table_, header):
                 'headers': ["Field", "Value"];
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         header (str): header of a column
+        merge_lines (bool): whether to merge lines if multi-line entry found
 
     Returns (list): target column. Each item is a string.
 
@@ -322,7 +323,10 @@ def get_column(table_, header):
     index = get_column_index(table_, header)
     column = []
     for row in rows:
-        column.append(row[index])
+        value = row[index]
+        if merge_lines and isinstance(value, list):
+            value = ''.join(value)
+        column.append(value)
 
     return column
 
@@ -447,7 +451,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
     if not new_kwargs:
         LOG.debug("kwargs unspecified, returning the whole target column as list.")
-        return get_column(table_, target_header)
+        return get_column(table_, target_header, merge_lines=merge_lines)
 
     row_indexes = []
     for header, values in new_kwargs.items():
@@ -487,7 +491,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
         # handle multi-line value
         if merge_lines and isinstance(target_value, list):
-            target_value = ' '.join(target_value)
+            target_value = ''.join(target_value)
 
         target_values.append(target_value)
 
