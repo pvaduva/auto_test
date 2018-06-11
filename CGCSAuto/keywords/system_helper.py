@@ -3323,6 +3323,9 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=
     return 0, msg
 
 
-def is_stx_build(con_ssh=None):
-    typelist_table = table_parser.table(cli.ceilometer('metertype-list', ssh_client=con_ssh))
-    return 'vswitch.engine.util' not in table_parser.get_column(typelist_table, 'Name')
+def is_avs(con_ssh=None):
+    vswitch_type = ProjVar.get_var('VSWITCH_TYPE')
+    if vswitch_type is None:
+        vswitch_type = get_system_value(field='vswitch_type', con_ssh=con_ssh)
+        ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
+    return not (vswitch_type != 'ovs')
