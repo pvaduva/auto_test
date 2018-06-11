@@ -2277,28 +2277,33 @@ def __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=0, auth_info=Tenant.
     return filtered_ips
 
 
-def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
+def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD, vshell=False):
     """
     Get the eth name for given mac address on the ssh client provided
     Args:
         ssh_client (SSHClient): usually a vm_ssh
         mac_addr (str): such as "fa:16:3e:45:0d:ec"
         timeout (int): max time to wait for the given mac address appear in ip addr
+        vshell (bool): if True, get eth name from "vshell port-list"
 
     Returns (str): The first matching eth name for given mac. such as "eth3"
 
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
-        if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
+        if not vshell:
+            if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
 
-            code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
-            # sample output:
-            # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
-            # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
+                code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
+                # sample output:
+                # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
+                # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
 
-            return output.split(sep=':')[1].strip()
-
+                return output.split(sep=':')[1].strip()
+        else:
+            code, output = ssh_client.exec_cmd('vshell port-list | grep {}'.format(mac_addr))
+            #|uuid|id|type|name|socket|admin|oper|mtu|mac-address|pci-address|network-uuid|network-name
+            return output.split(sep='|')[4].strip()
         time.sleep(1)
     else:
         LOG.warning("Cannot find provided mac address {} in 'ip addr'".format(mac_addr))

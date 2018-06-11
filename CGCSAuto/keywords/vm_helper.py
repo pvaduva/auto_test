@@ -577,7 +577,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             # tenant_vif = random.choice(['virtio', 'avp'])
             if tenant_net_id:
                 nics.append({'net-id': tenant_net_id, 'vif-model': 'virtio'})
-    
+
     if isinstance(nics, dict):
         nics = [nics]
 
@@ -671,7 +671,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if meta:
         meta_args = [' --meta {}={}'.format(key_, val_) for key_, val_ in meta.items()]
         args_ += ''.join(meta_args)
-    
+
     if poll:
         args_ += ' --poll'
 
@@ -4455,7 +4455,7 @@ def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, exp
 
     LOG.info("Waiting for migration {} for vm {} to reach {} status".format(migration_id, vm_id, expt_status))
     end_time = time.time() + timeout
-    prev_state=None
+    prev_state = None
     while time.time() < end_time:
         mig_status = get_vm_migration_values(vm_id=vm_id, rtn_val='Status', **{'Id': migration_id})[0]
         if mig_status == expt_status:
@@ -4525,20 +4525,43 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
 
 
 def _set_vm_route(vm_id, target_subnet, via_ip, dev_or_mac, persist=True):
-    # the os on vm must be managed by network-scripts
+    # returns True if the targeted VM is vswitch-enabled
+    # for vswitch-enabled VMs, it must be setup with TisInitServiceScript if persist=True
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        vshell, msg = ssh_client.exec_cmd("vshell port-list", fail_ok=True)
+        vshell = not vshell
         if ':' in dev_or_mac:
-            dev = network_helper.get_eth_for_mac(ssh_client, dev_or_mac)
+            dev = network_helper.get_eth_for_mac(ssh_client, dev_or_mac, vshell=vshell)
         else:
             dev = dev_or_mac
-        param = target_subnet, via_ip, dev
-        LOG.info("Routing {} via {} on interface {}".format(*param))
-        ssh_client.exec_sudo_cmd("route add -net {} gw {} {}".format(*param), fail_ok=False)
-        if persist:
-            LOG.info("Setting persistent route")
+        if not vshell:   # not avs managed
+            param = target_subnet, via_ip, dev
+            LOG.info("Routing {} via {} on interface {}".format(*param))
+            ssh_client.exec_sudo_cmd("route add -net {} gw {} {}".format(*param), fail_ok=False)
+            if persist:
+                LOG.info("Setting persistent route")
+                ssh_client.exec_sudo_cmd(
+                    "echo -e \"{} via {}\" > /etc/sysconfig/network-scripts/route-{}".format(*param),
+                    fail_ok=False)
+            return False
+        else:
+            param = target_subnet, via_ip, dev
+            LOG.info("Routing {} via {} on interface {}, AVS-enabled".format(*param))
             ssh_client.exec_sudo_cmd(
-                "echo -e \"{} via {}\" > /etc/sysconfig/network-scripts/route-{}".format(*param),
-                fail_ok=False)
+                "sed -i $'s,quit,route add {} {} {} 1\\\\nquit,g' /etc/vswitch/vswitch.cmds.default".format(
+                    target_subnet, dev, via_ip
+                ), fail_ok=False)
+            # reload vswitch
+            ssh_client.exec_sudo_cmd("/etc/init.d/vswitch restart", fail_ok=False)
+            if persist:
+                LOG.info("Setting persistent route")
+                ssh_client.exec_sudo_cmd(
+                    # ROUTING_STUB
+                    # "192.168.1.0/24,192.168.111.1,eth0"
+                    "sed -i $'s@#ROUTING_STUB@\"{},{},{}\"\\\\n#ROUTING_STUB@g' {}".format(
+                        target_subnet, via_ip, dev, TisInitServiceScript.configuration_path
+                    ), fail_ok=False)
+            return True
 
 
 def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
@@ -4587,56 +4610,84 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
     if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
         raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
 
-    _set_vm_route(
+    vshell_vm1 = _set_vm_route(
         vm1,
         interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
 
     if bidirectional:
-        _set_vm_route(
+        vshell_vm2 = _set_vm_route(
             vm2,
             interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm2]['internal']['mac'])
 
     if validate:
         LOG.info("Validating route(s) across data")
-        ping_vms_from_vm(vm2, vm1, net_types='data')
+        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1)
         if bidirectional:
-            ping_vms_from_vm(vm1, vm2, net_types='data')
+            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2)
 
     return interfaces
 
 
-def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
+def setup_kernel_routing(vm_id, **kwargs):
     """
     Setup kernel routing function for the specified VM
-    replciates the operation as in wrs_guest_setup.sh
+    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
     in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
-    the script could be located on the VM at /etc/init.d/tis_automation_setup_kernel_routing.sh
+    see TisInitServiceScript for script details
     no fail_ok option, since if failed, the vm's state is undefined
 
     Args:
         vm_id (str):
             the VM to be configured
-        low_latency (bool):
-            if the VM is configured for low_latency,
-            when True, cpu0 is not used for netif_multiqueue
-        ssh_args (dict):
-            kwargs for ssh_to_vm_from_natbox
+        kwargs (dict):
+            kwargs for TisInitServiceScript.configure
 
     """
-    LOG.info("Setting up kernel routing for VM {}, low_latency={}".format(vm_id, low_latency))
+    LOG.info("Setting up kernel routing for VM {}, kwargs={}".format(vm_id, kwargs))
 
     scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
-    with ssh_to_vm_from_natbox(vm_id, **ssh_args) as ssh_client:
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
         r, msg = ssh_client.exec_cmd("cat /proc/sys/net/ipv4/ip_forward", fail_ok=False)
         if msg == "1":
             LOG.warn("VM {} has ip_forward enabled already, skipping".format(vm_id))
             return
+        TisInitServiceScript.configure(ssh_client, **kwargs)
+        TisInitServiceScript.enable(ssh_client)
+        TisInitServiceScript.start(ssh_client)
 
-        if low_latency:
-            low_latency = "'yes'"
-        else:
-            low_latency = "'no'"
-        TisInitServiceScript.configure(ssh_client, LOW_LATENCY=low_latency)
+
+def setup_avr_routing(vm_id, **kwargs):
+    """
+    Setup avr routing (vswitch L3) function for the specified VM
+    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
+    in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
+    see TisInitServiceScript for script details
+    no fail_ok option, since if failed, the vm's state is undefined
+
+    Args:
+        vm_id (str):
+            the VM to be configured
+        kwargs (dict):
+            kwargs for TisInitServiceScript.configure
+
+    """
+    LOG.info("Setting up avr routing for VM {}, kwargs={}".format(vm_id, kwargs))
+    data = network_helper.get_data_ips_for_vms(vm_id)[0]
+    internal = network_helper.get_internal_ips_for_vms(vm_id)[0]
+    for vm, info in get_vms_ports_info([vm_id]).items():
+        for ip, cidr, mac in info:
+            if ip == data:
+                data_netmask = ipaddress.ip_network(cidr).netmask
+            elif ip == internal:
+                internal_netmask = ipaddress.ip_network(cidr).netmask
+
+    scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        TisInitServiceScript.configure(ssh_client, FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
+    "{},{},eth0,9000"
+    "{},{},eth1,9000"
+)
+""".format(data, data_netmask, internal, internal_netmask), **kwargs)
         TisInitServiceScript.enable(ssh_client)
         TisInitServiceScript.start(ssh_client)
 

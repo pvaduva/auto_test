@@ -8,7 +8,20 @@ from utils.tis_log import LOG
 from consts.cgcs import IxiaServerIP
 from utils.exceptions import IxiaError
 
-import IxNetwork
+try:
+    import IxNetwork
+except ImportError as err:
+    LOG.warn(str(err))
+    LOG.warn("keywords/ixia_helper is not available")
+
+    class ImportFailedModule(object):
+        def __init__(self, imp_err):
+            self._exception = imp_err
+
+        def __getattr__(self, name):
+            raise self._exception
+
+    IxNetwork = ImportFailedModule(err)
 
 
 class IxiaResource(object):
@@ -153,21 +166,31 @@ class IxiaSession(object):
         LOG.info("Connecting to Ixia API Server at {}:{}, version {}".format(
                 tcl_server_ip, tcl_server_port, tcl_server_ver))
 
-        self._ixnet.connect(tcl_server_ip, '-port', tcl_server_port, '-version', tcl_server_ver)
-        self._connected = True
-        self._connected_remote = (tcl_server_ip, tcl_server_port, tcl_server_ver)
+        try:
+            self._connected = True
+            self._connected_remote = (tcl_server_ip, tcl_server_port, tcl_server_ver)
+            self._ixnet.connect(tcl_server_ip, '-port', tcl_server_port, '-version', tcl_server_ver)
+        except Exception as err:
+            # if connect failed, do not assume the user will call disconnect
+            self.disconnect()
+            raise err
 
     def disconnect(self):
         """
         Disconnect the underlying socket.
-        Allow to be called multiple times.
+        Allowed to be called multiple times.
         """
         if self._connected:
-            for res in self._ixia_resources:
-                IxiaResource.release(res)
-            self._ixnet.disconnect()
+            try:
+                self._ixnet.disconnect()
+            except:
+                pass
             self._connected = False
             self._connected_remote = None
+
+        for res in self._ixia_resources:
+            IxiaResource.release(res)
+        self._ixia_resources.clear()
 
     def add_chassis(self, chassis_ip=None, timeout=60, default=True, clear=False):
         """

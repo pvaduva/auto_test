@@ -1,5 +1,6 @@
 from consts.proj_vars import ProjVar
 
+
 class TisInitServiceScript(object):
     script_path = "/etc/init.d/tis_automation_init.sh"
     configuration_path = "/etc/init.d/tis_automation_init.config"
