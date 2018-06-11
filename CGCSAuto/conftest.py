@@ -27,6 +27,7 @@ no_teardown = False
 tracebacks = []
 region = None
 test_count = 0
+console_log = True
 
 ################################
 # Process and log test results #
@@ -229,7 +230,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 
     print_msg = separator + '\n' + msg
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
-    print(print_msg)
+    if console_log:
+        print(print_msg)
     if log_type == 'tc_res':
         global tc_end_time
         tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
@@ -278,6 +280,7 @@ def pytest_configure(config):
     openstack_cli = config.getoption('openstackcli')
     horizon_visible = config.getoption('horizon_visible')
     remote_cli = config.getoption('remote_cli')
+
     global change_admin
     change_admin = config.getoption('changeadmin')
     global repeat_count
@@ -354,7 +357,11 @@ def pytest_configure(config):
 
     InstallVars.set_install_var(lab=lab)
 
-    config_logger(log_dir)
+    if config.getoption('capture').lower() == 'no':
+        global console_log
+        console_log = False
+
+    config_logger(log_dir, console_log=console_log)
 
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
@@ -604,7 +611,7 @@ def pytest_addoption(parser):
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
 
 
-def config_logger(log_dir):
+def config_logger(log_dir, console_log=True):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
@@ -627,9 +634,10 @@ def config_logger(log_dir):
     LOG.addHandler(file_handler)
 
     # logger for stream output
+    console_level = logging.INFO if console_log else logging.CRITICAL
     stream_hdler = logging.StreamHandler()
     stream_hdler.setFormatter(tis_formatter)
-    stream_hdler.setLevel(logging.INFO)
+    stream_hdler.setLevel(console_level)
     LOG.addHandler(stream_hdler)
 
 

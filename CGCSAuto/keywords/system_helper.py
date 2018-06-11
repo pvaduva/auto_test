@@ -3321,3 +3321,8 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=
     msg = 'System spectre meltdown version is successfully modified to: {}'.format(version)
     LOG.info(msg)
     return 0, msg
+
+
+def is_stx_build(con_ssh=None):
+    typelist_table = table_parser.table(cli.ceilometer('metertype-list', ssh_client=con_ssh))
+    return 'vswitch.engine.util' not in table_parser.get_column(typelist_table, 'Name')

@@ -102,8 +102,11 @@ def test_ceilometer_meters_exist(meters):
     hypervisors = host_helper.get_hypervisors()
     vswitch_util_meters_tab = ceilometer_helper.get_meters_table(meter='vswitch.engine.util')
     vswitch_engines_meters = table_parser.get_values(vswitch_util_meters_tab, 'Resource ID', Name='vswitch.engine.util')
-
-    assert len(hypervisors) <= len(vswitch_engines_meters), "Each nova hypervisor should have at least one vSwitch core"
+    if system_helper.is_stx_build():
+        assert not vswitch_engines_meters, "vswitch meters found for STX build"
+    else:
+        assert len(hypervisors) <= len(vswitch_engines_meters), \
+            "Each nova hypervisor should have at least one vSwitch core"
 
 
 @fixture(scope='module', autouse=True)
