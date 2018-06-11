@@ -3329,7 +3329,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
 
     vms_tenants = list(set(vms_tenants))
 
-    all_routers = get_routers(auth_info=Tenant.ADMIN)
+    all_routers = get_routers(auth_info=auth_info)
     vms_routers = []
     for router in all_routers:
         router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info, con_ssh=con_ssh)

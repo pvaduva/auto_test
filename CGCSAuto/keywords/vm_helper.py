@@ -1545,7 +1545,7 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
     content = ''
     for vm_id in vm_ids:
         vm_args = '{}{}'.format(args, vm_id)
-        output = cli.nova('console-log', vm_args, ssh_client=con_ssh)
+        output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
         console_logs[vm_id] = output
         content += "Console log for vm {}:\n{}\n".format(vm_id, output)
 
@@ -1703,7 +1703,8 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
-                          vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True):
+                          vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True,
+                          auth_info=Tenant.ADMIN):
     """
     ssh to a vm from natbox.
 
@@ -1723,6 +1724,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         retry (bool): whether or not to retry if fails to connect
         retry_timeout (int): max time to retry
         close_ssh
+        auth_info (dict)
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -1733,13 +1735,13 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
     """
     if vm_image_name is None:
-        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh).strip().lower()
+        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh, auth_info=auth_info).strip().lower()
 
     if vm_ip is None:
         if use_fip:
-            vm_ip = network_helper.get_external_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]
+            vm_ip = network_helper.get_external_ips_for_vms(vms=vm_id, con_ssh=con_ssh, auth_info=auth_info)[0]
         else:
-            vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]
+            vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, con_ssh=con_ssh, auth_info=auth_info)[0]
 
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
@@ -3982,7 +3984,8 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     boot_source = boot_source if boot_source else 'volume'
     if image:
         if boot_source == 'volume':
-            resource_id = cinder_helper.create_volume(name=vm_type, image_id=image, guest_image=guest_os)[1]
+            resource_id = cinder_helper.create_volume(name=vm_type, image_id=image, guest_image=guest_os,
+                                                      auth_info=auth_info)[1]
             if cleanup:
                 ResourceCleanup.add('volume', resource_id, scope=cleanup)
         else:
@@ -3997,9 +4000,9 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         else:
             vif_model = vm_type
 
-        mgmt_net_id = network_helper.get_mgmt_net_id()
-        tenant_net_id = network_helper.get_tenant_net_id()
-        internal_net_id = network_helper.get_internal_net_id()
+        mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info)
+        tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info)
+        internal_net_id = network_helper.get_internal_net_id(auth_info=auth_info)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
