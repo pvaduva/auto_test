@@ -450,14 +450,14 @@ class TestSharedCpuEnabled:
         f2_numa_nodes = 1
         f2_node0 = 1
         f2_shared_vcpu = 1
-        new_shared_cpu_flavor = create_shared_flavor(vcpus=f2_vcpus, storage_backing=add_shared_cpu,
+        new_shared_cpu_flavor = create_shared_flavor(vcpus=f2_vcpus, storage_backing=storage_backing,
                                                      numa_nodes=f2_numa_nodes, node0=f2_node0,
                                                      shared_vcpu=f2_shared_vcpu)
 
         f3_vcpus = 4
         f3_numa_nodes = 1
         f3_node0 = 1
-        non_shared_cpu_flavor = create_shared_flavor(vcpus=f3_vcpus, storage_backing=add_shared_cpu,
+        non_shared_cpu_flavor = create_shared_flavor(vcpus=f3_vcpus, storage_backing=storage_backing,
                                                      numa_nodes=f3_numa_nodes, node0=f3_node0)
 
         LOG.tc_step("Resize vm w/shared cpu flavor and validate shared vcpu")
