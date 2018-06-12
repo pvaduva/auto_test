@@ -176,10 +176,10 @@ def test_invalid_firewall_rules(delete_file):
     cli_client.exec_cmd("sed -e '3i invalid' -i {}".format(invalid_rules_file))
 
     LOG.tc_step("Install firewall rules with invalid file name {}".format(invalid_rules_file))
-    code, output = cli.system('firewall-rules-install', invalid_rules_file, rtn_list=True)
+    code, output = cli.system('firewall-rules-install', invalid_rules_file, fail_ok=True, rtn_list=True)
     LOG.info("Invalid firewall rules return code:[{}] & output: [{}]".format(code, output))
 
-    assert 'Firewall rules install failed: Error in custom firewall rule file' in output, "Unexpected output"
+    assert 'Error in custom firewall rule file' in output, "Unexpected output"
     assert code == 1, "Invalid firewall rules exit code"
 
 
