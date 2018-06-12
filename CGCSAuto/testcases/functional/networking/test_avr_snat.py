@@ -56,7 +56,7 @@ def snat_setups(request):
     network_helper.associate_floating_ip(floatingip, vm_id, fip_val='ip')
 
     LOG.fixture_step("Ping vm's floating ip from NatBox and ensure it's reachable")
-    vm_helper.ping_vms_from_natbox(vm_id, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, use_fip=True)
 
     return vm_id, floatingip
 
@@ -275,7 +275,7 @@ def test_snat_computes_lock_reboot(snat_setups):
 
     vm_ = snat_setups[0]
     LOG.tc_step("Ping VM {} from NatBox".format(vm_))
-    vm_helper.ping_vms_from_natbox(vm_, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
 
     vm_host = nova_helper.get_vm_host(vm_)
     LOG.info("VM host is {}".format(vm_host))
