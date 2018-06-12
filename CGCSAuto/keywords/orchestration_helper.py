@@ -6,8 +6,10 @@ import time
 
 from utils import cli, exceptions
 from utils.tis_log import LOG
-from consts.cgcs import OrchestStrategyPhase, OrchStrategyKey
-from consts.timeout import OrchestrationPhaseTimeout
+from utils.clients.ssh import ControllerClient
+from consts.cgcs import OrchestStrategyPhase, OrchStrategyKey, OrchStrategyState
+from consts.timeout import OrchestrationPhaseTimeout, HostTimeout
+from consts.auth import Tenant
 
 
 PHASE_COMPLETION_CHECK_INTERVAL = 20
@@ -80,6 +82,16 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
             return 1, msg
         else:
             raise exceptions.OrchestrationError(msg)
+
+    if 'strategy-uuid' not in [tr.strip() for tr in output.split(':')]:
+        msg = "The {} strategy not created: {}".format(orchestration, output)
+        LOG.warn(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.OrchestrationError(msg)
+
+
     if wait_for_completion:
         if timeout is None:
             #timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.BUILD]
@@ -207,6 +219,64 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
     return 0, results
 
 
+def delete_strategy(orchestration, conn_ssh=None, abort=True, fail_ok=False):
+    """
+    Deletes an orchestration strategy
+    Args:
+        orchestration (str): indicates the orchestration strategy type. Choices are  patch or upgrade
+
+        conn_ssh:
+        fail_ok:
+
+    Returns (tupble):
+        (0, dict) - success  strategy applied successfully
+        (1, output) - CLI command rejected
+        (2, err_msg) - Timeout before the strategy is fully applied
+        (3, err_msg) - Strategy apply failed
+
+    """
+    if orchestration is None:
+        raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
+    cmd = ''
+    if orchestration is "patch":
+        cmd += "patch-strategy "
+    elif orchestration is "upgrade":
+        cmd += "upgrade-strategy "
+
+
+    strategy_values = get_current_strategy_values(orchestration)
+    if len(strategy_values) > 0:
+
+        startegy_state = strategy_values[OrchStrategyKey.STATE] if OrchStrategyKey.STATE in strategy_values else None
+        if startegy_state and startegy_state in [OrchStrategyState.APPLYING, OrchStrategyState.BUILDING, OrchStrategyState.BUILDING]:
+            if abort:
+                cli.sw_manager(cmd + "abort", '', ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
+                wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.ABORT)
+            else:
+                msg = " In correct phase cannot be aborted: {}"
+                LOG.warn(msg)
+                if fail_ok:
+                    return 1, msg
+                else:
+                    raise exceptions.OrchestrationError(msg)
+
+
+        rc, output = cli.sw_manager(cmd + "delete", '', ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
+
+        if rc != 0:
+            msg = " CLI command {} rejected: {}".format(cmd, output)
+            LOG.warn(msg)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.OrchestrationError(msg)
+        LOG.info("{} : {}".format(output, orchestration))
+    else:
+        LOG.info("No {} strategy available".format(orchestration))
+
+    return 0, None
+
+
 def get_current_strategy_values(orchestration, conn_ssh=None):
     """
     Gets orchestration strategy values
@@ -228,11 +298,17 @@ def get_current_strategy_values(orchestration, conn_ssh=None):
         cmd += "patch-strategy show"
     else:
         cmd += "upgrade-strategy show"
+    try:
+        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+    except:
+        time.sleep(20)
+        if not conn_ssh._is_connected(fail_ok=True):
+            conn_ssh.connect(retry=True)
+            ControllerClient.set_active_controller(ssh_client=conn_ssh)
+        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
 
-    rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
     rtn = {}
-    if rc == 0 and output is not None and "No strategy available" not in output:
-        LOG.info("{} output: {}".format(cmd, output))
+    if rc == 0 and output is not None and ('strategy-uuid' in [tr.strip() for tr in output.split(':')]):
         lines = output.splitlines()
         for line in lines:
             pairs = line.split(':')
@@ -264,7 +340,7 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
     if not validate_current_strategy_phase(orchestration, current_phase):
         raise exceptions.OrchestrationError("Current {} strategy phase does not match the specified phase={}"
                                             .format(orchestration, current_phase))
-
+    check_interval = PHASE_COMPLETION_CHECK_INTERVAL
     if timeout is not None and timeout < PHASE_COMPLETION_CHECK_INTERVAL:
         timeout = PHASE_COMPLETION_CHECK_INTERVAL
     else:
@@ -273,6 +349,7 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
                 timeout = OrchestrationPhaseTimeout.BUILD
             elif current_phase == OrchestStrategyPhase.APPLY:
                 timeout = OrchestrationPhaseTimeout.APPLY
+                check_interval = 40
             else:
                 timeout = OrchestrationPhaseTimeout.ABORT
 
@@ -281,7 +358,19 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
     output = None
     prev_phase_completion = "0%"
 
+    if conn_ssh is None:
+        conn_ssh = ControllerClient.get_active_controller()
+
     while time.time() < end_time:
+        if not conn_ssh._is_connected(fail_ok=True):
+            ## ssh connection is lost. Controllers may swact in path application.
+            time.sleep(30)
+            conn_ssh.connect(retry=True, retry_timeout=HostTimeout.SWACT-30)
+            ControllerClient.set_active_controller(conn_ssh)
+            time.sleep(60)
+            cli.source_openrc_file(conn_ssh, Tenant.ADMIN, '/etc/nova/openrc')
+            end_time = end_time + HostTimeout.SWACT
+
         output = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
         if len(output) > 0:
             if output[OrchStrategyKey.CURRENT_PHASE] == OrchestStrategyPhase.ABORT:
@@ -301,7 +390,7 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
             if phase_completion == '100%':
                 return True, None
             else:
-                time.sleep(PHASE_COMPLETION_CHECK_INTERVAL)
+                time.sleep(check_interval)
     else:
         msg = "{} strategy {} phase was not completed in specified time: {}"\
             .format(orchestration, current_phase, output)

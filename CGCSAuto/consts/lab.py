@@ -619,6 +619,18 @@ class Labs:
         'compute_nodes': [67712, 94178, 80778],
     }
 
+    WP_13_14 = {
+        'short_name': 'wp_13_14',
+        'name': 'yow-cgcs-wolfpass-13_14',
+        'floating ip': '128.224.150.165',
+        'controller-0 ip': '128.224.150.164',
+        'controller-1 ip': '128.224.150.236',
+        'controller_nodes': [37879, 77147],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+    }
+
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',

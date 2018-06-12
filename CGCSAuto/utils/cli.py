@@ -84,7 +84,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
             # Add additional auth args for https lab
             if CliAuth.get_var('HTTPS'):
-                if cmd == 'openstack':
+                if cmd in ['openstack', "sw-manager"]:
                     flags += ' --os-interface internal'
                 else:
                     flags += ' --os-endpoint-type internalURL'
@@ -298,7 +298,7 @@ def qemu_img(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False,
 
 
 def sw_manager(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN,
-               source_creden_=Tenant.ADMIN, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+               source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
 
     return exec_cli('sw-manager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,

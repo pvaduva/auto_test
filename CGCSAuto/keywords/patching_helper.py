@@ -4,7 +4,7 @@ import re
 import time
 from datetime import datetime
 
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, orchestration_helper
 from utils import cli
 from utils import table_parser
 from utils.clients.ssh import ControllerClient
@@ -1318,8 +1318,8 @@ def remove_patches(patch_ids='', con_ssh=None):
     assert 0 == code, 'Failed to remove patches:{}, \noutput {}'.format(patch_ids, output)
 
     patch_ids_removed = []
-    for patch_ids, rtn_code in output:
-        patch_ids_removed += patch_ids
+    for patch_id, rtn_code in output:
+        patch_ids_removed += patch_id
 
     assert patch_ids_removed, \
         'Failed to remove patches:{}, \npatch_ids_removed {}'.format(patch_ids, patch_ids_removed)
@@ -1419,3 +1419,22 @@ def lab_time_now(con_ssh=None):
     parsed = datetime.strptime(with_milliseconds, format1)
 
     return with_milliseconds.split('.')[0], parsed
+
+
+def orchestration_patch_hosts(controller_apply_type='serial', storage_apply_type='serial',
+                              compute_apply_type='serial', max_parallel_computes=2, instance_action='stop-start',
+                              alarm_restrictions='strict'):
+
+    # Create patch strategy
+    orchestration = 'patch'
+
+    LOG.tc_step("Creating patch  strategy  ......")
+    orchestration_helper.create_strategy(orchestration, controller_apply_type=controller_apply_type,
+                                         storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
+                                         max_parallel_computes=max_parallel_computes,
+                                         instance_action=instance_action, alarm_restrictions=alarm_restrictions)
+
+    LOG.tc_step("Applying patch strategy ......")
+    orchestration_helper.apply_strategy(orchestration)
+    LOG.tc_step("Delete patch orchestration strategy ......")
+    orchestration_helper.delete_strategy(orchestration)

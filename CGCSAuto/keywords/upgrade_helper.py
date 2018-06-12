@@ -345,6 +345,8 @@ def get_system_health_query_upgrade_2(con_ssh=None):
                 failed[k.strip()] = v.strip()
             elif "Incomplete configuration" in k:
                 failed[k.strip()] = v.strip()
+            elif "Locked or disabled hosts" in k:
+                failed[k.strip()] = v.strip()
 
 
         elif "Missing manifests" in line:

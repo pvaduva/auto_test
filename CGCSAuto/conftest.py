@@ -508,20 +508,7 @@ def pytest_addoption(parser):
                          "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
                          "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
                          " The default is default. Applicable only for upgrades from R3."
-    apply_strategy_help = "How the orchestration strategy is applied:" \
-                          "  serial - apply orchestration strategy one node  at a time; " \
-                          "  parallel - apply orchestration strategy in parallel; " \
-                          "  ignore - do not apply the orchestration strategy; " \
-                          " If not specified,  the system will choose the option to apply the strategy. " \
-                          "Applicable only for upgrades from R3."
-    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
-                                " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
+
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
@@ -536,17 +523,7 @@ def pytest_addoption(parser):
     parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
                      action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
 
-    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
-                     action='store',  help=apply_strategy_help)
 
-    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
-                     action='store',  help=max_parallel_compute_help)
-
-    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
-                     action='store', default='strict',  help=alarm_restriction_help)
 
     ####################
     # Patching options #
@@ -572,6 +549,51 @@ def pytest_addoption(parser):
 
     parser.addoption('--patch-base-dir', '--patch_base_dir',  dest='patch_base_dir', default=None,
                      action='store', metavar='BASEDIR',  help=patch_base_dir_help)
+
+
+
+    ###############################
+    #  Orchestration options #
+    ###############################
+    apply_strategy_help = "How the orchestration strategy is applied:" \
+                          "  serial - apply orchestration strategy one node  at a time; " \
+                          "  parallel - apply orchestration strategy in parallel; " \
+                          "  ignore - do not apply the orchestration strategy; " \
+                          " If not specified,  the system will choose the option to apply the strategy. " \
+                          "Applicable only for upgrades from R3."
+    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
+                                " is selected"
+    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
+                             of any existing alarms.
+                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
+                                            present
+                                 strict -  orchestration is not allowed if alarms are present
+                             """
+
+    instance_action_help = """Inidcates how to VMs are moved from compute hosts when apply reboot-required patches. There
+                             are two possible values for moving the VMs off the compute hosts:
+                                 start-stop -  instances are stopped before a compute host is patched. This is typically
+                                 used for VMs that do not support migration.
+                                 migrate -  instances are either live migrated or cold migrated  before compute host is
+                                 patched.
+                             """
+    parser.addoption('--controller-apply-type', '--controller_apply_type', '--ctra',  dest='controller_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
+                     action='store',  help=max_parallel_compute_help)
+
+    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
+                     action='store', default='strict',  help=alarm_restriction_help)
+
+    parser.addoption('--instance-action', '--instance_action', dest='instance_action',
+                     action='store', default='stop-start',  help=instance_action_help)
 
     ###############################
     #  Backup and Restore options #

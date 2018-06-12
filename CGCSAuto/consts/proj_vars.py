@@ -268,6 +268,14 @@ class PatchingVars:
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
         'PATCH_BASE_DIR': None,
+        # Patch orchestration
+        'CONTROLLER_APPLY_TYPE': "serial",
+        'STORAGE_APPLY_TYPE': "serial",
+        'COMPUTE_APPLY_TYPE': "serial",
+        'MAX_PARALLEL_COMPUTES': 2,
+        'INSTANCE_ACTION': "stop-start",
+        'ALARM_RESTRICTIONS': "strict",
+
     }
 
     @classmethod
