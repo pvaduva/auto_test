@@ -135,8 +135,8 @@ def delete_file(get_custom_firewall_rule, request):
 
     def teardown():
         try:
-            LOG.fixture_step("Cleanup Remove file: {}, {}".format(invalid_rules_file, firewall_rules_path))
-            cli_client.exec_cmd("rm {} {}".format(invalid_rules_file, firewall_rules_path))
+            LOG.fixture_step("Cleanup Remove file: {}, {}".format(invalid_rules_file))
+            cli_client.exec_cmd("rm {}".format(invalid_rules_file))
         except:
             pass
     request.addfinalizer(teardown)
