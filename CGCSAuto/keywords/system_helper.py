@@ -3328,4 +3328,4 @@ def is_avs(con_ssh=None):
     if vswitch_type is None:
         vswitch_type = get_system_value(field='vswitch_type', con_ssh=con_ssh)
         ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
-    return not (vswitch_type != 'ovs')
+    return vswitch_type != 'ovs'
