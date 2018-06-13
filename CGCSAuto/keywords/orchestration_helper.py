@@ -14,6 +14,7 @@ from consts.auth import Tenant
 
 PHASE_COMPLETION_CHECK_INTERVAL = 20
 
+IGNORED_ALARM_IDS = ['200.001', '700.004', '900.001', '900.005', '900.101']
 
 def create_strategy(orchestration, controller_apply_type="serial", storage_apply_type="serial",
                     compute_apply_type="serial", max_parallel_computes=0, instance_action="stop-start",
@@ -305,6 +306,7 @@ def get_current_strategy_values(orchestration, conn_ssh=None):
         if not conn_ssh._is_connected(fail_ok=True):
             conn_ssh.connect(retry=True)
             ControllerClient.set_active_controller(ssh_client=conn_ssh)
+
         rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
 
     rtn = {}
@@ -368,7 +370,6 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
             conn_ssh.connect(retry=True, retry_timeout=HostTimeout.SWACT-30)
             ControllerClient.set_active_controller(conn_ssh)
             time.sleep(60)
-            cli.source_openrc_file(conn_ssh, Tenant.ADMIN, '/etc/nova/openrc')
             end_time = end_time + HostTimeout.SWACT
 
         output = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)

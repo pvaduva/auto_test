@@ -2,23 +2,21 @@ import time
 import pytest
 import os
 from utils.tis_log import LOG
-from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
-from keywords import system_helper, host_helper, install_helper, upgrade_helper, patching_helper, orchestration_helper, nova_helper, vm_helper
+from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from keywords import system_helper, host_helper, install_helper, patching_helper, \
+    orchestration_helper, nova_helper, vm_helper
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.proj_vars import ProjVar, PatchingVars, InstallVars
-from consts.cgcs import Prompt, HostAvailState, HostOperState
+from consts.cgcs import Prompt, HostAvailState
 from utils.clients.ssh import ControllerClient, SSHClient
 from testfixtures.fixture_resources import ResourceCleanup
-
-
-IGNORED_ALARM_IDS = ['200.001', '700.004,', '900.001', '900.005', '900.101' ]
 
 
 @pytest.fixture(scope='session')
 def pre_check_patch():
 
-    #ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    # ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
 
     # Check system health for patch orchestration;
@@ -37,23 +35,21 @@ def check_health(check_patch_ignored_alarms=True):
             if "No alarms" in health.keys() and check_patch_ignored_alarms:
                 rtn = ('Alarm ID',)
                 current_alarms_ids = system_helper.get_alarms(rtn_vals=rtn, mgmt_affecting=True)
-                affecting_alarms = [id for id in current_alarms_ids if id not in IGNORED_ALARM_IDS ]
-                if len(affecting_alarms) > 0:
-                    assert False, "Managment affecting alarm(s) present: {}".format(affecting_alarms)
+                affecting_alarms = [id_ for id_ in current_alarms_ids if id_ not in
+                                    orchestration_helper.IGNORED_ALARM_IDS]
+                if len(affecting_alarms) > 1:
+                    assert False, "Management affecting alarm(s) present: {}".format(affecting_alarms)
             else:
                 assert False, "System health query failed: {}".format(health)
 
     return rc, health
 
+
 @pytest.fixture(scope='session')
-def patch_orchestration_setup(pre_check_patch):
+def patch_orchestration_setup():
 
     lab = InstallVars.get_install_var('LAB')
-
-    # establish ssh connection with active controller
-    controller_conn = ControllerClient.get_active_controller()
-    #cpe = system_helper.is_small_footprint(controller_conn)
-    #is_simplex = system_helper.is_simplex()
+    pre_check_patch()
     current_release = system_helper.get_system_software_version()
     build_id = system_helper.get_system_build_id()
 
@@ -71,9 +67,7 @@ def patch_orchestration_setup(pre_check_patch):
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    # bld_server_attr['prompt'] = r'.*yow-cgts[1234]-lx.*$ '
     bld_server_attr['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
-    # '.*yow\-cgts[34]\-lx ?~\]?\$ '
     bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
                                 password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
     bld_server_conn.connect()
@@ -82,7 +76,6 @@ def patch_orchestration_setup(pre_check_patch):
     bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     bld_server_attr['ssh_conn'] = bld_server_conn
     bld_server_obj = Server(**bld_server_attr)
-
 
     # Download patch files from specified patch dir
     LOG.info("Downloading patch files from patch dir {}".format(patch_dir))
@@ -93,40 +86,13 @@ def patch_orchestration_setup(pre_check_patch):
     if len(patches) == 0:
         pytest.skip("No patch files found in {}:{}.".format(bld_server_obj.name, patch_dir))
 
-    controller_apply_strategy = PatchingVars.get_patching_var('CONTROLLER_APPLY_TYPE')
-    storage_apply_strategy = PatchingVars.get_patching_var('STORAGE_APPLY_TYPE')
-    compute_apply_strategy = PatchingVars.get_patching_var('COMPUTE_APPLY_TYPE')
-    max_parallel_computes = PatchingVars.get_patching_var('MAX_PARALLEL_COMPUTES')
-    instance_action = PatchingVars.get_patching_var('INSTANCE_ACTION')
-    alarm_restrictions = PatchingVars.get_patching_var('ALARM_RESTRICTIONS')
-
-    if controller_apply_strategy:
-        LOG.info("Controller apply type: {}".format(controller_apply_strategy))
-    if storage_apply_strategy:
-        LOG.info("Storage apply type: {}".format(storage_apply_strategy))
-    if compute_apply_strategy:
-        LOG.info("Compute apply type: {}".format(compute_apply_strategy))
-    if max_parallel_computes:
-        LOG.info("Maximum parallel computes: {}".format(max_parallel_computes))
-    if instance_action:
-        LOG.info("Instance action: {}".format(instance_action))
-    if alarm_restrictions:
-        LOG.info("Alarm restriction option: {}".format(alarm_restrictions))
-
-
     enable_dev_certificate = BuildServerPath.PATCH_ENABLE_DEV_CERTIFICATES[current_release]
 
     get_patch_dev_enabler_certificate(bld_server_obj, enable_dev_certificate, lab)
 
     _patching_setup = {'lab': lab, 'output_dir': output_dir, 'build_server': bld_server_obj,
                        'patch_dir': patch_dir, 'enable_dev_certificate': enable_dev_certificate,
-                       'patches': patches,
-                       'controller_apply_strategy': controller_apply_strategy,
-                       'storage_apply_strategy': storage_apply_strategy,
-                       'compute_apply_strategy': compute_apply_strategy,
-                       'max_parallel_computes': max_parallel_computes,
-                       'instance_action': instance_action, 'alarm_restrictions': alarm_restrictions,
-                      }
+                       'patches': patches}
 
     LOG.info("Patch Orchestration ready to start: {} ".format(_patching_setup))
     return _patching_setup
@@ -156,11 +122,10 @@ def get_patch_dev_enabler_certificate(server, cert_path, lab):
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
-    server.ssh_conn.rsync(cert_path, dest_server, patch_dest_dir, ssh_port=None,
-                                  pre_opts=pre_opts)
+    server.ssh_conn.rsync(cert_path, dest_server, patch_dest_dir, ssh_port=None, pre_opts=pre_opts)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='session', autouse=True)
 def patch_tear_down(request):
 
     def remove_on_teardown():
@@ -168,7 +133,7 @@ def patch_tear_down(request):
         applied_patches = patching_helper.get_patches_in_state(expected_states='Applied')
         applied_patches = [p for p in applied_patches if "RR_" or "INSVC" in p]
         partial_applied_patches = [p for p in patching_helper.get_partial_applied() if "RR_" or "INSVC" in p]
-        if len(applied_patches + partial_applied_patches ) > 0:
+        if len(applied_patches + partial_applied_patches) > 0:
             patches_for_removal = ' '.join(applied_patches + partial_applied_patches)
             LOG.info("Patches to be removed: {}".format(patches_for_removal))
 
@@ -209,7 +174,6 @@ def get_downloaded_patch_files(patch_dest_dir=None, conn_ssh=None):
     return patch_names
 
 
-
 def download_patches(lab, server, patch_dir, conn_ssh=None):
     """
 
@@ -217,6 +181,7 @@ def download_patches(lab, server, patch_dir, conn_ssh=None):
         lab:
         server:
         patch_dir:
+        conn_ssh:
 
     Returns:
 
@@ -258,16 +223,26 @@ def download_patches(lab, server, patch_dir, conn_ssh=None):
     return patches
 
 
-def run_patch_orchestration_strategy(controller_apply_type='serial', storage_apply_type='serial', compute_apply_type='serial',
-                              max_parallel_computes=2, instance_action='stop-start', alarm_restrictions='strict'):
-
-    patches_ids = patching_helper.get_patches_in_state(expected_states=['Partial-Apply', 'Partial-Remove'])
+def check_alarms_():
 
     current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
-    affecting_alarms = [id for id in current_alarms_ids if id[0] not in IGNORED_ALARM_IDS]
+    affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
     if len(affecting_alarms) > 0:
         assert system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=True)[0],\
             "Alarms present: {}".format(affecting_alarms)
+
+
+def run_patch_orchestration_strategy(controller_apply_type='serial', storage_apply_type='serial',
+                                     compute_apply_type='serial', max_parallel_computes=2,
+                                     instance_action='stop-start', alarm_restrictions='strict'):
+
+    patches_ids = patching_helper.get_patches_in_state(expected_states=['Partial-Apply', 'Partial-Remove'])
+
+    # current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
+    # affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
+    # if len(affecting_alarms) > 0:
+    #     assert system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=True)[0],\
+    #         "Alarms present: {}".format(affecting_alarms)
 
     LOG.tc_step("Running patch orchestration with parameters: {}.....".format(locals()))
 
@@ -282,74 +257,13 @@ def run_patch_orchestration_strategy(controller_apply_type='serial', storage_app
     LOG.info(" Applying Patch orchestration strategy completed for {} ....".format(patches_ids))
 
 
-@pytest.mark.release_patch
-def test_system_patch_orchestration(patch_orchestration_setup):
-    """
-    This test verifies the patch orchestration operation procedures for release patches. The patch orchestration
-    automatically patches all hosts on a system in the following order: controllers, storages, and computes.
-    The test creates a patch  orchestration strategy or plan for automated patching operation with the following
-    options to customize the test:
-
-    --controller-apply-type : specifies how controllers are patched serially or in parallel.  By default controllers are
-    patched always in serial regardless of the selection.
-    --storage-apply-type : speciefies how the storages are patched. Possible values are: serial, parallel or ignore. The
-    default value is serial.
-   --compute-apply-type : speciefies how the computes are patched. Possible values are: serial, parallel or ignore. The
-    default value is serial.
-    --max-parallel-compute-hosts: specifies the maximum number of computes to patch in parallel. Possible values
-    [2 - 100]The default is 2.
-    --instance-action - For reboot-required patches,  specifies how the VM instances are moved from compute hosts being
-    patched. Possible choices are:
-        start-stop - VMs are stopped before compute host is patched.
-        migrate - VMs are either live migrated or cold migrated off the compute before applying the patches.
-
-
-    Args:
-        patch_orchestration_setup:
-
-    Returns:
-
-    """
-
-    lab = patch_orchestration_setup['lab']
-    check_health(check_patch_ignored_alarms=False)
-
-    LOG.info("Starting patch orchestration for lab {} .....".format(lab))
-
-    patches = patch_orchestration_setup['patches']
-    patch_ids = ' '.join(patches.keys())
-
-    LOG.tc_step("Uploading  patches {} ... ".format(patch_ids))
-    patch_dest_dir = WRSROOT_HOME + '/patches'
-    assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir)[0] in [0, 1],\
-        "Failed to upload  patches : {}".format(patch_ids)
-
-    LOG.tc_step("Querying patches ... ")
-    assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
-
-    LOG.tc_step("Applying patches ... ")
-    rc = patching_helper.run_patch_cmd("apply", args='--all')[0]
-    assert rc in [0, 1, 2], "Failed to apply patches"
-
-    LOG.tc_step("Installing patches through orchestration for lab {} .....".format(lab))
-    patching_helper.orchestration_patch_hosts(
-            controller_apply_type=patch_orchestration_setup['controller_apply_strategy'],
-            storage_apply_type=patch_orchestration_setup['storage_apply_strategy'],
-            compute_apply_type=patch_orchestration_setup['compute_apply_strategy'],
-            max_parallel_computes=patch_orchestration_setup['max_parallel_computes'],
-            instance_action=patch_orchestration_setup['instance_action'],
-            alarm_restrictions=patch_orchestration_setup['alarm_restrictions'])
-
-
-@pytest.mark.test_patch
 @pytest.mark.parametrize('test_patch_type', ['RR_', 'INSVC_'])
-def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type, patch_tear_down):
+def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type):
     """
     Verifies apply/remove rr and in-service test patches through patch orchestration
     Args:
         patch_orchestration_setup:
         test_patch_type:
-        patch_tear_down:
 
     Returns:
 
@@ -371,6 +285,7 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     LOG.info(" Patch {} applied .....".format(applied))
 
     LOG.tc_step("Installing patches through orchestration .....")
+    check_alarms_()
     run_patch_orchestration_strategy(alarm_restrictions='relaxed')
 
     LOG.info(" Install patch through orchestration completed for patches {} ....".format(applied))
@@ -393,19 +308,16 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     LOG.info(" Testing apply/remove through patch orchestration completed for patches {}.....".format(applied))
 
 
-@pytest.mark.test_patch
 @pytest.mark.parametrize('storage_apply_type, compute_apply_type, max_parallel_computes, instance_action, test_patch',
-                         [('serial', 'serial', 2, 'migrate', 'RR_NOVA'),
+                         [('serial', 'serial', 2, 'migrate', 'INSVC_COMPUTE'),
                           ('serial', 'serial', 2, 'migrate', 'INSVC_ALLNODES'),
                           ('serial', 'parallel', 2, 'stop-start', 'RR_COMPUTE'),
                           ('serial', 'parallel', 2, 'stop-start', 'INSVC_NOVA'),
-                          ('serial', 'parallel', 2, 'migrate', 'RR_COMPUTE'),
-                          ('serial', 'parallel', 2, 'migrate', 'INSVC_NOVA'),
                           ('parallel', 'parallel', 2, 'migrate', 'INSVC_ALLNODES'),
                           ('serial', 'parallel', 4, 'stop-start', 'RR_NOVA'),
                           ('serial', 'parallel', 4, 'stop-start', 'INSVC_COMPUTE')])
 def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply_type, compute_apply_type,
-                                        max_parallel_computes, instance_action, test_patch, patch_tear_down):
+                                        max_parallel_computes, instance_action, test_patch):
     """
     This test verifies the patch orchestration strategy apply type  and instance action options
 
@@ -415,31 +327,35 @@ def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply
         compute_apply_type:
         max_parallel_computes:
         instance_action:
-        patch_tear_down:
+        test_patch:
 
     Returns:
 
     """
     personality = test_patch[6:].lower() if 'INSVC' in test_patch else test_patch[3:].lower()
 
-    if 'allnodes' not in personality and 'nova' not in personality and \
-                    len(system_helper.get_hostnames(personality=personality)) == 0:
+    if 'allnodes' not in personality and 'nova' not in personality \
+            and len(system_helper.get_hostnames(personality=personality)) == 0:
             pytest.skip("No {} hosts in system".format(personality))
 
-    check_health(check_patch_ignored_alarms=False)
+    check_health()
 
     controllers = system_helper.get_hostnames(personality='controller')
     computes = system_helper.get_hostnames(personality='compute')
     storages = system_helper.get_hostnames(personality='storage')
     hosts = controllers + computes + storages
     if "parallel" in storage_apply_type and len(storages) < 4:
-        pytest.skip("At leaset two pairs tier storages required for this test: {}".format(storages))
-    if "parallel" in compute_apply_type  and len(computes) < (max_parallel_computes + 1):
-        pytest.skip("At leaset {} computes are required for this test: {}".format(1 + max_parallel_computes, hosts))
+        pytest.skip("At least two pairs tier storages required for this test: {}".format(storages))
+    if "parallel" in compute_apply_type and len(computes) < (max_parallel_computes + 1):
+        pytest.skip("At least {} computes are required for this test: {}".format(1 + max_parallel_computes, hosts))
+
+    LOG.info("Launching a VM ... ")
+    vm_id = vm_helper.launch_vms(vm_type='avp', ping_vms=True)[0]
+    ResourceCleanup.add("vm", vm_id)
 
     patches = patch_orchestration_setup['patches']
     patch = [k for k in patches.keys() if test_patch in k][0]
-    patch_file =  patches[patch]
+    patch_file = patches[patch]
     LOG.tc_step("Uploading patch file {} .....".format(patch_file))
     uploaded_id = patching_helper.upload_patch_file(patch_file=patch_file)
     assert patch.strip() == uploaded_id.strip(), " Expected patch {} and uploaded patch {} mismatch"\
@@ -451,12 +367,17 @@ def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply
     LOG.info(" Patch {} applied .....".format(applied))
 
     LOG.tc_step("Installing patches through orchestration for patch {} .....".format(applied))
-
+    check_alarms_()
     run_patch_orchestration_strategy(storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
                                      max_parallel_computes=max_parallel_computes, instance_action=instance_action,
                                      alarm_restrictions='relaxed')
 
     LOG.info(" Install patch through orchestration completed for patch {} ....".format(applied))
+    time.sleep(20)
+    LOG.tc_step("Verifying VM connectivity after patch {} .....".format(applied))
+    assert vm_helper.ping_vms_from_natbox(vm_ids=vm_id, fail_ok=True)[0], "VM connectivity lost after patch {}"\
+        .format(applied)
+    LOG.info(" VM {}  is active after patch {} .....".format(vm_id, applied))
 
     LOG.tc_step("Removing test patch {} .....".format(applied))
 
@@ -481,9 +402,8 @@ def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply
     LOG.info(" Testing apply/remove through patch orchestration completed for patch {}.....".format(applied))
 
 
-@pytest.mark.test_patch
-@pytest.mark.parametrize('ignored_alarm_texts',['HOST_LOCK', 'VM_STOPPED'])
-def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, ignored_alarm_texts, patch_tear_down):
+@pytest.mark.parametrize('ignored_alarm_texts', ['HOST_LOCK-VM_STOPPED'])
+def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, ignored_alarm_texts):
     """
     This test verifies the patch orchestration operation with presence of alarms that are normally ignored by the
     orchestration. These alarms are '200.001', '700.004,', '900.001', '900.005', '900.101'.  This test generates the
@@ -491,12 +411,11 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
     Args:
         patch_orchestration_setup:
         ignored_alarm_texts:
-        patch_tear_down:
 
     Returns:
 
     """
-    check_health(check_patch_ignored_alarms=False)
+    check_health()
 
     controllers = system_helper.get_hostnames(personality='controller')
     computes = system_helper.get_hostnames(personality='compute')
@@ -506,7 +425,7 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
     host_locked = False
     vm_stopped = False
 
-    if 'HOST_LOCK' in ignored_alarm_texts and ( len(computes) <= 1 or len(controllers) == 1):
+    if 'HOST_LOCK' in ignored_alarm_texts and (len(computes) <= 1 or len(controllers) == 1):
         pytest.skip("Not enough hosts present in the system")
 
     if 'HOST_LOCK' in ignored_alarm_texts:
@@ -525,13 +444,13 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
     if 'VM_STOPPED' in ignored_alarm_texts:
 
         vms = nova_helper.get_all_vms()
-        vm_id_to_stop = None
+        # vm_id_to_stop = None
         if len(vms) > 0:
             vm_id_to_stop = vms[0]
         else:
             LOG.info("No vms running in system; creating one ... ")
             vm_id_to_stop = vm_helper.launch_vms(vm_type='avp', ping_vms=True)[0]
-            ResourceCleanup.add("vm", vm_id_to_stop )
+            ResourceCleanup.add("vm", vm_id_to_stop)
         assert vm_id_to_stop, "Fail to launch VM"
         LOG.info("Stop VM {} to generate 700.004 alarm....".format(vm_id_to_stop))
         vm_helper.stop_vms(vm_id_to_stop)
@@ -542,8 +461,8 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
 
     if vm_stopped or host_locked:
         patches = patch_orchestration_setup['patches']
-        patch = [k for k in patches.keys() if 'RR_ALLNODES' in k][0]
-        patch_file =  patches[patch]
+        patch = [k for k in patches.keys() if 'INSVC_ALLNODES' in k][0]
+        patch_file = patches[patch]
         LOG.tc_step("Uploading patch file {} .....".format(patch_file))
         uploaded_id = patching_helper.upload_patch_file(patch_file=patch_file)
         assert patch.strip() == uploaded_id.strip(), " Expected patch {} and uploaded patch {} mismatch"\
@@ -554,6 +473,7 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
         applied = patching_helper.apply_patches(patch_ids=[uploaded_id])
         LOG.info(" Patch {} applied .....".format(applied))
         LOG.tc_step("Installing patch {} through orchestration .....".format(uploaded_id))
+        check_alarms_()
         run_patch_orchestration_strategy()
         LOG.info(" Install patch through orchestration completed for patch {} ....".format(applied))
         if host_locked and host:
@@ -579,27 +499,29 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
 
         LOG.info(" Testing apply/remove through patch orchestration completed for patch {}.....".format(applied))
 
+        if host_locked and host:
+            host_helper.unlock_host(host)
+            host_helper.wait_for_host_states(host, check_interval=20, availability=HostAvailState.AVAILABLE)
 
-@pytest.mark.test_patch
-def test_patch_orchestration_with_alarms(patch_orchestration_setup,  patch_tear_down):
+
+def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
     """
     This test verifies the patch orchestration operation can not proceed with presence of alarms that are not normally
-    ignored by the orchestration.  The test generates the alarm ( 700.002 - VM paused) before executing the patch orchestration.
+    ignored by the orchestration.  The test generates the alarm ( 700.002 - VM paused) before executing the patch
+    orchestration.
     Args:
         patch_orchestration_setup:
-        alarm_ids:
-        patch_tear_down:
 
     Returns:
 
     """
-    check_health(check_patch_ignored_alarms=False)
+    check_health()
 
     # generate VM paused ( 700.002) critical alarm
-    LOG.tc_step("Genenerating VM paused ( 700.002) critical alarm .....")
+    LOG.tc_step("Generating VM paused ( 700.002) critical alarm .....")
 
     vms = nova_helper.get_all_vms()
-    vm_id_to_pause = None
+    # vm_id_to_pause = None
     if len(vms) > 0:
         vm_id_to_pause = vms[0]
     else:
@@ -615,7 +537,7 @@ def test_patch_orchestration_with_alarms(patch_orchestration_setup,  patch_tear_
 
     patches = patch_orchestration_setup['patches']
     patch = [k for k in patches.keys() if 'RR_ALLNODES' in k][0]
-    patch_file =  patches[patch]
+    patch_file = patches[patch]
     LOG.tc_step("Uploading patch file {} .....".format(patch_file))
     uploaded_id = patching_helper.upload_patch_file(patch_file=patch_file)
     assert patch.strip() == uploaded_id.strip(), " Expected patch {} and uploaded patch {} mismatch"\
@@ -628,7 +550,7 @@ def test_patch_orchestration_with_alarms(patch_orchestration_setup,  patch_tear_
 
     LOG.tc_step("Attempting to create patch orchestration strategy; expected to fail.....")
     rc, msg = orchestration_helper.create_strategy('patch', fail_ok=True)
-    assert rc != 0,  "Patch orchestration strategy created with presense of critical alarm; expected to fail: {}"\
+    assert rc != 0,  "Patch orchestration strategy created with presence of critical alarm; expected to fail: {}"\
         .format(msg)
 
     LOG.info("Deleting the failed patch orchestration strategy .....")

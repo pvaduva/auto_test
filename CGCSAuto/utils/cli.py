@@ -84,10 +84,13 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
             # Add additional auth args for https lab
             if CliAuth.get_var('HTTPS'):
-                if cmd in ['openstack', "sw-manager"]:
+                if cmd in  ['openstack', 'sw-manager']:
                     flags += ' --os-interface internal'
                 else:
                     flags += ' --os-endpoint-type internalURL'
+            else:
+                if cmd == 'sw-manager':
+                    flags += ' --os-interface internal'
 
             flags = (auth_args + ' ' + flags).strip()
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
