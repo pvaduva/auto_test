@@ -353,8 +353,7 @@ class TestSharedCpuEnabled:
     # TC2920, TC2921
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'error'), [
         mark.domain_sanity((2, 1, 1, 1, None)),
-        (2, 2, None, 1, 'error'),
-        (2, 2, None, 1, None)
+        (2, 2, None, 1, 'error')
     ])
     def test_launch_vm_with_shared_cpu(self, vcpus, numa_nodes, numa_node0, shared_vcpu, error, add_shared_cpu):
         """
@@ -413,21 +412,21 @@ class TestSharedCpuEnabled:
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes,
-                          shared_vcpu=shared_vcpu, vpcus=vcpus)
+                          shared_vcpu=shared_vcpu, vcpus=vcpus)
 
         # live migrate
         LOG.tc_step("Live migrate vm and then ping vm from NatBox")
         vm_helper.live_migrate_vm(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes,
-                          shared_vcpu=shared_vcpu, vpcus=vcpus)
+                          shared_vcpu=shared_vcpu, vcpus=vcpus)
 
         # cold migrate
         LOG.tc_step("Cold migrate vm and then ping vm from NatBox")
         vm_helper.cold_migrate_vm(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes,
-                          shared_vcpu=shared_vcpu, vpcus=vcpus)
+                          shared_vcpu=shared_vcpu, vcpus=vcpus)
 
     # TC2922
     def test_resize_vm_with_shared_cpu(self, add_shared_cpu):
