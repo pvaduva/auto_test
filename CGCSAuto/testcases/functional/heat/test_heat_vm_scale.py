@@ -112,11 +112,12 @@ def vm_scaling_stack():
     return stack_name, vm_id
 
 
+# TODO: take out for now until heat stacks are updated to use gnocchi
 @mark.parametrize(('scale_up_to', 'action'), [
     mark.priorities('nightly', 'sx_nightly')((2, None)),
     (3, 'vote_no_to_stop'),
 ])
-def test_heat_vm_auto_scale(vm_scaling_stack, scale_up_to, action):
+def _test_heat_vm_auto_scale(vm_scaling_stack, scale_up_to, action):
 
     """
     Test VM auto scaling :
