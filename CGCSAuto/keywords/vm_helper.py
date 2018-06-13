@@ -17,7 +17,7 @@ from consts.proj_vars import ProjVar
 from consts.scripts import GuestServiceScript
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
-    vlm_helper, storage_helper, ceilometer_helper, ixia_helper
+    vlm_helper, storage_helper, ceilometer_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 from utils import exceptions, cli, table_parser, multi_thread
@@ -4645,6 +4645,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
     session_managed = False
     if ixia_session is None:
         LOG.info("ixia_session not supplied, creating")
+        from keywords import ixia_helper
         ixia_session = ixia_helper.IxiaSession()
         session_managed = True
         ixia_session.connect()
