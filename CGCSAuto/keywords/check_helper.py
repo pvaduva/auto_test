@@ -214,8 +214,11 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
         vcpus_per_numa = vcpus_on_numa[node_id]
 
         shared_pcpu = topology_on_numa_node['shared_pcpu']
-        shared_pcpu_total += shared_pcpu
-        shared_pcpu_num = len(shared_pcpu)
+        if shared_pcpu is not None:
+            shared_pcpu_total += shared_pcpu
+            shared_pcpu_num = len(shared_pcpu)
+        else:
+            shared_pcpu_num = 0
 
         assert expt_cpu_pol == topology_on_numa_node['pol'], "CPU policy is {} instead of {} in vm-topology".\
             format(topology_on_numa_node['pol'], expt_cpu_pol)
