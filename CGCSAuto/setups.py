@@ -8,8 +8,8 @@ import pexpect
 
 import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
-from consts import build_server as build_server_consts
-from consts.cgcs import Prompt, REGION_MAP
+from consts import build_server
+from consts.cgcs import Prompt, REGION_MAP, SysType
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
@@ -500,7 +500,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device,
-                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency):
+                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency, stop):
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --fresh_install-conf=<full path of fresh_install configuration file> "
                          "has to be provided")
@@ -508,7 +508,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
                                              lab_files_dir=None, build_server=BuildServerPath.DEFAULT_BUILD_SERVER,
                                              compute=None, storage=None, license_path=None, guest_image=None,
-                                             heat_templates=None, security=security, low_latency=low_latency)
+                                             heat_templates=None, security=security, low_latency=low_latency, stop=stop)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -624,19 +624,22 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                           host_build_dir=host_build_dir)
     if 'system_mode' not in lab_to_install:
         if 'storage_nodes' in lab_to_install:
-            lab_to_install['system_mode'] = "storage"
+            system_mode = SysType.STORAGE
         else:
-            lab_to_install['system_mode'] = "standard"
+            lab_to_install['system_mode'] = SysType.REGULAR
+    else:
+        if "simplex" in lab_to_install['system_mode']:
+            system_mode = SysType.AIO_SX
+        else:
+            system_mode = SysType.AIO_DX
+
+    lab_to_install['system_mode'] = system_mode
+    ProjVar.set_var(sys_type=system_mode)
+    LOG.debug("SYS_TYPE: {}".format(system_mode))
+
 
     # add nodes dictionary
     lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
-    # TODO: this will fail if labconf_path leads a ini without files_server and/or files_dir
-    lab_to_install.update(get_info_from_lab_files(files_server, files_dir))
-    if 'mode' not in lab_to_install:
-        if 'storage_nodes' in lab_to_install:
-            lab_to_install['mode'] = "storage"
-        else:
-            lab_to_install['mode'] = "standard"
     if 'compute_nodes' in lab_to_install:
         lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
     if 'storage_nodes' in lab_to_install:
@@ -680,6 +683,13 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         skip_labsetup = True if "setup" in skip_args else False
         skip_feed = True if "feed" in skip_args else False
         skip_pxebootcfg = True if "pxe" in skip_args else False
+    if resume:
+        if isinstance(resume, str) and resume.isdigit():
+            resume = int(resume)
+        else:
+            resume = install_helper.get_resume_step(lab_to_install)
+    if stop is not None:
+        stop = int(stop)
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
                                  skip_labsetup=skip_labsetup,
@@ -700,7 +710,8 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  security=security,
                                  boot_type=boot,
                                  low_latency=low_latency,
-                                 iso_path=iso_path
+                                 iso_path=iso_path,
+                                 stop=stop
                                  )
 
 
@@ -995,7 +1006,7 @@ def collect_sys_net_info(lab):
 # Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
 # Should we have the user create their own fresh_install configuration file if they want to fresh_install a lab with only 1 controller?
 def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage,
-                      license_path, guest_image, heat_templates, boot, iso_path, low_latency, security):
+                      license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop):
     """
     Writes a file in ini format of the fresh_install variables
     Args:
@@ -1113,7 +1124,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
     install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
     install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name
     try:
-        with open(install_config_path, "w+") as install_config_file:
+        with open(install_config_path, "w") as install_config_file:
             os.chmod(install_config_path, 0o777)
             config.write(install_config_file)
             install_config_file.close()
@@ -1178,167 +1189,14 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
         return lab_info_dict
 
 
-def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
-    if con_ssh:
-        connection = con_ssh
-    elif telnet_conn:
-        connection = telnet_conn
-    else:
-        connection = ControllerClient.get_active_controller()
+def initialize_server(server_hostname, prompt=None):
+    if prompt is None:
+        prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', server_hostname)
 
-    cmd = "test -f /home/wrsroot/.heat_resources"
-    rc, output = connection.exec_cmd(cmd)
-    if rc != 0:
-        err_msg = "/home/wrsroot/.heat_resources not found"
-        if fail_ok is False:
-            assert False, err_msg
-        elif fail_ok is True:
-            err_msg += " skipping heat setup"
-            LOG.error(err_msg)
-            return 1, err_msg
-    else:
-        cmd = "/home/wrsroot/./create_resource_stacks.sh"
-        rc, output = connection.exec_cmd(cmd)
-        if rc != 0:
-            err_msg = "Failure when creating resource stacks"
-            if fail_ok is False:
-                assert False, err_msg
-            elif fail_ok is True:
-                err_msg += " skipping heat setup"
-                LOG.error(err_msg)
-                return 2, err_msg
-        else:
-            expected_files = ["/home/wrsroot/lab_setup-admin-resources.yaml",
-                              "/home/wrsroot/lab_setup-admin-resources.yaml",
-                              "/home/wrsroot/lab_setup-admin-resources.yaml",
-                              "/home/wrsroot/launch_stacks.sh"]
-            for file in expected_files:
-                rc, output = connection.exec_cmd("test -f {}".format(file))
-                if rc != 0:
-                    err_msg = "{} not found".format(file)
-                    if fail_ok is False:
-                        assert False, err_msg
-                    elif fail_ok is True:
-                        err_msg += " skipping heat setup"
-                        LOG.error(err_msg)
-                        return 1, err_msg
-    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh")
-    cmd = "/home/wrsroot/launch_stacks.sh lab_setup.conf"
-    rc, output = connection.exec_cmd(cmd)
-    if rc != 0:
-        err_msg = "Heat stack launch failed"
-        if fail_ok is False:
-            assert False, err_msg
-        elif fail_ok is True:
-            err_msg += " skipping heat setup"
-            LOG.error(err_msg)
-            return 2, err_msg
-    else:
-        return 0, output
+    server_conn = SSHClient(server_hostname, user=SvcCgcsAuto.USER,
+                            password=SvcCgcsAuto.PASSWORD, initial_prompt=prompt)
+    server_conn.connect()
+    server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
+    server_dict = {"name": server_hostname, "prompt": prompt, "ssh_conn": server_conn}
 
-
-def setup_networking(controller0, usb=None):
-    nic_interface = controller0.host_nic
-    if not controller0.telnet_conn:
-        controller0.telnet_conn = TelnetClient(host=controller0.telnet_ip, port=int(controller0.telnet_port))
-        controller0.telnet_conn.send("\r\n")
-
-    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip addr add {}/23 dev {}".format(controller0.telnet_conn.password,
-                                                                                             controller0.host_ip,
-                                                                                             nic_interface))
-    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip link set dev {} up".format(controller0.telnet_conn.password,
-                                                                                          nic_interface))
-    time.sleep(2)
-    controller0.telnet_conn.exec_cmd("echo {} | sudo -S route add default gw 128.224.150.1".format(
-                                     controller0.telnet_conn.password))
-    ping = network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
-    if not ping:
-        time.sleep(120)
-        network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
-
-    return 0
-
-
-def collect_sys_net_info(lab):
-    LOG.warning("Collecting system network info upon session setup failure")
-    res_ = {}
-    source_user = SvcCgcsAuto.USER
-    source_pwd = SvcCgcsAuto.PASSWORD
-    source_prompt = SvcCgcsAuto.PROMPT
-
-    dest_info_collected = False
-    for source_server in ('natbox', 'ts'):
-        source_ip = NatBoxes.NAT_BOX_HW['ip'] if source_server == 'natbox' else SvcCgcsAuto.SERVER
-        source_ssh = SSHClient(source_ip, source_user, source_pwd, initial_prompt=source_prompt)
-        source_ssh.connect()
-        for ip_type_ in ('fip', 'uip'):
-            lab_ip_type = 'floating ip' if ip_type_ == 'fip' else 'controller-0 ip'
-            dest_ip = lab[lab_ip_type]
-
-            for action in ('ping', 'ssh'):
-                res_key = '{}_{}_from_{}'.format(action, ip_type_, source_server)
-                res_[res_key] = False
-                LOG.info("\n=== {} to lab {} {} from {}".format(action, ip_type_, dest_ip, source_server))
-                if action == 'ping':
-                    # ping lab
-                    pkt_loss_rate_ = network_helper.ping_server(server=dest_ip, ssh_client=source_ssh, fail_ok=True)[0]
-                    if pkt_loss_rate_ == 100:
-                        LOG.warning('Failed to ping lab {} from {}'.format(ip_type_, source_server))
-                        break
-                    res_[res_key] = True
-                else:
-                    # ssh to lab
-                    dest_user = HostLinuxCreds.get_user()
-                    dest_pwd = HostLinuxCreds.get_password()
-                    prompt = CONTROLLER_PROMPT
-
-                    try:
-                        dest_ssh = SSHFromSSH(source_ssh, dest_ip, dest_user, dest_pwd, initial_prompt=prompt)
-                        dest_ssh.connect()
-                        res_[res_key] = True
-
-                        # collect info on tis system if able to ssh to it
-                        if not dest_info_collected:
-                            LOG.info("\n=== ssh to lab {} from {} succeeded. Collect info from TiS system".format(
-                                    ip_type_, source_server))
-                            dest_info_collected = True
-                            dest_ssh.exec_cmd('ip addr')
-                            dest_ssh.exec_cmd('ip neigh')
-                            dest_ssh.exec_cmd('ip route')
-                            default_gateway = dest_ssh.exec_cmd(' ip route | grep --color=never default')[1]
-
-                            # ping natbox from lab
-                            nat_ip = NatBoxes.NAT_BOX_HW['ip']
-                            pkt_loss_rate_to_nat = network_helper.ping_server(server=nat_ip,
-                                                                              ssh_client=dest_ssh, fail_ok=True)[0]
-                            res_['ping_natbox_from_lab'] = True if pkt_loss_rate_to_nat < 100 else False
-
-                            # ssh to natbox from lab if ping succeeded
-                            if pkt_loss_rate_to_nat < 100:
-                                res_key_ssh_nat = 'ssh_natbox_from_lab'
-                                res_[res_key_ssh_nat] = False
-                                try:
-                                    nat_ssh = SSHFromSSH(dest_ssh, nat_ip, source_user, source_pwd,
-                                                         initial_prompt=source_prompt)
-                                    nat_ssh.connect()
-                                    res_[res_key_ssh_nat] = True
-                                    nat_ssh.close()
-                                except:
-                                    LOG.warning('Failed to ssh to NatBox from lab')
-
-                            # ping default gateway from natbox
-                            if default_gateway:
-                                default_gateway = re.findall('default via (.*) dev .*', default_gateway)[0]
-
-                                nat_ssh_ = SSHClient(nat_ip, source_user, source_pwd, initial_prompt=source_prompt)
-                                nat_ssh_.connect()
-                                pkt_loss_rate_ = network_helper.ping_server(server=default_gateway,
-                                                                            ssh_client=nat_ssh_, fail_ok=True)[0]
-                                res_['ping_default_gateway_from_natbox'] = True if \
-                                    pkt_loss_rate_ < 100 else False
-                        dest_ssh.close()
-                    except:
-                        LOG.warning('Failed to ssh to lab {} from {}'.format(ip_type_, source_server))
-
-        source_ssh.close()
-        LOG.info("Lab networking info collected: {}".format(res_))
+    return build_server.Server(**server_dict)

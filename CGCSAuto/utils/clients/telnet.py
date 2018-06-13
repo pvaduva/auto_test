@@ -29,7 +29,7 @@ def telnet_logger(host):
 
 TELNET_REGEX = '([\w]+-[\d]+)[ login:|:~\$]'
 TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
-TELNET_LOGIN_PROMPT_BASE = '[{}](-[\d]+)? login:'
+TELNET_LOGIN_PROMPT_BASE = '{}(-[\d]+)? login:'
 NEWPASSWORD_PROMPT = ''
 
 

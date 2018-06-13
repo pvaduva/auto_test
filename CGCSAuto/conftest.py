@@ -398,7 +398,7 @@ def pytest_addoption(parser):
                 "feed: skip setup of network feed"
     installconf_help = "Full path of lab fresh_install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
-    resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed'
+    resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed or from a given step'
     wipedisk_help = 'Wipe the disk(s) on the hosts'
     boot_help = 'Select how to boot the lab. Default is pxe. Options are: \n' \
                 'pxe: boot from the network using pxeboot \n' \
@@ -457,14 +457,12 @@ def pytest_addoption(parser):
     LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
 
     # Install
-    parser.addoption('--resumeinstall', '--resume-fresh_install', '--resume_install', dest='resumeinstall', action='store_true',
-                     help=resumeinstall_help)
-    parser.addoption('--skip', dest='skiplist', action='store',
-                     help=skip_help)
-    parser.addoption('--wipedisk',  dest='wipedisk', action='store_true',
-                     help=wipedisk_help)
-    parser.addoption('--boot', dest='boot_list', action='store', default='pxe',
-                     help=boot_help)
+    parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
+                     help=resumeinstall_help, const=True, nargs='?', default=False)
+    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=99)
+    parser.addoption('--skip', dest='skiplist', action='store', help=skip_help)
+    parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
+    parser.addoption('--boot', dest='boot_list', action='store', default='pxe', help=boot_help)
     parser.addoption('--installconf', '--fresh_install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
     parser.addoption('--security', dest='security', action='store', default='standard')

@@ -20,7 +20,7 @@ VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_TURNON
             VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
 
 
-def get_host_name():
+def get_hostname():
     return socket.gethostname()
 
 

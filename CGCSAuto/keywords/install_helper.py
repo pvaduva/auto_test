@@ -11,7 +11,7 @@ from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE
-from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
+from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, InstallPaths
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
@@ -220,12 +220,12 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
 def bring_node_console_up(node, boot_device,
                           boot_usb=None,
-                          low_latency=False,
+                          low_latency=None,
                           upgrade=False,
                           vlm_power_on=False,
                           close_telnet_conn=True,
-                          small_footprint=False,
-                          security="standard",
+                          small_footprint=None,
+                          security=None,
                           clone_install=False,):
     """
     Initiate the boot and installation operation.
@@ -2233,8 +2233,8 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     return True
 
 
-def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
-                    small_footprint=False, security="standard", clone_install=False, system_restore=False):
+def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=None,
+                    small_footprint=None, security=None, clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2307,16 +2307,14 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn.login()
     # controller0.telnet_conn.set_prompt(controller0.host_name + ':~\$ ')
 
-    time.sleep(20)
-
     if not system_restore and (patch_dir_paths and bld_server_conn):
-        time.sleep(20)
+        time.sleep(40)
         apply_patches(lab, bld_server_conn, patch_dir_paths)
-        controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
+        controller0.telnet_conn.send("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
         LOG.info("Controller0 reboot has started")
 
-        controller0.telnet_conn.get_read_until(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
+        controller0.telnet_conn.expect(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
         # Reconnect telnet session
         LOG.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
@@ -3030,59 +3028,58 @@ def get_git_name(lab_name):
 
 # TODO: figure out what config_region is and if we have to support it
 # TODO: add support for banners and branding
-def controller_system_config(active_controller=None, telnet_conn=None, config_file="TiS_config.ini_centos"):
+def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False):
     """
     Runs the config_controller command on the active_controller host
     Args:
-        active_controller: Node object representing the active controller
         telnet_conn: The telnet connection to the active controller
 
     Returns:
 
     """
-    lab = InstallVars.get_install_var("LAB")
-    output_dir = ProjVar.get_var('LOG_DIR')
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
     wrsroot_etc_profile = "/etc/profile.d/custom.sh"
+    controller0 = lab["controller-0"]
+    if con_telnet is None:
+        con_telnet = open_telnet_session(controller0)
+        close_telnet = True
 
-    if active_controller is None:
-        active_controller = lab["controller-0"]
-
-    if telnet_conn:
-        connection = telnet_conn
-    else:
-        active_controller.telnet_conn = open_telnet_session(active_controller)
-        connection = active_controller.telnet_conn
-
-    connection.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
+    con_telnet.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
                         wrsroot_etc_profile)
-    connection.exec_cmd("unset TMOUT")
-    connection.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
-    connection.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
-    connection.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
-    connection.exec_cmd("export USER=wrsroot")
-
-    rc = connection.exec_cmd("test -f {}".format(config_file))[0]
+    con_telnet.exec_cmd("unset TMOUT")
+    con_telnet.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
+    con_telnet.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
+    con_telnet.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
+    con_telnet.exec_cmd("export USER=wrsroot")
+    rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
     if rc == 0:
         cmd = 'echo "{}" | sudo -S config_controller --config-file {}'.format(HostLinuxCreds.get_password(), config_file)
         os.environ["TERM"] = "xterm"
-        rc, output = connection.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
-        connection.set_prompt(Prompt.CONTROLLER_PROMPT)
+        rc, output = con_telnet.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
+        con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
         # TODO: doesn't return bad return code
         if rc == 0:
             LOG.info("Controller configured")
-            admin_prompt = "\[wrsroot@{} ~\(keystone_admin\)\]\$ ".format(connection.hostname)
-            connection.set_prompt(admin_prompt)
-            host_helper.wait_for_hosts_states(active_controller.name,
+            if con_telnet.hostname:
+                admin_prompt = "\[wrsroot@{} ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
+            else:
+                admin_prompt = "\[wrsroot@.* ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
+            con_telnet.set_prompt(admin_prompt)
+            host_helper.wait_for_hosts_states(controller0.name,
                                               availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
-                                              use_telnet=True, con_telnet=active_controller.telnet_conn)
+                                              use_telnet=True, con_telnet=con_telnet)
         else:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
             raise exceptions.CLIRejected(err_msg)
     else:
-        err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, active_controller.name)
+        err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, controller0.name)
         LOG.error(err_msg)
         raise exceptions.CLIRejected(err_msg)
+
+    if close_telnet:
+        con_telnet.close()
 
     return rc, output
 
@@ -3289,10 +3286,19 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
     return 0
 
 
-def install_node(node_obj, boot_device_dict, small_footprint=False, low_latency=False, security="standard", usb=None):
+def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None):
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()
+    if small_footprint is None:
+        sys_type = ProjVar.get_var("SYS_TYPE")
+        LOG.debug("SYS_TYPE: {}".format(sys_type))
+        small_footprint = "AIO" in sys_type
+        LOG.debug(small_footprint)
+    if low_latency is None:
+        low_latency = InstallVars.get_install_var('LOW_LATENCY')
+    if security is None:
+        security = InstallVars.get_install_var("SECURITY")
     if usb is None:
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
     if usb:
@@ -3307,15 +3313,12 @@ def install_node(node_obj, boot_device_dict, small_footprint=False, low_latency=
         index = node_obj.telnet_conn.expect(menu_prompts, 360, fail_ok=True)
         if index < 0:
             break
-
         elif menu_prompts[index] == bios_option.name:
             enter_bios_option(node_obj, bios_option, expect_prompt=False)
-
         elif menu_prompts[index] == boot_device_menu.prompt:
             select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
             if node_obj.name != "controller-0":
                 break
-
         elif menu_prompts[index] == kickstart_menu.prompt:
             select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                                   security=security, usb=usb, expect_prompt=False)
@@ -3510,3 +3513,16 @@ def apply_branding(telnet_conn, fail_ok=True):
             else:
                 raise exceptions.TelnetException(msg)
     return 0, ''
+
+
+def get_resume_step(lab=None, install_progress_path=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    if install_progress_path is None:
+        install_progress_path = "{}/{}_install_progress.txt".format(InstallPaths.INSTALL_TEMP_DIR, lab["short_name"])
+
+    with open(install_progress_path, "r") as progress_file:
+        lines = progress_file.readlines()
+        for line in lines:
+            if "End step:" in line:
+                return int(line[line.find("End Step: "):].strip()) + 1

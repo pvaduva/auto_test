@@ -104,7 +104,8 @@ class InstallVars:
                          controller1_ceph_mon_device=None,
                          ceph_mon_gib=None,
                          low_latency=False,
-                         security="standard"):
+                         security="standard",
+                         stop=99):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
         __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH
@@ -126,6 +127,7 @@ class InstallVars:
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
+            'STOP': stop,
             'SKIP_LABSETUP': skip_labsetup,
             'SKIP_FEED': skip_feed,
             'SKIP_PXEBOOTCFG': skip_pxebootcfg,
