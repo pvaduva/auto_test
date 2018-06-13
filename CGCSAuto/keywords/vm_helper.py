@@ -3654,7 +3654,7 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
 
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
-                 vlm=False, ping_vms=False):
+                 vlm=False, force=True, ping_vms=False):
     """
     Evacuate given vms by rebooting their host. VMs should be on specified host already when this keyword called.
     Args:
@@ -3667,6 +3667,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         post_host (str): expected host for vms to be evacuated to
         vlm (False): whether to power-off host via vlm (assume host already reserved). When False, Run 'sudo reboot -f'
             from host.
+        force (bool): whether to use 'reboot -f'. This param is only used if vlm=False.
         ping_vms (bool): whether to ping vms after evacuation
 
     Returns (tuple): (<code> (int), <vms_failed_to_evac> (list))
@@ -3685,46 +3686,54 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         if standby and active == host:
             is_swacted = True
 
+    is_sx = system_helper.is_simplex()
+
     if vlm:
         LOG.tc_step("Power-off {} from vlm".format(host))
         vlm_helper.power_off_hosts(hosts=host, reserve=False)
     else:
         LOG.tc_step("'sudo reboot -f' from {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=False, con_ssh=con_ssh)
+        host_helper.reboot_hosts(host, wait_for_offline=True, wait_for_reboot_finish=False, force_reboot=force,
+                                 con_ssh=con_ssh)
+
+    if is_sx:
+        host_helper.wait_for_hosts_ready(hosts=host, con_ssh=con_ssh)
 
     try:
         LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
-                            con_ssh=con_ssh)
+        if not is_sx:
+            wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                                con_ssh=con_ssh)
 
-        LOG.tc_step("Check vms are in Active state and moved to other host(s) after host failure")
+        LOG.tc_step("Check vms are in Active state and moved to other host(s) (non-sx) after host failure")
         res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
                                                             con_ssh=con_ssh)
 
-        vms_host_err = []
-        for vm in vms_to_check:
-            if post_host:
-                if nova_helper.get_vm_host(vm) != post_host:
-                    vms_host_err.append(vm)
-            else:
-                if nova_helper.get_vm_host(vm) == host:
-                    vms_host_err.append(vm)
+        if not is_sx:
+            vms_host_err = []
+            for vm in vms_to_check:
+                if post_host:
+                    if nova_helper.get_vm_host(vm) != post_host:
+                        vms_host_err.append(vm)
+                else:
+                    if nova_helper.get_vm_host(vm) == host:
+                        vms_host_err.append(vm)
 
-        if vms_host_err:
-            if post_host:
-                err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
-                          "state: {}".format(post_host, host, vms_host_err, inactive_vms)
-            else:
-                err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
-                    format(host, vms_host_err, inactive_vms)
+            if vms_host_err:
+                if post_host:
+                    err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
+                              "state: {}".format(post_host, host, vms_host_err, inactive_vms)
+                else:
+                    err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
+                        format(host, vms_host_err, inactive_vms)
 
-            if fail_ok:
-                LOG.warning(err_msg)
-                return 1, vms_host_err
-            raise exceptions.VMError(err_msg)
+                if fail_ok:
+                    LOG.warning(err_msg)
+                    return 1, vms_host_err
+                raise exceptions.VMError(err_msg)
 
         if inactive_vms:
-            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+            err_msg = "VMs did not reach Active state after vm host rebooted: {}".format(inactive_vms)
             if fail_ok:
                 LOG.warning(err_msg)
                 return 2, inactive_vms

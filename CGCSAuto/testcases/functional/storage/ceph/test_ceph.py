@@ -92,36 +92,29 @@ def _test_ceph_osd_process_kill():
     with host_helper.ssh_to_host(osd_host) as host_ssh:
         LOG.tc_step('Take OSD {} out of service'.format(osd_id))
         cmd = 'ceph osd out {}'.format(osd_id)
-        rc, out = host_ssh.exec_cmd(cmd)
-        assert rc == 0, "Unable to take OSD out of service"
+        host_ssh.exec_cmd(cmd, fail_ok=False)
 
         LOG.tc_step('Bring OSD {} down'.format(osd_id))
         cmd = 'ceph osd down {}'.format(osd_id)
-        rc, out = host_ssh.exec_cmd(cmd)
-        msg = "Unable to bring down the OSD"
-        assert rc == 0, msg
+        host_ssh.exec_cmd(cmd, fail_ok=False)
 
         LOG.tc_step('Remove OSD {}'.format(osd_id))
         cmd = 'ceph osd rm {}'.format(osd_id)
-        rc, out = host_ssh.exec_cmd(cmd)
-        msg = "Unable to remove the OSD"
-        assert rc == 0, msg
+        host_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Check for loss of replication alarm in group {}'.format(storage_group))
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, timeout=180)[0], "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, timeout=180)
     
     LOG.tc_step('Check for ceph health warning alarm')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=180)[0], "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=180)
 
     LOG.tc_step('Check for OSD failure alarm')
     entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    events = system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
 
     LOG.tc_step('Put the OSD {} back in service'.format(osd_id))
     cmd = 'ceph osd create 5'.format(osd_id)
-    rc, out = con_ssh.exec_cmd(cmd)
-    msg = "Unable to start the OSD"
-    assert rc == 0, msg
+    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Check the OSD process is restarted with a different pid')
     endtime = time.time() + 300
@@ -138,14 +131,14 @@ def _test_ceph_osd_process_kill():
     LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
 
     LOG.tc_step('Check that loss of replication alarm in group {} alarm clears'.format(storage_group))
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_LOR, timeout=300), "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_LOR, timeout=300)
     
     LOG.tc_step('Check that ceph health warning clears')
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=300), "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND) 
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=300)
 
     LOG.tc_step('Check the OSD failure alarm clears')
     entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=300), "Alarm {} not cleared".format(EventLogID.STORAGE_DEGRADE)
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=300)
 
 
 @mark.parametrize('monitor', [
@@ -196,14 +189,14 @@ def test_ceph_mon_process_kill(monitor):
 
             LOG.tc_step('Remove the monitor')
             cmd = 'ceph mon remove {}'.format(monitor)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
             LOG.tc_step('Stop the ceph monitor')
             cmd = 'service ceph stop mon.{}'.format(monitor)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
     LOG.tc_step('Check that ceph monitor failure alarm is raised')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=300)[0], "Alarm {} not raised".format(EventLogID.STORAGE_DEGRADE)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=300)
 
     with host_helper.ssh_to_host(monitor) as host_ssh:
         with host_ssh.login_as_root() as root_ssh:
@@ -214,14 +207,14 @@ def test_ceph_mon_process_kill(monitor):
 
             LOG.tc_step('Remove old ceph monitor directory')
             cmd = 'rm -rf /var/lib/ceph/mon/ceph-{}'.format(monitor)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
             LOG.tc_step('Re-add the monitor')
             cmd = 'ceph-mon -i {} -c {} --mkfs --fsid {}'.format(monitor, ceph_conf, fsid)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
     LOG.tc_step('Check the ceph storage alarm condition clears')
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=360), "Alarm {} not cleared".format(EventLogID.STORAGE_DEGRADE)
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=360)
 
     LOG.tc_step('Check the ceph-mon process is restarted with a different pid')
     for i in range(0, PROC_RESTART_TIME):
@@ -229,6 +222,7 @@ def test_ceph_mon_process_kill(monitor):
         if mon_pid2 != mon_pid:
             break
         time.sleep(1)
+
     msg = 'Process did not restart in time'
     assert mon_pid2 != mon_pid, msg
     LOG.info('Old pid is {} and new pid is {}'.format(mon_pid, mon_pid2))
@@ -295,9 +289,7 @@ def test_ceph_reboot_storage_node():
         for host in storage_nodes:
             LOG.tc_step('Reboot {}'.format(host))
             HostsToRecover.add(host, scope='function')
-            results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-            host_helper.wait_for_host_states(host, availability='offline')
-            LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
+            host_helper.reboot_hosts(host, wait_for_offline=True, wait_for_reboot_finish=False)
 
             LOG.tc_step('Check health of CEPH cluster')
             end_time = time.time() + 10
@@ -598,13 +590,14 @@ def test_lock_cont_check_mon_down():
         "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check health of CEPH cluster')
-    health = False
+    msg = ''
     end_time = time.time() + 40
     while time.time() < end_time:
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
         if ceph_healthy:
             break
-    assert ceph_healthy, msg
+    else:
+        assert 0, msg
 
 
 # Tested on PV1.  Runtime: 1212.55 secs Date: Aug 2nd, 2017.  Status: Pass
@@ -922,7 +915,7 @@ def test_import_raw_with_cache_raw():
         msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
         assert rbd_raw_img_id not in out, msg
 
-    #TODO: Clean up resources used
+    # TODO: Clean up resources used
 
 
 # INPROGRESS

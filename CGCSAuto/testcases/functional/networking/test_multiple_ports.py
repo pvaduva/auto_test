@@ -5,9 +5,8 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
 from consts.reasons import SkipHostIf
 from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
+from keywords import vm_helper, nova_helper, network_helper, check_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
 
 
 def id_params(val):
@@ -203,22 +202,9 @@ class TestMutiPortsBasic:
         host = nova_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        HostsToRecover.add(host, scope='function')
+        vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
-        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                      timeout=120)
-
-        LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper.wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-        post_evac_host = nova_helper.get_vm_host(vm_under_test)
-        assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
-        LOG.tc_step("Wait for vm pingable from NatBox after evacuation.")
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-
-        LOG.tc_step("Verify vm pci address preserved after evacuated from {} to {}".format(host, post_evac_host))
+        LOG.tc_step("Verify vm pci address preserved after evacuation")
         check_helper.check_vm_pci_addr(vm_under_test, nics)
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works after "
@@ -492,20 +478,7 @@ class TestMutiPortsPCI:
         host = nova_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        HostsToRecover.add(host, scope='function')
-
-        LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                      timeout=120)
-
-        LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper.wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
-        post_evac_host = nova_helper.get_vm_host(vm_under_test)
-        assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
-        LOG.tc_step("Wait for vm pingable from NatBox after evacuation.")
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+        vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
         LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
         vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)

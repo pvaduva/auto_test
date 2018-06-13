@@ -122,13 +122,10 @@ class TestPrioritizedVMEvacuation:
         self.create_vms()
         self.check_vm_settings()
         self.trigger_evacuation()
-        self.check_vm_status()
         self.check_evacuation_orders()
         self.check_vm_settings()
 
     def check_vm_settings(self):
-        self.check_vm_status()
-
         LOG.tc_step('Check if the evacuation-priority actually set')
         for vm_info in self.vms_info.values():
             recovery_priority = get_vm_priority_metadata(vm_info['vm_id'], fail_ok=False)
@@ -142,17 +139,6 @@ class TestPrioritizedVMEvacuation:
                         vm_info['priority'], recovery_priority, vm_info['vm_id'])
 
         LOG.info('OK, evacuation-priorities are correctly set')
-
-    def check_vm_status(self):
-        LOG.tc_step('Checking states of VMs')
-        if not self.vms_info:
-            skip('No VMs to check')
-            return
-
-        for vm_info in self.vms_info.values():
-            vm_helper.wait_for_vm_values(vm_info['vm_id'], timeout=300, status=[VMStatus.ACTIVE])
-
-        LOG.info('OK, all VMs are in ACTIVE status\n')
 
     def check_evacuation_orders(self):
         LOG.tc_step('Checking the order of VM evacuation')
@@ -175,10 +161,11 @@ class TestPrioritizedVMEvacuation:
         action = self.operation.lower()
 
         self.start_time = patching_helper.lab_time_now()[1]
+        vms = [vm_dict['vm_id'] for vm_dict in self.vms_info.values()]
 
         if action in VALID_OPERATIONS:
             force_reboot = (action != 'reboot')
-            host_helper.reboot_hosts(self.current_host, force_reboot=force_reboot, fail_ok=False)
+            vm_helper.evacuate_vms(host=self.current_host, force=force_reboot, vms_to_check=vms)
         else:
             skip('Not supported action:{}'.format(action))
         LOG.info('OK, triggered evacuation by {} host:{}'.format(self.operation, self.current_host))

@@ -777,16 +777,8 @@ class TestHTEnabled:
         if host_action == 'evacuate':
             target_host = post_vm_host
             LOG.tc_step("Reboot vm host {}".format(target_host))
-            host_helper.reboot_hosts(target_host, wait_for_reboot_finish=False)
-            HostsToRecover.add(target_host)
-
-            LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-            vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-            LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-            vm_helper.wait_for_vms_values(vms=vm_id, values=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-            vm_host_post_evac = nova_helper.get_vm_host(vm_id)
-            assert target_host != vm_host_post_evac, "VM stuck on the same host upon host reboot"
+            vm_helper.evacuate_vms(host=target_host, vms_to_check=vm_id, ping_vms=True)
+            vm_host_post_evac = nova_helper.get_vm_host(vm_id=vm_id)
 
             LOG.tc_step("Check VM topology is still correct after host reboot")
             check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol=cpu_pol,

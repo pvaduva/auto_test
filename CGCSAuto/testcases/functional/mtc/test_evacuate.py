@@ -131,20 +131,7 @@ class TestVariousGuests:
 
         vm_host = nova_helper.get_vm_host(vm_id)
         LOG.tc_step("Reboot VM host {}".format(vm_host))
-        HostsToRecover.add(vm_host, scope='function')
-        host_helper.reboot_hosts(vm_host, wait_for_reboot_finish=False)
-
-        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vm_values(vm_id, fail_ok=True, timeout=120, status=[VMStatus.ERROR, VMStatus.REBUILD])
-
-        LOG.tc_step("Check vms are in Active state and moved to other host after host reboot")
-        vm_helper.wait_for_vm_values(vm_id, timeout=300, fail_ok=False, status=[VMStatus.ACTIVE])
-
-        post_vm_host = nova_helper.get_vm_host(vm_id)
-        assert vm_host != post_vm_host, "VM host did not change upon host reboot even though VM is in Active state."
-
-        LOG.tc_step("Check VM still pingable from Natbox after evacuated to other host")
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm_id, ping_vms=True)
 
 
 class TestEvacKPI:

@@ -265,7 +265,7 @@ def test_providernet_connectivity_reboot():
 
     LOG.tc_step("Reboot hosts: {}".format(slave_computes))
     HostsToRecover.add(slave_computes)
-    host_helper.reboot_hosts(slave_computes, wait_for_reboot_finish=False)
+    host_helper.reboot_hosts(slave_computes, wait_for_offline=False, wait_for_reboot_finish=False)
 
     LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
     audit_id = network_helper.schedule_providernet_connectivity_test()[1]
@@ -282,7 +282,7 @@ def test_providernet_connectivity_reboot():
     if not small_footprint:
         LOG.tc_step("Reboot the last compute host: {}".format(master_compute))
         HostsToRecover.add(master_compute)
-        host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
+        host_helper.reboot_hosts(master_compute, wait_for_offline=False, wait_for_reboot_finish=False)
 
         res, audit_id = network_helper.schedule_providernet_connectivity_test(fail_ok=True, timeout=300)
         if res == 0:

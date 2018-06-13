@@ -202,30 +202,7 @@ class TestDefaultGuest:
             vms_info[vm_]['content'] = content
 
         LOG.tc_step("Reboot target host {}".format(target_host))
-        host_helper.reboot_hosts(target_host, wait_for_reboot_finish=False)
-        HostsToRecover.add(target_host)
-
-        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vms_values(vms, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-        LOG.tc_step("Check vms are in Active state and moved to other host(s) after host reboot")
-        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
-
-        vms_host_err = []
-        for vm in vms:
-            post_host = nova_helper.get_vm_host(vm)
-            if post_host == target_host:
-                vms_host_err.append(vm)
-            vms_info[vm]['post_host'] = post_host
-        # by now, all vm_info dict should include: ephemeral, swap, vm_type, disks, file_paths, content, post_host
-
-        assert not vms_host_err, "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}". \
-            format(target_host, vms_host_err, inactive_vms)
-
-        assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
-
-        LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-        vm_helper.ping_vms_from_natbox(vms, fail_ok=False)
+        vm_helper.evacuate_vms(host=target_host, vms_to_check=vms, ping_vms=True)
 
         LOG.tc_step("Check files after evacuation")
         for vm_ in vms:
@@ -373,7 +350,7 @@ class TestOneHostAvail:
 
         LOG.tc_step("Reboot -f from target host {}".format(target_host))
         HostsToRecover.add(target_host)
-        host_helper.reboot_hosts(target_host, wait_for_reboot_finish=True)
+        host_helper.reboot_hosts(target_host)
 
         LOG.tc_step("Check vms are in Active state after host come back up")
         res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)

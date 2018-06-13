@@ -67,8 +67,8 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
             host_ssh.close()
 
 
-def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True,
-                 check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
+def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_offline=True,
+                 wait_for_reboot_finish=True, check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
     """
     Reboot one or multiple host(s)
 
@@ -77,6 +77,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         timeout (int): timeout waiting for reboot to complete in seconds
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
+        wait_for_offline (bool): Whether to wait for host to be offline after reboot
         wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
         check_hypervisor_up (bool):
         check_webservice_up (bool):
@@ -142,7 +143,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
             _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
-    if not wait_for_reboot_finish:
+    if not wait_for_offline and not is_simplex:
         msg = "Hosts reboot -f cmd sent"
         LOG.info(msg)
         return -1, msg
@@ -162,8 +163,13 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         hostnames.append(controller)
         if not is_simplex:
             wait_for_hosts_states(
-                controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
-                con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
+                    controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
+                    con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
+
+    if not wait_for_reboot_finish:
+        msg = 'Host(s) in offline state'
+        LOG.info(msg)
+        return -1, msg
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
