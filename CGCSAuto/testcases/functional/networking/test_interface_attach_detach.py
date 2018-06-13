@@ -276,11 +276,9 @@ def test_interface_attach_detach_on_paused_vm(base_vm, guest_os, if_attach_arg, 
     for i in range(live_migrations):
         LOG.tc_step("Perform following action(s) on vm {}: {} {} time".format(vm_under_test, 'live migrate --force', i))
         _force_live_migrate(vm_id=vm_under_test)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
         _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
 
         vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
         _ping_vm_data(vm_under_test, base_vm_id, action='live migrate')
 
     LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
@@ -298,15 +296,12 @@ def test_interface_attach_detach_on_paused_vm(base_vm, guest_os, if_attach_arg, 
     vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)
     new_vnics += 1
 
-    LOG.tc_step("Perform following action(s) on vm  {}: {} {} time".format(vm_under_test, 'live migrate', i))
-    for i in range(live_migrations):
-        vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
+    LOG.tc_step("Perform following action(s) on vm  {}: {} {} time".format(vm_under_test, 'live migrate', 1))
+    vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
 
     LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
     _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics + 1)
     _ping_vm_data(vm_under_test, base_vm_id, action='live migrate')
-
-
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'boot_source'), [
