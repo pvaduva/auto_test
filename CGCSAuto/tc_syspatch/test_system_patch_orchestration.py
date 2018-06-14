@@ -26,7 +26,7 @@ def check_health(check_patch_ignored_alarms=True):
     if rc == 0:
         LOG.info("System health OK for patching ......")
     else:
-        if len(health) > 1:
+        if len(health) > 2:
             assert False, "System health query failed: {}".format(health)
         else:
             if "No alarms" in health.keys() and check_patch_ignored_alarms:
@@ -36,6 +36,8 @@ def check_health(check_patch_ignored_alarms=True):
                                     orchestration_helper.IGNORED_ALARM_IDS]
                 if len(affecting_alarms) > 0:
                     assert False, "Management affecting alarm(s) present: {}".format(affecting_alarms)
+            elif "All hosts are patch current" in health.keys():
+                LOG.info("Some hosts are not patch current")
             else:
                 assert False, "System health query failed: {}".format(health)
 
@@ -229,37 +231,48 @@ def test_system_patch_orchestration(patch_orchestration_setup):
     patch_ids = ' '.join(patches.keys())
 
     LOG.tc_step("Uploading  patches {} ... ".format(patch_ids))
+
     patch_dest_dir = WRSROOT_HOME + '/patches'
-    assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir)[0] in [0, 1],\
-        "Failed to upload  patches : {}".format(patch_ids)
+    rc = patching_helper.run_patch_cmd('upload-dir', args=patch_dest_dir)[0]
+    assert rc in [0,1], "Fail to upload patches in dir {}".format(patch_dest_dir)
 
-    LOG.tc_step("Querying patches ... ")
-    assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+    uploaded = patching_helper.get_available_patches()
+    if rc == 0:
+        LOG.info("Patches uploaded: {}".format(uploaded))
+    else:
+        LOG.info("Patches are already in repo")
 
-    LOG.tc_step("Applying patches ... ")
-    rc = patching_helper.run_patch_cmd("apply", args='--all')[0]
-    assert rc in [0, 1, 2], "Failed to apply patches"
+    if len(uploaded) > 0:
+        LOG.tc_step("Applying patches ...")
+        applied = patching_helper.apply_patches(patch_ids=patch_ids)
 
-    patches_ids = patching_helper.get_patches_in_state(expected_states=['Partial-Apply', 'Partial-Remove'])
+        LOG.info("Patches applied: {}".format(applied))
+    else:
+        LOG.info("No Patches are applied; Patches may be already applied: {}")
 
-    current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
-    affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
-    if len(affecting_alarms) > 0:
-        assert system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=True)[0],\
-            "Alarms present: {}".format(affecting_alarms)
+    partial_patches_ids = patching_helper.get_patches_in_state(expected_states=['Partial-Apply', 'Partial-Remove'])
+    if len (partial_patches_ids) > 0:
 
-    LOG.tc_step("Installing patches through orchestration  .....")
-    patching_helper.orchestration_patch_hosts(
-            controller_apply_type=patch_orchestration_setup['controller_apply_strategy'],
-            storage_apply_type=patch_orchestration_setup['storage_apply_strategy'],
-            compute_apply_type=patch_orchestration_setup['compute_apply_strategy'],
-            max_parallel_computes=patch_orchestration_setup['max_parallel_computes'],
-            instance_action=patch_orchestration_setup['instance_action'],
-            alarm_restrictions=patch_orchestration_setup['alarm_restrictions'])
+        current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
+        affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
+        if len(affecting_alarms) > 0:
+            assert system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=True)[0],\
+                "Alarms present: {}".format(affecting_alarms)
 
-    LOG.info(" Applying Patch orchestration strategy completed for {} ....".format(patches_ids))
+        LOG.tc_step("Installing patches through orchestration  .....")
+        patching_helper.orchestration_patch_hosts(
+                controller_apply_type=patch_orchestration_setup['controller_apply_strategy'],
+                storage_apply_type=patch_orchestration_setup['storage_apply_strategy'],
+                compute_apply_type=patch_orchestration_setup['compute_apply_strategy'],
+                max_parallel_computes=patch_orchestration_setup['max_parallel_computes'],
+                instance_action=patch_orchestration_setup['instance_action'],
+                alarm_restrictions=patch_orchestration_setup['alarm_restrictions'])
 
-    LOG.tc_step("Deleting  patches  orchestration strategy .....")
-    delete_patch_strategy()
-    LOG.info("Deleted  patch orchestration strategy .....")
+        LOG.info(" Applying Patch orchestration strategy completed for {} ....".format(partial_patches_ids))
+
+        LOG.tc_step("Deleting  patches  orchestration strategy .....")
+        delete_patch_strategy()
+        LOG.info("Deleted  patch orchestration strategy .....")
+    else:
+        pytest.skip("All patches in  patch-dir are already in system.")
 
