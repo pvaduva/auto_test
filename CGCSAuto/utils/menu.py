@@ -15,8 +15,14 @@ class Menu(object):
             self.prompt = kwargs.get("prompt", kwargs["name"])
             self.wrap_around = kwargs.get("wrap_around", True)
             if kwargs.get("options"):
+                option_count = 0
                 for option in kwargs["options"]:
-                    options.append(Option(name=option["name"], index=option["index"], key=option["key"]))
+                    option_name = option.get("name")
+                    option_index = option.get("index", option_count)
+                    option_key = option.get("key")
+                    option_tag = option.get("tag")
+                    options.append(Option(name=option_name, index=option_index, key=option_key, tag=option_tag))
+                    option_count += 1
             self.options = options
             self.sub_menus = [] if sub_menus is None else sub_menus
         else:
@@ -124,6 +130,7 @@ class BiosMenu(Menu):
         if lab_name is None:
             lab = InstallVars.get_install_var("LAB")
             lab_name = lab["name"]
+        lab_name = lab_name.lower()
         LOG.debug("Lab name: {}".format(lab_name))
         if 'wolfpass' in lab_name or "wildcat" in lab_name:
             bios_menu_dict = bios.BiosMenus.American_Megatrends
@@ -194,7 +201,7 @@ class BootDeviceMenu(Menu):
         super().__init__(name="boot device menu", kwargs=bios.BootMenus.Boot_Device)
 
     def find_options(self, telnet_conn):
-        super().find_options(telnet_conn, end_of_menu=b"\^ and v to move selection", option_identifier=b"[A-Z][A-Za-z]",
+        super().find_options(telnet_conn, end_of_menu=b"\^ and v to move selection|_q{40,}_", option_identifier=b"[A-Z][A-Za-z]",
                              newline=b'(\x1b\[\d+;\d+H)+')
 
 

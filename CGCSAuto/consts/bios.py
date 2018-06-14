@@ -30,7 +30,7 @@ class BiosMenus:
     Supermicro = {
         "name": "American Megatrends",
         "options": [{'name': 'Setup', 'index': 0, 'key': 'Del'},
-                    {'name': 'Boot Menu', 'index': 1, 'key': ['Esc', '!']},
+                    {'name': 'Boot Menu', 'index': 1, 'key': ['Esc', '!'], 'tag': 'boot menu'},
                     {'name': 'PXE/LAN', 'index': 2, 'key': 'F12'}],
         "wrap_around": False
     }
@@ -39,7 +39,7 @@ class BiosMenus:
         "name": "American Megatrends",
         "options": [{'name': 'direct boot', 'index': 0, 'key': 'Enter'},
                     {'name': 'setup', 'index': 1, 'key': 'F2'},
-                    {'name': 'boot menu', 'index': 2, 'key': 'F6'},
+                    {'name': 'boot menu', 'index': 2, 'key': 'F6', 'tag': 'boot menu'},
                     {'name': 'network boot', 'index': 3, 'key': 'F12'}],
         "wrap_around": False
     }
@@ -48,7 +48,7 @@ class BiosMenus:
         "name": "American Megatrends",
         "options": [{'name': 'direct boot', 'index': 0, 'key': 'Enter'},
                     {'name': 'setup', 'index': 1, 'key': 'F2'},
-                    {'name': 'Boot Menu', 'index': 2, 'key': 'F6'},
+                    {'name': 'Boot Menu', 'index': 2, 'key': 'F6', 'tag': 'boot menu'},
                     {'name': 'network boot', 'index': 3, 'key': 'F12'}],
         "wrap_around": False
     }
@@ -59,16 +59,16 @@ class BiosMenus:
                     {'name': 'Setup', 'index': 1, 'key': ['Esc', '9']},
                     {'name': 'Intelligent Provisioning', 'index': 2, 'key': ['ESC', '0']},
                     {'name': 'Boot Override', 'index': 3, 'key': ['ESC', '!']},
-                    {'name': 'Network Boot', 'index': 4, 'key': ['ESC', '@']}],
+                    {'name': 'Network Boot', 'index': 4, 'key': ['ESC', '@'], 'tag': 'boot menu'}],
         "wrap_around": False
     }
 
     ml350 = {
         "name": "Hewlett",
         "options": [{'name': 'System Utilities', 'index': 0, 'key': ['ESC', 'O', 'p']},
-                    {'name': 'Intelligent Provisioning', 'index': 2, 'key': ['ESC', '0']},
-                    {'name': 'One Time Boot', 'index': 3, 'key': ['ESC', '!']},
-                    {'name': 'Network Boot', 'index': 4, 'key': ['ESC', '@']}],
+                    {'name': 'Intelligent Provisioning', 'index': 1, 'key': ['ESC', '0']},
+                    {'name': 'One Time Boot', 'index': 2, 'key': ['ESC', '!']},
+                    {'name': 'Network Boot', 'index': 3, 'key': ['ESC', '@'], 'tag': 'boot menu'}],
         "wrap_around": False
     }
     # TODO: double check options
@@ -83,7 +83,10 @@ class BiosMenus:
 
     Phoenix = {
         "name": "Phoenix",
-        "options": [{"name": "PXE", "index": 0, "key": 'F12'}],
+        "options": [{'name': 'System\x1b\[\d;\d+HSetup', 'index': 0, 'key': 'F2'},
+                    {'name': 'Lifecycle\x1b\[\d;\d+HController', 'index': 1, 'key': 'F10'},
+                    {'name': 'BIOS\x1b\[\d;\d+HBoot\x1b\[\d;\d+HManager', 'index': 2, 'key': 'F11'},
+                    {"name": "PXE\x1b\[\d;\d+HBoot", "index": 0, "key": 'F12', 'tag': 'boot menu'}],
         "wrap_around": False
     }
 
@@ -92,7 +95,7 @@ class BootMenus:
 
     Boot_Device = {
         "name": "boot device",
-        "prompt": "Please select boot device",
+        "prompt": "Please select boot device|Boot(\x1b\[\d+;\d+H)*(\s)*From",
         "wrap_around": True
     }
 
