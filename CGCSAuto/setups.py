@@ -626,7 +626,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         if 'storage_nodes' in lab_to_install:
             system_mode = SysType.STORAGE
         else:
-            lab_to_install['system_mode'] = SysType.REGULAR
+            system_mode = SysType.REGULAR
     else:
         if "simplex" in lab_to_install['system_mode']:
             system_mode = SysType.AIO_SX
