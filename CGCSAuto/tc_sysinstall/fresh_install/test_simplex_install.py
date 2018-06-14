@@ -87,13 +87,13 @@ def test_simplex_install(install_setup):
 
     LOG.tc_step("Check heat resources")
     if last_session_step <= LOG.test_step:
-        setup_heat(con_ssh=active_controller.ssh_conn)
+        fresh_install_helper.setup_heat(con_ssh=active_controller.ssh_conn)
         host_helper.wait_for_hosts_ready(["controller-0"], con_ssh=active_controller.ssh_conn)
     else:
         LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
-        pytest.skip("stopping at install step: {}".format(LOG.test_step))
+        skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run post-install scripts (if any)")
     rc = active_controller.ssh_conn.exec_cmd("test -d /home/wrsroot/postinstall/")
