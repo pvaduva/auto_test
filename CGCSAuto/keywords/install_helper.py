@@ -272,7 +272,7 @@ def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
     if node_obj.telnet_login_prompt:
         _telnet_conn.send("\r\n")
-    _telnet_conn.connect(fail_ok=True)
+    _telnet_conn.login(fail_ok=True)
     while _telnet_conn.expect(fail_ok=True, timeout=3) == 0:
         continue
 
