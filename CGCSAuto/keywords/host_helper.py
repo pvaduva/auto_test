@@ -760,7 +760,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 return 6, "Host is not up in nova hypervisor-list"
 
             if not is_simplex:
-                wait_for_tasks_affined(host)
+                wait_for_tasks_affined(host, con_ssh=con_ssh)
 
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
