@@ -335,7 +335,7 @@ def get_active_standby_controllers(con_ssh=None, use_telnet=False, con_telnet=No
 
 
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-                     auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None, retry=0):
+                     mgmt_affecting=False, auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None, retry=0):
     """
     Get active alarms_and_events dictionary with given criteria
     Args:
@@ -359,6 +359,8 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         args += ' --uuid'
     if show_suppress:
         args += ' --include_suppress'
+    if mgmt_affecting:
+        args += ' --mgmt_affecting'
 
     fail_ok = True
     if not retry:
@@ -394,8 +396,8 @@ def _compose_alarm_table(output, uuid=False):
 
 def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
                severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
-               query_type=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True, use_telnet=False,
-               con_telnet=None):
+               query_type=None, mgmt_affecting=False, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True,
+               use_telnet=False, con_telnet=None):
     """
     Get a list of alarms with values for specified fields.
     Args:
@@ -424,7 +426,7 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
 
     table_ = get_alarms_table(show_suppress=show_suppress, query_key=query_key, query_value=query_value,
                               query_type=query_type, con_ssh=con_ssh, auth_info=auth_info,
-                              use_telnet=use_telnet, con_telnet=con_telnet)
+                              use_telnet=use_telnet, con_telnet=con_telnet, mgmt_affecting=mgmt_affecting)
 
     if alarm_id:
         table_ = table_parser.filter_table(table_, **{'Alarm ID': alarm_id})
@@ -1432,15 +1434,14 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
         return 0, "4k memory is modified to {} in pending.".format(smallpage_num)
 
 
-def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_mem_values(host, headers, proc_id, wait_for_update=True, con_ssh=None, auth_info=Tenant.ADMIN):
     """
     Get host memory values
     Args:
         host (str): hostname
         headers (list):
         proc_id (int|str): such as 0, '1'
-        wait_for_avail_update (bool): wait for mem_avail to be smaller than mem_total in case host just unlocked as per
-            CGTS-7499
+        wait_for_update (bool): wait for vm_hp_pending_2M and vm_hp_pending_1G to be None (CGTS-7499)
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -1451,20 +1452,20 @@ def get_host_mem_values(host, headers, proc_id, wait_for_avail_update=True, con_
     cmd = 'host-memory-list --nowrap'
     table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
 
-    if wait_for_avail_update:
+    if wait_for_update:
         end_time = time.time() + 300
         while time.time() < end_time:
-            total_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_total(MiB)')]
-            avail_mems = [int(mem) for mem in table_parser.get_column(table_, 'mem_avail(MiB)')]
+            pending_2m = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_2M')]
+            pending_1g = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_1G')]
 
-            for i in range(len(total_mems)):
-                if total_mems[i] <= avail_mems[i]:
+            for i in range(len(pending_2m)):
+                if pending_2m[i] or pending_1g[i]:
                     break
             else:
-                LOG.debug("mem_total is larger than mem_avail")
+                LOG.debug("No pending 2M or 1G mem pages")
                 break
 
-            LOG.info("mem_total is no larger than mem_avail, wait for mem_avail to update")
+            LOG.info("Pending 2M or 1G pages, wait for mem page to update")
             time.sleep(30)
             table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
         else:
@@ -2173,10 +2174,21 @@ def are_hosts_unlocked(con_ssh=None):
 
 
 def get_system_health_query_upgrade(con_ssh=None):
+    """
+    Queries the  health of a system in use.
+    Args:
+        con_ssh:
+
+    Returns: tuple
+        (0, None, None) - success - all heath checks are OK.
+        (1, dict(error msg), None ) -  health query reported 1 or more failures with no recommmended actions.
+        (2, dict(error msg), dict(actions) -  health query reported failures with recommended actions to resolve failure
+    """
 
     output = (cli.system('health-query-upgrade', ssh_client=con_ssh)).splitlines()
     failed = {}
     ok = {}
+
     for line in output:
         if ":" in line:
             k, v = line.split(":")
@@ -2184,12 +2196,85 @@ def get_system_health_query_upgrade(con_ssh=None):
                 ok[k.strip()] = v.strip()
             elif "[Fail]" in v.strip():
                 failed[k.strip()] = v.strip()
+            elif "Hosts missing placement configuration" in k:
+                failed[k.strip()] = v.strip()
+            elif "Incomplete configuration" in k:
+                failed[k.strip()] = v.strip()
+            elif "Locked or disabled hosts" in k:
+                failed[k.strip()] = v.strip()
+
+
         elif "Missing manifests" in line:
             failed[line] = line
-    if len(failed) > 0:
-        return 1, failed
-    else:
-        return 0, None
+        elif "alarms found" in line:
+            if len (line.split(',')) > 1:
+                failed["managment affecting"] = int(line.split(',')[1].strip()[1])
+
+    if len(failed) == 0:
+        LOG.info("system health is OK to start upgrade......")
+        return 0, None,  None
+
+    actions = { "lock_unlock": [[], ""],
+                "force_upgrade": [False, ''],
+                "swact": [False, ''],
+                }
+
+    for k, v in failed.items():
+        if "No alarms" in k:
+            alarms = True
+            table_ = table_parser.table(cli.system('alarm-list --uuid'))
+            alarm_severity_list = table_parser.get_column(table_, "Severity")
+            if len(alarm_severity_list) > 0 and \
+                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
+                # minor alarm present
+                LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
+                actions["force_upgrade"] = [True, "Minor alarms present"]
+
+        elif "managment affecting" in k:
+            if v == 0:
+                # non management affecting alarm present  use  foce upgrade
+                LOG.warn("System health query upgrade found non managment affecting alarms: {}"
+                         .format(k))
+                actions["force_upgrade"] = [True, "Non managment affecting  alarms present"]
+
+            else:
+                # major/critical alarm present,  management affecting
+                LOG.error("System health query upgrade found major or critical alarms.")
+                return 1, failed, None
+
+
+        elif "Missing manifests" in k:
+            manifest = True
+
+            if "controller-1" in k:
+                if "controller-1" not in actions["lock_unlock"][0]:
+                    actions["lock_unlock"][0].append("controller-1")
+            if "controller-0" in k:
+                if "controller-0" not in actions["lock_unlock"][0]:
+                    actions["lock_unlock"][0].append("controller-0")
+
+            actions["lock_unlock"][1] += "Missing manifests;"
+
+        elif any(s in k for s in ("Cinder configuration", "Incomplete configuration")):
+            cinder_config = True
+            actions["swact"][0] = True
+            actions["swact"][1] += "Invalid Cinder configuration;"
+
+        elif "Placement Services Enabled" in k or "Hosts missing placement configuration" in k:
+            placement_services = True
+            if "controller-1" in v:
+                if "controller-1" not in actions["lock_unlock"][0]:
+                    actions["lock_unlock"][0].append("controller-1")
+            if "controller-0" in v:
+                if "controller-0" not in actions["lock_unlock"][0]:
+                    actions["lock_unlock"][0].append("controller-0")
+            actions["lock_unlock"][1] += "Missing placement configuration;"
+        else:
+            err_msg = "System health query upgrade failed: {}".format(failed)
+            LOG.error(err_msg)
+            return 1, failed,  None
+
+    return 2, failed, actions
 
 
 def get_system_health_query(con_ssh=None):
@@ -2561,7 +2646,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = "sudo license-fresh_install " + license_path
+    cmd = "sudo license-install " + license_path
     con_ssh.send(cmd)
     end_time = time.time() + timeout
     rc = 1
@@ -3323,3 +3408,29 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=
     LOG.info(msg)
     return 0, msg
 
+def is_avs(con_ssh=None):
+    vswitch_type = ProjVar.get_var('VSWITCH_TYPE')
+    if vswitch_type is None:
+        vswitch_type = get_system_value(field='vswitch_type', con_ssh=con_ssh)
+        ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
+    return vswitch_type != 'ovs'
+
+
+def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None,):
+    """
+
+    Args:
+        con_ssh:
+        use_telnet
+        con_telnet
+
+    Returns (str): e.g., 16.10
+
+    """
+    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,)
+    build_line = [l for l in build_info.splitlines() if "BUILD_ID" in l]
+    for line in build_line:
+        if line.split("=")[0].strip() == 'BUILD_ID':
+            return line.split("=")[1].strip().replace('"', '')
+    else:
+        return None

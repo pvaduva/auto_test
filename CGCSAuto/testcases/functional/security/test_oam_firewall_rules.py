@@ -125,6 +125,63 @@ def get_custom_firewall_rule():
 
     return custom_path
 
+@fixture()
+def delete_file(get_custom_firewall_rule, request):
+    user_file_dir = ProjVar.get_var('USER_FILE_DIR')
+    invalid_rules_file = '{}iptables.rules.invalid.file'.format(user_file_dir)
+    invalid_rules_path = '{}iptables.rules.invalid'.format(user_file_dir)
+    firewall_rules_path = get_custom_firewall_rule
+    cli_client = get_cli_client()
+
+    def teardown():
+        try:
+            LOG.fixture_step("Cleanup Remove file: {}, {}".format(invalid_rules_file))
+            cli_client.exec_cmd("rm {}".format(invalid_rules_file))
+        except:
+            pass
+    request.addfinalizer(teardown)
+
+    return invalid_rules_file, invalid_rules_path, firewall_rules_path, cli_client
+
+
+def test_invalid_firewall_rules(delete_file):
+    """
+    Verify invalid firewall install files name & invalid file
+    Test Setup:
+        - SCP iptables.rules from test server to lab
+
+    Test Steps:
+        - Install custom firewall rules with invalid file path
+        - Verify install failed with valid reason
+        - Install custom firewall rules with invalid file
+        - Verify install failed with valid reason
+
+    """
+    invalid_rules_file, invalid_rules_path, firewall_rules_path, cli_client = delete_file
+    LOG.info("firewall rules path {}".format(firewall_rules_path))
+
+    LOG.tc_step("Install firewall rules with invalid file name {}".format(invalid_rules_path))
+    code, output = cli.system('firewall-rules-install', invalid_rules_path, fail_ok=True, rtn_list=True)
+
+    LOG.tc_step("Verify Install firewall rules failed with invalid file name")
+    LOG.info("Invalid fireall rules return code:[{}] & output: [{}]".format(code, output))
+
+    assert 'Could not open file' in output, "Unexpected error"
+    assert code == 1, "Invalid firewall rules install expected to fail, reason received {}".format(output)
+
+    LOG.tc_step("Install firewall rules with invalid file")
+    cmd = "cp {} {}".format(firewall_rules_path, invalid_rules_file)
+    code, output = cli_client.exec_cmd(cmd)
+    LOG.info("Code: {} output: {}".format(code, output))
+    cli_client.exec_cmd("sed -e '3i invalid' -i {}".format(invalid_rules_file))
+
+    LOG.tc_step("Install firewall rules with invalid file name {}".format(invalid_rules_file))
+    code, output = cli.system('firewall-rules-install', invalid_rules_file, fail_ok=True, rtn_list=True)
+    LOG.info("Invalid firewall rules return code:[{}] & output: [{}]".format(code, output))
+
+    assert 'Error in custom firewall rule file' in output, "Unexpected output"
+    assert code == 1, "Invalid firewall rules exit code"
+
 
 def test_firewall_rules_custom(get_custom_firewall_rule):
     """
@@ -204,7 +261,7 @@ def _modify_firewall_rules(firewall_rules_path):
     """
     start_time = common.get_date_in_format()
     time.sleep(1)
-    cli.system('firewall-rules-fresh_install', firewall_rules_path)
+    cli.system('firewall-rules-install', firewall_rules_path)
     system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
                                   **{'Entity Instance ID': 'host=controller-0',
                                      'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})

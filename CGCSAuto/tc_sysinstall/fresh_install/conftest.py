@@ -1,4 +1,5 @@
 import pytest
+import os
 import re
 
 from keywords import install_helper, vlm_helper
@@ -100,7 +101,6 @@ def pytest_runtest_teardown(item):
 
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
     with open(progress_file_path, "w") as progress_file:
-        # os.chmod(progress_file_path, 0o777)
         progress_file.write(item.nodeid + "\n")
         progress_file.write("End step: {}".format(str(LOG.test_step)))
         progress_file.close()

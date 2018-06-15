@@ -39,7 +39,7 @@ def test_swact_20_times():
 
     LOG.tc_step("Start writing from pre-existed vm before swacting")
     end_event = Events("End write in base vm")
-    base_vm_thread = vm_helper.write_in_vm(vm_base, end_event=end_event, expect_timeout=40, thread_timeout=60*100)
+    base_vm_thread = vm_helper.write_in_vm(vm_base, end_event=end_event, expect_timeout=120, thread_timeout=60*100)
 
     try:
         for i in range(20):

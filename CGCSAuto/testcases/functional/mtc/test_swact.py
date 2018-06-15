@@ -96,7 +96,7 @@ def test_swact_uncontrolled_kpi(collect_kpi):
         skip("No standby host to swact to")
 
     init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
-    host_helper.reboot_hosts(hostnames=start_host, wait_for_reboot_finish=True)
+    host_helper.reboot_hosts(hostnames=start_host)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=SwactUncontrolled.NAME, init_time=init_time,
                               log_path=SwactUncontrolled.LOG_PATH, end_pattern=SwactUncontrolled.END, host=end_host,
                               start_host=start_host, start_pattern=SwactUncontrolled.START,

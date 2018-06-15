@@ -1101,7 +1101,7 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     return net_ids[0]
 
 
-def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
+def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, rtn_val='id'):
     """
     Get a list of tenant network ids that match the given net_names for a specific tenant.
 
@@ -1109,6 +1109,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         net_names (str or list): list of tenant network name(s) to get id(s) for
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
+        rtn_val (str): id or name
 
     Returns (list): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
 
@@ -1122,7 +1123,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         if isinstance(net_names, str):
             net_names = [net_names]
         table_ = table_parser.filter_table(table_, name=net_names, strict=False)
-        return table_parser.get_column(table_, 'id')
+        return table_parser.get_column(table_, rtn_val)
 
 
 def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None):
@@ -3175,7 +3176,7 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
 
 def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr=None, subnet_id=None, strict=False,
-              auth_info=Tenant.ADMIN, con_ssh=None):
+              auth_info=Tenant.ADMIN, con_ssh=None, merge_lines=True):
     """
     Get a list of ports with given arguments
     Args:
@@ -3210,7 +3211,7 @@ def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr
         if value:
             kwargs[key] = value
 
-    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=merge_lines, **kwargs)
     return ports
 
 
@@ -3328,7 +3329,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
 
     vms_tenants = list(set(vms_tenants))
 
-    all_routers = get_routers(auth_info=Tenant.ADMIN)
+    all_routers = get_routers(auth_info=auth_info)
     vms_routers = []
     for router in all_routers:
         router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info, con_ssh=con_ssh)
@@ -3867,6 +3868,23 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
                                               pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
                                               con_ssh=None, strict=True, **filters):
+    """
+
+    Args:
+        rtn_val (str|tuple|list):
+        seg_id:
+        host:
+        pnet_id:
+        pnet_name:
+        audit_id:
+        auth_info:
+        con_ssh:
+        strict:
+        **filters:
+
+    Returns:
+
+    """
     args = []
     if audit_id:
         args.append('--audit-uuid {}'.format(audit_id))
@@ -3886,7 +3904,21 @@ def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, hos
         return None
 
     table_ = table_parser.table(out)
-    return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
+
+    is_str = False
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+        is_str = True
+
+    vals = []
+    table_ = table_parser.filter_table(table_=table_, strict=strict, **filters)
+    for field in rtn_val:
+        vals.append(table_parser.get_values(table_, field, merge_lines=True))
+
+    if is_str:
+        vals = vals[0]
+
+    return vals
 
 
 def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=600,
@@ -3930,6 +3962,9 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
                 raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
                                               "seconds after running 'neutron providernet-connectivity-test-schedule'".
                                               format(audit_id, timeout))
+
+    else:
+        return -1, audit_id
 
 
 def get_dpdk_user_data(con_ssh=None):

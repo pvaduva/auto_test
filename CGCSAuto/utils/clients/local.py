@@ -137,7 +137,7 @@ class LocalHostClient(SSHClient):
         venv_dir = _get_virtualenv_dir(venv_dir)
 
         if check_first:
-            if self.file_exists(os.path.join(venv_dir, 'bin', 'activate')):
+            if self.file_exists(os.path.join(venv_dir, venv_name, 'bin', 'activate')):
                 if activate:
                     self.activate_virtualenv(venv_name=venv_name, venv_dir=venv_dir, fail_ok=fail_ok)
                 return
@@ -169,6 +169,13 @@ class LocalHostClient(SSHClient):
             self.set_prompt(prompt=new_prompt)
             LOG.info('virtualenv {} activated successfully'.format(venv_name))
 
+        time.sleep(3)
+        code, output = self.exec_cmd('pip -V')
+        if code != 0:
+            LOG.warning('pip is not working properly. Listing env variables.')
+            all_env = self.exec_cmd('declare -p')[1]
+            LOG.info("declare -p: \n{}".format(all_env))
+
     def deactivate_virtualenv(self, venv_name, new_prompt=None):
         # determine on the new prompt
         if not new_prompt:
@@ -198,7 +205,7 @@ def _get_virtualenv_dir(venv_dir=None):
 
 class RemoteCLIClient:
     """
-    Note: this should only be used on test server due to sudo permission needed to fresh_install/uninstall remote cli clients.
+    Note: this should only be used on test server due to sudo permission needed to install/uninstall remote cli clients.
     """
     REMOTE_CLI_FOLDER = 'wrs-remote-clients'
     __remote_cli_info = {'remote_cli_dir': None, 'venv_dir': None}
@@ -210,7 +217,7 @@ class RemoteCLIClient:
         if not python_executable:
             python_executable = client.exec_cmd('which python2')[1]
             if not python_executable:
-                raise ValueError('python2 is not installed on system. Please fresh_install python2 first.')
+                raise ValueError('python2 is not installed on system. Please install python2 first.')
         return python_executable
 
     @classmethod
@@ -246,7 +253,7 @@ class RemoteCLIClient:
 
         # no existing client or name mismatch, create new client
         # venv shared for same lab. Assuming only one remote cli test session should be run on same lab.
-        # remote cli fresh_install script should be able to auto remove the old clients if exist in the venv
+        # remote cli install script should be able to auto remove the old clients if exist in the venv
         localclient = LocalHostClient()
         localclient.connect(use_current=False)
 
@@ -267,7 +274,7 @@ class RemoteCLIClient:
                                     dest_path=dest_path, timeout=300)
 
             localclient.exec_cmd('cd {}; tar xvf {}.tgz'.format(dest_dir, dest_name), fail_ok=False)
-            localclient.exec_cmd('rm {}'.format(dest_path))
+            localclient.exec_cmd('rm -f {}'.format(dest_path))
             localclient.exec_cmd('mv {}* {}'.format(dest_name, dest_name))
 
             if not venv_dir:
@@ -284,8 +291,9 @@ class RemoteCLIClient:
                 localclient.exec_cmd('./install_clients.sh', fail_ok=False, expect_timeout=600)
                 cls.__remote_cli_info['remote_cli_dir'] = remote_cli_dir
             except:
-                # Do the cleanup in case of remote cli clients fresh_install failure.
-                cls.remove_remote_cli_clients(remote_cli_dir=remote_cli_dir, venv_dir=venv_dir)
+                # Do the cleanup in case of remote cli clients install failure.
+                if not ProjVar.get_var('NO_TEARDOWN'):
+                    cls.remove_remote_cli_clients(remote_cli_dir=remote_cli_dir, venv_dir=venv_dir)
                 raise
         else:
             localclient.activate_virtualenv(venv_dir=venv_dir, venv_name=venv_name)

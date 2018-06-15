@@ -2,13 +2,65 @@ import time
 
 # from testfixtures.fixture_resources import ResourceCleanup
 
-from keywords import common
+from keywords import common, host_helper
 
 from utils.tis_log import LOG
 from consts.cgcs import IxiaServerIP
 from utils.exceptions import IxiaError
 
 import IxNetwork
+
+
+class IxiaResource(object):
+    """
+    Resource allocation abstraction for IxNetwork Tcl service ports
+
+    Locks are stored in cls.nat_dest_path (/sandbox/ixia) on the test server
+    in the format of {resourceName}.lock
+    """
+
+    nat_dest_path = '/sandbox/ixia'
+    resources = [8010, 8011, 8012, 8013, 8014]
+
+    @staticmethod
+    def _lock_name(res):
+        return "{}.lock".format(str(res))
+
+    @classmethod
+    def _acquire_imm(cls, ssh_client):
+        for res in cls.resources:
+            r, msg = ssh_client.exec_cmd("test -f {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=True)
+            if r:   # file does not exist
+                r, msg = ssh_client.exec_cmd(
+                    "mkdir -p {}".format(cls.nat_dest_path), fail_ok=False)
+                r, msg = ssh_client.exec_cmd(
+                    "touch {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=False)
+                return res
+
+    @classmethod
+    def acquire(cls, timeout=60):
+        """
+        Acquire a service port, calls common.wait_for_val_from_func
+
+        Args:
+            timeout (int):
+                stops waiting after timeout
+
+        Returns (tuple):
+            (bSucceeded, port_acquired)
+        """
+        with host_helper.ssh_to_test_server() as ssh_client:
+            LOG.info("Acquiring a service port")
+            return common.wait_for_val_from_func(cls.resources, timeout, 5, cls._acquire_imm, ssh_client)
+
+    @classmethod
+    def release(cls, res):
+        """
+        Release a service port
+        """
+        with host_helper.ssh_to_test_server() as ssh_client:
+            LOG.info("Releasing service port {}".format(res))
+            return ssh_client.exec_cmd("rm -f {}/{}".format(cls.nat_dest_path, cls._lock_name(res)))
 
 
 class IxiaSession(object):
@@ -28,6 +80,7 @@ class IxiaSession(object):
         self._connected_remote = None
         self._chassis = None
         self._port_map = dict()  # maps portID to binded vport
+        self._ixia_resources = list()
 
     def __del__(self):
         self.disconnect()
@@ -68,23 +121,34 @@ class IxiaSession(object):
         else:
             return [self._ixnet.add(obj_ref, child, *add_args)]
 
-    def connect(self, tcl_server_port, tcl_server_ip=None, tcl_server_ver='8.10'):
+    def connect(self, tcl_server_port=None, tcl_server_ip=None, tcl_server_ver='8.10', port_timeout=60):
         """
         Connect to the IxNetwork Tcl Service Port.
-        Does not ensure exclusive access to this service port.
+        If tcl_server_port is None, guarantees exclusive access from other automation tests.
 
         Args:
-            tcl_server_port (int):
+            tcl_server_port (int|None):
                 the IxNetwork Tcl service port
+                or None to acquire from IxiaResource (managed)
             tcl_server_ip (str|None):
                 the IxNetwork service provider host
                 or None to use the default server
             tcl_server_ver (str):
                 the IxNetwork Tcl server version expected
+            port_timeout (int):
+                used only when tcl_server_port is None
+                timeout to wait for IxiaResource.acquire
 
         """
         if tcl_server_ip is None:
             tcl_server_ip = IxiaServerIP.tcl_server_ip
+
+        if tcl_server_port is None:
+            LOG.info("tcl_server_port unspecified")
+            r, tcl_server_port = IxiaResource.acquire(port_timeout)
+            if not r:
+                raise IxiaError("connect failed, cannot acquire an available tcl_server_port")
+            self._ixia_resources.append(tcl_server_port)
 
         LOG.info("Connecting to Ixia API Server at {}:{}, version {}".format(
                 tcl_server_ip, tcl_server_port, tcl_server_ver))
@@ -99,6 +163,8 @@ class IxiaSession(object):
         Allow to be called multiple times.
         """
         if self._connected:
+            for res in self._ixia_resources:
+                IxiaResource.release(res)
             self._ixnet.disconnect()
             self._connected = False
             self._connected_remote = None
@@ -181,7 +247,7 @@ class IxiaSession(object):
             # Unable to release ownership is ok when the configuration is blanked already
             pass
 
-    def connect_ports(self, ports, chassis=None, clear_ownership=True, existing=False):
+    def connect_ports(self, ports, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
         """
         Connect physical ports on the chassis to virtual ports.
         In order to use the existing setups from ixncfgs, mark existing=True.
@@ -199,11 +265,13 @@ class IxiaSession(object):
             existing (bool):
                 whether or not to use existing vports in the configuration
                 (instead of creating new vports)
+            rtn_dict (bool):
+                returns a dictionary mapping, from (card, port) to vport associated
 
-        Returns (list):
+        Returns (list|dict):
             vports created/existed in the configuration now
-            the order of vports is the same as specified in 'ports'
-            (ports[i] is assigned to vports[i])
+            the order of vports is the same as specified in 'ports' (ports[i] is assigned to vports[i])
+            if rtn_dict is True, return a dictionary from port to vport associated
         """
         if chassis is None:
             chassis = self._chassis
@@ -223,7 +291,9 @@ class IxiaSession(object):
         else:
             vports = self.getList(self._ixnet.getRoot(), 'vport')
 
+        vport_map = dict()
         for vport, (card, port) in zip(vports, ports):
+            vport_map[(card, port)] = vport
             port_id = self.__craft_port_id(card, port, chassis)
             self._port_map[port_id] = vport
             LOG.info("Connecting port: {}, vport = {}".format(port_id, vport))
@@ -232,13 +302,16 @@ class IxiaSession(object):
         LOG.info("Rebooting port(s) (~40s)")
         self._ixnet.commit()
 
-        return vports
+        if rtn_dict:
+            return vport_map
+        else:
+            return vports
 
     def configure_protocol_interface(self, port, ipv4=None, ipv6=None,
                                      vlan_id=None, mac_address=None,
                                      description=None, chassis=None,
-                                     interface=None,
-                                     validate=True, validate_timeout=5):
+                                     interface=None, create_if_nonexistent=False,
+                                     validate=True, validate_timeout=10):
         """
         Configure a Protocol Interface.
         In order to re-configure for an existing interface, specify 'interface='.
@@ -263,9 +336,15 @@ class IxiaSession(object):
                 the chassis identifier, or None to use the default
             interface (str|None):
                 existing interface identifier, or None to create a new one
+            create_if_nonexistent (bool):
+                default to False, raise IxiaError if the specified interface does not exist
+                otherwise, create a new interface instead
             validate (bool):
                 validate if the protocol interface is configured correctly
                 through ARP/NS
+            validate_timeout (int):
+                ARP/NS request timeout
+                note: arp/ns takes several fetches to refresh the result even when succeeded
 
         Returns (str):
             the interface identifier
@@ -287,8 +366,22 @@ class IxiaSession(object):
 
         if interface is None:
             interface = self._ixnet.add(self._port_map[port_id], "interface")
-        self.configure(interface, enabled='true', description=description)
+            self._ixnet.commit()
         interface = self.__remapIds(interface)
+
+        # verify if the interface exists
+        try:
+            self._ixnet.execute('sendArpAndNS', interface)
+        except IxNetwork.IxNetError as err:
+            if create_if_nonexistent:
+                LOG.warn("the specified interface does not exist, creating instead")
+                interface = self._ixnet.add(self._port_map[port_id], "interface")
+                self._ixnet.commit()
+                interface = self.__remapIds(interface)
+                LOG.warn("interface created: {}".format(interface))
+            else:
+                raise IxiaError("specified interface does not exist")
+        self.configure(interface, enabled='true', description=description)
 
         if ipv4 is not None:
             addr, gateway = ipv4
@@ -451,7 +544,7 @@ class IxiaSession(object):
             current = set(self.getAttribute(endpointSet, 'destinations'))
             current.update(destinations)
         else:
-            current = destiantions
+            current = destinations
         self.configure(endpointSet, destinations=list(current))
 
     def traffic_regenerate(self, trafficItem=None):
@@ -698,7 +791,7 @@ class IxiaSession(object):
                 continue
 
             view = view_obj
-            
+
             LOG.info("matched with view {}".format(view))
 
             self._ixnet.execute("refresh", view)

@@ -52,7 +52,7 @@ def test_system_persist_over_host_reboot(host_type):
 
     LOG.tc_step("Reboot a {} node and wait for reboot completes: {}".format(host_type, host))
     HostsToRecover.add(host)
-    host_helper.reboot_hosts(host, wait_for_reboot_finish=True)
+    host_helper.reboot_hosts(host)
     host_helper.wait_for_hosts_ready(host)
 
     LOG.tc_step("Check vm is still active and pingable after {} reboot".format(host))

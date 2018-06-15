@@ -122,9 +122,9 @@ def test_heat_kpi(collect_kpi):
 @mark.kpi
 def test_system_install_kpi(collect_kpi):
     """
-    This is the time to fresh_install the full system from beginning to end.
+    This is the time to install the full system from beginning to end.
 
-    Caveat is that it is designed to work with auto-fresh_install due to the way the
+    Caveat is that it is designed to work with auto-install due to the way the
     end_pattern is constructed.
     """
 
@@ -149,7 +149,7 @@ def test_system_install_kpi(collect_kpi):
 @mark.kpi
 def test_node_install_kpi(collect_kpi):
     """
-    This test measures the fresh_install time for each node in the system.
+    This test measures the install time for each node in the system.
     """
 
     if not collect_kpi:

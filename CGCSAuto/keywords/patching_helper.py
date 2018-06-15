@@ -4,7 +4,7 @@ import re
 import time
 from datetime import datetime
 
-from keywords import host_helper, system_helper
+from keywords import host_helper, system_helper, orchestration_helper
 from utils import cli
 from utils import table_parser
 from utils.clients.ssh import ControllerClient
@@ -20,8 +20,8 @@ PATCH_CMDS = {
         },
         'error': '',
     },
-    'host-fresh_install': {
-        'cmd': 'host-fresh_install',
+    'host-install': {
+        'cmd': 'host-install',
         'result_pattern': {
             r'Installation was successful.': 0,
             r'Installation rejected. Node must be locked': 1,
@@ -58,8 +58,8 @@ PATCH_CMDS = {
             r'([^ ]+) has been deleted': 0,
             },
     },
-    'host-fresh_install-async': {
-        'cmd': 'host-fresh_install-async',
+    'host-install-async': {
+        'cmd': 'host-install-async',
     },
     'show': {
         'cmd': 'show',
@@ -1260,23 +1260,23 @@ def host_install(host, reboot_required=True, fail_if_locked=True,
                 LOG.warn('-return error code')
                 return code, msg
     else:
-        LOG.info('no-reboot-required, fresh_install rr={} patch on host={}, no need to lock'.format(reboot_required, host))
+        LOG.info('no-reboot-required, install rr={} patch on host={}, no need to lock'.format(reboot_required, host))
 
     if wait_for_state_changed:
-        code, output = run_patch_cmd('host-fresh_install', args=host, con_ssh=con_ssh, timeout=1200)[0:2]
+        code, output = run_patch_cmd('host-install', args=host, con_ssh=con_ssh, timeout=1200)[0:2]
     else:
-        code, output = run_patch_cmd('host-fresh_install-async', args=host, con_ssh=con_ssh, timeout=100)[0:2]
-        LOG.info('OK, asynchronous fresh_install on "{}" command sent'.format(host))
+        code, output = run_patch_cmd('host-install-async', args=host, con_ssh=con_ssh, timeout=100)[0:2]
+        LOG.info('OK, asynchronous install on "{}" command sent'.format(host))
 
     if 0 != code:
-        LOG.warn('host-fresh_install returns: code={}, output={}'.format(code, output))
+        LOG.warn('host-install returns: code={}, output={}'.format(code, output))
 
     if not wait_for_state_changed and not_unlock:
         return code, {}
 
     if wait_for_state_changed:
         code, host_state = check_host_installed(host, reboot_required=reboot_required, con_ssh=con_ssh)
-        assert 0 == code, 'Failed to fresh_install patches on host:{}, code:{}, it is in state:{}'.format(
+        assert 0 == code, 'Failed to install patches on host:{}, code:{}, it is in state:{}'.format(
             host, code, host_state)
 
     if reboot_required:
@@ -1298,7 +1298,7 @@ def host_install(host, reboot_required=True, fail_if_locked=True,
                           'rr': False,
                           'state': 'idle'}
 
-        LOG.info('Wait after host-fresh_install, host into states: {}'.format(expected_state))
+        LOG.info('Wait after host-install, host into states: {}'.format(expected_state))
         code, state = wait_host_states(host, expected_state, con_ssh=con_ssh)
         assert 0 == code, \
             'Host:{} failed to reach states, expected={}, actual={}'.format(host, expected_state, state)
@@ -1318,8 +1318,8 @@ def remove_patches(patch_ids='', con_ssh=None):
     assert 0 == code, 'Failed to remove patches:{}, \noutput {}'.format(patch_ids, output)
 
     patch_ids_removed = []
-    for patch_ids, rtn_code in output:
-        patch_ids_removed += patch_ids
+    for patch_id, rtn_code in output:
+        patch_ids_removed += patch_id
 
     assert patch_ids_removed, \
         'Failed to remove patches:{}, \npatch_ids_removed {}'.format(patch_ids, patch_ids_removed)
@@ -1419,3 +1419,22 @@ def lab_time_now(con_ssh=None):
     parsed = datetime.strptime(with_milliseconds, format1)
 
     return with_milliseconds.split('.')[0], parsed
+
+
+def orchestration_patch_hosts(controller_apply_type='serial', storage_apply_type='serial',
+                              compute_apply_type='serial', max_parallel_computes=2, instance_action='stop-start',
+                              alarm_restrictions='strict'):
+
+    # Create patch strategy
+    orchestration = 'patch'
+
+    LOG.tc_step("Creating patch  strategy  ......")
+    orchestration_helper.create_strategy(orchestration, controller_apply_type=controller_apply_type,
+                                         storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
+                                         max_parallel_computes=max_parallel_computes,
+                                         instance_action=instance_action, alarm_restrictions=alarm_restrictions)
+
+    LOG.tc_step("Applying patch strategy ......")
+    orchestration_helper.apply_strategy(orchestration)
+    LOG.tc_step("Delete patch orchestration strategy ......")
+    orchestration_helper.delete_strategy(orchestration)

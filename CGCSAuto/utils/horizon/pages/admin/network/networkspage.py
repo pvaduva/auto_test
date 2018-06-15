@@ -172,3 +172,5 @@ class NetworksPage(basepage.BasePage):
 
     def go_to_qos_policies_tab(self):
         self.go_to_tab(1)
+
+

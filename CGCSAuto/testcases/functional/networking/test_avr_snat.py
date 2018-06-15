@@ -56,7 +56,7 @@ def snat_setups(request):
     network_helper.associate_floating_ip(floatingip, vm_id, fip_val='ip')
 
     LOG.fixture_step("Ping vm's floating ip from NatBox and ensure it's reachable")
-    vm_helper.ping_vms_from_natbox(vm_id, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, use_fip=True)
 
     return vm_id, floatingip
 
@@ -216,17 +216,8 @@ def test_snat_evacuate_vm(snat_setups, snat):
     vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
     # vm_helper.ping_vms_from_natbox(vm_, use_fip=True)
 
-    LOG.tc_step("Reboot vm host")
-    HostsToRecover.add(host, scope='function')
-    host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-
-    LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-    vm_helper.wait_for_vms_values(vm_, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-    LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper.wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-    post_evac_host = nova_helper.get_vm_host(vm_)
-    assert post_evac_host != host, "VM is on the same host after original host rebooted."
+    LOG.tc_step("Evacuate vm")
+    vm_helper.evacuate_vms(host=host, vms_to_check=vm_)
 
     LOG.tc_step("Verify vm can still ping outside")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
@@ -275,7 +266,7 @@ def test_snat_computes_lock_reboot(snat_setups):
 
     vm_ = snat_setups[0]
     LOG.tc_step("Ping VM {} from NatBox".format(vm_))
-    vm_helper.ping_vms_from_natbox(vm_, use_fip=True)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
 
     vm_host = nova_helper.get_vm_host(vm_)
     LOG.info("VM host is {}".format(vm_host))
@@ -293,17 +284,10 @@ def test_snat_computes_lock_reboot(snat_setups):
     LOG.tc_step("Ping external from vm {}".format(vm_))
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
-    LOG.tc_step("Reboot vm host")
-    host_helper.reboot_hosts(vm_host)
-    host_helper.wait_for_hypervisors_up(vm_host)
+    LOG.tc_step("Evacuate vm")
+    vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm_)
 
-    LOG.tc_step("Check vm host did not change after host reboot")
-    post_reboot_host = nova_helper.get_vm_host(vm_)
-    assert vm_host == post_reboot_host, "VM has moved to {} even though it's locked".format(post_reboot_host)
-
-    LOG.tc_step("Verify vm is recovered after host reboot complete and can still ping outside")
-    vm_helper.wait_for_vm_status(vm_, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-
+    LOG.tc_step("Verify vm is recovered and can still ping outside")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, use_fip=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)

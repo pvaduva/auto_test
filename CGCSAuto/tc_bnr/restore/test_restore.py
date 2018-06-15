@@ -234,7 +234,7 @@ def restore_setup(pre_restore_checkup):
         InstallVars.set_install_var(tis_build_dir=load_path)
 
         # set up feed for controller
-        LOG.fixture_step("Setting fresh_install feed in tuxlab for controller-0 ... ")
+        LOG.fixture_step("Setting install feed in tuxlab for controller-0 ... ")
         if not 'vbox' in lab['name'] and not RestoreVars.get_restore_var('skip_setup_feed'):
             assert install_helper.set_network_boot_feed(bld_server_conn, load_path), "Fail to set up feed for controller"
 
@@ -252,7 +252,7 @@ def restore_setup(pre_restore_checkup):
         install_helper.boot_controller(small_footprint=is_cpe, system_restore=True, low_latency=low_latency)
 
         # establish ssh connection with controller
-        LOG.fixture_step("Establishing ssh connection with controller-0 after fresh_install...")
+        LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
 
         node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
         normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)

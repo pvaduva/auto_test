@@ -112,11 +112,12 @@ def vm_scaling_stack():
     return stack_name, vm_id
 
 
+# TODO: take out for now until heat stacks are updated to use gnocchi
 @mark.parametrize(('scale_up_to', 'action'), [
     mark.priorities('nightly', 'sx_nightly')((2, None)),
     (3, 'vote_no_to_stop'),
 ])
-def test_heat_vm_auto_scale(vm_scaling_stack, scale_up_to, action):
+def _test_heat_vm_auto_scale(vm_scaling_stack, scale_up_to, action):
 
     """
     Test VM auto scaling :
@@ -209,7 +210,7 @@ def test_heat_vm_scale_after_actions(vm_scaling_stack, actions):
 
     if "host_reboot" in actions:
         if system_helper.is_simplex():
-            host_helper.reboot_hosts('controller-0', wait_for_reboot_finish=True)
+            host_helper.reboot_hosts('controller-0')
             vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=600, check_interval=10, fail_ok=False)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         else:

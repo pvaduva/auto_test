@@ -51,6 +51,7 @@ class BuildServerPath:
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
+    DEFAULT_PATCH_ENABLE_DEV_DIR = '/folk/cgts/tools/Enable_dev_certificate_patch/'
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
     CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
@@ -76,7 +77,19 @@ class BuildServerPath:
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
                        '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/last_build_with_test_patches/test_patches',
+                       '18.03': DEFAULT_PATCH_DIR + '18.03',
+                       '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                        }
+
+    TEST_PATCH_DIR_PATHS = {'18.03': DEFAULT_WORK_SPACE + '/TC_18.03_Test_Patch_Build/latest_build',
+                            '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
+                            }
+
+    PATCH_ENABLE_DEV_CERTIFICATES = {
+        '17.06': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE-17.06.patch',
+        '18.03': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE-18.03.patch',
+        '18.04': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE.patch'
+    }
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
@@ -101,9 +114,15 @@ class SecurityPath:
     ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'
     CA_CERT_PATH = '/home/wrsroot/ca-cert.pem'
 
+
 class TuxlabServerPath:
     DEFAULT_TUXLAB_SERVER = 'yow-tuxlab2'
     DEFAULT_BARCODES_DIR = '/export/pxeboot/vlm-boards'
+
+
+class IxiaPath:
+    CFG_500FPS = "D:/CGCS/IxNetwork/cgcsauto/pair_at_500fps.ixncfg"
+
 
 class InstallPaths:
     INSTALL_TEMP_DIR = '/folk/cgts/lab/new-installer/temp'

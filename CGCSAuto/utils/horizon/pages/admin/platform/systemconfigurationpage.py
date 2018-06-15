@@ -300,3 +300,7 @@ class SystemConfigurationPage(basepage.BasePage):
 
     def is_pipeline_present(self, name):
         return bool(self._get_row_with_pipeline_name(name))
+
+
+
+

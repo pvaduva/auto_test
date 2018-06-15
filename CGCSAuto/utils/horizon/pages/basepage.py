@@ -53,3 +53,5 @@ class BasePage(pageobject.PageObject):
 
     def change_project(self, name):
         self.topbar.user_dropdown_project.click_on_project(name)
+
+

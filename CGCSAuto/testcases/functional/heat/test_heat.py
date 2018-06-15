@@ -275,7 +275,7 @@ def revert_quota(request):
     mark.priorities('nightly', 'sx_nightly')('WR_Neutron_ProviderNet.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'),
+    # mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'), # TODO: take out for now until heat stacks are updated to use gnocchi
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Port.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Net.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Subnet.yaml'),

@@ -40,16 +40,13 @@ class TelnetClient(Telnet):
 
         self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
-        # newlines for: login_prompt, port message
+
         if not prompt and not hostname:
             prompt = ':~\$ '
             self.send('\r\n\r\n')
             index = self.expect(TELNET_REGEX, fail_ok=True)
             if index == 0:
                 hostname = re.search(TELNET_REGEX, self.cmd_output).group(1)
-                LOG.debug(hostname)
-                LOG.debug("Found in {}".format(self.cmd_output))
-                LOG.debug("with regular expression: {}".format(TELNET_REGEX))
                 prompt = '{}:~\$ '.format(hostname)
 
         elif not prompt:
@@ -75,7 +72,26 @@ class TelnetClient(Telnet):
 
         if login:
             self.login(fail_ok=fail_ok, expect_prompt_timeout=login_timeout)
+
         return self.sock
+
+    def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
+        super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
+        try:
+            self.send('\r\n\r\n')
+            index = self.expect(['Login:', TELNET_REGEX])
+            self.flush()
+            if index == 0:
+                self.send('\r\n\r\n')
+                self.expect(TELNET_REGEX)
+                self.flush()
+            msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
+            self.logger.info(msg)
+
+        except Exception as e:
+            err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'. \
+                format(host, port, e.__str__())
+            self.logger.warning(err_msg)
 
     def login(self, expect_prompt_timeout=3, fail_ok=False):
         self.send()
@@ -137,7 +153,6 @@ class TelnetClient(Telnet):
             self.logger.info("Send: {}".format(cmd))
 
         self.cmd_sent = cmd
-        LOG.debug("cmd sent: {}".format(self.cmd_sent))
         if not cmd.endswith('\n'):
             cmd = '{}\n'.format(cmd)
         # self.set_debuglevel(2)
@@ -181,7 +196,7 @@ class TelnetClient(Telnet):
             blobs.append(blob)
 
         try:
-            index, re_obj, matched_text = Telnet.expect(self, list=blobs, timeout=timeout)
+            index, re_obj, matched_text = super(TelnetClient, self).expect(list=blobs, timeout=timeout)
             # Reformat the output
             output = self._process_output(output=matched_text, rm_date=rm_date)
             if index >= 0:
@@ -251,9 +266,7 @@ class TelnetClient(Telnet):
         return
 
     def _process_exec_result(self, cmd, rm_date=False, get_exit_code=True):
-        LOG.debug("cmd output: {}".format(self.cmd_output))
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
-        LOG.debug("cmd output list: {}".format(cmd_output_list))
         # LOG.info("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
 
@@ -265,9 +278,9 @@ class TelnetClient(Telnet):
 
         if get_exit_code:
             exit_code = self.get_exit_code()
-            if exit_code != 0:
-                self.logger.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
-                                    format(cmd, exit_code, cmd_output))
+            # if exit_code != 0:
+            #    self.logger.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
+            #                        format(cmd, exit_code, cmd_output))
         else:
             exit_code = -1
             self.logger.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
@@ -276,6 +289,7 @@ class TelnetClient(Telnet):
         return exit_code, cmd_output
 
     def get_exit_code(self):
+        self.flush()
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=10)
         LOG.debug("echo output: {}".format(self.cmd_output))
@@ -296,5 +310,7 @@ class TelnetClient(Telnet):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
     def close(self):
-        super().close()
-        self.logger.info("Telnet connection closed")
+        is_closed = False if self.sock else True
+        if not is_closed:
+            self.logger.info("Closing telnet socket")
+        super(TelnetClient, self).close()

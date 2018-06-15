@@ -246,3 +246,4 @@ def backup_load_iso_image(backup_info):
         common.scp_from_active_controller_to_test_server(os.path.join(WRSROOT_HOME, "bootimage.iso"), backup_dest_path)
         LOG.info(" The backup build iso file copied to local test server: {}".format(backup_dest_path))
         return True
+

@@ -75,7 +75,7 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
 
 def get_avail_image_space(con_ssh):
     """
-    Get available disk space in GB on /opt/cgcs which is where glance images are saved at
+    Get available disk space in GiB on /opt/cgcs which is where glance images are saved at
     Args:
         con_ssh:
 
@@ -103,8 +103,13 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
 
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
+    if 0 == con_ssh.exec_cmd('ceph df')[0]:
+        # assume image storage for ceph is sufficient
+        return True
+
     if image_host_ssh is None:
-        image_host_ssh = con_ssh
+        image_host_ssh = get_cli_client()
 
     file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
     avail_size = get_avail_image_space(con_ssh=con_ssh)
@@ -213,6 +218,15 @@ def is_image_conversion_sufficient(img_file_path=None, guest_os=None, min_diff=0
 
 
 def ensure_image_storage_sufficient(guest_os, con_ssh=None):
+    """
+    Before image file is copied to tis, check if image storage is sufficient
+    Args:
+        guest_os:
+        con_ssh:
+
+    Returns:
+
+    """
     with host_helper.ssh_to_test_server() as img_ssh:
         if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
             images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
@@ -233,7 +247,7 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
 def create_image(name=None, image_id=None, source_image_file=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
-                 auth_info=Tenant.ADMIN, fail_ok=False, **properties):
+                 auth_info=Tenant.ADMIN, fail_ok=False, ensure_sufficient_space=True, **properties):
     """
     Create an image with given criteria.
 
@@ -254,6 +268,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
+        ensure_sufficient_space (bool): Ensure glance image storage is sufficient to create new image
         **properties: key=value pair(s) of properties to associate with the image
 
     Returns (tuple): (rtn_code(int), message(str))      # 1, 2 only applicable if fail_ok=True
@@ -274,6 +289,10 @@ def create_image(name=None, image_id=None, source_image_file=None,
         properties['os_type'] = 'windows'
     elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
         properties['hw_firmware_type'] = 'uefi'
+
+    if ensure_sufficient_space:
+        if not is_image_storage_sufficient(img_file_path=file_path):
+            skip('Insufficient image storage for creating glance image from {}'.format(file_path))
 
     source_str = file_path
 

@@ -159,3 +159,11 @@ class FlavorsPage(basepage.BasePage):
         row.mark()
         confirm_delete_form = self.flavors_table.delete_flavor()
         confirm_delete_form.submit()
+
+
+
+
+
+
+
+

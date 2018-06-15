@@ -1,5 +1,6 @@
 import logging
 import os
+import threading    # Used for formatting logger
 
 from time import strftime, gmtime
 
@@ -7,12 +8,13 @@ import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
-from consts import build_server as build_server_consts
-from consts import cgcs
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars
+from consts import build_server as build_server_consts
+from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
 
 
 tc_start_time = None
@@ -25,6 +27,7 @@ no_teardown = False
 tracebacks = []
 region = None
 test_count = 0
+console_log = True
 
 ################################
 # Process and log test results #
@@ -89,13 +92,18 @@ def _write_results(res_in_tests, test_name):
 
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
+            global tracebacks
             try:
-                from utils.cgcs_reporter import upload_results
+                from utils.cgcs_reporter import upload_results, parse_log
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
-                                                  parse_name=True)
+                                                  traceback=tracebacks, parse_name=True)
             except Exception:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
+
+            finally:
+                if repeat_count <= 0:
+                    tracebacks = []
 
         try:
             upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
@@ -160,6 +168,8 @@ def pytest_runtest_makereport(item, call, __multicall__):
     if repeat_count > 0:
         for key, val in res.items():
             if val[0] == 'Failed':
+                global tc_end_time
+                tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
                 _write_results(res_in_tests='Failed', test_name=test_name)
                 TestRes.FAILNUM += 1
                 if ProjVar.get_var('PING_FAILURE'):
@@ -220,7 +230,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 
     print_msg = separator + '\n' + msg
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
-    print(print_msg)
+    if console_log:
+        print(print_msg)
     if log_type == 'tc_res':
         global tc_end_time
         tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
@@ -283,6 +294,8 @@ def pytest_configure(config):
 
     global no_teardown
     no_teardown = config.getoption('noteardown')
+    if repeat_count > 0 or no_teardown:
+        ProjVar.set_var(NO_TEARDOWN=True)
     keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
     global region
@@ -343,7 +356,12 @@ def pytest_configure(config):
 
     InstallVars.set_install_var(lab=lab)
 
-    config_logger(log_dir)
+    print(str(config.getoption('capture')))
+    if config.getoption('noconsolelog'):
+        global console_log
+        console_log = False
+
+    config_logger(log_dir, console_log=console_log)
 
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
@@ -412,6 +430,7 @@ def pytest_addoption(parser):
     telnetlog_help = "Collect telnet logs throughout the session"
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
+    no_console_log = 'Print minimal console logs'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -443,13 +462,14 @@ def pytest_addoption(parser):
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
-
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
     parser.addoption('--horizon-visible', '--horizon_visible', action='store_true', dest='horizon_visible',
                      help=horizon_visible_help)
     parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
                      help=remote_cli_help)
+    parser.addoption('--noconsolelog', '--noconsole', '--no-console-log', '--no_console_log', '--no-console',
+                     '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
 
     ##################################
     # Lab fresh_install or upgrade options #
@@ -531,45 +551,20 @@ def pytest_addoption(parser):
                          "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
                          "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
                          " The default is default. Applicable only for upgrades from R3."
-    apply_strategy_help = "How the orchestration strategy is applied:" \
-                          "  serial - apply orchestration strategy one node  at a time; " \
-                          "  parallel - apply orchestration strategy in parallel; " \
-                          "  ignore - do not apply the orchestration strategy; " \
-                          " If not specified,  the system will choose the option to apply the strategy. " \
-                          "Applicable only for upgrades from R3."
-    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
-                                " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
+
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
     parser.addoption('--build-server', '--build_server',  dest='build_server',
                      action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
                      help=build_server_help)
-    parser.addoption('--tis-build-dir', '--tis_build_dir', '--build-dir', '--build_dir',  dest='tis_build_dir',
+    parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
                      action='store', metavar='DIR',  help=upgrade_build_dir_path)
     parser.addoption('--license',  dest='upgrade_license', action='store',
                      metavar='license full path', help=license_help)
 
     parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
                      action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
-
-    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
-                     action='store',  help=max_parallel_compute_help)
-
-    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
-                     action='store', default='strict',  help=alarm_restriction_help)
 
     ####################
     # Patching options #
@@ -595,6 +590,51 @@ def pytest_addoption(parser):
 
     parser.addoption('--patch-base-dir', '--patch_base_dir',  dest='patch_base_dir', default=None,
                      action='store', metavar='BASEDIR',  help=patch_base_dir_help)
+
+
+    ###############################
+    #  Orchestration options #
+    ###############################
+    apply_strategy_help = "How the orchestration strategy is applied:" \
+                          "  serial - apply orchestration strategy one node  at a time; " \
+                          "  parallel - apply orchestration strategy in parallel; " \
+                          "  ignore - do not apply the orchestration strategy; " \
+                          " If not specified,  the system will choose the option to apply the strategy. " \
+                          "Applicable only for upgrades from R3."
+    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
+                                " is selected"
+    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
+                             of any existing alarms.
+                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
+                                            present
+                                 strict -  orchestration is not allowed if alarms are present
+                             """
+
+    instance_action_help = """Inidcates how to VMs are moved from compute hosts when apply reboot-required patches. There
+                             are two possible values for moving the VMs off the compute hosts:
+                                 start-stop -  instances are stopped before a compute host is patched. This is typically
+                                 used for VMs that do not support migration.
+                                 migrate -  instances are either live migrated or cold migrated  before compute host is
+                                 patched.
+                             """
+    parser.addoption('--controller-apply-type', '--controller_apply_type', '--ctra',  dest='controller_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
+                     action='store',  help=max_parallel_compute_help)
+
+    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
+                     action='store', default='strict',  help=alarm_restriction_help)
+
+    parser.addoption('--instance-action', '--instance_action', dest='instance_action',
+                     action='store', default='stop-start',  help=instance_action_help)
+
 
     ###############################
     #  Backup and Restore options #
@@ -638,7 +678,7 @@ def pytest_addoption(parser):
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
 
 
-def config_logger(log_dir):
+def config_logger(log_dir, console_log=True):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
@@ -661,9 +701,10 @@ def config_logger(log_dir):
     LOG.addHandler(file_handler)
 
     # logger for stream output
+    console_level = logging.INFO if console_log else logging.CRITICAL
     stream_hdler = logging.StreamHandler()
     stream_hdler.setFormatter(tis_formatter)
-    stream_hdler.setLevel(logging.INFO)
+    stream_hdler.setLevel(console_level)
     LOG.addHandler(stream_hdler)
 
 

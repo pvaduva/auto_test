@@ -294,12 +294,12 @@ def install_uninstall_cert_into_tpm(ssh_client,
     else:
         cert_file_to_test = prepare_cert_file(ssh_client, primary_cert_file=cert_file, alt_cert_file=alt_cert_file)
 
-    cmd = 'certificate-fresh_install '
+    cmd = 'certificate-install '
     msg = ''
     if installing:
         expected_mode = tpm_modes['enabled']
         cmd += ' -m ' + expected_mode
-        msg += '-enabling/fresh_install certificate into TPM'
+        msg += '-enabling/install certificate into TPM'
 
     else:  # if expected_mode == 'ssl':
         expected_mode = tpm_modes['disabled']

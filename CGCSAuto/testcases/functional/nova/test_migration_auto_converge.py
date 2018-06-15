@@ -1,15 +1,29 @@
 import re
 import time
 
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
-from keywords import vm_helper, nova_helper, common, heat_helper
+from pytest import fixture
+
+from consts.proj_vars import ProjVar
+from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, WRSROOT_HOME
+from keywords import vm_helper, nova_helper, common, heat_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-# TODO remote_cli
+@fixture(scope='module', autouse=True)
+def prefix_remote_cli(request):
+    if ProjVar.get_var('REMOTE_CLI'):
+        ProjVar.set_var(REMOTE_CLI=False)
+        ProjVar.set_var(USER_FILE_DIR=WRSROOT_HOME)
+
+        def revert():
+            ProjVar.set_var(REMOTE_CLI=True)
+            ProjVar.set_var(USER_FILE_DIR=ProjVar.get_var('TEMP_DIR'))
+        request.addfinalizer(revert)
+
+
 def _get_stress_ng_heat(con_ssh=None):
     """
     copy the cloud-config userdata to TiS server.
@@ -41,6 +55,19 @@ def _get_stress_ng_heat(con_ssh=None):
         if dest_path is None:
             raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))
 
+    # tenant nets names were hardcoded in heat file. They need to be updated when systems don't have those networks.
+    # Update heat file if less than 3 tenant-nets configured.
+    tenant_nets = network_helper.get_tenant_net_ids(rtn_val='name')
+    net_count = len(tenant_nets)
+    if net_count <= 3:
+        LOG.info("Less than tenant networks configured. Update heat template.")
+        con_ssh.exec_cmd("sed -i 's/tenant2-net3/tenant2-net{}/g' {}".format(net_count-1, file_path))
+        if net_count <= 2:
+            con_ssh.exec_cmd("sed -i 's/tenant2-net2/tenant2-net{}/g' {}".format(net_count-1, file_path))
+            if net_count <= 1:
+                con_ssh.exec_cmd("sed -i 's/tenant2-net1/tenant2-net{}/g' {}".format(net_count-1, file_path))
+
+    # update heat file for multi-region system
     from consts.proj_vars import ProjVar
     from consts.cgcs import REGION_MAP
     region = ProjVar.get_var("REGION")

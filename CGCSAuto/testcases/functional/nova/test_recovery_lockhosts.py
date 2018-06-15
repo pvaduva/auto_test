@@ -38,14 +38,13 @@ def target_host():
     return target_host
 
 
-# @mark.skipif(True, reason="Host reboot undetected JIRA CGTS-4616")
 @mark.p1
 def test_vm_autorecovery_reboot_host(target_host):
     """
     Test vm auto recovery by rebooting the host while the rest of the nova hosts are locked.
 
     Args:
-        heartbeat (bool): Weather or not to have heartbeat enabled in extra spec
+        target_host
 
     Setups:
         - Lock nova hosts except the one with most vms on it  (module)

@@ -1,3 +1,4 @@
+import pytest
 import setups
 from consts.proj_vars import InstallVars, RestoreVars
 from keywords import vlm_helper
@@ -10,7 +11,7 @@ from utils import node
 ########################
 
 def pytest_configure(config):
-    # Lab fresh_install params
+    # Lab install params
     lab_arg = config.getoption('lab')
     use_usb = config.getoption('use_usb')
     backup_src_path = config.getoption('backup_path')
@@ -21,9 +22,8 @@ def pytest_configure(config):
     skip_reinstall = config.getoption('skip_reinstall')
     low_latency = config.getoption('low_latency')
 
-    setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None, wipedisk=False,
-                              controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None,
-                              boot="pxe", iso_path=None, security="standard", low_latency=low_latency, stop=99)
+    setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
+                              controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path,
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)
 
@@ -43,3 +43,27 @@ def pytest_runtest_teardown(item):
     # Delete any backup files from /opt/backups
     con_ssh.exec_sudo_cmd("rm -rf /opt/backups/*")
     con_ssh.flush()
+
+
+@pytest.fixture(scope='session', autouse=True)
+def setup_build_vars(request):
+    """
+    Setup primary tenant  before the first test gets executed.
+    TIS ssh was already set up at collecting phase.
+    """
+    def set_build_vars():
+        try:
+            con_ssh = ControllerClient.get_active_controller()
+            setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
+            setups.set_env_vars(con_ssh)
+            setups.copy_test_files()
+
+            # set build id to be used to upload/write test results
+            build_id, build_server, job = setups.get_build_info(con_ssh)
+            ProjVar.set_var(BUILD_ID=build_id)
+            ProjVar.set_var(BUILD_SERVER=build_server)
+            ProjVar.set_var(JOB=job)
+        except:
+            LOG.warning('Unable to set BUILD info')
+            pass
+    request.addfinalizer(set_build_vars)

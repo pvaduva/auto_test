@@ -76,7 +76,7 @@ def test_install_cloned_image(install_clone_setup):
     hostnames = install_clone_setup['hostnames']
     system_mode = install_clone_setup['system_mode']
     lab_name = lab['name']
-    LOG.info("Starting fresh_install-clone on AIO lab {} .... ".format(lab_name))
+    LOG.info("Starting install-clone on AIO lab {} .... ".format(lab_name))
     LOG.tc_step("Booting controller-0 ... ")
 
     if controller0_node.telnet_conn is None:
@@ -102,7 +102,7 @@ def test_install_cloned_image(install_clone_setup):
     install_helper.boot_controller(boot_usb=True, small_footprint=True, clone_install=True)
 
     # establish telnet connection with controller
-    LOG.tc_step("Establishing telnet connection with controller-0 after fresh_install-clone ...")
+    LOG.tc_step("Establishing telnet connection with controller-0 after install-clone ...")
 
     node_name_in_ini = '{}.*\~\$ '.format(controller0_node.host_name)
     normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
@@ -120,7 +120,7 @@ def test_install_cloned_image(install_clone_setup):
     controller0_node.telnet_conn.login()
     controller0_node.telnet_conn.exec_cmd("xterm")
 
-    LOG.tc_step ("Verify fresh_install-clone status ....")
+    LOG.tc_step ("Verify install-clone status ....")
     install_helper.check_clone_status(tel_net_session=controller0_node.telnet_conn)
 
     LOG.info("Source Keystone user admin environment ...")

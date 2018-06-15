@@ -7,7 +7,7 @@ from utils import table_parser, cli, exceptions
 from consts.auth import Tenant
 from consts.reasons import SkipStorageBacking
 
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, storage_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, storage_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -119,6 +119,7 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
     assert snapshot_range_min <= space_taken <= snapshot_range_max, \
         "Space occupied by snapshot not in expected range, size is {}" .format(space_taken)
 
+    init_time = common.get_date_in_format(date_format="%Y-%m-%d %T")
     LOG.tc_step("First snapshot created, {} GiB of storage left, attempt second snapshot".format(storage_left))
     exit_code, output, snap_size = create_snapshot_from_instance(vm_id, name="snapshot1")
     sleep(10)
@@ -129,7 +130,7 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
         "Free capacity has changed to {} even though 2nd snapshot failed (expected to be 0.01 within)".\
         format(storage_after, storage_left)
 
-    expt_err = "Not enough space on the storage media for image {}".format((output.split())[-1])
+    expt_err = "not enough disk space on the image storage media"
     with host_helper.ssh_to_host(vm_host) as host_ssh:
-        grepcmd = "grep '{}' /var/log/nova/nova-compute.log".format(expt_err)
+        grepcmd = """grep '{}' /var/log/nova/nova-compute.log | awk '$0 > "{}"'""".format(expt_err, init_time)
         host_ssh.exec_cmd(grepcmd, fail_ok=False)

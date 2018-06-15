@@ -1,4 +1,5 @@
 import re
+import os
 import time
 from contextlib import contextmanager
 from xml.etree import ElementTree
@@ -6,6 +7,7 @@ from xml.etree import ElementTree
 from consts import proj_vars
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
@@ -65,8 +67,8 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
             host_ssh.close()
 
 
-def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True,
-                 check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
+def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_offline=True,
+                 wait_for_reboot_finish=True, check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
     """
     Reboot one or multiple host(s)
 
@@ -75,6 +77,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         timeout (int): timeout waiting for reboot to complete in seconds
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
+        wait_for_offline (bool): Whether to wait for host to be offline after reboot
         wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
         check_hypervisor_up (bool):
         check_webservice_up (bool):
@@ -140,7 +143,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
             _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
-    if not wait_for_reboot_finish:
+    if not wait_for_offline and not is_simplex:
         msg = "Hosts reboot -f cmd sent"
         LOG.info(msg)
         return -1, msg
@@ -160,8 +163,13 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         hostnames.append(controller)
         if not is_simplex:
             wait_for_hosts_states(
-                controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
-                con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
+                    controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
+                    con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
+
+    if not wait_for_reboot_finish:
+        msg = 'Host(s) in offline state'
+        LOG.info(msg)
+        return -1, msg
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -529,7 +537,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if swact:
         if is_active_controller(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
                 and len(system_helper.get_controllers()) > 1:
-            LOG.info("{} is active controller, swact first before attempt to lock.")
+            LOG.info("{} is active controller, swact first before attempt to lock.".format(host))
             swact_host(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
             if is_aio_dup:
                 time.sleep(90)
@@ -2546,6 +2554,12 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     return vcpus
 
 
+def get_vcpu_pinnings_for_instance_via_virsh(host_ssh, instance_name):
+    vcpu_pins = get_values_virsh_xmldump(instance_name=instance_name, host_ssh=host_ssh,
+                                         tag_paths='cputune/vcpupin', target_type='dict')
+    return vcpu_pins
+
+
 def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     """
     Get hosts for each possible storage backing
@@ -2571,7 +2585,15 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     return hosts
 
 
-def get_coredumps_and_crashreports():
+def get_coredumps_and_crashreports(move=True):
+    """
+    Get core dumps and crash reports from every host
+    Args:
+        move: whether to move coredumps and crashreports to local automation dir
+
+    Returns (dict):
+
+    """
     LOG.info("Getting existing system crash reports from /var/crash/ and coredumps from /var/lib/systemd/coredump/")
 
     hosts_tab = table_parser.table(cli.system('host-list'))
@@ -2587,14 +2609,59 @@ def get_coredumps_and_crashreports():
                     format(set(all_hosts) - set(hosts_to_check)))
 
     core_dumps_and_reports = {}
+    active_con = system_helper.get_active_controller_name()
+    con_ssh = ControllerClient.get_active_controller()
+    con_dir = '{}/coredumps_and_crashreports/'.format(WRSROOT_HOME)
+    con_ssh.exec_cmd('mkdir -p {}'.format(con_dir))
+    scp_to_local = False
+    ls_cmd = 'ls -l --time-style=+%Y-%d-%m_%H-%M-%S {} | cat'
+    core_dump_dir = '/var/lib/systemd/coredump/'
+    crash_report_dir = '/var/crash/'
     for host in hosts_to_check:
         with ssh_to_host(hostname=host) as host_ssh:
-            core_dump_output = host_ssh.exec_cmd('ls -l /var/lib/systemd/coredump/', fail_ok=False)[1]
+            core_dump_output = host_ssh.exec_cmd(ls_cmd.format(core_dump_dir), fail_ok=False)[1]
             core_dumps = core_dump_output.splitlines()[1:]
-            crash_report_output = host_ssh.exec_cmd('ls -l /var/crash/', fail_ok=False)[1]
+            crash_report_output = host_ssh.exec_cmd(ls_cmd.format(crash_report_dir), fail_ok=False)[1]
             crash_reports = crash_report_output.splitlines()[1:]
-
             core_dumps_and_reports[host] = core_dumps, crash_reports
+
+            if move:
+                if core_dumps:
+                    for line in core_dumps:
+                        timestamp, name = line.split(sep=' ')[-2:]
+                        new_name = '_'.join((host, timestamp, name))
+                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(core_dump_dir, name, core_dump_dir, new_name))
+
+                    scp_to_local = True
+                    host_ssh.scp_on_source(source_path='{}/*'.format(core_dump_dir),
+                                           dest_user=HostLinuxCreds.get_user(),
+                                           dest_ip=active_con, dest_path=con_dir,
+                                           dest_password=HostLinuxCreds.get_password())
+                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(core_dump_dir))
+
+                if crash_reports:
+                    for line in crash_reports:
+                        timestamp, name = line.split(sep=' ')[-2:]
+                        new_name = '_'.join((host, timestamp, name))
+                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(crash_report_dir, name, crash_report_dir,
+                                                                       new_name))
+
+                    scp_to_local = True
+                    host_ssh.scp_on_source(source_path='{}/*'.format(crash_report_dir),
+                                           dest_user=HostLinuxCreds.get_user(),
+                                           dest_ip=active_con, dest_path=con_dir,
+                                           dest_password=HostLinuxCreds.get_password())
+                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(crash_report_dir))
+
+    if scp_to_local:
+        con_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(con_dir))
+
+        log_dir = proj_vars.ProjVar.get_var('LOG_DIR')
+        coredump_and_crashreport_dir = os.path.join(log_dir, 'coredumps_and_crashreports')
+        os.makedirs(coredump_and_crashreport_dir, exist_ok=True)
+        source_path = '{}/*'.format(con_dir)
+        common.scp_from_active_controller_to_localhost(source_path=source_path, dest_path=coredump_and_crashreport_dir)
+        con_ssh.exec_cmd('rm -f {}/*'.format(con_dir))
 
     LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
     return core_dumps_and_reports

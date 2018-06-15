@@ -376,3 +376,15 @@ class InstancesPage(basepage.BasePage):
         if disk_partition is not None:
             rebuild_instance_form.disk_config.text = disk_partition
         rebuild_instance_form.submit()
+
+
+
+
+
+
+
+
+        
+
+
+

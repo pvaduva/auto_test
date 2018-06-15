@@ -77,3 +77,4 @@ class PageObject(basewebobject.BaseWebObject):
     def go_to_target_page(self):
         self.driver.get(self.target_url)
         sleep(1)
+

@@ -8,11 +8,11 @@ import pexpect
 
 import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
-from consts import build_server
 from consts.cgcs import Prompt, REGION_MAP, SysType
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
+from consts import build_server
 from keywords.common import scp_to_local, scp_from_active_controller_to_localhost
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
     install_helper
@@ -424,10 +424,10 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
         lab_info_ = installconf['LAB']
         lab_name = lab_info_['LAB_NAME']
         if not lab_name:
-            raise ValueError("Either --lab=<lab_name> or --fresh_install-conf=<full path of fresh_install configuration file> "
+            raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                              "has to be provided")
         if lab_arg and lab_arg.lower() != lab_name.lower():
-            LOG.warning("Conflict in --lab={} and fresh_install conf file LAB_NAME={}. LAB_NAME in conf file will be used".
+            LOG.warning("Conflict in --lab={} and install conf file LAB_NAME={}. LAB_NAME in conf file will be used".
                         format(lab_arg, lab_name))
         lab_arg = lab_name
 
@@ -502,7 +502,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device,
                        controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency, stop):
     if not lab and not installconf_path:
-        raise ValueError("Either --lab=<lab_name> or --fresh_install-conf=<full path of fresh_install configuration file> "
+        raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
     elif not installconf_path:
         installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
@@ -635,8 +635,6 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
 
     lab_to_install['system_mode'] = system_mode
     ProjVar.set_var(sys_type=system_mode)
-    LOG.debug("SYS_TYPE: {}".format(system_mode))
-
 
     # add nodes dictionary
     lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
@@ -977,7 +975,7 @@ def collect_sys_net_info(lab):
 
     def setup_remote_cli_client():
         """
-        Download openrc files from horizon and fresh_install remote cli clients to virtualenv
+        Download openrc files from horizon andinstall remote cli clients to virtualenv
         Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
 
         Returns (RemoteCliClient)
@@ -987,7 +985,7 @@ def collect_sys_net_info(lab):
         # download openrc files
         horizon_helper.download_openrc_files()
 
-        # fresh_install remote cli clients
+        # install remote cli clients
         client = RemoteCLIClient.get_remote_cli_client()
 
         # copy test files
@@ -1051,7 +1049,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
             LOG.error("--file_server must be a valid build server. ")
             raise
         except ValueError:
-            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write fresh_install "
+            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
                           "configuration and try again. ")
             raise
         except AssertionError:

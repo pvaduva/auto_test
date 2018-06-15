@@ -150,18 +150,7 @@ def test_evacuate_pci_vm(vif_model_check):
         vm_ssh.exec_sudo_cmd('sync')
 
     LOG.tc_step("Reboot vm host {}".format(host))
-    host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-    HostsToRecover.add(host, scope='function')
-
-    LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-    vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-    LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-    post_evac_host = nova_helper.get_vm_host(vm_id)
-    assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    vm_helper.evacuate_vms(host=host, vms_to_check=vm_id, ping_vms=True, wait_for_host_up=False)
 
     if 'pci-passthrough' == vif_model:
         LOG.tc_step("Add vlan to pci-passthrough interface for VM again after evacuation due to interface change.")

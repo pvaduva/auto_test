@@ -4,6 +4,7 @@ import os
 import time
 
 from selenium import webdriver
+from pyvirtualdisplay import Display
 
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
@@ -47,7 +48,7 @@ class HorizonDriver:
     @classmethod
     def get_driver(cls):
         if cls.driver_info:
-            return cls.driver_info[0]
+            return cls.driver_info[0][0]
 
         LOG.info("Setting Firefox download preferences")
         profile = webdriver.FirefoxProfile()
@@ -60,18 +61,25 @@ class HorizonDriver:
         profile.set_preference("browser.download.dir", horizon_dir)
         profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/plain,application/x-shellscript")
         # profile.update_preferences()
-
+        display = None
+        try:
+            display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
+            display.start()
+        except:
+            pass
         driver_ = webdriver.Firefox(firefox_profile=profile)
         # driver_.maximize_window()
-        cls.driver_info.append(driver_)
+        cls.driver_info.append((driver_, display))
         LOG.info("Web driver created with download preference set")
         return driver_
 
     @classmethod
-    def quit_driver(cls):
+    def quit_driver(cls, *driver_display):
         if cls.driver_info:
-            driver_ = cls.driver_info[0]
+            driver_, display_ = cls.driver_info[0]
             driver_.quit()
+            if display_:
+                display_.stop()
             cls.driver_info = []
             profile = webdriver.FirefoxProfile()
             profile.set_preference("browser.download.folderList", 1)

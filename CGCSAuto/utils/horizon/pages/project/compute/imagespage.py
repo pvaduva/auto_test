@@ -235,3 +235,5 @@ class ImagesPage(basepage.BasePage):
         instance_form.switch_to(3)
         instance_form.addelements('Network', network_names)
         instance_form.submit()
+
+

@@ -656,14 +656,20 @@ class SSHClient:
                 self.exec_cmd('rm -f {}'.format(dest_path), fail_ok=True, get_exit_code=False)
             raise
 
-    def scp_on_source(self, source_path, dest_user, dest_ip, dest_path, dest_password, timeout=3600):
+    def scp_on_source(self, source_path, dest_user, dest_ip, dest_path, dest_password, timeout=3600, is_dir=False):
         dest = dest_path
         if dest_ip:
             dest = '{}:{}'.format(dest_ip, dest)
             if dest_user:
                 dest = '{}@{}'.format(dest_user, dest)
 
-        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source_path, dest)
+        if is_dir:
+            if not source_path.endswith('/'):
+                source_path += '/'
+            source_path = '-r {}'.format(source_path)
+
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.\
+            format(source_path, dest)
 
         self.send(scp_cmd)
         index = self.expect([self.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
