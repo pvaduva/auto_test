@@ -1079,6 +1079,7 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
 
     section = 'database'
     if name in 'metering_time_to_live':
+        skip("Ceilometer metering_time_to_live is no longer available in 'system service-parameter-list'")
         name = 'metering_time_to_live'
         service = 'ceilometer'
     elif name == 'alarm_history_time_to_live':
@@ -1148,6 +1149,8 @@ def get_retention_period(name='metering_time_to_live', con_ssh=None):
     Returns (int): Current PM retention period
 
     """
+    if name == 'metering_time_to_live':
+        skip("Ceilometer metering_time_to_live no longer exists")
     ret_per = get_service_parameter_values(name=name, rtn_value='value', con_ssh=con_ssh)[0]
     return int(ret_per)
 

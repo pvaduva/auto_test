@@ -14,16 +14,18 @@ from utils import table_parser
 
 from consts.auth import Tenant
 from consts.timeout import SysInvTimeout
-from keywords import common, host_helper, ceilometer_helper, network_helper, glance_helper, system_helper
+from keywords import common, host_helper, ceilometer_helper, network_helper, glance_helper, system_helper, \
+    gnocchi_helper
 
 
+# Obsolete - replaced with gnocchi
 @mark.cpe_sanity
 @mark.sanity
 @mark.sx_nightly
 @mark.parametrize('meter', [
     'image.size'
 ])
-def test_statistics_for_one_meter(meter):
+def _test_statistics_for_one_meter(meter):
     """
     Validate statistics for one meter
 
@@ -41,6 +43,33 @@ def test_statistics_for_one_meter(meter):
         header_val = eval(table_parser.get_column(stats_tab, header)[0])
 
         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
+
+
+@mark.cpe_sanity
+@mark.sanity
+@mark.sx_nightly
+@mark.parametrize('meter', [
+    'image.size'
+])
+def test_measurements_for_metric(meter):
+    """
+    Validate statistics for one meter
+
+    """
+    LOG.tc_step('Get ceilometer statistics table for image.size meter')
+
+    now = datetime.utcnow()
+    start = (now - timedelta(minutes=10))
+    start = start.strftime("%Y-%m-%dT%H:%M:%S")
+    image_name = glance_helper.get_images(rtn_val='name')[0]
+    values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type='image', start=start,
+                                                    extra_query="name='{}'".format(image_name))
+    assert 1 <= len(values) <= 3, "Incorrect count for {} {} metric via 'openstack metric measures aggregation'".\
+        format(image_name, meter)
+
+    LOG.tc_step('Check that values are larger than zero')
+    for val in values:
+        assert 0 <= float(val), "{} {} value in metric measurements table is less than zero".format(image_name, meter)
 
 
 def check_event_in_tenant_or_admin(resource_id, event_type):
@@ -66,7 +95,7 @@ def test_ceilometer_meters_exist(meters):
     """
     Validate ceilometer meters exist
     Verification Steps:
-    1. Get ceilometer meter-list
+    1. Check via 'openstack metric list' or 'ceilometer event-list'
     2. Check meters for router, subnet, image, and vswitch exists
     """
 
@@ -91,26 +120,25 @@ def test_ceilometer_meters_exist(meters):
 
     # Check meter for image
     LOG.tc_step('Check meters for image')
-    images = glance_helper.get_images()
-    image_meters_tab = ceilometer_helper.get_meters_table(meter='image.size')
-    images_in_meter_list = table_parser.get_column(image_meters_tab, 'Resource ID')
-
-    assert set(images) <= set(images_in_meter_list)
+    images = glance_helper.get_images(rtn_val='id')
+    resource_ids = gnocchi_helper.get_metrics(metric_name='image.size', rtn_val='resource_id')
+    assert set(images) <= set(resource_ids)
 
     # Check meter for vswitch
     LOG.tc_step('Check meters for vswitch')
-    hypervisors = host_helper.get_hypervisors()
-    vswitch_util_meters_tab = ceilometer_helper.get_meters_table(meter='vswitch.engine.util')
-    vswitch_engines_meters = table_parser.get_values(vswitch_util_meters_tab, 'Resource ID', Name='vswitch.engine.util')
+    resource_ids = gnocchi_helper.get_metrics(metric_name='vswitch.engine.util', fail_ok=True, rtn_val='resource_id')
     if system_helper.is_avs():
-        assert len(hypervisors) <= len(vswitch_engines_meters), \
+        hypervisors = host_helper.get_hypervisors(rtn_val='ID')
+        assert len(hypervisors) <= len(resource_ids), \
             "Each nova hypervisor should have at least one vSwitch core"
     else:
-        assert not vswitch_engines_meters, "vswitch meters found for STX build"
+        assert not resource_ids, "vswitch meters found for STX build"
 
 
+# Obsolete: TODO update
 @fixture(scope='module', autouse=True)
 def reset_retention(request):
+    return
     original = system_helper.get_retention_period()
     LOG.debug(original)
 
@@ -119,7 +147,8 @@ def reset_retention(request):
     request.addfinalizer(reset)
 
 
-def test_ceilometer_retention_period():
+# Obsolete: TODO update
+def _test_ceilometer_retention_period():
     """
     TC1996
     Verify that the retention period can be changed to specified values
@@ -146,7 +175,8 @@ def test_ceilometer_retention_period():
         assert interval != int(ret_per) and 0 != res, "FAIL: the retention period was changed"
 
 
-def test_ceilometer_retention_sample():
+# Obsolete: TODO update
+def _test_ceilometer_retention_sample():
     """
     TC1998
     Check that a sample can't be removed until after retention period

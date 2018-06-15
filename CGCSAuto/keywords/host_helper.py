@@ -1551,7 +1551,8 @@ def get_up_hypervisors(con_ssh=None):
     return get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
 
 
-def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con_telnet=None):
+def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con_telnet=None,
+                    rtn_val='Hypervisor hostname'):
     """
     Return a list of hypervisors names in specified state and status. If None is set to state and status,
     all hypervisors will be returned.
@@ -1564,13 +1565,14 @@ def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con
         con_ssh (SSHClient):
         use_telnet
         con_telnet
+        rtn_val (str): target header. e.g., ID, Hypervisor hostname
 
     Returns (list): a list of hypervisor names. Return () if no match found.
         Always return () for small footprint lab. i.e., do not work with small footprint lab
     """
     table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh,
                                          use_telnet=use_telnet, con_telnet=con_telnet))
-    target_header = 'Hypervisor hostname'
+    target_header = rtn_val
 
     if state is None and status is None:
         return table_parser.get_column(table_, target_header)

@@ -634,3 +634,44 @@ def collect_software_logs(con_ssh=None):
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")
         LOG.error(e, exc_info=True)
+
+
+def parse_args(args_dict, repeat_key=False, vals_sep=' '):
+    """
+    parse args dictionary and convert it to string
+    Args:
+        args_dict (dict): key/value pairs
+        repeat_key: if value is tuple or list, should the key be repeated.
+            e.g., True for --nic in nova boot. False for -m in gnocchi measures aggregation
+        vals_sep (str): separator to join multiple vals. Only applicable when repeat_key=False.
+
+    Returns (str):
+
+    """
+    args = ''
+    for key, val in args_dict.items():
+        if val is None:
+            continue
+
+        print('val: {}. type: {}'.format(val, type(val)))
+
+        if isinstance(val, str):
+            if ' ' in val:
+                ' --{}="{}"'.format(key, val)
+            else:
+                args += ' --{}={}'.format(key, val)
+        elif isinstance(val, bool):
+            if val:
+                args += ' --{}'.format(key)
+        elif isinstance(val, (int, float)):
+            args += ' --{}={}'.format(key, val)
+        elif isinstance(val, (list, tuple)):
+            if repeat_key:
+                for val_ in val:
+                    args += ' --{}={}'.format(key, val_)
+            else:
+                args += ' --{}={}'.format(key, vals_sep.join(val))
+        else:
+            raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
+
+    return args
