@@ -563,6 +563,10 @@ def test_restore(restore_setup):
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
+        LOG.tc_step('Run restore-complete (CGTS-9756)')
+        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+        controller_node.telnet_conn.exec_cmd(cmd)
+
         LOG.tc_step("Restoring Compute Nodes ...")
         if len(compute_hosts) > 0:
             for compute_host in compute_hosts:

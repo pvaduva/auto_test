@@ -10,10 +10,12 @@ from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.cgcs import Prompt, EventLogID
 from consts.filepaths import SecurityPath, BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar
+
 from utils import cli, lab_info, table_parser
 from utils.clients.ssh import ControllerClient, SSHFromSSH
 from utils.tis_log import LOG
 from keywords import system_helper, keystone_helper, host_helper
+from keywords import common
 
 
 tpm_modes = {
@@ -27,6 +29,7 @@ tpm_modes = {
 default_ssl_file = '/etc/ssl/private/server-cert.pem'
 testing_ssl_file = 'server-cert.pem.bk'
 conf_backup_dir = 'bk-conf'
+local_conf_backup_dir = '/tmp/bk-conf'
 cert_id_line = r'^\|\s* uuid \s*\|\s* ([a-z0-9-]+) \s*\|$'
 fmt_password = r'{password}'
 
@@ -81,6 +84,9 @@ def check_lab_status(request):
         ssh_client.exec_sudo_cmd('rm -rf ' + working_ssl_file)
         backup_dir = os.path.join(WRSROOT_HOME, conf_backup_dir)
         ssh_client.exec_sudo_cmd('rm -rf ' + backup_dir)
+        LOG.info('remove saved configuration files on local')
+        if os.path.exists(local_conf_backup_dir):
+            os.rmdir(local_conf_backup_dir)
 
     request.addfinalizer(cleaup)
 
@@ -94,8 +100,11 @@ def backup_configuration_files():
     for service, file_info in file_changes.items():
 
         for conf_file in file_info:
-
             ssh_client.exec_sudo_cmd('cp -f ' + conf_file + ' ' + backup_dir)
+    source_ip = system_helper.get_oam_ips()['oam_floating_ip']
+    # if os.path.exists(local_conf_backup_dir):
+    #     os.rmdir(local_conf_backup_dir)
+    common.scp_to_local(backup_dir, source_ip=source_ip, dest_path=local_conf_backup_dir, is_dir=True)
 
 
 def fetch_cert_file(ssh_client, search_path=None):
@@ -521,6 +530,7 @@ def test_enable_tpm(swact_first):
             LOG.info('Less than 2 controllers, skip swact')
         else:
             host_helper.swact_host(fail_ok=False)
+            copy_config_from_local(con_ssh, local_conf_backup_dir, os.path.join(WRSROOT_HOME, conf_backup_dir))
 
     LOG.tc_step('Install HTTPS Certificate into TPM')
     code, output = store_cert_into_tpm(con_ssh,
@@ -536,6 +546,18 @@ def test_enable_tpm(swact_first):
 
     LOG.tc_step('Verify the configurations changes for impacted components, expecting all changes exit')
     verify_configuration_changes(expected=True, connection=con_ssh)
+
+
+@timeout_it(max_wait=300)
+def copy_config_from_local(connection, local_dir, dest_dir):
+    LOG.info('copy configs from local to active controller')
+    dest_ip = system_helper.get_oam_ips()['oam_floating_ip']
+    common.scp_from_local(local_dir, dest_ip, dest_path=dest_dir, is_dir=True)
+    rc, output = connection.exec_sudo_cmd('stat ' + dest_dir)
+    if rc != 0:
+        LOG.info('Failed to scp file from local to the active controller:{}'.format(output))
+
+    return rc
 
 
 @mark.parametrize(('swact_first'), [
@@ -557,6 +579,7 @@ def test_disable_tpm(swact_first):
                 LOG.info('Less than 2 controllers, skip swact')
             else:
                 host_helper.swact_host(fail_ok=False)
+                copy_config_from_local(ssh_client, local_conf_backup_dir, os.path.join(WRSROOT_HOME, conf_backup_dir))
 
         LOG.tc_step('Disabling TPM')
         code, output = remove_cert_from_tpm(ssh_client, fail_ok=False, check_first=False)
