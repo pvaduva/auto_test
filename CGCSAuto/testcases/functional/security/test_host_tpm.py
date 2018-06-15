@@ -82,7 +82,7 @@ def check_lab_status(request):
         backup_dir = os.path.join(WRSROOT_HOME, conf_backup_dir)
         ssh_client.exec_sudo_cmd('rm -rf ' + backup_dir)
 
-    # request.addfinalizer(cleaup)
+    request.addfinalizer(cleaup)
 
 
 @fixture(scope='function', autouse=True)
