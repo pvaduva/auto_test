@@ -25,7 +25,8 @@ tpm_modes = {
     'murano_ca': 'murano_ca',
 }
 default_ssl_file = '/etc/ssl/private/server-cert.pem'
-backup_ssl_file = 'server-cert.pem.bk'
+testing_ssl_file = 'server-cert.pem.bk'
+conf_backup_dir = 'bk-conf'
 cert_id_line = r'^\|\s* uuid \s*\|\s* ([a-z0-9-]+) \s*\|$'
 fmt_password = r'{password}'
 
@@ -44,9 +45,26 @@ expected_install = (
     ('^done$', ''),
 )
 
+file_changes = {
+    'haproxy': {
+        '/etc/haproxy/haproxy.cfg':
+            (
+            'tpm-engine\s+/usr/lib64/openssl/engines/libtpm2.so',
+            'tpm-object\s+/etc/ssl/private/object.tpm',
+            )
+    },
+
+    'lighttpd': {
+        '/etc/lighttpd/lighttpd.conf':
+         (
+            'server.tpm-object\s+=\s+"/etc/ssl/private/object.tpm"',
+            'server.tpm-engine\s+=\s+"/usr/lib64/openssl/engines/libtpm[1-9]+.so"'
+         ),
+    },
+}
 
 @fixture(scope='session', autouse=True)
-def check_lab_status():
+def check_lab_status(request):
     current_lab = ProjVar.get_var('lab')
     if not current_lab or not current_lab.get('tpm_installed', False):
         skip('Non-TPM lab, skip the test.')
@@ -55,9 +73,29 @@ def check_lab_status():
         skip('Non-HTTPs lab, skip the test.')
 
     ssh_client = ControllerClient.get_active_controller()
-    working_ssl_file = os.path.join(WRSROOT_HOME, backup_ssl_file)
+    working_ssl_file = os.path.join(WRSROOT_HOME, testing_ssl_file)
     LOG.info('backup default ssl pem file to:' + working_ssl_file)
-    ssh_client.exec_sudo_cmd('cp -f ' + default_ssl_file + ' ' + backup_ssl_file)
+    ssh_client.exec_sudo_cmd('cp -f ' + default_ssl_file + ' ' + testing_ssl_file)
+
+    def cleaup():
+        ssh_client.exec_sudo_cmd('rm -rf ' + working_ssl_file)
+        backup_dir = os.path.join(WRSROOT_HOME, conf_backup_dir)
+        ssh_client.exec_sudo_cmd('rm -rf ' + backup_dir)
+
+    # request.addfinalizer(cleaup)
+
+
+@fixture(scope='function', autouse=True)
+def backup_configuration_files():
+    backup_dir = os.path.join(WRSROOT_HOME, conf_backup_dir)
+    ssh_client = ControllerClient.get_active_controller()
+    LOG.info('Save current configuration files')
+    ssh_client.exec_sudo_cmd('mkdir -p ' + backup_dir)
+    for service, file_info in file_changes.items():
+
+        for conf_file in file_info:
+
+            ssh_client.exec_sudo_cmd('cp -f ' + conf_file + ' ' + backup_dir)
 
 
 def fetch_cert_file(ssh_client, search_path=None):
@@ -233,13 +271,11 @@ def timeout_it(max_wait=900, wait_per_loop=10, passing_codes=(0,),
             while time.time() < end_time:
                 code = rc = func(*args, **kwargs)
 
-                LOG.info('TODO: rc={}'.format(rc))
-
                 if not rc:
                     if fail_on_empty:
                         return -1, rc
                 else:
-                    if isinstance(rc, tuple) or isinstance(rc, list) or isinstance(rc, set):
+                    if isinstance(rc, tuple) or isinstance(rc, list):
                         code = rc[0]
 
                     if code in passing_codes or code == passing_codes:
@@ -344,8 +380,6 @@ def install_uninstall_cert_into_tpm(ssh_client,
         msg += '-unisntall certificate from TPM'
 
     if pem_password is not None and installing:
-        LOG.info('TODO: WITHOUT PASSWORD for now ')
-        # cmd += ' -p "' + pem_password + '"'
         msg += ', with password:' + pem_password
     else:
         msg += ', without any password'
@@ -357,18 +391,6 @@ def install_uninstall_cert_into_tpm(ssh_client,
         LOG.debug('-succeeded:' + msg + ', cmd: ' + cmd + ', output:' + output)
         cert_id = get_cert_id(output)
         LOG.info('current cert-id is:' + cert_id)
-
-        # actual_id, actual_mode, actual_states = get_cert_info(cert_id, con_ssh=ssh_client)[1:]
-        # assert actual_id == cert_id, 'Wrong certificate id, expecting:{}, actual:{}'.format(cert_id, actual_id)
-        # assert actual_mode == expected_mode, msg
-        # # CGTS-9529
-        # # for state in actual_states['states'].values:
-        # #     pass
-        # if installing:
-        #     status = 'tpm-config-applied'
-        #     for h in system_helper.get_controllers():
-        #         LOG.info('TODO: actual_states={}'.format(actual_states))
-        #         assert actual_states['state'][h] == status, 'Controller: {} is not TPM-CONFIGURED'.format(h)
 
         if installing:
             status = 'tpm-config-applied'
@@ -388,7 +410,6 @@ def install_uninstall_cert_into_tpm(ssh_client,
 
 @timeout_it(max_wait=900, wait_per_loop=60)
 def wait_for_tmp_status(cert_id, ssh_client=None, expected_status=''):
-    # rc, actual_id, actual_mode, actual_states = get_cert_info(cert_id, con_ssh=ssh_client, expected_details='')
     rc, actual_id, actual_mode, actual_states = get_cert_info(cert_id, con_ssh=ssh_client)
     LOG.info('auctual_id={}, actual_mode={}, actual_states={}'.format(actual_id, actual_mode, actual_states))
 
@@ -404,6 +425,68 @@ def wait_for_tmp_status(cert_id, ssh_client=None, expected_status=''):
         return 0, 'no detailed information as expected'
 
     return 1, 'did not get expected status, continue to wait'
+
+
+def check_changes(expected_changes, actual_changes, expected=True):
+    expected_changes = sorted(expected_changes)
+    actual_changes = sorted(actual_changes.splitlines())
+    if len(actual_changes) <= len(expected_changes):
+        error_message = 'Fail, actual changes do not match expected.\n\tactual:\n{}\nexpected:\n{}'.format(
+            actual_changes, expected_changes)
+
+        LOG.info(error_message)
+        return error_message
+
+    prefix = '<' if expected else '>'
+
+    error_message = ''
+    i, j = 0, 0
+    while i < len(actual_changes) and j < len(expected_changes):
+        line = actual_changes[i]
+        if line.strip() and line.startswith(prefix):
+            line = line[2:].strip()
+            rule = expected_changes[j]
+            if re.match(rule, line):
+                i += 1
+                j += 1
+
+            else:
+                error_message += 'Mismatch: expecting:{}, actual:{}\n'.format(rule, line)
+                LOG.warn(error_message)
+                i += 1
+        else:
+            i += 1
+
+    return error_message
+
+
+def verify_configuration_changes(expected=True, connection=None):
+    global file_changes
+
+    error_messages = []
+    for service, info in file_changes.items():
+
+        for file_path, changes in info.items():
+            backup_file = os.path.join(conf_backup_dir, os.path.basename(file_path))
+            rc, output = connection.exec_sudo_cmd('diff -b ' + file_path + ' ' + backup_file)
+            if rc == 1:
+
+                error_message = check_changes(changes, output, expected=expected)
+                if error_message:
+                    LOG.error('Failed, ' + error_message)
+                    error_messages.append(error_message)
+
+            elif rc == 0:
+                error_message = 'Fail, No change for file:{}, rc:{}, output:{}'.format(file_path, rc, output)
+                LOG.info(error_message)
+                error_messages.append(error_message)
+            else:
+                error_message = 'Failed, rc:{}, output:{}, '.format(rc, output)
+                error_messages.append(error_message)
+                LOG.error(error_message)
+
+    assert len(error_messages) == 0, 'Failed with errors:' + '\n'.join(error_messages)
+    return True
 
 
 @mark.parametrize(('swact_first'), [
@@ -451,6 +534,9 @@ def test_enable_tpm(swact_first):
     LOG.info('Wait the out-of-config alarm cleared')
     system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE)
 
+    LOG.tc_step('Verify the configurations changes for impacted components, expecting all changes exit')
+    verify_configuration_changes(expected=True, connection=con_ssh)
+
 
 @mark.parametrize(('swact_first'), [
     mark.p1(False),
@@ -478,6 +564,9 @@ def test_disable_tpm(swact_first):
 
         LOG.info('Wait the out-of-config alarm cleared')
         system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE)
+
+        LOG.tc_step('Verify the configurations changes for impacted components, DO NOT expect any of the changes')
+        verify_configuration_changes(expected=False, connection=ssh_client)
 
     else:
         LOG.info('TPM is NOT configured on the lab, skip the test')
