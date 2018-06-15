@@ -1,12 +1,12 @@
 import copy
 import math
 import os
+import os.path
 import random
 import re
 import time
 import ipaddress
 from contextlib import contextmanager
-
 import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto
@@ -14,7 +14,6 @@ from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP,
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
-from consts.scripts import GuestServiceScript
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
     vlm_helper, storage_helper, ceilometer_helper
@@ -24,6 +23,7 @@ from utils import exceptions, cli, table_parser, multi_thread
 from utils import local_host
 from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
 from utils.clients.local import LocalHostClient
+from utils.guest_scripts.scripts import TisInitServiceScript
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
 
@@ -1702,6 +1702,118 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
                                           timeout=timeout, fail_ok=fail_ok)[0]
 
 
+def scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout=60, validate=True, natbox_client=None, sha1sum=None):
+    """
+    scp a file to a vm from natbox
+    the file must be located in the natbox
+    the natbox must has connectivity to the VM
+
+    Args:
+        vm_id (str): vm to scp to
+        source_file (str): full pathname to the source file
+        dest_file (str): destination full pathname in the VM
+        timeout (int): scp timeout
+        validate (bool): verify src and dest sha1sum
+        natbox_client (NATBoxClient|None):
+        sha1sum (str|None): validates the source file prior to operation, or None, only checked if validate=True
+
+    Returns (None):
+
+    """
+    if natbox_client is None:
+        natbox_client = NATBoxClient.get_natbox_client()
+
+    LOG.info("scp-ing from {} to VM {}".format(natbox_client.host, vm_id))
+
+    tmp_loc = '/tmp'
+    fname = os.path.basename(os.path.normpath(source_file))
+
+    # ensure source file exists
+    natbox_client.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+
+    # calculate sha1sum
+    if validate:
+        src_sha1 = natbox_client.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+        src_sha1 = src_sha1.split(' ')[0]
+        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+        if sha1sum is not None and src_sha1 != sha1sum:
+            raise ValueError("src sha1sum validation failed {} != {}".format(src_sha1, sha1sum))
+
+    with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        vm_ssh.exec_cmd('mkdir -p {}'.format(tmp_loc))
+        vm_ssh.scp_on_dest(natbox_client.user, natbox_client.host, source_file,
+                           '/'.join([tmp_loc, fname]), natbox_client.password, timeout=timeout)
+
+        # `mv $s $d` fails if $s == $d
+        if os.path.normpath(os.path.join(tmp_loc, fname)) != os.path.normpath(dest_file):
+            vm_ssh.exec_sudo_cmd('mv -f {} {}'.format('/'.join([tmp_loc, fname]), dest_file), fail_ok=False)
+
+        # ensure destination file exists
+        vm_ssh.exec_sudo_cmd('test -f {}'.format(dest_file), fail_ok=False)
+
+        # validation
+        if validate:
+            dest_sha1 = vm_ssh.exec_sudo_cmd('sha1sum {}'.format(dest_file), fail_ok=False)[1]
+            dest_sha1 = dest_sha1.split(' ')[0]
+            LOG.info("dst: {}, sha1sum: {}".format(dest_file, dest_sha1))
+            if src_sha1 != dest_sha1:
+                raise ValueError("dst sha1sum validation failed {} != {}".format(src_sha1, dest_sha1))
+            LOG.info("scp completed successfully")
+
+
+def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_ssh=None, natbox_client=None):
+    """
+    scp a file from any SSHClient to a VM
+    since not all SSHClient's has connectivity to the VM, this function scps the source file to natbox first
+
+    Args:
+        vm_id (str): vm to scp to
+        source_file (str): full pathname to the source file
+        dest_file (str): destination path in the VM
+        timeout (int): scp timeout
+        validate (bool): verify src and dest sha1sum
+        source_ssh (SSHClient|None): the source ssh session, or None to use 'localhost'
+        natbox_client (NATBoxClient|None):
+        sha1sum (str|None): validates the source file prior to operation, or None to skip, only used if validate=True
+
+    Returns (None):
+
+    """
+    if natbox_client is None:
+        natbox_client = NATBoxClient.get_natbox_client()
+    if source_ssh is None:
+        source_ssh = NATBoxClient.set_natbox_client('localhost')
+
+    # scp-ing from natbox, forward the call
+    if source_ssh.host == natbox_client.host:
+        return scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout, validate, natbox_client=natbox_client)
+
+    LOG.info("scp-ing from {} to natbox {}".format(source_ssh.host, natbox_client.host))
+
+    tmp_loc = '/tmp'
+    fname = os.path.basename(os.path.normpath(source_file))
+
+    # ensure source file exists
+    source_ssh.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+
+    # calculate sha1sum
+    if validate:
+        src_sha1 = source_ssh.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+        src_sha1 = src_sha1.split(' ')[0]
+        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+    else:
+        src_sha1 = None
+
+    # scp to natbox
+    natbox_client.exec_cmd('mkdir -p {}'.format(tmp_loc))
+    source_ssh.scp_on_source(
+        source_file, natbox_client.user, natbox_client.host, tmp_loc, natbox_client.password, timeout=timeout)
+
+    return scp_to_vm_from_natbox(
+        vm_id, '/'.join([tmp_loc, fname]), dest_file, timeout, validate,
+        natbox_client=natbox_client, sha1sum=src_sha1)
+
+
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
@@ -1716,7 +1828,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         username (str):
         password (str):
         prompt (str):
-        timeout (int): 
+        timeout (int):
         natbox_client (NATBoxClient):
         con_ssh (SSHClient): ssh connection to TiS active controller
         vm_ip (str): ssh to this ip from NatBox if given
@@ -4513,6 +4625,7 @@ def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
     """
     LOG.info("Setting up kernel routing for VM {}, low_latency={}".format(vm_id, low_latency))
 
+    scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
     with ssh_to_vm_from_natbox(vm_id, **ssh_args) as ssh_client:
         r, msg = ssh_client.exec_cmd("cat /proc/sys/net/ipv4/ip_forward", fail_ok=False)
         if msg == "1":
@@ -4523,22 +4636,9 @@ def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
             low_latency = "'yes'"
         else:
             low_latency = "'no'"
-
-        script = GuestServiceScript.generate_script(LOW_LATENCY=low_latency)
-        ssh_client.exec_sudo_cmd(
-            "cat > %s << 'EOT'\n%s\nEOT" % (GuestServiceScript.script_path, script), fail_ok=False)
-        ssh_client.exec_sudo_cmd("chmod a+x %s" % GuestServiceScript.script_path, fail_ok=False)
-
-        # assuming the guest os is managed by systemctl
-        ssh_client.exec_sudo_cmd(
-            "cat > %s << 'EOT'\n%s\nEOT" % (GuestServiceScript.service_path, GuestServiceScript.service),
-            fail_ok=False)
-        ssh_client.exec_sudo_cmd(
-            "systemctl daemon-reload", fail_ok=False)
-        ssh_client.exec_sudo_cmd(
-            "systemctl enable %s" % (GuestServiceScript.service_name), fail_ok=False)
-        ssh_client.exec_sudo_cmd(
-            "systemctl start %s" % (GuestServiceScript.service_name), fail_ok=False)
+        TisInitServiceScript.configure(ssh_client, LOW_LATENCY=low_latency)
+        TisInitServiceScript.enable(ssh_client)
+        TisInitServiceScript.start(ssh_client)
 
 
 @contextmanager
