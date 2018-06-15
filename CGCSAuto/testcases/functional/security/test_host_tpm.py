@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import shutil
 import functools
 
 from pytest import skip, fixture, mark
@@ -86,8 +87,7 @@ def check_lab_status(request):
         ssh_client.exec_sudo_cmd('rm -rf ' + backup_dir)
         LOG.info('remove saved configuration files on local')
         if os.path.exists(local_conf_backup_dir):
-            os.rmdir(local_conf_backup_dir)
-
+            shutil.rmtree(local_conf_backup_dir)
     request.addfinalizer(cleaup)
 
 
@@ -96,14 +96,20 @@ def backup_configuration_files():
     backup_dir = os.path.join(WRSROOT_HOME, conf_backup_dir)
     ssh_client = ControllerClient.get_active_controller()
     LOG.info('Save current configuration files')
-    ssh_client.exec_sudo_cmd('mkdir -p ' + backup_dir)
-    for service, file_info in file_changes.items():
+    ssh_client.exec_sudo_cmd('rm -f ' + backup_dir + '; mkdir -p ' + backup_dir)
 
+    for service, file_info in file_changes.items():
         for conf_file in file_info:
             ssh_client.exec_sudo_cmd('cp -f ' + conf_file + ' ' + backup_dir)
     source_ip = system_helper.get_oam_ips()['oam_floating_ip']
     # if os.path.exists(local_conf_backup_dir):
     #     os.rmdir(local_conf_backup_dir)
+    common.scp_to_local(backup_dir, source_ip=source_ip, dest_path=local_conf_backup_dir, is_dir=True)
+
+    if os.path.exists(local_conf_backup_dir):
+         shutil.rmtree(local_conf_backup_dir)
+
+    source_ip = system_helper.get_oam_ips()['oam_floating_ip']
     common.scp_to_local(backup_dir, source_ip=source_ip, dest_path=local_conf_backup_dir, is_dir=True)
 
 
@@ -551,6 +557,7 @@ def test_enable_tpm(swact_first):
 @timeout_it(max_wait=300)
 def copy_config_from_local(connection, local_dir, dest_dir):
     LOG.info('copy configs from local to active controller')
+    connection.exec_sudo_cmd('rm -rf ' + dest_dir)
     dest_ip = system_helper.get_oam_ips()['oam_floating_ip']
     common.scp_from_local(local_dir, dest_ip, dest_path=dest_dir, is_dir=True)
     rc, output = connection.exec_sudo_cmd('stat ' + dest_dir)
