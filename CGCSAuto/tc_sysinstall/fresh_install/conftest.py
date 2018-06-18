@@ -9,6 +9,7 @@ from consts.filepaths import TuxlabServerPath, InstallPaths
 from consts.auth import Tenant
 from setups import initialize_server
 from tc_sysinstall.fresh_install import fresh_install_helper
+from utils import exceptions, local_host
 
 
 @pytest.fixture(scope='session')
@@ -85,8 +86,12 @@ def install_setup():
             install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
-            LOG.info("wiping disks")
-            install_helper.wipe_disk_hosts(lab["hosts"])
+            LOG.info("attempting to wipe disks")
+            try:
+                active_con.telnet_conn.login()
+                install_helper.wipe_disk_hosts(lab["hosts"])
+            except exceptions.TelnetException as e:
+                LOG.error("Failed to wipedisks because of telnet exception: {}".format(e.message))
 
     return _install_setup
 
@@ -100,7 +105,12 @@ def pytest_runtest_teardown(item):
     LOG.info("unreserving hosts and writing install step to {}".format(progress_dir))
 
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+    file_exists = os.path.isfile(progress_file_path)
+    if file_exists:
+        # delete the file in case the user does not have write permissions
+        os.remove(progress_file_path)
     with open(progress_file_path, "w") as progress_file:
         progress_file.write(item.nodeid + "\n")
         progress_file.write("End step: {}".format(str(LOG.test_step)))
         progress_file.close()
+    LOG.info("Fresh Install Completed")

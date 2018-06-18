@@ -272,9 +272,9 @@ def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
     if node_obj.telnet_login_prompt:
         _telnet_conn.send("\r\n")
-    _telnet_conn.connect(fail_ok=True)
-    while _telnet_conn.expect(fail_ok=True, timeout=3) == 0:
-        continue
+
+
+
 
     return _telnet_conn
 
@@ -300,6 +300,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
     # Check if controller is online
     if not local_host.ping_to_host(controller0_node.host_ip):
         LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
@@ -1354,14 +1355,16 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     controller0_node = lab['controller-0']
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
+
 
     connection = controller0_node.telnet_conn
     cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
                                                                              system_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = connection.exec_cmd(cmd, extra_expects=outputs_restore_system_conf, timeout=HostTimeout.SYSTEM_RESTORE)
+    rc, output = connection.exec_cmd(cmd, blob=[outputs_restore_system_conf, connection.prompt], expect_timeout=HostTimeout.SYSTEM_RESTORE)
     compute_configured = False
     if rc == 0:
         if 'compute-config in progress' in output:
@@ -1371,7 +1374,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
                 LOG.info('No need to do compute-config-complete, which is a new behavior after 2017-11-27.')
                 LOG.info('Instead, we will have to wait the node self-boot and boot up to ready states.')
 
-            connection.find_prompt(prompt='controller\-[01] login:', timeout=HostTimeout.REBOOT)
+            connection.expect(['controller\-[01] login:'], timeout=HostTimeout.REBOOT)
 
             LOG.info('Find login prompt, try to login')
             connection.login()
@@ -1407,7 +1410,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
             reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
 
-            rc, output = connection.exec_cmd(reboot_cmd, alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
+            rc, output = connection.exec_cmd(reboot_cmd, blob=[' login: '], expect_timeout=HostTimeout.REBOOT)
             if rc != 0:
                 msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
                 LOG.error(msg)
@@ -1420,8 +1423,8 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
             LOG.info('re-run cli:{}'.format(cmd))
 
-            rc, output = connection.exec_cmd(cmd, alt_prompt=' login: ',
-                                             timeout=HostTimeout.SYSTEM_RESTORE, will_reboot=True)
+            rc, output = connection.exec_cmd(cmd, blob=[' login: '],
+                                             expect_timeout=HostTimeout.SYSTEM_RESTORE)
             LOG.debug('rc:{}, output:{}'.format(rc, output))
 
         if "System restore complete" in output:
@@ -1474,14 +1477,15 @@ def restore_controller_system_images(images_backup, tel_net_session=None, fail_o
     if tel_net_session is None:
 
         if controller0_node.telnet_conn is None:
-            controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+            controller0_node.telnet_conn = open_telnet_session(controller0_node)
+            controller0_node.telnet_conn.login()
 
         tel_net_session = controller0_node.telnet_conn
 
     cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-images {}".format(images_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = tel_net_session.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+    rc, output = tel_net_session.exec_cmd(cmd, expect_timeout=HostTimeout.SYSTEM_RESTORE)
     if rc != 0:
         err_msg = "{} failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -2213,9 +2217,10 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
     bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force"], pre_opts=pre_opts)
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force", "--chmod=Du=rwx"],
+                          pre_opts=pre_opts, timeout=HostTimeout.INSTALL_LOAD)
     bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts )
+                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts, timeout=HostTimeout.INSTALL_LOAD)
     #extra_opts=["--delete", "--force"]
     LOG.info("Create new symlink to feed directory")
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
@@ -2467,7 +2472,8 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
     controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
 
     telnet_client = controller0_node.telnet_conn
 
@@ -2606,7 +2612,8 @@ def check_clone_status(tel_net_session=None, con_ssh=None, fail_ok=False):
 
     if controller0_node.telnet_conn is None:
         LOG.info("Setting up telnet connection ...")
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
         controller0_node.telnet_conn.exec_cmd("xterm")
 
     cmd = 'config_controller --clone-status'.format(HostLinuxCreds.get_password())
@@ -2655,7 +2662,8 @@ def check_cloned_hardware_status(host, fail_ok=False):
 
 
     if controller_0_node.telnet_conn is None:
-        controller_0_node.telnet_conn = open_telnet_session(controller_0_node, log_dir)
+        controller_0_node.telnet_conn = open_telnet_session(controller_0_node)
+        controller_0_node.telnet_conn.login()
 
     LOG.info("Executing system show on cloned system")
     table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
@@ -2717,7 +2725,8 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
     controller0_node = lab['controller-0']
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
 
     host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
     LOG.info("Locking {} for  oam IP configuration update".format(host))
@@ -3043,6 +3052,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
     controller0 = lab["controller-0"]
     if con_telnet is None:
         con_telnet = open_telnet_session(controller0)
+        con_telnet.login()
         close_telnet = True
 
     con_telnet.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +

@@ -43,6 +43,9 @@ def test_storage_install(install_setup):
     last_session_step = install_setup["control"]["resume"]
     final_step = install_setup["control"]["stop"]
 
+    if final_step <= 0:
+        skip("stopping at install step: {}".format(LOG.test_step))
+
     LOG.tc_step("Install Controller")
     if last_session_step <= LOG.test_step:
         fresh_install_helper.install_controller(sys_type=SysType.STORAGE)

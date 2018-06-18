@@ -80,7 +80,7 @@ def test_install_cloned_image(install_clone_setup):
     LOG.tc_step("Booting controller-0 ... ")
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node, install_output_dir)
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
         try:
             controller0_node.telnet_conn.login()
         except:
@@ -116,7 +116,7 @@ def test_install_cloned_image(install_clone_setup):
         controller0_node.telnet_conn.close()
 
     output_dir = ProjVar.get_var('LOG_DIR')
-    controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node, output_dir)
+    controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
     controller0_node.telnet_conn.login()
     controller0_node.telnet_conn.exec_cmd("xterm")
 
