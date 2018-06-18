@@ -62,7 +62,7 @@ def test_firewall_rules_default():
     """
     # Cannot test connecting to the ports as they are in use.
 
-    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8774, 8776, 8777, 8778, 9292, 9696, 15491]
+    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8041, 8774, 8776, 8778, 9292, 9696, 15491]
 
     from consts.proj_vars import ProjVar
     if ProjVar.get_var('REGION') != 'RegionOne':
