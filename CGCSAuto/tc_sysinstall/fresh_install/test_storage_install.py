@@ -107,7 +107,8 @@ def test_storage_install(install_setup):
             if controller_name not in hostname:
                 host_thread = threading.Thread(target=install_helper.bring_node_console_up, name=hostname,
                                                args=(lab[hostname], boot_device),
-                                               kwargs={'vlm_power_on': True, "close_telnet_conn": True, "boot_usb": False})
+                                               kwargs={'vlm_power_on': True, "close_telnet_conn": True, "boot_usb": False,
+                                                       "small_footprint": False})
                 threads.append(host_thread)
                 LOG.info("Starting thread for {}".format(host_thread.name))
                 host_thread.start()

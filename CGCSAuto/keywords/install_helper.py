@@ -3298,7 +3298,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
 def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None):
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
-    bios_option = bios_menu.get_boot_option()
+    bios_option = re.compile(bios_menu.get_boot_option(), re.IGNORECASE)
     boot_device_menu = menu.BootDeviceMenu()
     if small_footprint is None:
         sys_type = ProjVar.get_var("SYS_TYPE")

@@ -74,10 +74,10 @@ class BiosMenus:
     # TODO: double check options
     PowerEdge = {
         "name": "PowerEdge",
-        "options": [{"name": "system setup", "index": 0, 'key': 'F2'},
-                    {"name": "lifecycle controller", "index": 1, "key": 'F10'},
-                    {"name": "boot manager", "index": 2, "key": 'F11'},
-                    {"name": "pxe boot", "index": 3, "key": 'F12'}],
+        "options": [{"name": "System Setup", "index": 0, 'key': 'F2'},
+                    {"name": "Lifecycle Controller", "index": 1, "key": 'F10'},
+                    {"name": "Boot Manager", "index": 2, "key": 'F11'},
+                    {"name": "PXE boot", "index": 3, "key": 'F12'}],
         "wrap_around": False
     }
 
