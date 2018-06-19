@@ -3982,15 +3982,15 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     """
 
     if not flavor:
-        flavor_id = nova_helper.create_flavor(name=vm_type)[1]
+        flavor = nova_helper.create_flavor(name=vm_type)[1]
         if cleanup:
-            ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
+            ResourceCleanup.add('flavor', flavor, scope=cleanup)
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
 
         if vm_type in ['vswitch', 'dpdk', 'vhost']:
             extra_specs.update({FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.MEM_PAGE_SIZE: '2048'})
 
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor_extra_specs(flavor=flavor, **extra_specs)
 
     resource_id = None
     boot_source = boot_source if boot_source else 'volume'
