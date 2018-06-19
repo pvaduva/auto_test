@@ -543,7 +543,7 @@ class TestSharedCpuEnabled:
         """
         storage_backing, shared_cpu_hosts = add_shared_cpu
         vm_helper.delete_vms()
-        origin_total_vcpus = host_helper.get_vcpus_for_computes(shared_cpu_hosts)
+        prev_total_vcpus = host_helper.get_vcpus_for_computes(shared_cpu_hosts)
 
         flv1_args = {
             'numa_nodes': 1,
@@ -561,6 +561,8 @@ class TestSharedCpuEnabled:
 
         target_host = shared_cpu_hosts[0]
         vms = {}
+        pcpus = vcpus - 1
+        expt_increase = pcpus
         for flv_arg in (flv1_args, flv2_args):
             LOG.tc_step("Create a flavor with following specs and launch a vm with this flavor: {}".format(flv_arg))
             flv_id = create_shared_flavor(**flv_arg)
@@ -571,7 +573,10 @@ class TestSharedCpuEnabled:
             LOG.tc_step("Check vm {} numa node setting via vm-topology".format(vm_id))
             check_shared_vcpu(vm=vm_id, numa_node0=flv_arg.get('node0', None),
                               numa_nodes=flv_arg.get('numa_nodes', None),
-                              shared_vcpu=shared_vcpu, vcpus=vcpus, prev_total_vcpus=origin_total_vcpus)
+                              shared_vcpu=shared_vcpu, vcpus=vcpus, prev_total_vcpus=prev_total_vcpus,
+                              expt_increase=expt_increase)
+
+            expt_increase += pcpus
             vms[vm_id] = flv_arg
 
         LOG.tc_step("Evacuate vms")
@@ -584,14 +589,14 @@ class TestSharedCpuEnabled:
             vm_hosts.append(vm_host)
 
         if len(list(set(vm_hosts))) == 1:
-            expt_increase = vcpus
+            post_evac_expt_increase = pcpus * 2
         else:
-            expt_increase = vcpus * 2
+            post_evac_expt_increase = pcpus
 
         for vm_, flv_arg_ in vms.items():
             check_shared_vcpu(vm=vm_, numa_node0=flv_arg_.get('node0', None),
-                              numa_nodes=flv_arg_.get('numa_nodes', None), expt_increase=expt_increase,
-                              prev_total_vcpus=origin_total_vcpus, shared_vcpu=shared_vcpu, vcpus=vcpus)
+                              numa_nodes=flv_arg_.get('numa_nodes', None), expt_increase=post_evac_expt_increase,
+                              prev_total_vcpus=prev_total_vcpus, shared_vcpu=shared_vcpu, vcpus=vcpus)
 
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
             (3, 1, 1, 0)
