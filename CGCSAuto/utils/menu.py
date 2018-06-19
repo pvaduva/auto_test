@@ -224,7 +224,7 @@ class Option(object):
 
         if tag is None:
             # bios options
-            if "boot menu" in option_name or "network boot" in option_name or "boot manager" in option_name:
+            if "boot menu" in option_name or "network boot" in option_name or "pxe boot" in option_name:
                 tag = "boot menu"
             elif "setup" in option_name:
                 tag = "setup"
