@@ -3982,7 +3982,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     """
 
     if not flavor:
-        flavor = nova_helper.create_flavor(name=vm_type)[1]
+        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2)[1]
         if cleanup:
             ResourceCleanup.add('flavor', flavor, scope=cleanup)
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
