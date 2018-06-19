@@ -4,7 +4,7 @@ from pytest import fixture, mark, skip
 
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
-from keywords import nova_helper, vm_helper, host_helper, keystone_helper, check_helper, system_helper
+from keywords import nova_helper, vm_helper, host_helper, keystone_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
@@ -12,9 +12,15 @@ from utils.tis_log import LOG
 
 
 @fixture(scope='module')
-def host_info():
+def target_hosts():
+    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    return hosts
+
+
+@fixture(scope='module')
+def host_info(target_hosts):
     LOG.fixture_step("Get VMs cores for each host")
-    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+
     max_vcpus_proc0 = 0
     max_vcpus_proc1 = 0
     host_max_proc0 = None
@@ -32,7 +38,12 @@ def host_info():
     LOG.fixture_step("Increase quota of allotted cores")
     vm_helper.ensure_vms_quotas(cores_num=(max(max_vcpus_proc0, max_vcpus_proc1) + 1))
 
-    return [(max_vcpus_proc0, host_max_proc0), (max_vcpus_proc1, host_max_proc1)]
+    return (max_vcpus_proc0, host_max_proc0), (max_vcpus_proc1, host_max_proc1)
+
+
+@fixture()
+def origin_total_vcpus(target_hosts):
+    return host_helper.get_vcpus_for_computes(hosts=target_hosts, rtn_val='vcpus_used')
 
 
 def get_failed_live_migrate_action_id(vm_id):
@@ -42,30 +53,25 @@ def get_failed_live_migrate_action_id(vm_id):
     return req_id[0]
 
 
-def check_shared_vcpu(vm, numa_node0, numa_nodes, shared_vcpu=None, vcpus=None):
+def check_shared_vcpu(vm, numa_node0, numa_nodes, vcpus, prev_total_vcpus, shared_vcpu=None,
+                      expt_increase=None):
+
     host = nova_helper.get_vm_host(vm_id=vm)
-    host_shared_vcpu_dict = host_helper.get_host_cpu_cores_for_function(host, function='Shared', thread=None)
-    LOG.info("dict: {}".format(host_shared_vcpu_dict))
-    if numa_nodes is None:
-        numa_nodes = 1
-
-    if numa_nodes == 1:
-        host_shared_vcpu = host_shared_vcpu_dict[numa_node0]
-    else:
-        host_shared_vcpu = host_shared_vcpu_dict[0] + host_shared_vcpu_dict[1]
-    vm_shared_pcpu = vm_helper.get_instance_topology(vm)[0]['shared_pcpu'][0]
-    assert vm_shared_pcpu in host_shared_vcpu
     if shared_vcpu is not None:
-        total_vcpus = int(host_helper.get_vcpus_for_computes(hosts=host, rtn_val='vcpus_used',
-                                                             numa_node=numa_node0)[host])
-        check_helper.check_topology_of_vm(vm, vcpus, total_vcpus, shared_vcpu=shared_vcpu,
-                                          cpu_pol='dedicated', expt_increase=0)
+        host_shared_vcpu_dict = host_helper.get_host_cpu_cores_for_function(host, function='Shared', thread=None)
+        LOG.info("dict: {}".format(host_shared_vcpu_dict))
+        if numa_nodes is None:
+            numa_nodes = 1
 
+        if numa_nodes == 1:
+            host_shared_vcpu = host_shared_vcpu_dict[numa_node0]
+        else:
+            host_shared_vcpu = host_shared_vcpu_dict[0] + host_shared_vcpu_dict[1]
+        vm_shared_pcpu = vm_helper.get_instance_topology(vm)[0]['shared_pcpu'][0]
+        assert vm_shared_pcpu in host_shared_vcpu
 
-def check_disabled_shared_vcpu(vm):
-    vm_shared_vcpu = vm_helper.get_instance_topology(vm)[0]['shared_pcpu']
-    LOG.info("shared: {}".format(vm_shared_vcpu))
-    assert not vm_shared_vcpu
+    check_helper.check_topology_of_vm(vm, vcpus, prev_total_cpus=prev_total_vcpus[host], shared_vcpu=shared_vcpu,
+                                      cpu_pol='dedicated', expt_increase=expt_increase, numa_num=numa_nodes)
 
 
 def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='dedicated',
@@ -352,10 +358,11 @@ class TestSharedCpuEnabled:
 
     # TC2920, TC2921
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'error'), [
-        mark.domain_sanity((2, 1, 1, 1, None)),
+        mark.domain_sanity((3, 1, 1, 2, None)),
         (2, 2, None, 1, 'error')
     ])
-    def test_launch_vm_with_shared_cpu(self, vcpus, numa_nodes, numa_node0, shared_vcpu, error, add_shared_cpu):
+    def test_launch_vm_with_shared_cpu(self, vcpus, numa_nodes, numa_node0, shared_vcpu, error, add_shared_cpu,
+                                       origin_total_vcpus):
         """
         Test boot vm cli returns error when system does not meet the shared cpu requirement(s) in given flavor
 
@@ -366,6 +373,7 @@ class TestSharedCpuEnabled:
             shared_vcpu (int):
             error
             add_shared_cpu
+            origin_total_vcpus
 
         Setup:
             - Configure one compute to have shared cpus via 'system host-cpu-modify -f shared p0=1,p1=1 <hostname>'
@@ -412,24 +420,24 @@ class TestSharedCpuEnabled:
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes,
-                          shared_vcpu=shared_vcpu, vcpus=vcpus)
+                          shared_vcpu=shared_vcpu, vcpus=vcpus, prev_total_vcpus=origin_total_vcpus)
 
         # live migrate
         LOG.tc_step("Live migrate vm and then ping vm from NatBox")
         vm_helper.live_migrate_vm(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes,
-                          shared_vcpu=shared_vcpu, vcpus=vcpus)
+                          shared_vcpu=shared_vcpu, vcpus=vcpus, prev_total_vcpus=origin_total_vcpus)
 
         # cold migrate
         LOG.tc_step("Cold migrate vm and then ping vm from NatBox")
         vm_helper.cold_migrate_vm(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         check_shared_vcpu(vm=vm_id, numa_node0=numa_node0, numa_nodes=numa_nodes,
-                          shared_vcpu=shared_vcpu, vcpus=vcpus)
+                          shared_vcpu=shared_vcpu, vcpus=vcpus, prev_total_vcpus=origin_total_vcpus)
 
     # TC2922
-    def test_resize_vm_with_shared_cpu(self, add_shared_cpu):
+    def test_resize_vm_with_shared_cpu(self, add_shared_cpu, origin_total_vcpus):
         """
         Test that the vm created with shared vcpus can successfully be resized to a flavor with shared vcpus and to a
         flavor without shared vcpus (and back)
@@ -466,49 +474,52 @@ class TestSharedCpuEnabled:
         f1_numa_nodes = 1
         f1_node0 = 1
         f1_shared_vcpu = 1
-        flavor = create_shared_flavor(vcpus=f1_vcpus, storage_backing=storage_backing, numa_nodes=f1_numa_nodes,
-                                      node0=f1_node0, shared_vcpu=f1_shared_vcpu)
+        flavor1 = create_shared_flavor(vcpus=f1_vcpus, storage_backing=storage_backing, numa_nodes=f1_numa_nodes,
+                                       node0=f1_node0, shared_vcpu=f1_shared_vcpu)
 
         LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
-        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True,
+        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor1, fail_ok=True,
                                                         cleanup='function')
 
         assert 0 == code, "Boot vm failed. Details: {}".format(output)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        check_shared_vcpu(vm=vm_id, numa_node0=f1_node0, numa_nodes=f1_numa_nodes)
+        check_shared_vcpu(vm=vm_id, numa_node0=f1_node0, numa_nodes=f1_numa_nodes, vcpus=f1_vcpus,
+                          prev_total_vcpus=origin_total_vcpus, shared_vcpu=f1_shared_vcpu)
 
         f2_vcpus = 4
         f2_numa_nodes = 1
         f2_node0 = 1
         f2_shared_vcpu = 1
-        new_shared_cpu_flavor = create_shared_flavor(vcpus=f2_vcpus, storage_backing=storage_backing,
-                                                     numa_nodes=f2_numa_nodes, node0=f2_node0,
-                                                     shared_vcpu=f2_shared_vcpu)
+        f2_shared_cpu = create_shared_flavor(vcpus=f2_vcpus, storage_backing=storage_backing,
+                                             numa_nodes=f2_numa_nodes, node0=f2_node0, shared_vcpu=f2_shared_vcpu)
 
         f3_vcpus = 4
         f3_numa_nodes = 1
         f3_node0 = 1
-        non_shared_cpu_flavor = create_shared_flavor(vcpus=f3_vcpus, storage_backing=storage_backing,
-                                                     numa_nodes=f3_numa_nodes, node0=f3_node0)
+        f3_non_shared = create_shared_flavor(vcpus=f3_vcpus, storage_backing=storage_backing,
+                                             numa_nodes=f3_numa_nodes, node0=f3_node0)
 
         LOG.tc_step("Resize vm w/shared cpu flavor and validate shared vcpu")
-        vm_helper.resize_vm(vm_id, new_shared_cpu_flavor)
+        vm_helper.resize_vm(vm_id, f2_shared_cpu)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        check_shared_vcpu(vm=vm_id, numa_node0=f2_node0, numa_nodes=f2_numa_nodes)
+        check_shared_vcpu(vm=vm_id, numa_node0=f2_node0, numa_nodes=f2_numa_nodes, shared_vcpu=f2_shared_vcpu,
+                          vcpus=f2_vcpus, prev_total_vcpus=origin_total_vcpus)
 
         LOG.tc_step("Resize vm w/non shared cpu flavor")
-        vm_helper.resize_vm(vm_id, non_shared_cpu_flavor)
+        vm_helper.resize_vm(vm_id, f3_non_shared)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        check_disabled_shared_vcpu(vm_id)
+        check_shared_vcpu(vm=vm_id, numa_node0=f3_node0, numa_nodes=f3_numa_nodes, shared_vcpu=None,
+                          vcpus=f3_vcpus, prev_total_vcpus=origin_total_vcpus)
 
         LOG.tc_step("Resize vm back to shared cpu flavor and validate shared vcpu")
-        vm_helper.resize_vm(vm_id, new_shared_cpu_flavor)
+        vm_helper.resize_vm(vm_id, f2_shared_cpu)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        check_shared_vcpu(vm=vm_id, numa_node0=f3_node0, numa_nodes=f3_numa_nodes)
+        check_shared_vcpu(vm=vm_id, numa_node0=f2_node0, numa_nodes=f2_numa_nodes, shared_vcpu=f2_shared_vcpu,
+                          vcpus=f2_vcpus, prev_total_vcpus=origin_total_vcpus)
 
     # TC2923
-    def test_evacuate_shared_cpu_vm(self, add_admin_role_func, add_shared_cpu):
+    def test_evacuate_shared_cpu_vm(self, target_hosts, add_shared_cpu, add_admin_role_func):
         """
         Test that instance with shared vcpu can be evacuated and that the vm still has shared vcpu after evacuation
 
@@ -531,6 +542,8 @@ class TestSharedCpuEnabled:
 
         """
         storage_backing, shared_cpu_hosts = add_shared_cpu
+        vm_helper.delete_vms()
+        origin_total_vcpus = host_helper.get_vcpus_for_computes(shared_cpu_hosts)
 
         flv1_args = {
             'numa_nodes': 1,
@@ -540,7 +553,9 @@ class TestSharedCpuEnabled:
             'node0': 1,
         }
 
-        _flv_args = {'vcpus': 2, 'storage_backing': storage_backing, 'shared_vcpu': 1}
+        shared_vcpu = 1
+        vcpus = 2
+        _flv_args = {'vcpus': vcpus, 'storage_backing': storage_backing, 'shared_vcpu': shared_vcpu}
         flv1_args.update(_flv_args)
         flv2_args.update(_flv_args)
 
@@ -555,21 +570,33 @@ class TestSharedCpuEnabled:
 
             LOG.tc_step("Check vm {} numa node setting via vm-topology".format(vm_id))
             check_shared_vcpu(vm=vm_id, numa_node0=flv_arg.get('node0', None),
-                              numa_nodes=flv_arg.get('numa_nodes', None))
+                              numa_nodes=flv_arg.get('numa_nodes', None),
+                              shared_vcpu=shared_vcpu, vcpus=vcpus, prev_total_vcpus=origin_total_vcpus)
             vms[vm_id] = flv_arg
 
         LOG.tc_step("Evacuate vms")
         vm_helper.evacuate_vms(target_host, vms_to_check=list(vms.keys()), ping_vms=True)
 
+        vm_hosts = []
         LOG.tc_step("Check shared vcpus and numa settings for vms after evacuation")
+        for vm_ in vms:
+            vm_host = nova_helper.get_vm_host(vm_id=vm_)
+            vm_hosts.append(vm_host)
+
+        if len(list(set(vm_hosts))) == 1:
+            expt_increase = vcpus
+        else:
+            expt_increase = vcpus * 2
+
         for vm_, flv_arg_ in vms.items():
             check_shared_vcpu(vm=vm_, numa_node0=flv_arg_.get('node0', None),
-                              numa_nodes=flv_arg_.get('numa_nodes', None))
+                              numa_nodes=flv_arg_.get('numa_nodes', None), expt_increase=expt_increase,
+                              prev_total_vcpus=origin_total_vcpus, shared_vcpu=shared_vcpu, vcpus=vcpus)
 
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
             (3, 1, 1, 0)
     ])
-    def test_shared_vcpu_scaling(self, vcpus, numa_nodes, numa_node0, shared_vcpu, add_shared_cpu, host_info):
+    def _test_shared_vcpu_scaling(self, vcpus, numa_nodes, numa_node0, shared_vcpu, add_shared_cpu, host_info):
         """
             Tests the following:
             - That the scaling of instance with shared vCPU behaves appropiately (TC5097)
@@ -642,7 +669,7 @@ class TestSharedCpuEnabled:
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
             (3, 1, 1, 0)
     ])
-    def test_shared_vcpu_pinning_constraints(self, vcpus, numa_nodes, numa_node0, shared_vcpu,
+    def _test_shared_vcpu_pinning_constraints(self, vcpus, numa_nodes, numa_node0, shared_vcpu,
                                              add_shared_cpu, add_admin_role_func, host_info):
         """
         Tests the following:
