@@ -252,16 +252,24 @@ PROCESSES = {
         'cmd': '/usr/bin/python2 /bin/cinder-volume', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active', 'retries': 32},
 
+    # 'ceilometer-collector': {
+    #     'cmd': '/usr/bin/python2 /bin/ceilometer-collector', 'impact': 'swact',
+    #     'severity': 'critical', 'node_type': 'active'},
+
+    # 'ceilometer-api': {
+    #     'cmd': '/usr/bin/python2 /bin/ceilometer-api', 'impact': 'swact',
+    #     'severity': 'critical', 'node_type': 'active'},
+
+    'gnocchi-metricd': {
+        'cmd': '/usr/bin/python2 /bin/gnocchi-metricd', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
+
     'ceilometer-collector': {
         'cmd': '/usr/bin/python2 /bin/ceilometer-collector', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    'ceilometer-api': {
-        'cmd': '/usr/bin/python2 /bin/ceilometer-api', 'impact': 'swact',
-        'severity': 'critical', 'node_type': 'active'},
-
-    'ceilometer-agent-notification': {
-        'cmd': '/usr/bin/python2 /bin/ceilometer-agent-notification', 'impact': 'swact',
+    'gnocchi-api': {
+        'cmd': '/usr/bin/python2 /bin/gnocchi-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
     'heat-engine': {
@@ -1033,9 +1041,12 @@ class MonitoredProcess:
     mark.p1('cinder-api'),
     mark.p1('cinder-scheduler'),
     mark.p1('cinder-volume'),   # retries = 32
-    mark.p1('ceilometer-collector'),
-    mark.p1('ceilometer-api'),
+    # mark.p1('ceilometer-collector'),
+    # mark.p1('ceilometer-api'),
     mark.p1('ceilometer-agent-notification'),
+    mark.p1('gnocchi-metricd'),
+    mark.p1('gnocchi-api'),
+    # mark.p1('ceilometer-api'),
     mark.priorities('p1', 'sx_nightly')('heat-api'),
     mark.p1('heat-api-cfn'),
     mark.p1('heat-api-cloudwatch'),
