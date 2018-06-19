@@ -2217,11 +2217,11 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
     bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force", "--chmod=Du=rwx"],
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force", "-v"],
                           pre_opts=pre_opts, timeout=HostTimeout.INSTALL_LOAD)
     bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts, timeout=HostTimeout.INSTALL_LOAD)
-    #extra_opts=["--delete", "--force"]
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["-v"], pre_opts=pre_opts,
+                          timeout=HostTimeout.INSTALL_LOAD)
     LOG.info("Create new symlink to feed directory")
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
         msg = "Failed to remove feed"
@@ -3212,7 +3212,7 @@ def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
         vlm_helper.power_off_hosts(node_obj.name)
         power_on_host(node_obj.name, wait_for_hosts_state_=False)
     if expect_prompt:
-        node_obj.telnet_conn.expect([bios_option.name], 360)
+        node_obj.telnet_conn.expect([re.compile(bios_option.name, re.IGNORECASE)], 360)
     for i in range(0, 5):
         bios_option.enter(node_obj.telnet_conn)
         time.sleep(1)
@@ -3298,7 +3298,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
 def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None):
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
-    bios_option = re.compile(bios_menu.get_boot_option(), re.IGNORECASE)
+    bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()
     if small_footprint is None:
         sys_type = ProjVar.get_var("SYS_TYPE")
@@ -3318,12 +3318,13 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if node_obj.telnet_conn is None:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
-    menu_prompts = [bios_option.name, boot_device_menu.prompt, kickstart_menu.prompt]
+    bios_option_pattern = re.compile(bios_option.name.encode(), re.IGNORECASE)
+    menu_prompts = [bios_option_pattern, boot_device_menu.prompt, kickstart_menu.prompt]
     while len(menu_prompts) > 0:
         index = node_obj.telnet_conn.expect(menu_prompts, 360, fail_ok=True)
         if index < 0:
             break
-        elif menu_prompts[index] == bios_option.name:
+        elif menu_prompts[index] == bios_option_pattern:
             enter_bios_option(node_obj, bios_option, expect_prompt=False)
         elif menu_prompts[index] == boot_device_menu.prompt:
             select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
@@ -3529,7 +3530,7 @@ def get_resume_step(lab=None, install_progress_path=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     if install_progress_path is None:
-        install_progress_path = "{}/{}_install_progress.txt".format(InstallPaths.INSTALL_TEMP_DIR, lab["short_name"])
+        install_progress_path = "{}/../{}_install_progress.txt".format(ProjVar.get_var("LOG_DIR"), lab["short_name"])
 
     with open(install_progress_path, "r") as progress_file:
         lines = progress_file.readlines()

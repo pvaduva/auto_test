@@ -100,7 +100,7 @@ def install_setup():
 def pytest_runtest_teardown(item):
 # Try first so that the failed tc_step can be written
     lab = InstallVars.get_install_var("LAB")
-    progress_dir = InstallPaths.INSTALL_TEMP_DIR
+    progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
     LOG.info("unreserving hosts and writing install step to {}".format(progress_dir))
 
