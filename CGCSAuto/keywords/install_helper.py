@@ -2301,8 +2301,8 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn.expect(["assword:"])
         controller0.telnet_conn.send(HostLinuxCreds.get_password())
         host_name_split = controller0.host_name.split("-")
-        if host_name_split[-1].startswith("0"):
-            host_name_split[-1] = host_name_split[-1].replace("0", "", 1)
+        host_name_split.pop(-1)
+        host_name_split[-1] = "\d+"
         host_name = '-'.join(host_name_split)
         host_name_regex = "(" + host_name + "|localhost" + ")"
         controller0.telnet_conn.hostname = host_name_regex
