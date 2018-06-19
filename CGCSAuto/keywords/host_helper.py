@@ -804,7 +804,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
 
 def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
-    if system_helper.is_simplex():
+    if system_helper.is_simplex(con_ssh=con_ssh):
         return True
 
     LOG.info("Check {} non-existent on {}".format(PLATFORM_AFFINE_INCOMPLETE, host))
@@ -876,7 +876,6 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
-    con_ssh = ControllerClient.get_active_controller()
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     hosts_to_check = []
     for host in hosts_to_unlock:
@@ -947,7 +946,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
         hosts_affine_incomplete = []
         for host in list(set(computes) & set(hosts_avail)):
-            if not wait_for_tasks_affined(host, fail_ok=True):
+            if not wait_for_tasks_affined(host, fail_ok=True, con_ssh=con_ssh):
                 hosts_affine_incomplete.append(host)
                 res[host] = 7, "Host platform tasks affining incomplete"
         hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
