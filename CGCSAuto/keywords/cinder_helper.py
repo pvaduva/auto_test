@@ -1,6 +1,7 @@
 import random
 import time
 
+# from consts.proj_vars import ProjVar
 from consts.auth import Tenant
 from consts.cgcs import GuestImages, Prompt
 from consts.timeout import VolumeTimeout
@@ -1248,6 +1249,7 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
     # according to the user documents, the first time of 'cinder import' may fail, in which case
     # we just have to try again
     for retry in range(retries if 2 <= retries <= 10 else 2):
+        con_ssh.set_prompt(prompt=controller_prompt)
         rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                             rtn_list=True)
         if rc == 1:
