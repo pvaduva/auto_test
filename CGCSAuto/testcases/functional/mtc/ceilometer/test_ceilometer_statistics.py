@@ -59,12 +59,12 @@ def test_measurements_for_metric(meter):
     LOG.tc_step('Get ceilometer statistics table for image.size meter')
 
     now = datetime.utcnow()
-    start = (now - timedelta(minutes=10))
+    start = (now - timedelta(minutes=15))
     start = start.strftime("%Y-%m-%dT%H:%M:%S")
     image_name = glance_helper.get_images(rtn_val='name')[0]
     values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type='image', start=start,
                                                     extra_query="name='{}'".format(image_name))
-    assert 1 <= len(values) <= 3, "Incorrect count for {} {} metric via 'openstack metric measures aggregation'".\
+    assert 1 <= len(values) <= 2, "Incorrect count for {} {} metric via 'openstack metric measures aggregation'".\
         format(image_name, meter)
 
     LOG.tc_step('Check that values are larger than zero')
