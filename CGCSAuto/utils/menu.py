@@ -1,8 +1,9 @@
 import time
 import re
 from utils.tis_log import LOG
-from consts.proj_vars import InstallVars
+from consts.proj_vars import InstallVars, ProjVar
 from consts import bios
+from consts.cgcs import SysType
 
 
 class Menu(object):
@@ -53,10 +54,9 @@ class Menu(object):
         elif tag is not None:
             for item in self.options:
                 if item.tag is not None:
-                    if tag in item.tag:
+                    if tag == item.tag:
                         option = item
                         index = item.index
-                        LOG.debug("Found tag")
                         break
         else:
             LOG.error("Either name of the option, index, or tag must be given in order to select")
@@ -74,6 +74,7 @@ class Menu(object):
         telnet_conn.expect([end_of_menu], 60)
         output = str.encode(telnet_conn.cmd_output)
         options = re.split(newline, output)
+        # TODO: use list comprehension to make this more readable
         options = list(filter(lambda option_string: re.search(option_identifier, option_string), options))
         LOG.debug("{} options are: {}".format(self.name, options))
         for i in range(0, len(options)):
@@ -154,15 +155,14 @@ class BiosMenu(Menu):
 
 
 class KickstartMenu(Menu):
-    def __init__(self, uefi=False, security="standard"):
-        if uefi:
-            super().__init__(name="UEFI boot menu", kwargs=bios.BootMenus.Kickstart.UEFI_Boot)
-        else:
-            super().__init__(name="PXE boot menu", kwargs=bios.BootMenus.Kickstart.PXE_Boot)
-        if security.lower() == "extended":
-            security_menu = super().__new__(KickstartMenu)
-            Menu.__init__(self=security_menu, name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
-            self.sub_menus.append(security_menu)
+    def __init__(self, uefi=False, name=None, options=None, index=0, prompt=None, wrap_around=True, sub_menus=None,
+                 kwargs=None):
+        if name is None:
+            name = "UEFI boot menu" if uefi else "PXE boot menu"
+        if prompt is None and kwargs is None:
+            kwargs = bios.BootMenus.Kickstart.UEFI_Boot if uefi else bios.BootMenus.Kickstart.PXE_Boot
+        super().__init__(name=name, options=options, index=index, prompt=prompt, wrap_around=wrap_around, sub_menus=sub_menus,
+                         kwargs=kwargs)
 
     def get_current_option(self, telnet_conn):
         if not self.options:
@@ -179,11 +179,39 @@ class KickstartMenu(Menu):
     def find_options(self, telnet_conn):
         super().find_options(telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab] to edit",
                              option_identifier=b"(\dm?\))|([\w]+)\s+> ", newline=b'(\x1b\[\d+;\d+H)+')
+        # TODO: this is a wasteful way to initialize the Options.
+        self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
+        for option in self.options:
+            # TODO: would like to make this more general, but it's impossible to determine the prompt
+            if "security" in option.name.lower() and "  >" in option.name.lower():
+                security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
+                self.sub_menus.append(security_menu)
+
+    def select(self, telnet_conn, index=None, pattern=None, tag=None):
+        if isinstance(tag, str):
+            tag_dict = {"os": "centos", "security": "standard", "type": None}
+
+            if "security" in tag or "extended" in tag:
+                tag_dict["security"] = "extended"
+                if InstallVars.get_install_var("LOW_LATENCY"):
+                    tag_dict["type"] = "lowlatency"
+                else:
+                    install_type = ProjVar.get_var("SYS_TYPE")
+                    if install_type == SysType.AIO_SX or install_type == SysType.AIO_DX:
+                        tag_dict["type"] = "cpe"
+                    elif install_type == SysType.REGULAR or install_type == SysType.STORAGE:
+                        tag_dict["type"] = "standard"
+            else:
+                tag_dict["type"] = tag
+            tag = tag_dict
+
+        super().select(telnet_conn, index, pattern, tag)
 
 
 class USBBootMenu(Menu):
     def __init__(self):
         super().__init__(name="USB boot menu", kwargs=bios.BootMenus.USB.Kernel)
+        # TODO: use list comprehension to make this more readable
         menu_dicts = filter(lambda is_sub_menu: isinstance(is_sub_menu, dict) and is_sub_menu['name'] != "kernel options",
                             [getattr(bios.BootMenus.USB, item) for item in dir(bios.BootMenus.USB)])
         for menu_dict in menu_dicts:
@@ -229,17 +257,6 @@ class Option(object):
             elif "setup" in option_name:
                 tag = "setup"
 
-            # kickstart options
-            if "wrl" not in option_name and "wrlinux" not in option_name:
-                if "all-in-one" in option_name or "cpe" in option_name:
-                    tag = "cpe"
-                elif "controller" in option_name:
-                    tag = "standard"
-            if "security" in option_name:
-                tag = "security"
-            if "lowlat" in option_name or "low lat" in option_name or "low_lat" in option_name:
-                tag = "lowlatency"
-
         self.tag = tag
         LOG.debug("{} option tag is {}".format(self.name, self.tag if self.tag else "None"))
 
@@ -250,4 +267,47 @@ class Option(object):
             cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
         LOG.info("Entering: {}".format(" + ".join(key)))
         telnet_conn.write(str.encode(cmd))
+
+class KickstartOption(Option):
+    def __init__(self, name, index=0, key=None, tag=None):
+        tag_dict = {"os": None, "security": "standard", "type": None}
+        super().__init__(name, index, key)
+        option_name = self.name.lower()
+
+        if tag is None:
+            if "wrl" in option_name or "wrlinux" in option_name:
+                tag_dict["os"] = "wrl"
+            else:
+                tag_dict["os"] = "centos"
+
+            if "all-in-one" in option_name or "cpe" in option_name or "aio" in option_name:
+                tag_dict["type"] = "cpe"
+            elif "controller" in option_name:
+                tag_dict["type"] = "standard"
+
+            if "security" in option_name:
+                if "standard" in option_name:
+                    tag_dict["security"] = "standard"
+                else:
+                    tag_dict["security"] = "extended"
+
+            if "lowlat" in option_name or "low lat" in option_name or "low_lat" in option_name:
+                tag_dict["type"] = "lowlatency"
+
+        elif isinstance(tag, str):
+            tag = tag.lower()
+            if "all-in-one" in tag or "cpe" in tag or "aio" in tag:
+                tag_dict["type"] = "cpe"
+            if "standard" in tag:
+                tag_dict["type"] = "standard"
+            if "lowlat" in tag or "low lat" in tag or "low_lat" in tag:
+                tag_dict["type"] = "lowlatency"
+            if "security" in tag or "extended" in tag:
+                tag_dict["security"] = "extended"
+
+        elif isinstance(tag, dict):
+            tag_dict = tag
+
+        self.tag = tag_dict
+        LOG.debug("Kickstart menu option {} tags are: ".format(self.name), tag_dict)
 

@@ -3313,7 +3313,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if usb:
         kickstart_menu = menu.USBBootMenu()
     else:
-        kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name, security=security)
+        kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name)
     if node_obj.telnet_conn is None:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 

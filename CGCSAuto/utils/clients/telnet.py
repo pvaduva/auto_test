@@ -75,23 +75,23 @@ class TelnetClient(Telnet):
 
         return self.sock
 
-    def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
-        super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
-        try:
-            self.send('\r\n\r\n')
-            index = self.expect(['Login:', TELNET_REGEX])
-            self.flush()
-            if index == 0:
-                self.send('\r\n\r\n')
-                self.expect(TELNET_REGEX)
-                self.flush()
-            msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
-            self.logger.info(msg)
+    #def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
+    #    super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
+    #    try:
+    #        self.send('\r\n\r\n')
+    #        index = self.expect(['Login:', TELNET_REGEX])
+    #        self.flush()
+    #        if index == 0:
+    #            self.send('\r\n\r\n')
+    #            self.expect(TELNET_REGEX)
+    #            self.flush()
+    #        msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
+    #        self.logger.info(msg)
 
-        except Exception as e:
-            err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'. \
-                format(host, port, e.__str__())
-            self.logger.warning(err_msg)
+    #    except Exception as e:
+    #        err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'. \
+    #            format(host, port, e.__str__())
+    #        self.logger.warning(err_msg)
 
     def login(self, expect_prompt_timeout=3, fail_ok=False):
         self.send()
