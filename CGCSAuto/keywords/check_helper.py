@@ -442,10 +442,11 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
+        win_expt_cores_per_sib = win_log_count_per_sibling = None
         if 'win' in guest:
             LOG.info("{}Check windows guest cores via wmic cpu get cmds".format(SEP))
             offline_cores_count = 0
-            log_cores_count, log_count_per_sibling = get_procs_and_siblings_on_windows(vm_ssh)
+            log_cores_count, win_log_count_per_sibling = get_procs_and_siblings_on_windows(vm_ssh)
             online_cores_count = present_cores_count = log_cores_count
         else:
             LOG.info("{}Check vm present|online|offline cores from inside vm via /sys/devices/system/cpu/".format(SEP))
@@ -475,13 +476,12 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
             if 'win' in guest:
                 LOG.info("{}Check windows guest siblings via wmic cpu get cmds".format(SEP))
                 expt_cores_list = []
-                expt_cores_per_sib = log_count_per_sibling = None
                 for sib_list in expt_sibs_list:
-                    expt_cores_per_sib = [len(vcpus) for vcpus in sib_list]
-                    expt_cores_list.append(expt_cores_per_sib)
-                assert log_count_per_sibling in expt_cores_list, \
+                    win_expt_cores_per_sib = [len(vcpus) for vcpus in sib_list]
+                    expt_cores_list.append(win_expt_cores_per_sib)
+                assert win_log_count_per_sibling in expt_cores_list, \
                     "Expected log cores count per sibling: {}, actual: {}".\
-                    format(expt_cores_per_sib, log_count_per_sibling)
+                    format(win_expt_cores_per_sib, win_log_count_per_sibling)
 
             else:
                 LOG.info("{}Check vm /sys/devices/system/cpu/[cpu#]/topology/thread_siblings_list".format(SEP))
