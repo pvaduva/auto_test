@@ -359,6 +359,7 @@ class TestSharedCpuEnabled:
     # TC2920, TC2921
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'error'), [
         mark.domain_sanity((3, 1, 1, 2, None)),
+        mark.domain_sanity((2, 1, 1, 1, None)),
         (2, 2, None, 1, 'error')
     ])
     def test_launch_vm_with_shared_cpu(self, vcpus, numa_nodes, numa_node0, shared_vcpu, error, add_shared_cpu,

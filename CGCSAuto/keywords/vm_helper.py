@@ -743,7 +743,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
-                                                                              con_ssh=con_ssh, auth_info=auth_info)
+                                                                              con_ssh=con_ssh, auth_info=Tenant.ADMIN)
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -2117,8 +2117,9 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     res_pass = {}
     res_fail = {}
     end_time = time.time() + timeout
+    arg = '--all-tenants' if auth_info == Tenant.ADMIN else ''
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.nova('list', positional_args=arg, ssh_client=con_ssh, auth_info=auth_info))
 
         for vm_id in list(vms_to_check):
             vm_val = table_parser.get_values(table_, target_header=header, ID=vm_id)[0]
