@@ -45,7 +45,7 @@ def check_system_health_for_upgrade():
     return system_helper.get_system_health_query_upgrade()
 
 
-def download_upgrade_license(lab, server, license_path):
+def  download_upgrade_license(lab, server, license_path):
 
     cmd = "test -h " + license_path
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(

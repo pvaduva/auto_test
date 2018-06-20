@@ -178,13 +178,22 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
 
         if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.APPLY, timeout=timeout,
                                               conn_ssh=conn_ssh, fail_ok=True)[0]:
-            msg = "The {} strategy apply phase failed to complete within the specified timeout={}."\
-                .format(orchestration, timeout)
-            LOG.warn(msg)
-            if fail_ok:
-                return 2, msg
-            else:
-                raise exceptions.OrchestrationError(msg)
+            current_ = get_current_strategy_values(orchestration)
+            c_phase = current_[OrchStrategyKey.CURRENT_PHASE]
+            c_compl = current_['current-phase-completion']
+
+            done = False
+            if c_phase == OrchestStrategyPhase.APPLY and int(c_compl.strip()[:-1]) > 50:
+                done = wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.APPLY, timeout=timeout,
+                                              conn_ssh=conn_ssh, fail_ok=True)[0]
+            if not done:
+                msg = "The {} strategy apply phase failed to complete within the specified timeout={}."\
+                    .format(orchestration, timeout)
+                LOG.warn(msg)
+                if fail_ok:
+                    return 2, msg
+                else:
+                    raise exceptions.OrchestrationError(msg)
 
     # get values of the applied strategy
     results = get_current_strategy_values(orchestration)

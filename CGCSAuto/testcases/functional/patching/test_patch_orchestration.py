@@ -1,6 +1,7 @@
 import time
 import pytest
 import os
+import re
 from utils.tis_log import LOG
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from keywords import system_helper, host_helper, install_helper, patching_helper, \
@@ -79,8 +80,19 @@ def patch_orchestration_setup():
 
     # Download patch files from specified patch dir
     LOG.info("Downloading patch files from patch dir {}".format(patch_dir))
+
     rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
-    assert rc == 0, "Patch directory path {} not found".format(patch_dir)
+    if rc != 0:
+        if 'latest_build' in os.path.basename(patch_dir):
+            assert False, "Patch directory path {} not found".format(patch_dir)
+        else:
+            patch_dir_latest = os.path.join(os.path.split(patch_dir)[0], 'latest_build')
+            LOG.info("Test Patch directory {} not found. Trying the latest_build subdir:{}".format(patch_dir,
+                                                                                              patch_dir_latest))
+            rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir_latest)[0]
+            assert rc == 0, "Test Patch directory {} not found".format(patch_dir_latest)
+            patch_dir = patch_dir_latest
+
     clear_patch_dest_dir()
     patches = download_patches(lab, bld_server_obj, patch_dir)
     if len(patches) == 0:
@@ -198,13 +210,8 @@ def download_patches(lab, server, patch_dir, conn_ssh=None):
         dest_server = lab[active_controller + ' ip']
         ssh_port = None
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-        if "Test_Patch_Build" in patch_dir:
-            server.ssh_conn.rsync(patch_dir + "/*_RR_*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
-                                  pre_opts=pre_opts)
-            server.ssh_conn.rsync(patch_dir + "/*_INSVC_*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
-                                  pre_opts=pre_opts)
-        else:
-            server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
+
+        server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
                                   pre_opts=pre_opts)
 
         if conn_ssh is None:
@@ -257,7 +264,7 @@ def run_patch_orchestration_strategy(controller_apply_type='serial', storage_app
     LOG.info(" Applying Patch orchestration strategy completed for {} ....".format(patches_ids))
 
 
-@pytest.mark.parametrize('test_patch_type', ['RR_', 'INSVC_'])
+@pytest.mark.parametrize('test_patch_type', ['_RR_', '_INSVC_', '_LARGE', '_[A-C]'])
 def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type):
     """
     Verifies apply/remove rr and in-service test patches through patch orchestration
@@ -268,9 +275,16 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     Returns:
 
     """
-
+    lab = patch_orchestration_setup['lab']
     downloaded_patches = patch_orchestration_setup['patches']
-    patchs = [k for k in downloaded_patches.keys() if "FAILURE" not in k and test_patch_type in k]
+    reg_str = '^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
+    reg_str = reg_str + test_patch_type + ')'
+    reg = re.compile(reg_str)
+
+    patchs = [k for k in downloaded_patches.keys() if "FAILURE" not in k and reg.match(k)]
+    if len(patchs) == 0:
+        pytest.skip("No patches with pattern {} availabe in patch-dir {}"
+                    .format(test_patch_type, patch_orchestration_setup['patch-dir']))
 
     patch_files = [downloaded_patches[patch] for patch in patchs]
     patches_to_upload = ' '.join(patch_files)
@@ -284,9 +298,17 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     applied = patching_helper.apply_patches(patch_ids=uploaded_ids, apply_all=True)
     LOG.info(" Patch {} applied .....".format(applied))
 
+    computes = len(lab['compute_nodes']) if 'compute_nodes' in lab.keys() else 0
+    storages = len(lab['storage_nodes']) if 'storage_nodes' in lab.keys() else 0
+
+    compute_apply_type = 'parallel' if  computes > 2 else 'serial'
+    max_parallel_computes = 4 if computes > 5 else 2
+    storage_apply_type = 'parallel' if storages / 2 >= 2 else 'serial'
+
     LOG.tc_step("Installing patches through orchestration .....")
     check_alarms_()
-    run_patch_orchestration_strategy(alarm_restrictions='relaxed')
+    run_patch_orchestration_strategy(storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
+                                     max_parallel_computes=max_parallel_computes, alarm_restrictions='relaxed')
 
     LOG.info(" Install patch through orchestration completed for patches {} ....".format(applied))
 
@@ -295,7 +317,8 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     patching_helper.remove_patches(patch_ids=' '.join(applied))
 
     LOG.tc_step("Completing the removal of patches {} through orchestration.....".format(applied))
-    run_patch_orchestration_strategy(alarm_restrictions='relaxed')
+    run_patch_orchestration_strategy(storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
+                                     max_parallel_computes=max_parallel_computes, alarm_restrictions='relaxed')
 
     LOG.info(" Remove patch through orchestration completed for patches {} ....".format(applied))
 
