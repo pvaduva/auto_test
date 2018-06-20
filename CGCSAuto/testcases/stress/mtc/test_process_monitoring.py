@@ -272,6 +272,10 @@ PROCESSES = {
         'cmd': '/usr/bin/python2 /bin/gnocchi-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
+    'ceilometer-agent-notification': {
+        'cmd': '/usr/bin/python2 /bin/ceilometer-agent-notification', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
+
     'heat-engine': {
         'cmd': '/usr/bin/python2 /bin/heat-engine', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},

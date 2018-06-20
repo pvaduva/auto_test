@@ -158,7 +158,7 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         LOG.tc_step("Check server group message is not enabled")
         check_server_group_messaging_disabled(vms=members)
 
-    if len(hosts) > 1:
+    if host_count > 1:
         # TC6566 verified here
         expt_fail = not best_effort and (policy == 'affinity' or (policy == 'anti_affinity' and host_count-vms_num < 1))
         LOG.tc_step("Attempt to live migrate VMs and ensure it {}".format('fails' if expt_fail else 'pass'))
