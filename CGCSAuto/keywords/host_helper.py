@@ -1051,7 +1051,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                 if not con_ssh._is_connected():
                     if reconnect:
                         LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
-                        con_ssh.connect(retry_timeout=timeout)
+                        con_ssh.connect(retry_timeout=timeout, retry=True)
                     else:
                         LOG.error("system disconnected")
                         if fail_ok:

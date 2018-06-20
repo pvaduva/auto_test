@@ -71,7 +71,7 @@ class BiosMenus:
                     {'name': 'Network Boot', 'index': 3, 'key': ['ESC', '@'], 'tag': 'boot menu'}],
         "wrap_around": False
     }
-    # TODO: double check options
+
     PowerEdge = {
         "name": "PowerEdge",
         "options": [{"name": "System Setup", "index": 0, 'key': ['ESC', '2']},
@@ -110,7 +110,7 @@ class BootMenus:
         UEFI_Boot = {
             "name": "UEFI Boot Menu",
             "prompt": "Automatic Anaconda / Kickstart Boot Menu",
-            "wrap_around": True
+            "wrap_around": False
         }
 
         Security = {

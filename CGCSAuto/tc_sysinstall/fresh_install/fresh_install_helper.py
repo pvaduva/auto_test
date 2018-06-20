@@ -172,8 +172,6 @@ def configure_controller(controller0_node):
     rc, output = install_helper.controller_system_config(con_telnet=controller0_node.telnet_conn)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-    else:
-        con_ssh = controller0_node.ssh_conn
     LOG.info("running lab setup for CPE lab")
     install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     LOG.info("unlocking {}".format(controller0_node.name))

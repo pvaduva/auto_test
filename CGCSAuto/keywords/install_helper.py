@@ -3299,6 +3299,8 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()
+    boot_device_regex = next((value for key, value in boot_device_dict.items()
+                              if key == node_obj.name or key == node_obj.personality), None)
     if small_footprint is None:
         sys_type = ProjVar.get_var("SYS_TYPE")
         LOG.debug("SYS_TYPE: {}".format(sys_type))
@@ -3313,7 +3315,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if usb:
         kickstart_menu = menu.USBBootMenu()
     else:
-        kickstart_menu = menu.KickstartMenu(uefi="ml350" in node_obj.host_name)
+        kickstart_menu = menu.KickstartMenu(uefi="UEFI" in boot_device_regex if boot_device_regex is not None else False)
     if node_obj.telnet_conn is None:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
@@ -3484,13 +3486,14 @@ def mount_boot_server_iso(lab_dict=None):
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
     cmd = "mkdir -p /media/iso/{}".format(barcode)
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode)
+    cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode, barcode)
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
     cmd = "sudo mount -o remount,exec,dev /media/iso/{}".format(barcode)
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
     cmd = "sudo rm -rf /export/pxeboot/pxelinux.cfg/{}".format(barcode)
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{} -t /export/pxeboot/pxelinux.cfg/{}".format(barcode)
+    cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{} -t /export/pxeboot/pxelinux.cfg/{}".format(
+        barcode, barcode, barcode)
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
     cmd = "sudo umount /media/iso/{}".format(barcode)
     assert tuxlab_conn.exec_cmd(cmd)[0] == 0
