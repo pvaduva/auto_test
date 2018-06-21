@@ -45,6 +45,18 @@ def _test_statistics_for_one_meter(meter):
         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
+def _wait_for_measurements(meter, resource_type, extra_query, start_time, timeout=630, check_interval=60):
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+        values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type=resource_type, start=start_time,
+                                                        extra_query=extra_query)
+        if values:
+            return values
+
+        time.sleep(check_interval)
+
+
 @mark.cpe_sanity
 @mark.sanity
 @mark.sx_nightly
@@ -62,10 +74,19 @@ def test_measurements_for_metric(meter):
     start = (now - timedelta(minutes=15))
     start = start.strftime("%Y-%m-%dT%H:%M:%S")
     image_name = glance_helper.get_images(rtn_val='name')[0]
-    values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type='image', start=start,
-                                                    extra_query="name='{}'".format(image_name))
-    assert 1 <= len(values) <= 2, "Incorrect count for {} {} metric via 'openstack metric measures aggregation'".\
-        format(image_name, meter)
+    resource_type = 'image'
+    extra_query = "name='{}'".format(image_name)
+
+    values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type=resource_type, start=start,
+                                                    extra_query=extra_query)
+
+    if values:
+        assert len(values) <= 4, "Incorrect count for {} {} metric via 'openstack metric measures aggregation'".\
+            format(image_name, meter)
+    else:
+        values = _wait_for_measurements(meter=meter, resource_type=resource_type, extra_query=extra_query,
+                                        start_time=start)
+        assert values, "No measurements for image.size for 25+ minutes"
 
     LOG.tc_step('Check that values are larger than zero')
     for val in values:

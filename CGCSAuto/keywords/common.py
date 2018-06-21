@@ -653,8 +653,6 @@ def parse_args(args_dict, repeat_key=False, vals_sep=' '):
         if val is None:
             continue
 
-        print('val: {}. type: {}'.format(val, type(val)))
-
         if isinstance(val, str):
             if ' ' in val:
                 ' --{}="{}"'.format(key, val)
