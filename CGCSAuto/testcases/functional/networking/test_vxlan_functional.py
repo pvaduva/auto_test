@@ -9,6 +9,9 @@ from testfixtures.fixture_resources import ResourceCleanup
 @fixture(scope='module', autouse=True)
 def add_admin_role(request):
 
+    if not system_helper.is_avs():
+        skip("vshell commands unsupported by OVS")
+
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
     other_tenant = Tenant.TENANT2 if 'tenant1' in primary_tenant_name else Tenant.TENANT1
@@ -92,7 +95,7 @@ def test_dynamic_vxlan_functional(version, mode):
 
     """
     vxlan_provider_name = 'group0-data0b'
-    vif_model = 'avp' if system_helper.is_avs() else 'e1000'
+    vif_model = 'avp'
     providernets = network_helper.get_providernets(rtn_val='name', strict=True, type='vxlan')
     if not providernets or (len(providernets) > 1) or (vxlan_provider_name not in providernets):
         skip("Vxlan provider-net not configured or Vxlan provider-net configured on more than one provider net\

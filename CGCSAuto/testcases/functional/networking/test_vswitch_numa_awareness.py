@@ -177,8 +177,9 @@ class TestVSwitchCPUReconfig:
                 host_helper.modify_host_cpu(host, 'vswitch', **vswitch_args)
             host_helper.unlock_host(host, check_hypervisor_up=True)
 
-        LOG.tc_step("Check ports and vswitch cores mapping are correct.")
-        check_helper.check_host_vswitch_port_engine_map(host)
+        if system_helper.is_avs():
+            LOG.tc_step("Check AVS ports and cores mapping are correct.")
+            check_helper.check_host_vswitch_port_engine_map(host)
 
         LOG.tc_step("Check {} is still a valid nova host.".format(host))
         host_helper.wait_for_hypervisors_up(host)
