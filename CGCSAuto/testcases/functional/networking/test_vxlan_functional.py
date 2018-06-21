@@ -2,7 +2,7 @@ from pytest import fixture, mark, skip
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from keywords import host_helper, network_helper, common, vm_helper, nova_helper, keystone_helper
+from keywords import host_helper, network_helper, common, vm_helper, nova_helper, keystone_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -92,6 +92,7 @@ def test_dynamic_vxlan_functional(version, mode):
 
     """
     vxlan_provider_name = 'group0-data0b'
+    vif_model = 'avp' if system_helper.is_avs() else 'e1000'
     providernets = network_helper.get_providernets(rtn_val='name', strict=True, type='vxlan')
     if not providernets or (len(providernets) > 1) or (vxlan_provider_name not in providernets):
         skip("Vxlan provider-net not configured or Vxlan provider-net configured on more than one provider net\
@@ -134,7 +135,7 @@ def test_dynamic_vxlan_functional(version, mode):
     for auth_info, vm_host in zip([primary_tenant, other_tenant], vxlan_computes):
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info)
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': internal_net_ids[0], 'vif-model': 'avp'}]
+                {'net-id': internal_net_ids[0], 'vif-model': vif_model}]
         vm_name = common.get_unique_name(name_str='vxlan')
         vm_ids.append(vm_helper.boot_vm(name=vm_name, vm_host=vm_host, nics=nics, avail_zone=aggregate_name,
                                         auth_info=auth_info,cleanup='function')[1])

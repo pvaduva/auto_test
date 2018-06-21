@@ -4,7 +4,7 @@ from pytest import mark, fixture, skip
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, DevClassID
-from keywords import network_helper, vm_helper, nova_helper, host_helper, check_helper
+from keywords import network_helper, vm_helper, nova_helper, host_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -13,6 +13,10 @@ from testfixtures.recover_hosts import HostsToRecover
 def list_nova_device():
     # run nova device-list for debugging purpose.
     network_helper.get_pci_device_list_values()
+
+
+def get_vif_type():
+    return 'avp' if system_helper.is_avs() else 'e1000'
 
 
 @fixture(scope='module', autouse=True)
@@ -144,9 +148,10 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_info, enable_device_an
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
+    vif_type = get_vif_type()
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
+            {'net-id': tenant_net_id, 'vif-model': vif_type},
             {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]
 
     flavor_id = _flavors['flavor_qat_vf_1']
@@ -244,10 +249,11 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
+    vif_type = get_vif_type()
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'},
-            {'net-id': internal_net_id, 'vif-model': 'avp'}]
+            {'net-id': tenant_net_id, 'vif-model': vif_type},
+            {'net-id': internal_net_id, 'vif-model': vif_type}]
 
     if vfs == 33:
         LOG.tc_step("Verifying  VM with over limit crypto VFs={} can not be launched .....".format(vfs))
@@ -286,23 +292,24 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_ids = network_helper.get_tenant_net_ids()
     internal_net_id = network_helper.get_internal_net_id()
+    vif_type = get_vif_type()
 
     vm_params = {'vm_no_crypto_1': [_flavors['flavor_none'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                                                              {'net-id': tenant_net_ids[0], 'vif-model': 'avp'},
-                                                              {'net-id': internal_net_id, 'vif-model': 'avp'}]],
+                                                              {'net-id': tenant_net_ids[0], 'vif-model': vif_type},
+                                                              {'net-id': internal_net_id, 'vif-model': vif_type}]],
                  'vm_no_crypto_2': [_flavors['flavor_none'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                                                              {'net-id': tenant_net_ids[1], 'vif-model': 'avp'},
-                                                              {'net-id': internal_net_id, 'vif-model': 'avp'}]],
+                                                              {'net-id': tenant_net_ids[1], 'vif-model': vif_type},
+                                                              {'net-id': internal_net_id, 'vif-model': vif_type}]],
                  'vm_sriov_crypto': [_flavors['flavor_qat_vf_1'],
                                      [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                                      {'net-id': tenant_net_ids[2], 'vif-model': 'avp'},
+                                      {'net-id': tenant_net_ids[2], 'vif-model': vif_type},
                                       {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]],
                  'vm_crypto_1': [_flavors['flavor_qat_vf_1'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                                                               {'net-id': tenant_net_ids[3], 'vif-model': 'avp'},
-                                                               {'net-id': internal_net_id, 'vif-model': 'avp'}]],
+                                                               {'net-id': tenant_net_ids[3], 'vif-model': vif_type},
+                                                               {'net-id': internal_net_id, 'vif-model': vif_type}]],
                  'vm_crypto_2': [_flavors['flavor_qat_vf_1'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                                                               {'net-id': tenant_net_ids[4], 'vif-model': 'avp'},
-                                                               {'net-id': internal_net_id, 'vif-model': 'avp'}]],
+                                                               {'net-id': tenant_net_ids[4], 'vif-model': vif_type},
+                                                               {'net-id': internal_net_id, 'vif-model': vif_type}]],
                  }
 
     vms = {}
@@ -361,9 +368,10 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
+    vif_type = get_vif_type()
 
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+            {'net-id': tenant_net_id, 'vif-model': vif_type}]
 
     vm_helper.ensure_vms_quotas(number_of_vms + 10)
 

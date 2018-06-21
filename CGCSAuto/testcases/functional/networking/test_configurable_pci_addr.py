@@ -1,8 +1,8 @@
-from pytest import mark, skip, fixture
+from pytest import mark
 
 from consts.cli_errs import PciAddrErr  # Don't remove - used in eval()
-from testfixtures.fixture_resources import ResourceCleanup
 from keywords import vm_helper, network_helper
+from testfixtures.pre_checks_and_configs import skip_for_ovs
 
 
 @mark.parametrize(('unsupported_pci_addr', 'vif_model', 'expt_err'), [
@@ -14,12 +14,12 @@ from keywords import vm_helper, network_helper
     ('0000:08:02.1', 'virtio', "PciAddrErr.NONE_ZERO_FUNCTION"),
     ('0000:09:1e.0', 'virtio', "PciAddrErr.LARGER_THAN_MAX_BUS"),
     ('0000:08:20.0', 'virtio', "PciAddrErr.LARGER_THAN_MAX_SLOT"),
-    ('00:04:1e.0', 'virtio',"PciAddrErr.BAD_FORMAT"),
+    ('00:04:1e.0', 'virtio', "PciAddrErr.BAD_FORMAT"),
     ('04:1e', 'virtio', "PciAddrErr.BAD_FORMAT"),
     ('0000:04:1e', 'virtio', "PciAddrErr.BAD_FORMAT"),
     ('0000_04:1e.0', 'virtio', "PciAddrErr.BAD_FORMAT"),
 ])
-def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_model, expt_err):
+def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_model, expt_err, skip_for_ovs):
     """
     Verify boot vm with invalid pci_address is rejected.
 
@@ -44,5 +44,3 @@ def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_m
 
     assert code in [1, 4], "Boot VM is not rejected"
     assert eval(expt_err) in output, "Expected error message is not found"
-
-

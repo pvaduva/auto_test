@@ -11,7 +11,6 @@ from consts.build_server import Server, get_build_server_info
 from consts.proj_vars import ProjVar, PatchingVars, InstallVars
 from consts.cgcs import Prompt, HostAvailState
 from utils.clients.ssh import ControllerClient, SSHClient
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 @pytest.fixture(scope='session')
@@ -87,8 +86,8 @@ def patch_orchestration_setup():
             assert False, "Patch directory path {} not found".format(patch_dir)
         else:
             patch_dir_latest = os.path.join(os.path.split(patch_dir)[0], 'latest_build')
-            LOG.info("Test Patch directory {} not found. Trying the latest_build subdir:{}".format(patch_dir,
-                                                                                              patch_dir_latest))
+            LOG.info("Test Patch directory {} not found. Trying the latest_build subdir:{}".
+                     format(patch_dir, patch_dir_latest))
             rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir_latest)[0]
             assert rc == 0, "Test Patch directory {} not found".format(patch_dir_latest)
             patch_dir = patch_dir_latest
@@ -212,7 +211,7 @@ def download_patches(lab, server, patch_dir, conn_ssh=None):
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
         server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
-                                  pre_opts=pre_opts)
+                              pre_opts=pre_opts)
 
         if conn_ssh is None:
             conn_ssh = ControllerClient.get_active_controller()
@@ -301,7 +300,7 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     computes = len(lab['compute_nodes']) if 'compute_nodes' in lab.keys() else 0
     storages = len(lab['storage_nodes']) if 'storage_nodes' in lab.keys() else 0
 
-    compute_apply_type = 'parallel' if  computes > 2 else 'serial'
+    compute_apply_type = 'parallel' if computes > 2 else 'serial'
     max_parallel_computes = 4 if computes > 5 else 2
     storage_apply_type = 'parallel' if storages / 2 >= 2 else 'serial'
 
@@ -373,8 +372,9 @@ def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply
         pytest.skip("At least {} computes are required for this test: {}".format(1 + max_parallel_computes, hosts))
 
     LOG.info("Launching a VM ... ")
-    vm_id = vm_helper.launch_vms(vm_type='avp', ping_vms=True)[0]
-    ResourceCleanup.add("vm", vm_id)
+
+    vm_id = vm_helper.boot_vm(cleanup='function')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     patches = patch_orchestration_setup['patches']
     patch = [k for k in patches.keys() if test_patch in k][0]
@@ -472,8 +472,9 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
             vm_id_to_stop = vms[0]
         else:
             LOG.info("No vms running in system; creating one ... ")
-            vm_id_to_stop = vm_helper.launch_vms(vm_type='avp', ping_vms=True)[0]
-            ResourceCleanup.add("vm", vm_id_to_stop)
+            vm_id_to_stop = vm_helper.boot_vm(cleanup='function')[1]
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id_to_stop)
+
         assert vm_id_to_stop, "Fail to launch VM"
         LOG.info("Stop VM {} to generate 700.004 alarm....".format(vm_id_to_stop))
         vm_helper.stop_vms(vm_id_to_stop)
@@ -549,8 +550,8 @@ def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
         vm_id_to_pause = vms[0]
     else:
         LOG.info("No vms running in system; creating one ... ")
-        vm_id_to_pause = vm_helper.launch_vms(vm_type='avp', ping_vms=True)[0]
-        ResourceCleanup.add("vm", vm_id_to_pause)
+        vm_id_to_pause = vm_helper.boot_vm(cleanup='function')
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id_to_pause)
 
     assert vm_id_to_pause, "Fail to launch VM"
     LOG.info("Pause VM {} to generate 700.002 critical alarm....".format(vm_id_to_pause))
@@ -596,4 +597,3 @@ def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
     assert applied not in all_patches, "Unable to delete patch {} from repo".format(applied)
 
     LOG.info(" Testing apply/remove through patch orchestration with  alarm is completed......")
-

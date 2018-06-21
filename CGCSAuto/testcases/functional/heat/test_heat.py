@@ -315,15 +315,19 @@ def test_heat_template(template_name, revert_quota):
         - Delete Heat stack and verify resource deletion
 
     """
-    if template_name == 'OS_Neutron_RouterInterface.yaml':
+    if 'QoSPolicy' in template_name:
+        if system_helper.is_avs():
+            skip("QoS policy is not supported by OVS")
+
+    elif template_name == 'OS_Neutron_RouterInterface.yaml':
         LOG.tc_step("Increase network quota by 2 for every tenant")
         tenants_quotas = revert_quota
         for tenant_id, network_quota in tenants_quotas.items():
             network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
             network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
 
-    # create new image to do update later
-    if template_name == 'OS_Nova_Server.yaml':
+    elif template_name == 'OS_Nova_Server.yaml':
+        # create new image to do update later
         LOG.tc_step("Creating an Image to be used for heat update later")
         image_id = glance_helper.create_image(name='tis-centos2')[1]
         ResourceCleanup.add('image', image_id)

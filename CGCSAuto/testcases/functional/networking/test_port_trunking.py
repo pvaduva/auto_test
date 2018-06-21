@@ -1,7 +1,7 @@
 from pytest import fixture, mark
 
 from utils.tis_log import LOG
-from keywords import vm_helper, network_helper, nova_helper
+from keywords import vm_helper, network_helper, nova_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -33,10 +33,7 @@ def _bring_up_vlan_interface(vm_id, eth_name, vlan_ids):
         vm_ssh.exec_sudo_cmd('ip addr')
 
 
-@mark.parametrize('vif_model', [
-    'avp'
-])
-def test_port_trunking(vif_model):
+def test_port_trunking():
     """
     Port trunking feature test cases
 
@@ -48,11 +45,11 @@ def test_port_trunking(vif_model):
         - Boot the first vm with the trunk
         - Create the second trunk without subport
         - Boot the second vm
-        - Add suport to trunk
+        - Add support to trunk
         - Configure vlan interfaces inside guests
         - Verify connectivity via vlan interfaces
         - Remove the subport from trunk and verify connectivity
-        - Add the suport to trunk and verify connectivity
+        - Add the support to trunk and verify connectivity
         - Do vm actions and verify connectivity
 
 
@@ -60,6 +57,7 @@ def test_port_trunking(vif_model):
         - Delete vms, ports, subnets, and networks created
 
     """
+    vif_model = 'avp' if system_helper.is_avs() else 'virtio'
     network_names = ['network11', 'network12', 'network13']
     net_ids = []
     sub_nets = ["30.0.0.0/24", "30.0.1.0/24", "30.0.2.0/24"]
