@@ -737,6 +737,12 @@ def pytest_unconfigure(config):
             LOG.warning("Unable to upload KPIs. {}".format(e.__str__()))
 
     try:
+        from utils.cgcs_reporter import parse_log
+        parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
+    except Exception as e:
+        LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
+
+    try:
         setups.list_migration_history(con_ssh=con_ssh)
     except:
         LOG.warning("Failed to run nova migration-list")
