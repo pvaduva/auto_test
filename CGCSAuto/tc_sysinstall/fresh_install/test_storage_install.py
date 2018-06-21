@@ -55,6 +55,7 @@ def test_storage_install(install_setup):
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
+    active_controller.telnet_conn.login()
     fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=active_controller.telnet_conn)
 
     LOG.tc_step("Download lab files")
