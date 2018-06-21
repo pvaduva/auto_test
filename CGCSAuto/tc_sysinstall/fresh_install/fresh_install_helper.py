@@ -59,6 +59,19 @@ def set_build_id(build_dir, build_server_conn=None):
             return "n/a"
 
 
+def do_step():
+    skip_list = InstallVars.get_install_var("SKIP")
+    current_step = LOG.test_step
+    last_session_step = InstallVars.get_install_var("RESUME")
+    do = last_session_step <= current_step and str(current_step) not in skip_list
+
+    if not do:
+        LOG.info("Skipping step because resume flag was given")
+
+    return do
+
+
+
 def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")

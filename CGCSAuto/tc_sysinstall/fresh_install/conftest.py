@@ -15,9 +15,8 @@ from utils import exceptions, local_host
 @pytest.fixture(scope='session')
 def install_setup():
     lab = InstallVars.get_install_var("LAB")
-    lab_type = lab["system_mode"]
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
-    skip_feed = InstallVars.get_install_var("SKIP_FEED")
+    skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"]
     if active_con.telnet_conn is None:
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
@@ -67,11 +66,11 @@ def install_setup():
                       "paths": paths,
                       "boot": boot,
                       "control": control,
-                      "skip_labsetup": InstallVars.get_install_var("SKIP_LABSETUP"),
+                      "skips": skip_list,
                       "active_controller": active_con}
 
     LOG.info("Setting up {} boot".format(boot["boot_type"]))
-    if not InstallVars.get_install_var("RESUME"):
+    if not InstallVars.get_install_var("RESUME") and "0" not in skip_list:
 
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj)
@@ -80,9 +79,9 @@ def install_setup():
             install_helper.rsync_image_to_boot_server(iso_host_obj)
             install_helper.mount_boot_server_iso(lab)
 
-        elif not skip_feed:
+        elif "feed" not in skip_list:
             load_path = directories["build"]
-            skip_cfg = InstallVars.get_install_var("SKIP_PXEBOOTCFG")
+            skip_cfg = "pxe" in skip_list
             install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
@@ -99,6 +98,7 @@ def install_setup():
 @pytest.mark.tryfirst
 def pytest_runtest_teardown(item):
 # Try first so that the failed tc_step can be written
+    final_step = LOG.test_step
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])

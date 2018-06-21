@@ -30,7 +30,8 @@ def test_simplex_install(install_setup):
          """
     lab = install_setup["lab"]
     active_controller = install_setup["active_controller"]
-    skip_labsetup = install_setup["skip_labsetup"]
+    skips = install_setup["skips"]
+    skip_labsetup = "setup" in skips
     controller_name = active_controller.name
     boot_type = install_setup["boot"]["boot_type"]
     last_session_step = install_setup["control"]["resume"]
@@ -40,10 +41,8 @@ def test_simplex_install(install_setup):
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Install Controller")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.install_controller(sys_type=SysType.AIO_SX)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -55,19 +54,15 @@ def test_simplex_install(install_setup):
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
 
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Configure controller")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.configure_controller(active_controller)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -77,24 +72,20 @@ def test_simplex_install(install_setup):
 
     if not skip_labsetup:
         LOG.tc_step("Run lab setup for simplex lab")
-        if last_session_step <= LOG.test_step:
+        if fresh_install_helper.do_step():
             install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
-        else:
-            LOG.info("Skipping step because resume flag was given")
         if LOG.test_step == final_step:
             # TODO: temporary way of doing this
-            pytest.skip("stopping at install step: {}".format(LOG.test_step))
+            skip("stopping at install step: {}".format(LOG.test_step))
     else:
         LOG.info("--skip_lab_setup specified. Skipping lab setup")
     setup_tis_ssh(lab)
     host_helper.wait_for_hosts_ready(controller_name, con_ssh=active_controller.ssh_conn)
 
     LOG.tc_step("Check heat resources")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.setup_heat(con_ssh=active_controller.ssh_conn)
         host_helper.wait_for_hosts_ready(["controller-0"], con_ssh=active_controller.ssh_conn)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))

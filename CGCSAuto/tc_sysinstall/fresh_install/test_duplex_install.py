@@ -35,6 +35,7 @@ def test_duplex_install(install_setup):
          """
     lab = install_setup["lab"]
     hosts = lab["hosts"]
+    skips = install_setup["skips"]
     lab_type = lab["system_mode"]
     boot_device = lab["boot_device_dict"]
     active_controller = install_setup["active_controller"]
@@ -48,10 +49,8 @@ def test_duplex_install(install_setup):
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Install Controller")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.install_controller(sys_type=SysType.AIO_DX)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -63,19 +62,15 @@ def test_duplex_install(install_setup):
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
 
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Configure controller")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.configure_controller(active_controller)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -84,61 +79,49 @@ def test_duplex_install(install_setup):
         active_controller.ssh_conn = install_helper.establish_ssh_connection(active_controller.host_ip)
 
     LOG.tc_step("Bulk add hosts for CPE lab")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=active_controller.ssh_conn)
         assert rc == 0, msg
         # assert added_hosts[0] + added_hosts[1] + added_hosts[2] == hosts, "hosts_bulk_add failed to add all hosts"
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run lab setup for CPE lab")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
         # TODO: Find out if necessary
         install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Boot standby controller for CPE lab")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         install_helper.bring_node_console_up(standby_con, boot_device, small_footprint=True, vlm_power_on=True,
                                              close_telnet_conn=True, boot_usb=False)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run lab setup for CPE lab")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
         install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Unlock standby controller for CPE lab")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         host_helper.unlock_host(standby_con.name, available_only=True, con_ssh=active_controller.ssh_conn)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run lab setup for CPE lab")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -146,11 +129,9 @@ def test_duplex_install(install_setup):
     setup_tis_ssh(lab)
 
     LOG.tc_step("Check heat resources")
-    if last_session_step <= LOG.test_step:
+    if fresh_install_helper.do_step():
         fresh_install_helper.setup_heat()
         host_helper.wait_for_hosts_ready(hosts)
-    else:
-        LOG.info("Skipping step because resume flag was given")
     if LOG.test_step == final_step:
         # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))

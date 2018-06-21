@@ -678,9 +678,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
     lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
     skip_args = skip.lower() if skip else None
     if skip_args:
-        skip_labsetup = True if "setup" in skip_args else False
-        skip_feed = True if "feed" in skip_args else False
-        skip_pxebootcfg = True if "pxe" in skip_args else False
+        skip_args = skip_args.split(',')
     if resume:
         if isinstance(resume, str) and resume.isdigit():
             resume = int(resume)
@@ -690,9 +688,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         stop = int(stop)
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
-                                 skip_labsetup=skip_labsetup,
-                                 skip_feed=skip_feed,
-                                 skip_pxebootcfg=skip_pxebootcfg,
+                                 skips=skip_args,
                                  wipedisk=wipedisk,
                                  build_server=build_server,
                                  host_build_dir=host_build_dir,

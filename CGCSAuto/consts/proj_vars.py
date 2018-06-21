@@ -88,9 +88,7 @@ class InstallVars:
     @classmethod
     def set_install_vars(cls, lab, resume,
                          wipedisk = False,
-                         skip_labsetup = False,
-                         skip_feed = False,
-                         skip_pxebootcfg = False,
+                         skips = None,
                          build_server=None,
                          host_build_dir=None,
                          guest_image=None,
@@ -130,9 +128,7 @@ class InstallVars:
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
             'STOP': stop,
-            'SKIP_LABSETUP': skip_labsetup,
-            'SKIP_FEED': skip_feed,
-            'SKIP_PXEBOOTCFG': skip_pxebootcfg,
+            'SKIP': skips if skips is not None else [],
             'WIPEDISK': wipedisk,
 
             # TIS BUILD info
