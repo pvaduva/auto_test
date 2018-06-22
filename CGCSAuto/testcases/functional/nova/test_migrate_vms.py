@@ -546,7 +546,7 @@ def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
         ping_duration = vm_helper.get_ping_loss_duration_on_operation(vm_t1, 300, 0.01, operation, vm_t1)
 
         LOG.tc_step("Collect traffic statistics")
-        duration = int(session.get_statistics('traffic item statistics')[0]['Frames Delta'])
+        duration = session.get_frames_delta(stable=True)
         assert duration > 0 and ping_duration > 0, \
             "No ping loss detected during live migration for {} vm".format(vm_type)
 

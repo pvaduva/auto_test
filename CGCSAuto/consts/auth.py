@@ -66,6 +66,16 @@ class Tenant:
         return cls.__primary
 
     @classmethod
+    def get_secondary(cls):
+        primary = cls.get_primary()
+        if primary is cls.TENANT1:
+            return cls.TENANT2
+        elif primary is cls.TENANT2:
+            return cls.TENANT1
+        else:   # primary is neither TENANT1/2
+            return cls.TENANT1
+
+    @classmethod
     def update_tenant_dict(cls, tenant_dictname, username=None, password=None, tenant=None):
         tenant_dictname = tenant_dictname.upper()
         tenant_dict = getattr(cls, tenant_dictname)

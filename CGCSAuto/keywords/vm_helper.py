@@ -4728,7 +4728,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         (IxiaSession) with traffic started
         stopped upon context ends, released if ixia_session is None
     """
-    LOG.info("Setting up traffic for pairs {}".format(vm_pairs))
+    LOG.tc_step("Setting up traffic for pairs {}".format(vm_pairs))
 
     src = dict()
     dest = dict()
@@ -4827,6 +4827,11 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
                                             existing=True, rtn_dict=True)
 
+        # disable existing interfaces in the old configuration
+        for port in vports.values():
+            for interface in ixia_session.getList(port, 'interface'):
+                ixia_session.configure(interface, enabled=False)
+
         # create new interfaces
         source_ifs = list()
         for ip, vlan in src_ports:
@@ -4881,3 +4886,51 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         ixia_session.traffic_start()
 
         yield ixia_session
+
+
+def get_traffic_loss_duration_on_operation(vm_id, vm_observer, oper_func, *func_args, **func_kwargs):
+    with traffic_between_vms([(vm_id, vm_observer)]) as session:
+        oper_func(*func_args, **func_kwargs)
+        return session.get_frames_delta(stable=True)
+
+
+def launch_vm_pair(vm_type='virtio', **launch_vms_kwargs):
+    """
+    Launch a pair of routed VMs
+    one on the primary tenant, and the other on the secondary tenant
+
+    Args:
+        vm_type (str)
+            one of 'virtio', 'avp', 'dpdk'
+        **launch_vms_kwargs (dict):
+            additional keyword arguments for launch_vms
+            shall not specify count, ping_vms, auth_info
+
+    Returns (tuple):
+        (vm_id_on_primary_tenant, vm_id_on_secondary_tenant)
+    """
+    LOG.tc_step("Launch a {} test-observer pair of routed VMs".format(vm_type))
+
+    assert 'count' not in launch_vms_kwargs and \
+        'ping_vms' not in launch_vms_kwargs and \
+        'auth_info' not in launch_vms_kwargs, \
+        "shall not specify count, ping_vms, auth_info"
+
+    vms, nics = launch_vms(
+        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary(), **launch_vms_kwargs)
+    vm_test = vms[0]
+
+    vms, nics = launch_vms(
+        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary(), **launch_vms_kwargs)
+    vm_observer = vms[0]
+
+    if vm_type == 'virtio' or vm_type == 'avp':
+        setup_kernel_routing(vm_test)
+        setup_kernel_routing(vm_observer)
+    elif vm_type == 'dpdk':
+        setup_avr_routing(vm_test)
+        setup_avr_routing(vm_observer)
+
+    route_vm_pair(vm_test, vm_observer)
+
+    return vm_test, vm_observer

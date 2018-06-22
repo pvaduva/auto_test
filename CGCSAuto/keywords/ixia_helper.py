@@ -350,7 +350,7 @@ class IxiaSession(object):
                                      vlan_id=None, mac_address=None,
                                      description=None, chassis=None,
                                      interface=None, create_if_nonexistent=False,
-                                     validate=True, validate_timeout=10):
+                                     validate=True, validate_timeout=60):
         """
         Configure a Protocol Interface.
         In order to re-configure for an existing interface, specify 'interface='.
@@ -445,14 +445,19 @@ class IxiaSession(object):
 
         if validate:
             vport = '/'.join(interface.split('/')[:-1])
-            self._ixnet.execute("clearNeighborTable", vport)
-            self._ixnet.execute('sendArpAndNS', interface)
+            def _validate(vport, interface):
+                self._ixnet.execute("clearNeighborTable", vport)
+                self._ixnet.execute('sendArpAndNS', interface)
+                for neighbor in self.getList(vport, 'discoveredNeighbor'):
+                    r, val = common.wait_for_val_from_func(
+                        False, 10, 1, self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
+                    if not r:
+                        return False
+                return True
 
-            for neighbor in self.getList(vport, 'discoveredNeighbor'):
-                r, val = common.wait_for_val_from_func(False, validate_timeout, 1,
-                                                       self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
-                if not r:
-                    raise IxiaError("Protocol Interface Validation Failed, ARP not resolved")
+            r, val = common.wait_for_val_from_func(True, validate_timeout, 10, _validate, vport, interface)
+            if not r:
+                raise IxiaError("Protocol Interface Validation Failed, ARP not resolved")
             LOG.info("Protocol Interface Validation Complete: {}".format(interface))
         return interface    # used for configuring traffic item
 
@@ -834,6 +839,7 @@ class IxiaSession(object):
             LOG.info("matched with view {}".format(view))
 
             self._ixnet.execute("refresh", view)
+            time.sleep(1)
             succ, val = common.wait_for_val_from_func('true', timeout, 1, self.getAttribute, view+"/page", 'isReady')
             if not succ:
                 msg = "timeout occurred when waiting for view {} to become ready. isReady={}".format(view, val)
@@ -851,3 +857,36 @@ class IxiaSession(object):
             return result
 
         return None
+
+    def get_frames_delta(self, stable=False, timeout=300, interval=10):
+        """
+        Equiv. to int(.get_statistics('traffic item statistics', fail_ok=False)[0]["Frames Delta"]) if stable=False
+        otherwise, this functions ensures the delta value is not changed before and after the interval
+
+        Args:
+            stable (bool):
+                if True, ensures the delta values is not changed in between two fetches
+            timeout (int):
+                max. time to wait for the delta to become stable
+                used only if stable=True
+
+        Returns (int):
+            int(.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
+        """
+        delta = int(self.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
+        LOG.info("Frames Delta={}".format(delta))
+        if not stable:
+            return delta
+
+        LOG.info("Getting \"Frames Delta\" with stable=True")
+
+        prev_delta = delta
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            time.sleep(interval)
+            delta = self.get_frames_delta(stable=False)
+            if delta == prev_delta:
+                return delta
+            prev_delta = delta
+
+        raise IxiaError("frames delta did not become stable after timeout")
