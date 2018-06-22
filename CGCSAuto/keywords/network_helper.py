@@ -4183,3 +4183,120 @@ def _check_pci_alias_created(devices, con_ssh=None):
         created_alias = pci_alias_dict[pci_alias]
         assert param_.get('vendor id') == created_alias['vendor id']
         assert param_.get('device id') == created_alias['device id']
+
+
+def create_port_pair(ingress_port, egress_port, name=None, description=None, service_func_param=None, fail_ok=False,
+                     con_ssh=None, auth_info=None):
+    """
+    Create port pair
+
+    Args:
+        ingress_port (str):
+        egress_port (str):
+        name (str|None):
+        description (str|None):
+        service_func_param (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, <port_pair_id>)     # successfully created
+        (1, <std_err>)          # create CLI rejected
+
+    """
+    if not name:
+        name = 'port_pair'
+        name = common.get_unique_name(name_str=name)
+
+    arg = '--ingress {} --egress {} {}'.format(ingress_port, egress_port, name)
+    if description:
+        arg = '--description {} {}'.format(description, arg)
+    if service_func_param:
+        arg = '--service-function-parameters {}'.format(service_func_param)
+
+    code, output = cli.openstack(cmd='sfc port pair create', positional_args=arg, fail_ok=fail_ok,
+                                 ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    pair_id = table_parser.get_value_two_col_table(table_, field='ID')
+    return 0, pair_id
+
+
+def delete_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Delete port pairs
+    Args:
+        port_pairs (str|list|tuple|None):
+        value: ID or Name
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple): (<code>(int), <successfully_deleted_pairs>(list), <rejected_pairs>(list), <rejection_messages>list)
+        (0, <successfully_deleted_pairs>(list), [], [])
+        (1, <successfully_deleted_pairs_if_any>, <rejected_pairs>(list), <rejection_messages>list)    # fail_ok=True
+
+    """
+    if not port_pairs:
+        port_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+    else:
+        if isinstance(port_pairs, str):
+            port_pairs = [port_pairs]
+
+        if check_first:
+            existing_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+            port_pairs = list(set(port_pairs) - set(existing_pairs))
+
+    if not port_pairs:
+        msg = 'Port pair(s) do not exist. Do nothing.'
+        LOG.info(msg)
+        return -1, [], [], []
+
+    succ_pairs = []
+    rejected_pairs = []
+    errors = []
+    for port_pair in port_pairs:
+        code, output = cli.openstack(cmd='sfc port pair delete', positional_args=port_pair, fail_ok=fail_ok,
+                                     ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+
+        if code > 0:
+            rejected_pairs.append(port_pair)
+            errors.append(output)
+        else:
+            succ_pairs.append(port_pair)
+
+    post_del_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+    failed_pairs = list(set(succ_pairs) - set(post_del_pairs))
+
+    assert not failed_pairs, "Some port-pair(s) still exist after deletion: {}".format(failed_pairs)
+    if rejected_pairs:
+        code = 1
+        LOG.info("Deletion rejected for following port-pair(s): {}".format(rejected_pairs))
+    else:
+        code = 0
+        LOG.info("Port pair(s) deleted successfully.")
+
+    return code, succ_pairs, rejected_pairs, errors
+
+
+def get_port_pairs(rtn_val='ID', con_ssh=None, auth_info=None, **filters):
+    """
+    Get port pairs
+    Args:
+        rtn_val (str): header of the table. ID or Name
+        con_ssh:
+        auth_info:
+        **filters:
+
+    Returns (list):
+
+    """
+    arg = '--print-empty'
+    table_ = table_parser.table(cli.openstack(cmd='sfc port pair list', positional_args=arg, ssh_client=con_ssh,
+                                              auth_info=auth_info))
+    return table_parser.get_values(table_, target_header=rtn_val, **filters)
