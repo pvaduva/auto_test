@@ -19,6 +19,12 @@ def check_alarms():
     pass
 
 
+@fixture(scope='module', autouse=True)
+def skip_for_ovs():
+    if not system_helper.is_avs():
+        skip("4k vm unsupported by OVS-dpdk")
+
+
 @fixture(scope='module', params=['local_image', 'local_lvm', 'remote'])
 def ensure_sufficient_4k_pages(request):
     """
