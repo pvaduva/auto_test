@@ -45,7 +45,7 @@ def _test_statistics_for_one_meter(meter):
         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
-def _wait_for_measurements(meter, resource_type, extra_query, start_time, timeout=630, check_interval=60):
+def _wait_for_measurements(meter, resource_type, extra_query, start_time, timeout=720, check_interval=60):
     end_time = time.time() + timeout
 
     while time.time() < end_time:
