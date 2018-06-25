@@ -61,6 +61,7 @@ class BuildServerPath:
                                '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/',
                                '18.03': '/localdisk/loadbuild/jenkins/TC_18.03_Host/latest_build/',
                                '18.04': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_build/',
+                               '18.07': '/localdisk/loadbuild/jenkins/TC_18.07_Host/latest_build/',
                                }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
