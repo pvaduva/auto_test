@@ -4213,7 +4213,7 @@ def create_port_pair(ingress_port, egress_port, name=None, description=None, ser
     if description:
         arg = '--description {} {}'.format(description, arg)
     if service_func_param:
-        arg = '--service-function-parameters {}'.format(service_func_param)
+        arg = '--service-function-parameters {} {}'.format(service_func_param, arg)
 
     code, output = cli.openstack(cmd='sfc port pair create', positional_args=arg, fail_ok=fail_ok,
                                  ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
@@ -4300,3 +4300,259 @@ def get_port_pairs(rtn_val='ID', con_ssh=None, auth_info=None, **filters):
     table_ = table_parser.table(cli.openstack(cmd='sfc port pair list', positional_args=arg, ssh_client=con_ssh,
                                               auth_info=auth_info))
     return table_parser.get_values(table_, target_header=rtn_val, **filters)
+
+
+def create_port_pair_group(port_pairs=None, port_pair_val='ID', name=None, description=None, group_param=None,
+                           fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Create a port pair group
+    Args:
+        port_pairs (str|list|tuple|None):
+        port_pair_val (str): ID or Name
+        name (str|None):
+        description (str|None):
+        group_param (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, <port pair group id>)
+        (1, <std_err>)
+
+    """
+    arg = '--print-empty'
+    if port_pairs:
+        if isinstance(port_pairs, str):
+            port_pairs = [port_pairs]
+        port_pairs = list(port_pairs)
+        for port_pair in port_pairs:
+            arg += ' --port-pair {}'.format(port_pair)
+
+    if description:
+        arg += ' --description {}'.format(description)
+    if group_param:
+        arg += ' --port-pair-group-parameters {}'.format(group_param)
+
+    if not name:
+        name = 'port_pair'
+        name = common.get_unique_name(name_str=name)
+    arg = '{} {}'.format(arg, name)
+
+    code, output = cli.openstack('sfc port pair group create', arg, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    group_id = table_parser.get_value_two_col_table(table_, 'ID')
+
+    # Check specified port-pair(s) are in created group
+    port_pairs_in_group = eval(table_parser.get_value_two_col_table(table_, 'Port Pair'))
+    if port_pairs:
+        if port_pair_val.lower() != 'id':
+            pair_ids = []
+            for port_pair in port_pairs:
+                port_pair_id = get_port_pairs(Name=port_pair, con_ssh=con_ssh, auth_info=auth_info)[0]
+                pair_ids.append(port_pair_id)
+            port_pairs = pair_ids
+        assert sorted(port_pairs_in_group) == sorted(port_pairs), "Port pairs expected in group: {}. Actual: {}".\
+            format(port_pairs, port_pairs_in_group)
+    else:
+        assert not port_pairs_in_group, "Port pair(s) exist in group even though no port pair is specified"
+
+    LOG.info("Port pair group {} created successfully".format(name))
+    return 0, group_id
+
+
+def set_port_pair_group(group, port_pairs=None, name=None, description=None, fail_ok=False, con_ssh=None,
+                        auth_info=None):
+    """
+    Set port pair group with given values
+    Args:
+        group (str): port pair group to set
+        port_pairs (list|str|tuple|None): port pair(s) to add
+        name (str|None):
+        description (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, "Port pair group set successfully")
+        (1, <std_err>)
+
+    """
+    arg = ''
+    verify = {}
+    if port_pairs is not None:
+        if port_pairs:
+            if isinstance(port_pairs, str):
+                port_pairs = [port_pairs]
+            port_pairs = list(port_pairs)
+            for port_pair in port_pairs:
+                arg += ' --port-pair {}'.format(port_pair)
+
+            verify['Port Pair'] = port_pairs
+        else:
+            arg += ' --no-port-pair'
+            verify['Port Pair'] = []
+
+    if name is not None:
+        arg += ' --name {}'.format(name)
+        verify['Name'] = name
+    if description is not None:
+        arg += ' --description {}'.format(description)
+        verify['Description'] = description
+
+    arg = '{} {}'.format(arg, group)
+    code, output = cli.openstack('sfc port pair group set', positional_args=arg, fail_ok=fail_ok, auth_info=auth_info,
+                                 ssh_client=con_ssh, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+
+    for key, val in verify.items():
+        actual_val = table_parser.get_value_two_col_table(table_, key)
+        if isinstance(val, list):
+            actual_val = eval(actual_val)
+            assert set(val) <= set(actual_val), "Port pair(s) set: {}; pairs in group: {}".format(val, actual_val)
+            assert len(set(actual_val)) == len(actual_val), "Duplicated item found in Port pairs field: {}".\
+                format(actual_val)
+        else:
+            assert val == actual_val, "Value set for {} is {} ; actual: {}".format(key, val, actual_val)
+
+    msg = "Port pair group set successfully"
+    LOG.info("Port pair group set successfully")
+    return 0, msg
+
+
+def unset_port_pair_group(group, port_pairs='all', fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Remove port pair(s) from a group
+    Args:
+        group (str):
+        port_pairs (str|list|tuple|None): port_pair(s). When 'all': remove all port pairs from group.
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns:
+        (0, <remaining port pairs in group>(list))
+        (1, <std_err>(str))
+
+    """
+    arg = ''
+    if port_pairs == 'all':
+        arg = '--all-port-pair'
+    else:
+        if isinstance(port_pairs, str):
+            port_pairs = [port_pairs]
+        port_pairs = list(port_pairs)
+
+        for port_pair in port_pairs:
+            arg += ' --port-pair {}'.format(port_pair)
+
+    arg = '{} {}'.format(arg, group)
+
+    code, output = cli.openstack('sfc port pair group unset', positional_args=arg, fail_ok=fail_ok, rtn_list=True,
+                                 ssh_client=con_ssh, auth_info=auth_info)
+
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    actual_pairs = eval(table_parser.get_value_two_col_table(table_, 'Port Pair'))
+    if port_pairs == 'all':
+        assert not actual_pairs
+    else:
+        unremoved_pairs = list(set(actual_pairs) & set(port_pairs))
+        assert not unremoved_pairs
+
+    LOG.info("Port pairs are successfully removed from group {}".format(group))
+    return 0, actual_pairs
+
+
+def delete_port_pair_group(group, check_first=True, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Delete given port pair group
+    Args:
+        group (str):
+        check_first (bool): Whether to check before deletion
+        fail_ok (bool):
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, 'Port pair group <group> does not exist. Skip deleting.')      # check_first=True
+        (0, 'Port pair group <group> successfully deleted')
+        (1, <std_err>)      # CLI rejected. fail_ok=True
+
+    """
+    code, output = cli.openstack('sfc port pair group delete', group, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info, rtn_list=True)
+
+    if check_first:
+        group_id = get_port_pair_group_value(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                             fail_ok=True)
+        if group_id is None:
+            msg = 'Port pair group {} does not exist. Skip deleting.'.format(group)
+            LOG.info(msg)
+            return -1, msg
+
+    if code > 0:
+        return 1, output
+
+    group_id = get_port_pair_group_value(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                         fail_ok=True)
+    assert group_id is None, "Port pair group {} still exists after deletion".format(group)
+
+    msg = 'Port pair group {} successfully deleted'.format(group)
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_port_pair_groups(rtn_val='ID', auth_info=None, con_ssh=None):
+    """
+    Get port pair groups
+    Args:
+        rtn_val (str): ID or Name
+        auth_info:
+        con_ssh:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('sfc port pair group list --print-empty', auth_info=auth_info,
+                                              ssh_client=con_ssh))
+
+    return table_parser.get_column(table_, header=rtn_val)
+
+
+def get_port_pair_group_value(group, field='Port Pair', fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Get port pair group value from 'openstack sfc port pair group show'
+    Args:
+        group (str):
+        field (str):
+        fail_ok (bool):
+        auth_info:
+        con_ssh:
+
+    Returns (None|str|dict|list):
+        None    # if group does not exist. Only when fail_ok=True
+        str|dict|list   # value of given field.
+
+    """
+    code, output = cli.openstack('sfc port pair group show', group, auth_info=auth_info, ssh_client=con_ssh,
+                                 fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+    if 'port pair' in field.lower():
+        value = eval(value)
+
+    return value
