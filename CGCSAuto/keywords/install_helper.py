@@ -3301,6 +3301,12 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     boot_device_menu = menu.BootDeviceMenu()
     boot_device_regex = next((value for key, value in boot_device_dict.items()
                               if key == node_obj.name or key == node_obj.personality), None)
+    if boot_device_regex:
+        uefi = "UEFI" in boot_device_regex or re.search("r\d+", node_obj.host_name)
+    else:
+        uefi = re.search("r\d+", node_obj.host_name) or "ml350" in node_obj.host_name
+    LOG.debug("{} uefi: {}".format(node_obj.host_name, str(uefi)))
+
     if small_footprint is None:
         sys_type = ProjVar.get_var("SYS_TYPE")
         LOG.debug("SYS_TYPE: {}".format(sys_type))
@@ -3315,7 +3321,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if usb:
         kickstart_menu = menu.USBBootMenu()
     else:
-        kickstart_menu = menu.KickstartMenu(uefi="UEFI" in boot_device_regex if boot_device_regex is not None else False)
+        kickstart_menu = menu.KickstartMenu(uefi=uefi)
     if node_obj.telnet_conn is None:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 

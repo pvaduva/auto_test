@@ -969,30 +969,31 @@ def collect_sys_net_info(lab):
 
     LOG.info("Lab networking info collected: {}".format(res_))
 
-    def setup_remote_cli_client():
-        """
-        Download openrc files from horizon andinstall remote cli clients to virtualenv
-        Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
 
-        Returns (RemoteCliClient)
+def setup_remote_cli_client():
+    """
+    Download openrc files from horizon andinstall remote cli clients to virtualenv
+    Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
 
-        """
-        from keywords import horizon_helper
-        # download openrc files
-        horizon_helper.download_openrc_files()
+    Returns (RemoteCliClient)
 
-        # install remote cli clients
-        client = RemoteCLIClient.get_remote_cli_client()
+    """
+    from keywords import horizon_helper
+    # download openrc files
+    horizon_helper.download_openrc_files()
 
-        # copy test files
-        LOG.info("Copy test files from controller to localhost for remote cli tests")
-        for dir_name in ('images/', 'heat/', 'userdata/'):
-            dest_path = '{}/{}'.format(ProjVar.get_var('TEMP_DIR'), dir_name)
-            os.makedirs(dest_path, exist_ok=True)
-            common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
-                                              dest_path=dest_path, is_dir=True)
+    # install remote cli clients
+    client = RemoteCLIClient.get_remote_cli_client()
 
-        return client
+    # copy test files
+    LOG.info("Copy test files from controller to localhost for remote cli tests")
+    for dir_name in ('images/', 'heat/', 'userdata/'):
+        dest_path = '{}/{}'.format(ProjVar.get_var('TEMP_DIR'), dir_name)
+        os.makedirs(dest_path, exist_ok=True)
+        common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
+                                          dest_path=dest_path, is_dir=True)
+
+    return client
 
 
 # TODO: currently no support for installing lab as a single controller node

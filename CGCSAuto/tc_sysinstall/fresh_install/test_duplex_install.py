@@ -12,11 +12,6 @@ from utils.tis_log import LOG
 def test_duplex_install(install_setup):
     """
          Complete fresh_install steps for a duplex lab
-
-         Prerequisites:
-             - Controller is online
-             - Controller has been configured
-             - heat and lab setup files are on the active controller
          Test Setups:
              - Retrieve dictionary containing lab information
              - Retrieve required paths to directories, images, and licenses
@@ -24,6 +19,9 @@ def test_duplex_install(install_setup):
              - Initialize build server and boot server objects
              - Retrieve what steps to be skipped
          Test Steps:
+             - Install controller-0
+             - Download configuration files, heat templates, images, and licenses
+             - Configure controller-0, run lab_setup, and unlock controller-0
              - Add the standby controller
              - Run the lab_setup.sh script
              - Re-add the standby controller
@@ -34,15 +32,9 @@ def test_duplex_install(install_setup):
              - Run the lab_setup.sh script
          """
     lab = install_setup["lab"]
-    hosts = lab["hosts"]
-    skips = install_setup["skips"]
-    lab_type = lab["system_mode"]
     boot_device = lab["boot_device_dict"]
-    active_controller = install_setup["active_controller"]
-    controller_name = active_controller.name
+    controller0_node = lab["controller-0"]
     standby_con = lab["controller-1"]
-    boot_type = install_setup["boot"]["boot_type"]
-    last_session_step = install_setup["control"]["resume"]
     final_step = install_setup["control"]["stop"]
 
     if final_step <= 0:
@@ -52,48 +44,41 @@ def test_duplex_install(install_setup):
     if fresh_install_helper.do_step():
         fresh_install_helper.install_controller(sys_type=SysType.AIO_DX)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
-    active_controller.telnet_conn.login()
-    fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=active_controller.telnet_conn)
+    controller0_node.telnet_conn.login()
+    fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     LOG.tc_step("Download lab files")
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
-
     if fresh_install_helper.do_step():
         fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Configure controller")
     if fresh_install_helper.do_step():
-        fresh_install_helper.configure_controller(active_controller)
+        fresh_install_helper.configure_controller(controller0_node)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
-    if not active_controller.ssh_conn:
-        active_controller.ssh_conn = install_helper.establish_ssh_connection(active_controller.host_ip)
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     LOG.tc_step("Bulk add hosts for CPE lab")
     if fresh_install_helper.do_step():
-        rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=active_controller.ssh_conn)
+        rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=controller0_node.ssh_conn)
         assert rc == 0, msg
         # assert added_hosts[0] + added_hosts[1] + added_hosts[2] == hosts, "hosts_bulk_add failed to add all hosts"
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run lab setup for CPE lab")
     if fresh_install_helper.do_step():
-        install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
-        # TODO: Find out if necessary
-        install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
+        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    #    install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Boot standby controller for CPE lab")
@@ -101,45 +86,30 @@ def test_duplex_install(install_setup):
         install_helper.bring_node_console_up(standby_con, boot_device, small_footprint=True, vlm_power_on=True,
                                              close_telnet_conn=True, boot_usb=False)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run lab setup for CPE lab")
     if fresh_install_helper.do_step():
-        install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
-        install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
+        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Unlock standby controller for CPE lab")
     if fresh_install_helper.do_step():
-        host_helper.unlock_host(standby_con.name, available_only=True, con_ssh=active_controller.ssh_conn)
+        host_helper.unlock_host(standby_con.name, available_only=True, con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Run lab setup for CPE lab")
     if fresh_install_helper.do_step():
-        install_helper.run_lab_setup(con_ssh=active_controller.ssh_conn)
+        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
         skip("stopping at install step: {}".format(LOG.test_step))
 
     setup_tis_ssh(lab)
+    host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
 
     LOG.tc_step("Check heat resources")
     if fresh_install_helper.do_step():
         fresh_install_helper.setup_heat()
-        host_helper.wait_for_hosts_ready(hosts)
-    if LOG.test_step == final_step:
-        # TODO: temporary way of doing this
-        skip("stopping at install step: {}".format(LOG.test_step))
-
-    LOG.tc_step("Run post install scripts (if any)")
-    rc = active_controller.ssh_conn.exec_cmd("test -d /home/wrsroot/postinstall/")
-    if rc != 0:
-        LOG.info("no post-fresh_install directory on {}".format(active_controller.name))
-    else:
-        rc, msg = install_helper.post_install()
-        assert rc == 0, msg

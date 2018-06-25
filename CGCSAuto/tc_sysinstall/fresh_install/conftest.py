@@ -102,15 +102,21 @@ def pytest_runtest_teardown(item):
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
-    LOG.info("unreserving hosts and writing install step to {}".format(progress_dir))
 
+    LOG.tc_teardown_start(item.nodeid)
+    LOG.fixture_step("unreserving hosts")
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
-    file_exists = os.path.isfile(progress_file_path)
-    if file_exists:
-        # delete the file in case the user does not have write permissions
-        os.remove(progress_file_path)
-    with open(progress_file_path, "w") as progress_file:
-        progress_file.write(item.nodeid + "\n")
-        progress_file.write("End step: {}".format(str(LOG.test_step)))
-        progress_file.close()
+
+    install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py", "test_storage_install.py"]
+    for install_testcase in install_testcases:
+        if install_testcase in item.nodeid:
+            LOG.fixture_step("Writing install step to {}".format(progress_file_path))
+            file_exists = os.path.isfile(progress_file_path)
+            if file_exists:
+                with open(progress_file_path, "w") as progress_file:
+                    progress_file.write(item.nodeid + "\n")
+                    progress_file.write("End step: {}".format(str(final_step)))
+                    progress_file.close()
+                os.chmod(progress_file_path, 0o755)
+                break
     LOG.info("Fresh Install Completed")

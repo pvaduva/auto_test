@@ -69,17 +69,39 @@ class Menu(object):
                 else:
                     self.move_up(telnet_conn)
         self.enter_key(telnet_conn, key)
+        self.index = 0
 
     def find_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
         telnet_conn.expect([end_of_menu], 60)
         output = str.encode(telnet_conn.cmd_output)
         options = re.split(newline, output)
-        # TODO: use list comprehension to make this more readable
-        options = list(filter(lambda option_string: re.search(option_identifier, option_string), options))
+        options = [option for option in options if re.search(option_identifier, option)]
         LOG.debug("{} options are: {}".format(self.name, options))
         for i in range(0, len(options)):
-            option = Option(name=options[i].decode(), index=i, key="Enter")
-            self.options.append(option)
+            self.options.append(Option(name=options[i].decode(), index=i))
+
+    def find_numbered_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
+        telnet_conn.expect([end_of_menu], 60)
+        output = str.encode(telnet_conn.cmd_output)
+        positioning_codes = re.findall(newline, output)
+        current_index = 0
+        next_index = 1
+        newline_codes = [positioning_codes[current_index]]
+
+        while True:
+            try:
+                current_line_num = int(re.search("(\[)(\d+)", positioning_codes[current_index]).group(2))
+                next_line_num = int(re.search("(\[)(\d+)", positioning_codes[next_index]).group(2))
+                if next_line_num > current_line_num:
+                    newline_codes.append(positioning_codes[next_index])
+                current_index += 1
+                next_index += 1
+            except IndexError:
+                break
+        for i in range(0, len(newline_codes) - 1):
+            option_name = output[output.find(newline_codes[i]):output.find(newline_codes[i+1])]
+            if re.search(option_identifier, option_name):
+                self.options.append(Option(name=option_name, index=i))
 
     def get_sub_menu(self, name, strict=True):
         for sub_menu in self.sub_menus:
@@ -105,6 +127,9 @@ class Menu(object):
             self.index = len(self.options) - 1
         return self.index
 
+    def order_options(self):
+        self.options.sort(key=lambda option: option.index)
+
     @staticmethod
     def enter_key(telnet_conn, key="Enter"):
         if isinstance(key, str):
@@ -117,7 +142,9 @@ class Menu(object):
         time.sleep(1)
 
     def get_current_option(self):
-        return self.options[self.index]
+        for option in self.options:
+            if option.index == self.index:
+                return option
 
     def get_prompt(self):
         return self.prompt
@@ -165,16 +192,13 @@ class KickstartMenu(Menu):
                          kwargs=kwargs)
 
     def get_current_option(self, telnet_conn):
+        highlight_code = "\x1b[0;7;37;40m" if "PXE" in self.name else "\x1b[0m\x1b[37m\x1b[40m"
         if not self.options:
-            highlight_code = "[0;7;37;40m" if "PXE" in self.name else "^[[0m^[[30m^[[47m^"
             self.find_options(telnet_conn)
-            for i in range(0, len(self.options)):
-                if highlight_code in self.options[i].name:
-                    self.index = self.options[i].index
-                    return self.options[i]
-            return self.options[0]
-        else:
-            super().get_current_option()
+        for i in range(0, len(self.options)):
+            if highlight_code in self.options[i].name:
+                self.index = self.options[i].index
+        return super().get_current_option()
 
     def find_options(self, telnet_conn):
         super().find_options(telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab] to edit",
@@ -186,6 +210,8 @@ class KickstartMenu(Menu):
             if "security" in option.name.lower() and "  >" in option.name.lower():
                 security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
                 self.sub_menus.append(security_menu)
+        current_option = self.get_current_option(telnet_conn)
+        self.index = current_option.index
 
     def select(self, telnet_conn, index=None, pattern=None, tag=None):
         if isinstance(tag, str):
@@ -211,9 +237,8 @@ class KickstartMenu(Menu):
 class USBBootMenu(Menu):
     def __init__(self):
         super().__init__(name="USB boot menu", kwargs=bios.BootMenus.USB.Kernel)
-        # TODO: use list comprehension to make this more readable
-        menu_dicts = filter(lambda is_sub_menu: isinstance(is_sub_menu, dict) and is_sub_menu['name'] != "kernel options",
-                            [getattr(bios.BootMenus.USB, item) for item in dir(bios.BootMenus.USB)])
+        menu_dicts = [getattr(bios.BootMenus.USB, item) for item in dir(bios.BootMenus.USB) if isinstance(item, dict)
+                      and item['name'] != "kernel options"]
         for menu_dict in menu_dicts:
             sub_menu = super().__new__(USBBootMenu)
             Menu.__init__(self=sub_menu, name=menu_dict["name"], kwargs=menu_dict)
@@ -234,7 +259,7 @@ class BootDeviceMenu(Menu):
 
 
 class Option(object):
-    def __init__(self, name, index=0, key=None, tag=None):
+    def __init__(self, name, index, key=None, tag=None):
         self.name = name
         self.index = index
         option_name = self.name.lower()
@@ -267,6 +292,7 @@ class Option(object):
             cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
         LOG.info("Entering: {}".format(" + ".join(key)))
         telnet_conn.write(str.encode(cmd))
+
 
 class KickstartOption(Option):
     def __init__(self, name, index=0, key=None, tag=None):

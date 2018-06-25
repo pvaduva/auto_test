@@ -250,6 +250,7 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
         return 0, output
 
 
+
 def clear_post_install_alarms():
     system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
     alarm = system_helper.get_alarms(alarm_id='250.001')
