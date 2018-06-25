@@ -4660,8 +4660,8 @@ def create_port_chain(port_pair_groups, name=None, flow_classifiers=None, descri
     return 0, port_chain_id
 
 
-def set_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, fail_ok=False, con_ssh=None,
-                   auth_info=None):
+def update_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, fail_ok=False,
+                      con_ssh=None, auth_info=None):
     """
     Set port chain with given values
     Args:
@@ -4856,3 +4856,133 @@ def get_port_chain_value(port_chain, field='Flow Classifiers', fail_ok=False, au
         value = eval(value)
 
     return value
+
+
+def get_flow_classifier_value(flow_classifier, field='Protocol', fail_ok=False, auth_info=None, con_ssh=None):
+    """
+        Get flow classifier value from 'openstack sfc flow classifier show'
+        Args:
+            flow_classifier (str):
+            field (str):
+            fail_ok (bool):
+            auth_info:
+            con_ssh:
+
+        Returns (None|str|dict|list):
+            None    # if flow classifier does not exist. Only when fail_ok=True
+            str|dict|list   # value of given field.
+
+        """
+    code, output = cli.openstack('sfc flow classifier show', flow_classifier, auth_info=auth_info, ssh_client=con_ssh,
+                                 fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+
+    return value
+
+
+def create_flow_classifier(name=None, description=None, protocol=None, ether_type=None, source_port=None,
+                           dest_port=None, source_ip_prefix=None, dest_ip_prefix=None, logical_source_port=None,
+                           logical_dest_port=None, l7_param=None, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Create a flow classifier
+    Args:
+        name:
+        description:
+        protocol:
+        ether_type:
+        source_port:
+        dest_port:
+        source_ip_prefix:
+        dest_ip_prefix:
+        logical_source_port:
+        logical_dest_port:
+        l7_param:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (0, <flow_classifier_id>)
+        (1, <std_err>)
+
+    """
+    arg_dict = {
+        'description': description,
+        'protocol': protocol,
+        'ethertype': ether_type,
+        'logical-source-port': logical_source_port,
+        'logical-destination-port': logical_dest_port,
+        'source-ip-prefix': source_ip_prefix,
+        'destination-ip-prefix': dest_ip_prefix,
+        'l7-parameters': l7_param,
+        'source-port': source_port,
+        'destination-port': dest_port,
+    }
+
+    args = []
+    for key, val in arg_dict.items():
+        if val is not None:
+            args.append('--{} {}'.format(key, val))
+
+    arg = ' '.join(args)
+    if not name:
+        name = 'flow_classifier'
+        name = common.get_unique_name(name_str=name)
+
+    arg += ' {}'.format(name)
+
+    LOG.info("Creating flow classifier {}".format(name))
+    code, output = cli.openstack('sfc flow classifier create', arg, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True, ssh_client=con_ssh)
+
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    id_ = table_parser.get_value_two_col_table(table_, 'ID')
+
+    msg = "Flow classifier {} successfully created.".format(id_)
+    LOG.info(msg)
+    return 0, id_
+
+
+def delete_flow_classifier(flow_classifier, check_first=True, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Delete flow classifier
+    Args:
+        flow_classifier (str):
+        check_first:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, Flow classifier <flow_classifier> does not exist. Skip deletion.")
+        (0, "Flow classifier <flow_classifier> successfully deleted")
+        (1, <std_err>)
+
+    """
+    if check_first:
+        info = get_flow_classifier_value(flow_classifier, field='ID', fail_ok=True, con_ssh=con_ssh,
+                                         auth_info=auth_info)
+        if info is None:
+            msg = "Flow classifier {} does not exist. Skip deletion.".format(flow_classifier)
+            LOG.info(msg)
+            return -1, msg
+
+    code, output = cli.openstack('sfc flow classifier delete', flow_classifier, auth_info=auth_info, fail_ok=fail_ok,
+                                 ssh_client=con_ssh, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    post_del_id = get_flow_classifier_value(flow_classifier, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                            fail_ok=True)
+    assert post_del_id is None, "Flow classifier {} still exists after deletion".format(flow_classifier)
+
+    msg = "Flow classifier {} successfully deleted".format(flow_classifier)
+    LOG.info(msg)
+    return 0, msg
