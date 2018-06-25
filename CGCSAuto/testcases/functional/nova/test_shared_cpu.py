@@ -544,7 +544,7 @@ class TestSharedCpuEnabled:
         """
         storage_backing, shared_cpu_hosts = add_shared_cpu
         vm_helper.delete_vms()
-        prev_total_vcpus = host_helper.get_vcpus_for_computes(shared_cpu_hosts)
+        prev_total_vcpus = host_helper.get_vcpus_for_computes()
 
         flv1_args = {
             'numa_nodes': 1,
