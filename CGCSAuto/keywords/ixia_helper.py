@@ -171,16 +171,28 @@ class IxiaSession(object):
             self._connected_remote = (tcl_server_ip, tcl_server_port, tcl_server_ver)
             self._ixnet.connect(tcl_server_ip, '-port', tcl_server_port, '-version', tcl_server_ver)
         except Exception as err:
-            # if connect failed, do not assume the user will call disconnect
+            # if connect failed, do not expect the user to call disconnect
+            # all resources allocated by connect shall be released
             self.disconnect()
             raise err
 
-    def disconnect(self):
+    def disconnect(self, traffic_stop=False):
         """
         Disconnect the underlying socket.
         Allowed to be called multiple times.
+
+        Args:
+            traffic_stop (bool):
+                calls .traffic_stop() if the traffic is running,
+                even when then traffic is not started by this session
+                defaults to False, as .disconnect may be called multiple times
         """
         if self._connected:
+            if traffic_stop and self.testAttributes(self.getRoot()+'/traffic', state="started"):
+                try:
+                    self.traffic_stop()
+                except:
+                    pass
             try:
                 self._ixnet.disconnect()
             except:
@@ -189,7 +201,11 @@ class IxiaSession(object):
             self._connected_remote = None
 
         for res in self._ixia_resources:
-            IxiaResource.release(res)
+            try:
+                IxiaResource.release(res)
+            except:
+                # this would usually require manual cleanup
+                LOG.warn("(IxiaResource) {} release failed".format(res))
         self._ixia_resources.clear()
 
     def add_chassis(self, chassis_ip=None, timeout=60, default=True, clear=False):
@@ -223,10 +239,10 @@ class IxiaSession(object):
         if clear:
             LOG.info("Clearing old chassis (if exist)")
             # required by API docs.: must remove all old chassis from ixncfg if exists
-            for chassis in self.getList(self._ixnet.getRoot()+'/availableHardware', 'chassis'):
+            for chassis in self.getList(self.getRoot()+'/availableHardware', 'chassis'):
                 self._ixnet.remove(chassis)
 
-        chassis = self._ixnet.add(self._ixnet.getRoot()+'availableHardware', 'chassis', '-hostname', chassis_ip)
+        chassis = self._ixnet.add(self.getRoot()+'availableHardware', 'chassis', '-hostname', chassis_ip)
 
         self._ixnet.commit()
         chassis = self._ixnet.remapIds(chassis)[0]
@@ -307,12 +323,12 @@ class IxiaSession(object):
         vports = list()
         if not existing:
             for i in range(len(ports)):
-                vport = self._ixnet.add(self._ixnet.getRoot(), 'vport')
+                vport = self._ixnet.add(self.getRoot(), 'vport')
                 self._ixnet.commit()
                 vport = self._ixnet.remapIds(vport)[0]
                 vports.append(vport)
         else:
-            vports = self.getList(self._ixnet.getRoot(), 'vport')
+            vports = self.getList(self.getRoot(), 'vport')
 
         vport_map = dict()
         for vport, (card, port) in zip(vports, ports):
@@ -494,7 +510,7 @@ class IxiaSession(object):
                 the associate configElement identifier for the endpointSet
         """
         LOG.info("Creating Traffic Item")
-        traffic_obj = self._ixnet.add(self._ixnet.getRoot() + '/traffic', 'trafficItem')
+        traffic_obj = self._ixnet.add(self.getRoot() + '/traffic', 'trafficItem')
 
         default_args = {
             'enabled': 'True',
@@ -581,7 +597,7 @@ class IxiaSession(object):
         """
         if trafficItem is None:
             LOG.info("Regenerating all trafficItems")
-            for trafficItem in self._ixnet.getList(self._ixnet.getRoot()+'/traffic', 'trafficItem'):
+            for trafficItem in self._ixnet.getList(self.getRoot()+'/traffic', 'trafficItem'):
                 self._ixnet.execute('generate', trafficItem)
         else:
             LOG.info("Regenerating trafficItem: {}".format(trafficItem))
@@ -592,7 +608,7 @@ class IxiaSession(object):
         Apply all traffic items to hardware.
         """
         LOG.info("Applying all traffic to hardware")
-        self._ixnet.execute('apply', self._ixnet.getRoot() + 'traffic')
+        self._ixnet.execute('apply', self.getRoot() + 'traffic')
 
     def traffic_apply_live(self):
         """
@@ -600,7 +616,7 @@ class IxiaSession(object):
         Only highLevelStream configurations are applied. (not from configElement)
         """
         LOG.info("Applying changes to live traffic")
-        traffic = self._ixnet.getRoot()+'/traffic'
+        traffic = self.getRoot()+'/traffic'
         self._ixnet.execute('applyOnTheFlyTrafficChanges', traffic)
 
     def traffic_start(self, regenerate=True, apply=True, timeout=60):
@@ -620,11 +636,11 @@ class IxiaSession(object):
             self.traffic_regenerate()
         if apply:
             self.traffic_apply()
-        traffic = self._ixnet.getRoot()+'/traffic'
+        traffic = self.getRoot()+'/traffic'
         LOG.info("Starting all traffic")
         self._ixnet.execute('start', traffic)
 
-        succ, val = common.wait_for_val_from_func("started", timeout, 1, self._ixnet.getAttribute, traffic, '-state')
+        succ, val = common.wait_for_val_from_func("started", timeout, 1, self.getAttribute, traffic, 'state')
         if not succ:
             raise IxiaError("Traffic cannot become 'started' after {} seconds. state={}".format(timeout, val))
 
@@ -637,11 +653,11 @@ class IxiaSession(object):
             timeout (int):
                 amount of seconds to wait for the traffic to become 'stopped'
         """
-        traffic = self._ixnet.getRoot()+'/traffic'
+        traffic = self.getRoot()+'/traffic'
         LOG.info("Stopping all traffic")
         self._ixnet.execute('stop', traffic)
 
-        succ, val = common.wait_for_val_from_func("stopped", timeout, 1, self._ixnet.getAttribute, traffic, '-state')
+        succ, val = common.wait_for_val_from_func("stopped", timeout, 1, self.getAttribute, traffic, 'state')
         if not succ:
             raise IxiaError("Traffic cannot become 'stopped' after {} seconds. state={}".format(timeout, val))
 
@@ -783,7 +799,7 @@ class IxiaSession(object):
         Returns (list):
             list of all statistics views' identifiers, in str
         """
-        return self.getList(self._ixnet.getRoot()+'/statistics', 'view')
+        return self.getList(self.getRoot()+'/statistics', 'view')
 
     def get_statistics(self, view, timeout=10, fail_ok=True):
         """

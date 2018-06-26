@@ -6,7 +6,7 @@ import random
 import re
 import time
 import ipaddress
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto
@@ -4803,16 +4803,14 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             port = eval(port)
             unavailable_ips.add(ipaddress.ip_address(port["ip_address"]))
 
-    session_managed = False
-    if ixia_session is None:
-        LOG.info("ixia_session not supplied, creating")
-        from keywords import ixia_helper
-        ixia_session = ixia_helper.IxiaSession()
-        session_managed = True
-        ixia_session.connect()
-    traffic_started = False
+    with ExitStack() as stack:
+        if ixia_session is None:
+            LOG.info("ixia_session not supplied, creating")
+            from keywords import ixia_helper
+            ixia_session = ixia_helper.IxiaSession()
+            ixia_session.connect()
+            stack.callback(ixia_session.disconnect, traffic_stop=True)
 
-    try:
         ixia_session.load_config(IxiaPath.CFG_500FPS)
         ixia_session.add_chassis(clear=True)
         vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
@@ -4870,15 +4868,5 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         ixia_session.configure(configElement+'/frameRate', rate=fps)
 
         ixia_session.traffic_start()
-        traffic_started = True
 
         yield ixia_session
-    finally:
-        try:
-            if traffic_started:
-                ixia_session.traffic_stop()
-        finally:
-            # must ensure the session is disconnected no matter what, as it locks the service port
-            if session_managed:
-                LOG.info("releasing ixia_session created")
-                ixia_session.disconnect()
