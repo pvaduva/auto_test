@@ -357,7 +357,6 @@ def pytest_configure(config):
 
     InstallVars.set_install_var(lab=lab)
 
-    print(str(config.getoption('capture')))
     if config.getoption('noconsolelog'):
         global console_log
         console_log = False
