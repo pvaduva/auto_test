@@ -5,7 +5,6 @@ import threading    # Used for formatting logger
 from time import strftime, gmtime
 
 import pytest   # Don't remove. Used in eval
-import html
 
 import setup_consts
 import setups
@@ -361,7 +360,7 @@ def pytest_configure(config):
         global console_log
         console_log = False
 
-    config_logger(log_dir, console_log=console_log)
+    config_logger(log_dir, console=console_log)
 
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
@@ -461,7 +460,6 @@ def pytest_addoption(parser):
     parser.addoption('--noconsolelog', '--noconsole', '--no-console-log', '--no_console_log', '--no-console',
                      '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
 
-
     ##################################
     # Lab install or upgrade options #
     ##################################
@@ -508,7 +506,6 @@ def pytest_addoption(parser):
                          "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
                          " The default is default. Applicable only for upgrades from R3."
 
-
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
     parser.addoption('--build-server', '--build_server',  dest='build_server',
@@ -521,8 +518,6 @@ def pytest_addoption(parser):
 
     parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
                      action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
-
-
 
     ####################
     # Patching options #
@@ -548,8 +543,6 @@ def pytest_addoption(parser):
 
     parser.addoption('--patch-base-dir', '--patch_base_dir',  dest='patch_base_dir', default=None,
                      action='store', metavar='BASEDIR',  help=patch_base_dir_help)
-
-
 
     ###############################
     #  Orchestration options #
@@ -636,7 +629,7 @@ def pytest_addoption(parser):
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
 
 
-def config_logger(log_dir, console_log=True):
+def config_logger(log_dir, console=True):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
@@ -659,7 +652,7 @@ def config_logger(log_dir, console_log=True):
     LOG.addHandler(file_handler)
 
     # logger for stream output
-    console_level = logging.INFO if console_log else logging.CRITICAL
+    console_level = logging.INFO if console else logging.CRITICAL
     stream_hdler = logging.StreamHandler()
     stream_hdler.setFormatter(tis_formatter)
     stream_hdler.setLevel(console_level)
