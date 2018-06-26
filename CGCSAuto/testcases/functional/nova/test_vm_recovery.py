@@ -2,11 +2,14 @@ import time
 
 from pytest import mark
 
+from consts.auth import Tenant
+from consts.proj_vars import ProjVar
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
 from consts.feature_marks import Features
 from consts.kpi_vars import VMRecoveryNova, VMRecoveryNetworking
 from consts.timeout import VMTimeout, EventLogTimeout
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper, common
+from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper, common, \
+    network_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.clients.ssh import NATBoxClient
 from utils.kpi import kpi_log_parser
@@ -347,14 +350,37 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm with above flavor")
-    vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]
+    mgmt_net_id = network_helper.get_mgmt_net_id()
+    tenant_net_id = network_helper.get_tenant_net_id()
+    internal_net_id = network_helper.get_internal_net_id()
+    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
+            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     target_host = nova_helper.get_vm_host(vm_id)
 
-    if collect_kpi:
-        duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.05, kill_kvm_and_recover, vm_id,
-                                                                 target_host)
-        assert duration > 0, "No ping loss detected during vm recovery after killing kvm"
+    if collect_kpi and 'ixia_ports' in ProjVar.get_var("LAB"):
+        LOG.tc_step("Launch an observer vm")
+
+        mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get_secondary())
+        tenant_net_id = network_helper.get_tenant_net_id(auth_info=Tenant.get_secondary())
+        internal_net_id = network_helper.get_internal_net_id(auth_info=Tenant.get_secondary())
+        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                {'net-id': tenant_net_id, 'vif-model': 'virtio'},
+                {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+        vm_observer = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function', auth_info=Tenant.get_secondary())[1]
+
+        vm_helper.setup_kernel_routing(vm_observer)
+        vm_helper.setup_kernel_routing(vm_id)
+
+        vm_helper.route_vm_pair(vm_observer, vm_id)
+
+        LOG.tc_step("Collect KPI for vm recovery after killing kvm")
+
+        duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, kill_kvm_and_recover, vm_id,
+                                                                    target_host)
+        assert duration > 0, "No traffic loss detected during vm recovery after killing kvm"
 
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VMRecoveryNetworking.NAME,
                                   kpi_val=duration/1000, uptime=5)
