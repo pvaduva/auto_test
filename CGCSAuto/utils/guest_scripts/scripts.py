@@ -1,5 +1,5 @@
+import os
 from consts.proj_vars import ProjVar
-
 
 class TisInitServiceScript(object):
     script_path = "/etc/init.d/tis_automation_init.sh"
@@ -46,7 +46,7 @@ WantedBy=multi-user.target
 
     @classmethod
     def src(cls):
-        return "utils/guest_scripts/tis_automation_init.sh"
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "tis_automation_init.sh")
 
     @classmethod
     def dst(cls):
