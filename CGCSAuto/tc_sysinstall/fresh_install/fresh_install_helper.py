@@ -7,7 +7,7 @@ from utils.clients.ssh import SSHClient, ControllerClient
 from consts.build_server import Server
 from consts.auth import Tenant
 from consts.cgcs import SysType, Prompt
-from consts.filepaths import BuildServerPath
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar, InstallVars
 
 
@@ -191,6 +191,7 @@ def configure_controller(controller0_node):
     install_helper.unlock_controller(controller0_node.name, con_ssh=controller0_node.ssh_conn, available_only=False)
 
 
+# TODO: refactor/clean up possibly move to install_helper
 def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
     if con_ssh:
         connection = con_ssh
@@ -198,57 +199,35 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
         connection = telnet_conn
     else:
         connection = ControllerClient.get_active_controller()
+    expected_files = [WRSROOT_HOME + ".heat_resources",
+                      WRSROOT_HOME + "lab_setup-admin-resources.yaml",
+                      WRSROOT_HOME + "lab_setup-tenant1-resources.yaml",
+                      WRSROOT_HOME + "lab_setup-tenant2-resources.yaml",
+                      WRSROOT_HOME + "launch_stacks.sh"]
 
-    cmd = "test -f /home/wrsroot/.heat_resources"
-    rc, output = connection.exec_cmd(cmd)
-    if rc != 0:
-        err_msg = "/home/wrsroot/.heat_resources not found"
-        if fail_ok is False:
-            assert False, err_msg
-        elif fail_ok is True:
-            err_msg += " skipping heat setup"
-            LOG.error(err_msg)
+    for file in expected_files:
+        if not connection.file_exists(file):
+            err_msg = "{} not found".format(file)
+            LOG.warning(err_msg)
+            assert fail_ok, err_msg
             return 1, err_msg
-    else:
-        cmd = "/home/wrsroot/./create_resource_stacks.sh"
-        rc, output = connection.exec_cmd(cmd)
-        if rc != 0:
-            err_msg = "Failure when creating resource stacks"
-            if fail_ok is False:
-                assert False, err_msg
-            elif fail_ok is True:
-                err_msg += " skipping heat setup"
-                LOG.error(err_msg)
-                return 2, err_msg
-        else:
-            expected_files = ["/home/wrsroot/lab_setup-admin-resources.yaml",
-                              "/home/wrsroot/lab_setup-admin-resources.yaml",
-                              "/home/wrsroot/lab_setup-admin-resources.yaml",
-                              "/home/wrsroot/launch_stacks.sh"]
-            for file in expected_files:
-                rc, output = connection.exec_cmd("test -f {}".format(file))
-                if rc != 0:
-                    err_msg = "{} not found".format(file)
-                    if fail_ok is False:
-                        assert False, err_msg
-                    elif fail_ok is True:
-                        err_msg += " skipping heat setup"
-                        LOG.error(err_msg)
-                        return 1, err_msg
-    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh")
-    cmd = "/home/wrsroot/launch_stacks.sh lab_setup.conf"
+
+    cmd = WRSROOT_HOME + "./create_resource_stacks.sh"
+    rc, output = connection.exec_cmd(cmd, fail_ok=fail_ok)
+    if rc != 0:
+        err_msg = "Failure when creating resource stacks skipping heat setup"
+        LOG.warning(err_msg)
+        return 2, err_msg
+
+    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh", fail_ok=fail_ok)
+    connection.exc_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
     rc, output = connection.exec_cmd(cmd)
     if rc != 0:
         err_msg = "Heat stack launch failed"
-        if fail_ok is False:
-            assert False, err_msg
-        elif fail_ok is True:
-            err_msg += " skipping heat setup"
-            LOG.error(err_msg)
-            return 2, err_msg
-    else:
-        return 0, output
+        LOG.warning(err_msg)
+        return 2, err_msg
 
+    return 0, output
 
 
 def clear_post_install_alarms():

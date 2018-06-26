@@ -46,8 +46,8 @@ class PrivKeyPath:
 class BuildServerPath:
     DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
-    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_6.0_Host'
-    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
+    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/TC_18.07_Host'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
@@ -59,7 +59,8 @@ class BuildServerPath:
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
                                '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/',
                                '18.03': '/localdisk/loadbuild/jenkins/TC_18.03_Host/latest_build/',
-                               '18.04': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_build/',
+                               '18.07': '/localdisk/loadbuild/jenkins/TC_18.07_Host/latest_build/',
+                               '18.08': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_build/',
                                }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
@@ -69,8 +70,10 @@ class BuildServerPath:
                                    '/folk/cgts/lab/R5-AIO-SX-full.lic'],
                          '18.03': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic',
                                    '/folk/cgts/lab/R5-AIO-SX-full.lic'],
-                         '18.04': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
-                                   '/folk/cgts/lab/R6-AIO-SX-full.lic']
+                         '18.07': ['/folk/cgts/lab/R6-EAR1-eval.lic', '/folk/cgts/lab/R6-EAR1-AIO-DX-eval.lic',
+                                   '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
+                         '18.08': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
+                                   '/folk/cgts/lab/R6-AIO-SX-full.lic'],
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
@@ -99,8 +102,10 @@ class BuildServerPath:
                              '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img',
                          '18.03':
                              '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img',
-                         '18.04':
-                             '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
+                         '18.07':
+                             '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img',
+                         '18.08':
+                             '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
                          }
 
 

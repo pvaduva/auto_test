@@ -1158,6 +1158,7 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     else:
         raise ValueError("Could not access lab files")
 
+    # TODO: create connection rather than using ssh_to_build_server
     with install_helper.ssh_to_build_server(conf_server) as ssh_conn:
         cmd = 'test -d {}'.format(lab_files_path)
         assert ssh_conn.exec_cmd(cmd)[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)

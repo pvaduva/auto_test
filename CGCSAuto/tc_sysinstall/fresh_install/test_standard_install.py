@@ -50,7 +50,8 @@ def test_standard_install(install_setup):
         skip("stopping at install step: {}".format(LOG.test_step))
 
     controller0_node.telnet_conn.login()
-    fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
+    controller0_node.telnet_conn.flush()
+    # fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     LOG.tc_step("Download lab files")
     lab_files_server = install_setup["servers"]["lab_files"]

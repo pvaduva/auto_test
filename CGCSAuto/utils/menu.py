@@ -80,29 +80,6 @@ class Menu(object):
         for i in range(0, len(options)):
             self.options.append(Option(name=options[i].decode(), index=i))
 
-    def find_numbered_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
-        telnet_conn.expect([end_of_menu], 60)
-        output = str.encode(telnet_conn.cmd_output)
-        positioning_codes = re.findall(newline, output)
-        current_index = 0
-        next_index = 1
-        newline_codes = [positioning_codes[current_index]]
-
-        while True:
-            try:
-                current_line_num = int(re.search("(\[)(\d+)", positioning_codes[current_index]).group(2))
-                next_line_num = int(re.search("(\[)(\d+)", positioning_codes[next_index]).group(2))
-                if next_line_num > current_line_num:
-                    newline_codes.append(positioning_codes[next_index])
-                current_index += 1
-                next_index += 1
-            except IndexError:
-                break
-        for i in range(0, len(newline_codes) - 1):
-            option_name = output[output.find(newline_codes[i]):output.find(newline_codes[i+1])]
-            if re.search(option_identifier, option_name):
-                self.options.append(Option(name=option_name, index=i))
-
     def get_sub_menu(self, name, strict=True):
         for sub_menu in self.sub_menus:
             if (name == sub_menu.name and strict) or (name in sub_menu.name and not strict):
@@ -253,9 +230,33 @@ class BootDeviceMenu(Menu):
     def __init__(self):
         super().__init__(name="boot device menu", kwargs=bios.BootMenus.Boot_Device)
 
-    def find_options(self, telnet_conn):
-        super().find_options(telnet_conn, end_of_menu=b"\^ and v to move selection|_q{40,}_", option_identifier=b"[A-Z][A-Za-z]",
-                             newline=b'(\x1b\[\d+;\d+H)+')
+    # TODO: make this the base menu function
+    def find_options(self, telnet_conn, end_of_menu=b"\^ and v to move selection|_q{40,}_", option_identifier=b"[A-Z][A-Za-z]",
+                             newline=b'(\x1b\[\d+;\d+H)+'):
+        telnet_conn.expect([end_of_menu], 60)
+        output = str.encode(telnet_conn.cmd_output)
+        positioning_codes = re.findall(newline, output)
+        current_index = 0
+        next_index = 1
+        newline_codes = [positioning_codes[current_index]]
+
+        while True:
+            try:
+                current_line_num = int(re.search(b"(\[)(\d+)", positioning_codes[current_index]).group(2))
+                next_line_num = int(re.search(b"(\[)(\d+)", positioning_codes[next_index]).group(2))
+                if next_line_num > current_line_num:
+                    newline_codes.append(positioning_codes[next_index])
+                current_index += 1
+                next_index += 1
+            except IndexError:
+                break
+        option_index = 0
+        for i in range(0, len(newline_codes) - 1):
+            option_name = output[output.find(newline_codes[i]):output.find(newline_codes[i + 1])]
+            if re.search(option_identifier, option_name):
+                self.options.append(Option(name=option_name.decode(), index=option_index))
+                option_index += 1
+        LOG.debug("{} options are: {}".format(self.name, [option.name for option in self.options]))
 
 
 class Option(object):

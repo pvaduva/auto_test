@@ -3010,6 +3010,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
     return 0, None
 
 
+# TODO: find a better spot for this
 def get_git_name(lab_name):
     """
     Args:
@@ -3093,6 +3094,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
     return rc, output
 
 
+# TODO: refactor/clean up
 def post_install(active_controller=None):
     """
     runs post fresh_install scripts if there are any
@@ -3534,6 +3536,7 @@ def apply_branding(telnet_conn, fail_ok=True):
     return 0, ''
 
 
+# TODO: move to fresh install helper
 def get_resume_step(lab=None, install_progress_path=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")

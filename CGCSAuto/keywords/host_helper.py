@@ -320,8 +320,9 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
         controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh)) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
+        timeout = HostTimeout.CONTROLLER_UNLOCK if "controller-0" in hosts or "controller-1" in hosts else HostTimeout.COMPUTE_UNLOCK
         res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
-                                           con_ssh=con_ssh)
+                                           con_ssh=con_ssh, timeout=timeout)
 
         if res_unlock:
             res_1 = wait_for_subfunction_ready(hosts, fail_ok=fail_ok, con_ssh=con_ssh)
