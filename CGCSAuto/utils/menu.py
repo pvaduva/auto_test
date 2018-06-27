@@ -230,7 +230,7 @@ class BootDeviceMenu(Menu):
     def __init__(self):
         super().__init__(name="boot device menu", kwargs=bios.BootMenus.Boot_Device)
 
-    # TODO: make this the base menu function
+    # TODO: generalize for the base Menu function
     def find_options(self, telnet_conn, end_of_menu=b"\^ and v to move selection|_q{40,}_", option_identifier=b"[A-Z][A-Za-z]",
                              newline=b'(\x1b\[\d+;\d+H)+'):
         telnet_conn.expect([end_of_menu], 60)

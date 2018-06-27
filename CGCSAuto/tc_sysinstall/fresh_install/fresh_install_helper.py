@@ -220,7 +220,7 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
         return 2, err_msg
 
     connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh", fail_ok=fail_ok)
-    connection.exc_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
+    connection.exec_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
     rc, output = connection.exec_cmd(cmd)
     if rc != 0:
         err_msg = "Heat stack launch failed"
