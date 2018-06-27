@@ -16,6 +16,7 @@ from consts import build_server
 from keywords.common import scp_to_local, scp_from_active_controller_to_localhost
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
     install_helper
+from tc_sysinstall.fresh_install import fresh_install_helper
 from utils import exceptions, lab_info
 from utils import local_host
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, SSHFromSSH
@@ -676,19 +677,16 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         lab_to_install['local_password'] = password
 
     lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
-    skip_args = skip.lower() if skip else None
-    if skip_args:
-        skip_args = skip_args.split(',')
     if resume:
         if isinstance(resume, str) and resume.isdigit():
             resume = int(resume)
         else:
-            resume = install_helper.get_resume_step(lab_to_install)
+            resume = fresh_install_helper.get_resume_step(lab_to_install)
     if stop is not None:
         stop = int(stop)
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
-                                 skips=skip_args,
+                                 skips=skip,
                                  wipedisk=wipedisk,
                                  build_server=build_server,
                                  host_build_dir=host_build_dir,

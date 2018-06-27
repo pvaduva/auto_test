@@ -164,6 +164,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
                                lab['controller-0 ip'],
                                os.path.join(WRSROOT_HOME, "bootimage.sig"), pre_opts=pre_opts)
 
+
 def get_mgmt_boot_device(node):
     boot_device = {}
     boot_interfaces = system_helper.get_host_port_pci_address_for_net_type(node.name)
@@ -256,6 +257,21 @@ def bring_node_console_up(node, boot_device,
             usb=boot_usb)
     if close_telnet_conn:
         node.telnet_conn.close()
+
+
+def boot_hosts(boot_device, nodes=None):
+    threads = []
+    usb = ("usb" in InstallVars.get_install_var("BOOT_TYPE") or "burn" in InstallVars.get_install_var("BOOT_TYPE"))
+    for node in nodes:
+        boot_usb = node.name == "controller-0" and usb
+        node_thread = threading.Thread(target=bring_node_console_up, name=node.name,
+                                       args=(node, boot_device),
+                                       kwargs={'vlm_power_on': True, "close_telnet_conn": True, "boot_usb": boot_usb,})
+        threads.append(node_thread)
+        LOG.info("Starting thread for {}".format(node_thread.name))
+        node_thread.start()
+    for thread in threads:
+        thread.join()
 
 
 def get_non_controller_system_hosts():
@@ -3010,7 +3026,6 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
     return 0, None
 
 
-# TODO: find a better spot for this
 def get_git_name(lab_name):
     """
     Args:
@@ -3062,6 +3077,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
     con_telnet.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
     con_telnet.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
     con_telnet.exec_cmd("export USER=wrsroot")
+
     rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
     if rc == 0:
         cmd = 'echo "{}" | sudo -S config_controller --config-file {}'.format(HostLinuxCreds.get_password(), config_file)
@@ -3094,12 +3110,11 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
     return rc, output
 
 
-# TODO: refactor/clean up
-def post_install(active_controller=None):
+def post_install(controller0_node=None):
     """
-    runs post fresh_install scripts if there are any
+    runs post install scripts if there are any
     Args:
-        active_controller: a Node object representing the active controller of the lab.
+        controller0_node: a Node object representing the active controller of the lab.
 
     Returns tuple of a return code a message
     -1: Unable to execute one of the scripts
@@ -3111,40 +3126,28 @@ def post_install(active_controller=None):
     """
     lab = InstallVars.get_install_var("LAB")
     rc, msg = 0, None
-
-    if active_controller is None:
-        active_controller = lab["controller-0"]
-
-    if active_controller.ssh_conn is not None:
-        connection = active_controller.ssh_conn
-    elif active_controller.telnet_conn is not None:
-        connection = active_controller.telnet_conn
+    if controller0_node is None:
+        controller0_node = lab["controller-0"]
+    if controller0_node.ssh_conn is not None:
+        connection = controller0_node.ssh_conn
     else:
-        connection = host_helper.get_host_telnet_session(active_controller.host_name, lab)
-    if connection is None:
-        connection = ControllerClient.get_active_controller(lab["name"])
+        connection = ControllerClient.get_active_controller()
 
-    assert connection, "Could not establish a connection to {}".format(active_controller.name)
-
-    if connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0] != 0:
-        rc, msg = 1, "No post fresh_install directory"
-
-    else:
+    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")
+    if rc == 0:
         scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
-
         if len(scripts) > 0:
             for script in scripts:
                 LOG.info("Attempting to run {}".format(script))
-                exec = connection.exec_cmd("chmod 755 /home/wrsroot/{}".format(script))[0]
-                if exec != 0:
-                    rc, msg = -1, 'Unable to change {} permissions'.format(script)
-                    break
-                exec = connection.exec_cmd("/home/wrsroot/{} {}".format(script, active_controller.host_name))[0]
-                if exec != 0:
+                connection.exec_cmd("chmod 755 /home/wrsroot/{}".format(script))
+                rc = connection.exec_cmd("/home/wrsroot/{} {}".format(script, controller0_node.host_name))[0]
+                if rc != 0:
                     rc, msg = -1, 'Unable to execute {}'.format(script)
                     break
         else:
             rc, msg = 2, "No post fresh_install scripts in the directory"
+    else:
+        rc, msg = 1, "No post fresh_install directory"
 
     connection.exec_cmd("source /etc/nova/openrc; system alarm-list")
     connection.exec_cmd("cat /etc/build.info")
@@ -3313,7 +3316,6 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         sys_type = ProjVar.get_var("SYS_TYPE")
         LOG.debug("SYS_TYPE: {}".format(sys_type))
         small_footprint = "AIO" in sys_type
-        LOG.debug(small_footprint)
     if low_latency is None:
         low_latency = InstallVars.get_install_var('LOW_LATENCY')
     if security is None:
@@ -3536,15 +3538,39 @@ def apply_branding(telnet_conn, fail_ok=True):
     return 0, ''
 
 
-# TODO: move to fresh install helper
-def get_resume_step(lab=None, install_progress_path=None):
-    if lab is None:
-        lab = InstallVars.get_install_var("LAB")
-    if install_progress_path is None:
-        install_progress_path = "{}/../{}_install_progress.txt".format(ProjVar.get_var("LOG_DIR"), lab["short_name"])
+def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
+    if con_ssh:
+        connection = con_ssh
+    elif telnet_conn:
+        connection = telnet_conn
+    else:
+        connection = ControllerClient.get_active_controller()
+    if yaml_files is None:
+        yaml_files = [WRSROOT_HOME + "lab_setup-admin-resources.yaml",
+                      WRSROOT_HOME + "lab_setup-tenant1-resources.yaml",
+                      WRSROOT_HOME + "lab_setup-tenant2-resources.yaml",]
+    expected_files = [WRSROOT_HOME + ".heat_resources", WRSROOT_HOME + "launch_stacks.sh"] + yaml_files
 
-    with open(install_progress_path, "r") as progress_file:
-        lines = progress_file.readlines()
-        for line in lines:
-            if "End step:" in line:
-                return int(line[line.find("End Step: "):].strip()) + 1
+    for file in expected_files:
+        if not connection.file_exists(file):
+            err_msg = "{} not found".format(file)
+            LOG.warning(err_msg)
+            assert fail_ok, err_msg
+            return 1, err_msg
+
+    cmd = WRSROOT_HOME + "./create_resource_stacks.sh"
+    rc, output = connection.exec_cmd(cmd, fail_ok=fail_ok)
+    if rc != 0:
+        err_msg = "Failure when creating resource stacks skipping heat setup"
+        LOG.warning(err_msg)
+        return 2, err_msg
+
+    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh", fail_ok=fail_ok)
+    connection.exec_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
+    rc, output = connection.exec_cmd(cmd)
+    if rc != 0:
+        err_msg = "Heat stack launch failed"
+        LOG.warning(err_msg)
+        return 2, err_msg
+
+    return 0, output

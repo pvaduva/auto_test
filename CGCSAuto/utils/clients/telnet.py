@@ -55,7 +55,7 @@ class TelnetClient(Telnet):
             hostname = re.search(TELNET_REGEX, prompt).group(0)
 
         self.flush()
-        self.logger = telnet_logger(hostname) if hostname else telnet_logger(host)
+        self.logger = telnet_logger(hostname) if hostname else telnet_logger(host + ":" + str(port))
         self.hostname = hostname
         self.prompt = prompt
         self.cmd_output = ''

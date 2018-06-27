@@ -79,19 +79,9 @@ def test_storage_install(install_setup):
 #        skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Boot other lab hosts")
-    threads = []
     if fresh_install_helper.do_step():
-        for hostname in hosts:
-            if controller0_node.name not in hostname:
-                host_thread = threading.Thread(target=install_helper.bring_node_console_up, name=hostname,
-                                               args=(lab[hostname], boot_device),
-                                               kwargs={'vlm_power_on': True, "close_telnet_conn": True, "boot_usb": False,
-                                                       "small_footprint": False})
-                threads.append(host_thread)
-                LOG.info("Starting thread for {}".format(host_thread.name))
-                host_thread.start()
-        for thread in threads:
-            thread.join()
+        host_objects = [lab[hostname] for hostname in hosts if controller0_node.name not in hostname]
+        install_helper.boot_hosts(boot_device, nodes=host_objects)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -148,5 +138,5 @@ def test_storage_install(install_setup):
 
     LOG.tc_step("Check heat resources")
     if fresh_install_helper.do_step():
-        fresh_install_helper.setup_heat()
+        install_helper.setup_heat()
         fresh_install_helper.clear_post_install_alarms()

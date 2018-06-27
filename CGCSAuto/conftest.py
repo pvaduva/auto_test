@@ -480,7 +480,7 @@ def pytest_addoption(parser):
     parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
                      help=resumeinstall_help, const=True, nargs='?', default=False)
     parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=99)
-    parser.addoption('--skip', dest='skiplist', action='store', help=skip_help)
+    parser.addoption('--skip', dest='skiplist', action='store', nargs='*', help=skip_help)
     parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
     parser.addoption('--boot', dest='boot_list', action='store', default='pxe', help=boot_help)
     parser.addoption('--installconf', '--fresh_install-conf', action='store', metavar='installconf', default=None,
@@ -498,7 +498,7 @@ def pytest_addoption(parser):
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
 
-    # Custom fresh_install help
+    # install help
     file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
                     "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
@@ -510,7 +510,7 @@ def pytest_addoption(parser):
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
 
-    # Custom fresh_install options
+    # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
                      action='store', metavar='DIR', help=file_dir_help)
     parser.addoption('--controller', dest='controller',

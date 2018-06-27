@@ -112,4 +112,4 @@ def test_duplex_install(install_setup):
 
     LOG.tc_step("Check heat resources")
     if fresh_install_helper.do_step():
-        fresh_install_helper.setup_heat()
+        install_helper.setup_heat()

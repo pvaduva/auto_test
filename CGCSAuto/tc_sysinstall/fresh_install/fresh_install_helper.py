@@ -66,10 +66,9 @@ def do_step():
     do = last_session_step <= current_step and str(current_step) not in skip_list
 
     if not do:
-        LOG.info("Skipping step because resume flag was given")
+        LOG.info("Skipping step")
 
     return do
-
 
 
 def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None):
@@ -191,45 +190,6 @@ def configure_controller(controller0_node):
     install_helper.unlock_controller(controller0_node.name, con_ssh=controller0_node.ssh_conn, available_only=False)
 
 
-# TODO: refactor/clean up possibly move to install_helper
-def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True):
-    if con_ssh:
-        connection = con_ssh
-    elif telnet_conn:
-        connection = telnet_conn
-    else:
-        connection = ControllerClient.get_active_controller()
-    expected_files = [WRSROOT_HOME + ".heat_resources",
-                      WRSROOT_HOME + "lab_setup-admin-resources.yaml",
-                      WRSROOT_HOME + "lab_setup-tenant1-resources.yaml",
-                      WRSROOT_HOME + "lab_setup-tenant2-resources.yaml",
-                      WRSROOT_HOME + "launch_stacks.sh"]
-
-    for file in expected_files:
-        if not connection.file_exists(file):
-            err_msg = "{} not found".format(file)
-            LOG.warning(err_msg)
-            assert fail_ok, err_msg
-            return 1, err_msg
-
-    cmd = WRSROOT_HOME + "./create_resource_stacks.sh"
-    rc, output = connection.exec_cmd(cmd, fail_ok=fail_ok)
-    if rc != 0:
-        err_msg = "Failure when creating resource stacks skipping heat setup"
-        LOG.warning(err_msg)
-        return 2, err_msg
-
-    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh", fail_ok=fail_ok)
-    connection.exec_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
-    rc, output = connection.exec_cmd(cmd)
-    if rc != 0:
-        err_msg = "Heat stack launch failed"
-        LOG.warning(err_msg)
-        return 2, err_msg
-
-    return 0, output
-
-
 def clear_post_install_alarms():
     system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
     alarm = system_helper.get_alarms(alarm_id='250.001')
@@ -237,3 +197,16 @@ def clear_post_install_alarms():
         LOG.tc_step("Swact lock/unlock host")
         rc, msg = host_helper.lock_unlock_controllers()
         assert rc == 0, msg
+
+
+def get_resume_step(lab=None, install_progress_path=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    if install_progress_path is None:
+        install_progress_path = "{}/../{}_install_progress.txt".format(ProjVar.get_var("LOG_DIR"), lab["short_name"])
+
+    with open(install_progress_path, "r") as progress_file:
+        lines = progress_file.readlines()
+        for line in lines:
+            if "End step:" in line:
+                return int(line[line.find("End Step: "):].strip()) + 1
