@@ -544,6 +544,26 @@ class Labs:
         'ixia_ports': [{'port': (6, 11), 'range': (3153, 3201)}, {'port': (6, 12), 'range': (3253, 3301)}],
     }
 
+    WCP_106 = {
+        'short_name': 'wcp_106',
+        'name': 'yow-cgcs-wildcat-106',
+        'floating ip': '128.224.150.94',
+        'controller-0 ip': '128.224.150.94',
+        'controller_nodes': [23601],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WCP_112 = {
+        'short_name': 'wcp_112',
+        'name': 'yow-cgcs-wildcat-112',
+        'floating ip': '128.224.150.148',
+        'controller-0 ip': '128.224.150.148',
+        'controller_nodes': [95980],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     WCP_113_121 = {
         'short_name': 'wcp_113_121',
         'name': 'yow-cgcs-wildcat-113_121',
@@ -553,6 +573,16 @@ class Labs:
         'controller_nodes': [31701, 19174],
         'compute_nodes': [11182, 47720, 56027, 28212, 33598],
         'storage_nodes': [11507, 47400],
+    }
+
+    WCP_122 = {
+        'short_name': 'wcp_122',
+        'name': 'yow-cgcs-wildcat-122',
+        'floating ip': '128.224.151.170',
+        'controller-0 ip': '128.224.151.170',
+        'controller_nodes': [64873],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     WP_01_02 = {
