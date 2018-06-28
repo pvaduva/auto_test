@@ -486,6 +486,7 @@ def pytest_addoption(parser):
     parser.addoption('--installconf', '--fresh_install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
     parser.addoption('--security', dest='security', action='store', default='standard')
+    parser.addoption('--drop', dest='drop_num', action='store', help='an integer representing which drop to install')
     # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"

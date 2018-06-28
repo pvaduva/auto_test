@@ -1,5 +1,6 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.cgcs import DROPS
 
 
 class ProjVar:
@@ -87,10 +88,11 @@ class InstallVars:
 
     @classmethod
     def set_install_vars(cls, lab, resume,
-                         wipedisk = False,
-                         skips = None,
+                         wipedisk=False,
+                         skips=None,
                          build_server=None,
                          host_build_dir=None,
+                         drop_num=None,
                          guest_image=None,
                          files_server=None,
                          files_dir=None,
@@ -108,7 +110,8 @@ class InstallVars:
                          stop=99):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
-        __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH
+        __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.LATEST_HOST_BUILD_PATHS.get(
+            DROPS.get(drop_num), BuildServerPath.DEFAULT_HOST_BUILD_PATH)
         __files_server = files_server if files_server else __build_server
         __files_dir = files_dir if files_dir else \
             "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
@@ -150,7 +153,8 @@ class InstallVars:
 
             # Generic
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
-            'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.DEFAULT_GUEST_IMAGE_PATH,
+            'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop_num),
+                                                                                                 BuildServerPath.DEFAULT_GUEST_IMAGE_PATH),
             'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
             'OUT_PUT_DIR': out_put_dir,
             'BUILD_ID': None,

@@ -86,6 +86,7 @@ def download_upgrade_license(lab, server, license_path):
                             os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                             pre_opts=pre_opts)
 
+
 # TODO: to replace download_upgrade_license
 def download_license(lab, server, license_path, dest_name="upgrade_license"):
 
@@ -3052,7 +3053,8 @@ def get_git_name(lab_name):
 
 # TODO: figure out what config_region is and if we have to support it
 # TODO: add support for banners and branding
-def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False):
+def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
+                             banner=True, branding=True):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -3070,6 +3072,10 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         con_telnet.login()
         close_telnet = True
 
+    if banner:
+        apply_banner(telnet_conn=con_telnet, fail_ok=True)
+    if branding:
+        apply_branding(telnet_conn=con_telnet, fail_ok=True)
     con_telnet.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
                         wrsroot_etc_profile)
     con_telnet.exec_cmd("unset TMOUT")
@@ -3108,6 +3114,47 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         con_telnet.close()
 
     return rc, output
+
+
+def apply_banner(telnet_conn, fail_ok=True):
+    LOG.info("Applying banner files")
+    banner_dir = "{}/banner/".format(WRSROOT_HOME)
+    rc = telnet_conn.exec_cmd("test -d {}".format(banner_dir), fail_ok=fail_ok)
+
+    if rc != 0:
+        err_msg = "Banner files not found"
+        LOG.info(err_msg)
+        return 1, err_msg
+    else:
+        rc = telnet_conn.exec_cmd("echo {} | sudo -S mv {} /opt/".format(SvcCgcsAuto.PASSWORD, banner_dir),
+                              fail_ok=fail_ok)
+        if rc != 0:
+            err_msg = 'Banner application failed'
+            LOG.info(err_msg)
+            return 2, err_msg
+
+    return 0, ''
+
+
+def apply_branding(telnet_conn, fail_ok=True):
+    LOG.info("Applying branding files")
+    branding_dir = "{}/branding".format(WRSROOT_HOME)
+    branding_dest = "{}/opt/branding".format(WRSROOT_HOME)
+    rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir), fail_ok=fail_ok)
+
+    if rc != 0:
+        err_msg = "Branding directory does not exist"
+        LOG.info(err_msg)
+        return 1, err_msg
+    else:
+        cmd = "echo {} | sudo -S cp -r {}/* {}".format(HostLinuxCreds.get_password(), branding_dir, branding_dest)
+        rc = telnet_conn.exec_cmd(cmd)
+        if rc != 0:
+            err_msg = "failed to copy branding files from {} to {}".format(branding_dir, branding_dest)
+            LOG.info(err_msg)
+            return 2, err_msg
+
+    return 0, ''
 
 
 def post_install(controller0_node=None):
@@ -3511,31 +3558,6 @@ def mount_boot_server_iso(lab_dict=None):
     tuxlab_conn.close()
 
     return 0, None
-
-
-def apply_branding(telnet_conn, fail_ok=True):
-    branding_dir = "{}/branding".format(WRSROOT_HOME)
-    branding_dest = "{}/opt/branding".format(WRSROOT_HOME)
-    rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir))[0]
-
-    if rc != 0:
-        msg = "Branding directory does not exist"
-        if fail_ok:
-            return 1, msg
-        else:
-            raise exceptions.TelnetException(msg)
-
-    else:
-        cmd = "echo {} | sudo -S cp -r {}/* {}".format(HostLinuxCreds.get_password(), branding_dir, branding_dest)
-        rc = telnet_conn.exec_cmd(cmd)[0]
-
-        if rc != 0:
-            msg = "failed to copy branding files from {} to {}".format(branding_dir, branding_dest)
-            if fail_ok:
-                return 1, msg
-            else:
-                raise exceptions.TelnetException(msg)
-    return 0, ''
 
 
 def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
