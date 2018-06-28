@@ -4684,8 +4684,8 @@ def setup_avr_routing(vm_id, **kwargs):
     scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
         TisInitServiceScript.configure(ssh_client, FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
-    "{},{},eth0,9000"
-    "{},{},eth1,9000"
+    "{},{},eth0,1500"
+    "{},{},eth1,1500"
 )
 """.format(data, data_netmask, internal, internal_netmask), **kwargs)
         TisInitServiceScript.enable(ssh_client)
