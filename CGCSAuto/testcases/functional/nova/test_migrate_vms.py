@@ -22,12 +22,6 @@ def check_system():
 
 
 @fixture(scope='module')
-def avs_only():
-    if not system_helper.is_avs():
-        skip("Skip test on OVS system")
-
-
-@fixture(scope='module')
 def hosts_per_stor_backing(check_system):
     hosts_per_backing = host_helper.get_hosts_per_storage_backing()
     LOG.fixture_step("Hosts per storage backing: {}".format(hosts_per_backing))
@@ -508,7 +502,7 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     'avp',
     'dpdk',
 ])
-def test_kpi_live_migrate(check_system, avs_only, vm_type, collect_kpi):
+def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
     """
     Collect live migration ping loss duration KPI
     Args:
@@ -522,6 +516,8 @@ def test_kpi_live_migrate(check_system, avs_only, vm_type, collect_kpi):
         skip("KPI only test. Skip due to kpi collection is not enabled.")
     if 'ixia_ports' not in ProjVar.get_var("LAB"):
         skip("this lab is not configured with ixia_ports.")
+    if not system_helper.is_avs() and vm_type in ('avp', 'dkdp'):
+        skip('avp vif unsupported by OVS')
 
     def operation(vm_id_):
         code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)

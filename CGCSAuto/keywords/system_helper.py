@@ -3418,7 +3418,7 @@ def is_avs(con_ssh=None):
     if vswitch_type is None:
         vswitch_type = get_system_value(field='vswitch_type', con_ssh=con_ssh)
         ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
-    return vswitch_type != 'ovs'
+    return 'ovs' not in vswitch_type    # 'avs' or '' for avs; 'ovs-dpdk' for ovs.
 
 
 def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None,):

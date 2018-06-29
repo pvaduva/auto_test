@@ -1,10 +1,16 @@
-from pytest import mark, skip
+from pytest import mark, skip, fixture
 
 from consts.cgcs import FlavorSpec
 from consts.reasons import SkipHypervisor
-from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper
+from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
+
+
+@fixture(scope='module', autouse=True)
+def skip_for_ovs():
+    if not system_helper.is_avs():
+        skip('avp vif required by dpdk/vhost vm is unsupported by OVS')
 
 
 def _get_dpdk_user_data(con_ssh=None):
