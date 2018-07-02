@@ -1178,7 +1178,6 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
         nameservers (list): list of IP addresses (in plain text) of new DNS servers to change to
         with_action_option: whether invoke the CLI with or without "action" option
                             - None      no "action" option at all
-                            - apply     system dns-modify <> action=apply
                             - install   system dns-modify <> action=install
                             - anystr    system dns-modify <> action=anystring...
     Returns:
