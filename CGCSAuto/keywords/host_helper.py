@@ -3350,6 +3350,31 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
         test_server_conn.close()
 
 
+@contextmanager
+def ssh_to_compliance_server(server='tis-compliance-test-node.cumulus.wrs.com', user='cumulus',
+                             password='kumuluz', prompt=None):
+    """
+    ssh to given compliance server
+
+    Args:
+        server:
+        user (str):
+        password (str):
+        prompt (str|None): expected prompt. such as: cumulus@tis-compliance-test-node:~$
+
+    Yields (SSHClient): ssh client for given compliance server and user
+
+    """
+    prompt = prompt if prompt else '{}@tis-compliance-test-node:~$'.format(user)
+    server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
+    server_conn.connect()
+
+    try:
+        yield server_conn
+    finally:
+        server_conn.close()
+
+
 def get_host_co_processor_pci_list(hostname):
 
     host_pci_info = []
@@ -3946,3 +3971,60 @@ def get_host_cmdline_options(host, con_ssh=None):
         output = host_ssh.exec_cmd('cat /proc/cmdline')[1]
 
     return output
+
+
+@contextmanager
+def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
+                       telnet_session=None):
+    """
+    ssh to a external node from sshclient.
+
+    Args:
+        host (str|None): hostname or ip address of remote node to ssh to.
+        username (str):
+        password (str):
+        prompt (str):
+
+
+    Returns (SSHClient): ssh client of the host
+
+    Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
+                  remote_ssh.exec_cmd(cmd)
+
+    """
+
+    if not host:
+        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
+
+    if use_telnet and not telnet_session:
+        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+
+    if not con_ssh and not use_telnet:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not use_telnet:
+        default_user, default_password = LinuxUser.get_current_user_password()
+    else:
+        default_user = HostLinuxCreds.get_user()
+        default_password = HostLinuxCreds.get_password()
+
+    user = username if username else default_user
+    password = password if password else default_password
+    if use_telnet:
+        original_host = telnet_session.exec_cmd('hostname')[1]
+    else:
+        original_host = con_ssh.host
+
+    if not prompt:
+        prompt = '.*' + host + '\:~\$'
+
+    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
+    remote_ssh.connect()
+    current_host = remote_ssh.host
+    if not current_host == host:
+        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
+    try:
+        yield remote_ssh
+    finally:
+        if current_host != original_host:
+            remote_ssh.close()

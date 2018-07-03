@@ -225,6 +225,73 @@ def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False
     return 0, succ_msg
 
 
+def update_subnet(subnet, unset=False, allocation_pool=None, dns_server=None, host_route=None, service_type=None,
+                  tag=None,  name=None, dhcp=None, gateway=None, description=None, auth_info=Tenant.ADMIN,
+                  fail_ok=False, con_ssh=None):
+    """
+    set/unset given setup
+    Args:
+        subnet (str):
+        unset (bool): set or unset
+        allocation_pool (None|str|tuple|list):
+        dns_server (None|str|tuple|list):
+        host_route (None|str|tuple|list):
+        service_type (None|str|tuple|list):
+        tag (None|bool):
+        name (str|None):
+        dhcp (None|bool):
+        gateway (str|None): valid str: <ip> or 'none'
+        description:
+        auth_info:
+        fail_ok:
+        con_ssh:
+
+    Returns:
+
+    """
+    LOG.info("Update subnet {}".format(subnet))
+    set_no = ['no', '', False]
+    unset_all = ['all', True]
+
+    arg_dict = {
+        'allocation-pool': allocation_pool,
+        'dns-nameserver': dns_server,
+        'host-route': host_route,
+        'service-type': service_type,
+        'tag': tag if tag not in set_no+unset_all else None,
+    }
+
+    if unset:
+        arg_dict.update(**{'all-tag': True if tag in unset_all else None})
+        cmd = 'unset'
+    else:
+        set_only_dict = {
+            'name': name,
+            'dhcp': True if dhcp is True else None,
+            'gateway': gateway,
+            'description': description,
+            'no-dhcp': True if dhcp in set_no else None,
+            'no-tag': True if tag in set_no else None,
+            'no-dns-nameservers': True if dns_server in set_no else None,
+            'no-host-route': True if host_route in set_no else None,
+            'no-allocation-pool': True if allocation_pool in set_no else None
+        }
+        arg_dict.update(**set_only_dict)
+        cmd = 'unset'
+
+    arg_str = common.parse_args(args_dict=arg_dict, repeat_arg=True)
+    arg_str += ' {}'.format(subnet)
+
+    code, output = cli.openstack('subnet {}'.format(cmd), arg_str, ssh_client=con_ssh, auth_info=auth_info,
+                                 rtn_list=True, fail_ok=fail_ok)
+
+    if code > 0:
+        return 1, output
+
+    LOG.info("Subnet {} updated successfully")
+    return 0, subnet
+
+
 def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
     """
     Get subnets ids based on given criteria.
@@ -1408,7 +1475,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
     tenant_id = keystone_helper.get_tenant_ids(tenant, con_ssh=con_ssh)[0]
 
     args_dict = {
-        '--tenant-id': tenant_id if auth_info == Tenant.ADMIN else None,
+        '--tenant-id': tenant_id if (auth_info == Tenant.ADMIN and tenant != Tenant.ADMIN) else None,
         '--distributed': distributed,
         '--ha': ha,
     }

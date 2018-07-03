@@ -303,8 +303,8 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
                 else:
                     try:
-                        with common.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
-                                                       telnet_session=controller0_node.telnet_conn) as host_ssh:
+                        with host_helper.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
+                                                            telnet_session=controller0_node.telnet_conn) as host_ssh:
                             host_ssh.send("sudo wipedisk")
                             prompts = [Prompt.PASSWORD_PROMPT, "\[y/n\]", "wipediskscompletely"]
                             index = host_ssh.expect(prompts)
@@ -2899,7 +2899,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
         con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
                           dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
 
-    with common.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
+    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
             as node_ssh:
 
         if node_ssh.exec_cmd("ls {}".format(clone_image_iso_dest_path))[0] != 0:

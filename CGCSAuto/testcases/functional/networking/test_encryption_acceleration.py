@@ -277,7 +277,7 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
         check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, run_cpa=False)
 
         _perform_nova_actions(vms_dict={vm_name: vm_id}, flavors=_flavors, vfs=vfs)
-        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=10800)
+        check_helper.check_qat_service(vm_id=vm_id, qat_devs=expt_qat_devs, timeout=14400)
 
 
 def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
