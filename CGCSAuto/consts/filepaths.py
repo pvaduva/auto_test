@@ -54,7 +54,7 @@ class BuildServerPath:
     DEFAULT_PATCH_ENABLE_DEV_DIR = '/folk/cgts/tools/Enable_dev_certificate_patch/'
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
     CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
-
+    
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',

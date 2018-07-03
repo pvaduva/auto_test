@@ -9,7 +9,7 @@ from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from keywords import html_helper
-from keywords import install_helper, cinder_helper, glance_helper, common, system_helper
+from keywords import install_helper, cinder_helper, glance_helper, common, system_helper, host_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -193,19 +193,19 @@ def backup_load_iso_image(backup_info):
     backup_dest = backup_info['backup_dest']
     backup_dest_path = backup_info['backup_dest_full_path']
 
-    version = system_helper.get_system_software_version()
-    load_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[version.strip()]
-    if load_path.strip()[-1:] == '/':
-        load_path = load_path.strip()[:-1]
+    load_path = ProjVar.get_var('BUILD_PATH')
     build_id = ProjVar.get_var('BUILD_ID')
     assert re.match(TIS_BLD_DIR_REGEX, build_id), "Invalid Build Id pattern"
-    load_path.replace("latest_build", build_id)
 
-    with install_helper.ssh_to_build_server() as build_server_conn:
+    build_server = ProjVar.get_var('BUILD_SERVER')
+    if not (build_server and build_server.strip()):
+        build_server = BuildServerPath.DEFAULT_BUILD_SERVER     # default
+
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as build_server_conn:
 
         cmd = "test -e " + load_path
         assert build_server_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'The system build {} not found in {}:{}'.\
-            format(build_id, BuildServerPath.DEFAULT_BUILD_SERVER, load_path)
+            format(build_id, build_server, load_path)
 
         iso_file_path = os.path.join(load_path, "export", install_helper.UPGRADE_LOAD_ISO_FILE)
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())

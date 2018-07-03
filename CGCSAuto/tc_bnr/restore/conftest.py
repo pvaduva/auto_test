@@ -59,10 +59,7 @@ def setup_build_vars(request):
             setups.copy_test_files()
 
             # set build id to be used to upload/write test results
-            build_id, build_server, job = setups.get_build_info(con_ssh)
-            ProjVar.set_var(BUILD_ID=build_id)
-            ProjVar.set_var(BUILD_SERVER=build_server)
-            ProjVar.set_var(JOB=job)
+            setups.get_build_info(con_ssh)
         except:
             LOG.warning('Unable to set BUILD info')
             pass

@@ -100,10 +100,7 @@ def setup_test_session(global_setup):
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id, build_server, job = setups.get_build_info(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id)
-    ProjVar.set_var(BUILD_SERVER=build_server)
-    ProjVar.set_var(JOB=job)
+    setups.get_build_info(con_ssh)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
 
     setups.set_session(con_ssh=con_ssh)

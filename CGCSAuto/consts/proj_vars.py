@@ -6,6 +6,8 @@ class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
                   'JOB': None,
+                  'BUILD_BY': None,
+                  'BUILD_PATH': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
                   'VSWITCH_INFO_HOSTS': [],
