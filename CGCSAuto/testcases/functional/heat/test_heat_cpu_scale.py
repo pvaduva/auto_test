@@ -50,13 +50,12 @@ def launch_cpu_scaling_stack(vcpus, min_vcpus):
     return stack_name
 
 
-# TODO: take this out temporarily due to ceilometer change
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('vcpus', 'min_vcpus', 'live_mig', 'swact'), [
     mark.priorities('nightly', 'sx_nightly')((3, 2, None, None)),
     mark.p1((3, 1, 'live_migrate', 'swact')),
 ])
-def _test_heat_cpu_scale(vcpus, min_vcpus, live_mig, swact):
+def test_heat_cpu_scale(vcpus, min_vcpus, live_mig, swact):
     """
     Vcpu auto scale via  Heat template testing:
 
