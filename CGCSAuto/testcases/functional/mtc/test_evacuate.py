@@ -181,6 +181,7 @@ class TestEvacKPI:
         vm2_router = network_helper.get_tenant_router(auth_info=Tenant.get_secondary())
         vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
         vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+        targets = list(get_hosts)
 
         if vm1_router_host == vm2_router_host:
             def _chk_same_router_host():
@@ -209,13 +210,17 @@ class TestEvacKPI:
             host_observer = vm2_host
 
             LOG.tc_step("Ensure VM1 and (ROUTER1, VM2, ROUTER2) are on different hosts")
-            targets = list(get_hosts)
-            targets.remove(vm1_router_host)
-            targets.remove(vm2_host)
+            if vm1_router_host in targets:
+                # ensure vm1_router_host is not selected for vm1
+                # vm1_router_host can be backed by any type of storage
+                targets.remove(vm1_router_host)
+            if vm2_host in targets:
+                targets.remove(vm2_host)
 
             if vm1_host in targets:
                 host_src_evacuation = vm1_host
             else:
+                assert targets, "no suitable compute for vm1, after excluding ROUTER1, VM2, ROUTER2 's hosts"
                 host_src_evacuation = targets[0]
                 vm_helper.live_migrate_vm(vm_id=vm1, destination_host=host_src_evacuation)
                 vm1_host = nova_helper.get_vm_host(vm1)
@@ -235,6 +240,10 @@ class TestEvacKPI:
                 VM2, ROUTER2 not on COMPUTE-A
             """
             LOG.tc_step("Ensure VM1, ROUTER1 on COMPUTE-A")
+
+            # VM1 must be sitting on ROUTER1's host, thus vm1_router_host must be backed by local_image
+            assert vm1_router_host in targets, "vm1_router_host is not backed by local_image"
+
             if vm1_host != vm1_router_host:
                 vm_helper.live_migrate_vm(vm_id=vm1, destination_host=vm1_router_host)
                 vm1_host = nova_helper.get_vm_host(vm1)
@@ -242,11 +251,11 @@ class TestEvacKPI:
             host_src_evacuation = vm1_host
 
             LOG.tc_step("Ensure VM2, ROUTER2 not on COMPUTE-A, for simplicity, ensure they are on the same compute")
-            targets = list(get_hosts)
             targets.remove(host_src_evacuation)
             if vm2_host in targets:
                 host_observer = vm2_host
             else:
+                assert targets, "no suitable compute for vm2, after excluding COMPUTE-A"
                 host_observer = targets[0]
                 vm_helper.live_migrate_vm(vm_id=vm2, destination_host=host_observer)
                 vm2_host = nova_helper.get_vm_host(vm2)
