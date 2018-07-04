@@ -315,7 +315,7 @@ def test_heat_template(template_name, revert_quota):
 
     """
     if 'QoSPolicy' in template_name:
-        if system_helper.is_avs():
+        if not system_helper.is_avs():
             skip("QoS policy is not supported by OVS")
 
     elif template_name == 'OS_Neutron_RouterInterface.yaml':
