@@ -1007,7 +1007,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
                 "VM {} did not reach original state within {} seconds after live migration".
                 format(vm_id, VMTimeout.LIVE_MIGRATE_COMPLETE))
 
-    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    after_host = before_host
+    for i in range(3):
+        after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        if after_host != before_host:
+            break
+        time.sleep(3)
 
     if before_host == after_host:
         LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
