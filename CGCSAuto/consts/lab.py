@@ -70,7 +70,7 @@ class Labs:
         'controller-0 ip': '128.224.150.168',
         'controller-1 ip': '128.224.150.169',
         'controller_nodes': [22354, 22357],
-        'compute_nodes': [22431, 22432, 22433, 22434],
+        'compute_nodes': [22431, 22432, 22433,],#22434],
         'ixia_ports': [{'port': (2, 5), 'range': (1160, 1209)}, {'port': (2, 6), 'range': (1210, 1259)}],
     }
 

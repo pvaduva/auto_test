@@ -500,7 +500,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
         node_telnet.close()
 
 
-def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device, drop,
+def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device, drop, patch_dir,
                        controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency, stop):
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -619,15 +619,19 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
     out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
 
     # add lab resource type and any other lab information in the lab files
-    lab_to_install.update(get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"]),
-                          host_build_dir=host_build_dir)
-    if 'system_mode' not in lab_to_install:
+    lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
+                   host_build_dir=host_build_dir)
+    lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items() if "system" in system_label))
+    multi_region_lab = lab_info_dict["multi_region"]
+    dist_cloud_lab = lab_info_dict["dist_cloud"]
+
+    if 'system_mode' not in lab_info_dict:
         if 'storage_nodes' in lab_to_install:
             system_mode = SysType.STORAGE
         else:
             system_mode = SysType.REGULAR
     else:
-        if "simplex" in lab_to_install['system_mode']:
+        if "simplex" in lab_info_dict['system_mode']:
             system_mode = SysType.AIO_SX
         else:
             system_mode = SysType.AIO_DX
@@ -703,6 +707,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  iso_path=iso_path,
                                  stop=stop,
                                  drop_num=drop,
+                                 patch_dir=patch_dir
                                  )
 
 
@@ -710,7 +715,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
 # Fix: overwrite the controller nodes in the lab with supplied ones
 # Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
 # Should we have the user create their own fresh_install configuration file if they want to fresh_install a lab with only 1 controller?
-def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, drop,
+def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, drop, patch_dir,
                       license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop):
     """
     Writes a file in ini format of the fresh_install variables
@@ -859,6 +864,8 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     """
     lab_info_dict = {}
     info_prefix = "SYSTEM_"
+    multi_region_identifer = "\[REGION2_PXEBOOT_NETWORK\]"
+    dist_cloud_identifer = "DISTRIBUTED_CLOUD_ROLE"
     if conf_dir:
         lab_files_path = conf_dir
     elif lab_name is not None and host_build_dir is not None:
@@ -867,32 +874,31 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
                                                                                              (lab_name))
     else:
         raise ValueError("Could not access lab files")
+    ssh_conn = install_helper.establish_ssh_connection(conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                                       initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, conf_server))
+    assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
+    multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".format(multi_region_identifer, lab_files_path))[0] == 0
+    dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".format(dist_cloud_identifer, lab_files_path))[0] == 0
+    lab_info_dict["multi_region"] = multi_region
+    lab_info_dict["dist_cloud"] = dist_cloud
 
-    # TODO: create connection rather than using ssh_to_build_server
-    with install_helper.ssh_to_build_server(conf_server) as ssh_conn:
-        cmd = 'test -d {}'.format(lab_files_path)
-        assert ssh_conn.exec_cmd(cmd)[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
-        cmd = 'grep -r --color=none {} {}'.format(info_prefix, lab_files_path)
+    rc, output = ssh_conn.exec_cmd('grep -r --color=none {} {}'.format(info_prefix, lab_files_path), rm_date=False)
+    assert rc == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
+    lab_info = output.replace(' ', '')
+    lab_info_list = lab_info.splitlines()
+    for line in lab_info_list:
+        key = line[line.find(info_prefix):line.find('=')].lower()
+        val = line[line.find('=') + 1:].lower()
+        lab_info_dict[key] = val.replace('"', '')
+    # Workaround for r430 labs
+    lab_name = lab_info_dict["system_name"]
+    last_num = -1
+    if not lab_name[last_num].isdigit():
+        while not lab_name[last_num].isdigit():
+            last_num -= 1
+        lab_info_dict["name"] = lab_name[:last_num+1]
 
-        rc, output = ssh_conn.exec_cmd(cmd, rm_date=False)
-        assert rc == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
-
-        lab_info = output.replace(' ', '')
-        lab_info_list = lab_info.splitlines()
-        for line in lab_info_list:
-            key = line[line.find(info_prefix):line.find('=')].lower()
-            val = line[line.find('=') + 1:].lower()
-            lab_info_dict[key] = val.replace('"', '')
-
-        # Workaround for r430 labs
-        lab_name = lab_info_dict["system_name"]
-        last_num = -1
-        if not lab_name[last_num].isdigit():
-            while not lab_name[last_num].isdigit():
-                last_num -= 1
-            lab_info_dict["name"] = lab_name[:last_num+1]
-
-        return lab_info_dict
+    return lab_info_dict
 
 
 def is_https(con_ssh):
@@ -1075,13 +1081,11 @@ def collect_sys_net_info(lab):
                 res_key = '{}_{}_from_{}'.format(action, ip_type_, source_server)
                 res_[res_key] = False
                 LOG.info("\n=== {} to lab {} {} from {}".format(action, ip_type_, dest_ip, source_server))
-                print("\n=== {} to lab {} {} from {}".format(action, ip_type_, dest_ip, source_server))
                 if action == 'ping':
                     # ping lab
                     pkt_loss_rate_ = network_helper.ping_server(server=dest_ip, ssh_client=source_ssh, fail_ok=True)[0]
                     if pkt_loss_rate_ == 100:
                         LOG.warning('Failed to ping lab {} from {}'.format(ip_type_, source_server))
-                        print('Failed to ping lab {} from {}'.format(ip_type_, source_server))
                         break
                     res_[res_key] = True
                 else:
@@ -1098,8 +1102,6 @@ def collect_sys_net_info(lab):
                         # collect info on tis system if able to ssh to it
                         if not dest_info_collected:
                             LOG.info("\n=== ssh to lab {} from {} succeeded. Collect info from TiS system".format(
-                                    ip_type_, source_server))
-                            print("\n=== ssh to lab {} from {} succeeded. Collect info from TiS system".format(
                                     ip_type_, source_server))
                             dest_info_collected = True
                             dest_ssh.exec_cmd('ip addr')
@@ -1125,7 +1127,6 @@ def collect_sys_net_info(lab):
                                     nat_ssh.close()
                                 except:
                                     LOG.warning('Failed to ssh to NatBox from lab')
-                                    print('Failed to ssh to NatBox from lab')
 
                             # ping default gateway from natbox
                             if default_gateway:
@@ -1145,7 +1146,6 @@ def collect_sys_net_info(lab):
                         dest_ssh.close()
                     except:
                         LOG.warning('Failed to ssh to lab {} from {}'.format(ip_type_, source_server))
-                        print('Failed to ssh to lab {} from {}'.format(ip_type_, source_server))
 
         source_ssh.close()
 
@@ -1156,13 +1156,13 @@ def collect_sys_net_info(lab):
         pkt_loss_rate_ = network_helper.ping_server(server=lab['floating ip'], ssh_client=nat_ssh, fail_ok=True)[0]
         if pkt_loss_rate_ == 100:
             LOG.warning('Failed to ping lab fip from natbox after arp')
-            print('Failed to ping lab fip from natbox after arp')
             res_['ping_fip_from_natbox_after_arp'] = False
         else:
             res_['ping_fip_from_natbox_after_arp'] = True
 
     LOG.info("Lab networking info collected: {}".format(res_))
-    print("Lab networking info collected: {}".format(res_))
+
+    return res_
 
 
 def setup_remote_cli_client():

@@ -36,7 +36,11 @@ class Menu(object):
 
     def select(self, telnet_conn, index=None, pattern=None, tag=None):
         if not self.options:
-            self.find_options(telnet_conn)
+            try:
+                self.find_options(telnet_conn)
+            except TypeError:
+                LOG.error("{} has no options".format(self.name))
+                raise
         if index is not None:
             option = self.options[index]
         elif pattern is not None:
@@ -44,31 +48,27 @@ class Menu(object):
                 if hasattr(pattern, "search"):
                     if pattern.search(item.name):
                         option = item
-                        index = option.index
                         break
                 else:
                     if pattern in item.name:
                         option = item
-                        index = option.index
                         break
         elif tag is not None:
             for item in self.options:
                 if item.tag is not None:
                     if tag == item.tag:
                         option = item
-                        index = item.index
                         break
         else:
             LOG.error("Either name of the option, index, or tag must be given in order to select")
         LOG.info("Selecting {} option {}".format(self.name, option.name))
-        key = option.key
-        if key == "Enter" or key == "Return" and index > 0:
-            while self.index != index:
-                if index > self.index:
+        if option.key == "Enter" or option.key == "Return":
+            while self.index != option.index:
+                if option.index > self.index:
                     self.move_down(telnet_conn)
                 else:
                     self.move_up(telnet_conn)
-        self.enter_key(telnet_conn, key)
+        option.enter(telnet_conn)
         self.index = 0
 
     def find_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
@@ -88,7 +88,8 @@ class Menu(object):
 
     def move_down(self, telnet_conn):
         current_index = self.index
-        self.enter_key(telnet_conn, "Down")
+        LOG.info("Entering: Down")
+        telnet_conn.write(str.encode(bios.TerminalKeys.Keys["Down"]))
         if current_index < (len(self.options) - 1):
             self.index += 1
         elif self.wrap_around:
@@ -97,7 +98,8 @@ class Menu(object):
 
     def move_up(self, telnet_conn):
         current_index = self.index
-        self.enter_key(telnet_conn, "Up")
+        LOG.info("Entering: Up")
+        telnet_conn.write(str.encode(bios.TerminalKeys.Keys["Up"]))
         if current_index > 0:
             self.index -= 1
         elif self.wrap_around:
@@ -106,17 +108,6 @@ class Menu(object):
 
     def order_options(self):
         self.options.sort(key=lambda option: option.index)
-
-    @staticmethod
-    def enter_key(telnet_conn, key="Enter"):
-        if isinstance(key, str):
-            key = [key]
-        cmd = ''
-        for input in key:
-            cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
-        LOG.info("Entering: {}".format(" + ".join(key)))
-        telnet_conn.write(str.encode(cmd))
-        time.sleep(1)
 
     def get_current_option(self):
         for option in self.options:
@@ -177,9 +168,9 @@ class KickstartMenu(Menu):
                 self.index = self.options[i].index
         return super().get_current_option()
 
-    def find_options(self, telnet_conn):
-        super().find_options(telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab] to edit",
-                             option_identifier=b"(\dm?\))|([\w]+)\s+> ", newline=b'(\x1b\[\d+;\d+H)+')
+    def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
+                     option_identifier=b"(\dm?\))|([\w]+)\s+> ", newline=b'(\x1b\[\d+;\d+H)+'):
+        super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
         for option in self.options:
@@ -192,7 +183,7 @@ class KickstartMenu(Menu):
 
     def select(self, telnet_conn, index=None, pattern=None, tag=None):
         if isinstance(tag, str):
-            tag_dict = {"os": "centos", "security": "standard", "type": None}
+            tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
 
             if "security" in tag or "extended" in tag:
                 tag_dict["security"] = "extended"
@@ -211,7 +202,7 @@ class KickstartMenu(Menu):
         super().select(telnet_conn, index, pattern, tag)
 
 
-class USBBootMenu(Menu):
+class USBBootMenu(KickstartMenu):
     def __init__(self):
         super().__init__(name="USB boot menu", kwargs=bios.BootMenus.USB.Kernel)
         menu_dicts = [getattr(bios.BootMenus.USB, item) for item in dir(bios.BootMenus.USB) if isinstance(item, dict)
@@ -221,9 +212,10 @@ class USBBootMenu(Menu):
             Menu.__init__(self=sub_menu, name=menu_dict["name"], kwargs=menu_dict)
             self.sub_menus.append(sub_menu)
 
-    def find_options(self, telnet_conn):
-        super().find_options(telnet_conn, end_of_menu=b"Press \[Tab] to edit",
-                             option_identifier=b"[A-Z][A-Za-z]", newline=b'(\x1b\[\d+;\d+H)+')
+    def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
+                     option_identifier=b"[A-Z][A-Za-z]", newline=b'(\x1b\[\d+;\d+H)+'):
+        super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
+
 
 
 class BootDeviceMenu(Menu):
@@ -266,15 +258,14 @@ class Option(object):
         option_name = self.name.lower()
 
         if key is None:
-            if "press" in option_name or "use" in option_name:
-                for key in bios.TerminalKeys.Keys.keys():
-                    if key.lower() in option_name:
-                        self.key = key
-                        break
+            has_key = re.search("(press|use)\W*(\w+)", option_name, re.IGNORECASE)
+            if has_key:
+                match = has_key.group(2)
+                self.key = match.capitalize() if match.capitalize() in bios.TerminalKeys.Keys.keys() else match
             else:
                 self.key = 'Enter'
         else:
-            self.key=key
+            self.key = key
 
         if tag is None:
             # bios options
@@ -292,34 +283,34 @@ class Option(object):
         for input in key:
             cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
         LOG.info("Entering: {}".format(" + ".join(key)))
+        LOG.debug(cmd)
         telnet_conn.write(str.encode(cmd))
 
 
 class KickstartOption(Option):
     def __init__(self, name, index=0, key=None, tag=None):
-        tag_dict = {"os": None, "security": "standard", "type": None}
+        tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
         super().__init__(name, index, key)
         option_name = self.name.lower()
+        time.sleep(1)
 
         if tag is None:
             if "wrl" in option_name or "wrlinux" in option_name:
                 tag_dict["os"] = "wrl"
-            else:
-                tag_dict["os"] = "centos"
 
             if "all-in-one" in option_name or "cpe" in option_name or "aio" in option_name:
                 tag_dict["type"] = "cpe"
             elif "controller" in option_name:
                 tag_dict["type"] = "standard"
 
-            if "security" in option_name:
-                if "standard" in option_name:
-                    tag_dict["security"] = "standard"
-                else:
-                    tag_dict["security"] = "extended"
+            if "security" in option_name and "extended" in option_name:
+                tag_dict["security"] = "extended"
 
             if "lowlat" in option_name or "low lat" in option_name or "low_lat" in option_name:
                 tag_dict["type"] = "lowlatency"
+
+            if "graphic" in option_name:
+                tag_dict["console"] = "graphical"
 
         elif isinstance(tag, str):
             tag = tag.lower()

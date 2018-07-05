@@ -107,7 +107,10 @@ class InstallVars:
                          ceph_mon_gib=None,
                          low_latency=False,
                          security="standard",
-                         stop=99):
+                         stop=99,
+                         patch_dir=None,
+                         multi_region=False,
+                         dist_cloud=False):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
         __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.LATEST_HOST_BUILD_PATHS.get(
@@ -115,16 +118,15 @@ class InstallVars:
         __files_server = files_server if files_server else __build_server
         __files_dir = files_dir if files_dir else \
             "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
-        if iso_path is not None:
-            __iso_path = iso_path if iso_path is not '' else __host_build_dir + '/export/bootimage.iso'
-            if iso_path.find(":/") != -1:
-                iso_server = iso_path[:iso_path.find(":")]
-                __iso_path = iso_path[iso_path.find("/"):]
-            else:
-                iso_server = __build_server
-        else:
-            __iso_path = iso_path if iso_path else host_build_dir + '/export/bootimage.iso'
-            iso_server = __build_server
+        __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
+        iso_server = __build_server
+        if __iso_path.find(":/") != -1:
+            iso_server = __iso_path[:__iso_path.find(":")]
+            __iso_path = __iso_path[__iso_path.find("/"):]
+        patch_server = __build_server
+        if patch_dir and patch_dir.find(":/") != -1:
+            patch_server = patch_dir[:iso_path.find(":")]
+            patch_dir = patch_dir[iso_path.find("/"):]
 
         cls.__var_dict = {
             'LAB': lab,
@@ -133,6 +135,8 @@ class InstallVars:
             'STOP': stop,
             'SKIP': skips if skips is not None else [],
             'WIPEDISK': wipedisk,
+            'MULTI_REGION': multi_region,
+            'DISTRIBUTED_CLOUD': dist_cloud,
 
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
@@ -143,6 +147,8 @@ class InstallVars:
             'LAB_FILES_DIR': __files_dir,
             'ISO_PATH': __iso_path,
             'ISO_HOST': iso_server,
+            'PATCH_DIR': patch_dir,
+            'PATCH_SERVER': patch_server,
             # Default tuxlab for boot
             'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
             'BOOT_TYPE': boot_type.lower().strip(),

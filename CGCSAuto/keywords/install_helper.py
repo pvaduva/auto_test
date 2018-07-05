@@ -3051,8 +3051,6 @@ def get_git_name(lab_name):
     return lab_name
 
 
-# TODO: figure out what config_region is and if we have to support it
-# TODO: add support for banners and branding
 def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
                              banner=True, branding=True):
     """
@@ -3086,7 +3084,8 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
     rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
     if rc == 0:
-        cmd = 'echo "{}" | sudo -S config_controller --config-file {}'.format(HostLinuxCreds.get_password(), config_file)
+        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") else "config_controller"
+        cmd = 'echo "{}" | sudo -S {} --config-file {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
         con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
@@ -3119,7 +3118,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 def apply_banner(telnet_conn, fail_ok=True):
     LOG.info("Applying banner files")
     banner_dir = "{}/banner/".format(WRSROOT_HOME)
-    rc = telnet_conn.exec_cmd("test -d {}".format(banner_dir), fail_ok=fail_ok)
+    rc = telnet_conn.exec_cmd("test -d {}".format(banner_dir), fail_ok=fail_ok)[0]
 
     if rc != 0:
         err_msg = "Banner files not found"
@@ -3127,7 +3126,7 @@ def apply_banner(telnet_conn, fail_ok=True):
         return 1, err_msg
     else:
         rc = telnet_conn.exec_cmd("echo {} | sudo -S mv {} /opt/".format(SvcCgcsAuto.PASSWORD, banner_dir),
-                              fail_ok=fail_ok)
+                              fail_ok=fail_ok)[0]
         if rc != 0:
             err_msg = 'Banner application failed'
             LOG.info(err_msg)
@@ -3140,7 +3139,7 @@ def apply_branding(telnet_conn, fail_ok=True):
     LOG.info("Applying branding files")
     branding_dir = "{}/branding".format(WRSROOT_HOME)
     branding_dest = "{}/opt/branding".format(WRSROOT_HOME)
-    rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir), fail_ok=fail_ok)
+    rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir), fail_ok=fail_ok)[0]
 
     if rc != 0:
         err_msg = "Branding directory does not exist"
@@ -3148,7 +3147,7 @@ def apply_branding(telnet_conn, fail_ok=True):
         return 1, err_msg
     else:
         cmd = "echo {} | sudo -S cp -r {}/* {}".format(HostLinuxCreds.get_password(), branding_dir, branding_dest)
-        rc = telnet_conn.exec_cmd(cmd)
+        rc = telnet_conn.exec_cmd(cmd)[0]
         if rc != 0:
             err_msg = "failed to copy branding files from {} to {}".format(branding_dir, branding_dest)
             LOG.info(err_msg)
@@ -3172,7 +3171,6 @@ def post_install(controller0_node=None):
 
     """
     lab = InstallVars.get_install_var("LAB")
-    rc, msg = 0, None
     if controller0_node is None:
         controller0_node = lab["controller-0"]
     if controller0_node.ssh_conn is not None:
@@ -3180,14 +3178,16 @@ def post_install(controller0_node=None):
     else:
         connection = ControllerClient.get_active_controller()
 
-    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")
+    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0]
+    LOG.debug(rc)
     if rc == 0:
         scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
         if len(scripts) > 0:
             for script in scripts:
                 LOG.info("Attempting to run {}".format(script))
-                connection.exec_cmd("chmod 755 /home/wrsroot/{}".format(script))
-                rc = connection.exec_cmd("/home/wrsroot/{} {}".format(script, controller0_node.host_name))[0]
+                connection.exec_cmd("chmod 755 /home/wrsroot/postinstall/{}".format(script))
+                rc = connection.exec_cmd("/home/wrsroot/postinstall/{} {}".format(script, controller0_node.host_name),
+                                         expect_timeout=HostTimeout.POST_INSTALL_SCRIPTS)[0]
                 if rc != 0:
                     rc, msg = -1, 'Unable to execute {}'.format(script)
                     break
@@ -3195,9 +3195,6 @@ def post_install(controller0_node=None):
             rc, msg = 2, "No post fresh_install scripts in the directory"
     else:
         rc, msg = 1, "No post fresh_install directory"
-
-    connection.exec_cmd("source /etc/nova/openrc; system alarm-list")
-    connection.exec_cmd("cat /etc/build.info")
 
     return rc, msg
 
@@ -3296,53 +3293,44 @@ def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, f
 
 
 def select_install_option(node_obj, boot_menu, index=None, low_latency=False, security="standard", usb=None,
-                          small_footprint=False, timeout=2400, expect_prompt=True):
+                          small_footprint=False, expect_prompt=True):
+    type = "cpe" if small_footprint else "standard"
+    if low_latency:
+        type = "lowlat"
+    tag = {"os": "centos", "security": security, "type": type, "console": "serial"}
+    if index:
+        index = index if isinstance(index, list) else [index]
+
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
-    if usb is None:
-        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
-    if small_footprint:
-        tag = "cpe"
-    else:
-        tag = "standard"
-    if low_latency:
-        tag = "lowlat"
-    LOG.info("Choosing centOS {} fresh_install option".format(tag))
-
-    if usb:
-        if isinstance(index, int):
-            boot_menu.select(node_obj.telnet_conn, index=index)
-        else:
-            boot_menu.select(node_obj.telnet_conn, tag=tag)
-        if boot_menu.sub_menus:
-            sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
-            try:
-                menus_navigated = 0
-                while len(sub_menu_prompts) > 0:
-                    index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
-                    sub_menu = boot_menu.sub_menus[index + menus_navigated]
-                    if sub_menu.name == "Controller Configuration":
-                        sub_menu.select(node_obj.telnet_conn, pattern="erial")
-                    elif sub_menu.name == "Serial Console":
-                        sub_menu.select(node_obj.telnet_conn, pattern=security.upper())
-                    sub_menu_prompts.pop(index)
-                    menus_navigated += 1
-            except exceptions.TelnetTimeout:
-                pass
-    else:
-        if isinstance(index, int):
-            boot_menu.select(node_obj.telnet_conn, index=index)
-        elif security == "extended":
-            security_menu = boot_menu.get_sub_menu("Security", strict=False)
-            if security_menu:
-                boot_menu.select(node_obj.telnet_conn, tag="security")
-                node_obj.telnet_conn.expect([security_menu.prompt], 60)
-                security_menu.select(node_obj.telnet_conn, tag=tag)
-            else:
-                msg = "Node does not have a security menu"
-                raise exceptions.TelnetException(msg)
-        else:
-            boot_menu.select(node_obj.telnet_conn, tag=tag)
+    LOG.info("Choosing centOS {} fresh install option".format(tag))
+    boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None, tag=tag if not index else None)
+    if boot_menu.sub_menus:
+        sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
+        try:
+            sub_menus_navigated = 0
+            while len(sub_menu_prompts) > 0:
+                index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                sub_menu = boot_menu.sub_menus[index + sub_menus_navigated]
+                if sub_menu.name == "Controller Configuration":
+                    tag["security"] = "standard"
+                    tag["type"] = None
+                elif sub_menu.name == "Serial Console":
+                    tag["security"] = security
+                    tag["type"] = None
+                else:
+                    tag["security"] = security
+                    tag["type"] = type
+                boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                 tag=tag if not index else None)
+                sub_menu_prompts.pop(index)
+                sub_menus_navigated += 1
+        except exceptions.TelnetTimeout:
+            pass
+        except IndexError:
+            LOG.error("Not enough indexes were given for the menu. {} indexes was given for {} amount of menus".format(
+                str(len(index)), str(len(boot_menu.sub_menus + 1))))
+            raise
 
     return 0
 
@@ -3394,14 +3382,6 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
             break
         menu_prompts.pop(index)
 
-    # enter_bios_option(node_obj, bios_option)
-    # if "hp" not in node_obj.host_name and "ml350" not in node_obj.host_name:
-    #    boot_device_menu = menu.BootDeviceMenu()
-    #    select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb)
-    #if node_obj.name == "controller-0":
-    #    select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-    #                          security=security, usb=usb)
-
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
     LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
@@ -3427,7 +3407,7 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
             boot_controller(lab=lab_dict)
             if not local_host.ping_to_host(controller0_node.host_ip):
 
-                err_msg = "Cannot ping destination lab {} controller-0 after fresh_install".format(dest_lab_name)
+                err_msg = "Cannot ping destination lab {} controller-0".format(dest_lab_name)
                 LOG.warn(err_msg)
                 if fail_ok:
                     return 1, err_msg

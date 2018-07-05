@@ -30,6 +30,7 @@ def test_simplex_install(install_setup):
     skips = install_setup["skips"]
     skip_labsetup = "setup" in skips
     final_step = install_setup["control"]["stop"]
+    patch_dir = install_setup["directories"]["patches"]
 
     if final_step <= 0:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -37,6 +38,8 @@ def test_simplex_install(install_setup):
     LOG.tc_step("Install Controller")
     if fresh_install_helper.do_step():
         fresh_install_helper.install_controller(sys_type=SysType.AIO_SX)
+        if patch_dir:
+            install_helper.apply_patches(lab=lab, build_server=install_setup["servers"]["patches"], patch_dir=patch_dir)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -60,7 +63,7 @@ def test_simplex_install(install_setup):
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    LOG.tc_step("Run lab setup for simplex lab")
+    LOG.tc_step("Run lab setup")
     if fresh_install_helper.do_step() and not skip_labsetup:
         install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
@@ -72,3 +75,11 @@ def test_simplex_install(install_setup):
     LOG.tc_step("Check heat resources")
     if fresh_install_helper.do_step():
         install_helper.setup_heat(con_ssh=controller0_node.ssh_conn)
+    if LOG.test_step == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
+
+    LOG.tc_step("Attempt to run post install scripts")
+    if fresh_install_helper.do_step():
+        rc, msg = install_helper.post_install()
+        LOG.info(msg)
+        assert rc >= 0, msg

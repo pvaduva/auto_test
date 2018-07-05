@@ -7,7 +7,7 @@ from consts.proj_vars import InstallVars
 from keywords import host_helper, system_helper, install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils.clients.ssh import SSHClient
-from setups import setup_tis_ssh
+from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
 
 
@@ -34,12 +34,15 @@ def test_storage_install(install_setup):
     boot_device = lab['boot_device_dict']
     controller0_node = lab["controller-0"]
     final_step = install_setup["control"]["stop"]
+    patch_dir = install_setup["directories"]["patches"]
 
     if final_step <= 0:skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Install Controller")
     if fresh_install_helper.do_step():
         fresh_install_helper.install_controller(sys_type=SysType.STORAGE)
+        if patch_dir:
+            install_helper.apply_patches(lab=lab, build_server=install_setup["servers"]["patches"], patch_dir=patch_dir)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -134,9 +137,18 @@ def test_storage_install(install_setup):
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
+    collect_sys_net_info(lab)
     setup_tis_ssh(lab)
 
     LOG.tc_step("Check heat resources")
     if fresh_install_helper.do_step():
         install_helper.setup_heat()
         fresh_install_helper.clear_post_install_alarms()
+    if LOG.test_step == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
+
+    LOG.tc_step("Attempt to run post install scripts")
+    if fresh_install_helper.do_step():
+        rc, msg = install_helper.post_install()
+        LOG.info(msg)
+        assert rc >= 0, msg

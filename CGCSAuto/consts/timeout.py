@@ -26,6 +26,7 @@ class HostTimeout:
     INSTALL_CLONE_STATUS = 60
     INSTALL_CONTROLLER = 2400
     INSTALL_LOAD = 3600
+    POST_INSTALL_SCRIPTS = 3600
 
 
 class VMTimeout:

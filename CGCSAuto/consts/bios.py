@@ -9,6 +9,7 @@ class TerminalKeys:
         "Insert": "placeholder",
         "Del": "placeholder",
         "Delete": "placeholder",
+        "Tab": "placeholder",
         "F1": '\x1b' + '[OP',
         "F2": '\x1b' + '[OQ',
         "F3": '\x1b' + '[OR',

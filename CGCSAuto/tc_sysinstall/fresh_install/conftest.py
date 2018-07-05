@@ -24,10 +24,10 @@ def install_setup():
     build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
 
     vlm_helper.reserve_hosts(lab["hosts"])
-
     # Initialise server objects
     file_server = InstallVars.get_install_var("FILES_SERVER")
     iso_host = InstallVars.get_install_var("ISO_HOST")
+    patch_server = InstallVars.get_install_var("PATCH_SERVER")
 
     bld_server = initialize_server(build_server)
     if file_server == bld_server.name:
@@ -38,17 +38,23 @@ def install_setup():
         iso_host_obj = bld_server
     else:
         iso_host_obj = initialize_server(iso_host)
+    if patch_server == bld_server.name:
+        patch_server = bld_server
+    else:
+        patch_server = initialize_server(patch_server)
 
     fresh_install_helper.set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 
     servers = {
                "build": bld_server,
-               "lab_files": file_server_obj
+               "lab_files": file_server_obj,
+               "patches": patch_server
                }
 
     directories = {"build": build_dir,
                    "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
-                   "lab_files": InstallVars.get_install_var("LAB_FILES_DIR")}
+                   "lab_files": InstallVars.get_install_var("LAB_FILES_DIR"),
+                   "patches": InstallVars.get_install_var("PATCH_DIR")}
 
     paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),
              "license": InstallVars.get_install_var("LICENSE")}
@@ -79,7 +85,7 @@ def install_setup():
             install_helper.rsync_image_to_boot_server(iso_host_obj)
             install_helper.mount_boot_server_iso(lab)
 
-        elif "feed" not in skip_list:
+        elif "feed" not in skip_list and "pxe" in boot["boot_type"]:
             load_path = directories["build"]
             skip_cfg = "pxe" in skip_list
             install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, skip_cfg=skip_cfg)
@@ -102,8 +108,18 @@ def pytest_runtest_teardown(item):
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
+    lab = InstallVars.get_install_var("LAB")
 
     LOG.tc_teardown_start(item.nodeid)
+    try:
+        controller0_node = lab["controller-0"]
+        if controller0_node.telnet_conn is None:
+            controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
+            controller0_node.login()
+        rc, output = controller0_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)
+        LOG.info(output)
+    except:
+        pass
     LOG.fixture_step("unreserving hosts")
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
