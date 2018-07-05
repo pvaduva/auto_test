@@ -1,5 +1,5 @@
 import re
-import random
+import time
 from pytest import fixture
 from utils.tis_log import LOG
 
@@ -28,6 +28,9 @@ def setup_alias(request):
         system_helper.delete_service_parameter(uuid=user_uuid)
 
         system_helper.apply_service_parameters(service, wait_for_config=True)
+
+        # CGTS-9637  cpu usage high
+        time.sleep(120)
 
     request.addfinalizer(revert_alias_setup)
 
