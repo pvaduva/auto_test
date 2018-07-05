@@ -2193,10 +2193,10 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
     bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force", "-v"],
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force", "-v", "--chmod=Du=rwx"],
                           pre_opts=pre_opts, timeout=HostTimeout.INSTALL_LOAD)
     bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["-v"], pre_opts=pre_opts,
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
                           timeout=HostTimeout.INSTALL_LOAD)
     LOG.info("Create new symlink to feed directory")
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
