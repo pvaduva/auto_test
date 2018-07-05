@@ -94,6 +94,7 @@ class Menu(object):
             self.index += 1
         elif self.wrap_around:
             self.index = 0
+        time.sleep(1)
         return self.index
 
     def move_up(self, telnet_conn):
@@ -104,6 +105,7 @@ class Menu(object):
             self.index -= 1
         elif self.wrap_around:
             self.index = len(self.options) - 1
+        time.sleep(1)
         return self.index
 
     def order_options(self):
@@ -292,7 +294,6 @@ class KickstartOption(Option):
         tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
         super().__init__(name, index, key)
         option_name = self.name.lower()
-        time.sleep(1)
 
         if tag is None:
             if "wrl" in option_name or "wrlinux" in option_name:
