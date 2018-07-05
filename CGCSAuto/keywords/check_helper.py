@@ -376,9 +376,9 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
 
         LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
                  format(SEP, expt_increase))
-        post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_total_cpus,
-                                                                                  fail_ok=True)
         expt_total = round(prev_total_cpus + expt_increase, 4)
+        post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_total_cpus,
+                                                                                  expt_cpus=expt_total, fail_ok=True)
         assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
                                              'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
 
