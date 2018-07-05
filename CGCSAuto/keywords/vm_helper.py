@@ -1865,9 +1865,15 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
-                         user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
-                         retry_timeout=retry_timeout)
+    try:
+        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
+                             user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
+                             retry_timeout=retry_timeout)
+    except:
+        LOG.warning('Failed to ssh to VM {}! Collecting vm console log'.format(vm_id))
+        get_console_logs(vm_ids=vm_id)
+        raise
+
     try:
         yield vm_ssh
     finally:
