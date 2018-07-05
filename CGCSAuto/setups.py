@@ -524,7 +524,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
 
     errors = []
     lab_to_install = lab
-    drop = int(drop) if drop is not None else None
+    drop = int(drop) if drop else None
     build_server = None
     host_build_dir = BuildServerPath.DEFAULT_HOST_BUILD_PATH
     guest_image = None
