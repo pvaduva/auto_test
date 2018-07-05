@@ -1552,7 +1552,8 @@ def get_up_hypervisors(con_ssh=None):
     return get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
 
 
-def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con_telnet=None):
+def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con_telnet=None,
+                    rtn_val='Hypervisor hostname'):
     """
     Return a list of hypervisors names in specified state and status. If None is set to state and status,
     all hypervisors will be returned.
@@ -1565,13 +1566,14 @@ def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con
         con_ssh (SSHClient):
         use_telnet
         con_telnet
+        rtn_val (str): target header. e.g., ID, Hypervisor hostname
 
     Returns (list): a list of hypervisor names. Return () if no match found.
         Always return () for small footprint lab. i.e., do not work with small footprint lab
     """
     table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh,
                                          use_telnet=use_telnet, con_telnet=con_telnet))
-    target_header = 'Hypervisor hostname'
+    target_header = rtn_val
 
     if state is None and status is None:
         return table_parser.get_column(table_, target_header)
@@ -2258,7 +2260,7 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_
 
     Args:
         host_ssh (SSHFromSSH):
-        prev_cpus (list):
+        prev_cpus (None|float|int):
         expt_cpus (int|None)
         timeout (int):
         fail_ok (bool): whether to raise exception when allocated vcpus number did not change
@@ -2554,7 +2556,7 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     return vcpus
 
 
-def get_vcpu_pinnings_for_instance_via_virsh(host_ssh, instance_name):
+def get_vcpu_pins_for_instance_via_virsh(host_ssh, instance_name):
     vcpu_pins = get_values_virsh_xmldump(instance_name=instance_name, host_ssh=host_ssh,
                                          tag_paths='cputune/vcpupin', target_type='dict')
     return vcpu_pins
@@ -3348,6 +3350,31 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
         test_server_conn.close()
 
 
+@contextmanager
+def ssh_to_compliance_server(server='tis-compliance-test-node.cumulus.wrs.com', user='cumulus',
+                             password='kumuluz', prompt=None):
+    """
+    ssh to given compliance server
+
+    Args:
+        server:
+        user (str):
+        password (str):
+        prompt (str|None): expected prompt. such as: cumulus@tis-compliance-test-node:~$
+
+    Yields (SSHClient): ssh client for given compliance server and user
+
+    """
+    prompt = prompt if prompt else '{}@tis-compliance-test-node:~$'.format(user)
+    server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
+    server_conn.connect()
+
+    try:
+        yield server_conn
+    finally:
+        server_conn.close()
+
+
 def get_host_co_processor_pci_list(hostname):
 
     host_pci_info = []
@@ -3944,3 +3971,60 @@ def get_host_cmdline_options(host, con_ssh=None):
         output = host_ssh.exec_cmd('cat /proc/cmdline')[1]
 
     return output
+
+
+@contextmanager
+def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
+                       telnet_session=None):
+    """
+    ssh to a external node from sshclient.
+
+    Args:
+        host (str|None): hostname or ip address of remote node to ssh to.
+        username (str):
+        password (str):
+        prompt (str):
+
+
+    Returns (SSHClient): ssh client of the host
+
+    Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
+                  remote_ssh.exec_cmd(cmd)
+
+    """
+
+    if not host:
+        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
+
+    if use_telnet and not telnet_session:
+        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+
+    if not con_ssh and not use_telnet:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not use_telnet:
+        default_user, default_password = LinuxUser.get_current_user_password()
+    else:
+        default_user = HostLinuxCreds.get_user()
+        default_password = HostLinuxCreds.get_password()
+
+    user = username if username else default_user
+    password = password if password else default_password
+    if use_telnet:
+        original_host = telnet_session.exec_cmd('hostname')[1]
+    else:
+        original_host = con_ssh.host
+
+    if not prompt:
+        prompt = '.*' + host + '\:~\$'
+
+    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
+    remote_ssh.connect()
+    current_host = remote_ssh.host
+    if not current_host == host:
+        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
+    try:
+        yield remote_ssh
+    finally:
+        if current_host != original_host:
+            remote_ssh.close()

@@ -43,7 +43,7 @@ def _append_nics(vifs, net_ids, nics):
     mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('ubuntu_14', (('e1000', '00:1f'), ('virtio', None)))),
     mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('tis-centos-guest', (('avp', '00:1e'), ('virtio', '08:09'))))
 ], ids=id_gen)
-def test_ping_between_two_vms(guest_os, vifs):
+def test_ping_between_two_vms(guest_os, vifs, skip_for_ovs):
     """
     Ping between two vms with virtio and avp vif models
 

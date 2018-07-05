@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
 from consts.reasons import SkipHostIf
 from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, check_helper, glance_helper
+from keywords import vm_helper, nova_helper, network_helper, check_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -102,7 +102,7 @@ class TestMutiPortsBasic:
         mark.priorities('nightly', 'sx_nightly')((('e1000', '04:09'), ('virtio', '08:1f'))),
         mark.p2((('avp_x8', None), ('virtio_x7', None))),
     ], ids=id_params)
-    def test_multiports_on_same_network_vm_actions(self, vifs, base_setup):
+    def test_multiports_on_same_network_vm_actions(self, vifs, skip_for_ovs, base_setup):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -167,7 +167,7 @@ class TestMutiPortsBasic:
     @mark.parametrize('vifs', [
         (('avp', '00:05'), ('e1000', '08:01'), ('virtio', '01:1f'), ('virtio', None)),
     ], ids=id_params)
-    def test_multiports_on_same_network_evacuate_vm(self, vifs, base_setup):
+    def test_multiports_on_same_network_evacuate_vm(self, vifs, skip_for_ovs, base_setup):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -273,11 +273,12 @@ class TestMutiPortsPCI:
             extra_pcipt_net_name = pcipt_nets[0]
             extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
 
+        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
-                {'net-id': internal_net_id, 'vif-model': 'avp'}, ]
+                {'net-id': internal_net_id, 'vif-model': vif_type}, ]
 
         if extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
@@ -318,7 +319,7 @@ class TestMutiPortsPCI:
         mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
         mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_vm_actions(self, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_vm_actions(self, skip_for_ovs, base_setup_pci, vifs):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -364,8 +365,9 @@ class TestMutiPortsPCI:
         if pcipt_included and not pcipt_info:
             skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
+        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+                {'net-id': tenant_net_id, 'vif-model': vif_type}]
         nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
         if pcipt_included and extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
@@ -424,7 +426,7 @@ class TestMutiPortsPCI:
         mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_evacuate_vm(self, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_evacuate_vm(self, skip_for_ovs, base_setup_pci, vifs):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -453,8 +455,9 @@ class TestMutiPortsPCI:
         base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
             extra_pcipt_net_name = base_setup_pci
 
+        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+                {'net-id': tenant_net_id, 'vif-model': vif_type}]
         for vif in vifs:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
 

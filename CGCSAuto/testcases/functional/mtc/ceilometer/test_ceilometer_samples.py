@@ -11,10 +11,11 @@ from utils.tis_log import LOG
 from keywords import ceilometer_helper
 
 
+# Obsolete: TODO update
 @mark.sanity
 @mark.cpe_sanity
 @mark.sx_nightly
-def test_ceilometer_vswitch_port_samples():
+def _test_ceilometer_vswitch_port_samples():
     """
     Test Steps:
         - Get resource IDs for last two vswitch.port.transmit.util entries in ceilometer sample-list

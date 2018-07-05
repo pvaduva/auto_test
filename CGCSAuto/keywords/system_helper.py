@@ -32,7 +32,7 @@ class System:
         system['alarms_and_events'] = alarms
         # TODO: add networks, providernets, interfaces, flavors, images, volumes, vms info?
 
-    # TODO: add methods to set nodes for fresh_install delete tests
+    # TODO: add methods to set nodes for install delete tests
 
 
 def get_hostname(con_ssh=None):
@@ -1079,6 +1079,7 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
 
     section = 'database'
     if name in 'metering_time_to_live':
+        skip("Ceilometer metering_time_to_live is no longer available in 'system service-parameter-list'")
         name = 'metering_time_to_live'
         service = 'ceilometer'
     elif name == 'alarm_history_time_to_live':
@@ -1148,6 +1149,8 @@ def get_retention_period(name='metering_time_to_live', con_ssh=None):
     Returns (int): Current PM retention period
 
     """
+    if name == 'metering_time_to_live':
+        skip("Ceilometer metering_time_to_live no longer exists")
     ret_per = get_service_parameter_values(name=name, rtn_value='value', con_ssh=con_ssh)[0]
     return int(ret_per)
 
@@ -1179,7 +1182,7 @@ def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, nameserv
         with_action_option: whether invoke the CLI with or without "action" option
                             - None      no "action" option at all
                             - apply     system dns-modify <> action=apply
-                            - fresh_install   system dns-modify <> action=fresh_install
+                            - install   system dns-modify <> action=install
                             - anystr    system dns-modify <> action=anystring...
     Returns:
 
@@ -3413,7 +3416,7 @@ def is_avs(con_ssh=None):
     if vswitch_type is None:
         vswitch_type = get_system_value(field='vswitch_type', con_ssh=con_ssh)
         ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
-    return vswitch_type != 'ovs'
+    return 'ovs' not in vswitch_type    # 'avs' or '' for avs; 'ovs-dpdk' for ovs.
 
 
 def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None,):

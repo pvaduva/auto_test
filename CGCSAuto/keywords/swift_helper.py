@@ -311,7 +311,7 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
     public_url = get_swift_public_url()
     token = html_helper.get_user_token()
 
-    cmd = 'curl --insecure -i {}/'.format(public_url)
+    cmd = 'curl -i {}/'.format(public_url)
     if object_:
         cmd += "{}/{} -X COPY -H \"X-Auth-Token: {}\"".format(container, object_, token)
     else:

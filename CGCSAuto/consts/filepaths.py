@@ -1,5 +1,6 @@
 WRSROOT_HOME = '/home/wrsroot/'
 
+
 class TiSPath:
     TIS_UBUNTU_PATH = '/home/wrsroot/userdata/ubuntu_if_config.sh'
     TIS_CENTOS_PATH = '/home/wrsroot/userdata/centos_if_config.sh'
@@ -45,14 +46,15 @@ class PrivKeyPath:
 class BuildServerPath:
     DEFAULT_BUILD_SERVER = 'yow-cgts4-lx'
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
-    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/TC_18.07_Host'
-    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img'
+    DEFAULT_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/CGCS_6.0_Host'
+    DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
     DEFAULT_PATCH_ENABLE_DEV_DIR = '/folk/cgts/tools/Enable_dev_certificate_patch/'
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
     CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
+
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
@@ -78,7 +80,6 @@ class BuildServerPath:
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
                        '16.10': DEFAULT_PATCH_DIR + '16.10',
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
-                       '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/last_build_with_test_patches/test_patches',
                        '18.03': DEFAULT_PATCH_DIR + '18.03',
                        '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                        }
@@ -126,7 +127,3 @@ class TuxlabServerPath:
 
 class IxiaPath:
     CFG_500FPS = "D:/CGCS/IxNetwork/cgcsauto/pair_at_500fps.ixncfg"
-
-
-class InstallPaths:
-    INSTALL_TEMP_DIR = '/folk/cgts/lab/new-installer/temp'

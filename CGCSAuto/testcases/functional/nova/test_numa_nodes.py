@@ -5,10 +5,10 @@ from pytest import fixture, mark, skip
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, InstanceTopology
-from consts.cli_errs import NumaErr
+from consts.cli_errs import NumaErr     # Do not remove
 from keywords import nova_helper, vm_helper, system_helper, host_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.pre_checks_and_configs import check_numa_num
+from testfixtures.pre_checks_and_configs import check_numa_num      # Do not remove
 
 
 ########################################
@@ -299,7 +299,6 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     mark.nightly((2, 2, 1, 0)),
     mark.p2((1, 1, 1, None)),
 ])
-# @mark.usefixtures('delete_resources_func')    # This fixture is auto-used by nova test cases
 def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num, no_simplex):
     """
     Test NUMA nodes settings in flavor extra specs are successfully applied to a vm
@@ -392,14 +391,15 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_
     assert numa_nodes == nodelist_len, \
         "nodelist for vm {} in libvirt view does not match number of numa nodes set in flavor".format(vm_id)
 
-    # TC5069
-    LOG.tc_step("Check that all NICs are associated with the host NUMA node that guest NUMA-0 is mapped to")
-    host = nova_helper.get_vm_host(vm_id)
-    actual_nics = network_helper.get_vm_nics(vm_id)
-    with host_helper.ssh_to_host(host) as compute_ssh:
-        for nic in actual_nics:
-            port_id = list(nic.values())[0]['port_id']
-            ports_tab = table_parser.table(compute_ssh.exec_cmd("vshell port-show {}".format(port_id),
-                                                                fail_ok=False)[1])
-            socket_id = int(table_parser.get_value_two_col_table(ports_tab, field='socket-id'))
-            assert socket_id == numa_node0, "NIC is not associated with numa-node0"
+    if system_helper.is_avs():
+        # TC5069
+        LOG.tc_step("Check via vshell that all vNICs are associated with the host NUMA node that guest numa0 maps to")
+        host = nova_helper.get_vm_host(vm_id)
+        actual_nics = network_helper.get_vm_nics(vm_id)
+        with host_helper.ssh_to_host(host) as compute_ssh:
+            for nic in actual_nics:
+                port_id = list(nic.values())[0]['port_id']
+                ports_tab = table_parser.table(compute_ssh.exec_cmd("vshell port-show {}".format(port_id),
+                                                                    fail_ok=False)[1])
+                socket_id = int(table_parser.get_value_two_col_table(ports_tab, field='socket-id'))
+                assert socket_id == numa_node0, "NIC is not associated with numa-node0"

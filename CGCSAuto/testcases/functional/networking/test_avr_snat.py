@@ -284,10 +284,13 @@ def test_snat_computes_lock_reboot(snat_setups):
     LOG.tc_step("Ping external from vm {}".format(vm_))
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
-    LOG.tc_step("Evacuate vm")
-    vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm_)
+    LOG.tc_step("Evacuate vm and expect VM to stay on same host")
+    code, output = vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm_, fail_ok=True)
+    assert code > 0, "Actual: {}".format(output)
 
     LOG.tc_step("Verify vm is recovered and can still ping outside")
+    host_helper.wait_for_hosts_ready(hosts=vm_host)
+    vm_helper.wait_for_vm_status(vm_id=vm_)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, use_fip=True)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)

@@ -386,10 +386,12 @@ class HTTPPort:
     NEUTRON_VER = "v2.0"
     CEIL_PORT = 8777
     CEIL_VER = "v2"
+    GNOCCHI_PORT = 8041
+    GNOCCHI_VER = 'v1'
     SYS_PORT = 6385
     SYS_VER = "v1"
     CINDER_PORT = 8776
-    CINDER_VER = "v2"   # v1 is also supported
+    CINDER_VER = "v3"   # v1 and v2 are also supported
     GLANCE_PORT = 9292
     GLANCE_VER = "v2"
     HEAT_PORT = 8004
@@ -397,7 +399,7 @@ class HTTPPort:
     HEAT_CFN_PORT = 8000
     HEAT_CFN_VER = "v1"
     NOVA_PORT = 8774
-    NOVA_VER = "v2"     # v3 also supported
+    NOVA_VER = "v2.1"     # v3 also supported
     NOVA_EC2_PORT = 8773
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491

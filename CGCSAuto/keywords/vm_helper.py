@@ -1,12 +1,12 @@
 import copy
 import math
 import os
+import os.path
 import random
 import re
 import time
 import ipaddress
-from contextlib import contextmanager
-
+from contextlib import contextmanager, ExitStack
 import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto
@@ -14,7 +14,6 @@ from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP,
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
-from consts.scripts import GuestServiceScript
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
     vlm_helper, storage_helper, ceilometer_helper
@@ -24,6 +23,7 @@ from utils import exceptions, cli, table_parser, multi_thread
 from utils import local_host
 from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
 from utils.clients.local import LocalHostClient
+from utils.guest_scripts.scripts import TisInitServiceScript
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
 
@@ -577,7 +577,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             # tenant_vif = random.choice(['virtio', 'avp'])
             if tenant_net_id:
                 nics.append({'net-id': tenant_net_id, 'vif-model': 'virtio'})
-    
+
     if isinstance(nics, dict):
         nics = [nics]
 
@@ -671,7 +671,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if meta:
         meta_args = [' --meta {}={}'.format(key_, val_) for key_, val_ in meta.items()]
         args_ += ''.join(meta_args)
-    
+
     if poll:
         args_ += ' --poll'
 
@@ -743,7 +743,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
-                                                                              con_ssh=con_ssh, auth_info=auth_info)
+                                                                              con_ssh=con_ssh, auth_info=Tenant.ADMIN)
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -1007,7 +1007,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
                 "VM {} did not reach original state within {} seconds after live migration".
                 format(vm_id, VMTimeout.LIVE_MIGRATE_COMPLETE))
 
-    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    after_host = before_host
+    for i in range(3):
+        after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        if after_host != before_host:
+            break
+        time.sleep(3)
 
     if before_host == after_host:
         LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
@@ -1702,6 +1707,118 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
                                           timeout=timeout, fail_ok=fail_ok)[0]
 
 
+def scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout=60, validate=True, natbox_client=None, sha1sum=None):
+    """
+    scp a file to a vm from natbox
+    the file must be located in the natbox
+    the natbox must has connectivity to the VM
+
+    Args:
+        vm_id (str): vm to scp to
+        source_file (str): full pathname to the source file
+        dest_file (str): destination full pathname in the VM
+        timeout (int): scp timeout
+        validate (bool): verify src and dest sha1sum
+        natbox_client (NATBoxClient|None):
+        sha1sum (str|None): validates the source file prior to operation, or None, only checked if validate=True
+
+    Returns (None):
+
+    """
+    if natbox_client is None:
+        natbox_client = NATBoxClient.get_natbox_client()
+
+    LOG.info("scp-ing from {} to VM {}".format(natbox_client.host, vm_id))
+
+    tmp_loc = '/tmp'
+    fname = os.path.basename(os.path.normpath(source_file))
+
+    # ensure source file exists
+    natbox_client.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+
+    # calculate sha1sum
+    if validate:
+        src_sha1 = natbox_client.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+        src_sha1 = src_sha1.split(' ')[0]
+        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+        if sha1sum is not None and src_sha1 != sha1sum:
+            raise ValueError("src sha1sum validation failed {} != {}".format(src_sha1, sha1sum))
+
+    with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        vm_ssh.exec_cmd('mkdir -p {}'.format(tmp_loc))
+        vm_ssh.scp_on_dest(natbox_client.user, natbox_client.host, source_file,
+                           '/'.join([tmp_loc, fname]), natbox_client.password, timeout=timeout)
+
+        # `mv $s $d` fails if $s == $d
+        if os.path.normpath(os.path.join(tmp_loc, fname)) != os.path.normpath(dest_file):
+            vm_ssh.exec_sudo_cmd('mv -f {} {}'.format('/'.join([tmp_loc, fname]), dest_file), fail_ok=False)
+
+        # ensure destination file exists
+        vm_ssh.exec_sudo_cmd('test -f {}'.format(dest_file), fail_ok=False)
+
+        # validation
+        if validate:
+            dest_sha1 = vm_ssh.exec_sudo_cmd('sha1sum {}'.format(dest_file), fail_ok=False)[1]
+            dest_sha1 = dest_sha1.split(' ')[0]
+            LOG.info("dst: {}, sha1sum: {}".format(dest_file, dest_sha1))
+            if src_sha1 != dest_sha1:
+                raise ValueError("dst sha1sum validation failed {} != {}".format(src_sha1, dest_sha1))
+            LOG.info("scp completed successfully")
+
+
+def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_ssh=None, natbox_client=None):
+    """
+    scp a file from any SSHClient to a VM
+    since not all SSHClient's has connectivity to the VM, this function scps the source file to natbox first
+
+    Args:
+        vm_id (str): vm to scp to
+        source_file (str): full pathname to the source file
+        dest_file (str): destination path in the VM
+        timeout (int): scp timeout
+        validate (bool): verify src and dest sha1sum
+        source_ssh (SSHClient|None): the source ssh session, or None to use 'localhost'
+        natbox_client (NATBoxClient|None):
+        sha1sum (str|None): validates the source file prior to operation, or None to skip, only used if validate=True
+
+    Returns (None):
+
+    """
+    if natbox_client is None:
+        natbox_client = NATBoxClient.get_natbox_client()
+    if source_ssh is None:
+        source_ssh = NATBoxClient.set_natbox_client('localhost')
+
+    # scp-ing from natbox, forward the call
+    if source_ssh.host == natbox_client.host:
+        return scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout, validate, natbox_client=natbox_client)
+
+    LOG.info("scp-ing from {} to natbox {}".format(source_ssh.host, natbox_client.host))
+
+    tmp_loc = '/tmp'
+    fname = os.path.basename(os.path.normpath(source_file))
+
+    # ensure source file exists
+    source_ssh.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+
+    # calculate sha1sum
+    if validate:
+        src_sha1 = source_ssh.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+        src_sha1 = src_sha1.split(' ')[0]
+        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+    else:
+        src_sha1 = None
+
+    # scp to natbox
+    natbox_client.exec_cmd('mkdir -p {}'.format(tmp_loc))
+    source_ssh.scp_on_source(
+        source_file, natbox_client.user, natbox_client.host, tmp_loc, natbox_client.password, timeout=timeout)
+
+    return scp_to_vm_from_natbox(
+        vm_id, '/'.join([tmp_loc, fname]), dest_file, timeout, validate,
+        natbox_client=natbox_client, sha1sum=src_sha1)
+
+
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
@@ -1716,7 +1833,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         username (str):
         password (str):
         prompt (str):
-        timeout (int): 
+        timeout (int):
         natbox_client (NATBoxClient):
         con_ssh (SSHClient): ssh connection to TiS active controller
         vm_ip (str): ssh to this ip from NatBox if given
@@ -1748,9 +1865,15 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
-                         user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
-                         retry_timeout=retry_timeout)
+    try:
+        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
+                             user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
+                             retry_timeout=retry_timeout)
+    except:
+        LOG.warning('Failed to ssh to VM {}! Collecting vm console log'.format(vm_id))
+        get_console_logs(vm_ids=vm_id)
+        raise
+
     try:
         yield vm_ssh
     finally:
@@ -2117,8 +2240,9 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     res_pass = {}
     res_fail = {}
     end_time = time.time() + timeout
+    arg = '--all-tenants' if auth_info == Tenant.ADMIN else ''
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.nova('list', positional_args=arg, ssh_client=con_ssh, auth_info=auth_info))
 
         for vm_id in list(vms_to_check):
             vm_val = table_parser.get_values(table_, target_header=header, ID=vm_id)[0]
@@ -3981,15 +4105,15 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     """
 
     if not flavor:
-        flavor_id = nova_helper.create_flavor(name=vm_type)[1]
+        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2)[1]
         if cleanup:
-            ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
+            ResourceCleanup.add('flavor', flavor, scope=cleanup)
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
 
         if vm_type in ['vswitch', 'dpdk', 'vhost']:
             extra_specs.update({FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.MEM_PAGE_SIZE: '2048'})
 
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor_extra_specs(flavor=flavor, **extra_specs)
 
     resource_id = None
     boot_source = boot_source if boot_source else 'volume'
@@ -4342,7 +4466,7 @@ def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, exp
 
     LOG.info("Waiting for migration {} for vm {} to reach {} status".format(migration_id, vm_id, expt_status))
     end_time = time.time() + timeout
-    prev_state=None
+    prev_state = None
     while time.time() < end_time:
         mig_status = get_vm_migration_values(vm_id=vm_id, rtn_val='Status', **{'Id': migration_id})[0]
         if mig_status == expt_status:
@@ -4412,20 +4536,43 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
 
 
 def _set_vm_route(vm_id, target_subnet, via_ip, dev_or_mac, persist=True):
-    # the os on vm must be managed by network-scripts
+    # returns True if the targeted VM is vswitch-enabled
+    # for vswitch-enabled VMs, it must be setup with TisInitServiceScript if persist=True
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        vshell, msg = ssh_client.exec_cmd("vshell port-list", fail_ok=True)
+        vshell = not vshell
         if ':' in dev_or_mac:
-            dev = network_helper.get_eth_for_mac(ssh_client, dev_or_mac)
+            dev = network_helper.get_eth_for_mac(ssh_client, dev_or_mac, vshell=vshell)
         else:
             dev = dev_or_mac
-        param = target_subnet, via_ip, dev
-        LOG.info("Routing {} via {} on interface {}".format(*param))
-        ssh_client.exec_sudo_cmd("route add -net {} gw {} {}".format(*param), fail_ok=False)
-        if persist:
-            LOG.info("Setting persistent route")
+        if not vshell:   # not avs managed
+            param = target_subnet, via_ip, dev
+            LOG.info("Routing {} via {} on interface {}".format(*param))
+            ssh_client.exec_sudo_cmd("route add -net {} gw {} {}".format(*param), fail_ok=False)
+            if persist:
+                LOG.info("Setting persistent route")
+                ssh_client.exec_sudo_cmd(
+                    "echo -e \"{} via {}\" > /etc/sysconfig/network-scripts/route-{}".format(*param),
+                    fail_ok=False)
+            return False
+        else:
+            param = target_subnet, via_ip, dev
+            LOG.info("Routing {} via {} on interface {}, AVS-enabled".format(*param))
             ssh_client.exec_sudo_cmd(
-                "echo -e \"{} via {}\" > /etc/sysconfig/network-scripts/route-{}".format(*param),
-                fail_ok=False)
+                "sed -i $'s,quit,route add {} {} {} 1\\\\nquit,g' /etc/vswitch/vswitch.cmds.default".format(
+                    target_subnet, dev, via_ip
+                ), fail_ok=False)
+            # reload vswitch
+            ssh_client.exec_sudo_cmd("/etc/init.d/vswitch restart", fail_ok=False)
+            if persist:
+                LOG.info("Setting persistent route")
+                ssh_client.exec_sudo_cmd(
+                    # ROUTING_STUB
+                    # "192.168.1.0/24,192.168.111.1,eth0"
+                    "sed -i $'s@#ROUTING_STUB@\"{},{},{}\"\\\\n#ROUTING_STUB@g' {}".format(
+                        target_subnet, via_ip, dev, TisInitServiceScript.configuration_path
+                    ), fail_ok=False)
+            return True
 
 
 def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
@@ -4474,70 +4621,86 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
     if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
         raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
 
-    _set_vm_route(
+    vshell_vm1 = _set_vm_route(
         vm1,
         interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
 
     if bidirectional:
-        _set_vm_route(
+        vshell_vm2 = _set_vm_route(
             vm2,
             interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm2]['internal']['mac'])
 
     if validate:
         LOG.info("Validating route(s) across data")
-        ping_vms_from_vm(vm2, vm1, net_types='data')
+        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1)
         if bidirectional:
-            ping_vms_from_vm(vm1, vm2, net_types='data')
+            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2)
 
     return interfaces
 
 
-def setup_kernel_routing(vm_id, low_latency=False, **ssh_args):
+def setup_kernel_routing(vm_id, **kwargs):
     """
     Setup kernel routing function for the specified VM
-    replciates the operation as in wrs_guest_setup.sh
+    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
     in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
-    the script could be located on the VM at /etc/init.d/tis_automation_setup_kernel_routing.sh
+    see TisInitServiceScript for script details
     no fail_ok option, since if failed, the vm's state is undefined
 
     Args:
         vm_id (str):
             the VM to be configured
-        low_latency (bool):
-            if the VM is configured for low_latency,
-            when True, cpu0 is not used for netif_multiqueue
-        ssh_args (dict):
-            kwargs for ssh_to_vm_from_natbox
+        kwargs (dict):
+            kwargs for TisInitServiceScript.configure
 
     """
-    LOG.info("Setting up kernel routing for VM {}, low_latency={}".format(vm_id, low_latency))
+    LOG.info("Setting up kernel routing for VM {}, kwargs={}".format(vm_id, kwargs))
 
-    with ssh_to_vm_from_natbox(vm_id, **ssh_args) as ssh_client:
+    scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
         r, msg = ssh_client.exec_cmd("cat /proc/sys/net/ipv4/ip_forward", fail_ok=False)
         if msg == "1":
             LOG.warn("VM {} has ip_forward enabled already, skipping".format(vm_id))
             return
+        TisInitServiceScript.configure(ssh_client, **kwargs)
+        TisInitServiceScript.enable(ssh_client)
+        TisInitServiceScript.start(ssh_client)
 
-        if low_latency:
-            low_latency = "'yes'"
-        else:
-            low_latency = "'no'"
 
-        script = GuestServiceScript.generate_script(LOW_LATENCY=low_latency)
-        ssh_client.exec_sudo_cmd(
-            "cat > %s << 'EOT'\n%s\nEOT" % (GuestServiceScript.script_path, script), fail_ok=False)
-        ssh_client.exec_sudo_cmd("chmod a+x %s" % GuestServiceScript.script_path, fail_ok=False)
+def setup_avr_routing(vm_id, **kwargs):
+    """
+    Setup avr routing (vswitch L3) function for the specified VM
+    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
+    in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
+    see TisInitServiceScript for script details
+    no fail_ok option, since if failed, the vm's state is undefined
 
-        # assuming the guest os is managed by systemctl
-        ssh_client.exec_sudo_cmd(
-            "cat > %s << 'EOT'\n%s\nEOT" % (GuestServiceScript.service_path, GuestServiceScript.service),
-            fail_ok=False)
-        ssh_client.exec_sudo_cmd(
-            "systemctl daemon-reload", fail_ok=False)
-        ssh_client.exec_sudo_cmd(
-            "systemctl enable %s" % (GuestServiceScript.service_name), fail_ok=False)
-        ssh_client.exec_sudo_cmd(
-            "systemctl start %s" % (GuestServiceScript.service_name), fail_ok=False)
+    Args:
+        vm_id (str):
+            the VM to be configured
+        kwargs (dict):
+            kwargs for TisInitServiceScript.configure
+
+    """
+    LOG.info("Setting up avr routing for VM {}, kwargs={}".format(vm_id, kwargs))
+    data = network_helper.get_data_ips_for_vms(vm_id)[0]
+    internal = network_helper.get_internal_ips_for_vms(vm_id)[0]
+    for vm, info in get_vms_ports_info([vm_id]).items():
+        for ip, cidr, mac in info:
+            if ip == data:
+                data_netmask = ipaddress.ip_network(cidr).netmask
+            elif ip == internal:
+                internal_netmask = ipaddress.ip_network(cidr).netmask
+
+    scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        TisInitServiceScript.configure(ssh_client, FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
+    "{},{},eth0,1500"
+    "{},{},eth1,1500"
+)
+""".format(data, data_netmask, internal, internal_netmask), **kwargs)
+        TisInitServiceScript.enable(ssh_client)
+        TisInitServiceScript.start(ssh_client)
 
 
 @contextmanager
@@ -4651,16 +4814,14 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             port = eval(port)
             unavailable_ips.add(ipaddress.ip_address(port["ip_address"]))
 
-    session_managed = False
-    if ixia_session is None:
-        LOG.info("ixia_session not supplied, creating")
-        from keywords import ixia_helper
-        ixia_session = ixia_helper.IxiaSession()
-        session_managed = True
-        ixia_session.connect()
-    traffic_started = False
+    with ExitStack() as stack:
+        if ixia_session is None:
+            LOG.info("ixia_session not supplied, creating")
+            from keywords import ixia_helper
+            ixia_session = ixia_helper.IxiaSession()
+            ixia_session.connect()
+            stack.callback(ixia_session.disconnect, traffic_stop=True)
 
-    try:
         ixia_session.load_config(IxiaPath.CFG_500FPS)
         ixia_session.add_chassis(clear=True)
         vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
@@ -4718,15 +4879,5 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         ixia_session.configure(configElement+'/frameRate', rate=fps)
 
         ixia_session.traffic_start()
-        traffic_started = True
 
         yield ixia_session
-    finally:
-        try:
-            if traffic_started:
-                ixia_session.traffic_stop()
-        finally:
-            # must ensure the session is disconnected no matter what, as it locks the service port
-            if session_managed:
-                LOG.info("releasing ixia_session created")
-                ixia_session.disconnect()

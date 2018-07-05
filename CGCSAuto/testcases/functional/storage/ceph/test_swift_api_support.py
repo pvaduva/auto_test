@@ -181,7 +181,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=True,
                                                                      cinder=cinder_pool_gib,
                                                                      object_gib=object_pool_gib,
-                                                                     services='cinder,glance,swift')
+                                                                     services='cinder,glance,nova,swift')
 
     LOG.info("Verifying if swift object gateway is enabled...")
     assert str(updated_backend_info['object_gateway']).lower() == 'true', "Fail to enable Swift object gateway: {}"\

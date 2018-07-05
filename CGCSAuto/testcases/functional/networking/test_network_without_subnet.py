@@ -40,7 +40,7 @@ def update_net_quota(request):
     ('port_id', 'virtio'),
     ('net-id', 'avp')
 ])
-def test_network_without_subnets(base_vm, if_attach_arg, vif_model):
+def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model):
     """
     Sample test case for Boot an instance with network without subnet
     Args:

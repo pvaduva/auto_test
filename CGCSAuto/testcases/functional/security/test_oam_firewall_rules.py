@@ -62,7 +62,7 @@ def test_firewall_rules_default():
     """
     # Cannot test connecting to the ports as they are in use.
 
-    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8774, 8776, 8777, 8778, 9292, 9696, 15491]
+    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8041, 8774, 8776, 8778, 9292, 9696, 15491]
 
     from consts.proj_vars import ProjVar
     if ProjVar.get_var('REGION') != 'RegionOne':
@@ -125,6 +125,7 @@ def get_custom_firewall_rule():
 
     return custom_path
 
+
 @fixture()
 def delete_file(get_custom_firewall_rule, request):
     user_file_dir = ProjVar.get_var('USER_FILE_DIR')
@@ -135,7 +136,7 @@ def delete_file(get_custom_firewall_rule, request):
 
     def teardown():
         try:
-            LOG.fixture_step("Cleanup Remove file: {}, {}".format(invalid_rules_file))
+            LOG.fixture_step("Cleanup Remove file: {}".format(invalid_rules_file))
             cli_client.exec_cmd("rm {}".format(invalid_rules_file))
         except:
             pass
@@ -285,7 +286,8 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
     :param port: (number) Port to test
     :param port_expected_open: (boolean)
     """
-    lab_ip = html_helper.get_ip_addr()
+    lab_ip = ProjVar.get_var('lab')['floating ip']
+    cli.system('show', source_openrc=True)
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)
@@ -323,7 +325,7 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
         end_event.set()
         listener_thread.wait_for_thread_end(timeout=10)
         con_ssh.send_control('c')
-        con_ssh.expect(Prompt.CONTROLLER_PROMPT)
+        con_ssh.expect(con_ssh.get_prompt())
 
 
 def _listen_on_port(port, end_event, timeout=300):

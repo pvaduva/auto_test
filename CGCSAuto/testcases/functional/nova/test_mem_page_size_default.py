@@ -145,5 +145,6 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
     LOG.tc_step("Check memory is taken from mem page pool that matches mem_page_size - {} via vm-topology.".
                 format(mem_page_size))
     assert pre_used_mem + 1024 == post_used_mem, "Used memory is not increased by 1024MiB"
-    assert pre_avail_mems - 1024 == post_avail_mems, ("Available memory in {} page pool is not decreased "
-                                                                "by 1024MiB").format(mem_page_size)
+    if mem_page_size != 'small':
+        assert pre_avail_mems - 1024 == post_avail_mems, ("Available memory in {} page pool is not decreased "
+                                                                    "by 1024MiB").format(mem_page_size)

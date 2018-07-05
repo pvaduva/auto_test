@@ -5,7 +5,7 @@ import re
 from keywords import install_helper, vlm_helper
 from utils.tis_log import LOG
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import TuxlabServerPath, InstallPaths
+from consts.filepaths import TuxlabServerPath
 from consts.auth import Tenant
 from setups import initialize_server
 from tc_sysinstall.fresh_install import fresh_install_helper

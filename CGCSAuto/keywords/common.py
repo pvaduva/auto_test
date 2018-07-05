@@ -5,7 +5,6 @@
 import os
 import re
 import time
-from contextlib import contextmanager
 from datetime import datetime
 
 import pexpect
@@ -14,8 +13,6 @@ from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import ProjVar
-from keywords import security_helper
-from utils import exceptions
 from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
 from utils.tis_log import LOG
 
@@ -187,7 +184,8 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
 
 
 def scp_from_localhost_to_active_controller(source_path, dest_path='',
-                                            dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
+                                            dest_user=HostLinuxCreds.get_user(),
+                                            dest_password=HostLinuxCreds.get_password(),
                                             timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -198,7 +196,8 @@ def scp_from_localhost_to_active_controller(source_path, dest_path='',
 
 
 def scp_from_active_controller_to_localhost(source_path, dest_path='',
-                                            src_user=HostLinuxCreds.get_user(), src_password=HostLinuxCreds.get_password(),
+                                            src_user=HostLinuxCreds.get_user(),
+                                            src_password=HostLinuxCreds.get_password(),
                                             timeout=900, is_dir=False):
 
     active_cont_ip = ControllerClient.get_active_controller().host
@@ -291,64 +290,6 @@ def get_tenant_name(auth_info=None):
     if auth_info is None:
         auth_info = Tenant.get_primary()
     return auth_info['tenant']
-
-
-@contextmanager
-def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
-                       telnet_session=None):
-    """
-    ssh to a exterbal node from sshclient.
-
-    Args:
-        host (str|None): hostname or ip address of remote node to ssh to.
-        username (str):
-        password (str):
-        prompt (str):
-
-
-    Returns (SSHClient): ssh client of the host
-
-    Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
-                  remote_ssh.exec_cmd(cmd)
-
-    """
-
-    if not host:
-        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
-
-    if use_telnet and not telnet_session:
-        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
-
-    if not con_ssh and not use_telnet:
-        con_ssh = ControllerClient.get_active_controller()
-
-    if not use_telnet:
-        default_user, default_password = security_helper.LinuxUser.get_current_user_password()
-    else:
-        default_user = HostLinuxCreds.get_user()
-        default_password = HostLinuxCreds.get_password()
-
-    user = username if username else default_user
-    password = password if password else default_password
-    if use_telnet:
-        original_host = telnet_session.exec_cmd('hostname')[1]
-    else:
-        original_host = con_ssh.host
-
-    if not prompt:
-        prompt = '.*' + host + '\:~\$'
-
-    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
-    remote_ssh.connect()
-    current_host = remote_ssh.host
-    if not current_host == host:
-        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
-    try:
-        yield remote_ssh
-    finally:
-        if current_host != original_host:
-            remote_ssh.close()
-
 
 
 class Count:
@@ -550,6 +491,7 @@ def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=6
     Args:
         ssh_client (SSH_Client):
         process (str): unique identification of process, such as pid, or unique proc name
+        sudo (bool)
         disappear (bool): whether to wait for proc appear or disappear
         timeout (int): max wait time
         time_to_stay (int): seconds to persists
@@ -634,3 +576,51 @@ def collect_software_logs(con_ssh=None):
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")
         LOG.error(e, exc_info=True)
+
+
+def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
+    """
+    parse args dictionary and convert it to string
+    Args:
+        args_dict (dict): key/value pairs
+        repeat_arg: if value is tuple, list, dict, should the arg be repeated.
+            e.g., True for --nic in nova boot. False for -m in gnocchi measures aggregation
+        vals_sep (str): separator to join multiple vals. Only applicable when repeat_arg=False.
+
+    Returns (str):
+
+    """
+    args = ''
+    for key, val in args_dict.items():
+        if val is None:
+            continue
+
+        if isinstance(val, str):
+            if ' ' in val:
+                val = '"{}"'.format(val)
+            args += ' --{}={}'.format(key, val)
+        elif isinstance(val, bool):
+            if val:
+                args += ' --{}'.format(key)
+        elif isinstance(val, (int, float)):
+            args += ' --{}={}'.format(key, val)
+        elif isinstance(val, dict):
+            vals = []
+            for key_, val_ in val.items():
+                if ' ' in val_:
+                    val_ = '"{}"'.format(val_)
+                vals.append('{}={}'.format(key_, val_))
+            if repeat_arg:
+                args += ' ' + ' '.join(['--{} {}'.format(key, val_) for val_ in vals])
+            else:
+                args += ' --{} {}'.format(key, vals_sep.join(vals))
+        elif isinstance(val, (list, tuple)):
+            if repeat_arg:
+                for val_ in val:
+                    args += ' --{}={}'.format(key, val_)
+            else:
+                args += ' --{}={}'.format(key, vals_sep.join(val))
+        else:
+            raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
+
+    return args

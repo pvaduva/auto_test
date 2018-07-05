@@ -50,7 +50,7 @@ def test_remote_cli():
     cinder_helper.get_qos_list()
     glance_helper.get_images()
     system_helper.get_computes()
-    ceilometer_helper.alarm_list()
+    ceilometer_helper.get_alarms()
     keystone_helper.is_https_lab()
 
 

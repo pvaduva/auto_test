@@ -1,5 +1,4 @@
 import copy
-import time
 
 from consts.timeout import HostTimeout
 from consts.cgcs import HTTPPort, HostAdminState
@@ -123,7 +122,10 @@ def test_restapi_neutron_get_extensions():
     assert res == 0, "FAIL: The extensions returned are not valid."
 
 
-def test_restapi_ceilometer_get_host_pipelines():
+################################################################################
+# ceilometer pipeline is obsoleted. gnocchi does not have equivalent function. #
+################################################################################
+def _test_restapi_ceilometer_get_host_pipelines():
     """
     Do a bulk query of all pipelines and see if we get the expected number of pipelines.
     Expect at least 2 pipelines.
@@ -141,7 +143,7 @@ def test_restapi_ceilometer_get_host_pipelines():
                                             .format(NUM_PIPELINES, len(pipelines))
 
 
-def test_restapi_ceilometer_get_individual_pipelines():
+def _test_restapi_ceilometer_get_individual_pipelines():
     """
     Check that Each pipeline's information is in a valid form.
 
@@ -161,7 +163,7 @@ def test_restapi_ceilometer_get_individual_pipelines():
         assert res == 0, "FAIL: Pipeline {} has invalid information.".format(item["name"])
 
 
-def test_restapi_ceilometer_put_pipelines():
+def _test_restapi_ceilometer_put_pipelines():
     """
     Modify some of the parameters of a pipeline and confirm that they are modified correctly.
 
@@ -201,6 +203,8 @@ def test_restapi_ceilometer_put_pipelines():
         assert payload == data, "FAIL: The pipeline {}'s values were not changed correctly.".format(item["name"])
         assert copy_payload == reset_pipeline, "FAIL: The pipeline {} was not set back to its original state."\
                                                .format(item["name"])
+
+# END of obsoleted ceilometer testcases.
 
 
 def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):

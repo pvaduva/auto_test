@@ -1,18 +1,16 @@
-import pytest
 import os
-import setups
+
+import pytest
+
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import install_helper,  patching_helper, upgrade_helper, common
-from utils.clients.ssh import ControllerClient, SSHClient
-from utils import table_parser, cli
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES
-
-# Import test fixtures that are applicable to upgrade test
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.proj_vars import ProjVar, InstallVars, UpgradeVars
+from keywords import install_helper,  patching_helper, upgrade_helper, common
 from testfixtures.pre_checks_and_configs import *
-
+from utils import table_parser, cli
+from utils.clients.ssh import SSHClient, ControllerClient
 
 natbox_ssh = None
 con_ssh = None
@@ -134,7 +132,7 @@ def upgrade_setup(pre_check_upgrade):
     # # get upgrade license file for release
     LOG.info("Downloading the license {}:{} for target release {}".format(bld_server_obj.name,
                                                                           license_path, upgrade_version))
-    install_helper.download_license(lab, bld_server_obj, license_path)
+    install_helper.download_upgrade_license(lab, bld_server_obj, license_path)
 
     LOG.tc_step("Checking if target release license is downloaded......")
     cmd = "test -e " + os.path.join(WRSROOT_HOME, "upgrade_license.lic")
@@ -145,7 +143,7 @@ def upgrade_setup(pre_check_upgrade):
     LOG.tc_step("Installing the target release {} license file".format(upgrade_version))
     rc = system_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                                                con_ssh=controller0_conn)
-    assert rc == 0, "Unable to fresh_install upgrade license file in Controller-0"
+    assert rc == 0, "Unable to install upgrade license file in Controller-0"
     LOG.info("Target release license installed......")
 
     # Check load already imported if not  get upgrade load iso file
@@ -336,7 +334,7 @@ def apply_patches(lab, server, patch_dir):
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
                 common.scp_from_localhost_to_active_controller(temp_path,
-                                            dest_path=patch_dest_dir, is_dir=True)
+                                                               dest_path=patch_dest_dir, is_dir=True)
 
         else:
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,

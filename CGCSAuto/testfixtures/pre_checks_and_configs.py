@@ -1,3 +1,4 @@
+import re
 import time
 
 from pytest import fixture, skip
@@ -10,6 +11,17 @@ from consts.reasons import SkipSysType
 from keywords import system_helper, host_helper, keystone_helper, security_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+
+
+@fixture(scope='function')
+def skip_for_ovs():
+    """
+    Skip test for OVS system, if test name contains avs_pattern
+    """
+    test_name = ProjVar.get_var('TEST_NAME')
+    avs_pattern = 'avp|avr|avs'
+    if re.search(avs_pattern, test_name) and not system_helper.is_avs():
+        skip("Test unsupported by OVS")
 
 
 @fixture(scope='session')

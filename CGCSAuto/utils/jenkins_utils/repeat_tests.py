@@ -8,7 +8,7 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
         test_cases = _get_tests_from_file(file_path=file_path)
         if not test_cases:
             print("No testcases listed in {}.".format(file_path))
-            return
+            exit(1)
     elif test_cases:
         if isinstance(test_cases, str):
             test_cases = [test_cases]

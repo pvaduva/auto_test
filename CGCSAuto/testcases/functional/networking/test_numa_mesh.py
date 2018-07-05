@@ -1,8 +1,8 @@
-from pytest import mark
+from pytest import mark, skip
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
-from keywords import host_helper, check_helper
+from keywords import host_helper, check_helper, system_helper
 
 
 # Remove since it's covered by test_modify_cpu_unlock_negative
@@ -32,6 +32,9 @@ def _test_set_cpu_cores_denied_unlocked_host():
 # TODO: Add parameter for lab support split and lab that doesn't
 @mark.p2
 def test_vswitch_ports_cores_mapping():
+    if not system_helper.is_avs():
+        skip("vshell commands unsupported by OVS")
+
     up_hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
     assert up_hypervisors, "No hypervisor is up."
 

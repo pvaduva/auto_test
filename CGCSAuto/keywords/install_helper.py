@@ -11,7 +11,7 @@ from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE
-from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, InstallPaths
+from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
@@ -215,7 +215,7 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
     if wait_for_thread:
         node_thread.join(HostTimeout.SYSTEM_RESTORE)
         if node_thread.is_alive():
-            err_msg = "Host {} failed to fresh_install within the {} seconds".format(node.name, HostTimeout.SYSTEM_RESTORE)
+            err_msg = "Host {} failed to install within the {} seconds".format(node.name, HostTimeout.SYSTEM_RESTORE)
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
@@ -358,7 +358,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
                 else:
                     try:
-                        with common.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
+                        with host_helper.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
                                                        telnet_session=controller0_node.telnet_conn) as host_ssh:
                             host_ssh.send("sudo wipedisk")
                             prompts = [Prompt.PASSWORD_PROMPT, "\[y/n\]", "wipediskscompletely"]
@@ -507,47 +507,6 @@ def lock_hosts(hosts):
         hosts = [hosts]
     for host in hosts:
         host_helper.lock_host(host)
-
-
-@contextmanager
-def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
-                        prompt=None):
-    """
-    ssh to given build server.
-    Usage: Use with context_manager. i.e.,
-        with ssh_to_build_server(bld_srv=cgts-yow3-lx) as bld_srv_ssh:
-            # do something
-        # ssh session will be closed automatically
-
-    Args:
-        bld_srv (str|dict): build server ip, name or dictionary (choose from consts.build_serve.BUILD_SERVERS)
-        user (str): svc-cgcsauto if unspecified
-        password (str): password for svc-cgcsauto user if unspecified
-        prompt (str|None): expected prompt. such as: svc-cgcsauto@yow-cgts4-lx.wrs.com$
-
-    Yields (SSHClient): ssh client for given build server and user
-
-    """
-    # Get build_server dict from bld_srv param.
-    if isinstance(bld_srv, str):
-        for bs in BUILD_SERVERS:
-            if bs['name'] in bld_srv or bs['ip'] == bld_srv:
-                bld_srv = bs
-                break
-        else:
-            raise exceptions.BuildServerError("Requested build server - {} is not found. Choose server ip or "
-                                              "server name from: {}".format(bld_srv, BUILD_SERVERS))
-    elif bld_srv not in BUILD_SERVERS:
-        raise exceptions.BuildServerError("Unknown build server: {}. Choose from: {}".format(bld_srv, BUILD_SERVERS))
-
-    prompt = prompt if prompt else Prompt.BUILD_SERVER_PROMPT_BASE.format(user, bld_srv['name'])
-    bld_server_conn = SSHClient(bld_srv['ip'], user=user, password=password, initial_prompt=prompt)
-    bld_server_conn.connect()
-
-    try:
-        yield bld_server_conn
-    finally:
-        bld_server_conn.close()
 
 
 def download_image(lab, server, guest_path):
@@ -770,7 +729,7 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
 
 def launch_vms_post_install():
     """
-    Launchs VMs using the launch scripts generated after running lab_setup.sh post fresh_install. Verifies the created
+    Launchs VMs using the launch scripts generated after running lab_setup.sh post install. Verifies the created
     VMs are pingable.
     Returns(list): list of VM ids that are generated
 
@@ -779,7 +738,7 @@ def launch_vms_post_install():
     existing_vms_count = len(vms)
 
     if existing_vms_count > 0:
-        LOG.info("VMs exist; may be already launched as part of fresh_install: {} ".format(vms))
+        LOG.info("VMs exist; may be already launched as part of install: {} ".format(vms))
     else:
         # check if vm launch scripts exist in the lab
         active_controller = ControllerClient.get_active_controller()
@@ -803,7 +762,7 @@ def launch_vms_post_install():
     if len(vms) > 0:
         LOG.info("Verifying VMs are pingable : {} ".format(vms))
         vm_helper.ping_vms_from_natbox(vm_ids=vms)
-        LOG.info("VMs launched successfully post fresh_install")
+        LOG.info("VMs launched successfully post install")
     return vms
 
 
@@ -2684,13 +2643,13 @@ def check_cloned_hardware_status(host, fail_ok=False):
     LOG.info("Executing system show on cloned system")
     table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
     system_name = table_parser.get_value_two_col_table(table_, 'name')
-    assert "Cloned_system" in system_name, "Unexpected system name {} after fresh_install-clone".format(system_name)
+    assert "Cloned_system" in system_name, "Unexpected system name {} after install-clone".format(system_name)
 
     system_type = table_parser.get_value_two_col_table(table_, 'system_type')
-    assert "All-in-one" in system_type, "Unexpected system type {} after fresh_install-clone".format(system_type)
+    assert "All-in-one" in system_type, "Unexpected system type {} after install-clone".format(system_type)
 
     system_desc = table_parser.get_value_two_col_table(table_, 'description')
-    assert "Cloned_from" in system_desc, "Unexpected system description {} after fresh_install-clone".format(system_desc)
+    assert "Cloned_from" in system_desc, "Unexpected system description {} after install-clone".format(system_desc)
 
     software_version = table_parser.get_value_two_col_table(table_, 'software_version')
 
@@ -2698,16 +2657,16 @@ def check_cloned_hardware_status(host, fail_ok=False):
     table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     host_name = table_parser.get_value_two_col_table(table_, 'hostname')
-    assert host == host_name, "Unexpected hostname {} after fresh_install-clone".format(host_name)
+    assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
     if system_mode == 'duplex':
         host_mgmt_ip = table_parser.get_value_two_col_table(table_, 'mgmt_ip')
-        assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after fresh_install-clone"\
+        assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after install-clone"\
             .format(host_mgmt_ip, host)
 
     host_mgmt_mac = table_parser.get_value_two_col_table(table_, 'mgmt_mac')
 
     host_software_load = table_parser.get_value_two_col_table(table_, 'software_load')
-    assert host_software_load == software_version, "Unexpected software load {} in host {} after fresh_install-clone"\
+    assert host_software_load == software_version, "Unexpected software load {} in host {} after install-clone"\
         .format(host_software_load, host)
 
     LOG.info("Executing system host ethernet port list on cloned system host {}".format(host))
@@ -2722,11 +2681,11 @@ def check_cloned_hardware_status(host, fail_ok=False):
     table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
     assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
-        "No data interface type found in Host {} after system clone-fresh_install".format(host)
+        "No data interface type found in Host {} after system clone-install".format(host)
     assert len(table_parser.filter_table(table_, **{'network type':'mgmt'})['values']) >= 1, \
-        "No mgmt interface type found in Host {} after system clone-fresh_install".format(host)
+        "No mgmt interface type found in Host {} after system clone-install".format(host)
     assert len(table_parser.filter_table(table_, **{'network type':'oam'})['values']) >= 1, \
-        "No oam interface type found in Host {} after system clone-fresh_install".format(host)
+        "No oam interface type found in Host {} after system clone-install".format(host)
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
@@ -2958,7 +2917,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
                 boot_controller(lab=lab_dict)
                 if not local_host.ping_to_host(controller0_node.host_ip):
 
-                    err_msg = "Cannot ping destination lab {} controller-0 after fresh_install".format(dest_lab_name)
+                    err_msg = "Cannot ping destination lab {} controller-0 after install".format(dest_lab_name)
                     LOG.warn(err_msg)
                     if fail_ok:
                         return 1, err_msg
@@ -2979,7 +2938,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
         con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
                           dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
 
-    with common.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
+    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
             as node_ssh:
 
         if node_ssh.exec_cmd("ls {}".format(clone_image_iso_dest_path))[0] != 0:
@@ -3164,9 +3123,9 @@ def post_install(controller0_node=None):
 
     Returns tuple of a return code a message
     -1: Unable to execute one of the scripts
-    0: succesfully ran post fresh_install scripts
-    1: there was no directory containing any post fresh_install scripts to run
-    2: The post fresh_install directory was empty
+    0: succesfully ran post install scripts
+    1: there was no directory containing any post install scripts to run
+    2: The post install directory was empty
 
 
     """
@@ -3192,9 +3151,9 @@ def post_install(controller0_node=None):
                     rc, msg = -1, 'Unable to execute {}'.format(script)
                     break
         else:
-            rc, msg = 2, "No post fresh_install scripts in the directory"
+            rc, msg = 2, "No post install scripts in the directory"
     else:
-        rc, msg = 1, "No post fresh_install directory"
+        rc, msg = 1, "No post install directory"
 
     return rc, msg
 

@@ -361,3 +361,8 @@ def parse_storprofiles_from_xml(xml_file=None):
 
     # LOG.info('xml storage-profile:{}'.format(storprofile))
     return storprofile
+
+
+
+
+

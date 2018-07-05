@@ -273,3 +273,6 @@ def get_rootfs(hosts):
     LOG.info("Root disk UUIDS: {}".format(rootfs_uuid))
 
     return rootfs_uuid
+
+
+

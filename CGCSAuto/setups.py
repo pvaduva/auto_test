@@ -303,10 +303,9 @@ def get_tis_timestamp(con_ssh):
 
 def get_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
+    build_path = None
     if code != 0:
-        build_id = ' '
-        build_host = ' '
-        job = ' '
+        build_id = build_host = job = build_by = ' '
     else:
         # get build_id
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
@@ -327,7 +326,17 @@ def get_build_info(con_ssh):
         # get jenkins job
         job = re.findall('''JOB=\"(.*)\"''', output)
         job = job[0] if job else ' '
-    return build_id, build_host, job
+
+        # get build_by
+        build_by = re.findall('''BUILD_BY=\"(.*)\"''', output)
+        build_by = build_by[0] if build_by else 'jenkins'   # Assume built by jenkins although this is likely wrong
+
+        if build_id.strip():
+            build_path = '/localhost/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
+
+    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path)
+
+    return build_id, build_host, job, build_by
 
 
 def _rsync_files_to_con1():
@@ -1061,7 +1070,6 @@ def collect_sys_net_info(lab):
 
     """
     LOG.warning("Collecting system network info upon session setup failure")
-    print("Collecting system network info upon session setup failure")
     res_ = {}
     source_user = SvcCgcsAuto.USER
     source_pwd = SvcCgcsAuto.PASSWORD

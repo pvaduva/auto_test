@@ -180,6 +180,9 @@ class TestEvacKPI:
         if not collect_kpi:
             skip("KPI only test. Skip due to kpi collection is not enabled.")
 
+        if not system_helper.is_avs() and vm_type in ('dpdk', 'avp'):
+            skip('avp vif unsupported by OVS')
+
         router_host = network_helper.get_router_info(field='wrs-net:host')
         target_host = get_hosts[0] if router_host == get_hosts[1] else get_hosts[1]
 

@@ -1018,7 +1018,7 @@ def modify_https(enable_https=True, check_first=True, timeout=400, check_interva
     if enable_https:
         CliAuth.set_vars(HTTPS=True)
         msg = "Enabled HTTPS on lab"
-        LOG.info('TODO: fresh_install certificate for https. There will be a warning msg if self-signed certificate is used')
+        LOG.info('TODO: install certificate for https. There will be a warning msg if self-signed certificate is used')
     else:
         CliAuth.set_vars(HTTPS=False)
         msg = "Enabled HTTP on lab"
@@ -1142,4 +1142,3 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
         LOG.info("Cert file copied to {} on localhost".format(dest_path))
 
     return cert_path
-

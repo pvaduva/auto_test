@@ -359,7 +359,7 @@ def test_scaling_vm_negative(ht_and_nonht_hosts, add_admin_role_func):
 
 
 # TC2904 + TC2905 + TC5156
-def test_resize_scaled_down_vm(ht_and_nonht_hosts):
+def _test_resize_scaled_down_vm(ht_and_nonht_hosts):
     """
         Tests the following:
             - that the resizing of a scaled-down vm to a scalable flavor with less cpus is successful (TC2904)
@@ -430,7 +430,8 @@ def test_resize_scaled_down_vm(ht_and_nonht_hosts):
     # TC2904 condition tested here
     LOG.tc_step("Attempt to resize vm to the flavor, assert that resize is successful")
     vm_helper.resize_vm(vm_1, scale_flavor)
-    check_helper.check_topology_of_vm(vm_id=vm_1, vcpus=2, prev_total_cpus=4, min_vcpus=1, cpu_pol='ded', expt_increase=-2)
+    check_helper.check_topology_of_vm(vm_id=vm_1, vcpus=2, prev_total_cpus=4, min_vcpus=1, cpu_pol='ded',
+                                      expt_increase=-2)
 
     # scale down once to start TC2905
     LOG.tc_step("Scale down the vm once")
@@ -449,7 +450,6 @@ def test_resize_scaled_down_vm(ht_and_nonht_hosts):
     LOG.tc_step("Attempt to resize vm to the flavor, assert that resize is successful")
     vm_helper.resize_vm(vm_1, scale_up_flavor)
     check_helper.check_topology_of_vm(vm_id=vm_1, vcpus=5, prev_total_cpus=1, min_vcpus=1, cpu_pol='ded', expt_increase=3, current_vcpus=4)
-
 
     # get new usage quota, make sure it matches the number of vcpus in the vm
     LOG.tc_step('getting new usage quota')

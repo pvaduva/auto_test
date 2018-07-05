@@ -42,8 +42,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
         resource_found = cinder_helper.get_volumes(name=vol_name)
 
     elif to_verify is 'ceilometer_alarm':
-        table = ceilometer_helper.get_alarms()
-        resource_found = table_parser.get_values(table, 'Alarm ID', Name=stack_name, strict=False)
+        resource_found = ceilometer_helper.get_alarms(name=stack_name, strict=False)
 
     elif to_verify is 'neutron_port':
         port_name = getattr(Heat, template_name)['port_name']
@@ -275,7 +274,7 @@ def revert_quota(request):
     mark.priorities('nightly', 'sx_nightly')('WR_Neutron_ProviderNet.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'),
-    # mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'), # TODO: take out for now until heat stacks are updated to use gnocchi
+    mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Port.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Net.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Subnet.yaml'),
@@ -315,15 +314,19 @@ def test_heat_template(template_name, revert_quota):
         - Delete Heat stack and verify resource deletion
 
     """
-    if template_name == 'OS_Neutron_RouterInterface.yaml':
+    if 'QoSPolicy' in template_name:
+        if not system_helper.is_avs():
+            skip("QoS policy is not supported by OVS")
+
+    elif template_name == 'OS_Neutron_RouterInterface.yaml':
         LOG.tc_step("Increase network quota by 2 for every tenant")
         tenants_quotas = revert_quota
         for tenant_id, network_quota in tenants_quotas.items():
             network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
             network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
 
-    # create new image to do update later
-    if template_name == 'OS_Nova_Server.yaml':
+    elif template_name == 'OS_Nova_Server.yaml':
+        # create new image to do update later
         LOG.tc_step("Creating an Image to be used for heat update later")
         image_id = glance_helper.create_image(name='tis-centos2')[1]
         ResourceCleanup.add('image', image_id)

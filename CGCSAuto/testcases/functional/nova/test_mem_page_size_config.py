@@ -10,7 +10,7 @@ from pytest import fixture, mark, skip
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
-from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper, cinder_helper
+from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -266,6 +266,7 @@ testdata = [None, 'any', 'large', 'small', '2048', '1048576']
 def flavor_mem_page_size(request, flavor_2g):
     flavor_id = flavor_2g[0]
     mem_page_size = request.param
+    skip_4k_for_ovs(mem_page_size)
 
     if mem_page_size is None:
         nova_helper.unset_flavor_extra_specs(flavor_id, FlavorSpec.MEM_PAGE_SIZE)
@@ -273,6 +274,11 @@ def flavor_mem_page_size(request, flavor_2g):
         nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
     return mem_page_size
+
+
+def skip_4k_for_ovs(mempage_size):
+    if mempage_size == 'small' and not system_helper.is_avs():
+        skip("4K VM is only supported by AVS")
 
 
 @fixture(scope='module')
@@ -310,6 +316,8 @@ def test_boot_vm_mem_page_size(flavor_2g, flavor_mem_page_size, image_mempage, i
         - Delete created flavor (module)
 
     """
+    skip_4k_for_ovs(image_mem_page_size)
+
     flavor_id, hosts, storage_backing = flavor_2g
 
     if image_mem_page_size is None:
@@ -394,6 +402,8 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
         - Re-Configure the compute to have 0 hugepages (module)
         - Revert host mem pages back to original
     """
+    skip_4k_for_ovs(mem_page_size)
+
     flavor_id, hosts_configured, storage_backing = flavor_2g
     LOG.tc_step("Set memory page size extra spec in flavor")
     nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated',
@@ -424,6 +434,7 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
     instance_topology = vm_helper.get_instance_topology(vm_id)
     for topology in instance_topology:
         vm_page_size = topology['pgsize']
+
     if mem_page_size == 'small':
         mem_table_header = 'A:mem_4K'
     elif mem_page_size == 'large' and vm_page_size == '2M':
