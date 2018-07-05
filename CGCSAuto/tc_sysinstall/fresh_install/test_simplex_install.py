@@ -31,15 +31,15 @@ def test_simplex_install(install_setup):
     skip_labsetup = "setup" in skips
     final_step = install_setup["control"]["stop"]
     patch_dir = install_setup["directories"]["patches"]
+    patch_server = install_setup["servers"]["patches"]
 
     if final_step <= 0:
         skip("stopping at install step: {}".format(LOG.test_step))
 
     LOG.tc_step("Install Controller")
     if fresh_install_helper.do_step():
-        fresh_install_helper.install_controller(sys_type=SysType.AIO_SX)
-        if patch_dir:
-            install_helper.apply_patches(lab=lab, build_server=install_setup["servers"]["patches"], patch_dir=patch_dir)
+        fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
+                                                patch_server_conn=patch_server.ssh_conn)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 

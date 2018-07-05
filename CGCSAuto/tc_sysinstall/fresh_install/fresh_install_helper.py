@@ -71,7 +71,7 @@ def do_step():
     return do
 
 
-def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None):
+def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None, patch_dir=None, patch_server_conn=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     if usb is None:
@@ -79,10 +79,13 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
         usb = ('usb' in boot_type) or ('burn' in boot_type)
     if sys_type is None:
         sys_type = ProjVar.get_var('SYS_TYPE')
+    if patch_dir is None:
+        patch_dir = InstallVars.get_install_var("PATCH_DIR")
     is_cpe = sys_type == SysType.AIO_SX or sys_type == SysType.AIO_DX
 
     vlm_helper.power_off_hosts(lab["hosts"])
-    install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb, security=security, low_latency=low_latency)
+    install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb, security=security, low_latency=low_latency,
+                                   patch_dir_paths=patch_dir, bld_server_conn=patch_server_conn)
     if usb:
         setup_networking(lab["controller-0"])
 
