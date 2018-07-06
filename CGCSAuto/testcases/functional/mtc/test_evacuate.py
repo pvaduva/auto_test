@@ -290,7 +290,7 @@ class TestEvacKPI:
         def operation(vm_id_, host_):
             vm_helper.evacuate_vms(host=host_, vms_to_check=vm_id_, ping_vms=True)
 
-        vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type=vm_type)
+        vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type=vm_type, storage_backing='local_image')
 
         host_src_evacuation, host_observer = self._prepare_test(
             vm_test, vm_observer, get_hosts.copy(), with_router=True)

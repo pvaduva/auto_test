@@ -492,7 +492,7 @@ class IxiaSession(object):
                 see ._show(traffic_obj) for available attributes
             trackBy (list):
                 tracking options list,
-                see ._help(traffic_obj + '/tracking', '-trackBy') for available options
+                see ._show(traffic_obj + '/tracking') for available options
             endpointSets (list):
                 list of dict
                     attributes to configure in the newly created endpoint set,

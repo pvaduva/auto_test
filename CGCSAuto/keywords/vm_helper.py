@@ -4080,7 +4080,7 @@ def ensure_vms_quotas(vms_num=10, cores_num=None, vols_num=None, tenant=None, co
         nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)
 
 
-def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source=None, guest_os=None,
+def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, image=None, boot_source=None, guest_os=None,
                avail_zone=None, target_host=None, ping_vms=False, con_ssh=None, auth_info=None, cleanup='function'):
 
     """
@@ -4090,6 +4090,9 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         count:
         nics:
         flavor:
+        storage_backing (str):
+            storage backend for flavor to be created
+            only used if flavor is None
         image:
         boot_source:
         guest_os
@@ -4105,7 +4108,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     """
 
     if not flavor:
-        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2)[1]
+        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2, storage_backing=storage_backing)[1]
         if cleanup:
             ResourceCleanup.add('flavor', flavor, scope=cleanup)
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
@@ -4704,7 +4707,7 @@ def setup_avr_routing(vm_id, **kwargs):
 
 
 @contextmanager
-def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=1000):
+def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=True, fps=1000):
     """
     Create traffic between VMs during 'operation'
     Statistics can be retrieved through ixia_session.get_statistics
@@ -4718,6 +4721,9 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         ixia_session (IxiaSession|None):
             IxiaSession object, must be connected
             or None, released upon context ends
+        ixncfg (str|None):
+            ixncfg path on the ixia server
+            or None to use IxiaPath.CFG_500FPS
         bidirectional (bool):
             if the traffic is bidirectional
         fps (int):
@@ -4801,11 +4807,12 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
                 dest_ports[(ip, vlan)] = port
                 break
 
-    LOG.info("Port matching complete src_ports={} dest_ports={}".format(src_ports, dest_ports))
+    LOG.info("Port Matching Complete src_ports={} dest_ports={}".format(src_ports, dest_ports))
     assert len(set(src_ports.values()).intersection(set(dest_ports.values()))) == 0, \
         "at least one src-dest pair shares the same ixia port (i.e., self-destined)"
     assert len(src_ports) and len(dest_ports), "at least one of the pairs cannot be associated with an ixia port"
 
+    # collect IPs in-use, so the IxNetwork interfaces could choose one from the remaining ones
     unavailable_ips = set()
     for ports in network_helper.get_ports('fixed_ips', merge_lines=False):
         if not issubclass(type(ports), list):
@@ -4821,8 +4828,13 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             ixia_session = ixia_helper.IxiaSession()
             ixia_session.connect()
             stack.callback(ixia_session.disconnect, traffic_stop=True)
+        else:
+            stack.callback(ixia_session.traffic_stop)
 
-        ixia_session.load_config(IxiaPath.CFG_500FPS)
+        if ixncfg is None:
+            ixia_session.load_config(IxiaPath.CFG_500FPS)
+        else:
+            ixia_session.load_config(ixncfg)
         ixia_session.add_chassis(clear=True)
         vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
                                             existing=True, rtn_dict=True)
@@ -4868,7 +4880,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             dest_ifs.append(iface)
 
         # assuming the configuration only has one trafficItem in it
-        trafficItem = ixia_session.getList(ixia_session.getRoot()+'/traffic', 'trafficItem')[0]
+        trafficItem = ixia_session.getList(ixia_session.getRoot() + '/traffic', 'trafficItem')[0]
         if bidirectional:
             ixia_session.configure(trafficItem, biDirectional='true')
             fps /= 2
@@ -4881,7 +4893,12 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
 
         # traffic not started yet, use configElements to adjust settings
         configElement = ixia_session.getList(trafficItem, 'configElement')[0]
-        ixia_session.configure(configElement+'/frameRate', rate=fps)
+        ixia_session.configure(configElement + '/frameRate', rate=fps)
+
+        # set tracking options
+        ixia_session.configure(trafficItem + '/tracking',
+            trackBy=["trackingenabled0", "vlanVlanId0", "ipv4SourceIp0", "ipv4DestIp0"])
+        ixia_session.configure(ixia_session.getRoot() + "/traffic/statistics/packetLossDuration", enabled=True)
 
         ixia_session.traffic_start()
 
@@ -4889,6 +4906,27 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
 
 
 def get_traffic_loss_duration_on_operation(vm_id, vm_observer, oper_func, *func_args, **func_kwargs):
+    """
+    Get frames delta for operation
+    the operation must restore traffic between the vm pair before it ends
+    vm_id and vm_observer must be properly routed and enabled for L3 forwarding
+
+    Args:
+        vm_id (str):
+            the first vm of the pair for traffic
+        vm_observer (str):
+            the second vm of the pair for traffic
+        oper_func (function|lambda):
+            the operation to be performed under traffic
+        *func_args (list):
+            arguments for oper_func
+        **func_kwargs (list):
+            keyword arguments for oper_func
+
+    Returns (int):
+        "Frames Delta"
+        by default, in (milli-seconds)
+    """
     with traffic_between_vms([(vm_id, vm_observer)]) as session:
         oper_func(*func_args, **func_kwargs)
         return session.get_frames_delta(stable=True)
@@ -4900,7 +4938,7 @@ def launch_vm_pair(vm_type='virtio', **launch_vms_kwargs):
     one on the primary tenant, and the other on the secondary tenant
 
     Args:
-        vm_type (str)
+        vm_type (str):
             one of 'virtio', 'avp', 'dpdk'
         **launch_vms_kwargs (dict):
             additional keyword arguments for launch_vms
