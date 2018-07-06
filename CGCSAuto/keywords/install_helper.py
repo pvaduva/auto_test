@@ -2706,7 +2706,7 @@ def update_system_info_for_cloned_system( system_mode='duplex', fail_ok=False):
         'name': lab['name'],
     }
 
-    system_helper.set_system_info(**system_info)
+    system_helper.modify_system(**system_info)
 
 
 def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,  clone_image_iso_path=None,

@@ -96,8 +96,8 @@ def test_system_type_is_readonly():
     change_to_system_type = SystemType.CPE
     if cur_system_type == SystemType.CPE:
         change_to_system_type = SystemType.STANDARD
-    code, msg = system_helper.set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
-                                              system_mode='{}'.format(change_to_system_type))
+    code, msg = system_helper.modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
+                                            system_mode='{}'.format(change_to_system_type))
 
     LOG.tc_step('Verify system rejected to change System Type to {}'.format(change_to_system_type))
     assert 1 == code, msg

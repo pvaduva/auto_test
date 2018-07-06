@@ -990,9 +990,9 @@ def get_storage_monitors_count():
     raise NotImplementedError
 
 
-def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
     """
-    Modify the System Information.
+    Modify the System configs/info.
 
     Args:
         fail_ok (bool):
@@ -1031,11 +1031,8 @@ def set_system_info(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs
 
     if code == 1:
         return 1, output
-    elif code == 0:
-        return 0, ''
-    else:
-        # should not get here; cli.system() should already handle these cases
-        pass
+
+    return 0, ''
 
 
 def get_system_value(field='name', fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=None):

@@ -4198,7 +4198,7 @@ def create_pci_alias_for_devices(dev_type, hosts=None, devices=None, alias_names
             class_id = DevClassID.GPU
         else:
             class_id = DevClassID.USB
-        devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True,
+        devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True, regex=True,
                                                           **{'class id': class_id})
     elif isinstance(devices, str):
         devices = [devices]

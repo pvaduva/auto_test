@@ -13,7 +13,7 @@ def setup_alias(request):
     LOG.fixture_step("Create nova device list for gpu device")
     nova_gpu_alias = _get_nova_alias(class_id=DevClassID.GPU, dev_type='gpu')
     LOG.fixture_step("Create nova device list for usb device")
-    nova_usb_alias = _get_nova_alias(class_id=DevClassID.USB, dev_type='user')
+    nova_usb_alias = _get_nova_alias(class_id=DevClassID.USB, dev_type='user', regex=True)
 
     def revert_alias_setup():
 
@@ -108,9 +108,9 @@ def test_gpu_passthrough(setup_alias):
     LOG.tc_step("Deleting nova service parameter service parameters for gpu & usb")
 
 
-def _get_nova_alias(class_id, dev_type):
+def _get_nova_alias(class_id, dev_type, regex=False):
     hosts = host_helper.get_up_hypervisors()
-    devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True,
+    devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True, regex=regex,
                                                       **{'class id': class_id})
     dev_len = min(len(devices), 2)
     devices = devices[:dev_len]
