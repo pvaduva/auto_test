@@ -15,7 +15,7 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common, network_helper
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
 from utils.clients.telnet import TelnetClient, TELNET_LOGIN_PROMPT
@@ -2287,6 +2287,9 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn.login()
     # controller0.telnet_conn.set_prompt(controller0.host_name + ':~\$ ')
 
+    if boot_usb:
+        setup_networking(controller0)
+
     if not system_restore and (patch_dir_paths and bld_server_conn):
         time.sleep(40)
         apply_patches(lab, bld_server_conn, patch_dir_paths)
@@ -2303,6 +2306,26 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         # controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
 
 
+def setup_networking(controller0):
+    nic_interface = controller0.host_nic
+    if not controller0.telnet_conn:
+        controller0.telnet_conn = open_telnet_session(controller0)
+
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip addr add {}/23 dev {}".format(controller0.telnet_conn.password,
+                                                                                             controller0.host_ip,
+                                                                                             nic_interface))
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip link set dev {} up".format(controller0.telnet_conn.password,
+                                                                                          nic_interface))
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S route add default gw 128.224.150.1".format(
+                                     controller0.telnet_conn.password))
+    ping = network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
+    if not ping:
+        time.sleep(120)
+        network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=False)
+
+    return 0
+
+
 def apply_patches(lab, build_server, patch_dir):
     """
 
@@ -2315,6 +2338,13 @@ def apply_patches(lab, build_server, patch_dir):
 
     """
     patch_names = []
+    controller0_node = lab["controller-0"]
+    if controller0_node.ssh_conn:
+        con_ssh = controller0_node.ssh_conn
+    elif controller0_node.telnet_conn:
+        con_ssh = controller0_node.telnet_conn
+    else:
+        con_ssh = None
     # rc = build_server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
     rc = build_server.exec_cmd("test -d " + patch_dir)[0]
     assert rc == 0, "Patch directory path {} not found".format(patch_dir)
@@ -2336,24 +2366,25 @@ def apply_patches(lab, build_server, patch_dir):
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
-        build_server.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        build_server.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts,
+                           timeout=HostTimeout.INSTALL_LOAD)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))
 
         LOG.info("Uploading  patches ... ")
-        assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir)[0] == 0, \
+        assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir, con_ssh=con_ssh)[0] == 0, \
             "Failed to upload  patches : {}".format(avail_patches)
 
         LOG.info("Querying patches ... ")
-        assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+        assert patching_helper.run_patch_cmd("query", con_ssh=con_ssh)[0] == 0, "Failed to query patches"
 
         LOG.info("Applying patches ... ")
-        rc = patching_helper.run_patch_cmd("apply", args='--all')[0]
+        rc = patching_helper.run_patch_cmd("apply", args='--all', con_ssh=con_ssh)[0]
         assert rc == 0, "Failed to apply patches"
 
         LOG.info("Querying patches ... ")
-        assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+        assert patching_helper.run_patch_cmd("query", con_ssh=con_ssh)[0] == 0, "Failed to query patches"
 
 
 def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
@@ -3262,27 +3293,24 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
-    LOG.info("Choosing centOS {} fresh install option".format(tag))
     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None, tag=tag if not index else None)
     if boot_menu.sub_menus:
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
         try:
             sub_menus_navigated = 0
             while len(sub_menu_prompts) > 0:
-                index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
-                sub_menu = boot_menu.sub_menus[index + sub_menus_navigated]
+                prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 if sub_menu.name == "Controller Configuration":
-                    tag["security"] = "standard"
-                    tag["type"] = None
+                    sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                    pattern="erial" if not index else None)
                 elif sub_menu.name == "Serial Console":
-                    tag["security"] = security
-                    tag["type"] = None
+                    sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                    pattern=security.upper() if not index else None)
                 else:
-                    tag["security"] = security
-                    tag["type"] = type
-                boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
-                                 tag=tag if not index else None)
-                sub_menu_prompts.pop(index)
+                    boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                     tag=tag if not index else None)
+                sub_menu_prompts.pop(prompt_index)
                 sub_menus_navigated += 1
         except exceptions.TelnetTimeout:
             pass
@@ -3304,7 +3332,6 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         uefi = "UEFI" in boot_device_regex or re.search("r\d+", node_obj.host_name)
     else:
         uefi = re.search("r\d+", node_obj.host_name) or "ml350" in node_obj.host_name
-    LOG.debug("{} uefi: {}".format(node_obj.host_name, str(uefi)))
 
     if small_footprint is None:
         sys_type = ProjVar.get_var("SYS_TYPE")
@@ -3317,8 +3344,10 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if usb is None:
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
     if usb:
+        LOG.debug("creating USB boot menu")
         kickstart_menu = menu.USBBootMenu()
     else:
+        LOG.debug("creating {} boot menu".format("UEFI" if uefi else "PXE"))
         kickstart_menu = menu.KickstartMenu(uefi=uefi)
     if node_obj.telnet_conn is None:
         node_obj.telnet_conn = open_telnet_session(node_obj)

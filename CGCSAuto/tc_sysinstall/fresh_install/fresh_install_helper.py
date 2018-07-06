@@ -86,29 +86,6 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
     vlm_helper.power_off_hosts(lab["hosts"])
     install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb, security=security, low_latency=low_latency,
                                    patch_dir_paths=patch_dir, bld_server_conn=patch_server_conn)
-    if usb:
-        setup_networking(lab["controller-0"])
-
-
-
-def setup_networking(controller0):
-    nic_interface = controller0.host_nic
-    if not controller0.telnet_conn:
-        controller0.telnet_conn = install_helper.open_telnet_session(controller0)
-
-    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip addr add {}/23 dev {}".format(controller0.telnet_conn.password,
-                                                                                             controller0.host_ip,
-                                                                                             nic_interface))
-    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip link set dev {} up".format(controller0.telnet_conn.password,
-                                                                                          nic_interface))
-    controller0.telnet_conn.exec_cmd("echo {} | sudo -S route add default gw 128.224.150.1".format(
-                                     controller0.telnet_conn.password))
-    ping = network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
-    if not ping:
-        time.sleep(120)
-        network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=False)
-
-    return 0
 
 
 def download_lab_files(lab_files_server, build_server, sys_version=None, sys_type=None, lab_files_dir=None,

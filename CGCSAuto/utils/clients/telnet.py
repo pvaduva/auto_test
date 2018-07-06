@@ -6,7 +6,7 @@ from telnetlib import Telnet
 import pexpect
 
 from consts.auth import HostLinuxCreds
-from consts.cgcs import DATE_OUTPUT
+from consts.cgcs import DATE_OUTPUT, Prompt
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.clients.ssh import PASSWORD_PROMPT, EXIT_CODE_CMD
@@ -259,6 +259,52 @@ class TelnetClient(Telnet):
 
         if code > 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}".format(cmd))
+
+        return code, output
+
+    def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None, prefix_space=False):
+        """
+        Execute a command with sudo.
+
+        Args:
+            cmd (str): command to execute. such as 'ifconfig'
+            expect_timeout (int): timeout waiting for command to return
+            rm_date (bool): whether to remove date info at the end of the output
+            fail_ok (bool): whether to raise exception when non-zero exit code is returned
+            get_exit_code
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
+            strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
+                searchwindowsize instead)
+            extra_prompt (str|None)
+            prefix_space (bool): prefix ' ' to cmd, so that it will not go into bash history if HISTCONTROL=ignorespace
+
+        Returns (tuple): (exit code (int), command output (str))
+
+        """
+        cmd = 'sudo ' + cmd
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
+        LOG.debug("Executing sudo command...")
+        self.send(cmd)
+        pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
+        prompts = [self.prompt]
+        if extra_prompt is not None:
+            prompts.append(extra_prompt)
+        prompts.append(pw_prompt)
+
+        index = self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
+        if index == prompts.index(pw_prompt):
+            self.send(self.password)
+            prompts.remove(pw_prompt)
+            self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
+
+        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        if code != 0 and not fail_ok:
+            raise exceptions.TelnetException("Non-zero return code for sudo cmd: {}. Output: {}".
+                                                  format(cmd, output))
 
         return code, output
 

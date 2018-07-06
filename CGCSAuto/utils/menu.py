@@ -207,11 +207,12 @@ class KickstartMenu(Menu):
 class USBBootMenu(KickstartMenu):
     def __init__(self):
         super().__init__(name="USB boot menu", kwargs=bios.BootMenus.USB.Kernel)
-        menu_dicts = [getattr(bios.BootMenus.USB, item) for item in dir(bios.BootMenus.USB) if isinstance(item, dict)
-                      and item['name'] != "kernel options"]
-        for menu_dict in menu_dicts:
+        public_sub_menu_vars = [getattr(bios.BootMenus.USB, var) for var in vars(bios.BootMenus.USB) if not var.startswith('__')]
+        sub_menu_dicts = [public_var for public_var in public_sub_menu_vars if isinstance(public_var, dict)
+                          and public_var['name'] != "kernel options"]
+        for sub_menu_dict in sub_menu_dicts:
             sub_menu = super().__new__(USBBootMenu)
-            Menu.__init__(self=sub_menu, name=menu_dict["name"], kwargs=menu_dict)
+            Menu.__init__(self=sub_menu, name=sub_menu_dict["name"], kwargs=sub_menu_dict)
             self.sub_menus.append(sub_menu)
 
     def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
@@ -284,8 +285,7 @@ class Option(object):
         cmd = ''
         for input in key:
             cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
-        LOG.info("Entering: {}".format(" + ".join(key)))
-        LOG.debug(cmd)
+        LOG.info("selecting {} option".format(self.name))
         telnet_conn.write(str.encode(cmd))
 
 
