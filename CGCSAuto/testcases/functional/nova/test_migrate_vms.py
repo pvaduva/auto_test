@@ -516,7 +516,7 @@ def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
         skip("KPI only test. Skip due to kpi collection is not enabled.")
     if 'ixia_ports' not in ProjVar.get_var("LAB"):
         skip("this lab is not configured with ixia_ports.")
-    if not system_helper.is_avs() and vm_type in ('avp', 'dkdp'):
+    if not system_helper.is_avs() and vm_type in ('avp', 'dpdk'):
         skip('avp vif unsupported by OVS')
 
     def operation(vm_id_):
