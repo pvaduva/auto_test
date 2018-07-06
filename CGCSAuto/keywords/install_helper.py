@@ -2286,7 +2286,6 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     else:
         controller0.telnet_conn.login()
     # controller0.telnet_conn.set_prompt(controller0.host_name + ':~\$ ')
-
     if boot_usb:
         setup_networking(controller0)
 
@@ -2301,6 +2300,8 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         # Reconnect telnet session
         LOG.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
+        if boot_usb:
+            setup_networking(controller0)
 
         # controller0.ssh_conn.disconnect()
         # controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
