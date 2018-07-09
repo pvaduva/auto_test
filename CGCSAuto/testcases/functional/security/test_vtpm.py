@@ -788,6 +788,10 @@ def test_vtpm(vm_operation, extra_specs):
     if number_hypervisor < 2 and 'migrate' in vm_operation:
         skip('Not enough hypervisors available for testing')
 
+    if vm_operation == 'reboot_host' or vm_operation == 'evacuate' or extra_specs == 'vtpm' or extra_specs == 'autorc':
+        skip("Due to CGTS-9620 VM with vtpm lost non-volatile data after its hosting node is rebooted. "
+             "undo skip once non-volatile data is not lost on VM with vtpm")
+
     vm_types = [vm_type for vm_type in extra_specs.split(',') if vm_type in g_vms]
 
     for vm_type in vm_types:
