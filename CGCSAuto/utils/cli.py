@@ -12,7 +12,7 @@ from utils.clients.local import RemoteCLIClient
 
 def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
              flags='', fail_ok=False, cli_dir='', auth_info=None, source_openrc=None, err_only=False,
-             timeout=CLI_TIMEOUT, rtn_list=False):
+             timeout=CLI_TIMEOUT, rtn_list=False, force_source=False):
     """
 
     Args:
@@ -74,7 +74,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             cmd = 'source {}; {}'.format(source_file, cmd)
         else:
             source_openrc_file(ssh_client=ssh_client, auth_info=auth_info, rc_file=source_file, fail_ok=fail_ok,
-                               remote_cli=use_remote_cli)
+                               remote_cli=use_remote_cli, force=force_source)
     else:
         if auth_info:
             auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {}"
@@ -138,7 +138,7 @@ def _get_rc_path(tenant, remote_cli=False):
     return openrc_path
 
 
-def source_openrc_file(ssh_client, auth_info, rc_file, fail_ok=False, remote_cli=False):
+def source_openrc_file(ssh_client, auth_info, rc_file, fail_ok=False, remote_cli=False, force=False):
     """
     Source to the given openrc file on the ssh client.
     Args:
@@ -156,7 +156,7 @@ def source_openrc_file(ssh_client, auth_info, rc_file, fail_ok=False, remote_cli
     exit_code, cmd_output = -1, None
     user = auth_info['user']
 
-    if 'keystone_{}'.format(user) not in ssh_client.prompt:
+    if force or 'keystone_{}'.format(user) not in ssh_client.prompt:
         tenant = auth_info['tenant']
         password = auth_info['password']
         new_prompt = Prompt.REMOTE_CLI_PROMPT.format(user) if remote_cli else Prompt.TENANT_PROMPT.format(user)
@@ -215,12 +215,12 @@ def openstack(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False,
 
 def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
            flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_openrc=None, err_only=False,
-           timeout=CLI_TIMEOUT, rtn_list=False):
+           timeout=CLI_TIMEOUT, rtn_list=False, force_source=False):
 
     return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
                     fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, force_source=force_source)
 
 
 def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',

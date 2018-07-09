@@ -287,7 +287,7 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
     :param port_expected_open: (boolean)
     """
     lab_ip = ProjVar.get_var('lab')['floating ip']
-    cli.system('show', source_openrc=True)
+    cli.system('show', source_openrc=True, force_source=True)
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)
