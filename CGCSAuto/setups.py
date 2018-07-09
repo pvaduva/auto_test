@@ -331,7 +331,7 @@ def get_build_info(con_ssh):
         build_by = build_by[0] if build_by else 'jenkins'   # Assume built by jenkins although this is likely wrong
 
         if build_id.strip():
-            build_path = '/localhost/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
+            build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
 
     ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path)
 

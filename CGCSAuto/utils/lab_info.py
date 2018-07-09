@@ -284,7 +284,7 @@ def get_build_info(labname=None, log_dir=None):
             build_by = build_by[0] if build_by else ''
 
             if build_id.strip():
-                build_path = '/localhost/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
+                build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
     finally:
         con_ssh.close()
 
