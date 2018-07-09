@@ -398,6 +398,8 @@ def repeat(times=5, wait_per_iter=10, expected_code=0, expected_hits=2, stop_cod
 
 
 def run_cmd(cmd, con_ssh=None, **kwargs):
+    LOG.debug('run patch cmd:' + cmd)
+
     ssh_client = con_ssh or ControllerClient.get_active_controller()
     if isinstance(ssh_client, list):
         LOG.info('ssh_client is a LIST:{}'.format(ssh_client))
@@ -568,7 +570,7 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
 
 
 def wait_for_hosts_states(expected_states=None, con_ssh=None):
-    if expected_states:
+    if not expected_states:
         return 0, None
 
     for host, expected_state in expected_states.items():
