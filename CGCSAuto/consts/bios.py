@@ -131,7 +131,6 @@ class BootMenus:
         Controller_Configuration = {
             "name": "Controller Configuration",
             "prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
-            "index": 0,
             "wrap_around": True
         }
 

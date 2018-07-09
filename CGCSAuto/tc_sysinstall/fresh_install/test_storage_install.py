@@ -41,7 +41,7 @@ def test_storage_install(install_setup):
 
     LOG.tc_step("Install Controller")
     if fresh_install_helper.do_step():
-        fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
+        fresh_install_helper.install_controller(sys_type=SysType.STORAGE, patch_dir=patch_dir,
                                                 patch_server_conn=patch_server.ssh_conn)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))

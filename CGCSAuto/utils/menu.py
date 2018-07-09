@@ -177,7 +177,7 @@ class KickstartMenu(Menu):
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
         for option in self.options:
             # TODO: would like to make this more general, but it's impossible to determine the prompt
-            if "security" in option.name.lower() and "  >" in option.name.lower():
+            if "security" in option.name.lower() and ("  >" in option.name.lower() or "options" in option.name.lower()):
                 security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
                 self.sub_menus.append(security_menu)
         current_option = self.get_current_option(telnet_conn)

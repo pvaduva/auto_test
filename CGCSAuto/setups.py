@@ -766,9 +766,6 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
         try:
             lab_info = get_info_from_lab_files(files_server, files_dir)
             lab_dict = get_lab_dict(install_helper.get_git_name(lab_info["system_name"]))
-        except exceptions.BuildServerError:
-            LOG.error("--file_server must be a valid build server. ")
-            raise
         except ValueError:
             LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
                           "configuration and try again. ")
