@@ -449,6 +449,7 @@ def check_error_states(con_ssh=None, pre_states=None, pre_trace_backs=None, no_c
 def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=600):
 
     assert cmd in PATCH_CMDS, 'Unknown patch command:<{}>'.format(cmd)
+    LOG.debug('run patch cmd: ' + cmd)
 
     ssh_client = con_ssh or ControllerClient.get_active_controller()
     if isinstance(ssh_client, list):
