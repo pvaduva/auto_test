@@ -564,8 +564,9 @@ def test_restore(restore_setup):
         restore_volumes()
 
         LOG.tc_step('Run restore-complete (CGTS-9756)')
+        controller_node.telnet_conn.login()
         cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
-        controller_node.telnet_conn.exec_cmd(cmd)
+        controller_node.telnet_conn.exec_cmd(cmd, 'controller-0 login:')
 
         LOG.tc_step("Restoring Compute Nodes ...")
         if len(compute_hosts) > 0:
