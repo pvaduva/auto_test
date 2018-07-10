@@ -757,7 +757,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
         files_dir = lab_files_dir if lab_files_dir is not '' else None
         if files_dir.find(":/") != -1:
             files_server = files_dir[:files_dir.find(":/")]
-            files_dir = files_dir[files_dir.find(":"):]
+            files_dir = files_dir[files_dir.find(":") + 1:]
     else:
         files_dir = None
 

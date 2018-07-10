@@ -50,7 +50,10 @@ def test_simplex_install(install_setup):
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     if fresh_install_helper.do_step():
-        fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server)
+        fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,
+                                                load_path=InstallVars.get_install_var("TIS_BUILD_DIR"),
+                                                license_path=InstallVars.get_install_var("LICENSE"),
+                                                guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 

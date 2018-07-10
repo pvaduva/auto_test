@@ -558,6 +558,7 @@ def download_heat_templates(lab, server, load_path):
 
 def download_lab_config_files(lab, server, load_path, custom_path=None):
     lab_name = get_git_name(lab['name'])
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     if 'vbox' in lab_name:
         return
@@ -571,17 +572,13 @@ def download_lab_config_files(lab, server, load_path, custom_path=None):
     cmd = "test -e " + config_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             server.name, config_path)
-
-    cmd = "test -e " + script_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            server.name, script_path)
-
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-
     server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
+    cmd = "test -e " + script_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
     server.ssh_conn.rsync(script_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
@@ -2363,7 +2360,7 @@ def apply_patches(lab, build_server, patch_dir):
             LOG.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
+        patch_dest_dir = WRSROOT_HOME + "patches/"
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
@@ -2383,6 +2380,9 @@ def apply_patches(lab, build_server, patch_dir):
         LOG.info("Applying patches ... ")
         rc = patching_helper.run_patch_cmd("apply", args='--all', con_ssh=con_ssh)[0]
         assert rc == 0, "Failed to apply patches"
+
+        LOG.info("Installing Patches ... ")
+        assert patching_helper.run_patch_cmd("install-local", con_ssh=con_ssh)[0] == 0, "Failed to install patches"
 
         LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query", con_ssh=con_ssh)[0] == 0, "Failed to query patches"
@@ -3080,8 +3080,11 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
         con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
-        # TODO: doesn't return bad return code
-        if rc == 0:
+        if "failed" in output:
+            err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
+            LOG.error(err_msg)
+            raise exceptions.CLIRejected(err_msg)
+        else:
             LOG.info("Controller configured")
             if con_telnet.hostname:
                 admin_prompt = "\[wrsroot@{} ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
@@ -3091,10 +3094,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             host_helper.wait_for_hosts_states(controller0.name,
                                               availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                               use_telnet=True, con_telnet=con_telnet)
-        else:
-            err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
-            LOG.error(err_msg)
-            raise exceptions.CLIRejected(err_msg)
     else:
         err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, controller0.name)
         LOG.error(err_msg)
@@ -3116,7 +3115,7 @@ def apply_banner(telnet_conn, fail_ok=True):
         LOG.info(err_msg)
         return 1, err_msg
     else:
-        rc = telnet_conn.exec_cmd("echo {} | sudo -S mv {} /opt/".format(SvcCgcsAuto.PASSWORD, banner_dir),
+        rc = telnet_conn.exec_cmd("echo {} | sudo -S mv {} /opt/".format(HostLinuxCreds.get_password(), banner_dir),
                               fail_ok=fail_ok)[0]
         if rc != 0:
             err_msg = 'Banner application failed'
@@ -3129,7 +3128,7 @@ def apply_banner(telnet_conn, fail_ok=True):
 def apply_branding(telnet_conn, fail_ok=True):
     LOG.info("Applying branding files")
     branding_dir = "{}/branding".format(WRSROOT_HOME)
-    branding_dest = "{}/opt/branding".format(WRSROOT_HOME)
+    branding_dest = "/opt/branding"
     rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir), fail_ok=fail_ok)[0]
 
     if rc != 0:

@@ -116,15 +116,18 @@ def set_license_var(sys_version=None, sys_type=None):
         sys_version = ProjVar.get_var('SW_VERSION')[0]
     if sys_type is None:
         sys_type = ProjVar.get_var('SYS_TYPE')
+    LOG.debug("SYSTEM_TYPE: {}".format(sys_type))
 
-    if sys_type == SysType.REGULAR or SysType.STORAGE:
-        index = 0
+    if sys_type == SysType.AIO_SX:
+        index = 2
     elif sys_type == SysType.AIO_DX:
         index = 1
-    elif sys_type == SysType.AIO_SX:
-        index = 2
+    else:
+        index = 0
 
     license_paths = BuildServerPath.TIS_LICENSE_PATHS[sys_version]
+    LOG.debug(license_paths)
+    LOG.debug(license_paths[index])
     license_path = license_paths[index]
     InstallVars.set_install_var(license=license_path)
 

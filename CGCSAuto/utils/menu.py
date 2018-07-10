@@ -328,5 +328,5 @@ class KickstartOption(Option):
             tag_dict = tag
 
         self.tag = tag_dict
-        LOG.debug("Kickstart menu option {} tags are: ".format(self.name), tag_dict)
+        LOG.debug("Kickstart menu option {} tags are: {}".format(self.name, tag_dict))
 

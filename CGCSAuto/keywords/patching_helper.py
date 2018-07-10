@@ -27,6 +27,13 @@ PATCH_CMDS = {
             r'Installation rejected. Node must be locked': 1,
         }
     },
+    'install-local': {
+        'cmd': 'install-local',
+        'result_pattern': {
+            r'Installation was successful.': 0,
+            r'Installation rejected. Node must be locked': 1,
+        }
+    },
     'query': {
         'cmd': 'query',
     },
