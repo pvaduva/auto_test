@@ -982,7 +982,7 @@ class Telnet:
                 for x in range(0, int(selection_menu_option)):
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
-                    time.sleep(1)
+                    time.sleep(2)
                 log.info("Pressing ENTER key")
                 self.write(str.encode("\n"))
                 return
@@ -992,7 +992,7 @@ class Telnet:
                 for x in range(0, int(selection_menu_option)):
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
-                    time.sleep(1)
+                    time.sleep(2)
                 log.info("Pressing ENTER key")
                 self.write(str.encode("\n"))
 
@@ -1012,6 +1012,7 @@ class Telnet:
                     self.write(str.encode("\n"))
                 else:
                     log.info("Selecting standard profile")
+                    time.sleep(2)
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\n"))
 
