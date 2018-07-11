@@ -58,7 +58,7 @@ def test_refstack(suite):
                 print('Refstack test output: {}'.format(output))
             else:
                 failing_path = '{}/failing'.format(RefStack.TEST_HISTORY_DIR)
-                failed_tests = compliance_ssh.exec_cmd('grep --color=never "test: " {}'.format(failing_path))
+                failed_tests = compliance_ssh.exec_cmd('grep --color=never "test: " {}'.format(failing_path))[1]
                 raise RefStackError(failed_tests)
         finally:
             # deactivate venv
