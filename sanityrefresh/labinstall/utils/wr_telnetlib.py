@@ -1070,7 +1070,7 @@ class Telnet:
                 # GENERIC USB
                 if usb and node.name == CONTROLLER0:
                     log.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash"
+                    boot_device_regex = "USB|Kingston|JetFlash|Verbatim"
 
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
