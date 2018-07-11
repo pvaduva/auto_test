@@ -485,6 +485,9 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
 
     matched_events = []
     stop_time = time.time() + timeout
+    if expecting and (service == 'nova-novnc' or service == 'vim-webserver'):
+        stop_time = time.time() + timeout + 300
+        interval = 60
     retry = 0
     while time.time() < stop_time:
         retry += 1
