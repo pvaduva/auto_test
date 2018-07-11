@@ -62,7 +62,7 @@ def get_tracebacks_from_pytestlog(log_dir, traceback_lines=10, search_forward=Fa
                     except IndexError:
                         break
                 else:
-                    traceback_for_test.append(line[1:])
+                    traceback_for_test.append(line[1:].strip())
                     continue
 
             if next_failure in line:
@@ -98,7 +98,7 @@ def parse_traceback(traceback, traceback_lines=10, search_forward=False):
     if search_forward:
         traceback.reverse()
     for line in traceback:
-        collected_lines.append(line)
+        collected_lines.append(line.strip())
         if line.startswith('>  '):
             collected_lines = collected_lines[-traceback_lines:]
             if search_forward:

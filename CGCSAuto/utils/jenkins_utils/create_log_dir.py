@@ -6,12 +6,12 @@ import setups
 
 def create_log_dir(lab, logs_dir=None, sub_dir=None):
     # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
-    logs_dir = logs_dir if logs_dir else os.path.expanduser("~")
+    logs_dir = logs_dir.strip() if logs_dir else os.path.expanduser("~")
     automation_logs = 'AUTOMATION_LOGS'
     if automation_logs in logs_dir:
         logs_dir = logs_dir.split(sep='/{}'.format(automation_logs))[0]
     if sub_dir:
-        automation_logs = os.path.join(automation_logs, sub_dir.lower())
+        automation_logs = os.path.join(automation_logs, sub_dir.strip().lower())
 
     lab = lab.lower().replace('-', '_')
     labname = setups.get_lab_dict(lab).get('short_name').replace('-', '_').lower().strip()
