@@ -61,7 +61,7 @@ def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, s
         return 1, out
 
     table_ = table_parser.table(out)
-    return table_parser.get_values(table_, rtn_val)
+    return 0, table_parser.get_values(table_, rtn_val)
 
 
 def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val='id', fail_ok=False,
