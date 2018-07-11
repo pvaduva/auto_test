@@ -11,7 +11,7 @@ def create_log_dir(lab, logs_dir=None, sub_dir=None):
     if automation_logs in logs_dir:
         logs_dir = logs_dir.split(sep='/{}'.format(automation_logs))[0]
     if sub_dir:
-        automation_logs = os.path.join(automation_logs, sub_dir)
+        automation_logs = os.path.join(automation_logs, sub_dir.lower())
 
     lab = lab.lower().replace('-', '_')
     labname = setups.get_lab_dict(lab).get('short_name').replace('-', '_').lower().strip()
