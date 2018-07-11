@@ -26,7 +26,7 @@ def hosts_per_backing(add_admin_role_module):
     'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from, ixia_supported):
     """
     KPI test  - vm startup time.
     Args:
@@ -42,8 +42,6 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     """
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
-    if 'ixia_ports' not in ProjVar.get_var("LAB"):
-        skip("this lab is not configured with ixia_ports.")
 
     # vm launch KPI
     if boot_from != 'volume':

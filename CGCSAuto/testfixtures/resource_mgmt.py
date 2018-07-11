@@ -132,6 +132,8 @@ def _delete_resources(resources, scope):
     ports = resources['ports']
     trunks = resources['trunks']
     networks = resources['networks']
+    security_groups = resources['security_groups']
+    network_qoss = resources['network_qoss']
     vol_snapshots = resources['vol_snapshots']
     aggregates = resources['aggregates']
 
@@ -235,10 +237,25 @@ def _delete_resources(resources, scope):
             code, msg = network_helper.delete_subnet(subnet_id=subnet, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
+
+    if network_qoss:
+        LOG.fixture_step("({}) Attempt to delete following network QoSes: {}".format(scope, networks))
+        for qos in network_qoss:
+            code, msg = network_helper.delete_qos(qos_id=qos, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+
     if networks:
         LOG.fixture_step("({}) Attempt to delete following networks: {}".format(scope, networks))
         for network in networks:
             code, msg = network_helper.delete_network(network_id=network, fail_ok=True, auth_info=Tenant.ADMIN)
+            if code > 0:
+                err_msgs.append(msg)
+
+    if security_groups:
+        LOG.fixture_step("({}) Attempt to delete following security groups: {}".format(scope, security_groups))
+        for group in security_groups:
+            code, msg = network_helper.delete_security_group(group, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:
                 err_msgs.append(msg)
 

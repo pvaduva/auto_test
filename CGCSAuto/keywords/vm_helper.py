@@ -490,7 +490,8 @@ def auto_mount_vm_disks(vm_id, disks=None, guest_os=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
+            block_device_mapping=None, sec_group_name=None,
+            vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
             fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True, cleanup=None):
     """
     Boot a vm with given parameters
@@ -512,6 +513,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                                 terminate>'.
         auth_info (dict):
         con_ssh (SSHClient):
+        sec_group_name (str): add nova boot option --security-groups $(sec_group_name)
         nics (list): nics to be created for the vm
             each nic: <net-id=net-uuid,net-name=network-name,v4-fixed-ip=ip-addr,v6-fixed-ip=ip-addr,
                         port-id=port-uuid,vif-model=model>,vif-pci-address=pci-address>
@@ -666,6 +668,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--config-drive': str(config_drive) if config_drive else None,
                           }
 
+    if sec_group_name is not None:
+        optional_args_dict["--security-groups"] = sec_group_name
+
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
 
     if meta:
@@ -788,13 +793,21 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=200, fail_ok=False, con_ssh=
             raise exceptions.VMNetworkError(msg)
 
 
-def __compose_args(optional_args_dict):
+def __compose_args(optional_args_dict, *other_args):
     args = []
     for key, val in optional_args_dict.items():
         if val is not None:
             arg = key + ' ' + val
             args.append(arg)
-    return ' '.join(args)
+    return ' '.join(args + list(other_args))
+
+
+def __merge_dict(base_dict, merge_dict):
+    # identical to {**base_dict, **merge_dict} in python3.6+
+    d = dict(base_dict) # id() will be different, making a copy
+    for k in merge_dict:
+        d[k] = merge_dict[k]
+    return d
 
 
 def get_any_keypair(auth_info=None, con_ssh=None):
@@ -4080,8 +4093,9 @@ def ensure_vms_quotas(vms_num=10, cores_num=None, vols_num=None, tenant=None, co
         nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)
 
 
-def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, image=None, boot_source=None, guest_os=None,
-               avail_zone=None, target_host=None, ping_vms=False, con_ssh=None, auth_info=None, cleanup='function'):
+def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, image=None, boot_source=None,
+               guest_os=None, avail_zone=None, target_host=None, ping_vms=False, con_ssh=None, auth_info=None,
+               cleanup='function', **boot_vm_kwargs):
 
     """
 
@@ -4101,7 +4115,9 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, i
         ping_vms
         con_ssh:
         auth_info:
-        cleanup
+        cleanup:
+        boot_vm_kwargs (dict):
+            additional kwargs to pass to boot_vm
 
     Returns:
 
@@ -4154,7 +4170,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, i
     for i in range(count):
         vm_id = boot_vm(name="{}-{}".format(vm_type, i), flavor=flavor, source=boot_source, source_id=resource_id,
                         nics=nics, guest_os=guest_os, avail_zone=avail_zone, vm_host=target_host, user_data=user_data,
-                        auth_info=auth_info, con_ssh=con_ssh, cleanup=cleanup)[1]
+                        auth_info=auth_info, con_ssh=con_ssh, cleanup=cleanup, **boot_vm_kwargs)[1]
         vms.append(vm_id)
 
         if ping_vms:
@@ -4932,7 +4948,7 @@ def get_traffic_loss_duration_on_operation(vm_id, vm_observer, oper_func, *func_
         return session.get_frames_delta(stable=True)
 
 
-def launch_vm_pair(vm_type='virtio', **launch_vms_kwargs):
+def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **launch_vms_kwargs):
     """
     Launch a pair of routed VMs
     one on the primary tenant, and the other on the secondary tenant
@@ -4955,11 +4971,13 @@ def launch_vm_pair(vm_type='virtio', **launch_vms_kwargs):
         "shall not specify count, ping_vms, auth_info"
 
     vms, nics = launch_vms(
-        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary(), **launch_vms_kwargs)
+        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary(),
+        **__merge_dict(launch_vms_kwargs, primary_kwargs))
     vm_test = vms[0]
 
     vms, nics = launch_vms(
-        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary(), **launch_vms_kwargs)
+        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary(),
+        **__merge_dict(launch_vms_kwargs, secondary_kwargs))
     vm_observer = vms[0]
 
     if vm_type == 'virtio' or vm_type == 'avp':

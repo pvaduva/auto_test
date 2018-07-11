@@ -131,6 +131,12 @@ def collect_kpi(request):
 
 
 @fixture(scope='session')
+def ixia_supported():
+    if 'ixia_ports' not in ProjVar.get_var("LAB"):
+        skip("this lab is not configured with ixia_ports.")
+
+
+@fixture(scope='session')
 def heat_files_check():
     con_ssh = ControllerClient.get_active_controller()
     heat_dir = HeatTemplate.HEAT_DIR

@@ -502,7 +502,7 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     'avp',
     'dpdk',
 ])
-def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
+def test_kpi_live_migrate(check_system, vm_type, collect_kpi, ixia_supported):
     """
     Collect live migration ping loss duration KPI
     Args:
@@ -514,8 +514,6 @@ def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
     """
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
-    if 'ixia_ports' not in ProjVar.get_var("LAB"):
-        skip("this lab is not configured with ixia_ports.")
     if not system_helper.is_avs() and vm_type in ('avp', 'dpdk'):
         skip('avp vif unsupported by OVS')
 

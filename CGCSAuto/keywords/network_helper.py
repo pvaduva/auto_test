@@ -10,6 +10,7 @@ from consts.filepaths import UserData
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
+from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import NATBoxClient, get_cli_client
 from utils.tis_log import LOG
@@ -475,6 +476,73 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
 
     msg = "Network {} is successfully updated".format(net_id)
     return 0, msg
+
+
+def __compose_args(optional_args_dict, *other_args):
+    args = []
+    for key, val in optional_args_dict.items():
+        if val is not None:
+            arg = key + ' ' + val
+            args.append(arg)
+    return ' '.join(args + list(other_args))
+
+
+def create_security_group(name, project=None, description=None, auth_info=None, fail_ok=False, cleanup='function'):
+    """
+    Create a security group
+    Args:
+        name (str):
+        description (str):
+        auth_info (dict):
+            create under this project
+        fail_ok (bool):
+        cleanup (str):
+
+    Returns (str|tuple):
+        str identifier for the newly created security group
+        or if fail_ok=True, return tuple:
+        (0, identifier) succeeded
+        (1, msg) failed
+    """
+    if auth_info is None:
+        auth_info = Tenant.get_primary()
+
+    args_dict = {
+        # '--project-domain': auth_info["region"],
+        '--descritpion': description
+    }
+
+    if project is not None:
+        args_dict['--project'] = project
+
+    table_ = cli.openstack("security group create", __compose_args(args_dict, name),
+                           fail_ok=fail_ok, auth_info=auth_info)
+    if fail_ok:
+        code, table_ = table_
+        if code:
+            return code, table_
+    table_ = table_parser.table(table_)
+    identifier = table_parser.get_value_two_col_table(table_, 'id')
+    ResourceCleanup.add('security_group', identifier, scope=cleanup)
+    LOG.info("Security group created: name={} id={}".format(name, identifier))
+    if fail_ok:
+        return 0, identifier
+    return identifier
+
+
+def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.ADMIN):
+    """
+    Delete a security group
+    Args:
+        group_id (str): security group to be deleted
+        auth_info (dict):
+
+    Returns (tuple): (code, msg)
+        (0, msg): succeeded
+        (1, err_msg): failed
+    """
+    LOG.info("Deleting security group {}".format(group_id))
+    return cli.openstack("security group delete", group_id, fail_ok=fail_ok, auth_info=auth_info)
 
 
 def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
@@ -1027,7 +1095,7 @@ def get_qos_names(qos_ids=None, con_ssh=None, auth_info=None):
 
 
 def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
-               con_ssh=None, auth_info=Tenant.ADMIN):
+               con_ssh=None, auth_info=Tenant.ADMIN, cleanup='function'):
     """
     Args:
         name(str): Name of the QoS to be created.
@@ -1039,6 +1107,7 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
         fail_ok(bool):
         con_ssh(SSHClient):
         auth_info(dict): Run the neutron qos-create cli using this authorization info. Admin by default,
+        cleanup (str):
 
     Returns(tuple): exit_code(int), qos_id(str)
                     (0, qos_id) qos successfully created.
@@ -1093,6 +1162,7 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
             raise exceptions.NeutronError(msg)
 
     qos_id = table_parser.get_value_two_col_table(table_, 'id')
+    ResourceCleanup.add('network_qos', qos_id, scope=cleanup)
     LOG.info("QoS successfully created")
     return 0, qos_id
 
