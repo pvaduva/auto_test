@@ -8,7 +8,7 @@ import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
-from consts.proj_vars import ProjVar, InstallVars
+from consts.proj_vars import ProjVar, InstallVars, ComplianceVar
 from consts import build_server as build_server_consts
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
@@ -92,11 +92,12 @@ def _write_results(res_in_tests, test_name):
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
             global tracebacks
+            search_forward = True if ComplianceVar.get_var('REFSTACK_SUITE') else False
             try:
                 from utils.cgcs_reporter import upload_results, parse_log
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
-                                                  traceback=tracebacks, parse_name=True)
+                                                  traceback=tracebacks, parse_name=True, search_forward=search_forward)
             except Exception:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
 
@@ -327,6 +328,12 @@ def pytest_configure(config):
     if telnet_log:
         ProjVar.set_var(COLLECT_TELNET=True)
 
+    # Compliance configs:
+    refstack_suite = config.getoption('refstack_suite')
+    if refstack_suite:
+        from consts.proj_vars import ComplianceVar
+        ComplianceVar.set_var(REFSTACK_SUITE=refstack_suite)
+
     if session_log_dir:
         log_dir = session_log_dir
     else:
@@ -335,8 +342,14 @@ def pytest_configure(config):
         if '/AUTOMATION_LOGS' in resultlog:
             resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
         if not resultlog.endswith('/'):
-            resultlog += '/'
-        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+            resultlog += '/AUTOMATION_LOGS'
+        lab_name = lab['short_name']
+        time_stamp = strftime('%Y%m%d%H%M')
+        if refstack_suite:
+            suite_name = os.path.basename(refstack_suite).split('.txt')[0]
+            log_dir = '{}/refstack/{}/{}_{}'.format(resultlog, lab_name, time_stamp, suite_name)
+        else:
+            log_dir = '{}/{}/{}'.format(resultlog, lab_name, time_stamp)
     os.makedirs(log_dir, exist_ok=True)
 
     if report_all:
@@ -627,6 +640,12 @@ def pytest_addoption(parser):
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
+    ####################
+    #  Compliance Test #
+    ####################
+    refstack_help = "RefStack test suite path. Need to be accessible from test server (128.224.150.21)." \
+                    "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'"
+    parser.addoption('--refstack_suite', '--refstack-suite', dest='refstack_suite', help=refstack_help)
 
 
 def config_logger(log_dir, console=True):

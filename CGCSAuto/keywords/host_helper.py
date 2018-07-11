@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from xml.etree import ElementTree
 
 from consts import proj_vars
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds, ComplianceCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
@@ -3351,8 +3351,8 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
 
 
 @contextmanager
-def ssh_to_compliance_server(server='tis-compliance-test-node.cumulus.wrs.com', user='cumulus',
-                             password='kumuluz', prompt=None):
+def ssh_to_compliance_server(server=ComplianceCreds.get_host(), user=ComplianceCreds.get_user(),
+                             password=ComplianceCreds.get_password(), prompt=None):
     """
     ssh to given compliance server
 
@@ -3365,9 +3365,14 @@ def ssh_to_compliance_server(server='tis-compliance-test-node.cumulus.wrs.com', 
     Yields (SSHClient): ssh client for given compliance server and user
 
     """
-    prompt = prompt if prompt else '{}@tis-compliance-test-node:~$'.format(user)
+    set_ps1 = False
+    if not prompt:
+        prompt = '.*{}@.*:.*\$ '.format(user)
+        set_ps1 = True
     server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
     server_conn.connect()
+    if set_ps1:
+        server_conn.exec_cmd(r'export PS1="\u@\h:\w\$ "')
 
     try:
         yield server_conn

@@ -5,7 +5,7 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID, UUID
 from consts.filepaths import UserData
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
@@ -277,7 +277,7 @@ def update_subnet(subnet, unset=False, allocation_pool=None, dns_server=None, ho
             'no-allocation-pool': True if allocation_pool in set_no else None
         }
         arg_dict.update(**set_only_dict)
-        cmd = 'unset'
+        cmd = 'set'
 
     arg_str = common.parse_args(args_dict=arg_dict, repeat_arg=True)
     arg_str += ' {}'.format(subnet)
@@ -288,7 +288,7 @@ def update_subnet(subnet, unset=False, allocation_pool=None, dns_server=None, ho
     if code > 0:
         return 1, output
 
-    LOG.info("Subnet {} updated successfully")
+    LOG.info("Subnet {} updated successfully".format(subnet))
     return 0, subnet
 
 
@@ -1605,6 +1605,19 @@ def delete_router(router_id, del_ifs=True, auth_info=Tenant.ADMIN, con_ssh=None,
 
 
 def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        router_id:
+        subnet:
+        port:
+        auth_info:
+        con_ssh:
+        fail_ok:
+
+    Returns:
+
+    """
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
 
@@ -1628,12 +1641,16 @@ def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None,
     if code == 1:
         return 1, output, if_source
 
-    if subnet is not None and not router_subnet_exists(router_id, subnet):
-        msg = "Subnet {} is not shown in router-port-list for router {}".format(subnet, router_id)
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, msg, if_source
-        raise exceptions.NeutronError(msg)
+    if subnet is not None:
+        if not re.match(UUID, subnet):
+            subnet = get_subnets(name=subnet, auth_info=auth_info, con_ssh=con_ssh)[0]
+
+        if not router_subnet_exists(router_id, subnet):
+            msg = "Subnet {} is not shown in router-port-list for router {}".format(subnet, router_id)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg, if_source
+            raise exceptions.NeutronError(msg)
 
     # TODO: Add check if port is used to add interface.
 
@@ -1659,12 +1676,16 @@ def delete_router_interface(router_id, subnet=None, port=None, auth_info=None, c
     if code == 1:
         return 1, output
 
-    if subnet is not None and router_subnet_exists(router_id, subnet):
-        msg = "Subnet {} is still shown in router-port-list for router {}".format(subnet, router_id)
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, msg
-        raise exceptions.NeutronError(msg)
+    if subnet is not None:
+        if not re.match(UUID, subnet):
+            subnet = get_subnets(name=subnet, auth_info=auth_info, con_ssh=con_ssh)[0]
+
+        if router_subnet_exists(router_id, subnet):
+            msg = "Subnet {} is still shown in router-port-list for router {}".format(subnet, router_id)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.NeutronError(msg)
 
     succ_msg = "Interface is deleted successfully for router {}.".format(router_id)
     LOG.info(succ_msg)
@@ -1712,13 +1733,13 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_
         router_id = get_tenant_router(con_ssh=con_ssh)
 
     if not extnet_id:
-        extnet_id = get_ext_networks(con_ssh=con_ssh)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=auth_info)[0]
 
     args = ' '.join([args, router_id, extnet_id])
 
     # Clear first if gateway already set
-    if clear_first and get_router_ext_gateway_info(router_id):
-        clear_router_gateway(router_id=router_id, check_first=False)
+    if clear_first and get_router_ext_gateway_info(router_id, auth_info=auth_info, con_ssh=con_ssh):
+        clear_router_gateway(router_id=router_id, check_first=False, auth_info=auth_info, con_ssh=con_ssh)
 
     code, output = cli.neutron('router-gateway-set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                rtn_list=True)
@@ -1726,7 +1747,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_
     if code == 1:
         return 1, output
 
-    post_ext_gateway = get_router_ext_gateway_info(router_id)
+    post_ext_gateway = get_router_ext_gateway_info(router_id, auth_info=auth_info, con_ssh=con_ssh)
 
     if not extnet_id == post_ext_gateway['network_id']:
         msg = "Failed to set gateway of external network {} for router {}".format(extnet_id, router_id)
@@ -2092,7 +2113,7 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
                 return 2, msg
             raise exceptions.NeutronError(msg)
 
-    succ_msg = "Neutron quota(s) updated successfully to: {}.".format(kwargs)
+    succ_msg = "Neutron quota(s) updated successfully for tenant {} to: {}.".format(tenant_id, kwargs)
     LOG.info(succ_msg)
     return 0, succ_msg
 

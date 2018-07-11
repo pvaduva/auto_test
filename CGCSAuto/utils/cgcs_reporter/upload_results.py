@@ -299,7 +299,8 @@ def upload_test_results(cursor, log_dir, tag=None):
         # print("{}".format(session_info))
         session_id = insert_test_session(cursor=cursor, **session_info)
 
-    tracebacks = parse_log.get_parsed_failures(log_dir)
+    search_forward = True if 'refstack' in log_dir else False
+    tracebacks = parse_log.get_tracebacks_from_pytestlog(log_dir, search_forward=search_forward)
     tests_info = __get_testcases_info(testcases_res=testcases_res, ends_at=ends_at)
     for test_info in tests_info:    # type: dict
         test_info['session_id'] = session_id
@@ -314,7 +315,8 @@ def upload_test_results(cursor, log_dir, tag=None):
     return session_id
 
 
-def upload_test_result(session_id, test_name, result, start_time, end_time, traceback=None, parse_name=False,
+def upload_test_result(session_id, test_name, result, start_time, end_time, traceback=None, search_forward=False,
+                       parse_name=False,
                        **extra_info):
     """
     Upload result for single testcase to database
@@ -325,6 +327,7 @@ def upload_test_result(session_id, test_name, result, start_time, end_time, trac
         start_time:
         end_time:
         traceback (None|str|list):
+        search_forward(bool)
         parse_name (bool): whether to parse test_name
         **extra_info: valid keys: jira
 
@@ -342,7 +345,7 @@ def upload_test_result(session_id, test_name, result, start_time, end_time, trac
         if traceback:
             if isinstance(traceback, list):
                 traceback = traceback[0]
-            traceback = parse_log.get_parsed_failure(traceback)
+            traceback = parse_log.parse_traceback(traceback, search_forward=search_forward)
             test_info['comments'] = "<pre>" + html.escape(traceback) + "</pre>"
 
         for key in 'jira':

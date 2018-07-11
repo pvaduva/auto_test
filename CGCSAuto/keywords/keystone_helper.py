@@ -445,7 +445,7 @@ def create_user(name=None, rtn_val='name', domain=None, project=None, project_do
         name = 'user'
         common.get_unique_name(name_str=name)
 
-    LOG.info("Creating openstack user {}".format(name))
+    LOG.info("Create/Show openstack user {}".format(name))
     arg_dict = {
         'domain': domain,
         'project': project,
@@ -466,7 +466,7 @@ def create_user(name=None, rtn_val='name', domain=None, project=None, project_do
         return 1, output
 
     user = table_parser.get_value_two_col_table(table_parser.table(output), field=rtn_val)
-    LOG.info("Openstack user {} successfully created".format(user))
+    LOG.info("Openstack user {} successfully created/showed".format(user))
 
     return 0, user
 
