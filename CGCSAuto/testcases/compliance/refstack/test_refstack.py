@@ -76,5 +76,6 @@ def test_refstack(suite):
             for file in RefStack.LOG_FILES:
                 file_path = '{}/{}'.format(RefStack.TEST_HISTORY_DIR, file)
                 if compliance_ssh.file_exists(file_path):
+                    compliance_ssh.exec_cmd('chmod 755 {}'.format(file_path))
                     log_files.append(file)
             RefStack.LOG_FILES = log_files
