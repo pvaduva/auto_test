@@ -12,6 +12,16 @@ from keywords import html_helper
 from keywords import install_helper, cinder_helper, glance_helper, common, system_helper, host_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from setups import collect_tis_logs
+
+
+def collect_logs(msg):
+    try:
+        LOG.info('collecting logs: ' + msg)
+        active_controller = ControllerClient.get_active_controller()
+        collect_tis_logs(active_controller)
+    except:
+        pass
 
 
 @fixture(scope='function')
@@ -90,6 +100,8 @@ def pre_system_backup():
 
         _backup_info['usb_parts_info'] = None
         _backup_info['backup_dest_full_path'] = backup_dest_full_path
+
+    collect_logs('before_br')
 
     return _backup_info
 
@@ -176,6 +188,7 @@ def test_backup(pre_system_backup):
     else:
         LOG.info("No cinder volumes are avaialbe or in-use states in the system; skipping cinder volume export...")
 
+    collect_logs('after_backup')
     # Copying system backup ISO file for future restore
     assert backup_load_iso_image(backup_info)
 

@@ -368,9 +368,9 @@ def install_non_active_node(node_name, lab):
     assert rc == 0 or rc == 4, "Host {} failed to unlock: rc = {}, msg: {}".format(node_name, rc, output)
 
     if rc == 4:
-        LOG.warn('{} now is in degraded status')
+        LOG.warn('{} now is in degraded status'.format(node_name))
 
-    LOG.info('{} is installed')
+    LOG.info('{} is installed'.format(node_name))
 
 
 def restore_volumes():
@@ -606,5 +606,6 @@ def test_restore(restore_setup):
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)
     assert rc == 0, "System health not OK: {}".format(failed)
 
+    collect_logs(con_ssh)
     ProjVar.set_var(SOURCE_CREDENTIAL=None)
     # vm_helper.boot_vm()
