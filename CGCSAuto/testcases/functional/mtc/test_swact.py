@@ -84,7 +84,7 @@ def test_swact_controlled_kpi(collect_kpi):
     host_helper.swact_host(hostname=start_host)
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Swact.NAME, init_time=init_time,
                               log_path=Swact.LOG_PATH, end_pattern=Swact.END, host=end_host, start_host=start_host,
-                              start_pattern=Swact.START, start_path=Swact.START_PATH, uptime=1)
+                              start_pattern=Swact.START, start_path=Swact.START_PATH, uptime=1, fail_ok=False)
 
 
 @mark.kpi
@@ -100,4 +100,4 @@ def test_swact_uncontrolled_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=SwactUncontrolled.NAME, init_time=init_time,
                               log_path=SwactUncontrolled.LOG_PATH, end_pattern=SwactUncontrolled.END, host=end_host,
                               start_host=start_host, start_pattern=SwactUncontrolled.START,
-                              start_path=SwactUncontrolled.START_PATH, uptime=5)
+                              start_path=SwactUncontrolled.START_PATH, uptime=5, fail_ok=False)

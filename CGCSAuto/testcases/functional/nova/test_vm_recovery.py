@@ -359,10 +359,9 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VMRecoveryNetworking.NAME,
                                   kpi_val=duration/1000, uptime=5)
 
-        if collect_kpi:
-            kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
-                                      log_path=VMRecoveryNova.LOG_PATH, end_pattern=VMRecoveryNova.END.format(vm_id),
-                                      start_pattern=VMRecoveryNova.START.format(vm_id))
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
+                                  log_path=VMRecoveryNova.LOG_PATH, end_pattern=VMRecoveryNova.END.format(vm_id),
+                                  start_pattern=VMRecoveryNova.START.format(vm_id), fail_ok=False)
     else:
         kill_kvm_and_recover(vm_id, target_host_=target_host)
 

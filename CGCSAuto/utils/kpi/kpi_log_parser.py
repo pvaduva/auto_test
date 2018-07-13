@@ -15,7 +15,8 @@ from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=None, start_pattern=None,
                start_path=None, extended_regex=False, python_pattern=None, average_for_all=False, lab_name=None,
                con_ssh=None, sudo=False, topdown=False, init_time=None, build_id=None, start_host=None,
-               uptime=5, start_pattern_init=False, sw_version=None, patch=None, unit=None, kpi_val=None):
+               uptime=5, start_pattern_init=False, sw_version=None, patch=None, unit=None, kpi_val=None,
+               fail_ok=True):
 
     """
     Record kpi in ini format in given file
@@ -131,12 +132,17 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         kpi_dict.update({'timestamp': time_stamp, 'value': kpi_val})
 
         append_to_kpi_file(local_kpi_file=local_kpi_file, kpi_name=kpi_name, kpi_dict=kpi_dict)
+        return 0, kpi_val
 
     except Exception as e:
+        if not fail_ok:
+            raise
+
         print("Failed to record kpi. Error: {}".format(e.__str__()))
         import traceback
         import sys
         traceback.print_exc(file=sys.stdout)
+        return 1, e.__str__()
 
 
 def append_to_kpi_file(local_kpi_file, kpi_name, kpi_dict):

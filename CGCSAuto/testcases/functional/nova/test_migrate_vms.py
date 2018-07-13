@@ -552,4 +552,4 @@ def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
 
         LOG.info("ping loss: {}ms; traffic loss: {}ms".format(ping_duration, duration))
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
-                                  kpi_val=duration, uptime=5, unit='Time(ms)')
+                                  kpi_val=duration, uptime=5, unit='Time(ms)', fail_ok=False)

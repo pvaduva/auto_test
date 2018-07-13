@@ -47,7 +47,7 @@ def test_drbd_kpi(no_simplex, collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, python_pattern=python_pattern,
                               lab_name=lab_name, unit=DRBDSync.UNIT,
-                              average_for_all=True, end_pattern=end_pattern, uptime=15)
+                              average_for_all=True, end_pattern=end_pattern, uptime=15, fail_ok=False)
 
 
 @mark.kpi
@@ -69,7 +69,7 @@ def test_config_controller_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15, fail_ok=False)
 
 
 @mark.kpi
@@ -91,7 +91,7 @@ def test_lab_setup_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15, fail_ok=False)
 
 
 @mark.kpi
@@ -116,7 +116,7 @@ def test_heat_kpi(collect_kpi):
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
                               end_pattern=end_pattern, sudo=True, topdown=True,
-                              start_pattern_init=True, uptime=15)
+                              start_pattern_init=True, uptime=15, fail_ok=False)
 
 
 @mark.kpi
@@ -143,7 +143,7 @@ def test_system_install_kpi(collect_kpi):
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
                               end_pattern=end_pattern, start_path=start_path,
-                              sudo=True, topdown=True, start_pattern_init=True)
+                              sudo=True, topdown=True, start_pattern_init=True, fail_ok=False)
 
 
 @mark.kpi
@@ -193,7 +193,7 @@ def test_node_install_kpi(collect_kpi):
 
         install_duration = _get_time_delta(start_time, end_time)
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, 
-                                  log_path=log_path, lab_name=lab_name, kpi_val=install_duration)
+                                  log_path=log_path, lab_name=lab_name, kpi_val=install_duration, fail_ok=False)
 
 
 @mark.kpi
@@ -251,8 +251,8 @@ def test_idle_kpi(collect_kpi):
     avg_cpu_usage = round(100 - avg_cpu_idle, 4)
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Idle.NAME_CPU, kpi_val=avg_cpu_usage, uptime=5,
-                              unit='Percentage')
+                              unit='Percentage', fail_ok=False)
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Idle.NAME_MEM, kpi_val=mem_usage, uptime=5,
-                              unit='Percentage')
+                              unit='Percentage', fail_ok=False)
 

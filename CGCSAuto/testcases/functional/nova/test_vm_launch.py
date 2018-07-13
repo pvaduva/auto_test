@@ -71,9 +71,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     vm_id = vm_helper.boot_vm(name=boot_from, flavor=flavor, source=boot_source, vm_host=target_host,
                               cleanup='function')[1]
 
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VmStartup.NAME.format(boot_from),
-                              log_path=VmStartup.LOG_PATH, end_pattern=VmStartup.END.format(vm_id),
-                              start_pattern=VmStartup.START.format(vm_id), uptime=1)
+    code_boot, out_boot = \
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VmStartup.NAME.format(boot_from),
+                                  log_path=VmStartup.LOG_PATH, end_pattern=VmStartup.END.format(vm_id),
+                                  start_pattern=VmStartup.START.format(vm_id), uptime=1)
 
     # Migration KPI
     if len(hosts_per_backing.get(storage_backing)) >= 2:
@@ -92,7 +93,7 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
             duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation_live, vm_id)
             assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
-                                      kpi_val=duration, uptime=1, unit='Time(ms)')
+                                          kpi_val=duration, uptime=1, unit='Time(ms)')
 
             vim_duration = vm_helper.get_live_migrate_duration(vm_id=vm_id)
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NOVA_NAME.format(boot_from),
@@ -129,6 +130,8 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
         assert duration > 0, "No ping loss detected during live migration for {} vm".format(boot_from)
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Rebuild.NAME.format(boot_from),
                                   kpi_val=duration, uptime=1, unit='Time(ms)')
+
+    assert code_boot == 0, out_boot
 
 
 def check_for_qemu_process(host_ssh):
