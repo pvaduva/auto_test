@@ -13,6 +13,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
     bld_server = upgrade_setup['build_server']
+    collect_kpi = upgrade_setup['col_kpi']
     missing_manifests = False
     cinder_configuration = False
     force = False
@@ -95,6 +96,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     upgrade_helper.system_upgrade_start(force=force)
     upgrade_helper.wait_for_upgrade_states("started")
     LOG.info("upgrade started successfully......")
+    if collect_kpi:
+        upgrade_helper.collect_upgrade_start_kpi(lab, collect_kpi)
 
     # upgrade standby controller
     LOG.tc_step("Upgrading controller-1")

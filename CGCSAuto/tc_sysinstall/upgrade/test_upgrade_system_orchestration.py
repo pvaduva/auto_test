@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from utils.tis_log import LOG
 from keywords import system_helper, host_helper, install_helper, upgrade_helper
 from consts.filepaths import BuildServerPath
@@ -37,6 +38,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
     bld_server = upgrade_setup['build_server']
+    collect_kpi = upgrade_setup['col_kpi']
+
     # orchestration = 'upgrade'
     man_upgrade_nodes = upgrade_setup['man_upgrade_nodes']
     orchestration_nodes = upgrade_setup['orchestration_nodes']
@@ -64,7 +67,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
             if 'controller-0' in controller_nodes:
                 rc, output = upgrade_helper.upgrade_host_lock_unlock('controller-0')
                 assert rc == 0, "Failed to lock/unlock host {}: {}".format('controller-0', output)
-                system_upgrade_health[2]["swact"] = False
+                time.sleep(60)
+                #system_upgrade_health[2]["swact"] = False
         if system_upgrade_health[2]["swact"][0]:
             LOG.info("Swact Required: {}".format(system_upgrade_health[2]["swact"][1]))
             host_helper.swact_host('controller-0')
@@ -110,10 +114,19 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     #         rc, output = upgrade_helper.upgrade_host_lock_unlock(host)
     #         assert rc == 0, "Failed to lock/unlock host {}: {}".format(host, output)
 
-    LOG.tc_step("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
-    upgrade_helper.system_upgrade_start(force=force)
-    LOG.info("upgrade started successfully......")
+    upgrade_init_time = str(datetime.now())
 
+    LOG.tc_step("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
+    current_state = upgrade_helper.get_upgrade_state()
+    if "No upgrade in progress" in current_state:
+        upgrade_helper.system_upgrade_start(force=force)
+        LOG.info("upgrade started successfully......")
+    elif "started" in current_state:
+        LOG.info("upgrade already started ......")
+    else:
+        LOG.info("upgrade is already in state {} please continue manual upgrade ......".format(current_state))
+        assert False, "upgrade is already in state {} please continue manual upgrade ......".format(current_state)
+    time.sleep(60)
     # upgrade standby controller
     LOG.tc_step("Upgrading controller-1")
     upgrade_helper.upgrade_controller('controller-1')
@@ -130,10 +143,13 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
               "within  the specified timeout"
         assert False, err_msg
 
+    if collect_kpi:
+        upgrade_helper.collected_upgrade_controller1_kpi(lab, collect_kpi, init_time=upgrade_init_time)
+
     rc, output = host_helper.swact_host(hostname="controller-0")
     assert rc == 0, "Failed to swact: {}".format(output)
     LOG.info("Swacted and  controller-1 has become active......")
-    # time.sleep(60)
+    time.sleep(120)
     # active_controller = system_helper.get_active_controller_name()
 
     if 'controller-1' in man_upgrade_nodes:
@@ -143,6 +159,9 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     if len(orchestration_nodes) > 0:
         upgrade_helper.orchestration_upgrade_hosts(upgraded_hosts=man_upgrade_nodes,
                                                    orchestration_nodes=orchestration_nodes)
+    if collect_kpi:
+        upgrade_helper.collect_upgrade_orchestration_kpi(lab, collect_kpi)
+
     # Activate the upgrade
     LOG.tc_step("Activating upgrade....")
     upgrade_helper.activate_upgrade()

@@ -93,6 +93,10 @@ def upgrade_setup(pre_check_upgrade):
 
     LOG.tc_func_start("UPGRADE_TEST")
     lab = InstallVars.get_install_var('LAB')
+    col_kpi = ProjVar.get_var('COLLECT_KPI')
+    collect_kpi_path = None
+    if  col_kpi:
+        collect_kpi_path = ProjVar.get_var('KPI_PATH')
 
     # establish ssh connection with controller-0
     controller0_conn = ControllerClient.get_active_controller()
@@ -250,6 +254,7 @@ def upgrade_setup(pre_check_upgrade):
                       'compute_apply_strategy': compute_apply_strategy,
                       'max_parallel_computes': max_parallel_computes,
                       'alarm_restrictions': alarm_restrictions,
+                      'col_kpi': collect_kpi_path,
                       }
     ver = (system_helper.get_imported_load_version()).pop()
     assert upgrade_version in ver, "Import error. Expected " \

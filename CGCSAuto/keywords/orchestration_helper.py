@@ -9,6 +9,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.cgcs import OrchestStrategyPhase, OrchStrategyKey, OrchStrategyState
 from consts.timeout import OrchestrationPhaseTimeout, HostTimeout
+from keywords import common
 from consts.auth import Tenant
 
 
@@ -321,6 +322,7 @@ def get_current_strategy_values(orchestration, conn_ssh=None):
     rtn = {}
     if rc == 0 and output is not None and ('strategy-uuid' in [tr.strip() for tr in output.split(':')]):
         lines = output.splitlines()
+        lines = [ l.strip() for l in lines]
         for line in lines:
             pairs = line.split(':')
             rtn[pairs[0].strip()] = pairs[1].strip()
@@ -471,3 +473,110 @@ def get_current_strategy_uuid(orchestration):
         if OrchStrategyKey.STRATEGY_UUID in results else None
     LOG.info("{} strategy uuid = {}".format(orchestration, uuid))
     return uuid
+
+
+def get_current_strategy_details(orchestration, conn_ssh=None):
+    """
+    Gets orchestration strategy details when successfully applied.
+    Args:
+        orchestration:
+        conn_ssh:
+
+    Returns: dict of strategy values
+
+    """
+
+    if orchestration is None:
+        raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
+    if orchestration is not "patch" and orchestration is not "upgrade":
+        raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified")
+
+    cmd = ''
+    if orchestration is "patch":
+        cmd += "patch-strategy show --details"
+    else:
+        cmd += "upgrade-strategy show --details"
+    try:
+        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+    except:
+        time.sleep(20)
+        if not conn_ssh._is_connected(fail_ok=True):
+            conn_ssh.connect(retry=True)
+            ControllerClient.set_active_controller(ssh_client=conn_ssh)
+
+        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+
+    rtn = {}
+    if rc == 0 and output is not None and ('strategy-uuid' in [tr.strip() for tr in output.split(':')]):
+        lines = output.splitlines()
+        build_phase_index = [i for i, word in enumerate(lines) if "build-phase" in word]
+        apply_phase_index = [i for i, word in enumerate(lines) if "apply-phase" in word]
+        strategy_lines = []
+        build_phase_lines = []
+        apply_phase_lines = []
+        if len(build_phase_index) > 0:
+            strategy_lines.extend(lines[1:build_phase_index[0]])
+            if len(apply_phase_index) > 0:
+                build_phase_lines.extend(lines[build_phase_index[0]:apply_phase_index[0]])
+                apply_phase_lines.extend(lines[apply_phase_index[0]:])
+            else:
+                build_phase_lines.extend(lines[build_phase_index[0]:])
+        else:
+            strategy_lines.extend(lines[1:])
+
+        strategy_values = {}
+        build_phase_values = {}
+        apply_phase_values = {}
+        if len(strategy_lines) > 0:
+            for line in strategy_lines:
+                pairs = line.split(':')
+                strategy_values[pairs[0].strip()] = pairs[1].strip()
+            rtn['strategy'] = strategy_values
+        if len(build_phase_lines) > 0:
+            for line in build_phase_lines:
+                pairs = line.split(':')
+                if pairs[0].strip() == "stages":
+                    break
+                build_phase_values[pairs[0].strip()] = pairs[1].strip()
+
+            rtn['build'] = build_phase_values
+
+        if len(apply_phase_lines) > 0:
+            for line in apply_phase_lines:
+                pairs = line.split(':')
+                if pairs[0].strip() == "stages":
+                    break
+                apply_phase_values[pairs[0].strip()] = pairs[1].strip()
+            rtn['apply'] = apply_phase_values
+
+    return rtn
+
+
+def get_current_strategy_phase_duration(orchestration, phase, conn_ssh=None):
+    """
+    Gets the elapsed time in seconds to execute the specified orchestration strategy phase
+    Args:
+        orchestration:
+        phase:
+        conn_ssh:
+
+    Returns:
+
+    """
+
+    if orchestration is None:
+        raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
+    if orchestration is not "patch" and orchestration is not "upgrade":
+        raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified")
+
+    if phase is None:
+         raise ValueError("The orchestration phase (choices are 'build' or 'apply') must be specified")
+    if phase is not "build" and phase is not "apply":
+        raise ValueError("Invalid orchestration phase type (choices are 'build' or 'apply') specified")
+    duration = None
+    strategy_details = get_current_strategy_details(orchestration)
+    if phase in strategy_details.keys():
+        start_date_time = strategy_details[phase]["start-date-time"]
+        end_date_time = strategy_details[phase]["end-date-time"]
+        duration = common.get_timedelta_for_isotimes(start_date_time, end_date_time)
+    return duration

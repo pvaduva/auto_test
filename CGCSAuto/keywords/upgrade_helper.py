@@ -11,6 +11,8 @@ from keywords import system_helper, host_helper, install_helper, orchestration_h
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils.kpi import kpi_log_parser
+from consts.kpi_vars import UpgradeActivate, UpgradeComplete, UpgradeStart, UpgradeOrchestration, UpgradeController1
 
 
 def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
@@ -431,6 +433,7 @@ def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
         (2, <stderr>) : "applicable only if fail_ok is true. upgrade-start rejected:
         An upgrade is already in progress."
     """
+
     if force:
         rc, output = cli.system("upgrade-start", positional_args='--force', fail_ok=True, ssh_client=con_ssh)
     else:
@@ -957,3 +960,129 @@ def simplex_host_upgrade(con_ssh=None, fail_ok=False):
             raise exceptions.CLIRejected(err_msg)
     else:
         return 0, "host upgrade success"
+
+
+def collect_upgrade_start_kpi(lab, collect_kpi ):
+    """
+
+    Returns:
+
+    """
+
+    lab_name =  lab['short_name']
+    log_path = UpgradeStart.LOG_PATH
+    kpi_name = UpgradeStart.NAME
+    host = "controller-0"
+    start_pattern = UpgradeStart.START
+    end_pattern = UpgradeStart.END
+
+    try:
+
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                                  log_path=log_path, lab_name=lab_name, host=host,
+                                  start_pattern=start_pattern,
+                                  end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+    except ValueError as evalue:
+
+        LOG.info("Unable to collect upgrade start kpi for lab {}: {}".format(lab_name, evalue))
+
+
+def collected_upgrade_controller1_kpi(lab, collect_kpi, init_time=None):
+    """
+
+    Args:
+        lab:
+        collect_kpi:
+
+    Returns:
+
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test.  Skip due to kpi collection is not enabled")
+        return
+
+    lab_name = lab['short_name']
+    log_path = UpgradeController1.LOG_PATH
+    kpi_name = UpgradeController1.NAME
+    host = "controller-0"
+    start_pattern = UpgradeController1.START
+    start_path = UpgradeController1.START_PATH
+    end_pattern = UpgradeController1.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern, start_path=start_path,
+                              end_pattern=end_pattern, init_time=init_time, sudo=True, topdown=True)
+
+
+
+def collect_upgrade_orchestration_kpi(lab, collect_kpi):
+    """
+
+    Args:
+        lab:
+        collect_kpi:
+
+    Returns:
+
+    """
+    if not collect_kpi:
+        LOG.info("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = lab['short_name']
+    print("Upgrade host: {}".format(upgrade_host))
+    host = "controller-1"
+
+    kpi_name = UpgradeOrchestration.NAME.format(upgrade_host)
+
+    orchestration_duration = orchestration_helper.get_current_strategy_phase_duration("upgrade", "apply")
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, lab_name=lab_name,
+                              kpi_val=orchestration_duration)
+
+
+def collect_upgrade_activate_kpi(lab, collect_kpi):
+    """
+    This measures the time to run upgrade-activate.
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = lab['short_name']
+    host = "controller-1"
+
+    kpi_name = UpgradeActivate.NAME
+    log_path = UpgradeActivate.LOG_PATH
+    start_pattern = UpgradeActivate.START
+    end_pattern = UpgradeActivate.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                          log_path=log_path, lab_name=lab_name, host=host,
+                          start_pattern=start_pattern,
+                          end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+
+
+
+def collect_upgrade_complete_kpi(lab, collect_kpi):
+    """
+    This measures the time to run upgrade-activate.
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = lab['short_name']
+    host = "controller-0"
+
+    kpi_name = UpgradeComplete.NAME
+    log_path = UpgradeComplete.LOG_PATH
+    start_pattern = UpgradeComplete.START
+    end_pattern = UpgradeComplete.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                          log_path=log_path, lab_name=lab_name, host=host,
+                          start_pattern=start_pattern,
+                          end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+

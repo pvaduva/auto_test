@@ -150,3 +150,40 @@ class CyclicTest:
     NAME_VM_AVG = 'cyclictest_vm_avg_latency'
     NAME_VM_6_NINES = 'cyclictest_vm_6nines_percentile_latency'
     UNIT = 'Time(us)'
+
+
+class UpgradeStart:
+    NAME = 'upgrade_start'
+    START_PATH = '/var/log/sysinv.log'
+    START = 'Starting upgrade from release: {} to release: {}'
+    LOG_PATH = '/var/log/sysinv.log'
+    END = 'Finished upgrade preparation'
+
+
+class UpgradeController1:
+    NAME = 'upgrade_controller_1'
+    START_PATH = '/var/log/bash.log'
+    START = ' system  host-upgrade controller-1'
+    LOG_PATH = '/var/log/fm-event.log'
+    END = '200.022.*controller-1 reinstall completed successfully'
+
+
+class UpgradeOrchestration:
+    NAME = 'upgrade_orchestration'
+
+
+
+class UpgradeActivate:
+    NAME = 'upgrade_activate'
+    START_PATH = '/var/log/bash.log'
+    START = 'system  upgrade-activate'
+    LOG_PATH = '/var/log/sysinv.log'
+    END = '.*controllerconfig.upgrades.management .*Finished upgrade activation'
+
+
+class UpgradeComplete:
+    NAME = 'upgrade_complete'
+    START_PATH = '/var/log/bash.log'
+    START = ' system  upgrade-complete'
+    LOG_PATH = '/var/log/sysinv.log'
+    END = '.*controllerconfig.upgrades.management .*Finished upgrade complete'
