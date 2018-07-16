@@ -1,6 +1,3 @@
-from pytest import mark, skip
-
-from consts.proj_vars import ComplianceVar
 from consts.compliance import RefStack
 from utils.tis_log import LOG
 from utils.exceptions import RefStackError
@@ -41,8 +38,8 @@ def test_refstack():
         try:
             # run refstack tests
             LOG.info('run refstack tests')
-            run_cmd = 'refstack-client test -c {} -v --test-list test-list.txt > {}/test_run.log'.format(
-                RefStack.TEMPEST_CONF, RefStack.TEST_HISTORY_DIR)
+            run_cmd = 'refstack-client test -c {} -v --test-list {}/test-list.txt > {}/test_run.log'.format(
+                RefStack.TEMPEST_CONF, RefStack.TEST_HISTORY_DIR, RefStack.TEST_HISTORY_DIR)
             code, output = compliance_ssh.exec_cmd(run_cmd, expect_timeout=TEST_MAX_TIMEOUT, fail_ok=True)
             if code == 0:
                 print('Refstack test output: {}'.format(output))

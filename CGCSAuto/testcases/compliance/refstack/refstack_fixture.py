@@ -31,8 +31,8 @@ def refstack_pre_check():
             file_path = '{}/{}'.format(RefStack.TEST_HISTORY_DIR, file)
             refstack_host_ssh.exec_cmd('rm -f {}'.format(file_path), get_exit_code=False)
 
-        LOG.fixture_step('scp test-list file to refstack-client dir')
-        dest_path = '{}/test-list.txt'.format(RefStack.CLIENT_DIR)
+        LOG.fixture_step('scp test-list file to refstack test history dir')
+        dest_path = '{}/test-list.txt'.format(RefStack.TEST_HISTORY_DIR)
         refstack_host_ssh.scp_on_dest(source_path=refstack_suite, source_ip=SvcCgcsAuto.SERVER,
                                       source_user=SvcCgcsAuto.USER, source_pswd=SvcCgcsAuto.PASSWORD,
                                       dest_path=dest_path, timeout=120)
@@ -126,7 +126,7 @@ def refstack_setup(refstack_pre_check, request):
 
     def scp_logs():
         LOG.info("scp test results files from refstack test host to local automation dir")
-        dest_dir = os.path.join(ProjVar.get_var('LOG_DIR'), 'refstack')
+        dest_dir = os.path.join(ProjVar.get_var('LOG_DIR'), 'compliance')
         os.makedirs(dest_dir, exist_ok=True)
         localhost = LocalHostClient()
         localhost.connect()

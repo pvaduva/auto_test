@@ -94,7 +94,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
 
     if re.search(COMPLIANCE_PATTERN, testcases_res):
-        summary_txt = os.path.join(log_path.split(':')[1].strip(), 'summary.txt')
+        summary_txt = os.path.join(log_path.split(':')[1].strip(), 'compliance', 'summary.txt')
         try:
             with open(summary_txt) as f:
                 summary = f.read()
