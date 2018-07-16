@@ -127,7 +127,7 @@ def refstack_setup(refstack_pre_check, request):
     def scp_logs():
         LOG.info("scp test results files from refstack test host to local automation dir")
         dest_dir = os.path.join(ProjVar.get_var('LOG_DIR'), 'refstack')
-        os.makedirs(path=dest_dir, exist_ok=True)
+        os.makedirs(dest_dir, exist_ok=True)
         localhost = LocalHostClient()
         localhost.connect()
 
