@@ -341,8 +341,7 @@ def pytest_configure(config):
         resultlog = resultlog if resultlog else os.path.expanduser("~")
         if '/AUTOMATION_LOGS' in resultlog:
             resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
-        if not resultlog.endswith('/'):
-            resultlog += '/AUTOMATION_LOGS'
+        resultlog = os.path.join(resultlog, 'AUTOMATION_LOGS')
         lab_name = lab['short_name']
         time_stamp = strftime('%Y%m%d%H%M')
         if refstack_suite:
