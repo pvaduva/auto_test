@@ -3,6 +3,7 @@ import math
 import re
 import time
 from collections import Counter
+from contextlib import contextmanager
 
 from consts.auth import Tenant
 from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID, UUID
@@ -51,7 +52,7 @@ def get_ip_address_str(ip=None):
 
 def create_network(name=None, shared=None, tenant_name=None, network_type=None, segmentation_id=None, qos=None,
                    physical_network=None, vlan_transparent=None, port_security=None, avail_zone=None, external=None,
-                   default=None, tags=None, fail_ok=False, auth_info=None, con_ssh=None):
+                   default=None, tags=None, fail_ok=False, auth_info=None, con_ssh=None, cleanup=''):
 
     """
     Create a network for given tenant
@@ -134,13 +135,15 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
         raise exceptions.NeutronError(msg)
 
     succ_msg = "Network {} is successfully created for tenant {}".format(net_id, expt_tenant_name)
+    if cleanup:
+        ResourceCleanup.add('network', net_id, scope=cleanup)
     LOG.info(succ_msg)
     return 0, net_id
 
 
 def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gateway=False, dns_servers=None,
                   alloc_pool=None, ip_version=None, subnet_pool=None, tenant_name=None, fail_ok=False, auth_info=None,
-                  con_ssh=None):
+                  con_ssh=None, cleanup=''):
     """
     Create a subnet for given tenant under specified network
 
@@ -227,6 +230,8 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         raise exceptions.NeutronError(msg)
 
     succ_msg = "Subnet {} is successfully created for tenant {}".format(subnet_id, expt_tenant_name)
+    if cleanup:
+        ResourceCleanup.add('subnet', subnet_id, scope=cleanup)
     LOG.info(succ_msg)
     return 0, subnet_id
 
@@ -523,7 +528,8 @@ def create_security_group(name, project=None, description=None, auth_info=None, 
             return code, table_
     table_ = table_parser.table(table_)
     identifier = table_parser.get_value_two_col_table(table_, 'id')
-    ResourceCleanup.add('security_group', identifier, scope=cleanup)
+    if cleanup:
+        ResourceCleanup.add('security_group', identifier, scope=cleanup)
     LOG.info("Security group created: name={} id={}".format(name, identifier))
     if fail_ok:
         return 0, identifier
@@ -1162,7 +1168,8 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
             raise exceptions.NeutronError(msg)
 
     qos_id = table_parser.get_value_two_col_table(table_, 'id')
-    ResourceCleanup.add('network_qos', qos_id, scope=cleanup)
+    if cleanup:
+        ResourceCleanup.add('network_qos', qos_id, scope=cleanup)
     LOG.info("QoS successfully created")
     return 0, qos_id
 
@@ -4180,7 +4187,7 @@ def get_dpdk_user_data(con_ssh=None):
     cmd = 'mkdir -p {};touch {}'.format(file_dir, file_path)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    content = "#wrs-config\nFUNCTIONS=hugepages,avr\n"
+    content = "#wrs-config\nFUNCTIONS=hugepages,\n"
     con_ssh.exec_cmd('echo "{}" >> {}'.format(content, file_path), fail_ok=False)
     output = con_ssh.exec_cmd('cat {}'.format(file_path))[1]
     assert output in content
@@ -5173,3 +5180,54 @@ def delete_flow_classifier(flow_classifier, check_first=True, fail_ok=False, aut
     msg = "Flow classifier {} successfully deleted".format(flow_classifier)
     LOG.info(msg)
     return 0, msg
+
+
+@contextmanager
+def vconsole(ssh_client):
+    """
+    Enter vconsole for the given ssh connection.
+    raises if vconsole connection cannot be established
+
+    Args:
+        ssh_client (SSHClient):
+            the connection to use for vconsole session
+
+    Yields (function):
+        executer function for vconsole
+
+    """
+    LOG.info("Entering vconsole")
+    original_prompt = ssh_client.get_prompt()
+    ssh_client.set_prompt("AVS> ")
+    try:
+        ssh_client.exec_sudo_cmd("vconsole", get_exit_code=False)
+    except Exception as err:
+        # vconsole failed to connect
+        # this is usually because vswitch initialization failed
+        # check instance logs
+        ssh_client.set_prompt(original_prompt)
+        ssh_client.flush(3)
+        ssh_client.send_control('c')
+        ssh_client.flush(10)
+        raise err
+
+    def v_exec(cmd, fail_ok=False):
+        LOG.info("vconsole execute: {}".format(cmd))
+        if cmd.strip().lower() == 'quit':
+            raise ValueError("shall not exit vconsole without proper cleanup")
+
+        code, output = ssh_client.exec_cmd(cmd, get_exit_code=False)
+        if "done" in output.lower():
+            return 0, output
+
+        LOG.warning(output)
+        if not fail_ok:
+            assert 0, 'vconsole failed to execute "{}"'.format(cmd)
+        return 1, output
+
+    yield v_exec
+
+    LOG.info("Exiting vconsole")
+    ssh_client.set_prompt(original_prompt)
+    ssh_client.exec_cmd("quit")
+

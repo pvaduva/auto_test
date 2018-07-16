@@ -239,7 +239,7 @@ def _delete_resources(resources, scope):
                 err_msgs.append(msg)
 
     if network_qoss:
-        LOG.fixture_step("({}) Attempt to delete following network QoSes: {}".format(scope, networks))
+        LOG.fixture_step("({}) Attempt to delete following network QoSes: {}".format(scope, network_qoss))
         for qos in network_qoss:
             code, msg = network_helper.delete_qos(qos_id=qos, fail_ok=True, auth_info=Tenant.ADMIN)
             if code > 0:

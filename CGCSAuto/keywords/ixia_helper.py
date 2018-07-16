@@ -448,11 +448,14 @@ class IxiaSession(object):
             def _validate(vport, interface):
                 self._ixnet.execute("clearNeighborTable", vport)
                 self._ixnet.execute('sendArpAndNS', interface)
+                time.sleep(5)
                 for neighbor in self.getList(vport, 'discoveredNeighbor'):
                     r, val = common.wait_for_val_from_func(
-                        False, 10, 1, self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
+                        False, 5, 1, self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
                     if not r:
                         return False
+                    else:
+                        LOG.info("{} resolved. MAC: {}".format(vport, self.getAttribute(neighbor, 'neighborMac')))
                 return True
 
             r, val = common.wait_for_val_from_func(True, validate_timeout, 10, _validate, vport, interface)
@@ -480,6 +483,27 @@ class IxiaSession(object):
         self._ixnet.setMultiAttribute(obj_ref, *self.__compound_ixargs({}, kwargs))
         if commit:
             self._ixnet.commit()
+
+    def duplicate_traffic_item(self, trafficItem, times=1):
+        """
+        Duplicate a traffic item.
+
+        Args:
+            trafficItem (str):
+                the identifier of the trafficItem to be duplicated
+            times (int):
+                number of times to duplicate
+
+        Returns (list):
+            newly created trafficItems from duplication
+
+        """
+        old_items = self.getList(self.getRoot()+'/traffic', 'trafficItem')
+        self._ixnet.execute("duplicate", trafficItem, times)
+        new_items = self.getList(self.getRoot()+'/traffic', 'trafficItem')
+        for item in old_items:
+            new_items.remove(item)
+        return new_items
 
     def create_traffic_item(self, trafficItem, trackBy, endpointSets, configElements):
         """
@@ -532,12 +556,7 @@ class IxiaSession(object):
 
         endp_pairs = list()
         for endp, ce in zip(endpointSets, configElements):
-            endp_obj = self._ixnet.add(traffic_obj, 'endpointSet', *self.__compound_ixargs({}, endp))
-            self._ixnet.commit()
-
-            endp_obj = self.__remapIds(endp_obj)
-            ce_obj = traffic_obj + '/configElement:' + endp_obj[endp_obj.rindex(':')+1:]
-
+            endp_obj, ce_obj = self.create_endpoint_set(traffic_obj, endp)
             endp_pairs.append((endp_obj, ce_obj))
 
             for k, v in ce.items():
@@ -553,6 +572,27 @@ class IxiaSession(object):
 
         LOG.info("Traffic Item Creation Complete: {}".format(traffic_obj))
         return traffic_obj, endp_pairs
+
+    def create_endpoint_set(self, trafficItem, endp={}):
+        """
+        Create an endpointSet according to 'endp' under a trafficItem
+
+        Args:
+            trafficItem (str):
+                the traffic item to attach to
+            endp (dict):
+                attributes to configure in the newly created endpoint set,
+                see ._show(endp_obj) for available attributes
+
+        Returns (tuple):
+            endpointSet, configElement
+
+        """
+        endp_obj = self._ixnet.add(trafficItem, 'endpointSet', *self.__compound_ixargs({}, endp))
+        self._ixnet.commit()
+        endp_obj = self.__remapIds(endp_obj)
+        ce_obj = trafficItem + '/configElement:' + endp_obj[endp_obj.rindex(':')+1:]
+        return endp_obj, ce_obj
 
     def configure_endpoint_set(self, endpointSet, sources=[], destinations=[], append=True):
         """
@@ -852,18 +892,37 @@ class IxiaSession(object):
             #         for row in self.getAttribute(view+'/page', 'rowValues')[0]]
 
             result = list()
-            for row in self.getAttribute(view+'/page', 'rowValues')[0]:
-                result.append(dict(zip(self.getAttribute(view+'/page', 'columnCaptions'), row)))
+            for row in self.getAttribute(view+'/page', 'rowValues'):
+                result.append(dict(zip(self.getAttribute(view+'/page', 'columnCaptions'), row[0])))
             return result
 
         return None
 
-    def get_frames_delta(self, stable=False, timeout=300, interval=10):
+    @staticmethod
+    def wait_for_stable_value_from_func(func, *args, timeout=300, interval=10, **kwargs):
+        val = func(*args, **kwargs)
+
+        prev_val = val
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            time.sleep(interval)
+            val = func(*args, **kwargs)
+            if val == prev_val:
+                return True, val
+            prev_val = val
+
+        return False, val
+
+    def get_frames_delta(self, name=None, stable=False, timeout=300, interval=10):
         """
         Equiv. to int(.get_statistics('traffic item statistics', fail_ok=False)[0]["Frames Delta"]) if stable=False
         otherwise, this functions ensures the delta value is not changed before and after the interval
+        For tests with multiple traffic items, use wait_for_stable_value_from_func for stable=True
 
         Args:
+            name (str|None):
+                traffic item name
+                if None, returns the 0th entry
             stable (bool):
                 if True, ensures the delta values is not changed in between two fetches
             timeout (int):
@@ -873,20 +932,23 @@ class IxiaSession(object):
         Returns (int):
             int(.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
         """
-        delta = int(self.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
-        LOG.info("Frames Delta={}".format(delta))
-        if not stable:
+        def _get_delta():
+            if name is None:
+                delta = int(self.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
+            else:
+                items = self.get_statistics('traffic item statistics', fail_ok=False)
+                for item in items:
+                    item_name = item['Traffic Item']
+                    if name == item_name:
+                        delta = int(item['Frames Delta'])
+                        break
+                else:
+                    raise ValueError("{} is not found in traffic item statistics".format(name))
+            LOG.info("Frames Delta={}".format(delta))
             return delta
-
-        LOG.info("Getting \"Frames Delta\" with stable=True")
-
-        prev_delta = delta
-        end_time = time.time() + timeout
-        while time.time() < end_time:
-            time.sleep(interval)
-            delta = self.get_frames_delta(stable=False)
-            if delta == prev_delta:
-                return delta
-            prev_delta = delta
-
-        raise IxiaError("frames delta did not become stable after timeout")
+        if not stable:
+            return _get_delta()
+        succ, val = self.wait_for_stable_value_from_func(_get_delta, timeout=timeout, interval=interval)
+        if not succ:
+            raise IxiaError("frames delta did not become stable after timeout")
+        return val

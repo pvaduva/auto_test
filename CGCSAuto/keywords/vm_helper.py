@@ -6,6 +6,7 @@ import random
 import re
 import time
 import ipaddress
+from collections import Counter
 from contextlib import contextmanager, ExitStack
 import pexpect
 
@@ -4702,31 +4703,57 @@ def setup_avr_routing(vm_id, **kwargs):
 
     """
     LOG.info("Setting up avr routing for VM {}, kwargs={}".format(vm_id, kwargs))
-    data = network_helper.get_data_ips_for_vms(vm_id)[0]
-    internal = network_helper.get_internal_ips_for_vms(vm_id)[0]
+    datas = network_helper.get_data_ips_for_vms(vm_id)
+    data_dict = dict()
+    try:
+        internals = network_helper.get_internal_ips_for_vms(vm_id)
+    except:
+        internals = list()
+    internal_dict = dict()
     for vm, info in get_vms_ports_info([vm_id]).items():
         for ip, cidr, mac in info:
-            if ip == data:
-                data_netmask = ipaddress.ip_network(cidr).netmask
-            elif ip == internal:
-                internal_netmask = ipaddress.ip_network(cidr).netmask
+            if ip in datas:
+                data_dict[ip] = ipaddress.ip_network(cidr).netmask
+            elif ip in internals:
+                internal_dict[ip] = ipaddress.ip_network(cidr).netmask
+
+    interfaces = list()
+    items = list(data_dict.items()) + list(internal_dict.items())
+
+    if len(items) > 2:
+        LOG.warn("wrs_guest_setup/tis_automation_init does not support more than two DPDK NICs")
+        LOG.warn("stripping {} from interfaces".format(items[2:]))
+        items = items[:2]
+
+    for (ip, netmask), ct in zip(items, range(len(items))):
+        interfaces.append("""\"{},{},eth{},1500\"""".format(ip, netmask, ct))
 
     scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
-        TisInitServiceScript.configure(ssh_client, FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
-    "{},{},eth0,1500"
-    "{},{},eth1,1500"
+        TisInitServiceScript.configure(
+            ssh_client, NIC_COUNT=str(len(items)), FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
+    {}
 )
-""".format(data, data_netmask, internal, internal_netmask), **kwargs)
+""".format("\n    ".join(interfaces)), **kwargs)
         TisInitServiceScript.enable(ssh_client)
         TisInitServiceScript.start(ssh_client)
 
 
 @contextmanager
-def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=True, fps=1000):
+def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=True,
+                        fps=1000, fps_type="framesPerSecond", start_traffic=True):
     """
     Create traffic between VMs during 'operation'
     Statistics can be retrieved through ixia_session.get_statistics
+
+    The ixncfg shall only have one traffic item with one endpoint set,
+    when vm_pairs contain multiple pairs, each pair is configured as a duplicated traffic item.
+    the duplicated traffic items are configured in the order of the supplied vm_pairs, named as,
+    vm_pairs[0] -> 'vm_pairs[0]'
+    vm_pairs[1] -> 'vm_pairs[1]'
+    vm_pairs[n] -> 'vm_pairs[n]'
+
+    the original traffic item in the ixncfg will be disabled.
 
     Args:
         vm_pairs (list)
@@ -4743,8 +4770,13 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
         bidirectional (bool):
             if the traffic is bidirectional
         fps (int):
-            frames per second
+            line rate, scale by 'fps_type'
             if the traffic is bidirectional, this value is implicitly halved
+        fps_type (str):
+            "framesPerSecond" or "percentLineRate"
+            specifies the scale for 'fps'
+        start_traffic (bool):
+            start traffic before yielding ixia_session
 
     Returns (context):
         (IxiaSession) with traffic started
@@ -4754,6 +4786,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
 
     src = dict()
     dest = dict()
+    ip_pairs = list()
     for source, destination in vm_pairs:
         if issubclass(type(source), (list, tuple)):
             ip, vm_id = source
@@ -4763,6 +4796,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             ip = network_helper.get_data_ips_for_vms(vm_id)[0]
         src[ip] = vm_id
         LOG.info("src: vm_id={} ip={}".format(vm_id, ip))
+        src_ip = ip
 
         if issubclass(type(destination), (list, tuple)):
             ip, vm_id = destination
@@ -4772,6 +4806,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             ip = network_helper.get_data_ips_for_vms(vm_id)[0]
         dest[ip] = vm_id
         LOG.info("dst: vm_id={} ip={}".format(vm_id, ip))
+        ip_pairs.append((src_ip, ip))
 
     LOG.info("Getting VLANs associated")
     for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=True).items():
@@ -4852,7 +4887,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
         else:
             ixia_session.load_config(ixncfg)
         ixia_session.add_chassis(clear=True)
-        vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
+        vports = ixia_session.connect_ports(list(set(src_ports.values()))+list(set(dest_ports.values())),
                                             existing=True, rtn_dict=True)
 
         # disable existing interfaces in the old configuration
@@ -4861,7 +4896,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
                 ixia_session.configure(interface, enabled=False)
 
         # create new interfaces
-        source_ifs = list()
+        source_ifs = dict()
         for ip, vlan in src_ports:
             port = src_ports[(ip, vlan)]
             cidr = src[ip][1]
@@ -4876,9 +4911,9 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
                 iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
             else:
                 iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
-            source_ifs.append(iface)
+            source_ifs[ip] = iface
 
-        dest_ifs = list()
+        dest_ifs = dict()
         for ip, vlan in dest_ports:
             port = dest_ports[(ip, vlan)]
             cidr = dest[ip][1]
@@ -4893,30 +4928,39 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
                 iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
             else:
                 iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
-            dest_ifs.append(iface)
+            dest_ifs[ip] = iface
 
         # assuming the configuration only has one trafficItem in it
         trafficItem = ixia_session.getList(ixia_session.getRoot() + '/traffic', 'trafficItem')[0]
         if bidirectional:
-            ixia_session.configure(trafficItem, biDirectional='true')
             fps /= 2
-        else:
-            ixia_session.configure(trafficItem, biDirectional='false')
-
-        # enable only newly created interfaces for traffic
-        endpointSet = ixia_session.getList(trafficItem, 'endpointSet')[0]
-        ixia_session.configure_endpoint_set(endpointSet, source_ifs, dest_ifs, append=False)
-
-        # traffic not started yet, use configElements to adjust settings
-        configElement = ixia_session.getList(trafficItem, 'configElement')[0]
-        ixia_session.configure(configElement + '/frameRate', rate=fps)
+        ixia_session.configure(trafficItem, biDirectional=bidirectional)
 
         # set tracking options
         ixia_session.configure(trafficItem + '/tracking',
             trackBy=["trackingenabled0", "vlanVlanId0", "ipv4SourceIp0", "ipv4DestIp0"])
         ixia_session.configure(ixia_session.getRoot() + "/traffic/statistics/packetLossDuration", enabled=True)
 
-        ixia_session.traffic_start()
+        # disable old traffic item
+        ixia_session.configure(trafficItem, enabled=False)
+
+        trafficItems = ixia_session.duplicate_traffic_item(trafficItem, len(ip_pairs))
+        for trafficItem, (src_ip, dest_ip), ip_pair_index in zip(trafficItems, ip_pairs, range(len(ip_pairs))):
+            endpointSet = ixia_session.getList(trafficItem, 'endpointSet')[0]
+            ixia_session.configure_endpoint_set(endpointSet, [source_ifs[src_ip]], [dest_ifs[dest_ip]], append=False)
+
+            # traffic not started yet, use configElements to adjust settings
+            configElement = ixia_session.getList(trafficItem, 'configElement')[0]
+            ixia_session.configure(configElement + '/frameRate', rate=fps, type=fps_type)
+
+            # enable newly configured traffic item(s)
+            ixia_session.configure(trafficItem, enabled=True)
+
+            # assign name with respect to the order in ip_pairs
+            ixia_session.configure(trafficItem, name="vm_pairs[{}]".format(ip_pair_index))
+
+        if start_traffic:
+            ixia_session.traffic_start()
 
         yield ixia_session
 
@@ -4956,8 +5000,13 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **l
     Args:
         vm_type (str):
             one of 'virtio', 'avp', 'dpdk'
+        primary_kwargs (dict):
+            launch_vms_kwargs for the VM launched under the primary tenant
+        secondary_kwargs (dict):
+            launch_vms_kwargs for the VM launched under the secondary tenant
         **launch_vms_kwargs (dict):
-            additional keyword arguments for launch_vms
+            additional keyword arguments for launch_vms for both tenants
+            overlapping keys will be overriden by primary_kwargs and secondary_kwargs
             shall not specify count, ping_vms, auth_info
 
     Returns (tuple):
@@ -4990,3 +5039,51 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **l
     route_vm_pair(vm_test, vm_observer)
 
     return vm_test, vm_observer
+
+
+def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.16.33.0/24", cidr_tenant2="172.18.33.0/24"):
+    """
+    Launch a VM connected with both provider nets (data0, data1)
+    IPv4 subnets only
+
+    Args:
+        vm_type (str):
+            one of 'virtio', 'avp', 'dpdk'
+
+    Returns (str):
+        vm_id
+    """
+    nw_primary = network_helper.create_network(name=common.get_unique_name(name_str='tenant1-net'),
+                                               shared=True, tenant_name=Tenant.TENANT1['tenant'],
+                                               auth_info=Tenant.ADMIN, cleanup='function')[1]
+    nw_secondary = network_helper.create_network(name=common.get_unique_name(name_str='tenant2-net'),
+                                                 shared=True, tenant_name=Tenant.TENANT2['tenant'],
+                                                 auth_info=Tenant.ADMIN, cleanup='function')[1]
+
+    # subnet_list = table_parser.table(cli.neutron('subnet-list'))
+    # cidrs = table_parser.get_column(subnet_list, 'cidr')
+
+    network_helper.create_subnet(nw_primary, cidr=cidr_tenant1, dhcp=True, no_gateway=True,
+                                 tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.ADMIN, cleanup='function')
+    network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
+                                 tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.ADMIN, cleanup='function')
+
+    if vm_type == 'virtio':
+        vif_model = 'virtio'
+    else:
+        vif_model = 'avp'
+
+    nics = [{'net-id': network_helper.get_mgmt_net_id(), 'vif-model': 'virtio'},
+            {'net-id': nw_primary, 'vif-model': vif_model},
+            {'net-id': nw_secondary, 'vif-model': vif_model},]
+    vms, nics = launch_vms(
+        vm_type=vm_type, count=1, ping_vms=True, nics=nics)
+    vm_id = vms[0]
+
+    if vm_type == 'virtio' or vm_type == 'avp':
+        setup_kernel_routing(vm_id)
+    elif vm_type == 'dpdk':
+        setup_avr_routing(vm_id)
+
+    return vm_id
+

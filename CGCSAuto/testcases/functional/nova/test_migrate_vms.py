@@ -502,7 +502,7 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     'avp',
     'dpdk',
 ])
-def test_kpi_live_migrate(check_system, vm_type, collect_kpi, ixia_supported):
+def test_kpi_live_migrate(ixia_supported, check_system, vm_type, collect_kpi):
     """
     Collect live migration ping loss duration KPI
     Args:

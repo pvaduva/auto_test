@@ -517,7 +517,7 @@ class Labs:
         'controller_nodes': [23299, 23300],
         'compute_nodes': [23303, 23304, 23305],
         'storage_nodes': [23301, 23302],
-        'ixia_ports': [{'port': (6, 5), 'range': (3301, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
+        'ixia_ports': [{'port': (6, 5), 'range': (3302, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
     }
 
     WCP_99_103 = {

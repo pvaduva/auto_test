@@ -26,7 +26,7 @@ def hosts_per_backing(add_admin_role_module):
     'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from, ixia_supported):
+def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
