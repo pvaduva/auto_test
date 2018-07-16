@@ -19,32 +19,37 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-def collect_logs(con_ssh, fail_ok=True):
+def collect_logs(con_ssh=None, fail_ok=True):
 
     log_tarball = r'/scratch/ALL_NODES*'
     log_dir = r'~/collected-logs'
     old_log_dir = r'~/collected-logs/old-files'
 
-    prep_cmd = 'mkdir {}; mkdir {}'.format(log_dir, old_log_dir)
-    code, output = con_ssh.exec_cmd(prep_cmd, fail_ok=fail_ok)
-    if code != 0:
-        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
-        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+    try:
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+        prep_cmd = 'mkdir {}; mkdir {}'.format(log_dir, old_log_dir)
+        code, output = con_ssh.exec_cmd(prep_cmd, fail_ok=fail_ok)
+        if code != 0:
+            LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+            con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
 
-    prep_cmd = 'mv -f {} {}'.format(log_tarball, old_log_dir)
-    code, output = con_ssh.exec_sudo_cmd(prep_cmd, fail_ok=fail_ok)
-    if code != 0:
-        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+        prep_cmd = 'mv -f {} {}'.format(log_tarball, old_log_dir)
+        code, output = con_ssh.exec_sudo_cmd(prep_cmd, fail_ok=fail_ok)
+        if code != 0:
+            LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
 
-        LOG.info('execute: rm -rf /scratch/ALL_NODES*')
-        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+            LOG.info('execute: rm -rf /scratch/ALL_NODES*')
+            con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
 
-        LOG.info('ok, removed /scratch/ALL_NODES*')
+            LOG.info('ok, removed /scratch/ALL_NODES*')
 
-    else:
-        LOG.info('ok, {} moved to {}'.format(log_tarball, old_log_dir))
+        else:
+            LOG.info('ok, {} moved to {}'.format(log_tarball, old_log_dir))
 
-    collect_tis_logs(con_ssh=con_ssh)
+        collect_tis_logs(con_ssh=con_ssh)
+    except:
+        pass
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -566,7 +571,7 @@ def test_restore(restore_setup):
         LOG.tc_step('Run restore-complete (CGTS-9756)')
         controller_node.telnet_conn.login()
         cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
-        controller_node.telnet_conn.exec_cmd(cmd, 'controller-0 login:')
+        controller_node.telnet_conn.exec_cmd(cmd, extra_expects=['controller-0 login:'])
 
         LOG.tc_step("Restoring Compute Nodes ...")
         if len(compute_hosts) > 0:
@@ -606,6 +611,6 @@ def test_restore(restore_setup):
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)
     assert rc == 0, "System health not OK: {}".format(failed)
 
-    collect_logs(con_ssh)
+    collect_logs()
     ProjVar.set_var(SOURCE_CREDENTIAL=None)
     # vm_helper.boot_vm()
