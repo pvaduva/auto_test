@@ -292,6 +292,13 @@ def pytest_configure(config):
     elif stress_count > 0:
         count = stress_count
 
+    # neccesary install params if --lab is not given
+    controller_arg = config.getoption('controller')
+    compute_arg = config.getoption('compute')
+    storage_arg = config.getoption('storage')
+    lab_file_dir = config.getoption('file_dir')
+    build_server = config.getoption('build_server')
+
     global no_teardown
     no_teardown = config.getoption('noteardown')
     if repeat_count > 0 or no_teardown:
@@ -304,7 +311,13 @@ def pytest_configure(config):
     collect_netinfo = config.getoption('netinfo')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
-    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
+    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg,
+                                      installconf_path=install_conf,
+                                      controller_arg=controller_arg,
+                                      compute_arg=compute_arg,
+                                      storage_arg=storage_arg,
+                                      lab_files_dir=lab_file_dir,
+                                      build_server=build_server,)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
@@ -502,29 +515,26 @@ def pytest_addoption(parser):
     file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
                     "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
-    controller_help = "Comma-separated list of VLM barcodes for controllers"
-    compute_help = "Comma-separated list of VLM barcodes for computes"
-    storage_help = "Comma-separated list of VLM barcodes for storage nodes"
+    controller_help = "space-separated list of VLM barcodes for controllers"
+    compute_help = "space-separated list of VLM barcodes for computes"
+    storage_help = "space-separated list of VLM barcodes for storage nodes"
     guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
 
     # Custom install options
-    parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
-                     action='store', metavar='DIR', help=file_dir_help)
-    parser.addoption('--controller', dest='controller',
-                     action='store', help=controller_help)
+    parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
+                     help=file_dir_help)
+    parser.addoption('--controller', dest='controller', action='store', nargs='*', help=controller_help)
+    parser.addoption('--compute', dest='compute', action='store', nargs='*', help=compute_help)
+    parser.addoption('--storage', dest='storage', action='store', nargs='*', help=storage_help)
     parser.addoption('--guest_image', '--guest-image', '--guest_image_path', '--guest-image-path',
                      dest='guest_image_path', action='store', metavar='guest image full path',
                      default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
     parser.addoption('--heat_templates', '--heat-templates', '--heat_templates_path', '--heat-templates-path',
                      dest='heat_templates', action='store', metavar='heat templates full path',
                      default=BuildServerPath.HEAT_TEMPLATES, help=heat_help)
-    parser.addoption('--compute', dest='compute',
-                     action='store', help=compute_help)
-    parser.addoption('--storage', dest='storage',
-                     action='store', help=storage_help)
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
     # Note --lab is also a lab fresh_install option, when config file is not provided.

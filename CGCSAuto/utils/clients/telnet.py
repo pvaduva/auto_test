@@ -159,10 +159,13 @@ class TelnetClient(Telnet):
         self.write(cmd.encode())
 
     def send_control(self, char='c'):
-        if char != 'c':
-            raise NotImplemented("Only ctrl+c is supported")
+        valid_chars = ["[", "\\", "]", "^", "_"]
+        if char.isalpha() or char in valid_chars:
+            code = chr(ord(char.upper()) - 64)
+        else:
+            raise NotImplemented("ctrl+{} is not supported".format(char))
         self.logger.info("Send: ctrl+{}".format(char))
-        self.write(b'\x03')
+        self.write(code.encode())
 
     def _process_output(self, output, rm_date=False):
         if isinstance(output, bytes):
@@ -216,6 +219,8 @@ class TelnetClient(Telnet):
         except EOFError:
             err_msg = 'EOF encountered and before receiving anything. '
             index = -1
+        except exceptions.TelnetTimeout:
+            err_msg = 'Timed out looking for {}'
 
         if fail_ok:
             self.logger.warning(err_msg)

@@ -5058,3 +5058,11 @@ def delete_flow_classifier(flow_classifier, check_first=True, fail_ok=False, aut
     msg = "Flow classifier {} successfully deleted".format(flow_classifier)
     LOG.info(msg)
     return 0, msg
+
+
+def reset_telnet_port(telnet_conn):
+    telnet_conn.send_control("\\")
+    telnet_conn.expect(["anonymous:.+:PortCommand> "], timeout=5)
+    telnet_conn.send("resetport")
+    telnet_conn.send("\r\n")
+    telnet_conn.login()

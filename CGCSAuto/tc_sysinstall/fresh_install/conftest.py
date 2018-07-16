@@ -1,12 +1,11 @@
 import pytest
 import os
-import re
 
 from keywords import install_helper, vlm_helper
+from keywords.network_helper import reset_telnet_port
 from utils.tis_log import LOG
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import TuxlabServerPath
-from consts.auth import Tenant
 from setups import initialize_server
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils import exceptions, local_host
@@ -16,14 +15,21 @@ from utils import exceptions, local_host
 def install_setup():
     lab = InstallVars.get_install_var("LAB")
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
+    barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"]
     if active_con.telnet_conn is None:
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
+        try:
+            reset_telnet_port(active_con.telnet_conn)
+        except:
+            pass
     build_server = InstallVars.get_install_var('BUILD_SERVER')
     build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
 
-    vlm_helper.reserve_hosts(lab["hosts"])
+    vlm_helper.force_unreserve_hosts(lab["hosts"])
+    for barcode in barcodes:
+        local_host.reserve_vlm_console(barcode, "AUTO: lab installation")
     # Initialise server objects
     file_server = InstallVars.get_install_var("FILES_SERVER")
     iso_host = InstallVars.get_install_var("ISO_HOST")
@@ -115,7 +121,7 @@ def pytest_runtest_teardown(item):
         controller0_node = lab["controller-0"]
         if controller0_node.telnet_conn is None:
             controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
-            controller0_node.login()
+            controller0_node.telnet_conn.login()
         rc, output = controller0_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)
         LOG.info(output)
     except:

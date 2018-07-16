@@ -4,6 +4,7 @@ import os
 import subprocess
 import re
 from utils.tis_log import LOG
+from consts.auth import SvcCgcsAuto
 from consts.vlm import VlmAction
 
 SSH_DIR = "~/.ssh"
@@ -16,8 +17,8 @@ REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
 VLM = "/folk/vlm/commandline/vlmTool"
 
 
-VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_TURNON, VlmAction.VLM_TURNOFF,
-            VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
+VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_FORCE_UNRESERVE, VlmAction.VLM_TURNON,
+            VlmAction.VLM_TURNOFF, VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
 
 
 def get_hostname():
@@ -78,8 +79,7 @@ def reserve_vlm_console(barcode, note=None):
     reserved_barcodes = exec_cmd(cmd)[1]
     if not reserved_barcodes or "Error" in reserved_barcodes:
         # check if node is already reserved by user
-        cmd = [VLM, "getAttr", "-t", str(barcode), "port"]
-        port = exec_cmd(cmd)[1]
+        port = vlm_getattr(barcode, "port")[1]
         if "TARGET_NOT_RESERVED_BY_USER" in port:
             msg = "Failed to reserve target(s): " + str(barcode)
             LOG.error(msg)
@@ -92,6 +92,30 @@ def reserve_vlm_console(barcode, note=None):
         msg = "Barcode {} reserved: {}".format(barcode, reserved_barcodes)
         LOG.info(msg)
         return 0, msg
+
+
+def force_unreserve_vlm_console(barcode):
+    action = VlmAction.VLM_FORCE_UNRESERVE
+    force_unreserve_cmd = [VLM, action, SvcCgcsAuto.USER, "-P", SvcCgcsAuto.VLM_PASSWORD, "-t", str(barcode)]
+
+    reserve_note = vlm_getattr(barcode, 'reserve_note')[1]
+    reserved_by_user = "TARGET_NOT_RESERVED_BY_USER" not in vlm_getattr(barcode, 'port')[1]
+    if not reserve_note or reserved_by_user:
+        print("Force unreserving target: {}".format(barcode))
+        exec_cmd(force_unreserve_cmd)
+        reserved = vlm_getattr(barcode, 'date')[1]
+        if reserved:
+            msg = "Failed to force unreserve target!"
+            LOG.error(msg)
+            return 1, msg
+        else:
+            msg = "Barcode {} was succesfully unreserved".format(barcode)
+            LOG.info(msg)
+            return 0, msg
+    else:
+        msg = "cannot unreserve {} as it has a reservation note: {}".format(barcode, reserve_note)
+        LOG.error(msg)
+        return 2, msg
 
 
 def vlm_findmine():
@@ -110,7 +134,12 @@ def vlm_findmine():
     return reserved_targets
 
 
-def vlm_exec_cmd(action, barcode, reserve=True):
+def vlm_getattr(barcode, attr='all'):
+    cmd = [VLM, 'getAttr', '-t', str(barcode), attr]
+    return exec_cmd(cmd)
+
+
+def vlm_exec_cmd(action, barcode, reserve=True,):
     if action not in VLM_CMDS:
         msg = '"{}" is an invalid action.'.format(action)
         msg += " Valid actions: {}".format(str(VLM_CMDS))

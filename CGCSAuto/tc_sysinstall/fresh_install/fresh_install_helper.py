@@ -102,7 +102,7 @@ def download_lab_files(lab_files_server, build_server, sys_version=None, sys_typ
         lab = InstallVars.get_install_var('LAB')
 
     LOG.info("Downloading lab config files")
-    install_helper.download_lab_config_files(lab, lab_files_server, load_path, custom_path=lab_files_dir)
+    install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server)
     LOG.info("Downloading heat templates")
     install_helper.download_heat_templates(lab, build_server, load_path)
     LOG.info("Downloading guest image")
@@ -174,9 +174,10 @@ def configure_controller(controller0_node):
     install_helper.unlock_controller(controller0_node.name, con_ssh=controller0_node.ssh_conn, available_only=False)
 
 
-def clear_post_install_alarms():
-    system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60)
-    alarm = system_helper.get_alarms(alarm_id='250.001')
+def clear_post_install_alarms(con_ssh=None):
+    system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60,
+                                       con_ssh=con_ssh)
+    alarm = system_helper.get_alarms(alarm_id='250.001', con_ssh=con_ssh)
     if alarm:
         LOG.tc_step("Swact lock/unlock host")
         rc, msg = host_helper.lock_unlock_controllers()

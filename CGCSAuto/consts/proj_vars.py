@@ -1,6 +1,7 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.cgcs import DROPS
+import keywords
 
 
 class ProjVar:
@@ -119,7 +120,8 @@ class InstallVars:
             DROPS.get(drop_num), BuildServerPath.DEFAULT_HOST_BUILD_PATH)
         __files_server = files_server if files_server else __build_server
         __files_dir = files_dir if files_dir else \
-            "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
+            "{}/{}/{}".format(__host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
+                              keywords.install_helper.get_git_name(lab['name']))
         __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
         iso_server = __build_server
         if __iso_path.find(":/") != -1:

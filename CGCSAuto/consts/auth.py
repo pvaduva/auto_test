@@ -189,6 +189,7 @@ class SvcCgcsAuto:
     SERVER = '128.224.150.21'
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
+    VLM_PASSWORD = 'wrssvc-cgcsauto'
     HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
     HOSTNAME = 'yow-cgcs-test.wrs.com'

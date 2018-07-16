@@ -727,9 +727,19 @@ class Labs:
     NO_LAB = None
 
 
-def edit_lab_entry():
-    # TODO
-    raise NotImplementedError
+def edit_lab_entry(lab, key='short_name', **kwargs):
+    __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
+    __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
+    __lab_list = [lab for lab in __lab_list if isinstance(lab, dict)]
+
+    lab_info = None
+    for lab_ in __lab_list:
+        if lab.lower().replace('-', '_') == lab_.get(key).lower().replace('-', '_'):
+            lab_.update(kwargs)
+            lab_info = lab_
+            break
+
+    return lab_info
 
 
 def get_lab_dict(lab, key='short_name'):

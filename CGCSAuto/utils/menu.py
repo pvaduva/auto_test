@@ -130,7 +130,7 @@ class BiosMenu(Menu):
             lab_name = lab["name"]
         lab_name = lab_name.lower()
         LOG.debug("Lab name: {}".format(lab_name))
-        if 'wolfpass' in lab_name or "wildcat" in lab_name:
+        if 'wolfpass' in lab_name or "wildcat" in lab_name or "grizzly" in lab_name:
             bios_menu_dict = bios.BiosMenus.American_Megatrends
         elif 'supermicro' in lab_name:
             bios_menu_dict = bios.BiosMenus.Supermicro

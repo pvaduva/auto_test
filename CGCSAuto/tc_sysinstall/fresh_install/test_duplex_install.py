@@ -82,7 +82,8 @@ def test_duplex_install(install_setup):
 
     LOG.tc_step("Run lab setup")
     if fresh_install_helper.do_step():
-        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        rc, msg = install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        assert rc == 0, msg
     #    install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -96,8 +97,10 @@ def test_duplex_install(install_setup):
 
     LOG.tc_step("Run lab setup")
     if fresh_install_helper.do_step():
-        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        rc, msg = install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        assert rc == 0, msg
+        rc, msg = install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        assert rc == 0, msg
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -109,17 +112,19 @@ def test_duplex_install(install_setup):
 
     LOG.tc_step("Run lab setup")
     if fresh_install_helper.do_step():
-        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        rc, msg = install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        assert rc == 0, msg
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
-    collect_sys_net_info(lab)
-    setup_tis_ssh(lab)
+    if lab.get("floating ip"):
+        collect_sys_net_info(lab)
+        setup_tis_ssh(lab)
     host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
 
     LOG.tc_step("Check heat resources")
     if fresh_install_helper.do_step():
-        install_helper.setup_heat()
+        install_helper.setup_heat(con_ssh=controller0_node.ssh_conn)
     if LOG.test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 

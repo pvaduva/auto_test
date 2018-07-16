@@ -556,23 +556,20 @@ def download_heat_templates(lab, server, load_path):
                               TiSPath.HEAT, pre_opts=pre_opts)
 
 
-def download_lab_config_files(lab, server, load_path, custom_path=None):
-    lab_name = get_git_name(lab['name'])
+def download_lab_config_files(lab, server, load_path, conf_server=None):
+    if 'vbox' in lab["name"]:
+        return
+    if not conf_server:
+        conf_server = server
+
+    config_path = InstallVars.get_install_var("LAB_FILES_DIR")
+    script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
-    if 'vbox' in lab_name:
-        return
-
-    if custom_path:
-        config_path = custom_path
-    else:
-        config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
-    script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
-
     cmd = "test -e " + config_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             server.name, config_path)
-    server.ssh_conn.rsync(config_path + "/*",
+    conf_server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
@@ -695,19 +692,19 @@ def run_infra_post_install_setup():
     return run_setup_script(script="lab_infra_post_install_setup", config=True)
 
 
-def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=3600):
+def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=3600, fail_ok=True):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
     if config:
         cmd = "test -e {}/{}.conf".format(WRSROOT_HOME, script)
-        rc = con_ssh.exec_cmd(cmd)[0]
+        rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
         if rc != 0:
             msg = "The {}.conf file missing from active controller".format(script)
             return rc, msg
 
     cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
-    rc = con_ssh.exec_cmd(cmd, )[0]
+    rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
@@ -715,7 +712,7 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
 
     cmd = "cd; source /etc/nova/openrc; ./{}.sh".format(script)
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
-    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
+    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)

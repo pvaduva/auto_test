@@ -10,12 +10,12 @@ import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, REGION_MAP, SysType
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
-from consts.lab import Labs, add_lab_entry, NatBoxes
+from consts.lab import Labs, add_lab_entry, NatBoxes, edit_lab_entry
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server
 from keywords.common import scp_to_local, scp_from_active_controller_to_localhost
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
-    install_helper
+    install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils import exceptions, lab_info
 from utils import local_host
@@ -417,14 +417,16 @@ def get_auth_via_openrc(con_ssh):
     return auth_dict
 
 
-def get_lab_from_cmdline(lab_arg, installconf_path):
+def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute_arg=None, storage_arg=None,
+                         lab_files_dir=None, build_server=None):
     lab_dict = None
     if not lab_arg and not installconf_path:
         lab_dict = setup_consts.LAB
-        if lab_dict is None:
-            raise ValueError("No lab is specified via cmdline or setup_consts.py")
-        LOG.warning("lab is not specified via cmdline! Using lab from setup_consts file: {}".format(
-            lab_dict['short_name']))
+        # if lab_dict is None:
+        #    raise ValueError("No lab is specified via cmdline or setup_consts.py")
+        if lab_dict:
+            LOG.warning("lab is not specified via cmdline! Using lab from setup_consts file: {}".format(
+                lab_dict['short_name']))
 
     if installconf_path:
         installconf = configparser.ConfigParser()
@@ -442,7 +444,106 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
         lab_arg = lab_name
 
     if lab_dict is None:
-        lab_dict = get_lab_dict(lab_arg)
+        if lab_arg:
+            lab_dict = get_lab_dict(lab_arg)
+        else:
+            LOG.warning("lab is not specified via cmdline! Using install args to find lab")
+            lab_dict = get_lab_from_install_args(lab_arg, controller_arg, compute_arg, storage_arg, lab_files_dir,
+                                                 build_server)
+
+    return lab_dict
+
+
+def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_files_dir, build_server):
+    controller_nodes = [int(node) for node in controllers] if controllers else []
+    compute_nodes = [int(node) for node in computes] if computes else []
+    storage_nodes = [int(node) for node in storages] if storages else []
+    __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
+    files_server = __build_server
+    if lab_files_dir:
+        files_dir = lab_files_dir
+        if files_dir.find(":/") != -1:
+            files_server = files_dir[:files_dir.find(":/")]
+            files_dir = files_dir[files_dir.find(":") + 1:]
+    else:
+        files_dir = None
+    # Get lab info
+    lab_info = None
+    if lab_arg:
+        lab_info = get_lab_dict(lab_arg)
+
+    if controller_nodes and not lab_info:
+        labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+        labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
+        for lab in labs:
+            if 'controller_nodes' in lab:
+                if controller_nodes == lab['controller_nodes']:
+                    lab_info = lab
+                    break
+        # Add new entry
+        if not lab_info:
+            LOG.warning("no lab stored with the controller barcodes {}! Creating a new lab".format(controller_nodes))
+            lab_info = {}
+            controller_attributes = vlm_helper.get_attributes_dict(controller_nodes, val="barcodes")
+            lab_info["controller_nodes"] = controller_nodes
+            for i in range(0, len(controller_attributes)):
+                controller_name = "controller-{}".format(i)
+                lab_info["{} ip".format(controller_name)] = controller_attributes[i]["IP Address"]
+            if files_dir and files_server:
+                lab_info.update(get_info_from_lab_files(files_server, files_dir))
+                lab_info["name"] = lab_info.pop("system_name") # rename system_name to name
+            else:
+                barcodes = controller_nodes + compute_nodes + storage_nodes
+                aliases = vlm_helper.get_attributes_dict(barcodes, attr="alias", val="barcodes")
+                print("list of aliases: {}".format(aliases))
+                highest = "0"
+                lowest = "inf" # arbitrarily large number
+                for alias_dict in aliases:
+                    print("alias dictionary: {}".format(alias_dict))
+                    alias = alias_dict["alias"]
+                    print("alias: {}".format(alias))
+                    node_num_pattern = "-(\d+)"
+                    node_num = re.search(node_num_pattern, alias).group(1)
+                    if int(node_num) > int(highest):
+                        highest = node_num
+                    if float(node_num) < float(lowest):
+                        lowest = node_num
+                        base_name = alias
+                lab_info["name"] = base_name + "_{}".format(highest)
+            short_naming_dict = {"wildcat": "WCP", "ironpass": "IP", "wolfpass": "WP", "supermicro": "SM"}
+            short_name_pattern = ".*-(\d+)(_\d+)?"
+            match = re.search(short_name_pattern, lab_info["name"])
+            system_name = match.group(0)
+            first_node_num = match.group(1)
+            last_node_num = match.group(2) if match.group(2) else ""
+            for server_type in short_naming_dict.keys():
+                if server_type in system_name:
+                    lab_info["short_name"] = short_naming_dict[server_type] + "_{}{}".format(first_node_num,
+                                                                                             last_node_num)
+            if not lab_info.get("short_name"):
+                lab_info["short_name"] = lab_info["name"].split("-")[2].upper() + "_{}{}".format(first_node_num,
+                                                                                                 last_node_num)
+            lab_info = add_lab_entry(floating_ip=None, dict_name=lab_info["short_name"], **lab_info)
+
+    if files_dir and files_server and not lab_info:
+        try:
+            conf_file_info = get_info_from_lab_files(files_server, files_dir)
+            lab_info = get_lab_dict(conf_file_info["system_name"])
+        except ValueError:
+            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
+                      "configuration and try again. ")
+            raise
+        except AssertionError:
+            LOG.error("Please ensure --file_dir was entered correctly and exists in {}. ".format(files_server))
+            raise
+    # Update lab info
+    if compute_nodes:
+        lab_info["compute_nodes"] = compute_nodes
+    if storage_nodes:
+        lab_info["storage_nodes"] = compute_nodes
+    lab_dict = edit_lab_entry(lab_info["short_name"], **lab_info)
+    LOG.warning("Discovered the following lab info: {}".format(lab_dict))
+
     return lab_dict
 
 
@@ -720,10 +821,6 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  )
 
 
-# TODO: currently no support for installing lab as a single controller node
-# Fix: overwrite the controller nodes in the lab with supplied ones
-# Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
-# Should we have the user create their own fresh_install configuration file if they want to fresh_install a lab with only 1 controller?
 def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, drop, patch_dir,
                       license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop):
     """
@@ -743,67 +840,24 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
     Returns: the path of the written file
 
     """
-    # Setup variables
-    lab_name = lab if lab != "" else None
-    lab_dict = None
-    controller_nodes = controller.split(',') if controller is not None and controller is not '' else None
-    compute_nodes = compute.split(',') if compute is not None and compute is not '' else None
-    storage_nodes = storage.split(',') if storage is not None and storage is not '' else None
     __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
     host_build_dir = tis_build_dir if tis_build_dir and tis_build_dir != "" else BuildServerPath.DEFAULT_HOST_BUILD_PATH
     files_server = __build_server
-
     if lab_files_dir:
-        files_dir = lab_files_dir if lab_files_dir is not '' else None
+        files_dir = lab_files_dir
         if files_dir.find(":/") != -1:
             files_server = files_dir[:files_dir.find(":/")]
             files_dir = files_dir[files_dir.find(":") + 1:]
     else:
         files_dir = None
-
-    # Get lab info
-    if files_server and files_dir:
-        try:
-            lab_info = get_info_from_lab_files(files_server, files_dir)
-            lab_dict = get_lab_dict(install_helper.get_git_name(lab_info["system_name"]))
-        except ValueError:
-            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
-                          "configuration and try again. ")
-            raise
-        except AssertionError:
-            LOG.error("Please ensure --file_dir was entered correctly and exists in {}. ".format(files_server))
-            raise
-
-    if controller_nodes and not lab_dict:
-        labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
-        labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
-        for lab_info in labs:
-            if 'controller_nodes' in lab_info:
-                for barcode in lab_info['controller_nodes']:
-                    if str(barcode) in controller_nodes:
-                        lab_dict = lab_info
-                        files_dir = \
-                            "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                        install_helper.get_git_name(lab_dict['name']))
-                        if compute_nodes:
-                            lab_dict["compute_nodes"] = [int(node) for node in compute_nodes]
-                        if storage_nodes:
-                            lab_dict["storage_nodes"] = [int(node) for node in storage_nodes]
-
-    if lab_name and not lab_dict:
-        if controller_nodes:
-            LOG.error("could not find lab with {} as a controller node. Checking --lab argument".format(controller_nodes))
-        lab_dict = get_lab_dict(lab_name)
-        files_dir = "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                                        install_helper.get_git_name(
-                                                                                            lab_dict['name']))
-
-    # TODO: if the user tries again and ends up getting the error message in set_install_vars that would be contradictory
+    if lab:
+        lab_dict = get_lab_dict(lab)
+    else:
+        lab_dict = ProjVar.get_var("LAB")
     if not lab_dict:
-        raise ValueError("Either --lab=<lab_name> or --file_dir=<full path of lab configuration files> "
-                         "or --controller=<Comma-separated list of VLM barcodes for controllers> "
-                         "has to be provided")
-
+        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server, tis_build_dir)
+    files_dir = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
+                                      install_helper.get_git_name(lab_dict['name'])) if not files_dir else files_dir
     # Write .ini file
     config = configparser.ConfigParser(allow_no_value=True)
     config.optionxform = str
@@ -875,9 +929,8 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     if conf_dir:
         lab_files_path = conf_dir
     elif lab_name is not None and host_build_dir is not None:
-        lab_files_path = "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                                             install_helper.get_git_name
-                                                                                             (lab_name))
+        lab_files_path = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
+                                               install_helper.get_git_name(lab_name))
     else:
         raise ValueError("Could not access lab files")
     ssh_conn = install_helper.establish_ssh_connection(conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
