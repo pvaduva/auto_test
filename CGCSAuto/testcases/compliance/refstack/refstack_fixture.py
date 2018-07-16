@@ -117,12 +117,12 @@ def refstack_setup(refstack_pre_check, request):
                                 fail_ok=False)
             server_ssh.exec_cmd('grep {} {}'.format(val, RefStack.TEMPEST_CONF), fail_ok=False)
 
-    LOG.fixture_step("Add routes to access VM from compliance server if not already done")
-    cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True, rtn_val='cidr')
-    cidrs_to_add = ['{}.0/24'.format(re.findall('(.*).\d+/\d+', item)[0]) for item in cidrs]
-    for cidr in cidrs_to_add:
-        if server_ssh.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
-            server_ssh.exec_sudo_cmd('ip route add {} via {}'.format(cidr, VM_ROUTE_VIA))
+        LOG.fixture_step("Add routes to access VM from compliance server if not already done")
+        cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True, rtn_val='cidr')
+        cidrs_to_add = [r'{}.0/24'.format(re.findall('(.*).\d+/\d+', item)[0]) for item in cidrs]
+        for cidr in cidrs_to_add:
+            if server_ssh.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
+                server_ssh.exec_sudo_cmd('ip route add {} via {}'.format(cidr, VM_ROUTE_VIA))
 
     def scp_logs():
         LOG.info("scp test results files from refstack test host to local automation dir")

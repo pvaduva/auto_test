@@ -853,6 +853,10 @@ def pytest_generate_tests(metafunc):
     if ProjVar.get_var('REMOTE_CLI'):
         metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
 
+    elif ComplianceVar.get_var('REFSTACK_SUITE'):
+        suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
+        metafunc.parametrize('compliance_suite', [suite])
+
 
 ##############################################################
 # Manipulating fixture orders based on following pytest rules
@@ -898,6 +902,11 @@ def c2_fixture(config_host_class):
 
 @pytest.fixture(scope='session', autouse=True)
 def prefix_remote_cli():
+    return
+
+
+@pytest.fixture(scope='session', autouse=True)
+def compliance_suite():
     return
 
 

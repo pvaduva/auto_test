@@ -10,13 +10,7 @@ from keywords import host_helper
 TEST_MAX_TIMEOUT = 20000
 
 
-@mark.parametrize('suite', [
-    # 'all',
-    'platform',
-    # 'compute',
-    # 'object'
-])
-def test_refstack(suite):
+def test_refstack():
     """
     Test refstack suite specified via cmdline arg
 
@@ -33,10 +27,6 @@ def test_refstack(suite):
         - parse the test results
 
     """
-    refstack_test_list = ComplianceVar.get_var('REFSTACK_SUITE')
-    if suite not in refstack_test_list.lower():
-        skip("{} suite is not under test".format(suite))
-
     LOG.tc_step("Run RefStack test in venv")
     with host_helper.ssh_to_compliance_server() as compliance_ssh:
         compliance_ssh.exec_cmd('cd {}'.format(RefStack.CLIENT_DIR))
