@@ -292,7 +292,7 @@ def update_subnet(subnet, unset=False, allocation_pool=None, dns_server=None, ho
     return 0, subnet
 
 
-def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+def get_subnets(name=None, cidr=None, strict=True, regex=False, rtn_val='id', auth_info=None, con_ssh=None):
     """
     Get subnets ids based on given criteria.
 
@@ -301,6 +301,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, 
         cidr (str): cidr of the subnet
         strict (bool): whether to perform strict search on given name and cidr
         regex (bool): whether to use regext to search
+        rtn_val
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -313,7 +314,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, 
     if cidr is not None:
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
 
-    return table_parser.get_column(table_, 'id')
+    return table_parser.get_column(table_, rtn_val)
 
 
 def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, con_ssh=None):

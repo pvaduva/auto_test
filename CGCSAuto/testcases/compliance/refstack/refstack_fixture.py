@@ -1,4 +1,5 @@
 import re
+import os
 from pytest import skip, fixture
 
 from utils.tis_log import LOG
@@ -6,7 +7,7 @@ from utils.clients.local import LocalHostClient
 from consts.cgcs import FlavorSpec
 from consts.auth import Tenant, SvcCgcsAuto, ComplianceCreds
 from consts.proj_vars import ComplianceVar, ProjVar
-from consts.compliance import RefStack
+from consts.compliance import RefStack, VM_ROUTE_VIA
 from keywords import keystone_helper, nova_helper, cinder_helper, network_helper, glance_helper, storage_helper, \
     system_helper, host_helper
 
@@ -116,15 +117,26 @@ def refstack_setup(refstack_pre_check, request):
                                 fail_ok=False)
             server_ssh.exec_cmd('grep {} {}'.format(val, RefStack.TEMPEST_CONF), fail_ok=False)
 
+    LOG.fixture_step("Add routes to access VM from compliance server if not already done")
+    cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True, rtn_val='cidr')
+    cidrs_to_add = ['{}.0/24'.format(re.findall('(.*).\d+/\d+', item)[0]) for item in cidrs]
+    for cidr in cidrs_to_add:
+        if server_ssh.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
+            server_ssh.exec_sudo_cmd('ip route add {} via {}'.format(cidr, VM_ROUTE_VIA))
+
     def scp_logs():
+        LOG.info("scp test results files from refstack test host to local automation dir")
+        dest_dir = os.path.join(ProjVar.get_var('LOG_DIR'), 'refstack')
+        os.makedirs(path=dest_dir, exist_ok=True)
         localhost = LocalHostClient()
         localhost.connect()
-        LOG.info("scp test results files from refstack test host to local automation dir")
-        dest_dir = ProjVar.get_var('LOG_DIR')
 
         for item in RefStack.LOG_FILES:
             source_path = '{}/{}'.format(RefStack.TEST_HISTORY_DIR, item)
             localhost.scp_on_dest(source_ip=ComplianceCreds.get_host(), source_user=ComplianceCreds.get_user(),
                                   source_pswd=ComplianceCreds.get_password(), source_path=source_path,
                                   dest_path=dest_dir, timeout=300, cleanup=False)
+        
+        origin_name = ComplianceVar.get_var('REFSTACK_SUITE').rsplit(r'/', maxsplit=1)[-1]
+        localhost.exec_cmd('mv {}/test-list.txt {}/{}'.format(dest_dir, dest_dir, origin_name))
     request.addfinalizer(scp_logs)

@@ -1,3 +1,5 @@
+VM_ROUTE_VIA = '10.10.10.50'
+
 # Refstack consts:
 class RefStack:
     TEST_SUITES_DIR = '/folk/cgts/compliance/RefStack'      # Unused
