@@ -415,6 +415,6 @@ def test_server_group_update():
     metadata = {ServerGroupMetadata.GROUP_SIZE: 1}
     code, output = nova_helper.set_server_group_metadata(srv_grp_id, fail_ok=True, **metadata)
     assert code == 1, "Expect server group metadata set to fail. Actual: {}".format(output)
-    err_pattern = "Action would result in server group .* number of members {} exceeding group size {}".\
+    err_pattern = "Action would result in server group .* number of members {} exceeding .*group size {}".\
         format(2, 1)
     assert re.search(err_pattern, output), "Improper error message returned"
