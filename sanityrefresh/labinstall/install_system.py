@@ -1363,22 +1363,38 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                                   WRSROOT_USERNAME, controller0.host_ip,
                                   WRSROOT_HOME_DIR, pre_opts=pre_opts)
         else:
-            scripts_path = lab_cfg_path + "/../../scripts/"
-            rc = bld_server_conn.rsync(os.path.join(scripts_path, "*"),
+            rc = bld_server_conn.rsync(os.path.join(lab_cfg_path, "/../../scripts/", "*"),
                                        WRSROOT_USERNAME, controller0.host_ip,
                                        WRSROOT_HOME_DIR, pre_opts=pre_opts,
                                        allow_fail=True)
 
-            # For custom config installs
-            if rc != 0:
-                bld_server_conn.rsync(os.path.join(load_path, centos_lab_path, "scripts", "*"),
-                                      WRSROOT_USERNAME, controller0.host_ip,
-                                      WRSROOT_HOME_DIR, pre_opts=pre_opts)
+            rc1 = bld_server_conn.rsync(os.path.join(load_path, centos_lab_path, "scripts", "*"),
+                                        WRSROOT_USERNAME, controller0.host_ip,
+                                        WRSROOT_HOME_DIR,
+                                        pre_opts=pre_opts, allow_fail=True)
 
-        bld_server_conn.rsync(os.path.join(load_path, heat_temp_path, "*"),
-                              WRSROOT_USERNAME, controller0.host_ip, \
-                              WRSROOT_HEAT_DIR + "/", \
-                              pre_opts=pre_opts)
+            rc2 = bld_server_conn.rsync(os.path.join(load_path, "lab/scripts", "*"),
+                                        WRSROOT_USERNAME, controller0.host_ip,
+                                        WRSROOT_HOME_DIR,
+                                        pre_opts=pre_opts, allow_fail=True)
+
+            if 0 not in (rc, rc1, rc2):
+                msg = "Unable to rsync any script files"
+                log.error(msg)
+                wr_exit()._exit(1, msg)
+
+        # Grab heat templates
+        heatloc1 = bld_server_conn.rsync(os.path.join(load_path, heat_temp_path, "*"),
+                                         WRSROOT_USERNAME, controller0.host_ip, \
+                                         WRSROOT_HEAT_DIR + "/", \
+                                         pre_opts=pre_opts, allow_fail=True)
+
+        if heatloc1 != 0:
+            bld_server_conn.rsync(os.path.join(load_path, HEAT_TEMPLATES_PATH_STX, "*"),
+                                  WRSROOT_USERNAME, controller0.host_ip, \
+                                  WRSROOT_HEAT_DIR + "/", \
+                                  pre_opts=pre_opts, allow_fail=True)
+
 
     # Grab the configuration files, e.g. TiS_config.ini_centos, etc.
     bld_server_conn.rsync(os.path.join(lab_cfg_path, "*"),
