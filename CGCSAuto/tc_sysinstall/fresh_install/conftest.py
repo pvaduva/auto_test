@@ -18,6 +18,10 @@ def install_setup():
     barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"]
+
+    vlm_helper.force_unreserve_hosts(lab["hosts"])
+    for barcode in barcodes:
+        local_host.reserve_vlm_console(barcode, "AUTO: lab installation")
     if active_con.telnet_conn is None:
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
         try:
@@ -27,9 +31,6 @@ def install_setup():
     build_server = InstallVars.get_install_var('BUILD_SERVER')
     build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
 
-    vlm_helper.force_unreserve_hosts(lab["hosts"])
-    for barcode in barcodes:
-        local_host.reserve_vlm_console(barcode, "AUTO: lab installation")
     # Initialise server objects
     file_server = InstallVars.get_install_var("FILES_SERVER")
     iso_host = InstallVars.get_install_var("ISO_HOST")
