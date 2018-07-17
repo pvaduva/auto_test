@@ -96,7 +96,7 @@ def reserve_vlm_console(barcode, note=None):
 
 def force_unreserve_vlm_console(barcode):
     action = VlmAction.VLM_FORCE_UNRESERVE
-    force_unreserve_cmd = [VLM, action, SvcCgcsAuto.USER, "-P", SvcCgcsAuto.VLM_PASSWORD, "-t", str(barcode)]
+    force_unreserve_cmd = [VLM, action, "-L", SvcCgcsAuto.USER, "-P", SvcCgcsAuto.VLM_PASSWORD, "-t", str(barcode)]
 
     reserve_note = vlm_getattr(barcode, 'reserve_note')[1]
     reserved_by_user = "TARGET_NOT_RESERVED_BY_USER" not in vlm_getattr(barcode, 'port')[1]
