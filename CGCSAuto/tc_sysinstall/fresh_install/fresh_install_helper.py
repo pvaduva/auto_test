@@ -101,14 +101,14 @@ def download_lab_files(lab_files_server, build_server, sys_version=None, sys_typ
     if lab is None:
         lab = InstallVars.get_install_var('LAB')
 
-    LOG.info("Downloading lab config files")
-    install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server)
     LOG.info("Downloading heat templates")
     install_helper.download_heat_templates(lab, build_server, load_path)
     LOG.info("Downloading guest image")
     install_helper.download_image(lab, build_server, guest_path)
     LOG.info("Copying license")
     install_helper.download_license(lab, build_server, license_path, dest_name="license")
+    LOG.info("Downloading lab config files")
+    install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server)
 
 
 def set_license_var(sys_version=None, sys_type=None):

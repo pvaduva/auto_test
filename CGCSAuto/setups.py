@@ -759,7 +759,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
     if vbox:
         lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
     else:
-        lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+        lab_to_install['boot_device_dict'] = lab_info_dict['boot_device_dict']
 
     if vbox:
         # get the ip address of the local linux vm
@@ -788,7 +788,6 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
 
-    lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
     if resume:
         if isinstance(resume, str) and resume.isdigit():
             resume = int(resume)
@@ -855,7 +854,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
     else:
         lab_dict = ProjVar.get_var("LAB")
     if not lab_dict:
-        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server, tis_build_dir)
+        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server)
     files_dir = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
                                       install_helper.get_git_name(lab_dict['name'])) if not files_dir else files_dir
     # Write .ini file
@@ -936,11 +935,23 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     ssh_conn = install_helper.establish_ssh_connection(conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
                                                        initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, conf_server))
     assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
-    multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".format(multi_region_identifer, lab_files_path))[0] == 0
-    dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".format(dist_cloud_identifer, lab_files_path))[0] == 0
+
+    # check lab configuration for special cases (i.e. distributed cloud or multi region)
+    multi_region = ssh_conn.exec_cmd("grep -r '{}' {}/TiS_config.ini_centos".format(multi_region_identifer, lab_files_path))[0] == 0
+    dist_cloud = ssh_conn.exec_cmd("grep -r '{}' {}/TiS_config.ini_centos".format(dist_cloud_identifer, lab_files_path))[0] == 0
     lab_info_dict["multi_region"] = multi_region
     lab_info_dict["dist_cloud"] = dist_cloud
 
+    # get boot_device_dict
+    configname = os.path.basename(os.path.normpath(conf_dir))
+    settings_filepath = conf_dir + "/settings.ini"
+    if ssh_conn.exec_cmd('test -f {}/settings.ini'.format(conf_dir))[0] == 0:
+        lab_info_dict["boot_device_dict"] = create_node_boot_dict(configname=configname, settings_filepath=settings_filepath,
+                                                             settings_server_conn=ssh_conn)
+    else:
+        lab_info_dict["boot_device_dict"] = create_node_boot_dict(configname=configname)
+
+    # collect SYSTEM info
     rc, output = ssh_conn.exec_cmd('grep -r --color=none {} {}'.format(info_prefix, lab_files_path), rm_date=False)
     assert rc == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
     lab_info = output.replace(' ', '')
