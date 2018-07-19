@@ -516,8 +516,8 @@ class Labs:
         'controller-0 ip': '128.224.151.111',
         'controller-1 ip': '128.224.151.205',
         'controller_nodes': [23299, 23300],
-        'compute_nodes': [23303, 23304, 23305],
-        'storage_nodes': [23301, 23302],
+        'compute_nodes': [23303, 23301, 23302],
+        'storage_nodes': [23304, 23305],
         'ixia_ports': [{'port': (6, 5), 'range': (3301, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
     }
 
