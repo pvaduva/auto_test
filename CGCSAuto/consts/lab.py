@@ -555,6 +555,16 @@ class Labs:
         'storage_nodes': [11507, 47400],
     }
 
+    WCP_122 = {
+        'short_name': 'wcp_122',
+        'name': 'cgcs-wildcat-122',
+        'floating ip': '128.224.151.170',
+        'controller-0 ip': '128.224.151.170',
+        'controller_nodes': [64873],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     WP_01_02 = {
         'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
