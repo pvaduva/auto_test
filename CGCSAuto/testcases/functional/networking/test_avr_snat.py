@@ -3,8 +3,8 @@ import time
 from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
-from consts.cgcs import VMStatus, FlavorSpec
-from keywords import vm_helper, nova_helper, host_helper, network_helper, common
+from consts.cgcs import FlavorSpec
+from keywords import vm_helper, nova_helper, host_helper, network_helper, common, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 from utils.clients.ssh import NATBoxClient
@@ -46,9 +46,10 @@ def snat_setups(request):
     LOG.fixture_step("Boot a VM from volume")
     vm_id = vm_helper.boot_vm(name='snat', reuse_vol=False, cleanup='module')[1]
 
-    LOG.fixture_step("Attempt to ping from NatBox and ensure if fails")
-    ping_res = vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, use_fip=False)
-    assert ping_res is False, "VM can still be ping'd from outside after SNAT enabled without floating ip."
+    if system_helper.is_avs():
+        LOG.fixture_step("Attempt to ping from NatBox and ensure if fails")
+        ping_res = vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True, use_fip=False)
+        assert ping_res is False, "VM can still be ping'd from outside after SNAT enabled without floating ip."
 
     LOG.fixture_step("Create a floating ip and associate it to VM")
     floatingip = network_helper.create_floating_ip()[1]
