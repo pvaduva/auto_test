@@ -191,9 +191,9 @@ class HostTask:
 
 
 class Prompt:
-    CONTROLLER_0 = '.*controller\-0\[:| ].*\$ '
-    CONTROLLER_1 = '.*controller\-1\[:| ].*\$ '
-    CONTROLLER_PROMPT = '.*controller\-[01]\[:| ].*\$ '
+    CONTROLLER_0 = '.*controller\-0[:| ].*\$ '
+    CONTROLLER_1 = '.*controller\-1[:| ].*\$ '
+    CONTROLLER_PROMPT = '.*controller\-[01][:| ].*\$ '
 
     VXWORKS_PROMPT = '-> '
 
