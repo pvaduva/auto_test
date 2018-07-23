@@ -111,6 +111,7 @@ def test_lock_unlock_host(host_type, collect_kpi):
                                                         start_path=HostLock.START_PATH,
                                                         init_time=init_time)
 
+        time.sleep(30)      # delay in sysinv log vs nova hypervisor list
         code_unlock, out_unlock = kpi_log_parser.record_kpi(local_kpi_file=collect_kpi,
                                                             kpi_name=HostUnlock.NAME.format(host_type), host=None,
                                                             log_path=HostUnlock.LOG_PATH,
