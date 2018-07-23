@@ -19,18 +19,23 @@ SHORT_LAB_REL_PATH = "lab"
 CENTOS_LAB_REL_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab"
 HEAT_TEMPLATES_PATH = "std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 HEAT_TEMPLATES_PATH_STX = "export/heat-templates"
+TC_18_03_WKSPCE = "/folk/cgts/temp/prestaging/R5"
 TC_17_06_WKSPCE = "/folk/cgts/temp/prestaging/R4"
 TS_16_10_WKSPCE = "/folk/cgts/temp/prestaging/R3"
 TS_15_12_WKSPCE = "/folk/cgts/temp/prestaging/R2"
+TC_18_03_REL_PATH = "cgcs/extras.ND"
 TC_17_06_REL_PATH = "cgcs/extras.ND"
 TS_16_10_REL_PATH = "cgcs/extras.ND"
 TS_15_12_REL_PATH = "cgcs/extras.ND"
+TC_18_03_LAB_REL_PATH = "cgcs/extras.ND/lab"
 TC_17_06_LAB_REL_PATH = "cgcs/extras.ND/lab"
 TS_16_10_LAB_REL_PATH = "cgcs/extras.ND/lab"
 TS_15_12_LAB_REL_PATH = "cgcs/extras.ND/lab"
+TC_18_03_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 TC_17_06_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 TS_16_10_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-heat/templates"
 TS_15_12_HEAT_TEMPLATE_PATH = "cgcs/openstack/recipes-base/python-heat/python-heat/templates"
+TC_18_03_HOST = "centos"
 TC_17_06_HOST = "centos"
 TS_16_10_HOST = "centos"
 TS_15_12_HOST = "wrlinux"
@@ -45,6 +50,7 @@ BULKCFG_LIST = ["hosts_bulk_add.xml", "hosts.xml"]
 BULK_CFG_FILENAME = "hosts_bulk_add.xml"
 LAB_SETUP_SCRIPT = "lab_setup.sh"
 LAB_SETUP_CFG_FILENAME = "lab_setup.conf"
+LAB_SETUP_OVS = "lab_setup_ovs.conf"
 CUSTOM_LAB_SETTINGS_FILENAME = "settings.ini"
 #CENTOS_GUEST = DEFAULT_WKSPCE + "/CGCS_4.0_Centos_Guest_Build"
 #CENTOS_GUEST = DEFAULT_WKSPCE + "/TC_17.06_Guest"
@@ -179,7 +185,7 @@ TELNET_CONSOLE_USERNAME = ""
 TELNET_CONSOLE_PASSWORD = ""
 
 # SSH expect
-SSH_EXPECT_TIMEOUT = 3600
+SSH_EXPECT_TIMEOUT = 4200
 SSH_EXPECT_ECHO = False
 
 # ssh
@@ -235,6 +241,7 @@ RETURN_CODE_CMD = "echo {}$?{}".format(OPEN_MARKER, CLOSE_MARKER)
 # e.g. Tue Nov 24 15:52:39 UTC 2015
 DATE_TIMESTAMP_REGEX = r"\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2} \w{3} \d{4}"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+TC_18_03_REGEX = "^TC_18.03*"
 TC_17_06_REGEX = "^TC_17.06*"
 TS_16_10_REGEX = "^TS_16.10*"
 TS_15_12_REGEX = "^TS_15.12*"

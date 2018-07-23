@@ -133,6 +133,10 @@ def parse_args():
                          action='store_true',
                          help="Simplex install")
 
+    lab_grp.add_argument('--ovs', dest='ovs',
+                         action='store_true',
+                         help="Use ovs-dpdk versions of files")
+
     lab_grp.add_argument('--lowlat', dest='lowlat',
                          action='store_true',
                          help="Low latency option for CPE and Simplex")
@@ -279,11 +283,20 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
     prestage_load_path = ""
     load_path = "{}/{}".format(bld_server_wkspce, tis_blds_dir)
 
+    TC_18_03_pattern = re.compile(TC_18_03_REGEX)
     TC_17_06_pattern = re.compile(TC_17_06_REGEX)
     TS_16_10_pattern = re.compile(TS_16_10_REGEX)
     TS_15_12_pattern = re.compile(TS_15_12_REGEX)
 
-    if TC_17_06_pattern.match(tis_blds_dir):
+    
+    if TC_18_03_pattern.match(tis_blds_dir):
+        prestage_load_path = TC_18_03_WKSPCE
+        cmd = "test -d " + prestage_load_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0:
+            msg = "Load path {} not found".format(prestage_load_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+    elif TC_17_06_pattern.match(tis_blds_dir):
         prestage_load_path = TC_17_06_WKSPCE
         cmd = "test -d " + prestage_load_path
         if bld_server_conn.exec_cmd(cmd)[0] != 0:
@@ -386,7 +399,10 @@ def verify_lab_cfg_location(bld_server_conn, lab_cfg_location, load_path, tis_on
     '''
 
     # Determine where to find configuration files, e.g. TiS_config.ini, etc.
-    if load_path == TC_17_06_WKSPCE:
+    if load_path == TC_18_03_WKSPCE:
+        lab_cfg_rel_path = TC_18_03_LAB_REL_PATH + "/yow/" + lab_cfg_location
+        lab_cfg_path = load_path + "/" + lab_cfg_rel_path
+    elif load_path == TC_17_06_WKSPCE:
         lab_cfg_rel_path = TC_17_06_LAB_REL_PATH + "/yow/" + lab_cfg_location
         lab_cfg_path = load_path + "/" + lab_cfg_rel_path
     elif load_path == TS_16_10_WKSPCE:
@@ -1362,6 +1378,10 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
             bld_server_conn.rsync(os.path.join(TC_17_06_WKSPCE, TC_17_06_LAB_REL_PATH, "scripts", "*"),
                                   WRSROOT_USERNAME, controller0.host_ip,
                                   WRSROOT_HOME_DIR, pre_opts=pre_opts)
+        elif load_path.find(TC_18_03_WKSPCE) > -1:
+            bld_server_conn.rsync(os.path.join(TC_18_03_WKSPCE, TC_18_03_LAB_REL_PATH, "scripts", "*"),
+                                  WRSROOT_USERNAME, controller0.host_ip,
+                                  WRSROOT_HOME_DIR, pre_opts=pre_opts)
         else:
             rc = bld_server_conn.rsync(os.path.join(lab_cfg_path, "/../../scripts/", "*"),
                                        WRSROOT_USERNAME, controller0.host_ip,
@@ -1881,6 +1901,7 @@ def main():
     banner = args.banner
     wipedisk = args.wipedisk
     security = args.security
+    ovs = args.ovs
 
     branding = args.branding
 
@@ -1996,6 +2017,7 @@ def main():
     logutils.print_name_value("Simplex", simplex)
     logutils.print_name_value("Security", security)
     logutils.print_name_value("Low Lat", lowlat)
+    logutils.print_name_value("OVS", ovs)
     logutils.print_name_value("Run Postinstall Scripts", postinstall)
     logutils.print_name_value("Run config_region instead of config_controller", config_region)
 
@@ -2319,7 +2341,11 @@ def main():
 
     executed = False
     if do_next_install_step(lab_type, lab_install_step):
-        if prestage_load_path.find(TC_17_06_WKSPCE) > -1:
+        if prestage_load_path.find(TC_18_03_WKSPCE) > -1:
+            downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, prestage_load_path,
+                                   guest_load_path, host_os, override, lab_cfg_location,
+                                   TC_18_03_LAB_REL_PATH, TC_18_03_HEAT_TEMPLATE_PATH)
+        elif prestage_load_path.find(TC_17_06_WKSPCE) > -1:
             downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, prestage_load_path,
                                    guest_load_path, host_os, override, lab_cfg_location,
                                    TC_17_06_LAB_REL_PATH, TC_17_06_HEAT_TEMPLATE_PATH)
@@ -2367,6 +2393,16 @@ def main():
             #    wait_state(controller0, AVAILABILITY, DEGRADED)
             #else:
             #    wait_state(controller0, AVAILABILITY, ONLINE)
+
+            if ovs:
+                cmd = "mv {} {}".format(LAB_SETUP_OVS, LAB_SETUP_CFG_FILENAME)
+                rc, output = controller0.ssh_conn.exec_cmd(cmd)
+                if rc != 0:
+                    msg = "Failed to override avs lab_setup.conf"
+                    log.error(msg)
+                    wr_exit()._exit(1, msg)
+
+
             run_labsetup()
             # Test if the node is locked before attempting an unlock
             node_locked = test_state(controller0, ADMINISTRATIVE, LOCKED)
