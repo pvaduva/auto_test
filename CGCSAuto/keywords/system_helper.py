@@ -213,6 +213,8 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     """
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, use_telnet=use_telnet,
                                            con_telnet=con_telnet))
+
+    table_ = table_parser.filter_table(table_, exclude=True, hostname='None')
     filters = {'hostname': name,
                'personality': personality,
                'administrative': administrative,
