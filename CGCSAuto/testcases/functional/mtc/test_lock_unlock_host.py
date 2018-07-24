@@ -33,7 +33,6 @@ def test_lock_active_controller_reject(no_simplex):
     LOG.tc_step("Lock active controller and ensure it fail to lock")
     exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False, check_first=False)
     assert exit_code == 1, 'Expect locking active controller to be rejected. Actual: {}'.format(cmd_output)
-    get_hostnames
     status = host_helper.get_hostshow_value(active_controller, 'administrative')
     assert status == 'unlocked', "Fail: The active controller was locked."
 
