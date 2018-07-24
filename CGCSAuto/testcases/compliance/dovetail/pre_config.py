@@ -1,48 +1,47 @@
+import os
 import configparser
 import yaml
-import setups
-from consts import lab
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxCreds, CliAuth
 from keywords import vlm_helper, host_helper
-from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    SSHFromSSH
+from utils.clients.ssh import ControllerClient
 from utils import table_parser
-import os
+from consts.filepaths import Dovetail
 
-def env_config_generate(floatingIP):
+
+def env_config_generate(floating_ip):
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
     con_ssh.exec_cmd('source /etc/nova/openrc')
-    projectID= con_ssh.exec_cmd('openstack project list')
-    projectID=table_parser.table(projectID[1])
-    projectID_admin=table_parser._get_values(projectID,'Name','admin','ID')
-    projectID_admin=projectID_admin.pop(0)
+    projectID = con_ssh.exec_cmd('openstack project list')
+    projectID = table_parser.table(projectID[1])
+    projectID_admin = table_parser._get_values(projectID, 'Name', 'admin', 'ID')
+    projectID_admin = projectID_admin.pop(0)
     config = configparser.ConfigParser()
     config.optionxform = str
-    config [None]= {'# Project-level authentication scope (name or ID), recommend admin project.':'',
-                        'export OS_PROJECT_NAME': 'admin',
+    config[None] = {'# Project-level authentication scope (name or ID), recommend admin project.':'',
+                        'export OS_PROJECT_NAME':'admin',
                         '# For identity v2, it uses OS_TENANT_NAME rather than OS_PROJECT_NAME.':'',
-                        'export OS_TENANT_NAME' :'admin',
+                        'export OS_TENANT_NAME':'admin',
                         '# Authentication username, belongs to the project above, recommend admin user.':'',
                         'export OS_USERNAME':'admin',
                         '# Authentication password. Use your own password':'',
                         'export OS_PASSWORD':'Li69nux*',
                         '# Authentication URL, one of the endpoints of keystone service. If this is v3 version, \n# there need some extra variables as follows.' : '',
-                        'export OS_AUTH_URL' : "'http://"+floatingIP+":5000/v3'",
+                        'export OS_AUTH_URL' : Dovetail.OS_AUTH_URL.format(floating_ip),
                         '# Default is 2.0. If use keystone v3 API, this should be set as 3.': '',
-                        'export OS_IDENTITY_API_VERSION':'3',
+                        'export OS_IDENTITY_API_VERSION':CliAuth.get_var('OS_IDENTITY_API_VERSION'),
                         '# Domain name or ID containing the user above. \n# Command to check the domain: openstack user show <OS_USERNAME>':'',
-                        'export OS_USER_DOMAIN_NAME' :'Default',
+                        'export OS_USER_DOMAIN_NAME':'Default',
                         '# Domain name or ID containing the project aove.':'',
                         '# Command to check the domain: openstack project show <OS_PROJECT_NAME>':'',
                         'export OS_PROJECT_DOMAIN_NAME':'Default',
                         '# Special environment parameters for https. \n# If using https + cacert, the path of cacert file should be provided. \n# The cacert file should be put at $DOVETAIL_HOME/pre_config. \n#export OS_CACERT=/home/opnfv/dovetail/pre_config/cacert.pem \n\n# If using https + no cacert, should add OS_INSECURE environment parameter.':'',
                         'export OS_INSECURE':'True',
                         "export DOVETAIL_HOME":'/home/dovetail',
-                        'export OS_PROJECT_ID': projectID_admin,
+                        'export OS_PROJECT_ID':projectID_admin,
                         'export OS_REGION_NAME':'"RegionOne"'}
 
-    with open('${DOVETAIL_HOME}/pre_config/env_config.sh', 'w') as configfile:
+    with open('${DOVETAIL_HOME}/pre_config/env_config.sh', 'w+') as configfile:
       config.write(configfile, space_around_delimiters=False)
 
 
@@ -84,7 +83,7 @@ def pod_generate_2plus2(n1ip, n2ip, n3ip, n4ip):
                         {'name': 'node3', 'role': 'Compute', 'ip': n3ip, 'user': 'root', 'password': 'Li69nux*'},
                         {'name': 'node4', 'role': 'Compute', 'ip': n4ip, 'user': 'root', 'password': 'Li69nux*'}]}
 
-    with open('${DOVETAIL_HOME}/pre_config/pod.yaml', 'w') as yaml_file:
+    with open('${DOVETAIL_HOME}/pre_config/pod.yaml', 'w+') as yaml_file:
         yaml_file.write(yaml.dump(config, default_flow_style=False))
     return config
 
@@ -99,10 +98,9 @@ def tempest_conf_generate_2plus2():
   # Expected device name when a volume is attached to an instance.
   volume_device_name: vdb
 '''
-    sample=yaml.load(sample)
-    with open('${DOVETAIL_HOME}/pre_config/tempest_conf.yaml', 'w') as yaml_file:
+    sample = yaml.load(sample)
+    with open('${DOVETAIL_HOME}/pre_config/tempest_conf.yaml', 'w+') as yaml_file:
         yaml_file.write(yaml.dump(sample, default_flow_style=False))
-
 
 
 def fix_sshd_file(con_ssh):
@@ -118,24 +116,22 @@ def fix_sshd_file(con_ssh):
 # main
 ##############################
 def test():
-    #test_host = input("What lab will you be running Dovetail on: ")
-
-    os.system("export DOVETAIL_HOME=/home/dovetail")
+    os.system("export DOVETAIL_HOME="+Dovetail.DOVETAIL_HOME)
     os.system('mkdir -p ${DOVETAIL_HOME}/pre_config')
-    lab_info= vlm_helper.get_lab_dict()
-    controller0_ip= lab_info.get('controller-0 ip', 'xyz')
+    lab_info = vlm_helper.get_lab_dict()
+    # controller0_ip = lab_info.get('controller-0 ip')
 
-    floatingIP = lab_info.get('floating ip', 'xyz')
-    controller1_ip =lab_info.get('controller-1 ip', 'xyz')
+    floating_ip = lab_info.get('floating ip')
+    # controller1_ip = lab_info.get('controller-1 ip')
 
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
-    compute0_ip= con_ssh.exec_cmd('nslookup compute-0')
+    compute0_ip = con_ssh.exec_cmd('nslookup compute-0')
 
     compute0_ip = compute0_ip[1]
     compute0_ip = compute0_ip.split('Address')
-    compute0_ip=compute0_ip[-1]
-    compute0_ip=compute0_ip[2:]
+    compute0_ip = compute0_ip[-1]
+    compute0_ip = compute0_ip[2:]
 
     compute1_ip = con_ssh.exec_cmd('nslookup compute-1')
     compute1_ip = compute1_ip[1]
@@ -143,10 +139,9 @@ def test():
     compute1_ip = compute1_ip[-1]
     compute1_ip = compute1_ip[2:]
 
-    valid = False
-    pod_generate_2plus2('192.168.204.3','192.168.204.3',compute0_ip,compute1_ip)
+    pod_generate_2plus2('192.168.204.3', '192.168.204.3', compute0_ip, compute1_ip)
     tempest_conf_generate_2plus2()
-    env_config_generate(floatingIP)
+    env_config_generate(floating_ip)
 
     password = HostLinuxCreds.get_password()
 
@@ -176,8 +171,6 @@ def test():
         # con_ssh.close()
         # input("press enter to continue")
 
-
-
     with host_helper.ssh_to_host('compute-1') as con_ssh:
         fix_sshd_file(con_ssh)
         con_ssh.exec_cmd('wall fixed compute-1')
@@ -187,15 +180,14 @@ def test():
         # con_ssh.close()
         # input("press enter to continue")
 
-
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
 
-    stdout=con_ssh.exec_cmd('ps -fC nova-api | grep -v UID | wc')
-    stdout=stdout[1]
-    stdout=stdout.split()
-    stdout=stdout[0]
-    filepath=os.system("printf 'kumuluz\n' | sudo find / -name monitor_process.py")
+    stdout = con_ssh.exec_cmd('ps -fC nova-api | grep -v UID | wc')
+    stdout = stdout[1]
+    stdout = stdout.split()
+    stdout = stdout[0]
+    filepath = os.system("printf 'kumuluz\n' | sudo find / -name monitor_process.py")
 
     monitor = '''##############################################################################
 # Copyright (c) 2015 Huawei Technologies Co.,Ltd. and others
@@ -294,8 +286,7 @@ if __name__ == '__main__':    # pragma: no cover
 
     file = open(filepath, 'w+')
     file.write(monitor)
-    os.system('export DOVETAIL_HOME=/home/dovetail')
+    os.system('export DOVETAIL_HOME='+Dovetail.DOVETAIL_HOME)
     os.system('source ${DOVETAIL_HOME}/pre_config/env_config.sh')
     os.system("printf 'kumuluz\n' | sudo docker run --privileged=true -it -e DOVETAIL_HOME=$DOVETAIL_HOME -v $DOVETAIL_HOME:$DOVETAIL_HOME -v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash")
     os.system('dovetail run --testsuite ovp.1.0.0')
-
