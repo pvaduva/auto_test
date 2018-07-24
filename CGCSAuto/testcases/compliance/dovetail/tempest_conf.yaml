@@ -1,0 +1,3 @@
+compute:
+  min_compute_nodes: 2
+  volume_device_name: vdb
