@@ -1,7 +1,8 @@
 from pytest import mark, skip
 
-from keywords import cinder_helper, common, storage_helper
+from keywords import cinder_helper, common, storage_helper, glance_helper
 from consts.kpi_vars import VolCreate, KPI_DATE_FORMAT, ImageConversion, ImageDownload
+from testfixtures.resource_mgmt import ResourceCleanup
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
 
@@ -28,7 +29,10 @@ def test_kpi_cinder_volume_creation(collect_kpi):
     LOG.tc_step("Create a 20g volume from default tis guest and collect image download rate, image conversion rate, "
                 "and total volume creation time")
     init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
-    vol_id = cinder_helper.create_volume(name='20g', cleanup='function', size=20)[1]
+    image = glance_helper.create_image(cache_raw=False)[1]
+    ResourceCleanup.add('image', image)
+
+    vol_id = cinder_helper.create_volume(name='20g', cleanup='function', size=20, image_id=image)[1]
     vol_updated = cinder_helper.get_volume_show_values(vol_id, 'updated_at').split('.')[0]
 
     code_download, out_download = \
