@@ -30,6 +30,8 @@ class HeatTemplate:
     HEAT_DIR = '{}heat/hot/'.format(WRSROOT_HOME)
     LARGE_HEAT = 'upgrade_heat_template'
     LARGE_HEAT_NAME = 'upgrade_stack'
+    SYSTEM_TEST_HEAT = 'system_test_template'
+    SYSTEM_TEST_HEAT_NAME = 'NOKIA_V3'
 
 
 class TestServerPath:
