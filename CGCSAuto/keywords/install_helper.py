@@ -2301,7 +2301,9 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         # controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
 
 
-def setup_networking(controller0):
+def setup_networking(controller0, conf_server=None, conf_dir=None):
+    if not controller0.host_nic:
+        controller0.host_nic = get_nic_from_config()
     nic_interface = controller0.host_nic
     if not controller0.telnet_conn:
         controller0.telnet_conn = open_telnet_session(controller0)
@@ -2319,6 +2321,42 @@ def setup_networking(controller0):
         network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=False)
 
     return 0
+
+
+def get_nic_from_config(conf_server=None, conf_dir=None, delete_server=False):
+    if not conf_server:
+        conf_server = setups.initialize_server(InstallVars.get_install_var("FILES_SERVER"))
+        delete_server = True
+    conf_dir = conf_dir if conf_dir else InstallVars.get_install_var("LAB_FILES_DIR")
+    oam_interface = None
+    nic = None
+    count = 0
+    conf_file = conf_dir + "/TiS_config.ini_centos"
+
+    rc, output = conf_server.ssh_conn.exec_cmd("cat {}".format(conf_file))
+    sections = output.split("\n\n")
+    while nic is None:
+        count += 1
+        for section in sections:
+            if not oam_interface and "[OAM_NETWORK]" in section:
+                lines = section.split("\n")
+                for line in lines:
+                    if "LOGICAL_INTERFACE" in line:
+                        oam_interface = "[" + line[line.find("=") + 1:].strip() + "]"
+            if oam_interface and oam_interface in section:
+                lines = section.split("\n")
+                for line in lines:
+                    if "INTERFACE_PORTS" in line:
+                        nic_ports = line[line.find("=") + 1:].strip()
+                        nic = nic_ports[:nic_ports.find(",")]
+            if count > 2:
+                raise ValueError("could not parse nic from {}".format(conf_file))
+
+    if delete_server:
+        conf_server.ssh_conn.close()
+        del conf_server
+
+    return nic
 
 
 def apply_patches(lab, build_server, patch_dir):
@@ -3464,7 +3502,7 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
     barcode = lab_dict["controller_nodes"][0]
-    iso_dest_path = "/tmp/iso/{}".format(barcode)
+    iso_dest_path = "/tmp/iso/{}/bootimage.iso".format(barcode)
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
     tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
 
@@ -3481,44 +3519,48 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
         else:
             raise exceptions.BackupSystem(msg)
 
+    cmd = "sudo rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(barcode, barcode)
+    tuxlab_conn.exec_cmd(cmd)
+
     cmd = "test -f " + iso_full_path
     assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
-    iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path,
-                            dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
+    iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path, timeout=HostTimeout.INSTALL_LOAD,
+                            dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD)
     tuxlab_conn.close()
     return 0, None
 
 
-def mount_boot_server_iso(lab_dict=None):
+def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
     barcode = lab_dict["controller_nodes"][0]
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
     tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
 
-    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
-                                           initial_prompt=tuxlab_prompt)
-    tuxlab_conn.deploy_ssh_key()
+    if not tuxlab_conn:
+        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                               initial_prompt=tuxlab_prompt)
+        tuxlab_conn.deploy_ssh_key()
 
-    cmd = "sudo chmod -R 777 /tmp/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo umount /media/iso/{}; echo if we fail we ignore it".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo rm -rf /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    cmd = "chmod -R 777 /tmp/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    cmd = "umount /media/iso/{}; echo if we fail we ignore it".format(barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    cmd = "rm -rf /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
     cmd = "mkdir -p /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode, barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo mount -o remount,exec,dev /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo rm -rf /export/pxeboot/pxelinux.cfg/{}".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    cmd = "mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode, barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    cmd = "mount -o remount,exec,dev /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    cmd = "rm -rf /export/pxeboot/pxelinux.cfg/{}".format(barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
     cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{} -t /export/pxeboot/pxelinux.cfg/{}".format(
         barcode, barcode, barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
-    cmd = "sudo umount /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_cmd(cmd)[0] == 0
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    cmd = "umount /media/iso/{}".format(barcode)
+    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
 
     tuxlab_conn.close()
 

@@ -130,12 +130,14 @@ def create_vlm_node_dict(nodes, personality):
         name = personality + "-{}".format(i)
         node_info_dict['name'] = name
         node_info_dict['personality'] = personality
-        node_info_dict['host_ip'] = attribute_dict[i]['IP Address']
-        node_info_dict['telnet_ip'] = attribute_dict[i]['Terminal Server']
-        node_info_dict['host_name'] = attribute_dict[i]['Target Alias']
-        node_info_dict['telnet_port'] = str(2000 + int(attribute_dict[i]['Terminal Server Port']))
-        node_info_dict['barcode'] = attribute_dict[i]['Target ID']
+        node_info_dict['host_ip'] = attribute_dict['IP Address']
+        node_info_dict['telnet_ip'] = attribute_dict['Terminal Server']
+        node_info_dict['host_name'] = attribute_dict['Target Alias']
+        node_info_dict['telnet_port'] = str(2000 + int(attribute_dict['Terminal Server Port']))
+        node_info_dict['barcode'] = attribute_dict['Target ID']
+        node_info_dict['host_nic'] = None
         node_dict[name] = Node(**node_info_dict)
+        i += 1
 
     return node_dict
 
