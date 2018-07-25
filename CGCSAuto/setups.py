@@ -509,7 +509,7 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
                     if float(node_num) < float(lowest):
                         lowest = node_num
                         base_name = alias
-                lab_info["name"] = base_name + "_{}".format(highest)
+                lab_info["name"] = base_name + "_{}".format(highest) if highest > lowest else base_name
             short_naming_dict = {"wildcat": "WCP", "ironpass": "IP", "wolfpass": "WP", "supermicro": "SM"}
             short_name_pattern = ".*-(\d+)(_\d+)?"
             match = re.search(short_name_pattern, lab_info["name"])
@@ -521,9 +521,9 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
                     lab_info["short_name"] = short_naming_dict[server_type] + "_{}{}".format(first_node_num,
                                                                                              last_node_num)
             if not lab_info.get("short_name"):
-                lab_info["short_name"] = lab_info["name"].split("-")[2].upper() + "_{}{}".format(first_node_num,
+                lab_info["short_name"] = lab_info["name"].split("-")[2] + "_{}{}".format(first_node_num,
                                                                                                  last_node_num)
-            lab_info = add_lab_entry(floating_ip=None, dict_name=lab_info["short_name"], **lab_info)
+            lab_info = add_lab_entry(floating_ip=None, dict_name=lab_info["short_name"].upper(), **lab_info)
 
     if files_dir and files_server and not lab_info:
         try:
@@ -729,8 +729,16 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
     out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
 
     # add lab resource type and any other lab information in the lab files
+    if low_latency:
+        try:
+            files_dir = files_dir + '-lowlatency'
+            lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
+                           host_build_dir=host_build_dir)
+        except:
+            files_dir = files_dir[:files_dir.find('-lowlatency')]
+
     lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
-                   host_build_dir=host_build_dir)
+                                            host_build_dir=host_build_dir)
     lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items() if "system" in system_label))
     multi_region_lab = lab_info_dict["multi_region"]
     dist_cloud_lab = lab_info_dict["dist_cloud"]
