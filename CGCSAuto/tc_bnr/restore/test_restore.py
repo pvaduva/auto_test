@@ -516,14 +516,15 @@ def test_restore(restore_setup):
 
         if not compute_configured:
             LOG.tc_step('Old-load on AIO/CPE lab: config its compute functionalities')
-            install_helper.run_cpe_compute_config_complete(controller_node, controller0)
+            # LOG.warn('compute-config-complete was obsoleted by CGTS-9756!!!')
+            # install_helper.run_cpe_compute_config_complete(controller_node, controller0)
 
-            LOG.info('closing current ssh connection')
-            con_ssh.close()
+            # LOG.info('closing current ssh connection')
+            # con_ssh.close()
 
-            LOG.info('rebuild ssh connection')
-            con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
-            controller_node.ssh_conn = con_ssh
+            # LOG.info('rebuild ssh connection')
+            # con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+            # controller_node.ssh_conn = con_ssh
 
             ControllerClient.set_active_controller(con_ssh)
             host_helper.wait_for_hosts_ready(controller0)
@@ -594,6 +595,9 @@ def test_restore(restore_setup):
     LOG.tc_step("Delete backup files from {} ....".format(TiSPath.BACKUPS))
     con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
 
+    LOG.tc_step('Perform post-restore testing/checking')
+    post_restore_test(con_ssh)
+
     LOG.tc_step("Waiting until all alarms are cleared ....")
     timeout = 300
     healthy, alarms = system_helper.wait_for_all_alarms_gone(timeout=timeout, fail_ok=True)
@@ -612,5 +616,44 @@ def test_restore(restore_setup):
     assert rc == 0, "System health not OK: {}".format(failed)
 
     collect_logs()
-    ProjVar.set_var(SOURCE_CREDENTIAL=None)
-    # vm_helper.boot_vm()
+
+
+def check_volumes_spaces(con_ssh):
+    from keywords import cinder_helper
+    LOG.info('Checking cinder volumes and space usage')
+    usage_threshold = 0.70
+    free_space, total_space, unit = cinder_helper.get_lvm_usage(con_ssh)
+
+    if total_space and free_space < usage_threshold * total_space:
+        if total_space:
+            LOG.info('cinder LVM over-used: free:{}, total:{}, ration:{}%'.format(
+                free_space, total_space, free_space/total_space * 100))
+
+        LOG.info('Deleting known LVM alarms')
+
+        expected_reason = 'Cinder LVM .* Usage threshold exceeded; threshold: (\d+(\.\d+)?)%, actual: (\d+(\.\d+)?)%'
+        expected_entity = 'host=controller'
+        value_titles = ('UUID', 'Alarm ID', 'Reason Text', 'Entity ID')
+        lvm_pool_usage = system_helper.get_alarms(rtn_vals=value_titles, con_ssh=con_ssh)
+
+        if not lvm_pool_usage:
+            LOG.warn('Cinder LVM pool is used up to 75%, but no alarm for it')
+        else:
+            if len(lvm_pool_usage) > 1:
+                LOG.warn('More than one alarm existing for Cinder LVM over-usage')
+            elif len(lvm_pool_usage) < 1:
+                LOG.warn('No LVM cinder over-used alarms, got:{}'.format(lvm_pool_usage))
+
+            for lvm_alarm in lvm_pool_usage:
+                alarm_uuid, alarm_id, reason_text, entity_id = lvm_alarm.split('::::')
+
+                if re.match(expected_reason, reason_text) and re.search(expected_entity, entity_id):
+                    LOG.info('Expected alarm:{}, reason:{}'.format(alarm_uuid, reason_text))
+                    LOG.info('Deleting it')
+                    system_helper.delete_alarms(alarms=alarm_uuid)
+
+
+def post_restore_test(con_ssh):
+    LOG.info('Perform system testing and checking after the system is restored')
+    check_volumes_spaces(con_ssh)
+

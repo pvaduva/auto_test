@@ -1,3 +1,4 @@
+import re
 import random
 import time
 
@@ -1357,3 +1358,33 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             volume_exported.append(vol_id)
 
     return 0, volume_exported
+
+
+def get_lvm_usage(con_ssh):
+    LOG.info('Getting usage of cinder-volumes')
+    free, total, unit = 0, 0, 'g'
+    pattern = r'(\d+(\.\d+)?)([gm])'
+    code, output = con_ssh.exec_sudo_cmd('lvs')
+    if 0 != code:
+        LOG.warn('Failed to get usage of cinder-volumes')
+    else:
+        try:
+            used = 0
+            for line in output.strip().splitlines():
+                fields = line.split()
+                if fields[0] == 'cinder-volumes-pool':
+                    total = re.search(pattern, fields[3], re.IGNORECASE)
+                    unit = total.group(3)
+                    total = float(total.group(1))
+                elif fields[0].startswith('volume-'):
+                    usage = re.search(pattern, fields[3], re.IGNORECASE)
+                    used += float(usage.group(1))
+
+            free = total - used
+
+            LOG.info('lvm usage: free:{}, used:{}, total:{}'.format(free, used, total))
+        except Exception as e:
+            LOG.info('Wrong format:{}'.format(output))
+            free, total = 0
+
+    return free, total, unit

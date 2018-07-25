@@ -1,5 +1,6 @@
 import os
 import re
+import configparser
 
 from pytest import fixture, skip
 
@@ -10,6 +11,8 @@ from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from keywords import html_helper
 from keywords import install_helper, cinder_helper, glance_helper, common, system_helper, host_helper
+from keywords import vm_helper
+
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from setups import collect_tis_logs
@@ -131,6 +134,10 @@ def test_backup(pre_system_backup):
     """
 
     backup_info = pre_system_backup
+    LOG.info('Before backup, perform configuration changes and launch VMs')
+    con_ssh = ControllerClient.get_active_controller()
+    pre_backup_test(backup_info, con_ssh)
+
     lab = InstallVars.get_install_var('LAB')
     LOG.tc_step("System backup: lab={}; backup dest = {} backup destination path = {} ..."
                 .format(lab['name'], backup_info['backup_dest'], backup_info['backup_dest_full_path']))
@@ -260,3 +267,281 @@ def backup_load_iso_image(backup_info):
         LOG.info(" The backup build iso file copied to local test server: {}".format(backup_dest_path))
         return True
 
+
+def get_build_info():
+    build_info = {}
+    try:
+        LOG.info('Getting build information')
+        output = r'[dummy-head]\n' + system_helper.get_buildinfo()
+
+        LOG.info('output:{}'.format(output))
+
+        config = configparser.ConfigParser()
+        config.read_string(output)
+
+        for section in config.sections():
+            LOG.info('section:{}'.format(section))
+            for name, value in config.items(section):
+                LOG.info('name:{}, value:{}'.format(name, value))
+                build_info.update(name=value)
+
+    except Exception as e:
+        LOG.warn('failed to read build.info:{}'.format(e))
+
+    return build_info
+
+
+def adjust_cinder_quota(con_ssh, increase, backup_info):
+    free_space, total_space, unit = cinder_helper.get_lvm_usage(con_ssh)
+    LOG.info('lvm space: free:{}, total:{}'.format(free_space, total_space))
+
+    quotas = ['gigabytes', 'per_volume_gigabytes', 'volumes']
+    tenant = backup_info['tenant']
+    cinder_quotas = cinder_helper.get_quotas(quotas=quotas, auth_info=tenant, con_ssh=con_ssh)
+    LOG.info('Cinder quotas:{}'.format(cinder_quotas))
+
+    max_total_volume_size = int(cinder_quotas[0])
+    max_per_volume_size = int(cinder_quotas[1])
+    max_volumes = int(cinder_quotas[2])
+
+    current_volumes = cinder_helper.get_volumes(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+
+    LOG.info('Cinder VOLUME usage: current number of volumes:{}, max allowed:{}, all limites:{}'.format(
+        len(current_volumes), max_volumes, cinder_quotas))
+
+    LOG.info('max total: {}, max per volume:{}, max number of volumes:{}'.format(
+        max_total_volume_size, max_per_volume_size, max_volumes))
+
+    if 0 < max_total_volume_size < free_space:
+        free_space = max_total_volume_size
+
+    new_volume_limit = len(current_volumes) + increase
+    if 0 < max_volumes < new_volume_limit:
+        LOG.info('Not enough quota for number of cinder volumes, increase it to:{} from:{}'.format(
+            new_volume_limit, max_volumes))
+        try:
+            cinder_helper.update_quotas(tenant=tenant['user'],
+                                        con_ssh=con_ssh,
+                                        auth_info=Tenant.ADMIN,
+                                        volumes=new_volume_limit)
+        except Exception as e:
+            LOG.info('Failed to increase the Cinder quota for number of volumes to:{} from:{}, error:{}'.format(
+                new_volume_limit, max_volumes, e))
+            increase = max_volumes - len(current_volumes)
+
+    return increase, free_space, max_per_volume_size
+
+
+def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info=None):
+    LOG.info('Create VOLUMEs')
+
+    if not volume_names:
+        volume_names = ['vol_2G', 'vol_5G', 'vol_10G', 'vol_20G']
+
+    if not volume_sizes:
+        volume_sizes = [nm.split('_')[1][:-1] for nm in volume_names]
+        if len(volume_sizes) < len(volume_names):
+            volume_sizes = list(range(2, (2 + len(volume_names) * 2), 2))
+            volume_sizes = volume_sizes[:len(volume_names) + 1]
+
+    num_volumes, total_volume_size, per_volume_size = adjust_cinder_quota(con_ssh, len(volume_names), backup_info)
+
+    volumes = {}
+    count_volumes = 0
+    free_space = total_volume_size
+    for name, size in zip(volume_names, volume_sizes):
+        size = int(size)
+        if 0 < per_volume_size < size:
+            LOG.warn('The size of requested VOLUME is bigger than allowed, abort, requested:{}, allowed:{}'.format(
+                size, per_volume_size))
+            continue
+
+        free_space -= size
+        if free_space <= 0:
+            LOG.warn('No more space in cinder-volumes for requested:{}, limit:{}, left free:{}'.format(
+                size, total_volume_size, free_space))
+            break
+
+        LOG.info('-OK, attempt to create volume of size:{:05.3f}, free space left:{:05.3f}'.format(size, free_space))
+        volme_id = cinder_helper.create_volume(name=name, size=size, auth_info=Tenant.TENANT1)
+
+        volumes.update({volme_id: {'name':name, 'size':size}})
+
+        count_volumes += 1
+        if 0 < num_volumes < count_volumes:
+            LOG.info('Too many of volumes created, abort')
+            break
+
+    LOG.info('OK, created {} volumes, total size:{}, volumes:{}'.format(count_volumes, total_volume_size, volumes))
+    return volumes
+
+
+def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
+    from keywords import nova_helper
+    quotas = {'instances': {}, 'cores': {}, 'ram': {}}
+    limit_usage = ['limit', 'reserved', 'in_use']
+    tenant = backup_info['tenant']
+
+    quota_keys = list(quotas.keys())
+    LOG.info('TODO: quotas:{}, limit_usage:{}, tenant:{}'.format(quotas, limit_usage, tenant))
+    for limit in limit_usage:
+        limit_values = nova_helper.get_quotas(quotas=quota_keys, detail=limit, auth_info=tenant)
+        for i in range(len(quota_keys)):
+            key = quota_keys[i]
+            value = quotas.get(key, {})
+            value.update({limit: int(limit_values[i])})
+    LOG.info('TODO:{}'.format(quotas))
+
+    new_quotas = {'instances': 0, 'cores': 0, 'ram': 0}
+    free_quota = quotas['instances']['limit'] - quotas['instances']['in_use'] - quotas['instances']['reserved']
+    LOG.info('free_quota:{}'.format(free_quota))
+    if vm_count > free_quota:
+        LOG.info('Not enough quota for VM instances, increase {}'.format(vm_count - free_quota))
+        new_quotas['instances'] = vm_count
+        new_quotas['cores'] = 2 * vm_count
+        new_quotas['ram'] = 2048 * vm_count
+        LOG.info('TODO: update quotas with:{}'.format(new_quotas))
+        nova_helper.update_quotas(tenant=tenant, **new_quotas)
+
+
+def pb_launch_vms(con_ssh, image_ids, backup_info=None):
+    vms_added = []
+
+    if not image_ids:
+        LOG.warn('No images to backup')
+    else:
+        LOG.info('-currently active images: {}'.format(image_ids))
+        properties = ['name', 'status', 'visibility']
+        for image_id in image_ids:
+            name, status, visibility = glance_helper.get_image_properties(image_id, properties)
+            if status == 'active' and name and 'centos-guest' in name:
+                LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
+
+                LOG.info('-launch VMs from the image: {}'.format(image_id))
+                vm_id = vm_helper.launch_vms('vswitch', image=image_id, boot_source='image')
+                vms_added.append(vm_id)
+
+                LOG.info('-OK, 1 VM from image boot up {}'.format(vm_id))
+                break
+            else:
+                LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
+
+    vm_types = ['vswitch', 'dpdk', 'vhost']
+    LOG.info('-launch VMs for different types:{}'.format(vm_types))
+
+    LOG.info('-first make sure we have enough quota')
+    vm_count = len(vms_added) + len(vm_types)
+    adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
+
+    vm_ids = []
+    for vm_type in vm_types:
+        vm_ids += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+
+    return vm_ids
+
+
+def pre_backup_setup(backup_info, con_ssh):
+    from keywords import keystone_helper
+
+    tenant = Tenant.TENANT1
+    backup_info['tenant'] = tenant
+
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant['user'], con_ssh=con_ssh)[0]
+    LOG.info('Using tenant:{} thoughout the pre-backup test, details:{}'.format(tenant_id, tenant))
+
+    LOG.info('Deleting VMs for pre-backup system-wide test')
+    vm_helper.delete_vms()
+
+    LOG.info('Deleting Volumes for pre-backup system-wide test')
+    volumes = cinder_helper.get_volumes()
+    LOG.info('-deleting volumes:{}'.format(volumes))
+    cinder_helper.delete_volumes(volumes)
+
+    LOG.info('Make sure we have glance images to backup')
+    image_ids = glance_helper.get_images()
+
+    LOG.info('Launching VMs')
+    vms_added = pb_launch_vms(con_ssh, image_ids, backup_info=backup_info)
+
+    LOG.info('Creating different sizes of VMs')
+    volumes_added = pb_create_volumes(con_ssh, backup_info=backup_info)
+
+    return {'vms': vms_added, 'volumes': volumes_added, 'images': image_ids}
+
+
+def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
+    import random
+    from keywords import vm_helper, nova_helper
+
+    hyporvisors = host_helper.get_up_hypervisors(con_ssh=con_ssh)
+    if len(hyporvisors) < 2:
+        LOG.info('Only {} hyporvisors, it is not enougth to test migration'.format(len(hyporvisors)))
+        LOG.info('Skip migration test')
+        return 0
+    else:
+        LOG.info('There {} hyporvisors')
+
+    LOG.info('Randomly choose some VMs and do migrate:')
+
+    target = random.choice(vm_ids)
+    LOG.info('-OK, test migration of VM:{}'.format(target))
+
+    original_host = nova_helper.get_vm_host(target)
+    LOG.info('Original host:{}'.format(original_host))
+
+    vm_helper.live_migrate_vm(target)
+    current_host = nova_helper.get_vm_host(target)
+    LOG.info('After live-migration, host:{}'.format(original_host))
+
+    if original_host == current_host:
+        LOG.info('backup_info:{}'.format(backup_info))
+        LOG.warn('VM is still on its original host, live-migration failed? original host:{}'.format(original_host))
+        vm_info = nova_helper.get_vms_info(target)
+        LOG.info('detailed VM info: {}'.format(vm_info))
+
+    original_host = current_host
+    vm_helper.cold_migrate_vm(target)
+    current_host = nova_helper.get_vm_host(target)
+    LOG.info('After code-migration, host:{}'.format(current_host))
+    if original_host == current_host:
+        LOG.warn('VM is still on its original host, code-migration failed? original host:{}'.format(original_host))
+        vm_info = nova_helper.get_vms_info(target)
+        LOG.info('detailed VM info: {}'.format(vm_info))
+
+
+def lock_unlock_host(backup_ifno, con_ssh, vms):
+    from keywords import nova_helper
+    from keywords import host_helper
+    import random
+
+    target_vm = random.choice(vms)
+    LOG.info('lock and unlock the host of VM:{}'.format(target_vm))
+
+    target_host = nova_helper.get_vm_host(target_vm)
+    LOG.info('lock and unlock:{}'.format(target_host))
+
+    host_helper.lock_host(target_host)
+    LOG.info('check if the VM is pingable')
+    vm_helper.ping_vms_from_natbox(target_vm)
+
+    LOG.info('unlock:{}'.format(target_host))
+    host_helper.unlock_host(target_host)
+    host_helper.wait_for_host_states(target_host,
+                                     administrative='unlocked',
+                                     availability='available',
+                                     vim_progress_status='services-enabled')
+    vm_helper.ping_vms_from_natbox(target_vm)
+
+
+def pre_backup_test(backup_info, con_ssh):
+    LOG.tc_step('Pre-backup testing')
+    LOG.info('Backup-info:{}'.format(backup_info))
+
+    vms, volumes, images = pre_backup_setup(backup_info, con_ssh)
+    LOG.info('OK, createed VMs:{}, volumes:{}, images:{}'.format(vms, volumes, images))
+
+    LOG.info('Do VM migration tests')
+    pb_migrate_test(backup_info, con_ssh, vm_ids=vms)
+
+    LOG.info('Lock and unlock computes')
+    lock_unlock_host(backup_info, con_ssh, vms)
