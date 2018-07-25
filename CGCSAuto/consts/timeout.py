@@ -10,7 +10,7 @@ class HostTimeout:
     REBOOT = 2400  # Host reaches enabled/available state after sudo reboot -f from host
     SWACT = 180     # Active controller switched and being able to run openstack CLI after system host-swact returned
     LOCK = 900      # Host in locked state after system host-lock cli returned
-    TASK_CLEAR = 600    # Task clears in system host-show after host reaches enabled/available state
+    TASK_CLEAR = 900    # Task clears in system host-show after host reaches enabled/available state
     FAIL_AFTER_REBOOT = 120     # Host in offline or failed state via system host-show after sudo reboot -f returned
     HYPERVISOR_UP = 300     # Hypervsior in enabled/up state after host in available state and task clears
     WEB_SERVICE_UP = 180    # Web service up in sudo sm-dump after host in available state and task clears
