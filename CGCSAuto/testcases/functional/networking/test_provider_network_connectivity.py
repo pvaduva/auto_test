@@ -1,8 +1,8 @@
-import time
 from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
 from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.recover_hosts import HostsToRecover
@@ -97,39 +97,6 @@ def revert_vlan_provider_nets(request, get_vlan_providernet):
         cli.neutron("providernet-update {} --mtu {}".format(providernet_name, mtu), auth_info=Tenant.ADMIN)
 
     request.addfinalizer(_revert)
-
-
-@fixture(scope='module', autouse=True)
-def modify_neutron_config(request):
-    host = system_helper.get_active_controller_name()
-
-    def get_audit_interval():
-        with host_helper.ssh_to_host(host) as host_ssh:
-            cmd = 'cat /etc/neutron/neutron.conf | grep --color=never pnet_audit_interval'
-            code, output = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-            pnet_audit_interval = output.split('=', 1)[-1].replace(" ", "")
-            return int(pnet_audit_interval)
-
-    def modify_pnet_audit_interval(old_interval, new_interval):
-        with host_helper.ssh_to_host(host) as host_ssh:
-            LOG.fixture_step("Setting pnet_audit_interval to {} seconds".format(new_interval))
-            cmd = "sed -i 's/#pnet_audit_interval = {}/#pnet_audit_interval = {}/' /etc/neutron/neutron.conf".format(
-                old_interval, new_interval)
-            host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-
-    old_interval = get_audit_interval()
-    new_interval = 30
-
-    def _modify():
-        modify_pnet_audit_interval(old_interval, new_interval)
-        assert get_audit_interval() == new_interval, "pnet_audit_interval was not changed to {}".format(new_interval)
-
-    def _revert():
-        modify_pnet_audit_interval(new_interval, old_interval)
-        assert get_audit_interval() == old_interval, "pnet_audit_interval was not changed to {}".format(old_interval)
-
-    request.addfinalizer(_revert)
-    _modify()
 
 
 def test_providernet_connectivity_no_connectivity(get_vlan_providernet):
