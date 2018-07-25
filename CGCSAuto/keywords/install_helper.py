@@ -716,9 +716,25 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
+        copy_setup_logs_to_log_dir(con_ssh=con_ssh)
         return rc, msg
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
+
+
+def copy_setup_logs_to_log_dir(con_ssh=None, log_dir=None):
+    if not log_dir:
+        log_dir = ProjVar.get_var('LOG_DIR')
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+    logs = ['lab_setup.group0.log', 'launch_heat_stacks.log']
+
+    for log in logs:
+        path = WRSROOT_HOME + log
+        log_exists = con_ssh.exec_cmd('test -f {}'.format(path))[0] == 0
+        if log_exists:
+            LOG.info("Copying {} to {}".format(log, log_dir))
+            common.scp_to_local(source_path=path, source_ip=con_ssh.host, dest_path=log_dir)
 
 
 def launch_vms_post_install():
