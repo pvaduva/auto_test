@@ -59,6 +59,7 @@ class NtpPool:
     _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
     _garbage_garbage"'
 
+
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
     IMAGE_DIR_REMOTE = '/sandbox/images'
@@ -88,7 +89,8 @@ class GuestImages:
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
         'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
-        'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5)
+        'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5),
+        'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 1.5),
     }
 
 

@@ -29,8 +29,7 @@ def test_kpi_cinder_volume_creation(collect_kpi):
     LOG.tc_step("Create a 20g volume from default tis guest and collect image download rate, image conversion rate, "
                 "and total volume creation time")
     init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
-    image = glance_helper.create_image(cache_raw=False)[1]
-    ResourceCleanup.add('image', image)
+    image = glance_helper.get_guest_image(guest_os='tis-centos-guest-qcow2', cleanup='function')
 
     vol_id = cinder_helper.create_volume(name='20g', cleanup='function', size=20, image_id=image)[1]
     vol_updated = cinder_helper.get_volume_show_values(vol_id, 'updated_at').split('.')[0]

@@ -570,12 +570,23 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=No
 
     LOG.info("Downloading guest image from test server...")
     dest_name = GuestImages.IMAGE_FILES[img_os][2]
-    source_name = GuestImages.IMAGE_FILES[img_os][0]
-    source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
+    ts_source_name = GuestImages.IMAGE_FILES[img_os][0]
     if con_ssh is None:
         con_ssh = get_cli_client()
-    dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_path, dest_dir=dest_dir,
-                                                             dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
+
+    if ts_source_name:
+        # img saved on test server. scp from test server
+        source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, ts_source_name)
+        dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_path, dest_dir=dest_dir,
+                                                                 dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
+    else:
+        # scp from tis system if needed
+        dest_path = '{}/{}'.format(dest_dir, dest_name)
+        if ProjVar.get_var('REMOTE_CLI') and not con_ssh.file_exists(dest_path):
+            tis_source_path = '{}/{}'.format(GuestImages.IMAGE_DIR, dest_name)
+            common.scp_from_active_controller_to_localhost(source_path=tis_source_path, dest_path=dest_path,
+                                                           timeout=timeout)
+
     if not con_ssh.file_exists(dest_path):
         raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
 
@@ -609,8 +620,22 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
             if not ensure_image_storage_sufficient(guest_os=guest_os):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
+        disk_format = 'qcow2'
+        if guest_os == '{}-qcow2'.format(GuestImages.DEFAULT_GUEST):
+            # convert default img to qcow2 format if needed
+            qcow2_img_path = '{}/{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES[guest_os][2])
+            con_ssh = ControllerClient.get_active_controller()
+            if not con_ssh.file_exists(qcow2_img_path):
+                raw_img_path = '{}/{}'.format(GuestImages.IMAGE_DIR,
+                                              GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2])
+                con_ssh.exec_cmd('qemu-img convert -f raw -O qcow2 {} {}'.format(raw_img_path, qcow2_img_path),
+                                 fail_ok=False, expect_timeout=600)
+        elif re.search('cgcs-guest|vxworks|tis-centos', guest_os):
+            disk_format = 'raw'
+
+        # copy non-default img from test server
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if re.search('cgcs-guest|vxworks|tis-centos', guest_os) else 'qcow2'
+
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]
