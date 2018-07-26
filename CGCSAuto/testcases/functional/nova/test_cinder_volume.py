@@ -2,7 +2,6 @@ from pytest import mark, skip
 
 from keywords import cinder_helper, common, storage_helper, glance_helper
 from consts.kpi_vars import VolCreate, KPI_DATE_FORMAT, ImageConversion, ImageDownload
-from testfixtures.resource_mgmt import ResourceCleanup
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
 
