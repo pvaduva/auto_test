@@ -1,7 +1,7 @@
 import os
 import configparser
 import yaml
-from consts.auth import HostLinuxCreds, CliAuth
+from consts.auth import HostLinuxCreds, CliAuth, Tenant
 from keywords import vlm_helper, host_helper
 from utils.clients.ssh import ControllerClient
 from utils import table_parser
@@ -16,16 +16,18 @@ def env_config_generate(floating_ip):
     projectID = table_parser.table(projectID[1])
     projectID_admin = table_parser._get_values(projectID, 'Name', 'admin', 'ID')
     projectID_admin = projectID_admin.pop(0)
+    user_admin = Tenant.ADMIN['user']
+    password_admin = Tenant.ADMIN['password']
     config = configparser.ConfigParser()
     config.optionxform = str
     config[None] = {'# Project-level authentication scope (name or ID), recommend admin project.':'',
-                        'export OS_PROJECT_NAME':'admin',
+                        'export OS_PROJECT_NAME':user_admin,
                         '# For identity v2, it uses OS_TENANT_NAME rather than OS_PROJECT_NAME.':'',
-                        'export OS_TENANT_NAME':'admin',
+                        'export OS_TENANT_NAME':user_admin,
                         '# Authentication username, belongs to the project above, recommend admin user.':'',
-                        'export OS_USERNAME':'admin',
+                        'export OS_USERNAME':user_admin,
                         '# Authentication password. Use your own password':'',
-                        'export OS_PASSWORD':'Li69nux*',
+                        'export OS_PASSWORD':password_admin,
                         '# Authentication URL, one of the endpoints of keystone service. If this is v3 version, \n# there need some extra variables as follows.' : '',
                         'export OS_AUTH_URL' : Dovetail.OS_AUTH_URL.format(floating_ip),
                         '# Default is 2.0. If use keystone v3 API, this should be set as 3.': '',
@@ -145,40 +147,16 @@ def test():
 
     password = HostLinuxCreds.get_password()
 
-    with host_helper.ssh_to_host('controller-0') as con_ssh:
-        fix_sshd_file(con_ssh)
-        con_ssh.exec_cmd('wall Fixed controller-0')
-        con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
-        con_ssh.exec_sudo_cmd('systemctl restart sshd')
-        # con_ssh.close()
-        # input("press enter to continue")
+    nodes = ['controller-0', 'controller-1', 'compute-0', 'compute-1']
 
-    with host_helper.ssh_to_host('controller-1') as con_ssh:
-        fix_sshd_file(con_ssh)
-        con_ssh.exec_cmd('wall fixed controller-1')
-        con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
-        con_ssh.exec_sudo_cmd('systemctl restart sshd')
-
-        # con_ssh.close()
-        # input("press enter to continue")
-
-    with host_helper.ssh_to_host('compute-0') as con_ssh:
-        fix_sshd_file(con_ssh)
-        con_ssh.exec_cmd('wall fixed compute-0')
-        con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
-        con_ssh.exec_sudo_cmd('systemctl restart sshd')
-
-        # con_ssh.close()
-        # input("press enter to continue")
-
-    with host_helper.ssh_to_host('compute-1') as con_ssh:
-        fix_sshd_file(con_ssh)
-        con_ssh.exec_cmd('wall fixed compute-1')
-        con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
-        con_ssh.exec_sudo_cmd('systemctl restart sshd')
-
-        # con_ssh.close()
-        # input("press enter to continue")
+    for x in nodes:
+        with host_helper.ssh_to_host(x) as con_ssh:
+            fix_sshd_file(con_ssh)
+            con_ssh.exec_cmd('wall Fixed ' + x)
+            con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
+            con_ssh.exec_sudo_cmd('systemctl restart sshd')
+            # con_ssh.close()
+            # input("press enter to continue")
 
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
