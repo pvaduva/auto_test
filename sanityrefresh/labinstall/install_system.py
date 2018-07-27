@@ -1955,7 +1955,7 @@ def main():
     install_output_dir = None
     if args.output_dir:
         output_dir = args.output_dir
-        if re.match('.*\\\d+\\?', output_dir):
+        if re.match('.*/\d+/?$', output_dir):
             install_output_dir = output_dir
     else:
         prefix = re.search("\w+", __file__).group(0) + "."
