@@ -3126,8 +3126,8 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
     rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
     if rc == 0:
-        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") else "config_controller"
-        cmd = 'echo "{}" | sudo -S {} --config-file {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
+        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") else "config_controller --config-file"
+        cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
         con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
