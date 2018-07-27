@@ -8,9 +8,8 @@ import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
-from consts.proj_vars import ProjVar, InstallVars
+from consts.proj_vars import ProjVar, InstallVars, ComplianceVar
 from consts import build_server as build_server_consts
-#from consts.build_server import Server, get_build_server_info
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
@@ -27,6 +26,7 @@ no_teardown = False
 tracebacks = []
 region = None
 test_count = 0
+console_log = True
 
 ################################
 # Process and log test results #
@@ -91,13 +91,19 @@ def _write_results(res_in_tests, test_name):
 
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
+            global tracebacks
+            search_forward = True if ComplianceVar.get_var('REFSTACK_SUITE') else False
             try:
-                from utils.cgcs_reporter import upload_results
+                from utils.cgcs_reporter import upload_results, parse_log
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
-                                                  parse_name=True)
+                                                  traceback=tracebacks, parse_name=True, search_forward=search_forward)
             except Exception:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
+
+            finally:
+                if repeat_count <= 0:
+                    tracebacks = []
 
         try:
             upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
@@ -162,6 +168,8 @@ def pytest_runtest_makereport(item, call, __multicall__):
     if repeat_count > 0:
         for key, val in res.items():
             if val[0] == 'Failed':
+                global tc_end_time
+                tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
                 _write_results(res_in_tests='Failed', test_name=test_name)
                 TestRes.FAILNUM += 1
                 if ProjVar.get_var('PING_FAILURE'):
@@ -222,7 +230,8 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 
     print_msg = separator + '\n' + msg
     logging_msg = '\n{}{} {}'.format(separator, msg, nodeid)
-    print(print_msg)
+    if console_log:
+        print(print_msg)
     if log_type == 'tc_res':
         global tc_end_time
         tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
@@ -269,6 +278,9 @@ def pytest_configure(config):
     tenant_arg = config.getoption('tenant')
     bootvms_arg = config.getoption('bootvms')
     openstack_cli = config.getoption('openstackcli')
+    horizon_visible = config.getoption('horizon_visible')
+    remote_cli = config.getoption('remote_cli')
+
     global change_admin
     change_admin = config.getoption('changeadmin')
     global repeat_count
@@ -283,6 +295,8 @@ def pytest_configure(config):
 
     global no_teardown
     no_teardown = config.getoption('noteardown')
+    if repeat_count > 0 or no_teardown:
+        ProjVar.set_var(NO_TEARDOWN=True)
     keystone_debug = config.getoption('keystone_debug')
     install_conf = config.getoption('installconf')
     global region
@@ -299,9 +313,12 @@ def pytest_configure(config):
     always_collect = True if always_collect else False
     report_all = True if report_all else setup_consts.REPORT_ALL
     openstack_cli = True if openstack_cli else False
+    horizon_visible = True if horizon_visible else False
+    remote_cli = True if remote_cli else False
+    if remote_cli:
+        ProjVar.set_var(REMOTE_CLI=True)
     if collect_netinfo:
         ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
-
     if no_cgcs:
         ProjVar.set_var(CGCS_DB=False)
     if keystone_debug:
@@ -311,6 +328,12 @@ def pytest_configure(config):
     if telnet_log:
         ProjVar.set_var(COLLECT_TELNET=True)
 
+    # Compliance configs:
+    refstack_suite = config.getoption('refstack_suite')
+    if refstack_suite:
+        from consts.proj_vars import ComplianceVar
+        ComplianceVar.set_var(REFSTACK_SUITE=refstack_suite)
+
     if session_log_dir:
         log_dir = session_log_dir
     else:
@@ -318,9 +341,14 @@ def pytest_configure(config):
         resultlog = resultlog if resultlog else os.path.expanduser("~")
         if '/AUTOMATION_LOGS' in resultlog:
             resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
-        if not resultlog.endswith('/'):
-            resultlog += '/'
-        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+        resultlog = os.path.join(resultlog, 'AUTOMATION_LOGS')
+        lab_name = lab['short_name']
+        time_stamp = strftime('%Y%m%d%H%M')
+        if refstack_suite:
+            suite_name = os.path.basename(refstack_suite).split('.txt')[0]
+            log_dir = '{}/refstack/{}/{}_{}'.format(resultlog, lab_name, time_stamp, suite_name)
+        else:
+            log_dir = '{}/{}/{}'.format(resultlog, lab_name, time_stamp)
     os.makedirs(log_dir, exist_ok=True)
 
     if report_all:
@@ -329,7 +357,7 @@ def pytest_configure(config):
     # set project constants, which will be used when scp keyfile, and save ssh log, etc
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
-                     always_collect=always_collect)
+                     always_collect=always_collect, horizon_visible=horizon_visible)
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
@@ -340,7 +368,11 @@ def pytest_configure(config):
 
     InstallVars.set_install_var(lab=lab)
 
-    config_logger(log_dir)
+    if config.getoption('noconsolelog'):
+        global console_log
+        console_log = False
+
+    config_logger(log_dir, console=console_log)
 
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
@@ -393,11 +425,13 @@ def pytest_addoption(parser):
     installconf_help = "Full path of lab install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
-    wipedisk_help = 'wipe the disk(s) on the hosts'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
     telnetlog_help = "Collect telnet logs throughout the session"
+    horizon_visible_help = "Display horizon on screen"
+    remote_cli_help = 'Run testcases using remote CLI'
+    no_console_log = 'Print minimal console logs'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -429,9 +463,14 @@ def pytest_addoption(parser):
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
-
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
+    parser.addoption('--horizon-visible', '--horizon_visible', action='store_true', dest='horizon_visible',
+                     help=horizon_visible_help)
+    parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
+                     help=remote_cli_help)
+    parser.addoption('--noconsolelog', '--noconsole', '--no-console-log', '--no_console_log', '--no-console',
+                     '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
 
     ##################################
     # Lab install or upgrade options #
@@ -441,8 +480,6 @@ def pytest_addoption(parser):
                      help=resumeinstall_help)
     parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
                      help=skiplabsetup_help)
-    parser.addoption('--wipedisk', '--wipedisk', dest='wipedisk', action='store_true',
-                     help=wipedisk_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
     # Ceph Post Install
@@ -480,20 +517,6 @@ def pytest_addoption(parser):
                          "  storage:<#> - to start orchestration after <#> storage (s) are upgraded normally; " \
                          "  compute:<#> - start orchestration after <#> compute(s) are upgraded normally; " \
                          " The default is default. Applicable only for upgrades from R3."
-    apply_strategy_help = "How the orchestration strategy is applied:" \
-                          "  serial - apply orchestration strategy one node  at a time; " \
-                          "  parallel - apply orchestration strategy in parallel; " \
-                          "  ignore - do not apply the orchestration strategy; " \
-                          " If not specified,  the system will choose the option to apply the strategy. " \
-                          "Applicable only for upgrades from R3."
-    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
-                                " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
@@ -507,18 +530,6 @@ def pytest_addoption(parser):
 
     parser.addoption('--orchestration', '--orchestration-after', '--orchestration_after', dest='orchestration_after',
                      action='store', metavar='HOST_PERSONALITY:NUM', default='default', help=orchestration_help)
-
-    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
-                     action='store',  help=apply_strategy_help)
-
-    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
-                     action='store',  help=max_parallel_compute_help)
-
-    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
-                     action='store', default='strict',  help=alarm_restriction_help)
 
     ####################
     # Patching options #
@@ -544,6 +555,49 @@ def pytest_addoption(parser):
 
     parser.addoption('--patch-base-dir', '--patch_base_dir',  dest='patch_base_dir', default=None,
                      action='store', metavar='BASEDIR',  help=patch_base_dir_help)
+
+    ###############################
+    #  Orchestration options #
+    ###############################
+    apply_strategy_help = "How the orchestration strategy is applied:" \
+                          "  serial - apply orchestration strategy one node  at a time; " \
+                          "  parallel - apply orchestration strategy in parallel; " \
+                          "  ignore - do not apply the orchestration strategy; " \
+                          " If not specified,  the system will choose the option to apply the strategy. " \
+                          "Applicable only for upgrades from R3."
+    max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
+                                " is selected"
+    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
+                             of any existing alarms.
+                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
+                                            present
+                                 strict -  orchestration is not allowed if alarms are present
+                             """
+
+    instance_action_help = """Inidcates how to VMs are moved from compute hosts when apply reboot-required patches. There
+                             are two possible values for moving the VMs off the compute hosts:
+                                 start-stop -  instances are stopped before a compute host is patched. This is typically
+                                 used for VMs that do not support migration.
+                                 migrate -  instances are either live migrated or cold migrated  before compute host is
+                                 patched.
+                             """
+    parser.addoption('--controller-apply-type', '--controller_apply_type', '--ctra',  dest='controller_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--storage-apply-type', '--storage_apply_type', '--sstra',  dest='storage_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--compute-apply-type', '--compute_apply_type', '--cstra', dest='compute_strategy',
+                     action='store',  help=apply_strategy_help)
+
+    parser.addoption('--max-parallel-computes', '--max_parallel_computes', dest='max_parallel_computes',
+                     action='store',  help=max_parallel_compute_help)
+
+    parser.addoption('--alarm-restrictions', '--alarm_restrictions', dest='alarm_restrictions',
+                     action='store', default='strict',  help=alarm_restriction_help)
+
+    parser.addoption('--instance-action', '--instance_action', dest='instance_action',
+                     action='store', default='stop-start',  help=instance_action_help)
 
     ###############################
     #  Backup and Restore options #
@@ -577,7 +631,7 @@ def pytest_addoption(parser):
                                           "setup feed from scratch")
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
-                                                "This will be helpful if the lab was/will be in customized way.")
+                                               "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
                      action='store_true', help="Restore a low-latency lab")
 
@@ -585,9 +639,15 @@ def pytest_addoption(parser):
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
+    ####################
+    #  Compliance Test #
+    ####################
+    refstack_help = "RefStack test suite path. Need to be accessible from test server (128.224.150.21)." \
+                    "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'"
+    parser.addoption('--refstack_suite', '--refstack-suite', dest='refstack_suite', help=refstack_help)
 
 
-def config_logger(log_dir):
+def config_logger(log_dir, console=True):
     # logger for log saved in file
     file_name = log_dir + '/TIS_AUTOMATION.log'
     logging.Formatter.converter = gmtime
@@ -610,9 +670,10 @@ def config_logger(log_dir):
     LOG.addHandler(file_handler)
 
     # logger for stream output
+    console_level = logging.INFO if console else logging.CRITICAL
     stream_hdler = logging.StreamHandler()
     stream_hdler.setFormatter(tis_formatter)
-    stream_hdler.setLevel(logging.INFO)
+    stream_hdler.setLevel(console_level)
     LOG.addHandler(stream_hdler)
 
 
@@ -641,6 +702,7 @@ def pytest_unconfigure(config):
         build_server = ProjVar.get_var('BUILD_SERVER')
         session_id = ProjVar.get_var('SESSION_ID')
         session_tag = ProjVar.get_var('REPORT_TAG')
+        system_config = ProjVar.get_var('SYS_TYPE')
         session_str = 'Session Tag: {}\nSession ID: {}\n'.format(session_tag, session_id) if session_id else ''
         total_exec = TestRes.PASSNUM + TestRes.FAILNUM
         # pass_rate = fail_rate = '0'
@@ -652,11 +714,12 @@ def pytest_unconfigure(config):
                 f.write('\n\nLab: {}\n'
                         'Build ID: {}\n'
                         'Build Server: {}\n'
+                        'System Type: {}\n'
                         'Automation LOGs DIR: {}\n'
                         'Ends at: {}\n'
                         '{}'    # test session id and tag
-                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, ProjVar.get_var('LOG_DIR'),
-                                    tc_end_time, session_str, version_and_patch))
+                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, system_config,
+                                    ProjVar.get_var('LOG_DIR'), tc_end_time, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.
                         format(TestRes.PASSNUM, pass_rate, TestRes.FAILNUM, fail_rate, total_exec))
@@ -670,7 +733,7 @@ def pytest_unconfigure(config):
         LOG.exception("Failed to add session summary to test_results.py. \nDetails: {}".format(e.__str__()))
     # Below needs con_ssh to be initialized
     try:
-        from utils.ssh import ControllerClient
+        from utils.clients.ssh import ControllerClient
         con_ssh = ControllerClient.get_active_controller()
     except:
         LOG.warning("No con_ssh found")
@@ -682,6 +745,12 @@ def pytest_unconfigure(config):
             upload_kpi.upload_kpi(kpi_file=ProjVar.get_var('KPI_PATH'))
         except Exception as e:
             LOG.warning("Unable to upload KPIs. {}".format(e.__str__()))
+
+    try:
+        from utils.cgcs_reporter import parse_log
+        parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
+    except Exception as e:
+        LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
 
     try:
         setups.list_migration_history(con_ssh=con_ssh)
@@ -768,7 +837,6 @@ def pytest_generate_tests(metafunc):
     #         metafunc.fixturenames.remove(config_fixture)
     #         metafunc.fixturenames.insert(index, config_fixture)
 
-    pass
     # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
     # Stress fixture
     # global count
@@ -779,6 +847,14 @@ def pytest_generate_tests(metafunc):
     #
     # print(str(count))
     # print("{}".format(metafunc.fixturenames))
+
+    # Prefix 'remote_cli' to test names so they are reported as a different testcase
+    if ProjVar.get_var('REMOTE_CLI'):
+        metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
+
+    elif ComplianceVar.get_var('REFSTACK_SUITE'):
+        suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
+        metafunc.parametrize('compliance_suite', [suite])
 
 
 ##############################################################
@@ -820,6 +896,16 @@ def c1_fixture(config_host_module):
 
 @pytest.fixture(scope='class', autouse=True)
 def c2_fixture(config_host_class):
+    return
+
+
+@pytest.fixture(scope='session', autouse=True)
+def prefix_remote_cli():
+    return
+
+
+@pytest.fixture(scope='session', autouse=True)
+def compliance_suite():
     return
 
 

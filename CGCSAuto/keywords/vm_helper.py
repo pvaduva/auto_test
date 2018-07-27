@@ -1,28 +1,31 @@
+import copy
+import math
+import os
+import os.path
 import random
 import re
 import time
-import copy
-import math
+import ipaddress
+from contextlib import contextmanager, ExitStack
 import pexpect
-from contextlib import contextmanager
-
-from utils import exceptions, cli, table_parser, multi_thread
-from utils.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt
-from utils import local_host
-from utils.tis_log import LOG
-from utils.multi_thread import MThread, Events
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath
+from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
-
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
     vlm_helper, storage_helper, ceilometer_helper
-from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
+from utils import exceptions, cli, table_parser, multi_thread
+from utils import local_host
+from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
+from utils.clients.local import LocalHostClient
+from utils.guest_scripts.scripts import TisInitServiceScript
+from utils.multi_thread import MThread, Events
+from utils.tis_log import LOG
 
 
 def _set_vm_meta(vm_id, action, meta_data, check_after_set=False, con_ssh=None, fail_ok=False):
@@ -574,7 +577,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             # tenant_vif = random.choice(['virtio', 'avp'])
             if tenant_net_id:
                 nics.append({'net-id': tenant_net_id, 'vif-model': 'virtio'})
-    
+
     if isinstance(nics, dict):
         nics = [nics]
 
@@ -668,7 +671,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if meta:
         meta_args = [' --meta {}={}'.format(key_, val_) for key_, val_ in meta.items()]
         args_ += ''.join(meta_args)
-    
+
     if poll:
         args_ += ' --poll'
 
@@ -740,7 +743,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
-                                                                              con_ssh=con_ssh, auth_info=auth_info)
+                                                                              con_ssh=con_ssh, auth_info=Tenant.ADMIN)
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -807,14 +810,16 @@ def get_any_keypair(auth_info=None, con_ssh=None):
     """
     if auth_info is None:
         auth_info = Tenant.get_primary()
-    tenant = auth_info['tenant']
+    user = auth_info['user']
     table_keypairs = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
-    key_name = 'keypair-' + tenant
+    key_name = 'keypair-' + user
 
     if key_name in table_parser.get_column(table_keypairs, 'Name'):
         LOG.debug("{} already exists. Return existing key.".format(key_name))
     else:
-        args_ = '--pub-key /home/wrsroot/.ssh/id_rsa.pub keypair-' + tenant
+        pubkey_dir = ProjVar.get_var('USER_FILE_DIR')
+        pubkey_path = '{}/key.pub'.format(pubkey_dir)
+        args_ = '--pub-key {} keypair-{}'.format(pubkey_path, user)
         table_ = table_parser.table(cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh))
         if key_name not in table_parser.get_column(table_, 'Name'):
             raise exceptions.CLIRejected("Failed to add {}".format(key_name))
@@ -1002,7 +1007,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
                 "VM {} did not reach original state within {} seconds after live migration".
                 format(vm_id, VMTimeout.LIVE_MIGRATE_COMPLETE))
 
-    after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+    after_host = before_host
+    for i in range(3):
+        after_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        if after_host != before_host:
+            break
+        time.sleep(3)
 
     if before_host == after_host:
         LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
@@ -1542,7 +1552,7 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
     content = ''
     for vm_id in vm_ids:
         vm_args = '{}{}'.format(args, vm_id)
-        output = cli.nova('console-log', vm_args, ssh_client=con_ssh)
+        output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
         console_logs[vm_id] = output
         content += "Console log for vm {}:\n{}\n".format(vm_id, output)
 
@@ -1697,10 +1707,123 @@ def ping_ext_from_vm(from_vm, ext_ip=None, user=None, password=None, prompt=None
                                           timeout=timeout, fail_ok=fail_ok)[0]
 
 
+def scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout=60, validate=True, natbox_client=None, sha1sum=None):
+    """
+    scp a file to a vm from natbox
+    the file must be located in the natbox
+    the natbox must has connectivity to the VM
+
+    Args:
+        vm_id (str): vm to scp to
+        source_file (str): full pathname to the source file
+        dest_file (str): destination full pathname in the VM
+        timeout (int): scp timeout
+        validate (bool): verify src and dest sha1sum
+        natbox_client (NATBoxClient|None):
+        sha1sum (str|None): validates the source file prior to operation, or None, only checked if validate=True
+
+    Returns (None):
+
+    """
+    if natbox_client is None:
+        natbox_client = NATBoxClient.get_natbox_client()
+
+    LOG.info("scp-ing from {} to VM {}".format(natbox_client.host, vm_id))
+
+    tmp_loc = '/tmp'
+    fname = os.path.basename(os.path.normpath(source_file))
+
+    # ensure source file exists
+    natbox_client.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+
+    # calculate sha1sum
+    if validate:
+        src_sha1 = natbox_client.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+        src_sha1 = src_sha1.split(' ')[0]
+        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+        if sha1sum is not None and src_sha1 != sha1sum:
+            raise ValueError("src sha1sum validation failed {} != {}".format(src_sha1, sha1sum))
+
+    with ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        vm_ssh.exec_cmd('mkdir -p {}'.format(tmp_loc))
+        vm_ssh.scp_on_dest(natbox_client.user, natbox_client.host, source_file,
+                           '/'.join([tmp_loc, fname]), natbox_client.password, timeout=timeout)
+
+        # `mv $s $d` fails if $s == $d
+        if os.path.normpath(os.path.join(tmp_loc, fname)) != os.path.normpath(dest_file):
+            vm_ssh.exec_sudo_cmd('mv -f {} {}'.format('/'.join([tmp_loc, fname]), dest_file), fail_ok=False)
+
+        # ensure destination file exists
+        vm_ssh.exec_sudo_cmd('test -f {}'.format(dest_file), fail_ok=False)
+
+        # validation
+        if validate:
+            dest_sha1 = vm_ssh.exec_sudo_cmd('sha1sum {}'.format(dest_file), fail_ok=False)[1]
+            dest_sha1 = dest_sha1.split(' ')[0]
+            LOG.info("dst: {}, sha1sum: {}".format(dest_file, dest_sha1))
+            if src_sha1 != dest_sha1:
+                raise ValueError("dst sha1sum validation failed {} != {}".format(src_sha1, dest_sha1))
+            LOG.info("scp completed successfully")
+
+
+def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_ssh=None, natbox_client=None):
+    """
+    scp a file from any SSHClient to a VM
+    since not all SSHClient's has connectivity to the VM, this function scps the source file to natbox first
+
+    Args:
+        vm_id (str): vm to scp to
+        source_file (str): full pathname to the source file
+        dest_file (str): destination path in the VM
+        timeout (int): scp timeout
+        validate (bool): verify src and dest sha1sum
+        source_ssh (SSHClient|None): the source ssh session, or None to use 'localhost'
+        natbox_client (NATBoxClient|None):
+        sha1sum (str|None): validates the source file prior to operation, or None to skip, only used if validate=True
+
+    Returns (None):
+
+    """
+    if natbox_client is None:
+        natbox_client = NATBoxClient.get_natbox_client()
+    if source_ssh is None:
+        source_ssh = NATBoxClient.set_natbox_client('localhost')
+
+    # scp-ing from natbox, forward the call
+    if source_ssh.host == natbox_client.host:
+        return scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout, validate, natbox_client=natbox_client)
+
+    LOG.info("scp-ing from {} to natbox {}".format(source_ssh.host, natbox_client.host))
+
+    tmp_loc = '/tmp'
+    fname = os.path.basename(os.path.normpath(source_file))
+
+    # ensure source file exists
+    source_ssh.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+
+    # calculate sha1sum
+    if validate:
+        src_sha1 = source_ssh.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+        src_sha1 = src_sha1.split(' ')[0]
+        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+    else:
+        src_sha1 = None
+
+    # scp to natbox
+    natbox_client.exec_cmd('mkdir -p {}'.format(tmp_loc))
+    source_ssh.scp_on_source(
+        source_file, natbox_client.user, natbox_client.host, tmp_loc, natbox_client.password, timeout=timeout)
+
+    return scp_to_vm_from_natbox(
+        vm_id, '/'.join([tmp_loc, fname]), dest_file, timeout, validate,
+        natbox_client=natbox_client, sha1sum=src_sha1)
+
+
 @contextmanager
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
-                          vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True):
+                          vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True,
+                          auth_info=Tenant.ADMIN):
     """
     ssh to a vm from natbox.
 
@@ -1710,7 +1833,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         username (str):
         password (str):
         prompt (str):
-        timeout (int): 
+        timeout (int):
         natbox_client (NATBoxClient):
         con_ssh (SSHClient): ssh connection to TiS active controller
         vm_ip (str): ssh to this ip from NatBox if given
@@ -1720,6 +1843,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         retry (bool): whether or not to retry if fails to connect
         retry_timeout (int): max time to retry
         close_ssh
+        auth_info (dict)
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -1730,20 +1854,26 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
 
     """
     if vm_image_name is None:
-        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh).strip().lower()
+        vm_image_name = nova_helper.get_vm_image_name(vm_id=vm_id, con_ssh=con_ssh, auth_info=auth_info).strip().lower()
 
     if vm_ip is None:
         if use_fip:
-            vm_ip = network_helper.get_external_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]
+            vm_ip = network_helper.get_external_ips_for_vms(vms=vm_id, con_ssh=con_ssh, auth_info=auth_info)[0]
         else:
-            vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, con_ssh=con_ssh)[0]
+            vm_ip = network_helper.get_mgmt_ips_for_vms(vms=vm_id, con_ssh=con_ssh, auth_info=auth_info)[0]
 
     if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
 
-    vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
-                         user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
-                         retry_timeout=retry_timeout)
+    try:
+        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
+                             user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
+                             retry_timeout=retry_timeout)
+    except:
+        LOG.warning('Failed to ssh to VM {}! Collecting vm console log'.format(vm_id))
+        get_console_logs(vm_ids=vm_id)
+        raise
+
     try:
         yield vm_ssh
     finally:
@@ -2110,8 +2240,9 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     res_pass = {}
     res_fail = {}
     end_time = time.time() + timeout
+    arg = '--all-tenants' if auth_info == Tenant.ADMIN else ''
     while time.time() < end_time:
-        table_ = table_parser.table(cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info))
+        table_ = table_parser.table(cli.nova('list', positional_args=arg, ssh_client=con_ssh, auth_info=auth_info))
 
         for vm_id in list(vms_to_check):
             vm_val = table_parser.get_values(table_, target_header=header, ID=vm_id)[0]
@@ -3014,9 +3145,9 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
 
 
 def _scp_net_config_cloud_init(guest_os):
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
+    dest_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
 
-    dest_dir = '/home/wrsroot/userdata/'
     if 'ubuntu' in guest_os:
         dest_name = 'ubuntu_cloud_init_if_conf.sh'
     elif 'centos' in guest_os:
@@ -3024,7 +3155,7 @@ def _scp_net_config_cloud_init(guest_os):
     else:
         raise ValueError("Unknown guest_os")
 
-    dest_path = dest_dir + dest_name
+    dest_path = '{}/{}'.format(dest_dir, dest_name)
 
     if con_ssh.file_exists(file_path=dest_path):
         LOG.info('userdata {} already exists. Return existing path'.format(dest_path))
@@ -3055,6 +3186,8 @@ def _scp_net_config_cloud_init(guest_os):
     if index != 0:
         raise exceptions.SSHException("Failed to scp files")
 
+    return dest_dir
+
 
 def _create_cloud_init_if_conf(guest_os, nics_num):
     """
@@ -3075,7 +3208,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
 
     """
 
-    file_dir = TiSPath.USERDATA
+    file_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
     guest_os = guest_os.lower()
 
     # default eth_path for non-ubuntu image
@@ -3094,7 +3227,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     file_name = '{}_{}nic_cloud_init_if_conf.sh'.format(guest_os, nics_num)
 
     file_path = file_dir + file_name
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
@@ -3103,7 +3236,9 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     cmd = 'mkdir -p {}'.format(file_dir)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    tmp_file = ProjVar.get_var('TEMP_DIR') + file_name
+    tmp_dir = '{}/userdata'.format(ProjVar.get_var('TEMP_DIR'))
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_file = tmp_dir + file_name
 
     # No longer need to specify bash using cloud-config
     # if 'centos_7' in guest_os:
@@ -3131,7 +3266,8 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
                 f.write(" - sed -i 's/eth0/{}/g' {}\n".format(ethi_name, ethi_path))
                 f.write(' - ifup {}\n'.format(ethi_name))
 
-    common.scp_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
+    if not ProjVar.get_var('REMOTE_CLI'):
+        common.scp_from_localhost_to_active_controller(source_path=tmp_file, dest_path=file_path, is_dir=False)
 
     LOG.info("Userdata file created: {}".format(file_path))
     return file_path
@@ -3148,29 +3284,23 @@ def _get_cloud_config_add_user(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.USERDATA
+    file_dir = ProjVar.get_var('USER_FILE_DIR')
     file_name = UserData.ADDUSER_WRSROOT
     file_path = file_dir + file_name
 
     if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+        con_ssh = get_cli_client()
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
 
-    LOG.debug('Create userdata directory if not already exists')
-    cmd = 'mkdir -p {}'.format(file_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
     source_file = TestServerPath.USER_DATA + file_name
-
-    dest_path = common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=file_dir,
-                                                                 dest_name=file_name, con_ssh=con_ssh)
-
+    dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_file, dest_dir=file_dir,
+                                                             dest_name=file_name, con_ssh=con_ssh)
     if dest_path is None:
-        raise exceptions.CommonError("userdata file {} does not exist after download".format(file_path))
+        raise exceptions.CommonError("userdata file {} does not exist after download".format(dest_path))
 
-    return file_path
+    return dest_path
 
 
 def wait_for_process(process, vm_id=None, vm_ssh=None, disappear=False, timeout=120, time_to_stay=1, check_interval=3,
@@ -3309,6 +3439,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
             current_vms = nova_helper.get_vms(strict=False, name=vm_name)
             current_count = len(current_vms)
             if current_count == expt_max:
+                wait_for_vm_status(vm_id=current_vms[-1])
                 if func_second_vm:
                     if not second_vm:
                         second_vm = list(set(current_vms) - set(vm_ids))[0]
@@ -3325,6 +3456,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
 
                 vm_ids = current_vms
                 for vm_id in new_vms:
+                    wait_for_vm_status(vm_id=vm_id)
                     wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
 
                     dd_event = Events('dd started in {}'.format(vm_id))
@@ -3646,7 +3778,7 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
 
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
-                 vlm=False, ping_vms=False):
+                 vlm=False, force=True, ping_vms=False):
     """
     Evacuate given vms by rebooting their host. VMs should be on specified host already when this keyword called.
     Args:
@@ -3659,6 +3791,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         post_host (str): expected host for vms to be evacuated to
         vlm (False): whether to power-off host via vlm (assume host already reserved). When False, Run 'sudo reboot -f'
             from host.
+        force (bool): whether to use 'reboot -f'. This param is only used if vlm=False.
         ping_vms (bool): whether to ping vms after evacuation
 
     Returns (tuple): (<code> (int), <vms_failed_to_evac> (list))
@@ -3677,46 +3810,54 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         if standby and active == host:
             is_swacted = True
 
+    is_sx = system_helper.is_simplex()
+
     if vlm:
         LOG.tc_step("Power-off {} from vlm".format(host))
         vlm_helper.power_off_hosts(hosts=host, reserve=False)
     else:
         LOG.tc_step("'sudo reboot -f' from {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=False, con_ssh=con_ssh)
+        host_helper.reboot_hosts(host, wait_for_offline=True, wait_for_reboot_finish=False, force_reboot=force,
+                                 con_ssh=con_ssh)
+
+    if is_sx:
+        host_helper.wait_for_hosts_ready(hosts=host, con_ssh=con_ssh)
 
     try:
         LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
-                            con_ssh=con_ssh)
+        if not is_sx:
+            wait_for_vms_values(vms_to_check, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120,
+                                con_ssh=con_ssh)
 
-        LOG.tc_step("Check vms are in Active state and moved to other host(s) after host failure")
+        LOG.tc_step("Check vms are in Active state and moved to other host(s) (non-sx) after host failure")
         res, active_vms, inactive_vms = wait_for_vms_values(vms=vms_to_check, values=VMStatus.ACTIVE, timeout=timeout,
                                                             con_ssh=con_ssh)
 
-        vms_host_err = []
-        for vm in vms_to_check:
-            if post_host:
-                if nova_helper.get_vm_host(vm) != post_host:
-                    vms_host_err.append(vm)
-            else:
-                if nova_helper.get_vm_host(vm) == host:
-                    vms_host_err.append(vm)
+        if not is_sx:
+            vms_host_err = []
+            for vm in vms_to_check:
+                if post_host:
+                    if nova_helper.get_vm_host(vm) != post_host:
+                        vms_host_err.append(vm)
+                else:
+                    if nova_helper.get_vm_host(vm) == host:
+                        vms_host_err.append(vm)
 
-        if vms_host_err:
-            if post_host:
-                err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
-                          "state: {}".format(post_host, host, vms_host_err, inactive_vms)
-            else:
-                err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
-                    format(host, vms_host_err, inactive_vms)
+            if vms_host_err:
+                if post_host:
+                    err_msg = "Following VMs is not moved to expected host {} from {}: {}\nVMs did not reach Active " \
+                              "state: {}".format(post_host, host, vms_host_err, inactive_vms)
+                else:
+                    err_msg = "Following VMs stayed on the same host {}: {}\nVMs did not reach Active state: {}".\
+                        format(host, vms_host_err, inactive_vms)
 
-            if fail_ok:
-                LOG.warning(err_msg)
-                return 1, vms_host_err
-            raise exceptions.VMError(err_msg)
+                if fail_ok:
+                    LOG.warning(err_msg)
+                    return 1, vms_host_err
+                raise exceptions.VMError(err_msg)
 
         if inactive_vms:
-            err_msg = "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
+            err_msg = "VMs did not reach Active state after vm host rebooted: {}".format(inactive_vms)
             if fail_ok:
                 LOG.warning(err_msg)
                 return 2, inactive_vms
@@ -3964,21 +4105,22 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     """
 
     if not flavor:
-        flavor_id = nova_helper.create_flavor(name=vm_type)[1]
+        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2)[1]
         if cleanup:
-            ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
+            ResourceCleanup.add('flavor', flavor, scope=cleanup)
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
 
         if vm_type in ['vswitch', 'dpdk', 'vhost']:
             extra_specs.update({FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.MEM_PAGE_SIZE: '2048'})
 
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor_extra_specs(flavor=flavor, **extra_specs)
 
     resource_id = None
     boot_source = boot_source if boot_source else 'volume'
     if image:
         if boot_source == 'volume':
-            resource_id = cinder_helper.create_volume(name=vm_type, image_id=image, guest_image=guest_os)[1]
+            resource_id = cinder_helper.create_volume(name=vm_type, image_id=image, guest_image=guest_os,
+                                                      auth_info=auth_info)[1]
             if cleanup:
                 ResourceCleanup.add('volume', resource_id, scope=cleanup)
         else:
@@ -3993,9 +4135,9 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         else:
             vif_model = vm_type
 
-        mgmt_net_id = network_helper.get_mgmt_net_id()
-        tenant_net_id = network_helper.get_tenant_net_id()
-        internal_net_id = network_helper.get_internal_net_id()
+        mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info)
+        tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info)
+        internal_net_id = network_helper.get_internal_net_id(auth_info=auth_info)
 
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
@@ -4214,7 +4356,7 @@ def get_vim_events(vm_id, event_ids=None, controller=None, con_ssh=None):
 
 def get_live_migrate_duration(vm_id, con_ssh=None):
     LOG.info("Get live migration duration from nfv-vim-events.log for vm {}".format(vm_id))
-    events = (VimEventID.live_migrate_begin, VimEventID.live_migrate_end)
+    events = (VimEventID.LIVE_MIG_BEGIN, VimEventID.LIVE_MIG_END)
     live_mig_begin, live_mig_end = get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
 
     start_time = live_mig_begin['timestamp']
@@ -4227,8 +4369,8 @@ def get_live_migrate_duration(vm_id, con_ssh=None):
 
 def get_cold_migrate_duration(vm_id, con_ssh=None):
     LOG.info("Get cold migration duration from vim-event-log for vm {}".format(vm_id))
-    events = (VimEventID.cold_migrate_begin, VimEventID.cold_migrate_end,
-              VimEventID.cold_migrate_confirm_begin, VimEventID.cold_migrate_confirmed)
+    events = (VimEventID.COLD_MIG_BEGIN, VimEventID.COLD_MIG_END,
+              VimEventID.COLD_MIG_CONFIRM_BEGIN, VimEventID.COLD_MIG_CONFIRMED)
     cold_mig_begin, cold_mig_end, cold_mig_confirm_begin, cold_mig_confirm_end = \
         get_vim_events(vm_id=vm_id, event_ids=events, con_ssh=con_ssh)
 
@@ -4242,3 +4384,500 @@ def get_cold_migrate_duration(vm_id, con_ssh=None):
     LOG.info("Cold migrate and confirm for vm {} took {} seconds".format(vm_id, duration))
 
     return duration
+
+
+def live_migrate_force_complete(vm_id, migration_id=None, timeout=300, fail_ok=False, con_ssh=None):
+    """
+    Run nova live-migration-force-complete against given vm and migration session.
+    Args:
+        vm_id (str):
+        migration_id (str|int):
+        timeout:
+        fail_ok:
+        con_ssh:
+
+    Returns (tuple):
+        (0, 'VM is successfully live-migrated after live-migration-force-complete')
+        (1, <err_msg>)      # nova live-migration-force-complete cmd rejected. Only returns if fail_ok=True.
+
+    """
+    if not migration_id:
+        migration_id = get_vm_migration_values(vm_id=vm_id, fail_ok=False, con_ssh=con_ssh)[0]
+
+    code, output = cli.nova('live-migration-force-complete', '{} {}'.format(vm_id, migration_id), fail_ok=fail_ok,
+                            rtn_list=True, ssh_client=con_ssh)
+
+    if code > 0:
+        return 1, output
+
+    wait_for_migration_status(vm_id=vm_id, migration_id=migration_id, fail_ok=False, timeout=timeout, con_ssh=con_ssh)
+    msg = "VM is successfully live-migrated after live-migration-force-complete"
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_vm_migration_values(vm_id, rtn_val='Id', migration_type='live-migration', fail_ok=True, con_ssh=None, **kwargs):
+    """
+    Get values for given vm via nova migration-list
+    Args:
+        vm_id (str):
+        rtn_val (str):
+        migration_type(str): valid types: live-migration, migration
+        fail_ok:
+        con_ssh:
+        **kwargs:
+
+    Returns (list):
+
+    """
+    migration_tab = nova_helper.get_migration_list_table(con_ssh=con_ssh)
+    filters = {'Instance UUID': vm_id, 'Type': migration_type}
+    if kwargs:
+        filters.update(kwargs)
+    mig_ids = table_parser.get_values(migration_tab, target_header=rtn_val, **filters)
+    if not mig_ids and not fail_ok:
+        raise exceptions.VMError("{} has no {} session with filters: {}".format(vm_id, migration_type, kwargs))
+
+    return mig_ids
+
+
+def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, expt_status='completed',
+                              fail_ok=False, timeout=300, check_interval=5, con_ssh=None):
+    """
+    Wait for a migration session to reach given status in nova mgiration-list
+    Args:
+        vm_id (str):
+        migration_id (str|int):
+        migration_type (str): valid types: live-migration, migration
+        expt_status (str): migration status to wait for. such as completed, running, etc
+        fail_ok (bool):
+        timeout (int): max time to wait for the state
+        check_interval (int):
+        con_ssh:
+
+    Returns (tuple):
+        (0, <expt_status>)      #  migration status reached as expected
+        (1, <current_status>)   # did not reach given status. This only returns if fail_ok=True
+
+    """
+    if not migration_id:
+        migration_id = get_vm_migration_values(vm_id=vm_id, migration_type=migration_type, fail_ok=False,
+                                               con_ssh=con_ssh)[0]
+
+    LOG.info("Waiting for migration {} for vm {} to reach {} status".format(migration_id, vm_id, expt_status))
+    end_time = time.time() + timeout
+    prev_state = None
+    while time.time() < end_time:
+        mig_status = get_vm_migration_values(vm_id=vm_id, rtn_val='Status', **{'Id': migration_id})[0]
+        if mig_status == expt_status:
+            LOG.info("Migration {} for vm {} reached status: {}".format(migration_id, vm_id, expt_status))
+            return True, expt_status
+
+        if mig_status != prev_state:
+            LOG.info("Migration {} for vm {} is in status - {}".format(migration_id, vm_id, mig_status))
+            prev_state = mig_status
+
+        time.sleep(check_interval)
+
+    msg = 'Migration {} for vm {} did not reach {} status within {} seconds. It is in {} status.'. \
+        format(migration_id, vm_id, expt_status, timeout, prev_state)
+    if fail_ok:
+        LOG.warning(msg)
+        return False, prev_state
+    else:
+        raise exceptions.VMError(msg)
+
+
+def get_vms_ports_info(vms, rtn_subnet_id=False):
+    """
+    Get VMs' ports' (ip_addr, cidr, mac_addr).
+
+    Args:
+        vms (str|list):
+            vm_id, or a list of vm_ids
+        rtn_subnet_id (bool):
+            replaces cidr with subnet_id in result
+
+    Returns (dict):
+        {vms[0]: [(ip_addr, cidr, mac_addr), ...], vms[1]: [...], ...}
+    """
+    if not issubclass(type(vms), (list, tuple)):
+        vms = [vms]
+
+    info = dict()
+    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.ADMIN))
+    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.ADMIN))
+    for vm in vms:
+        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.ADMIN))
+        nics = table_parser.get_value_two_col_table(table, "wrs-if:nics")
+        if not issubclass(type(nics), list):
+            nics = [nics]
+        for nic in nics:
+            nic = eval(nic)
+            nic = nic[list(nic.keys())[0]]
+            fixed_ips = table_parser.get_values(port_table, 'fixed_ips', id=nic['port_id'])
+            mac = nic['mac_address']
+            if not issubclass(type(fixed_ips), list):
+                fixed_ips = [fixed_ips]
+            for fixed_ip in fixed_ips:
+                fixed_ip = eval(fixed_ip)
+                if rtn_subnet_id:
+                    cidr = fixed_ip['subnet_id']
+                    LOG.info("VM {} interface {} ip={} subnet_id={}".format(vm, mac, fixed_ip['ip_address'], cidr))
+                else:
+                    cidr = table_parser.get_values(subnet_table, 'cidr', id=fixed_ip['subnet_id'])[0]
+                    LOG.info("VM {} interface {} ip={} cidr={}".format(vm, mac, fixed_ip['ip_address'], cidr))
+
+                if vm not in info:
+                    info[vm] = list()
+                info[vm].append((fixed_ip['ip_address'], cidr, mac))
+
+    return info
+
+
+def _set_vm_route(vm_id, target_subnet, via_ip, dev_or_mac, persist=True):
+    # returns True if the targeted VM is vswitch-enabled
+    # for vswitch-enabled VMs, it must be setup with TisInitServiceScript if persist=True
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        vshell, msg = ssh_client.exec_cmd("vshell port-list", fail_ok=True)
+        vshell = not vshell
+        if ':' in dev_or_mac:
+            dev = network_helper.get_eth_for_mac(ssh_client, dev_or_mac, vshell=vshell)
+        else:
+            dev = dev_or_mac
+        if not vshell:   # not avs managed
+            param = target_subnet, via_ip, dev
+            LOG.info("Routing {} via {} on interface {}".format(*param))
+            ssh_client.exec_sudo_cmd("route add -net {} gw {} {}".format(*param), fail_ok=False)
+            if persist:
+                LOG.info("Setting persistent route")
+                ssh_client.exec_sudo_cmd(
+                    "echo -e \"{} via {}\" > /etc/sysconfig/network-scripts/route-{}".format(*param),
+                    fail_ok=False)
+            return False
+        else:
+            param = target_subnet, via_ip, dev
+            LOG.info("Routing {} via {} on interface {}, AVS-enabled".format(*param))
+            ssh_client.exec_sudo_cmd(
+                "sed -i $'s,quit,route add {} {} {} 1\\\\nquit,g' /etc/vswitch/vswitch.cmds.default".format(
+                    target_subnet, dev, via_ip
+                ), fail_ok=False)
+            # reload vswitch
+            ssh_client.exec_sudo_cmd("/etc/init.d/vswitch restart", fail_ok=False)
+            if persist:
+                LOG.info("Setting persistent route")
+                ssh_client.exec_sudo_cmd(
+                    # ROUTING_STUB
+                    # "192.168.1.0/24,192.168.111.1,eth0"
+                    "sed -i $'s@#ROUTING_STUB@\"{},{},{}\"\\\\n#ROUTING_STUB@g' {}".format(
+                        target_subnet, via_ip, dev, TisInitServiceScript.configuration_path
+                    ), fail_ok=False)
+            return True
+
+
+def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
+    """
+    Route the pair of VMs' data interfaces through internal interfaces
+    If multiple interfaces available on either of the VMs, the last one is used
+    If no interfaces available for data/internal network for either VM, raises IndexError
+    The internal interfaces for the pair VM must be on the same gateway
+    no fail_ok option, since if failed, the vm's state is undefined
+
+    Args:
+        vm1 (str):
+            vm_id, src if bidirectional=False
+        vm2 (str):
+            vm_id, dest if bidirectional=False
+        bidirectional (bool):
+            if True, also routes from vm2 to vm1
+        validate (bool):
+            validate pings between the pair over the data network
+        persist (bool):
+            keep the route after possible VM reboots
+
+    Returns (dict):
+        the interfaces used for routing,
+        {vm_id: {'data': {'ip', 'cidr', 'mac'}, 'internal':{'ip', 'cidr', 'mac'}}}
+    """
+    if vm1 == vm2:
+        raise ValueError("cannot route to a VM itself")
+
+    LOG.info("Collecting VMs' networks")
+    interfaces = {
+        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.ADMIN),
+              "internal": network_helper.get_internal_ips_for_vms(vm1)},
+        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.ADMIN),
+              "internal": network_helper.get_internal_ips_for_vms(vm2)},
+    }
+
+    for vm, info in get_vms_ports_info([vm1, vm2]).items():
+        for ip, cidr, mac in info:
+            # expect one data and one internal
+            if ip in interfaces[vm]['data']:
+                interfaces[vm]['data'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
+            elif ip in interfaces[vm]['internal']:
+                interfaces[vm]['internal'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
+
+    if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
+        raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
+
+    vshell_vm1 = _set_vm_route(
+        vm1,
+        interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
+
+    if bidirectional:
+        vshell_vm2 = _set_vm_route(
+            vm2,
+            interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm2]['internal']['mac'])
+
+    if validate:
+        LOG.info("Validating route(s) across data")
+        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1)
+        if bidirectional:
+            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2)
+
+    return interfaces
+
+
+def setup_kernel_routing(vm_id, **kwargs):
+    """
+    Setup kernel routing function for the specified VM
+    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
+    in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
+    see TisInitServiceScript for script details
+    no fail_ok option, since if failed, the vm's state is undefined
+
+    Args:
+        vm_id (str):
+            the VM to be configured
+        kwargs (dict):
+            kwargs for TisInitServiceScript.configure
+
+    """
+    LOG.info("Setting up kernel routing for VM {}, kwargs={}".format(vm_id, kwargs))
+
+    scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        r, msg = ssh_client.exec_cmd("cat /proc/sys/net/ipv4/ip_forward", fail_ok=False)
+        if msg == "1":
+            LOG.warn("VM {} has ip_forward enabled already, skipping".format(vm_id))
+            return
+        TisInitServiceScript.configure(ssh_client, **kwargs)
+        TisInitServiceScript.enable(ssh_client)
+        TisInitServiceScript.start(ssh_client)
+
+
+def setup_avr_routing(vm_id, **kwargs):
+    """
+    Setup avr routing (vswitch L3) function for the specified VM
+    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
+    in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
+    see TisInitServiceScript for script details
+    no fail_ok option, since if failed, the vm's state is undefined
+
+    Args:
+        vm_id (str):
+            the VM to be configured
+        kwargs (dict):
+            kwargs for TisInitServiceScript.configure
+
+    """
+    LOG.info("Setting up avr routing for VM {}, kwargs={}".format(vm_id, kwargs))
+    data = network_helper.get_data_ips_for_vms(vm_id)[0]
+    internal = network_helper.get_internal_ips_for_vms(vm_id)[0]
+    for vm, info in get_vms_ports_info([vm_id]).items():
+        for ip, cidr, mac in info:
+            if ip == data:
+                data_netmask = ipaddress.ip_network(cidr).netmask
+            elif ip == internal:
+                internal_netmask = ipaddress.ip_network(cidr).netmask
+
+    scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
+    with ssh_to_vm_from_natbox(vm_id) as ssh_client:
+        TisInitServiceScript.configure(ssh_client, FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
+    "{},{},eth0,1500"
+    "{},{},eth1,1500"
+)
+""".format(data, data_netmask, internal, internal_netmask), **kwargs)
+        TisInitServiceScript.enable(ssh_client)
+        TisInitServiceScript.start(ssh_client)
+
+
+@contextmanager
+def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=1000):
+    """
+    Create traffic between VMs during 'operation'
+    Statistics can be retrieved through ixia_session.get_statistics
+
+    Args:
+        vm_pairs (list)
+            list of tuple(s)
+                [0]: src: vm_id / (ip, vm_id)
+                [1]: dst: vm_id / (ip, vm_id)
+                using get_data_ips_for_vms[0] if only supplying vm_id s
+        ixia_session (IxiaSession|None):
+            IxiaSession object, must be connected
+            or None, released upon context ends
+        bidirectional (bool):
+            if the traffic is bidirectional
+        fps (int):
+            frames per second
+            if the traffic is bidirectional, this value is implicitly halved
+
+    Returns (context):
+        (IxiaSession) with traffic started
+        stopped upon context ends, released if ixia_session is None
+    """
+    LOG.info("Setting up traffic for pairs {}".format(vm_pairs))
+
+    src = dict()
+    dest = dict()
+    for source, destination in vm_pairs:
+        if issubclass(type(source), (list, tuple)):
+            ip, vm_id = source
+            ipaddress.ip_address(ip)     # verify if the IP supplied is legal, raises ValueError
+        else:
+            vm_id = source
+            ip = network_helper.get_data_ips_for_vms(vm_id)[0]
+        src[ip] = vm_id
+        LOG.info("src: vm_id={} ip={}".format(vm_id, ip))
+
+        if issubclass(type(destination), (list, tuple)):
+            ip, vm_id = destination
+            ipaddress.ip_address(ip)
+        else:
+            vm_id = destination
+            ip = network_helper.get_data_ips_for_vms(vm_id)[0]
+        dest[ip] = vm_id
+        LOG.info("dst: vm_id={} ip={}".format(vm_id, ip))
+
+    LOG.info("Getting VLANs associated")
+    for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=True).items():
+        for ip, subnet_id, mac in ports:
+            if ip in src or ip in dest:
+                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.ADMIN))
+                cidr = table_parser.get_value_two_col_table(table, "cidr")
+                net_type = table_parser.get_value_two_col_table(table, "wrs-provider:network_type")
+                seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
+                if ip in src:
+                    LOG.info("src: network_type={} seg_id={}".format(net_type, seg_id))
+                    src[ip] = int(seg_id), cidr
+                if ip in dest:
+                    LOG.info("dst: network_type={} seg_id={}".format(net_type, seg_id))
+                    dest[ip] = int(seg_id), cidr
+
+                if net_type != "vlan":
+                    LOG.warn("network type is not vlan, this setup might be incorrect")
+
+    # value: vm_id(str) -> tuple(vlan(int), cidr(str))
+    assert all(map(isinstance, src.values(), [tuple]*len(src))) and \
+        all(map(isinstance, dest.values(), [tuple]*len(src))), \
+        "at least one network is not resolved"
+
+    # determining the port bindings to the interfaces
+    ixia_ports = ProjVar.get_var("LAB")['ixia_ports']
+    all_ports = set([(d['port'], d['range']) for d in ixia_ports])
+    src_ports = dict()
+    dest_ports = dict()
+    for ip, (vlan, cidr) in src.items():
+        for d in ixia_ports:    # ordered as a list
+            if vlan in range(*d['range']):
+                src_ports[(ip, vlan)] = d['port']
+
+                # if a port is used for pair1, it should not be used for pair2
+                if (d['port'], d['range']) in all_ports:
+                    all_ports.remove((d['port'], d['range']))
+
+                # each ip/vlan is bind to 1 port max.
+                break
+
+    # ensuring the order, so if multiple ports support pair2 interfaces, use 1 port only
+    all_ports = list(all_ports)
+    all_ports.sort()
+
+    for ip, (vlan, cidr) in dest.items():
+        for port, rg in all_ports:  # ordered, rest of avail. ports
+            if vlan in range(*rg):
+                dest_ports[(ip, vlan)] = port
+                break
+
+    LOG.info("Port matching complete src_ports={} dest_ports={}".format(src_ports, dest_ports))
+    assert len(set(src_ports.values()).intersection(set(dest_ports.values()))) == 0, \
+        "at least one src-dest pair shares the same ixia port (i.e., self-destined)"
+    assert len(src_ports) and len(dest_ports), "at least one of the pairs cannot be associated with an ixia port"
+
+    unavailable_ips = set()
+    for ports in network_helper.get_ports('fixed_ips', merge_lines=False):
+        if not issubclass(type(ports), list):
+            ports = [ports]
+        for port in ports:
+            port = eval(port)
+            unavailable_ips.add(ipaddress.ip_address(port["ip_address"]))
+
+    with ExitStack() as stack:
+        if ixia_session is None:
+            LOG.info("ixia_session not supplied, creating")
+            from keywords import ixia_helper
+            ixia_session = ixia_helper.IxiaSession()
+            ixia_session.connect()
+            stack.callback(ixia_session.disconnect, traffic_stop=True)
+
+        ixia_session.load_config(IxiaPath.CFG_500FPS)
+        ixia_session.add_chassis(clear=True)
+        vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
+                                            existing=True, rtn_dict=True)
+
+        # create new interfaces
+        source_ifs = list()
+        for ip, vlan in src_ports:
+            port = src_ports[(ip, vlan)]
+            cidr = src[ip][1]
+            for ip_in_subnet in ipaddress.ip_network(cidr).hosts():
+                if ip_in_subnet not in unavailable_ips:
+                    unavailable_ips.add(ip_in_subnet)
+                    iface_ip = ip_in_subnet
+                    break
+            else:
+                raise ValueError("No available IPs in subnet")
+            if ipaddress.ip_address(ip).version == 4:
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+            else:
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
+            source_ifs.append(iface)
+
+        dest_ifs = list()
+        for ip, vlan in dest_ports:
+            port = dest_ports[(ip, vlan)]
+            cidr = dest[ip][1]
+            for ip_in_subnet in ipaddress.ip_network(cidr).hosts():
+                if ip_in_subnet not in unavailable_ips:
+                    unavailable_ips.add(ip_in_subnet)
+                    iface_ip = ip_in_subnet
+                    break
+            else:
+                raise ValueError("No available IPs in subnet")
+            if ipaddress.ip_address(ip).version == 4:
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+            else:
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
+            dest_ifs.append(iface)
+
+        # assuming the configuration only has one trafficItem in it
+        trafficItem = ixia_session.getList(ixia_session.getRoot()+'/traffic', 'trafficItem')[0]
+        if bidirectional:
+            ixia_session.configure(trafficItem, biDirectional='true')
+            fps /= 2
+        else:
+            ixia_session.configure(trafficItem, biDirectional='false')
+
+        # enable only newly created interfaces for traffic
+        endpointSet = ixia_session.getList(trafficItem, 'endpointSet')[0]
+        ixia_session.configure_endpoint_set(endpointSet, source_ifs, dest_ifs, append=False)
+
+        # traffic not started yet, use configElements to adjust settings
+        configElement = ixia_session.getList(trafficItem, 'configElement')[0]
+        ixia_session.configure(configElement+'/frameRate', rate=fps)
+
+        ixia_session.traffic_start()
+
+        yield ixia_session

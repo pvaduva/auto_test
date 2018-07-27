@@ -1,10 +1,14 @@
 import re
+
 from pytest import mark
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-from utils import cli
+
 from consts.cgcs import UUID
 from keywords import system_helper
+from utils import cli
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
+
+
 # This test case is  to verify the query alarm and logs using event list.
 # Mainly it starts on with generating alarm alarm id 300.005 Critical major minot and not applicable and query them.
 # US24127,US36505 and US36506 US70391 –FM: Merge Query/Display of Historical Alarms and Customer Logs

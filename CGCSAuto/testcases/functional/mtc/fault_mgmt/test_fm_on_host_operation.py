@@ -45,7 +45,7 @@ def _test_system_alarm_list_on_compute_reboot():
 
     LOG.tc_step("Reboot a nova hypervisor host and wait for hypervisor state up")
     compute_host = host_helper.get_up_hypervisors()[0]
-    host_helper.reboot_hosts(compute_host, wait_for_reboot_finish=True)
+    host_helper.reboot_hosts(compute_host)
     time.sleep(20)
 
     LOG.tc_step("Verify no active alarm generated after reboot completes")

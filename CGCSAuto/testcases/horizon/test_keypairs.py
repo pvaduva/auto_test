@@ -1,18 +1,18 @@
 from utils.horizon.regions import messages
 from utils.horizon.pages.project.compute import keypairspage
-from utils.horizon import helper
 from pytest import fixture
 from utils.tis_log import LOG
+from testfixtures.horizon import tenant_home_pg, driver
+from consts import horizon
 
+class TestKeypair:
 
-class TestKeypair(helper.TenantTestCase):
-    """Checks that the user is able to create/delete keypair."""
     KEYPAIR_NAME = 'test keypair'
 
     @fixture(scope='function')
-    def keypairs_pg(self, home_pg, request):
+    def keypairs_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Key Pairs')
-        keypairs_pg = keypairspage.KeypairsPage(home_pg.driver)
+        keypairs_pg = keypairspage.KeypairsPage(tenant_home_pg.driver)
         keypairs_pg.go_to_target_page()
 
         def teardown():
@@ -51,3 +51,4 @@ class TestKeypair(helper.TenantTestCase):
         assert keypairs_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not keypairs_pg.find_message_and_dismiss(messages.ERROR)
         assert not keypairs_pg.is_keypair_present(self.KEYPAIR_NAME)
+        horizon.test_result = True

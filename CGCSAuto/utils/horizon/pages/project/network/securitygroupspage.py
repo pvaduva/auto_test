@@ -31,10 +31,6 @@ class SecuritygroupsPage(basepage.BasePage):
 
     SECURITYGROUPS_TABLE_NAME_COLUMN = 'Name'
 
-    def __init__(self, driver):
-        super(SecuritygroupsPage, self).__init__(driver)
-        self._page_title = "Security Groups"
-
     def _get_row_with_securitygroup_name(self, name):
         return self.securitygroups_table.get_row(
             self.SECURITYGROUPS_TABLE_NAME_COLUMN, name)
@@ -58,6 +54,10 @@ class SecuritygroupsPage(basepage.BasePage):
 
     def is_securitygroup_present(self, name):
         return bool(self._get_row_with_securitygroup_name(name))
+
+    def get_security_group_info(self, name, header):
+        row = self._get_row_with_securitygroup_name(name)
+        return row.cells[header].text
 
     def go_to_manage_rules(self, name):
         row = self._get_row_with_securitygroup_name(name)

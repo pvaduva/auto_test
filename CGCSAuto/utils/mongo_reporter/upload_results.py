@@ -1,14 +1,18 @@
 import os
+import sys
 import re
 import pexpect
 import glob
 
 from consts.reporting import UploadRes
+from consts.lab import get_lab_dict
 
 LOCAL_PATH = os.path.dirname(__file__)
 WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
 WASSP_REPORTER = os.path.join(WASSP_PATH, "wassp/host/tools/report/testReportManual.py")
 WASSP_PYTHON = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
+# WASSP_LIB = os.path.join(WASSP_PATH, '.venv_wassp', 'lib', 'python3.3', 'site-packages')
+# sys.path.append(WASSP_LIB)
 
 
 def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=None, skip_uploaded=True):
@@ -41,7 +45,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     jira = ''
 
     # Parse common test info from test_results.log
-    lab, build, build_server, testcases_list, log_dir = __parse_common_info(file_path)
+    lab, build, build_server, testcases_list, log_dir, system_type = __parse_common_info(file_path)
 
     # logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
     logfile = 'none'        # Do not upload log to mongoDB since it will have major impact on performance
@@ -71,19 +75,19 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
         if not __upload_result(result_ini=result_ini, tag=tag, tester_name=tester_name, test_name=test_name,
                                result=result, lab=lab, build=build, userstory=userstory, domain=domain, jira=jira,
                                logfile=logfile, release_name=release_name, upload_log=upload_log,
-                               build_server=build_server):
+                               build_server=build_server, system_type=system_type):
             exit(1)
 
     print('All results uploaded successfully from: {}\nTag: {}'.format(file_path, tag))
 
 
 def __upload_result(result_ini, tag, tester_name, test_name, result, lab, build, userstory, domain, jira, logfile,
-                    release_name, upload_log, build_server):
+                    release_name, upload_log, build_server, system_type):
 
     upload_cmd = "{} {} -f {} 2>&1".format(WASSP_PYTHON, WASSP_REPORTER, result_ini)
     env_params = "-o '{}' -x '{}'  -n '{}' -t '{}' -r '{}' -l '{}' -b '{}' -u '{}' -d '{}' -j '{}' -a '{}' -R '{}' " \
-                 "-s '{}'".format(result_ini, tag, tester_name, test_name, result, lab, build, userstory, domain,
-                                  jira, logfile, release_name, build_server)
+                 "-s '{}' -L '{}'".format(result_ini, tag, tester_name, test_name, result, lab, build, userstory,
+                                          domain, jira, logfile, release_name, build_server, system_type)
 
     print("\nComposing result ini file for {}: {}".format(test_name, result_ini))
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
@@ -170,9 +174,35 @@ def __parse_common_info(test_results_file):
     if not testcases_res:
         raise LookupError("No results to upload from: {}".format(test_results_file))
 
-    lab = re.findall('Lab: (.*)\n', other_info)[0].strip().upper()
+    lab = re.findall('Lab: (.*)\n', other_info)[0].strip().upper().replace('-', '_')    # short_name in this format
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
     build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
+    sys_type = re.findall('System Type: (.*)\n', other_info)
+    if sys_type:
+        sys_type = sys_type[0].strip()
+        if '+' in sys_type:
+            count = sys_type.count('+')
+            if count == 1:
+                sys_type = 'regular'
+            elif count == 2:
+                sys_type = 'storage'
+            else:
+                sys_type = 'unknown'
+    else:
+        lab_info = get_lab_dict(lab=lab)
+        if lab_info.get('storage_nodes'):
+            sys_type = 'storage'
+        elif lab_info.get('compute_nodes'):
+            sys_type = 'regular'
+        elif lab_info.get('controller_nodes'):
+            if len(lab_info.get('controller_nodes')) == 1:
+                sys_type = 'aio-sx'
+            else:
+                sys_type = 'aio-dx'
+        else:
+            sys_type = 'unknown'
+    sys_type = sys_type.upper()
+
     log_dir = test_results_file.replace('test_results.log', '')
 
-    return lab, build, build_server, testcases_list, log_dir
+    return lab, build, build_server, testcases_list, log_dir, sys_type

@@ -1,16 +1,16 @@
+import re
 import random
 import time
 
-from utils import table_parser, cli, exceptions
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-
+# from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-from consts.timeout import VolumeTimeout
 from consts.cgcs import GuestImages, Prompt
-
+from consts.timeout import VolumeTimeout
 from keywords import common, glance_helper, keystone_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
@@ -1250,6 +1250,7 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
     # according to the user documents, the first time of 'cinder import' may fail, in which case
     # we just have to try again
     for retry in range(retries if 2 <= retries <= 10 else 2):
+        con_ssh.set_prompt(prompt=controller_prompt)
         rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                             rtn_list=True)
         if rc == 1:
@@ -1357,3 +1358,33 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             volume_exported.append(vol_id)
 
     return 0, volume_exported
+
+
+def get_lvm_usage(con_ssh):
+    LOG.info('Getting usage of cinder-volumes')
+    free, total, unit = 0, 0, 'g'
+    pattern = r'(\d+(\.\d+)?)([gm])'
+    code, output = con_ssh.exec_sudo_cmd('lvs')
+    if 0 != code:
+        LOG.warn('Failed to get usage of cinder-volumes')
+    else:
+        try:
+            used = 0
+            for line in output.strip().splitlines():
+                fields = line.split()
+                if fields[0] == 'cinder-volumes-pool':
+                    total = re.search(pattern, fields[3], re.IGNORECASE)
+                    unit = total.group(3)
+                    total = float(total.group(1))
+                elif fields[0].startswith('volume-'):
+                    usage = re.search(pattern, fields[3], re.IGNORECASE)
+                    used += float(usage.group(1))
+
+            free = total - used
+
+            LOG.info('lvm usage: free:{}, used:{}, total:{}'.format(free, used, total))
+        except Exception as e:
+            LOG.info('Wrong format:{}'.format(output))
+            free, total = 0
+
+    return free, total, unit

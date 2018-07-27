@@ -1,9 +1,10 @@
 import requests
 import json
-import re
+import os
 
 from consts.proj_vars import ProjVar
-from keywords import keystone_helper
+from consts.auth import CliAuth
+from keywords import keystone_helper, security_helper
 
 from utils.tis_log import LOG
 from utils.kpi.kpi import KPI
@@ -34,7 +35,6 @@ class Rest:
         self.token = ""
         self.token_payload = ""
         self.region = ProjVar.get_var('REGION')
-
         self.baseURL = keystone_helper.get_endpoints(rtn_val='URL',
                                                      service_name=serviceName,
                                                      interface="public",
@@ -43,6 +43,18 @@ class Rest:
                                                    service_name='keystone',
                                                    interface="public",
                                                    region=self.region)[0]
+        self.cert_path = None
+        self.verify = True
+        self.is_https = CliAuth.get_var('HTTPS')
+        if self.is_https:
+            self.verify = False
+            cert_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'server-with-key.pem')
+            if not os.path.exists(cert_path):
+                cert_path = security_helper.fetch_cert_file(scp_to_local=True)
+            self.cert_path = cert_path
+            if cert_path:
+                self.verify = cert_path
+
         self.generate_token_request()
         self.retrieve_token('/auth/tokens')
 
@@ -62,23 +74,31 @@ class Rest:
                        '}}}}')
         self.token_payload = json.loads(json_string)
 
-    def retrieve_token(self, endpoint, token_request=None):
+    def retrieve_token(self, endpoint, token_request=None, verify=None):
         if token_request is None:
             token_request = json.dumps(self.token_payload)
 
         headers = {'Content-type': 'application/json'}
 
+        if verify is None:
+            verify = self.verify
+
         LOG.info("Retrieving token. post URL: {}, headers: {}, data: {}".format(self.ksURL + endpoint, headers,
                                                                                 token_request))
         r = requests.post(self.ksURL+endpoint,
                           headers=headers,
-                          data=token_request, verify=False)
+                          data=token_request, verify=verify)
+        req = r.request
+        print("teststestst \n{} {}\n{}\n\n{}".format(req.method, req.url,
+                                                     '\n'.join('{}: {}'.format(k, v) for k, v in req.headers.items()),
+                                                     req.body,))
+
         if r.status_code != 201:
             self.token = "THISTOKENDOESNOTEXIST"
         else:
             self.token = r.headers['X-Subject-Token']
-        LOG.info('token retrieval status: {} text: {}'.format(r.status_code,r.text))
-        return(r.status_code, r.text)
+        LOG.info('token retrieval status: {} text: {}'.format(r.status_code, r.text))
+        return r.status_code, r.text
 
     def auth_header_select(self, auth=True):
         if auth:
@@ -87,58 +107,82 @@ class Rest:
             headers = {'X-Auth-Token': "THISISNOTAVALIDTOKEN"}
         return headers
 
-    def get(self, resource="", auth=True):
+    def get(self, resource="", auth=True, verify=None):
+        """
+
+        Args:
+            resource:
+            auth:
+            verify (bool|str|None):
+                True: applies to non-https system
+                False: equivalent to --insecure in curl cmd
+                str: applies to https system. CA-Certificate path. e.g., verify=/path/to/cert
+                None: Automatically set verify value based on whether https is enabled.
+
+        Returns:
+
+        """
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {}"
         LOG.info(message.format(self.baseURL, resource, headers))
+        if verify is None:
+            verify = self.verify
         kpi = KPI()
         r = requests.get(self.baseURL + resource,
-                         headers=headers, verify=False)
+                         headers=headers, verify=verify)
         delta = kpi.stop()
         return r.status_code, r.json()
 
-    def delete(self, resource="", auth=True):
+    def delete(self, resource="", auth=True, verify=None):
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {}"
         LOG.debug(message.format(self.baseURL, resource, headers))
+        if verify is None:
+            verify = self.verify
         kpi = KPI()
         r = requests.delete(self.baseURL + resource,
-                            headers=headers, verify=True)
+                            headers=headers, verify=verify)
         delta = kpi.stop()
         return r.status_code, r.json()
 
-    def patch(self, resource="", json_data={}, auth=True):
+    def patch(self, resource="", json_data={}, auth=True, verify=None):
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {} data: {}"
         LOG.debug(message.format(self.baseURL, resource,
                                 headers, json_data))
+        if verify is None:
+            verify = self.verify
         kpi = KPI()
         r = requests.patch(self.baseURL + resource,
                            headers=headers, data=json_data,
-                           verify=True)
+                           verify=verify)
         delta = kpi.stop()
         return r.status_code, r.json()
 
-    def put(self, resource="", json_data={}, auth=True):
+    def put(self, resource="", json_data={}, auth=True, verify=None):
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {} data: {}"
         LOG.debug(message.format(self.baseURL, resource,
                                 headers, json_data))
+        if verify is None:
+            verify = self.verify
         kpi = KPI()
         r = requests.put(self.baseURL + resource, 
                          headers=headers, data=json_data,
-                         verify=True)
+                         verify=verify)
         kpi.stop()
         return r.status_code, r.json()
 
-    def post(self, resource="", json_data={}, auth=True):
+    def post(self, resource="", json_data={}, auth=True, verify=None):
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {} data: {}"
         LOG.debug(message.format(self.baseURL, resource,
                                 headers, json_data))
         kpi = KPI()
+        if verify is None:
+            verify = self.verify
         r = requests.post(self.baseURL + resource,
                           headers=headers, data=json_data,
-                          verify=True)
+                          verify=verify)
         kpi.stop()
         return r.status_code, r.json()

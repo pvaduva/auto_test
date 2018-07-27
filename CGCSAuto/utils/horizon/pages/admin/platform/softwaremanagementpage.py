@@ -6,9 +6,7 @@ from utils.horizon.regions import forms
 class PatchesTable(tables.TableRegion):
     name = "patches"
 
-    @property
-    def form_fields(self):
-        return ("patch_files",)
+    UPLOAD_PATCHES_FORM_FIELDS = ("patch_files",)
 
     @tables.bind_table_action('patchupload')
     def upload_patches(self, upload_button):

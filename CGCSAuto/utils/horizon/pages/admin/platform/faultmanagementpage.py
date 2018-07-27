@@ -39,7 +39,6 @@ class FaultManagementPage(basepage.BasePage):
     EVENT_LOGS_TABLE_NAME_COLUMN = 'Timestamp'
     EVENTS_SUPPRESSION_TABLE_NAME_COLUMN = 'Event ID'
 
-
     @property
     def alarms_table(self):
         return AlarmsTable(self.driver)

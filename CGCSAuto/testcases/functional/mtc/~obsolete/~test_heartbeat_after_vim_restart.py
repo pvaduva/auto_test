@@ -3,16 +3,14 @@
 ###
 
 
-from pytest import fixture, mark, skip
-from time import sleep
+from pytest import fixture
 
-from utils import table_parser
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.timeout import EventLogTimeout
-from keywords import nova_helper, vm_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 # heartbeat Type
 flavor_params = ['True']

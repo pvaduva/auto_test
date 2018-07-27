@@ -223,3 +223,35 @@ class CliAuth:
             raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
 
         return cls.__var_dict[var_name]
+
+
+class ComplianceCreds:
+    __HOST = {
+        'host': 'tis-compliance-test-node.cumulus.wrs.com',
+        'user': 'cumulus',
+        'password': 'kumuluz'
+    }
+
+    @classmethod
+    def get_user(cls):
+        return cls.__HOST['user']
+
+    @classmethod
+    def get_password(cls):
+        return cls.__HOST['password']
+
+    @classmethod
+    def get_host(cls):
+        return cls.__HOST['host']
+
+    @classmethod
+    def set_user(cls, username):
+        cls.__HOST['user'] = username
+
+    @classmethod
+    def set_password(cls, password):
+        cls.__HOST['password'] = password
+
+    @classmethod
+    def set_host(cls, host):
+        cls.__HOST['host'] = host

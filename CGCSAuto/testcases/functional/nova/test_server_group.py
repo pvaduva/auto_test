@@ -6,10 +6,10 @@ from pytest import mark, skip, fixture
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
+from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, ServerGroupMetadata
-from consts.reasons import SkipHypervisor
 from consts.cli_errs import SrvGrpErr
-from keywords import nova_helper, vm_helper, system_helper
+from keywords import nova_helper, vm_helper, keystone_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
@@ -17,29 +17,11 @@ MSG = 'HELLO SRV GRP MEMBERS!'
 
 
 @fixture(scope='module', autouse=True)
-def check_system(add_cgcsauto_zone, add_admin_role_module, request):
+def check_system():
     storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
-
-    is_simplex = system_helper.is_simplex()
-    if is_simplex:
-        hosts_to_add = hosts
-    elif len(hosts) >= 2:
-        hosts_to_add = hosts[:2]
-    else:
-        skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
-        hosts_to_add = []
-
-    LOG.fixture_step("Add hosts to cgcsauto aggregate: {}".format(hosts_to_add))
-    nova_helper.add_hosts_to_aggregate('cgcsauto', hosts_to_add)
-
     vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
 
-    def remove_():
-        LOG.fixture_step("Remove hosts from cgcsauto aggregate: {}".format(hosts_to_add))
-        nova_helper.remove_hosts_from_aggregate('cgcsauto', hosts_to_add)
-    request.addfinalizer(remove_)
-
-    return is_simplex, hosts_to_add, storage_backing
+    return hosts, storage_backing
 
 
 def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=None, group_size=None,
@@ -72,16 +54,18 @@ def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=
     return flavor_id, srv_grp_msg_flv, srv_grp_id
 
 
-# TC2915 + TC2915
+# TC2915 + TC2915 + TC_6566 + TC2917
 @mark.parametrize(('srv_grp_msging', 'policy', 'group_size', 'best_effort', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((None, 'affinity', 4, None, 2)),
     mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
-    mark.nightly(('srv_grp_msg_true', 'anti_affinity', 4, None, 3)),    # negative res for last vm
-    ('srv_grp_msg_true', 'affinity', 2, True, 2)
+    mark.nightly(('srv_grp_msg_true', 'anti_affinity', 4, None, 3)),    # For system with 2+ hypervisors
+    ('srv_grp_msg_true', 'affinity', 2, True, 2),
 ])
 def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, vms_num, check_system):
     """
     Test server group policy and messaging
+    Test live migration with anti-affinity server group (TC6566)
+    Test changing size of existing server group via CLI (TC2917)
 
     Args:
         srv_grp_msging (str): server group messaging flavor spec
@@ -90,86 +74,75 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         best_effort (bool): best effort metadata to set for server group
         vms_num (int): number of vms to boot
 
-    Setups:
-        - Add admin role to tenant under test (module)
-        - Add two hosts to cgcsauto zone to limit the vms on two hosts only; add one if simplex system detected (module)
-
     Test Steps:
         - Create a server group with given policy
         - Add given metadata to above server group
         - Boot vm(s) with above server group
         - Verify vm(s) booted successfully and is a member of the server group
-        - Vefiry that all vms have the server group listed in nova show
+        - Verify that all vms have the server group listed in nova show
         - If server_group_messaging is on, then verify
             - vms receive srv grp msg sent from other vm
             - vms receive notification when other vm is paused
         - Attempt to delete the server group and make sure if fails due to having members
         - If server group messaging is off, verify server_group_app is not included in vm
+        - If server group has enough hosts, check live migration_id
+            - Try to live migrate one of the vms
+            - If anti_affinity, migration should not succeeds
+            - If affinity, migration should succeed
 
     Teardown:
         - Delete created vms, flavor, server group
-        - Remove cgcsauto hosts from aggregate  (module)
-        - Remove admin role from tenant under test  (module)
 
     """
-    is_simplex, cgcsauto_hosts, storage_backing = check_system
-    if is_simplex and policy == 'anti_affinity' and not best_effort:
-        skip("Skip anti_affinity strict for simplex system")
+    hosts, storage_backing = check_system
+    host_count = len(hosts)
+    if host_count == 1 and policy == 'anti_affinity' and not best_effort:
+        skip("Skip anti_affinity strict for system with 1 up host in storage aggregate")
 
     flavor_id, srv_grp_msg_flv, srv_grp_id = create_flavor_and_server_group(storage_backing, srv_grp_msging, policy,
                                                                             group_size, best_effort)
-
     vm_hosts = []
     members = []
     failed_num = 0
-    if policy == 'anti_affinity' and not best_effort and vms_num > 2:
-        failed_num = vms_num - 2
-        vms_num = 2
+    if policy == 'anti_affinity' and not best_effort and vms_num > host_count:
+        failed_num = vms_num - host_count
+        vms_num = host_count
 
     LOG.tc_step("Boot {} vm(s) with flavor {} in server group {} and ensure they are successfully booted.".
-                format(flavor_id, srv_grp_id, vms_num))
+                format(vms_num, flavor_id, srv_grp_id))
 
     for i in range(vms_num):
         vm_id = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
-                                  avail_zone='cgcsauto', fail_ok=False, cleanup='function')[1]
+                                  fail_ok=False, cleanup='function')[1]
 
         LOG.tc_step("Check vm {} is in server group {}".format(vm_id, srv_grp_id))
-        members = nova_helper.get_server_group_info(srv_grp_id, header='Members')
+        members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
         assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id, srv_grp_id)
 
         server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
-        assert srv_grp_id in server_group_output, 'Server group info does not appear in nova show for vm {}'.format(vm_id)
+        assert srv_grp_id in server_group_output, \
+            'Server group info does not appear in nova show for vm {}'.format(vm_id)
 
         vm_hosts.append(nova_helper.get_vm_host(vm_id))
 
     for i in range(failed_num):
         LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
         code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
-                                                  avail_zone='cgcsauto', fail_ok=True, cleanup='function')
+                                                  fail_ok=True, cleanup='function')
 
         nova_helper.get_vm_nova_show_value(vm_id, 'fault')
         assert 1 == code, "Boot vm is not rejected"
 
     unique_vm_hosts = list(set(vm_hosts))
-    if policy == 'affinity' or is_simplex:
+    if policy == 'affinity' or host_count == 1:
         assert 1 == len(unique_vm_hosts)
-
     else:
-        assert len(unique_vm_hosts) >= 2
+        assert len(unique_vm_hosts) == min(vms_num, host_count), "Improper VM hosts for anti-affinity policy"
 
     assert len(members) == vms_num
 
-    vm_to_ssh = members[0]
-    another_vm = members[1]
-
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_to_ssh)
-    vm_helper.wait_for_vm_pingable_from_natbox(another_vm)
-
-    LOG.tc_step("Attempt to delete server group")
-    code, output = nova_helper.delete_server_groups(srv_grp_id, fail_ok=True)
-    assert code == 1, "Deletion not rejected as expected"
-    expt_err = "Instance group {} is not empty. Must delete all group members before deleting group.".format(srv_grp_id)
-    assert expt_err in output, "Expect {} in error, actual error is {}".format(expt_err, output)
+    for vm in members:
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
 
     if srv_grp_msging:
         for vm in members:
@@ -184,6 +157,27 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     else:
         LOG.tc_step("Check server group message is not enabled")
         check_server_group_messaging_disabled(vms=members)
+
+    if host_count > 1:
+        # TC6566 verified here
+        expt_fail = not best_effort and (policy == 'affinity' or (policy == 'anti_affinity' and host_count-vms_num < 1))
+        LOG.tc_step("Attempt to live migrate VMs and ensure it {}".format('fails' if expt_fail else 'pass'))
+
+        vm_hosts_after_mig = []
+        for vm in members:
+            code, output = vm_helper.live_migrate_vm(vm, fail_ok=True)
+            if expt_fail:
+                assert code == 2, "CLI command was not rejected as expected. {}".format(output)
+            else:
+                assert code == 0, "Live migrate failed. {}".format(output)
+            vm_host = nova_helper.get_vm_host(vm)
+            vm_hosts_after_mig.append(vm_host)
+
+        if not best_effort:
+            if policy == 'affinity':
+                assert len(list(set(vm_hosts_after_mig))) == 1
+            else:
+                assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some V"
 
     if srv_grp_msging:
         for vm in members:
@@ -289,13 +283,9 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
         max_count (int|None):
         check_system (tuple): test fixture
 
-    Setups:
-        - Add admin role to tenant under test (module)
-        - Add two hosts to cgcsauto zone to limit the vms on two hosts only; add one if simplex system detected (module)
-
     Test Steps
         - Create a server group with given server group policy, group size and best effort flag
-        - Create a flavor with storage backing supported by cgcsauto hosts
+        - Create a flavor with storage backing supported
         - Boot a vm from image using above flavor and in above server group
         - Verify:
             - VMs status are as expected
@@ -304,20 +294,19 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
 
     Teardown:
         - Delete created vms, flavor, server group
-        - Remove cgcsauto hosts from aggregate  (module)
-        - Remove admin role from tenant under test  (module)
 
     """
-    is_simplex, cgcsauto_hosts, storage_backing = check_system
-    if is_simplex and policy == 'anti_affinity' and not best_effort:
-        skip("Skip anti_affinity strict for simplex system")
+    hosts, storage_backing = check_system
+    host_count = len(hosts)
+    if host_count == 1 and policy == 'anti_affinity' and not best_effort:
+        skip("Skip anti_affinity strict for system with 1 host in same storage aggregate")
 
     flavor_id, srv_grp_msg_flv, srv_grp_id = create_flavor_and_server_group(storage_backing, None, policy, group_size,
                                                                             best_effort)
 
     LOG.tc_step("Boot vms with {} server group policy and min/max count".format(policy))
     code, vms, msg = vm_helper.boot_vm(name='srv_grp_parallel', flavor=flavor_id, hint={'group': srv_grp_id},
-                                       avail_zone='cgcsauto', fail_ok=True, min_count=min_count, max_count=max_count,
+                                       fail_ok=True, min_count=min_count, max_count=max_count,
                                        cleanup='function')
 
     if max_count is None:
@@ -333,7 +322,7 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
             fault = nova_helper.get_vm_fault_message(vm)
             assert expt_err in fault
 
-    elif policy == 'anti_affinity' and not best_effort and min_count > 2:
+    elif policy == 'anti_affinity' and not best_effort and min_count > host_count:
         LOG.tc_step("Check anti-affinity strict vms failed to boot when min_count > hosts_count")
         assert 1 == code, msg
         expt_err = SrvGrpErr.HOST_UNAVAIL_ANTI_AFFINITY
@@ -341,10 +330,10 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
             fault = nova_helper.get_vm_fault_message(vm)
             assert expt_err in fault
 
-    elif policy == 'anti_affinity' and not best_effort and max_count > 2:
+    elif policy == 'anti_affinity' and not best_effort and max_count > host_count:
         LOG.tc_step("Check anti-affinity strict vms_count=host_count when min_count <= hosts_count <= max_count")
         assert 0 == code, msg
-        assert 2 == len(vms), "VMs number is not the same as qualified hosts number"
+        assert host_count == len(vms), "VMs number is not the same as qualified hosts number"
 
     elif max_count > group_size:
         LOG.tc_step("Check vms_count=group_size when min_count <= group_size <= max_count")
@@ -358,5 +347,74 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
 
     # if code == 0:
     LOG.tc_step("Check vms are in server group {}: {}".format(srv_grp_id, vms))
-    members = nova_helper.get_server_group_info(srv_grp_id, header='Members')
+    members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
     assert set(vms) <= set(members), "Some vms are not in srv group"
+
+
+def test_server_group_update():
+    """
+    - test server group metadata key removal (TC2910)
+    - check server group project ID (TC2914)
+    - test resize reject when group size < member size (TC2917)
+    - test server group deletion reject when member exists
+
+    Test Steps
+        - Create a server group with given server group policy, group size and best effort flag
+        - Add metadata to the group
+        - Verify:
+            - running "nova server-group-set-metadata <key>=" removes metadata
+            - that server group id is the same as primary tenant id
+        - Launch 2 vms as server group members
+        - Verify:
+            - resize succeed when group size >= member size
+            - resize reject when group size < member size (TC2917)
+            - server group deletion reject when member exists
+
+    Teardown:
+        - Delete created server group and vms
+
+    """
+    policy = 'affinity'
+    best_effort = False
+
+    group_size = 3
+    LOG.tc_step("Create server group with size=3 as tenant")
+    srv_grp_id = nova_helper.create_server_group(policy=policy, max_group_size=group_size)[1]
+    ResourceCleanup.add(resource_type='server_group', resource_id=srv_grp_id)
+
+    LOG.tc_step("Check server group Project ID")
+    project_id = nova_helper.get_server_groups_info(srv_grp_id, auth_info=Tenant.ADMIN,
+                                                    headers='Project Id')[srv_grp_id][0]
+    tenant_id = keystone_helper.get_tenant_ids()[0]
+    assert project_id == tenant_id
+
+    metadata = {ServerGroupMetadata.BEST_EFFORT: best_effort}
+    LOG.tc_step("Add server group metadata: {}".format(metadata))
+    nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
+
+    LOG.tc_step("Remove best effort metadata")
+    metadata[ServerGroupMetadata.BEST_EFFORT] = ""
+    nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
+
+    LOG.tc_step("Create 2 vms in server group")
+    for i in range(2):
+        vm_helper.boot_vm(name='srv_grp', hint={'group': srv_grp_id}, cleanup='function')
+
+    LOG.tc_step("Attempt to delete server group and ensure it's rejected")
+    code, output = nova_helper.delete_server_groups(srv_grp_id, fail_ok=True)
+    assert code == 1, "Deletion not rejected as expected"
+    expt_err = "Instance group {} is not empty. Must delete all group members before deleting group.".format(srv_grp_id)
+    assert expt_err in output, "Expect {} in error, actual error is {}".format(expt_err, output)
+
+    # TC2917
+    LOG.tc_step("Attempt to resize server group size to 2 and sure it passes")
+    metadata = {ServerGroupMetadata.GROUP_SIZE: 2}
+    nova_helper.set_server_group_metadata(srv_grp_id, fail_ok=False, **metadata)
+
+    LOG.tc_step("Attempt to resize server group size to 1 and ensure it's rejected due to 2 members exist")
+    metadata = {ServerGroupMetadata.GROUP_SIZE: 1}
+    code, output = nova_helper.set_server_group_metadata(srv_grp_id, fail_ok=True, **metadata)
+    assert code == 1, "Expect server group metadata set to fail. Actual: {}".format(output)
+    err_pattern = "Action would result in server group .* number of members {} exceeding .*group size {}".\
+        format(2, 1)
+    assert re.search(err_pattern, output), "Improper error message returned"

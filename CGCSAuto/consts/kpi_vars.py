@@ -142,3 +142,11 @@ class Evacuate:
 class Idle:
     NAME_CPU = 'idle_platform_cpu'
     NAME_MEM = 'idle_mem_usage'
+
+
+class CyclicTest:
+    NAME_HYPERVISOR_AVG = 'cyclictest_hypervisor_avg_latency'
+    NAME_HYPERVISOR_6_NINES = 'cyclictest_hypervisor_6nines_percentile_latency'
+    NAME_VM_AVG = 'cyclictest_vm_avg_latency'
+    NAME_VM_6_NINES = 'cyclictest_vm_6nines_percentile_latency'
+    UNIT = 'Time(us)'

@@ -11,6 +11,7 @@ class Labs:
         # 'auth_url': 'http://192.168.204.102:5000/v3/',
         'controller_nodes': [21768, 21769],
         'compute_nodes': [21770, 21771],
+        'ixia_ports': [{'port': (3, 15), 'range': (504, 535)}, {'port': (3, 16), 'range': (536, 567)}],
     }
 
     IP_1_4 = {
@@ -22,6 +23,7 @@ class Labs:
         # 'auth_url': 'http://192.168.204.2:5000/v3/',
         'controller_nodes': [20519, 20520],
         'compute_nodes': [20521, 20522],
+        'ixia_ports': [{'port': (3, 9), 'range': (600, 615)}, {'port': (3, 10), 'range': (700, 715)}],
     }
 
     IP_5_6 = {
@@ -34,6 +36,7 @@ class Labs:
         'controller_nodes': [20525, 20526],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'ixia_ports': [{'port': (3, 7), 'range': (764, 773)}, {'port': (3, 8), 'range': (774, 783)}],
     }
 
     IP_7_12 = {
@@ -44,7 +47,9 @@ class Labs:
         'controller-1 ip': '128.224.150.205',
         'controller_nodes': [21786, 21788],
         'compute_nodes': [21789, 21791],
-        'storage_nodes': [21790, 21787]
+        'storage_nodes': [21790, 21787],
+        'ixia_ports': [{'port': (3, 3), 'range': (632, 663)}, {'port': (3, 4), 'range': (632, 663)},
+                       {'port': (3, 5), 'range': (664, 695)}, {'port': (3, 6), 'range': (664, 695)}],
     }
 
     IP_14_17 = {
@@ -55,6 +60,7 @@ class Labs:
         'controller-1 ip': '128.224.150.212',
         'controller_nodes': [23527, 22348],
         'compute_nodes': [22347, 21784],
+        'ixia_ports': [{'port': (3, 11), 'range': (860, 891)}, {'port': (3, 12), 'range': (892, 923)}],
     }
 
     IP_18_19 = {
@@ -65,6 +71,7 @@ class Labs:
         'controller-1 ip': '128.224.150.169',
         'controller_nodes': [22354, 22357],
         'compute_nodes': [22431, 22432, 22433, 22434],
+        'ixia_ports': [{'port': (2, 5), 'range': (1160, 1209)}, {'port': (2, 6), 'range': (1210, 1259)}],
     }
 
     IP_20_27 = {
@@ -76,6 +83,7 @@ class Labs:
         'controller_nodes': [18541, 21758],
         'compute_nodes': [22417, 22418, 21762, 18537],
         'storage_nodes': [18536, 18551],
+        'ixia_ports': [{'port': (2, 9), 'range': (1460, 1509)}, {'port': (2, 10), 'range': (1560, 1609)}],
     }
 
     IP_28_30 = {
@@ -86,6 +94,7 @@ class Labs:
         'controller-1 ip': '128.224.150.179',
         'controller_nodes': [20559],
         'compute_nodes': [20516, 21710],
+        'ixia_ports': [{'port': (5, 9), 'range': (2902, 2933)}, {'port': (5, 10), 'range': (2966, 3001)}],
     }
 
     IP_31_32 = {
@@ -94,9 +103,10 @@ class Labs:
         'floating ip': '128.224.150.96',
         'controller-0 ip': '128.224.150.92',
         'controller-1 ip': '128.224.150.22',
-        'controller_nodes': [21750, 21758],
+        'controller_nodes': [21750, 23964],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'ixia_ports': [{'port': (6, 1), 'range': (1952, 2051)}, {'port': (6, 2), 'range': (1952, 2051)}],
     }
 
     IP_33_36 = {
@@ -106,7 +116,8 @@ class Labs:
         'controller-0 ip': '128.224.150.32',
         'controller-1 ip': '128.224.151.148',
         'controller_nodes': [20509, 20550],
-        'compute_nodes': [21720, 21721]
+        'compute_nodes': [21720, 21721],
+        'ixia_ports': [{'port': (6, 3), 'range': (2052, 2151)}, {'port': (6, 4), 'range': (2052, 2151)}],
     }
 
     IP_37_40 = {
@@ -129,6 +140,7 @@ class Labs:
         'controller_nodes': [22715, 22716],
         'compute_nodes': [22719, 22720, 23915, 22722],
         'storage_nodes': [23954, 23955, 23916, 22717, 22718, 22721],
+        'ixia_ports': [{'port': (5, 1), 'range': (1852, 1951)}, {'port': (5, 2), 'range': (1852, 1951)}],
     }
 
     PV1 = {
@@ -171,6 +183,7 @@ class Labs:
         'controller_nodes': [22352, 22351],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'ixia_ports': [{'port': (2, 11), 'range': (1660, 1691)}, {'port': (2, 12), 'range': (1724, 1755)}],
     }
 
     R720_3_7 = {
@@ -181,6 +194,7 @@ class Labs:
         'controller-1 ip': '128.224.151.36',
         'controller_nodes': [21805, 21806],
         'compute_nodes': [21763, 21764, 21765],
+        'ixia_ports': [{'port': (2, 13), 'range': (1756, 1787)}, {'port': (2, 14), 'range': (1820, 1851)}],
     }
 
     R730_1 = {
@@ -203,6 +217,7 @@ class Labs:
         'system_type': 'CPE',
         'system_mode': 'duplex',
         'tpm_installed': True,
+        'ixia_ports': [{'port': (2, 7), 'range': (3002, 3151)}],
     }
     
     R430_3_4 = {
@@ -224,6 +239,7 @@ class Labs:
         'controller_nodes': [46808],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+        'ixia_ports': [{'port': (1, 1), 'range': (600, 649)}, {'port': (1, 2), 'range': (650, 699)}],
     }
 
     SM_2 = {
@@ -234,6 +250,7 @@ class Labs:
         'controller_nodes': [23907],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+        'ixia_ports': [{'port': (1, 3), 'range': (700, 749)}, {'port': (1, 4), 'range': (750, 799)}],
     }
 
     SM_3 = {
@@ -244,6 +261,7 @@ class Labs:
         'controller_nodes': [23514],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+        'ixia_ports': [{'port': (6, 9), 'range': (600, 699)}, {'port': (6, 10), 'range': (700, 749)}],
     }
 
     SM_4 = {
@@ -285,6 +303,7 @@ class Labs:
         'controller-1 ip': '128.224.150.70',
         'controller_nodes': [23198, 23199],
         'compute_nodes': [23200, 23201],
+        'ixia_ports': [{'port': (5, 5), 'range': (2252, 2351)}, {'port': (5, 6), 'range': (2252, 2351)}],
     }
 
     WCP_7_12 = {
@@ -297,6 +316,7 @@ class Labs:
         'controller_nodes': [23202, 23203],
         'compute_nodes': [23206, 23207],
         'storage_nodes': [23204, 23205],
+        'ixia_ports': [{'port': (5, 11), 'range': (2352, 2451)}, {'port': (5, 12), 'range': (2352, 2451)}],
     }
 
     WCP_13_14 = {
@@ -313,17 +333,19 @@ class Labs:
     WCP_13 = {
         'short_name': 'wcp_13',
         'name': 'yow-cgcs-wildcat-13',
-        'floating ip': '128.224.151.229',
+        'floating ip': '128.224.150.133',
         'controller-0 ip': '128.224.150.133',
         'controller_nodes': [23213],
+        'ixia_ports': [{'port': (5, 13), 'range': (2453, 2484)}, {'port': (5, 14), 'range': (2419, 2551)}],
     }
 
     WCP_14 = {
         'short_name': 'wcp_14',
         'name': 'yow-cgcs-wildcat-14',
-        'floating ip': '128.224.151.217',
+        'floating ip': '128.224.150.136',
         'controller-0 ip': '128.224.150.136',
         'controller_nodes': [23214],
+        'ixia_ports': [{'port': (3, 1), 'range': (733, 741)}, {'port': (3, 2), 'range': (743, 751)}],
     }
 
     WCP_15_22 = {
@@ -335,7 +357,8 @@ class Labs:
         # 'auth_url': 'http://192.168.204.102:5000/v2.0/',
         'controller_nodes': [23215, 23216],
         'compute_nodes': [23219, 23220, 23221, 23222],
-        'storage_nodes': [23217, 23218]
+        'storage_nodes': [23217, 23218],
+        'ixia_ports': [{'port': (5, 15), 'range': (2552, 2651)}, {'port': (5, 16), 'range': (2552, 2651)}],
     }
 
     WCP_35_60 = {
@@ -349,6 +372,8 @@ class Labs:
                           23250, 23249, 23248, 23247, 23246, 23245, 23244, 23243,
                           23262, 23261, 23260, 23259],
         'storage_nodes': [23264, 23263, 23266, 23265],
+        'ixia_ports': [{'port': (7, 1), 'range': (3002, 3051)}, {'port': (7, 2), 'range': (3002, 3051)},
+                       {'port': (7, 3), 'range': (3101, 3151)}, {'port': (7, 4), 'range': (3101, 3151)}],
     }
 
     WCP_61_62 = {
@@ -360,6 +385,7 @@ class Labs:
         'controller_nodes': [23280, 23281],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'ixia_ports': [{'port': (8, 5), 'range': (600, 749)}, {'port': (8, 6), 'range': (600, 749)}],
     }
 
     WCP_63_66 = {
@@ -371,6 +397,7 @@ class Labs:
         'controller_nodes': [23282, 23283],
         'compute_nodes': [23284, 23285],
         'tpm_installed': True,
+        'ixia_ports': [{'port': (8, 9), 'range': (750, 899)}, {'port': (8, 10), 'range': (750, 899)}],
     }
 
     WCP_67 = {
@@ -382,6 +409,7 @@ class Labs:
         'controller_nodes': [23286],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+        'ixia_ports': [{'port': (8, 1), 'range': (2702, 2751)}, {'port': (8, 2), 'range': (2802, 2851)}],
     }
 
     WCP_68 = {
@@ -417,6 +445,7 @@ class Labs:
         'controller_nodes': [23271, 23272],
         'compute_nodes': [23273, 23274, 23275],
         'tpm_installed': True,
+        'ixia_ports': [{'port': (7, 5), 'range': (3152, 3201)}, {'port': (7, 6), 'range': (3252, 3301)}],
     }
 
     WCP_76_77 = {
@@ -429,6 +458,7 @@ class Labs:
         'system_type': 'CPE',
         'system_mode': 'duplex',
         'tpm_installed': True,
+        'ixia_ports': [{'port': (7, 7), 'range': (3302, 3351)}, {'port': (7, 8), 'range': (3402, 3451)}],
     }
 
     WCP_78_79 = {
@@ -441,6 +471,7 @@ class Labs:
         'system_type': 'CPE',
         'system_mode': 'duplex',
         'tpm_installed': True,
+        'ixia_ports': [{'port': (7, 9), 'range': (3452, 3501)}, {'port': (7, 10), 'range': (3552, 3601)}],
     }
 
     WCP_80_84 = {
@@ -451,6 +482,7 @@ class Labs:
         'controller-1 ip': '128.224.150.156',
         'controller_nodes': [23318, 23319],
         'compute_nodes': [23320, 23321, 23322],
+        'ixia_ports': [{'port': (7, 11), 'range': (3602, 3651)}, {'port': (7, 12), 'range': (3702, 3751)}],
     }
 
     WCP_85_89 = {
@@ -461,6 +493,7 @@ class Labs:
         'controller-1 ip': '128.224.150.202',
         'controller_nodes': [23323, 23324],
         'compute_nodes': [23325, 23326, 23327],
+        'ixia_ports': [{'port': (7, 13), 'range': (3752, 3801)}, {'port': (7, 14), 'range': (3852, 3901)}],
     }
 
     WCP_90_91 = {
@@ -473,6 +506,7 @@ class Labs:
         'system_type': 'CPE',
         'system_mode': 'duplex',
         'tpm_installed': True,
+        'ixia_ports': [{'port': (7, 15), 'range': (301, 350)}, {'port': (7, 16), 'range': (401, 450)}],
     }
 
     WCP_92_98 = {
@@ -484,6 +518,7 @@ class Labs:
         'controller_nodes': [23299, 23300],
         'compute_nodes': [23303, 23304, 23305],
         'storage_nodes': [23301, 23302],
+        'ixia_ports': [{'port': (6, 5), 'range': (3301, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
     }
 
     WCP_99_103 = {
@@ -495,6 +530,18 @@ class Labs:
         'controller_nodes': [23312, 23313],
         'compute_nodes': [23314, 23315, 23316],
         'tpm_installed': True,
+        'ixia_ports': [{'port': (6, 7), 'range': (3452, 3501)}, {'port': (6, 8), 'range': (3552, 3601)}],
+    }
+
+    WCP_105 = {
+        'short_name': 'wcp_105',
+        'name': 'yow-cgcs-wildcat-105',
+        'floating ip': '128.224.150.137',
+        'controller-0 ip': '128.224.150.137',
+        'controller_nodes': [23290],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+        'ixia_ports': [{'port': (6, 11), 'range': (3153, 3201)}, {'port': (6, 12), 'range': (3253, 3301)}],
     }
 
     WCP_113_121 = {
@@ -508,6 +555,16 @@ class Labs:
         'storage_nodes': [11507, 47400],
     }
 
+    WCP_122 = {
+        'short_name': 'wcp_122',
+        'name': 'cgcs-wildcat-122',
+        'floating ip': '128.224.151.170',
+        'controller-0 ip': '128.224.151.170',
+        'controller_nodes': [64873],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     WP_01_02 = {
         'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
@@ -517,6 +574,7 @@ class Labs:
         'controller_nodes': [62031, 29957],
         'system_type': 'CPE',
         'system_mode': 'duplex',
+        'ixia_ports': [{'port': (8, 7), 'range': (1700, 1849)}, {'port': (8, 8), 'range': (1700, 1849)}],
     }
 
     WP_03_07 = {
@@ -527,6 +585,16 @@ class Labs:
         'controller-1 ip': '128.224.151.166',
         'controller_nodes': [98522, 81712],
         'compute_nodes': [94867, 18658, 40810],
+    }
+
+    WP_08_12 = {
+        'short_name': 'wp_8_12',
+        'name': 'yow-cgcs-wolfpass-08_12',
+        'floating ip': '128.224.150.149',
+        'controller-0 ip': '128.224.150.200',
+        'controller-1 ip': '128.224.150.190',
+        'controller_nodes': [28894, 36242],
+        'compute_nodes': [67712, 94178, 80778],
     }
 
     WP_13_14 = {
@@ -548,6 +616,17 @@ class Labs:
         'controller_nodes': [59865],
         'system_type': 'CPE',
         'system_mode': 'simplex',
+    }
+
+    WP_16_17 = {
+        'short_name': 'wp_16_17',
+        'name': 'yow-cgcs-wolfpass-16_17',
+        'floating ip': '128.224.150.248',
+        'controller-0 ip': '128.224.150.247',
+        'controller-1 ip': '128.224.150.251',
+        'controller_nodes': [98812, 32981],
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
     }
 
     VBOX = {
@@ -621,6 +700,28 @@ class Labs:
 def edit_lab_entry():
     # TODO
     raise NotImplementedError
+
+
+def get_lab_dict(lab, key='short_name'):
+    """
+
+    Args:
+        lab: lab name or fip
+        key: unique identifier to locate a lab. Valid values: short_name, name, floating ip
+
+    Returns (dict|None): lab dict or None if no matching lab found
+    """
+    __lab_attr_list = [attr for attr in dir(Labs) if not attr.startswith('__')]
+    __lab_list = [getattr(Labs, attr) for attr in __lab_attr_list]
+    __lab_list = [lab for lab in __lab_list if isinstance(lab, dict)]
+
+    lab_info = None
+    for lab_ in __lab_list:
+        if lab.lower().replace('-', '_') == lab_.get(key).lower().replace('-', '_'):
+            lab_info = lab_
+            break
+
+    return lab_info
 
 
 def add_lab_entry(floating_ip, dict_name=None, short_name=None, name=None, **kwargs):

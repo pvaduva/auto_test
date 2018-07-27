@@ -1,9 +1,8 @@
-from pytest import mark
 import pexpect
 
-from keywords import host_helper, vm_helper
-from utils.ssh import ssh_to_controller0, ControllerClient
+from keywords import host_helper
 from utils import exceptions, cli
+from utils.clients.ssh import ssh_to_controller0, ControllerClient
 from utils.tis_log import LOG
 
 con_ssh = ControllerClient.get_active_controller()

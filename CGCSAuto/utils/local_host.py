@@ -4,7 +4,6 @@ import os
 import subprocess
 import re
 from utils.tis_log import LOG
-
 from consts.vlm import VlmAction
 
 SSH_DIR = "~/.ssh"

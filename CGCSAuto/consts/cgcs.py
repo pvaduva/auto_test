@@ -26,6 +26,7 @@ METADATA_SERVER = '169.254.169.254'
 HEAT_PATH = 'heat/hot/simple/'
 HEAT_SCENARIO_PATH = 'heat/hot/scenarios/'
 HEAT_FLAVORS = ['small_ded', 'small_float']
+HEAT_CUSTOM_TEMPLATES = 'custom_heat_templates'
 
 # special NIC patterns
 MELLANOX_DEVICE = 'MT27500|MT27710'
@@ -47,6 +48,17 @@ REGION_MAP = {'RegionOne': '',
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
+class NtpPool:
+    NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
+    NTP_POOL_2 = '"1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org"'
+    NTP_POOL_3 = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org"'
+    NTP_POOL_TOO_LONG = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,\
+    1.com,2.com,3.com"'
+    NTP_NAME_TOO_LONG = '"garbage_garbage_garbage_garbage_garbage\
+    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
+    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
+    _garbage_garbage"'
+
 
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
@@ -62,6 +74,7 @@ class GuestImages:
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),
         'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2', 0.3),
         'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2', 0.7),
+        'centos_gpu': ('centos-67-cloud-gpu.img', 16, 'centos-67-cloud-gpu.img', 0.7),
         'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2', 0.9),
         'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 1.5),                # OVP img
         'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 1.1),               # OVP img
@@ -75,7 +88,9 @@ class GuestImages:
         'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 0.3),
         'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 0.7),       # wrl-6
         'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 0.1),
-        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5)
+        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
+        'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5),
+        'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 1.5),
     }
 
 
@@ -178,16 +193,18 @@ class HostTask:
 
 
 class Prompt:
-    CONTROLLER_0 = '.*controller\-0\:~\$ '
-    CONTROLLER_1 = '.*controller\-1\:~\$ '
-    CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
+    CONTROLLER_0 = '.*controller\-0[:| ].*\$ '
+    CONTROLLER_1 = '.*controller\-1[:| ].*\$ '
+    CONTROLLER_PROMPT = '.*controller\-[01][:| ].*\$ '
 
     VXWORKS_PROMPT = '-> '
 
-    # ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ '
-    ADMIN_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
-    TENANT1_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant1\)\]\$ '
-    TENANT2_PROMPT = '\[wrsroot@controller\-[01] ~\(keystone_tenant2\)\]\$ '
+    ADMIN_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ '
+    # ADMIN_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
+    TENANT1_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_tenant1\)\]\$ '
+    TENANT2_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_tenant2\)\]\$ '
+    TENANT_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_{}\)\]\$ '   # general prompt. Need to fill in tenant name
+    REMOTE_CLI_PROMPT = '\(keystone_{}\)\]\$ '     # remote cli prompt
 
     COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
@@ -318,6 +335,7 @@ class EventLogID:
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
     INFRA_PORT_FAIL = '100.110'
+    IMA = '500.500'
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
@@ -368,10 +386,12 @@ class HTTPPort:
     NEUTRON_VER = "v2.0"
     CEIL_PORT = 8777
     CEIL_VER = "v2"
+    GNOCCHI_PORT = 8041
+    GNOCCHI_VER = 'v1'
     SYS_PORT = 6385
     SYS_VER = "v1"
     CINDER_PORT = 8776
-    CINDER_VER = "v2"   # v1 is also supported
+    CINDER_VER = "v3"   # v1 and v2 are also supported
     GLANCE_PORT = 9292
     GLANCE_VER = "v2"
     HEAT_PORT = 8004
@@ -379,7 +399,7 @@ class HTTPPort:
     HEAT_CFN_PORT = 8000
     HEAT_CFN_VER = "v1"
     NOVA_PORT = 8774
-    NOVA_VER = "v2"     # v3 also supported
+    NOVA_VER = "v2.1"     # v3 also supported
     NOVA_EC2_PORT = 8773
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491
@@ -477,7 +497,7 @@ class OrchStrategyKey:
 class DevClassID:
     QAT_VF = '0b4000'
     GPU = '030000'
-    USB = '0c0320'
+    USB = '0c0320|0c0330'
 
 
 class MaxVmsSupported:
@@ -546,9 +566,22 @@ class HeatStackStatus:
 
 
 class VimEventID:
-    live_migrate_begin = 'instance-live-migrate-begin'
-    live_migrate_end = 'instance-live-migrated'
-    cold_migrate_begin = 'instance-cold-migrate-begin'
-    cold_migrate_end = 'instance-cold-migrated'
-    cold_migrate_confirm_begin = 'instance-cold-migrate-confirm-begin'
-    cold_migrate_confirmed = 'instance-cold-migrate-confirmed'
+    LIVE_MIG_BEGIN = 'instance-live-migrate-begin'
+    LIVE_MIG_END = 'instance-live-migrated'
+    COLD_MIG_BEGIN = 'instance-cold-migrate-begin'
+    COLD_MIG_END = 'instance-cold-migrated'
+    COLD_MIG_CONFIRM_BEGIN = 'instance-cold-migrate-confirm-begin'
+    COLD_MIG_CONFIRMED = 'instance-cold-migrate-confirmed'
+
+
+class MigStatus:
+    COMPLETED = 'completed'
+    RUNNING = 'running'
+    PREPARING = 'preparing'
+    PRE_MIG = 'pre-migrating'
+    POST_MIG = 'post-migrating'
+
+
+class IxiaServerIP:
+    tcl_server_ip = '128.224.151.42'
+    chassis_ip = '128.224.151.109'

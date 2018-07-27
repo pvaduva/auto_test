@@ -3,14 +3,12 @@
 ###
 import re
 
-from utils import cli, table_parser
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-
-from consts.cgcs import UUID
 from consts.auth import Tenant
-
+from consts.cgcs import UUID
 from keywords import system_helper
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 # Remove following test as it's covered by test_timestamp_order.py and test_event_suppression.py

@@ -2,21 +2,22 @@
 This file contains CEPH-related storage test cases.
 """
 
-import random
-import time
 import ast
+import random
 import re
+import time
 
 from pytest import mark
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
-from utils.multi_thread import Events
+
+from consts.cgcs import EventLogID, GuestImages
 from keywords import nova_helper, vm_helper, host_helper, system_helper, \
     storage_helper, glance_helper, cinder_helper
-from consts.cgcs import EventLogID, GuestImages
-from testfixtures.recover_hosts import HostsToRecover
 from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
+from utils import exceptions, cli, table_parser
+from utils.clients.ssh import ControllerClient, get_cli_client
+from utils.multi_thread import Events
+from utils.tis_log import LOG
 
 PROC_RESTART_TIME = 30          # number of seconds between process restarts
 
@@ -91,36 +92,29 @@ def _test_ceph_osd_process_kill():
     with host_helper.ssh_to_host(osd_host) as host_ssh:
         LOG.tc_step('Take OSD {} out of service'.format(osd_id))
         cmd = 'ceph osd out {}'.format(osd_id)
-        rc, out = host_ssh.exec_cmd(cmd)
-        assert rc == 0, "Unable to take OSD out of service"
+        host_ssh.exec_cmd(cmd, fail_ok=False)
 
         LOG.tc_step('Bring OSD {} down'.format(osd_id))
         cmd = 'ceph osd down {}'.format(osd_id)
-        rc, out = host_ssh.exec_cmd(cmd)
-        msg = "Unable to bring down the OSD"
-        assert rc == 0, msg
+        host_ssh.exec_cmd(cmd, fail_ok=False)
 
         LOG.tc_step('Remove OSD {}'.format(osd_id))
         cmd = 'ceph osd rm {}'.format(osd_id)
-        rc, out = host_ssh.exec_cmd(cmd)
-        msg = "Unable to remove the OSD"
-        assert rc == 0, msg
+        host_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Check for loss of replication alarm in group {}'.format(storage_group))
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, timeout=180)[0], "Alarm {} not raised".format(EventLogID.STORAGE_LOR)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, timeout=180)
     
     LOG.tc_step('Check for ceph health warning alarm')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=180)[0], "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=180)
 
     LOG.tc_step('Check for OSD failure alarm')
     entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    events = system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
 
     LOG.tc_step('Put the OSD {} back in service'.format(osd_id))
     cmd = 'ceph osd create 5'.format(osd_id)
-    rc, out = con_ssh.exec_cmd(cmd)
-    msg = "Unable to start the OSD"
-    assert rc == 0, msg
+    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Check the OSD process is restarted with a different pid')
     endtime = time.time() + 300
@@ -137,14 +131,14 @@ def _test_ceph_osd_process_kill():
     LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
 
     LOG.tc_step('Check that loss of replication alarm in group {} alarm clears'.format(storage_group))
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_LOR, timeout=300), "Alarm {} not cleared".format(EventLogID.STORAGE_LOR)
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_LOR, timeout=300)
     
     LOG.tc_step('Check that ceph health warning clears')
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=300), "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND) 
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=300)
 
     LOG.tc_step('Check the OSD failure alarm clears')
     entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=300), "Alarm {} not cleared".format(EventLogID.STORAGE_DEGRADE)
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=300)
 
 
 @mark.parametrize('monitor', [
@@ -195,14 +189,14 @@ def test_ceph_mon_process_kill(monitor):
 
             LOG.tc_step('Remove the monitor')
             cmd = 'ceph mon remove {}'.format(monitor)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
             LOG.tc_step('Stop the ceph monitor')
             cmd = 'service ceph stop mon.{}'.format(monitor)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
     LOG.tc_step('Check that ceph monitor failure alarm is raised')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=300)[0], "Alarm {} not raised".format(EventLogID.STORAGE_DEGRADE)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=300)
 
     with host_helper.ssh_to_host(monitor) as host_ssh:
         with host_ssh.login_as_root() as root_ssh:
@@ -213,14 +207,14 @@ def test_ceph_mon_process_kill(monitor):
 
             LOG.tc_step('Remove old ceph monitor directory')
             cmd = 'rm -rf /var/lib/ceph/mon/ceph-{}'.format(monitor)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
             LOG.tc_step('Re-add the monitor')
             cmd = 'ceph-mon -i {} -c {} --mkfs --fsid {}'.format(monitor, ceph_conf, fsid)
-            rc, out = root_ssh.exec_cmd(cmd)
+            root_ssh.exec_cmd(cmd)
 
     LOG.tc_step('Check the ceph storage alarm condition clears')
-    assert system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=360), "Alarm {} not cleared".format(EventLogID.STORAGE_DEGRADE)
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=360)
 
     LOG.tc_step('Check the ceph-mon process is restarted with a different pid')
     for i in range(0, PROC_RESTART_TIME):
@@ -228,6 +222,7 @@ def test_ceph_mon_process_kill(monitor):
         if mon_pid2 != mon_pid:
             break
         time.sleep(1)
+
     msg = 'Process did not restart in time'
     assert mon_pid2 != mon_pid, msg
     LOG.info('Old pid is {} and new pid is {}'.format(mon_pid, mon_pid2))
@@ -294,9 +289,7 @@ def test_ceph_reboot_storage_node():
         for host in storage_nodes:
             LOG.tc_step('Reboot {}'.format(host))
             HostsToRecover.add(host, scope='function')
-            results = host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-            host_helper.wait_for_host_states(host, availability='offline')
-            LOG.tc_step("Results: {}".format(results))          # yang TODO log added to keyword, still needed?
+            host_helper.reboot_hosts(host, wait_for_offline=True, wait_for_reboot_finish=False)
 
             LOG.tc_step('Check health of CEPH cluster')
             end_time = time.time() + 10
@@ -597,13 +590,14 @@ def test_lock_cont_check_mon_down():
         "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
 
     LOG.tc_step('Check health of CEPH cluster')
-    health = False
+    msg = ''
     end_time = time.time() + 40
     while time.time() < end_time:
         ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
         if ceph_healthy:
             break
-    assert ceph_healthy, msg
+    else:
+        assert 0, msg
 
 
 # Tested on PV1.  Runtime: 1212.55 secs Date: Aug 2nd, 2017.  Status: Pass
@@ -645,17 +639,26 @@ def test_storgroup_semantic_checks():
     """
 
     con_ssh = ControllerClient.get_active_controller()
-    storage_nodes = system_helper.get_storage_nodes(con_ssh)
-    LOG.info("The following storage hosts are on the system: {}".format(storage_nodes))
+
+    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
+    capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
+    replication = ast.literal_eval(capabilities)
+    replication_factor = replication['replication']
+    LOG.info("The replication factor is: {}".format(replication_factor))
+
+    # We want to test storage-0 since it is a ceph monitor
+    # Then we want to test another storage host in another group.  The choice
+    # depends on the replication factor.
+    storage_nodes = ["storage-0"]
+    if replication_factor == "3":
+        storage_nodes.append("storage-3")
+    else:
+        storage_nodes.append("storage-2")
+
+    LOG.info("Storage hosts under test are: {}".format(storage_nodes))
 
     for host in storage_nodes:
-        peers = host_helper.get_hostshow_values(host, 'peers')
-        peers = ast.literal_eval(list(peers.values())[0])
-        hosts = peers['hosts']
-        hosts.remove(host)
-        storage_group = peers['name']
-
-        LOG.tc_step('Lock {} in the {} group:'.format(host, storage_group))
+        LOG.tc_step('Lock {}:'.format(host))
         HostsToRecover.add(host, scope='function')
         rtn_code, out = host_helper.lock_host(host)
         assert rtn_code == 0, out
@@ -685,6 +688,7 @@ def test_storgroup_semantic_checks():
         assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND)[0], \
             "Alarm {} not raised".format(EventLogID.STORAGE_ALARM_COND)
 
+        hosts = []
         if host == 'storage-0':
             hosts.append('controller-0')
             hosts.append('controller-1')
@@ -759,30 +763,21 @@ def test_import_with_cache_raw():
         1.  CGTS-3605 glance import --cache-raw should have an option to wait
         until RAW image is available
     """
-    con_ssh = ControllerClient.get_active_controller()
-
-    img_dest = '~/images'
+    con_ssh = get_cli_client()
     size = 10
     vm_list = []
 
     # Return a list of images of a given type
-    LOG.tc_step('Determine what qcow2 images we have available')
-    image_names = storage_helper.find_images(con_ssh)
-
-    if not image_names:
-        LOG.info('No qcow2 images were found on the system')
-        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        glance_helper._scp_guest_image()
-        image_names = storage_helper.find_images(con_ssh)
+    image_names, img_dir = __get_images_on_client(client=con_ssh, img_type='qcow2')
 
     LOG.tc_step('Import qcow2 images into glance')
     for image in image_names:
-        source_image_loc = img_dest + "/" + image
+        source_image_loc = img_dir + "/" + image
         img_name = 'testimage_{}'.format(image)
         ret = glance_helper.create_image(source_image_file=source_image_loc,
                                          disk_format='qcow2',
                                          container_format='bare',
-                                         cache_raw=True, wait=True)
+                                         cache_raw=True, wait=True, name=img_name)
         ResourceCleanup.add('image', ret[1])
         LOG.info("ret {}".format(ret))
         assert ret[0] == 0, ret[2]
@@ -854,6 +849,19 @@ def test_import_with_cache_raw():
         assert rbd_raw_img_id not in out, msg
 
 
+def __get_images_on_client(client, img_name=None, img_type='all'):
+    LOG.tc_step('Determine {} images we have available'.format(img_type))
+    image_names, img_dir = storage_helper.find_images(client, image_type=img_type, image_name=img_name)
+
+    if not image_names:
+        LOG.info('No requested images were found on the system')
+        LOG.tc_step('Downloading requested image(s)... this will take some time')
+        glance_helper._scp_guest_image()
+        image_names, img_dir = storage_helper.find_images(client, image_type=img_type, image_name=img_name)
+
+    return image_names, img_dir
+
+
 @mark.usefixtures('ceph_precheck')
 def test_import_raw_with_cache_raw():
     """
@@ -879,25 +887,15 @@ def test_import_raw_with_cache_raw():
         3.  Ensure you can launch a VM from image using the imported image
         4.  Ensure you can launch a VM from volume using the imported image
     """
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
 
     # Return a list of images of a given type
     LOG.tc_step('Determine what raw images we have available')
-    image_names = storage_helper.find_images(con_ssh, image_type='raw')
-
-    if not image_names:
-        LOG.info('No raw images were found on the controller')
-        LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} ' \
-                       'controller-1:{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_DIR)
-        con_ssh.exec_cmd(rsync_images)
-        image_names = storage_helper.find_images(con_ssh, image_type='raw')
-        msg = 'No images found on controller'
-        assert image_names, msg
+    image_names, img_dir = __get_images_on_client(client=con_ssh, img_type='raw')
 
     LOG.tc_step('Import raw images into glance with --cache-raw')
     for image in image_names:
-        source_image_loc = GuestImages.IMAGE_DIR + '/' + image
+        source_image_loc = img_dir + '/' + image
         ret = glance_helper.create_image(source_image_file=source_image_loc,
                                          disk_format='raw',
                                          container_format='bare',
@@ -917,7 +915,7 @@ def test_import_raw_with_cache_raw():
         msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
         assert rbd_raw_img_id not in out, msg
 
-    #TODO: Clean up resources used
+    # TODO: Clean up resources used
 
 
 # INPROGRESS
@@ -942,20 +940,15 @@ def _test_exceed_size_of_img_pool():
         2. Ensure the system alarms
     """
 
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
 
     # Return a list of images of a given type
     LOG.tc_step('Determine what qcow2 images we have available')
-    image_names = storage_helper.find_images(con_ssh)
-    
-    if not image_names:
-        LOG.info('No qcow2 images were found on the system')
-        LOG.tc_step('Downloading qcow2 image(s)... this will take some time')
-        glance_helper._scp_guest_image()
-        image_names = storage_helper.find_images(con_ssh)
+    img_name = 'ubuntu_14'
+    image_names, img_dir = __get_images_on_client(client=con_ssh, img_name=img_name)
 
     LOG.tc_step('Import qcow2 images into glance until pool is full')
-    source_img_path = "{}/{}".format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES['ubuntu_14'][2])
+    source_img_path = "{}/{}".format(img_dir, GuestImages.IMAGE_FILES[img_name][2])
 
     timeout = 7200
     end_time = time.time() + timeout
@@ -1011,36 +1004,27 @@ def _test_import_large_images_with_cache_raw():
         8.  Launch a VM from image
         9.  Cleanup flavors and VMs
     """
-
-    con_ssh = ControllerClient.get_active_controller()
+    con_ssh = get_cli_client()
     img = 'cgcs-guest'
     glance_helper.get_guest_image(guest_os=img)
 
     base_img = img + '.img'
     qcow2_img = img + '.qcow2'
     new_img = '40GB' + base_img
-    new_img_loc = GuestImages.IMAGE_DIR + '/' + new_img
     vm_list = []
 
     # Check that we have the cgcs-guest.img available
     # If we are on controller-1, we may need to rsync image files from
     # controller-0
     LOG.tc_step('Determine if the cgcs-guest image is available')
-    image_names = storage_helper.find_images(con_ssh, image_type='all')
-    if base_img not in image_names:
-        LOG.tc_step('Rsyncing images from controller-0')
-        rsync_images = 'rsync -avr -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no " {} ' \
-                       'controller-1:{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_DIR)
-        con_ssh.exec_cmd(rsync_images)
-        image_names = storage_helper.find_images(con_ssh)
-        msg = '{} was not found in {}'.format(base_img, GuestImages.IMAGE_DIR)
-        assert base_img in image_names, msg
-
+    image_names, img_dir = __get_images_on_client(client=con_ssh, img_name=img, img_type='all')
     # Resize the image to 40GB
     LOG.tc_step('Resize the cgcs-guest image to 40GB')
-    cmd = 'cp {}/{} {}/{}'.format(GuestImages.IMAGE_DIR, base_img, GuestImages.IMAGE_DIR, new_img)
+    cmd = 'cp {}/{} {}/{}'.format(img_dir, base_img, img_dir, new_img)
     rtn_code, out = con_ssh.exec_cmd(cmd)
     assert not rtn_code, out
+
+    new_img_loc = img_dir + '/' + new_img
     cmd = 'qemu-img resize {} -f raw 40G'.format(new_img_loc)
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
     assert not rtn_code, out
@@ -1052,17 +1036,17 @@ def _test_import_large_images_with_cache_raw():
 
     # Convert the image to qcow2
     LOG.tc_step('Convert the raw image to qcow2')
-    args = '{}/{} {}/{}'.format(GuestImages.IMAGE_DIR, new_img, GuestImages.IMAGE_DIR, qcow2_img)
+    args = '{}/{} {}/{}'.format(img_dir, new_img, img_dir, qcow2_img)
     cmd = 'qemu-img convert -f raw -O qcow2' + ' ' + args
     con_ssh.exec_cmd(cmd, expect_timeout=600)
 
     # Check the image type is updated
-    image_names = storage_helper.find_images(con_ssh, image_type='qcow2')
-    msg = 'qcow2 image was not found in {}'.format(GuestImages.IMAGE_DIR)
+    image_names, img_dir = storage_helper.find_images(con_ssh, image_type='qcow2')
+    msg = 'qcow2 image was not found in {}'.format(img_dir)
     assert qcow2_img in image_names, msg
 
     LOG.tc_step('Import image into glance')
-    source_img = GuestImages.IMAGE_DIR + '/' + qcow2_img
+    source_img = img_dir + '/' + qcow2_img
     out = glance_helper.create_image(source_image_file=source_img,
                                      disk_format='qcow2',
                                      container_format='bare',

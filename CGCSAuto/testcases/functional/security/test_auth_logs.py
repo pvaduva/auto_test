@@ -1,12 +1,11 @@
-import time
 import re
+import time
 
 from pytest import mark
 
 from consts.cgcs import Prompt
-from keywords import html_helper, host_helper, system_helper
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils.ssh import SSHClient, ControllerClient
 
 
 def exec_sudo_cmd_fail(ssh, cmd):

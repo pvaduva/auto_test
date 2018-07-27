@@ -33,6 +33,12 @@ def compare_cores_to_configure(host, function, p0, p1):
     return p0_to_config is None and p1_to_config is None, p0_to_config, p1_to_config
 
 
+@fixture(scope='class')
+def skip_for_ovs():
+    if not system_helper.is_avs():
+        skip('VSwitch numa affinity unsupported by OVS')
+
+
 @fixture(scope='module', autouse=True)
 def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     LOG.info("Looking for a host to reconfigure.")
@@ -177,8 +183,9 @@ class TestVSwitchCPUReconfig:
                 host_helper.modify_host_cpu(host, 'vswitch', **vswitch_args)
             host_helper.unlock_host(host, check_hypervisor_up=True)
 
-        LOG.tc_step("Check ports and vswitch cores mapping are correct.")
-        check_helper.check_host_vswitch_port_engine_map(host)
+        if system_helper.is_avs():
+            LOG.tc_step("Check AVS ports and cores mapping are correct.")
+            check_helper.check_host_vswitch_port_engine_map(host)
 
         LOG.tc_step("Check {} is still a valid nova host.".format(host))
         host_helper.wait_for_hypervisors_up(host)
@@ -370,7 +377,7 @@ def get_hosts(host_to_config):
 class TestNovaSchedulerAVS:
 
     @fixture(scope='class')
-    def hosts_configured(self, get_hosts, config_host_class):
+    def hosts_configured(self, skip_for_ovs, get_hosts, config_host_class):
         host0, host1, storage_backing, ht_enabled = get_hosts
 
         function = 'vSwitch'
@@ -438,7 +445,8 @@ class TestNovaSchedulerAVS:
         ('prefer', None, None, None),
         ('strict', None, 2, 'NumaErr.TWO_NUMA_ONE_VSWITCH')  # This error message is confusing
     ])
-    def test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0, numa_nodes, expt_err):
+    def test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0,
+                                           numa_nodes, expt_err):
         """
 
         Args:
@@ -867,7 +875,7 @@ class TestNovaSchedulerAVS:
 
 class TestSpanNumaNodes:
     @fixture(scope='class')
-    def span_numa_hosts(self, get_hosts, config_host_class):
+    def span_numa_hosts(self, skip_for_ovs, get_hosts, config_host_class):
         host0, host1, storage_backing, ht_enabled = get_hosts
 
         function = 'vSwitch'
@@ -903,7 +911,8 @@ class TestSpanNumaNodes:
         return host_span, host_other, storage_backing, ht_enabled
 
     @staticmethod
-    def create_flavor_span_numa(vcpus, vswitch_affinity, storage_backing, numa0, numa0_cpus, numa0_mem, numa1, numa1_cpus, numa1_mem):
+    def create_flavor_span_numa(vcpus, vswitch_affinity, storage_backing, numa0, numa0_cpus, numa0_mem, numa1,
+                                numa1_cpus, numa1_mem):
 
         LOG.tc_step("Create a 1024ram flavor with specified vcpus")
         name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)

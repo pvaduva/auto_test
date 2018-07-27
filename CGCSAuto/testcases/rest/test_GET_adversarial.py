@@ -4,7 +4,14 @@ from utils.rest import Rest
 from keywords import system_helper, host_helper
 import string
 
-def test_GET_ihosts_host_id_shortUUID():
+
+@pytest.fixture(scope='module')
+def sysinv_rest():
+    r = Rest('sysinv')
+    return r
+
+
+def test_GET_ihosts_host_id_shortUUID(sysinv_rest):
     """
     Test GET of <resource> with valid authentication and upper 
          case UUID values.
@@ -23,12 +30,12 @@ def test_GET_ihosts_host_id_shortUUID():
         n/a
     """
     path = "/ihosts/{}/addresses"
-    r = Rest('sysinv')
+    r = sysinv_rest
     LOG.info(path)
     LOG.info(system_helper.get_hostnames())
     for host in system_helper.get_hostnames():
         uuid = host_helper.get_hostshow_value(host, 'uuid')
-        LOG.info("host: {} uuid: {}".format(host,uuid))
+        LOG.info("host: {} uuid: {}".format(host, uuid))
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
 
@@ -41,7 +48,8 @@ def test_GET_ihosts_host_id_shortUUID():
         message = "Expected code of 400 - received {} and message {}"
         assert status_code == 400, message.format(status_code, text)
 
-def test_GET_ihosts_host_id_invalidUUID():
+
+def test_GET_ihosts_host_id_invalidUUID(sysinv_rest):
     """
     Test GET of <resource> with valid authentication and upper 
          case UUID values.
@@ -60,12 +68,12 @@ def test_GET_ihosts_host_id_invalidUUID():
         n/a
     """
     path = "/ihosts/{}/addresses"
-    r = Rest('sysinv')
+    r = sysinv_rest
     LOG.info(path)
     LOG.info(system_helper.get_hostnames())
     for host in system_helper.get_hostnames():
         uuid = host_helper.get_hostshow_value(host, 'uuid')
-        LOG.info("host: {} uuid: {}".format(host,uuid))
+        LOG.info("host: {} uuid: {}".format(host, uuid))
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
 
@@ -84,8 +92,8 @@ def test_GET_ihosts_host_id_invalidUUID():
         assert status_code == 400, message.format(status_code, text)
 
 
-# Remove for now due to CGTS-8265 might not be fixed.
-def _test_GET_ihosts_host_id_uppercaseUUID():
+# Remove for now until CGTS-8265 is fixed.
+def _test_GET_ihosts_host_id_uppercaseUUID(sysinv_rest):
     """
     Test GET of <resource> with valid authentication and upper 
          case UUID values.
@@ -104,7 +112,7 @@ def _test_GET_ihosts_host_id_uppercaseUUID():
         n/a
     """
     path = "/ihosts/{}/addresses"
-    r = Rest('sysinv')
+    r = sysinv_rest
     LOG.info("This test case will FAIL until CGTS-8265 is resolved")
     LOG.info(system_helper.get_hostnames())
     for host in system_helper.get_hostnames():

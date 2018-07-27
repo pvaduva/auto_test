@@ -1,17 +1,23 @@
 import time
 
-from pytest import fixture
+from pytest import fixture, skip
 
-from utils import exceptions
-from utils.tis_log import LOG
-from utils.ssh import NATBoxClient
-from utils.multi_thread import MThread, Events
 from consts.cgcs import FlavorSpec, Prompt
-from keywords import network_helper, vm_helper, nova_helper, glance_helper
+from keywords import network_helper, vm_helper, nova_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import exceptions
+from utils.clients.ssh import NATBoxClient
+from utils.multi_thread import MThread, Events
+from utils.tis_log import LOG
 
 GUEST_OS = 'ubuntu_14'
 VMS_COUNT = 4
+
+
+@fixture(scope='module', autouse=True)
+def skip_for_ovs():
+    if not system_helper.is_avs():
+        skip('DNAT unsupported by OVS')
 
 
 @fixture(scope='module')
@@ -72,10 +78,11 @@ def _vms():
         tenant_net_ids += tenant_net_ids
     assert len(tenant_net_ids) >= VMS_COUNT
 
-    vm_vif_models = {'virtio1_vm': ('virtio', tenant_net_ids[0]),
-                     'avp1_vm': ('avp', tenant_net_ids[1]),
-                     'avp2_vm': ('avp', tenant_net_ids[2]),
-                     'vswitch1_vm': ('avp', tenant_net_ids[3])}
+    vif = 'avp' if system_helper.is_avs() else 'e1000'
+    vm_vif_models = {'virtio_vm1': ('virtio', tenant_net_ids[0]),
+                     '{}_vm1'.format(vif): (vif, tenant_net_ids[1]),
+                     'virtio_vm2': ('virtio', tenant_net_ids[2]),
+                     '{}_vm2'.format(vif): (vif, tenant_net_ids[3])}
 
     vms = []
     for vm_name, vifs in vm_vif_models.items():

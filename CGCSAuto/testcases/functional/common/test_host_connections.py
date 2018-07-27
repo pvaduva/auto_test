@@ -1,11 +1,9 @@
 from pytest import mark
 
-from utils import exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-
 from consts.cgcs import HostAvailState
 from keywords import system_helper, network_helper, host_helper
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @mark.p3

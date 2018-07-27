@@ -1,18 +1,18 @@
-import random
 import time
 
 from consts.auth import Tenant
-from utils import table_parser, cli
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from utils import exceptions
 from consts.timeout import CMDTimeout, CeilTimeout
+from utils import exceptions
+from utils import table_parser, cli
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
-def get_alarms(name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_alarms(header='alarm_id', name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
     """
 
     Args:
+        header
         name:
         strict:
         auth_info:
@@ -22,11 +22,12 @@ def get_alarms(name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
     """
 
-    table_ = table_parser.table(cli.ceilometer('alarm-list', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('alarm list', auth_info=auth_info, ssh_client=con_ssh),
+                                combine_multiline_entry=True)
     if name is None:
-        return table_
+        return table_parser.get_column(table_, header)
 
-    return table_parser.get_values(table_, 'Alarm ID', Name='STACK1', strict=strict)
+    return table_parser.get_values(table_, header, Name=name, strict=strict)
 
 
 def get_resources(header='Resource ID', limit=10, timeout=CMDTimeout.RESOURCE_LIST, con_ssh=None,
@@ -209,24 +210,6 @@ def get_meters_table(limit=None, unique=None, meter=None, resource=None, auth_in
     table_ = table_parser.table(cli.ceilometer('meter-list', args_, auth_info=auth_info, ssh_client=con_ssh))
 
     return table_
-
-
-def alarm_list(header='State', con_ssh=None, auth_info=Tenant.ADMIN):
-    """
-    Get a list of alarms that can be tracked by Ceilometer
-    Args:
-        header (str): the column to get the values from
-        con_ssh (SSHClient):
-        auth_info (dict):
-
-    Returns (list): a list of all the values in the header column of the returned resources
-
-    """
-    table_ = table_parser.table(cli.ceilometer('alarm-list', auth_info=auth_info, ssh_client=con_ssh))
-
-    values = table_parser.get_values(table_, target_header=header)
-
-    return values
 
 
 def get_events(event_type, limit=None, header='message_id', con_ssh=None, auth_info=None,

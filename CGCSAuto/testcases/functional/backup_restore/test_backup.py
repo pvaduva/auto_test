@@ -1,14 +1,11 @@
 import time
 
-from pytest import fixture, skip, mark
-from utils.tis_log import LOG
-from utils import table_parser, cli, exceptions
-from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper
-from consts import timeout
-from testfixtures.recover_hosts import HostsToRecover
 from consts.auth import Tenant, SvcCgcsAuto
-from utils.ssh import ControllerClient
 from consts.timeout import VolumeTimeout
+from keywords import cinder_helper, glance_helper, common, system_helper
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def wait_for_volume_state(vol_id, field, field_value, timeout=VolumeTimeout.STATUS_CHANGE, fail_ok=True,

@@ -157,6 +157,7 @@ def __table_columns(first_table_row):
         start = end + 1
     return positions
 
+
 ###################################################################
 #  Above are contents from tempest_lib. Below are extended by us. #
 ###################################################################
@@ -299,7 +300,7 @@ def __is_table_two_column(table_):
     return True if table_['headers'] in TWO_COLUMN_TABLE_HEADERS else False
 
 
-def get_column(table_, header):
+def get_column(table_, header, merge_lines=False):
     """
     Get a whole column with customized header as a list. The header itself is excluded.
 
@@ -310,6 +311,7 @@ def get_column(table_, header):
                 'headers': ["Field", "Value"];
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         header (str): header of a column
+        merge_lines (bool): whether to merge lines if multi-line entry found
 
     Returns (list): target column. Each item is a string.
 
@@ -321,7 +323,10 @@ def get_column(table_, header):
     index = get_column_index(table_, header)
     column = []
     for row in rows:
-        column.append(row[index])
+        value = row[index]
+        if merge_lines and isinstance(value, list):
+            value = ''.join(value)
+        column.append(value)
 
     return column
 
@@ -446,7 +451,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
     if not new_kwargs:
         LOG.debug("kwargs unspecified, returning the whole target column as list.")
-        return get_column(table_, target_header)
+        return get_column(table_, target_header, merge_lines=merge_lines)
 
     row_indexes = []
     for header, values in new_kwargs.items():
@@ -486,7 +491,7 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
         # handle multi-line value
         if merge_lines and isinstance(target_value, list):
-            target_value = ' '.join(target_value)
+            target_value = ''.join(target_value)
 
         target_values.append(target_value)
 
@@ -775,6 +780,7 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None, low
         unique_key (bool): if key_header is unique for each row, such as UUID, then value for each key will be dict
             instead of list of dict
         eliminate_keys (None|str|list): columns to eliminate
+        lower_case (bool): Return the dictionary in lowercase
 
     Returns (dict): dictionary with value of the key_header as key, and the complete row as the value.
         The value itself is a list, number of items in the list depends on how many rows has the same value for
@@ -910,3 +916,22 @@ def convert_value_to_dict_cinder(value):
         value = [value]
     d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
     return d
+
+
+def get_columns(table_, headers):
+    if not isinstance(headers, list) and not isinstance(headers, set):
+        headers = [headers]
+
+    all_headers = table_['headers']
+    if not set(headers).issubset(all_headers):
+        LOG.error('Unknown column:{}'.format(
+                list(set(all_headers) - set(headers)) + list(set(headers) - set(all_headers)))
+        )
+        return []
+
+    selected_column_positions = [i for i, header in enumerate(all_headers) if header in headers]
+    results = []
+    for row in table_['values']:
+        results.append([row[i] for i in selected_column_positions])
+
+    return results

@@ -61,7 +61,7 @@ def test_launch_server_group_vms(setups):
             assert srv_grp_id in server_group_output, \
                 'Server group info does not appear in nova show for vm {}'.format(vm_id)
 
-            members = nova_helper.get_server_group_info(srv_grp_id, header='Members')
+            members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
             LOG.tc_step("Check vm {} is in server group {}".format(vm_id, srv_grp_id))
             assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id, srv_grp_id)
 
@@ -97,7 +97,7 @@ def check_vm_hosts(vms, policy='affinity', best_effort=False):
 
 
 def _check_affinity_vms():
-    affinity_vms = nova_helper.get_server_group_info(group_name='grp_affinity', header='Members')
+    affinity_vms = nova_helper.get_server_group_info(group_name='grp_affinity', headers='Members')[0]
     vm_host = check_vm_hosts(vms=affinity_vms, policy='affinity')[0]
 
     for vm_id in affinity_vms:
@@ -118,7 +118,7 @@ def _check_affinity_vms():
 def _check_anti_affinity_vms():
     storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
     best_effort = True if len(hosts) < 3 else False
-    anti_affinity_vms = nova_helper.get_server_group_info(group_name='grp_anti_affinity', header='Members')
+    anti_affinity_vms = nova_helper.get_server_group_info(group_name='grp_anti_affinity', headers='Members')[0]
 
     check_vm_hosts(vms=anti_affinity_vms, policy='anti_affinity', best_effort=best_effort)
 

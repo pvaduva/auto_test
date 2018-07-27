@@ -1,18 +1,16 @@
-import pytest
 import os
-import setups
+
+import pytest
+
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from consts.proj_vars import InstallVars, ProjVar, UpgradeVars
-from keywords import install_helper,  patching_helper, upgrade_helper, common
-from utils.ssh import ControllerClient, SSHClient
-from utils import table_parser, cli
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES
-
-# Import test fixtures that are applicable to upgrade test
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.proj_vars import ProjVar, InstallVars, UpgradeVars
+from keywords import install_helper,  patching_helper, upgrade_helper, common
 from testfixtures.pre_checks_and_configs import *
-
+from utils import table_parser, cli
+from utils.clients.ssh import SSHClient, ControllerClient
 
 natbox_ssh = None
 con_ssh = None
@@ -335,8 +333,8 @@ def apply_patches(lab, server, patch_dir):
                                   temp_path, dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
-                common.scp_to_active_controller(temp_path,
-                                            dest_path=patch_dest_dir, is_dir=True)
+                common.scp_from_localhost_to_active_controller(temp_path,
+                                                               dest_path=patch_dest_dir, is_dir=True)
 
         else:
             server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,

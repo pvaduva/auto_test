@@ -3,8 +3,6 @@ from selenium.webdriver.common import by
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
-from time import sleep
-from consts import horizon
 
 
 class InterfacesTable(tables.TableRegion):
@@ -14,7 +12,7 @@ class InterfacesTable(tables.TableRegion):
     @tables.bind_table_action('create')
     def create_interface(self, create_button):
         create_button.click()
-        sleep(3)
+        self.wait_till_spinner_disappears()
         return forms.FormRegion(
             self.driver,
             field_mappings=self.CREATE_INTERFACE_FORM_FIELDS
@@ -26,7 +24,7 @@ class InterfacesTable(tables.TableRegion):
         return forms.BaseFormRegion(self.driver)
 
     @tables.bind_row_action('delete')
-    def delete_interface_by_row_action(self, delete_button, row):
+    def delete_interface_by_row(self, delete_button, row):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
@@ -35,15 +33,7 @@ class RouterInterfacesPage(basepage.BasePage):
 
     INTERFACES_TABLE_STATUS_COLUMN = 'Status'
     INTERFACES_TABLE_NAME_COLUMN = 'Name'
-    # DEFAULT_IPv4_ADDRESS = '10.1.0.10'
-    DEFAULT_SUBNET = horizon.DEFAULT_SUBNET
-
-    '''_breadcrumb_routers_locator = (by.By.CSS_SELECTOR,
-                                   'ol.breadcrumb>li>a[href*="/project/routers"]')'''
-
-    def __init__(self, driver, router_name):
-        super(RouterInterfacesPage, self).__init__(driver)
-        self._page_title = router_name
+    DEFAULT_SUBNET = 'external-net0'
 
     def _get_row_with_interface_name(self, name):
         return self.interfaces_table.get_row(
@@ -58,7 +48,6 @@ class RouterInterfacesPage(basepage.BasePage):
         return list(map(lambda row: row.cells[self.
                    INTERFACES_TABLE_NAME_COLUMN].text,
                    self.interfaces_table.rows))
-
 
     def create_interface(self):
         interface_form = self.interfaces_table.create_interface()

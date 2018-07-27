@@ -1,19 +1,18 @@
-import random
-import time
-import re
 import json
+import re
+import time
 
 from pytest import skip
 
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.timeout import ImageTimeout
-from consts.cgcs import Prompt, GuestImages
+from consts.cgcs import GuestImages
 from consts.proj_vars import ProjVar
-from keywords import common, storage_helper, system_helper, host_helper
+from consts.timeout import ImageTimeout
+from keywords import common, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
+from utils.tis_log import LOG
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -76,7 +75,7 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
 
 def get_avail_image_space(con_ssh):
     """
-    Get available disk space in GB on /opt/cgcs which is where glance images are saved at
+    Get available disk space in GiB on /opt/cgcs which is where glance images are saved at
     Args:
         con_ssh:
 
@@ -104,8 +103,13 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
 
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
+    if 0 == con_ssh.exec_cmd('ceph df')[0]:
+        # assume image storage for ceph is sufficient
+        return True
+
     if image_host_ssh is None:
-        image_host_ssh = con_ssh
+        image_host_ssh = get_cli_client()
 
     file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
     avail_size = get_avail_image_space(con_ssh=con_ssh)
@@ -214,6 +218,15 @@ def is_image_conversion_sufficient(img_file_path=None, guest_os=None, min_diff=0
 
 
 def ensure_image_storage_sufficient(guest_os, con_ssh=None):
+    """
+    Before image file is copied to tis, check if image storage is sufficient
+    Args:
+        guest_os:
+        con_ssh:
+
+    Returns:
+
+    """
     with host_helper.ssh_to_test_server() as img_ssh:
         if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
             images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
@@ -234,7 +247,7 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
 def create_image(name=None, image_id=None, source_image_file=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
-                 auth_info=Tenant.ADMIN, fail_ok=False, **properties):
+                 auth_info=Tenant.ADMIN, fail_ok=False, ensure_sufficient_space=True, **properties):
     """
     Create an image with given criteria.
 
@@ -255,6 +268,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
+        ensure_sufficient_space (bool): Ensure glance image storage is sufficient to create new image
         **properties: key=value pair(s) of properties to associate with the image
 
     Returns (tuple): (rtn_code(int), message(str))      # 1, 2 only applicable if fail_ok=True
@@ -266,11 +280,19 @@ def create_image(name=None, image_id=None, source_image_file=None,
     # Use source image url if url is provided. Else use local img file.
 
     default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
-    file_path = source_image_file if source_image_file else "{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
+
+    file_path = source_image_file
+    if not file_path:
+        img_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+        file_path = "{}/{}".format(img_dir, default_guest_img)
     if 'win' in file_path and 'os_type' not in properties:
         properties['os_type'] = 'windows'
     elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
         properties['hw_firmware_type'] = 'uefi'
+
+    if ensure_sufficient_space:
+        if not is_image_storage_sufficient(img_file_path=file_path):
+            skip('Insufficient image storage for creating glance image from {}'.format(file_path))
 
     source_str = file_path
 
@@ -527,7 +549,7 @@ def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=N
     return results
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout=3600, con_ssh=None):
+def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
     """
 
     Args:
@@ -543,50 +565,30 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=GuestImages.IMAGE_DIR, timeout
     if img_os not in valid_img_os_types:
         raise ValueError("Invalid image OS type provided. Valid values: {}".format(valid_img_os_types))
 
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+    if not dest_dir:
+        dest_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
 
+    LOG.info("Downloading guest image from test server...")
     dest_name = GuestImages.IMAGE_FILES[img_os][2]
-    source_name = GuestImages.IMAGE_FILES[img_os][0]
+    ts_source_name = GuestImages.IMAGE_FILES[img_os][0]
+    if con_ssh is None:
+        con_ssh = get_cli_client()
 
-    if dest_dir.endswith('/'):
-        dest_dir = dest_dir[:-1]
-
-    dest_path = '{}/{}'.format(dest_dir, dest_name)
-
-    if con_ssh.file_exists(file_path=dest_path):
-        LOG.info('image file {} already exists. Return existing image path'.format(dest_path))
-        return dest_path
-
-    LOG.debug('Create directory for image storage if not already exists')
-    cmd = 'mkdir -p {}'.format(dest_dir)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, source_name)
-    source_ip = SvcCgcsAuto.SERVER
-    source_user = SvcCgcsAuto.USER
-
-    nat_name = ProjVar.get_var('NATBOX').get('name')
-    if nat_name == 'localhost' or nat_name.startswith('128.224.'):
-        nat_dest_path = '/tmp/{}'.format(dest_name)
-        nat_ssh = NATBoxClient.get_natbox_client()
-        if not nat_ssh.file_exists(nat_dest_path):
-            LOG.info("scp image from test server to NatBox: {}".format(nat_name))
-            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
-                                dest_path=nat_dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
-
-        LOG.info('scp image from natbox {} to active controller'.format(nat_name))
-        dest_user = HostLinuxCreds.get_user()
-        dest_pswd = HostLinuxCreds.get_password()
-        dest_ip = ProjVar.get_var('LAB').get('floating ip')
-        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
-                              dest_password=dest_pswd, timeout=timeout)
-        if not con_ssh.file_exists(dest_path):
-            raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
+    if ts_source_name:
+        # img saved on test server. scp from test server
+        source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, ts_source_name)
+        dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_path, dest_dir=dest_dir,
+                                                                 dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
     else:
-        LOG.info('scp image from test server to active controller')
-        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_ip, source_path=source_path,
-                            dest_path=dest_path, source_pswd=SvcCgcsAuto.PASSWORD, timeout=timeout)
+        # scp from tis system if needed
+        dest_path = '{}/{}'.format(dest_dir, dest_name)
+        if ProjVar.get_var('REMOTE_CLI') and not con_ssh.file_exists(dest_path):
+            tis_source_path = '{}/{}'.format(GuestImages.IMAGE_DIR, dest_name)
+            common.scp_from_active_controller_to_localhost(source_path=tis_source_path, dest_path=dest_path,
+                                                           timeout=timeout)
+
+    if not con_ssh.file_exists(dest_path):
+        raise exceptions.CommonError("image {} does not exist after download".format(dest_path))
 
     LOG.info("{} image downloaded successfully and saved to {}".format(img_os, dest_path))
     return dest_path
@@ -618,8 +620,22 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
             if not ensure_image_storage_sufficient(guest_os=guest_os):
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
+        disk_format = 'qcow2'
+        if guest_os == '{}-qcow2'.format(GuestImages.DEFAULT_GUEST):
+            # convert default img to qcow2 format if needed
+            qcow2_img_path = '{}/{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES[guest_os][2])
+            con_ssh = ControllerClient.get_active_controller()
+            if not con_ssh.file_exists(qcow2_img_path):
+                raw_img_path = '{}/{}'.format(GuestImages.IMAGE_DIR,
+                                              GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2])
+                con_ssh.exec_cmd('qemu-img convert -f raw -O qcow2 {} {}'.format(raw_img_path, qcow2_img_path),
+                                 fail_ok=False, expect_timeout=600)
+        elif re.search('cgcs-guest|vxworks|tis-centos', guest_os):
+            disk_format = 'raw'
+
+        # copy non-default img from test server
         image_path = _scp_guest_image(img_os=guest_os)
-        disk_format = 'raw' if guest_os in ['cgcs-guest', 'vxworks', 'tis-centos-guest'] else 'qcow2'
+
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False)[1]

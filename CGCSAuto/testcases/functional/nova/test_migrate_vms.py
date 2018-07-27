@@ -5,14 +5,24 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 
 from consts.cgcs import FlavorSpec, EventLogID
+from consts.proj_vars import ProjVar
+from consts.auth import Tenant
 from consts.kpi_vars import LiveMigrate
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper, \
+    ixia_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
-def hosts_per_stor_backing():
+def check_system():
+    up_hypervisors = host_helper.get_up_hypervisors()
+    if len(up_hypervisors) < 2:
+        skip("Less than two up hypervisors")
+
+
+@fixture(scope='module')
+def hosts_per_stor_backing(check_system):
     hosts_per_backing = host_helper.get_hosts_per_storage_backing()
     LOG.fixture_step("Hosts per storage backing: {}".format(hosts_per_backing))
 
@@ -51,8 +61,8 @@ def touch_files_under_vm_disks(vm_id, ephemeral=0, swap=0, vm_type='volume', dis
     mark.domain_sanity(('remote', 1, 512, None, 1, 'image', False)),
     mark.domain_sanity(('remote', 0, 512, 'dedicated', 2, 'image_with_vol', False)),
 ])
-def test_live_migrate_vm_positive(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type, block_mig,
-                                  hosts_per_stor_backing, no_simplex):
+def test_live_migrate_vm_positive(hosts_per_stor_backing, storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type,
+                                  block_mig):
     """
     Skip Condition:
         - Less than two hosts have specified storage backing
@@ -279,7 +289,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
     ('remote', 0, 512, 'image'),
     ('remote', 1, 512, 'volume'),
 ])
-def test_migrate_vm_negative_no_other_host(storage_backing, ephemeral, swap, boot_source, hosts_per_stor_backing):
+def test_migrate_vm_negative_no_other_host(hosts_per_stor_backing, storage_backing, ephemeral, swap, boot_source):
     """
     Skip Condition:
         - Number of hosts with specified storage backing is not 1
@@ -359,7 +369,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     mark.sanity(('tis-centos-guest', 'live', None)),
     mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),
 ])
-def test_migrate_vm(guest_os, mig_type, cpu_pol, no_simplex):
+def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
     ResourceCleanup.add('flavor', flavor_id)
@@ -416,11 +426,12 @@ def test_migrate_vm(guest_os, mig_type, cpu_pol, no_simplex):
     ('rhel_6', 4, 4096, None, 'volume'),
     ('rhel_7', 1, 1024, 'dedicated', 'volume'),
     ('win_2012', 3, 1024, 'dedicated', 'image'),
-    ('win_2016', 4, 4096, 'dedicated', 'volume'),
+    mark.priorities('nightly')(('win_2016', 4, 4096, 'dedicated', 'volume')),
     ('ge_edge', 1, 1024, 'shared', 'image'),
     ('ge_edge', 4, 4096, 'dedicated', 'volume'),
 ])
-def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no_simplex):
+def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, boot_source):
+
     img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
@@ -476,12 +487,13 @@ def test_migrate_vm_various_guest(guest_os, vcpus, ram, cpu_pol, boot_source, no
     check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_cold_mig],
                                       vm_host=vm_host_cold_mig, cpu_pol=cpu_pol, guest=guest_os)
 
+    LOG.tc_step("Swact active controller")
+    host_helper.swact_host()
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=30)
 
-@fixture(scope='module')
-def check_system():
-    up_hypervisors = host_helper.get_up_hypervisors()
-    if len(up_hypervisors) < 2:
-        skip("Less than two up hypervisors")
+    LOG.tc_step("Ensure {} vm can still be live-migrated after swact".format(guest_os))
+    vm_helper.live_migrate_vm(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
 @mark.kpi
@@ -502,18 +514,42 @@ def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
     """
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
-
-    LOG.tc_step("Launch a {} vm".format(vm_type))
-    vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True)
-    vm_id = vms[0]
-    time.sleep(30)
+    if 'ixia_ports' not in ProjVar.get_var("LAB"):
+        skip("this lab is not configured with ixia_ports.")
+    if not system_helper.is_avs() and vm_type in ('avp', 'dpdk'):
+        skip('avp vif unsupported by OVS')
 
     def operation(vm_id_):
         code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
         assert 0 == code, "Live migration is not supported. {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    duration = vm_helper.get_ping_loss_duration_on_operation(vm_id, 300, 0.01, operation, vm_id)
-    assert duration > 0, "No ping loss detected during live migration for {} vm".format(vm_type)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
-                              kpi_val=duration, uptime=5, unit='Time(ms)')
+    LOG.tc_step("Launch two {} VMs".format(vm_type))
+    vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.TENANT1)
+    vm_t1 = vms[0]
+    vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.TENANT2)
+    vm_t2 = vms[0]
+
+    LOG.tc_step("Enable routing")
+    if vm_type == 'virtio' or vm_type == 'avp':
+        vm_helper.setup_kernel_routing(vm_t1)
+        vm_helper.setup_kernel_routing(vm_t2)
+    elif vm_type == 'dpdk':
+        vm_helper.setup_avr_routing(vm_t1)
+        vm_helper.setup_avr_routing(vm_t2)
+
+    LOG.tc_step("Route VMs")
+    vm_helper.route_vm_pair(vm_t1, vm_t2)
+
+    LOG.tc_step("Setup traffic between VMs")
+    with vm_helper.traffic_between_vms([(vm_t1, vm_t2)]) as session:
+        ping_duration = vm_helper.get_ping_loss_duration_on_operation(vm_t1, 300, 0.01, operation, vm_t1)
+
+        LOG.tc_step("Collect traffic statistics")
+        duration = int(session.get_statistics('traffic item statistics')[0]['Frames Delta'])
+        assert duration > 0 and ping_duration > 0, \
+            "No ping loss detected during live migration for {} vm".format(vm_type)
+
+        LOG.info("ping loss: {}ms; traffic loss: {}ms".format(ping_duration, duration))
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
+                                  kpi_val=duration, uptime=5, unit='Time(ms)', fail_ok=False)

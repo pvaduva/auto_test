@@ -5,27 +5,34 @@ from keywords import system_helper, host_helper
 import re
 
 
+@pytest.fixture(scope='module')
+def sysinv_rest():
+    r = Rest('sysinv')
+    return r
+
+
 @pytest.mark.parametrize(
     'path', [
-        ('/ihosts/-/addresses'),
-        ('/ihosts/-/idisks'),
-        ('/ihosts/-/ilvgs'),
-        ('/ihosts/-/imemories'),
-        ('/ihosts/-/ipvs'),
-        ('/ihosts/-/isensors'),
-        ('/ihosts/-/isensorgroups'),
-        ('/ihosts/-/istors'),
-        ('/ihosts/-/pci_devices'),
-        ('/ihosts/-/routes'),
-        ('/ihosts/-'),
+        '/ihosts/-/addresses',
+        '/ihosts/-/idisks',
+        '/ihosts/-/ilvgs',
+        '/ihosts/-/imemories',
+        '/ihosts/-/ipvs',
+        '/ihosts/-/isensors',
+        '/ihosts/-/isensorgroups',
+        '/ihosts/-/istors',
+        '/ihosts/-/pci_devices',
+        '/ihosts/-/routes',
+        '/ihosts/-',
     ]
 )
-def test_GET_various_host_id_valid(path):
+def test_GET_various_host_id_valid(sysinv_rest, path):
     """
     Test GET of <resource> with valid authentication.
 
     Args:
-        n/a
+        sysinv_rest
+        path
 
     Prerequisites: system is running
     Test Setups:
@@ -36,7 +43,7 @@ def test_GET_various_host_id_valid(path):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = re.sub("-", "{}", path)
     LOG.info(path)
     LOG.info(system_helper.get_hostnames())

@@ -5,9 +5,8 @@ from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, VMStatus, GuestImages
 from consts.reasons import SkipHostIf
 from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, host_helper, check_helper, glance_helper, common
+from keywords import vm_helper, nova_helper, network_helper, check_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
 
 
 def id_params(val):
@@ -103,7 +102,7 @@ class TestMutiPortsBasic:
         mark.priorities('nightly', 'sx_nightly')((('e1000', '04:09'), ('virtio', '08:1f'))),
         mark.p2((('avp_x8', None), ('virtio_x7', None))),
     ], ids=id_params)
-    def test_multiports_on_same_network_vm_actions(self, vifs, base_setup):
+    def test_multiports_on_same_network_vm_actions(self, vifs, skip_for_ovs, base_setup):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -168,7 +167,7 @@ class TestMutiPortsBasic:
     @mark.parametrize('vifs', [
         (('avp', '00:05'), ('e1000', '08:01'), ('virtio', '01:1f'), ('virtio', None)),
     ], ids=id_params)
-    def test_multiports_on_same_network_evacuate_vm(self, vifs, base_setup):
+    def test_multiports_on_same_network_evacuate_vm(self, vifs, skip_for_ovs, base_setup):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -203,22 +202,9 @@ class TestMutiPortsBasic:
         host = nova_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        HostsToRecover.add(host, scope='function')
+        vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
-        LOG.tc_step("Wait for vms to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                      timeout=120)
-
-        LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper.wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-        post_evac_host = nova_helper.get_vm_host(vm_under_test)
-        assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
-        LOG.tc_step("Wait for vm pingable from NatBox after evacuation.")
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-
-        LOG.tc_step("Verify vm pci address preserved after evacuated from {} to {}".format(host, post_evac_host))
+        LOG.tc_step("Verify vm pci address preserved after evacuation")
         check_helper.check_vm_pci_addr(vm_under_test, nics)
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works after "
@@ -287,11 +273,12 @@ class TestMutiPortsPCI:
             extra_pcipt_net_name = pcipt_nets[0]
             extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
 
+        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
-                {'net-id': internal_net_id, 'vif-model': 'avp'}, ]
+                {'net-id': internal_net_id, 'vif-model': vif_type}, ]
 
         if extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
@@ -332,7 +319,7 @@ class TestMutiPortsPCI:
         mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
         mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_vm_actions(self, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_vm_actions(self, skip_for_ovs, base_setup_pci, vifs):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -378,8 +365,9 @@ class TestMutiPortsPCI:
         if pcipt_included and not pcipt_info:
             skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
+        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+                {'net-id': tenant_net_id, 'vif-model': vif_type}]
         nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
         if pcipt_included and extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
@@ -438,7 +426,7 @@ class TestMutiPortsPCI:
         mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_evacuate_vm(self, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_evacuate_vm(self, skip_for_ovs, base_setup_pci, vifs):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -467,8 +455,9 @@ class TestMutiPortsPCI:
         base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
             extra_pcipt_net_name = base_setup_pci
 
+        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'avp'}]
+                {'net-id': tenant_net_id, 'vif-model': vif_type}]
         for vif in vifs:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
 
@@ -492,20 +481,7 @@ class TestMutiPortsPCI:
         host = nova_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
-        host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-        HostsToRecover.add(host, scope='function')
-
-        LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-        vm_helper.wait_for_vms_values(vm_under_test, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True,
-                                      timeout=120)
-
-        LOG.tc_step("Verify vm is evacuated to other host")
-        vm_helper.wait_for_vm_status(vm_under_test, status=VMStatus.ACTIVE, timeout=120, fail_ok=False)
-        post_evac_host = nova_helper.get_vm_host(vm_under_test)
-        assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
-        LOG.tc_step("Wait for vm pingable from NatBox after evacuation.")
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
+        vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
         LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
         vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)

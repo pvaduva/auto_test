@@ -1,16 +1,15 @@
 import time
 
-from pytest import fixture, mark, skip
-from utils.tis_log import LOG
-from utils.ssh import NATBoxClient, ControllerClient
-from utils import table_parser, cli, exceptions
+from pytest import fixture
 
+from consts.auth import HostLinuxCreds
 from consts.cgcs import GuestImages
 from consts.filepaths import TestServerPath, WRSROOT_HOME, TiSPath
-from consts.auth import HostLinuxCreds
 from consts.proj_vars import ProjVar
 from keywords import host_helper, system_helper, common
-from testfixtures.fixture_resources import ResourceCleanup
+from utils import table_parser
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 generated_vm_dict = {}
 

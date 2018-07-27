@@ -1,48 +1,55 @@
-import pytest
 import os
 import re
 import time
-from utils.tis_log import LOG
-from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
-from consts.proj_vars import InstallVars, RestoreVars, ProjVar
+
+import pytest
+
+from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from consts.build_server import Server, get_build_server_info
 from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
-from utils.ssh import ControllerClient
 from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
-from consts.build_server import Server, get_build_server_info
-from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.timeout import HostTimeout
-from utils import node
-from utils import cli
+from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from setups import collect_tis_logs
+from utils import cli
+from utils import node
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
-def collect_logs(con_ssh, fail_ok=True):
+def collect_logs(con_ssh=None, fail_ok=True):
 
     log_tarball = r'/scratch/ALL_NODES*'
     log_dir = r'~/collected-logs'
     old_log_dir = r'~/collected-logs/old-files'
 
-    prep_cmd = 'mkdir {}; mkdir {}'.format(log_dir, old_log_dir)
-    code, output = con_ssh.exec_cmd(prep_cmd, fail_ok=fail_ok)
-    if code != 0:
-        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
-        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+    try:
+        if con_ssh is None:
+            con_ssh = ControllerClient.get_active_controller()
+        prep_cmd = 'mkdir {}; mkdir {}'.format(log_dir, old_log_dir)
+        code, output = con_ssh.exec_cmd(prep_cmd, fail_ok=fail_ok)
+        if code != 0:
+            LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+            con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
 
-    prep_cmd = 'mv -f {} {}'.format(log_tarball, old_log_dir)
-    code, output = con_ssh.exec_sudo_cmd(prep_cmd, fail_ok=fail_ok)
-    if code != 0:
-        LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
+        prep_cmd = 'mv -f {} {}'.format(log_tarball, old_log_dir)
+        code, output = con_ssh.exec_sudo_cmd(prep_cmd, fail_ok=fail_ok)
+        if code != 0:
+            LOG.warn('failed to execute cmd:{}, code:{}'.format(prep_cmd, code))
 
-        LOG.info('execute: rm -rf /scratch/ALL_NODES*')
-        con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
+            LOG.info('execute: rm -rf /scratch/ALL_NODES*')
+            con_ssh.exec_sudo_cmd('rm -rf /scratch/ALL_NODES*', fail_ok=fail_ok)
 
-        LOG.info('ok, removed /scratch/ALL_NODES*')
+            LOG.info('ok, removed /scratch/ALL_NODES*')
 
-    else:
-        LOG.info('ok, {} moved to {}'.format(log_tarball, old_log_dir))
+        else:
+            LOG.info('ok, {} moved to {}'.format(log_tarball, old_log_dir))
 
-    collect_tis_logs(con_ssh=con_ssh)
+        collect_tis_logs(con_ssh=con_ssh)
+    except:
+        pass
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -366,9 +373,9 @@ def install_non_active_node(node_name, lab):
     assert rc == 0 or rc == 4, "Host {} failed to unlock: rc = {}, msg: {}".format(node_name, rc, output)
 
     if rc == 4:
-        LOG.warn('{} now is in degraded status')
+        LOG.warn('{} now is in degraded status'.format(node_name))
 
-    LOG.info('{} is installed')
+    LOG.info('{} is installed'.format(node_name))
 
 
 def restore_volumes():
@@ -509,14 +516,15 @@ def test_restore(restore_setup):
 
         if not compute_configured:
             LOG.tc_step('Old-load on AIO/CPE lab: config its compute functionalities')
-            install_helper.run_cpe_compute_config_complete(controller_node, controller0)
+            # LOG.warn('compute-config-complete was obsoleted by CGTS-9756!!!')
+            # install_helper.run_cpe_compute_config_complete(controller_node, controller0)
 
-            LOG.info('closing current ssh connection')
-            con_ssh.close()
+            # LOG.info('closing current ssh connection')
+            # con_ssh.close()
 
-            LOG.info('rebuild ssh connection')
-            con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
-            controller_node.ssh_conn = con_ssh
+            # LOG.info('rebuild ssh connection')
+            # con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+            # controller_node.ssh_conn = con_ssh
 
             ControllerClient.set_active_controller(con_ssh)
             host_helper.wait_for_hosts_ready(controller0)
@@ -561,6 +569,11 @@ def test_restore(restore_setup):
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
+        LOG.tc_step('Run restore-complete (CGTS-9756)')
+        controller_node.telnet_conn.login()
+        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+        controller_node.telnet_conn.exec_cmd(cmd, extra_expects=['controller-0 login:'])
+
         LOG.tc_step("Restoring Compute Nodes ...")
         if len(compute_hosts) > 0:
             for compute_host in compute_hosts:
@@ -582,6 +595,9 @@ def test_restore(restore_setup):
     LOG.tc_step("Delete backup files from {} ....".format(TiSPath.BACKUPS))
     con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
 
+    LOG.tc_step('Perform post-restore testing/checking')
+    post_restore_test(con_ssh)
+
     LOG.tc_step("Waiting until all alarms are cleared ....")
     timeout = 300
     healthy, alarms = system_helper.wait_for_all_alarms_gone(timeout=timeout, fail_ok=True)
@@ -599,5 +615,45 @@ def test_restore(restore_setup):
     rc, failed = system_helper.get_system_health_query(con_ssh=con_ssh)
     assert rc == 0, "System health not OK: {}".format(failed)
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=None)
-    # vm_helper.boot_vm()
+    collect_logs()
+
+
+def check_volumes_spaces(con_ssh):
+    from keywords import cinder_helper
+    LOG.info('Checking cinder volumes and space usage')
+    usage_threshold = 0.70
+    free_space, total_space, unit = cinder_helper.get_lvm_usage(con_ssh)
+
+    if total_space and free_space < usage_threshold * total_space:
+        if total_space:
+            LOG.info('cinder LVM over-used: free:{}, total:{}, ration:{}%'.format(
+                free_space, total_space, free_space/total_space * 100))
+
+        LOG.info('Deleting known LVM alarms')
+
+        expected_reason = 'Cinder LVM .* Usage threshold exceeded; threshold: (\d+(\.\d+)?)%, actual: (\d+(\.\d+)?)%'
+        expected_entity = 'host=controller'
+        value_titles = ('UUID', 'Alarm ID', 'Reason Text', 'Entity ID')
+        lvm_pool_usage = system_helper.get_alarms(rtn_vals=value_titles, con_ssh=con_ssh)
+
+        if not lvm_pool_usage:
+            LOG.warn('Cinder LVM pool is used up to 75%, but no alarm for it')
+        else:
+            if len(lvm_pool_usage) > 1:
+                LOG.warn('More than one alarm existing for Cinder LVM over-usage')
+            elif len(lvm_pool_usage) < 1:
+                LOG.warn('No LVM cinder over-used alarms, got:{}'.format(lvm_pool_usage))
+
+            for lvm_alarm in lvm_pool_usage:
+                alarm_uuid, alarm_id, reason_text, entity_id = lvm_alarm.split('::::')
+
+                if re.match(expected_reason, reason_text) and re.search(expected_entity, entity_id):
+                    LOG.info('Expected alarm:{}, reason:{}'.format(alarm_uuid, reason_text))
+                    LOG.info('Deleting it')
+                    system_helper.delete_alarms(alarms=alarm_uuid)
+
+
+def post_restore_test(con_ssh):
+    LOG.info('Perform system testing and checking after the system is restored')
+    check_volumes_spaces(con_ssh)
+

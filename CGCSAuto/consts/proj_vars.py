@@ -5,6 +5,9 @@ from consts.filepaths import BuildServerPath, WRSROOT_HOME
 class ProjVar:
     __var_dict = {'BUILD_ID': None,
                   'BUILD_SERVER': None,
+                  'JOB': None,
+                  'BUILD_BY': None,
+                  'BUILD_PATH': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
                   'VSWITCH_INFO_HOSTS': [],
@@ -24,12 +27,17 @@ class ProjVar:
                   'TELNET_THREADS': None,
                   'SYS_TYPE': None,
                   'COLLECT_SYS_NET_INFO': False,
-                  'IS_VBOX': False
+                  'IS_VBOX': False,
+                  'RELEASE': 'R6',
+                  'REMOTE_CLI': False,
+                  'USER_FILE_DIR': WRSROOT_HOME,
+                  'NO_TEARDOWN': False,
+                  'VSWITCH_TYPE': None,
                   }
 
     @classmethod
     def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli,
-                 always_collect):
+                 always_collect, horizon_visible):
 
         labname = lab['short_name']
 
@@ -53,6 +61,7 @@ class ProjVar:
             'REPORT_TAG': report_tag,
             'OPENSTACK_CLI': openstack_cli,
             'KPI_PATH': logdir + '/kpi.ini',
+            'HORIZON_VISIBLE': horizon_visible
         })
 
     @classmethod
@@ -79,12 +88,15 @@ class InstallVars:
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume, skip_labsetup, wipedisk,
+    def set_install_vars(cls, lab, resume, skip_labsetup,
                          build_server=None,
                          host_build_dir=None,
                          guest_image=None,
                          files_server=None,
-                         files_dir=None,
+                         hosts_bulk_add=None,
+                         boot_if_settings=None,
+                         tis_config=None,
+                         lab_setup=None,
                          heat_templates=None,
                          license_path=None,
                          out_put_dir=None,
@@ -94,30 +106,31 @@ class InstallVars:
                          ceph_mon_gib=None):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
-        __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH
-        __files_server = files_server if files_server else __build_server
-        __files_dir = files_dir if files_dir else \
-            "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(__host_build_dir, lab['name'])
 
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
             'SKIP_LABSETUP': skip_labsetup,
-            'WIPEDISK': wipedisk,
 
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR': __host_build_dir,
+            'TIS_BUILD_DIR': host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
 
             # Files paths
+            'FILES_SERVER': files_server if files_server else __build_server,
+            'DEFAULT_LAB_FILES_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(
+                    host_build_dir, lab['name']),
             # Default tuxlab for boot
             'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
 
-            'FILES_SERVER': __files_server,
-            'LAB_FILES_DIR': __files_dir,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
+            # Lab specific
+            'TIS_CONFIG': tis_config,
+            'HOSTS_BULK_ADD': hosts_bulk_add,
+            'BOOT_IF_SETTINGS': boot_if_settings,
+            'LAB_SETUP_PATH': lab_setup,
 
             # Generic
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
@@ -257,6 +270,14 @@ class PatchingVars:
         'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
         'PASSWORD': ')OKM0okm',  # getpass.getpass()
         'PATCH_BASE_DIR': None,
+        # Patch orchestration
+        'CONTROLLER_APPLY_TYPE': "serial",
+        'STORAGE_APPLY_TYPE': "serial",
+        'COMPUTE_APPLY_TYPE': "serial",
+        'MAX_PARALLEL_COMPUTES': 2,
+        'INSTANCE_ACTION': "stop-start",
+        'ALARM_RESTRICTIONS': "strict",
+
     }
 
     @classmethod
@@ -373,5 +394,25 @@ class BackupVars:
         for key, val in kwargs.items():
             print("Key: {} Value: {}".format(key, val))
             cls.__var_dict[key.upper()] = val
-        cls.__var_dict.update(**kwargs)
 
+
+class ComplianceVar:
+    __var_dict = {'REFSTACK_SUITE': None,
+                  }
+
+    @classmethod
+    def set_var(cls, append=False, **kwargs):
+        for key, val in kwargs.items():
+            if append:
+                cls.__var_dict[key.upper()].append(val)
+            else:
+                cls.__var_dict[key.upper()] = val
+
+    @classmethod
+    def get_var(cls, var_name):
+        var_name = var_name.upper()
+        valid_vars = cls.__var_dict.keys()
+        if var_name not in valid_vars:
+            raise ValueError("Invalid var_name: {}. Valid vars: {}".format(var_name, valid_vars))
+
+        return cls.__var_dict[var_name]

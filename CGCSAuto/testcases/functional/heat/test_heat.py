@@ -9,9 +9,9 @@ from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper
     host_helper, common, system_helper
 
 from consts.heat import Heat, HeatUpdate
-from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HEAT_PATH, HeatStackStatus
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -42,8 +42,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
         resource_found = cinder_helper.get_volumes(name=vol_name)
 
     elif to_verify is 'ceilometer_alarm':
-        table = ceilometer_helper.get_alarms()
-        resource_found = table_parser.get_values(table, 'Alarm ID', Name=stack_name, strict=False)
+        resource_found = ceilometer_helper.get_alarms(name=stack_name, strict=False)
 
     elif to_verify is 'neutron_port':
         port_name = getattr(Heat, template_name)['port_name']
@@ -142,7 +141,7 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
     update_params = getattr(HeatUpdate, t_name)['params']
     update_vals = getattr(HeatUpdate, t_name)['new_vals']
 
-    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
+    template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_PATH, template_name)
     cmd_list = [" -f %s " % template_path]
 
     for i in range(len(update_params)):
@@ -211,7 +210,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     names = table_parser.get_values(table_, 'stack_name')
     stack_name = common.get_unique_name(t_name, existing_names=names)
 
-    template_path = os.path.join(WRSROOT_HOME, HEAT_PATH, template_name)
+    template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_PATH, template_name)
     cmd_list = ['-f %s ' % template_path]
 
     if params is not None:
@@ -315,15 +314,19 @@ def test_heat_template(template_name, revert_quota):
         - Delete Heat stack and verify resource deletion
 
     """
-    if template_name == 'OS_Neutron_RouterInterface.yaml':
+    if 'QoSPolicy' in template_name:
+        if not system_helper.is_avs():
+            skip("QoS policy is not supported by OVS")
+
+    elif template_name == 'OS_Neutron_RouterInterface.yaml':
         LOG.tc_step("Increase network quota by 2 for every tenant")
         tenants_quotas = revert_quota
         for tenant_id, network_quota in tenants_quotas.items():
             network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
             network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
 
-    # create new image to do update later
-    if template_name == 'OS_Nova_Server.yaml':
+    elif template_name == 'OS_Nova_Server.yaml':
+        # create new image to do update later
         LOG.tc_step("Creating an Image to be used for heat update later")
         image_id = glance_helper.create_image(name='tis-centos2')[1]
         ResourceCleanup.add('image', image_id)

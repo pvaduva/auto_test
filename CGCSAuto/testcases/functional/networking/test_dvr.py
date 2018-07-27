@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import RouterStatus
-from keywords import network_helper, vm_helper, nova_helper, host_helper, cinder_helper
+from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -149,9 +149,10 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
     mgmt_net_id = network_helper.get_mgmt_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
+    vif = 'avp' if system_helper.is_avs() else 'e1000'
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': 'avp'}]
+            {'net-id': internal_net_id, 'vif-model': vif}]
     for i in range(vms_num):
         vol = cinder_helper.create_volume(rtn_exist=False)[1]
         ResourceCleanup.add(resource_type='volume', resource_id=vol)
@@ -164,4 +165,4 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     from_vm = random.choice(vms)
     LOG.tc_step("Ping vms' over management and data networks from vm {}, and verify ping successful.".format(from_vm))
-    vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt'], fail_ok=False)
+    vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt', 'internal'], fail_ok=False)

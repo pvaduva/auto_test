@@ -115,11 +115,11 @@ class TestResizeSameHost:
         ('local_lvm',   (4, 1, 512), (0, 1, 0), 'volume'),
         ('local_lvm', (4, 0, 512), (4, 0, 1024), 'volume'),
         ('local_lvm', (4, 1, 0), (4, 2, 0), 'volume'),
-        mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 0, 0), (5, 1, 512), 'image')),
-        ('local_image', (4, 1, 512), (5, 2, 1024), 'image'),
-        mark.priorities('nightly', 'sx_nightly')(('local_image', (5, 1, 512), (5, 1, 0), 'image')),
+        ('local_image', (4, 0, 0), (5, 1, 512), 'image'),
+        mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (5, 2, 1024), 'image')),
+        ('local_image', (5, 1, 512), (5, 1, 0), 'image'),
         ('local_image', (4, 0, 0), (5, 1, 512), 'volume'),
-        mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (0, 2, 1024), 'volume')),
+        ('local_image', (4, 1, 512), (0, 2, 1024), 'volume'),
         mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (1, 1, 0), 'volume')),
         ], ids=id_gen)
     def test_resize_vm_positive(self, add_hosts_to_zone, storage_backing, origin_flavor, dest_flavor, boot_source):

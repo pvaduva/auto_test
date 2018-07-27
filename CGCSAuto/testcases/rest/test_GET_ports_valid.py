@@ -1,7 +1,13 @@
 import pytest
 from utils.tis_log import LOG
 from utils.rest import Rest
-from keywords import system_helper, host_helper
+from keywords import system_helper
+
+
+@pytest.fixture(scope='module')
+def sysinv_rest():
+    r = Rest('sysinv')
+    return r
 
 # @pytest.mark.parametrize(
 #     'authorize_valid,resource_valid,expected_status', [
@@ -50,14 +56,12 @@ from keywords import system_helper, host_helper
 #             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_networks_valid(authorize_valid, resource_valid, expected_status):
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False,400),
+    (False, True, 401)
+])
+def test_GET_networks_valid(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -73,21 +77,20 @@ def test_GET_networks_valid(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/networks/{}"
-    LOG.info(path)
     if resource_valid:
         network_list = system_helper.get_network_values()
     else:
         network_list = ['ffffffffffff-ffff-ffff-ffff-ffffffffffff']
-    LOG.info(network_list)
+
     for network in network_list:
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
         res = path.format(network)
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -96,14 +99,13 @@ def test_GET_networks_valid(authorize_valid, resource_valid, expected_status):
             message = "Expected code of {} - received {} and message {}"
             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_clusters_valid(authorize_valid, resource_valid, expected_status):
+
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_clusters_valid(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -119,21 +121,20 @@ def test_GET_clusters_valid(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/clusters/{}"
-    LOG.info(path)
-    if resource_valid: 
+    if resource_valid:
         cluster_list = system_helper.get_cluster_values()
     else:
         cluster_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
-    LOG.info(cluster_list)
+
     for cluster in cluster_list:
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
         res = path.format(cluster)
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -143,14 +144,12 @@ def test_GET_clusters_valid(authorize_valid, resource_valid, expected_status):
             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_ialarms_valid(authorize_valid, resource_valid, expected_status):
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_ialarms_valid(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -166,14 +165,13 @@ def test_GET_ialarms_valid(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/ialarms/{}"
-    LOG.info(path)
     if resource_valid:
         alarm_list = system_helper.get_alarms_table()
     else:
-        alarm_list = {'values':[['ffffffff-ffff-ffff-ffff-ffffffffffff']]}
-    LOG.info(alarm_list['values'])
+        alarm_list = {'values': [['ffffffff-ffff-ffff-ffff-ffffffffffff']]}
+
     for alarm in alarm_list['values']:
         alarm_uuid = alarm
         message = "Using requests GET {} with proper authentication"
@@ -181,7 +179,7 @@ def test_GET_ialarms_valid(authorize_valid, resource_valid, expected_status):
         res = path.format(alarm_uuid)
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -189,36 +187,6 @@ def test_GET_ialarms_valid(authorize_valid, resource_valid, expected_status):
             LOG.tc_step(message.format(expected_status))
             message = "Expected code of expected_status - received {} and message {}"
             assert status_code == expected_status, message.format(expected_status, status_code, text)
-
-
-def test_CGTS_7608_confirm_token_expiration_default():
-    """
-    test_CGTS_7608_confirm_token_expiration_default
-    https://jira.wrs.com:8443/browse/CGTS-7608
-
-    Args:
-        n/a
-
-    Prerequisites: system is running
-
-    Test Setups:
-        n/a
-    Test Steps:
-        - perform system service-parameter-list
-        - search for token-expiration in table
-          - should be 3600 - if not, we fail!
-    Test Teardown:
-        n/a
-    """
-    expected_default_value = "3600"
-    result_list = system_helper.\
-                  get_service_parameter_values(name='token_expiration')
-
-    for default_value in result_list:
-        LOG.info("Checking {} from {}".format(default_value, result_list))
-        message = "Expected {} received {}"
-        assert default_value == expected_default_value, \
-            message.format(expected_default_value, default_value)
             
 
 # @pytest.mark.parametrize(
@@ -228,7 +196,7 @@ def test_CGTS_7608_confirm_token_expiration_default():
 #         (False, True, 401)
 #     ]
 # )
-# def test_GET_event_valid(authorize_valid, resource_valid, expected_status):
+# def test_GET_event_valid(sysinv_rest, authorize_valid, resource_valid, expected_status):
 #     """
 #     Test GET of <resource> with valid authentication.
 
@@ -244,7 +212,7 @@ def test_CGTS_7608_confirm_token_expiration_default():
 #     Test Teardown:
 #         n/a
 #     """
-#     r = Rest('sysinv')
+#     r = sysinv_rest
 #     path = "/event_log/{}"
 #     LOG.info(path)
 #     if resource_valid:
@@ -268,14 +236,13 @@ def test_CGTS_7608_confirm_token_expiration_default():
 #             message = "Expected code of {} - received {} and message {}"
 #             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_devices(authorize_valid, resource_valid, expected_status):
+
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_devices(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -291,17 +258,17 @@ def test_GET_devices(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/devices/{}"
-    LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
+
+    hostnames = system_helper.get_hostnames()
+    for host in hostnames:
         res = path.format(host)
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(res))
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -310,6 +277,7 @@ def test_GET_devices(authorize_valid, resource_valid, expected_status):
             message = "Expected code of {} - received {} and message {}"
             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
+
 # @pytest.mark.parametrize(
 #     'authorize_valid,resource_valid,expected_status', [
 #         (True, True, 200),
@@ -317,7 +285,7 @@ def test_GET_devices(authorize_valid, resource_valid, expected_status):
 #         (False, True, 401)
 #     ]
 # )
-# def test_GET_cpus(authorize_valid, resource_valid, expected_status):
+# def test_GET_cpus(sysinv_rest, authorize_valid, resource_valid, expected_status):
 #     """
 #     Test GET of <resource> with valid authentication.
 
@@ -333,7 +301,7 @@ def test_GET_devices(authorize_valid, resource_valid, expected_status):
 #     Test Teardown:
 #         n/a
 #     """
-#     r = Rest('sysinv')
+#     r = sysinv_rest
 #     path = "/icpus/{}"
 #     LOG.info(path)
 #     LOG.info(system_helper.get_hostnames())
@@ -359,7 +327,8 @@ def test_GET_devices(authorize_valid, resource_valid, expected_status):
 #                 message = "Expected code of {} - received {} and message {}"
 #                 assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-def test_GET_idisks():
+
+def test_GET_idisks(sysinv_rest):
     """
     Test GET of <resource> with valid authentication.
 
@@ -375,12 +344,10 @@ def test_GET_idisks():
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/idisks/{}"
-    LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
-        LOG.info(host)
+    hostnames = system_helper.get_hostnames()
+    for host in hostnames:
         disk_table = system_helper.get_disk_values(host)
         for disk_uuid in disk_table:
             res = path.format(disk_uuid)
@@ -388,7 +355,7 @@ def test_GET_idisks():
             LOG.tc_step(message.format(res))
             status_code, text = r.get(resource=res, auth=True)
             message = "Retrieved: status_code: {} message: {}"
-            LOG.info(message.format(status_code, text))
+            LOG.debug(message.format(status_code, text))
             if status_code == 404:
                 pytest.skip("Unsupported resource in this configuration.")
             else:
@@ -405,7 +372,7 @@ def test_GET_idisks():
 #         (False, True, 401)
 #     ]
 # )
-# def test_GET_imemory(authorize_valid, resource_valid, expected_status):
+# def test_GET_imemory(sysinv_rest, authorize_valid, resource_valid, expected_status):
 #     """
 #     Test GET of <resource> with valid authentication.
 
@@ -421,7 +388,7 @@ def test_GET_idisks():
 #     Test Teardown:
 #         n/a
 #     """
-#     r = Rest('sysinv')
+#     r = sysinv_rest
 #     path = "/imemories/{}"
 #     LOG.info(path)
 #     LOG.info(system_helper.get_hostnames())
@@ -448,14 +415,12 @@ def test_GET_idisks():
 #                 assert status_code == expected_status, message.format(expected_status,status_code, text)
 
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_lldp_agents(authorize_valid, resource_valid, expected_status):
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_lldp_agents(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -471,16 +436,15 @@ def test_GET_lldp_agents(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/lldp_agents/{}"
-    LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
+    hostnames = system_helper.get_hostnames()
+    for host in hostnames:
         LOG.info(host)
         if resource_valid:
             lldp_table = system_helper.get_host_lldp_agent_table(host)
         else:
-            lldp_table =  ['ffffffff-ffff-ffff-ffff-ffffffffffff']
+            lldp_table = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
         LOG.info(lldp_table)
         for lldp_uuid in lldp_table:
             res = path.format(lldp_uuid)
@@ -488,7 +452,7 @@ def test_GET_lldp_agents(authorize_valid, resource_valid, expected_status):
             LOG.tc_step(message.format(res))
             status_code, text = r.get(resource=res, auth=authorize_valid)
             message = "Retrieved: status_code: {} message: {}"
-            LOG.info(message.format(status_code, text))
+            LOG.debug(message.format(status_code, text))
             if status_code == 404:
                 pytest.skip("Unsupported resource in this configuration.")
             else:
@@ -497,14 +461,13 @@ def test_GET_lldp_agents(authorize_valid, resource_valid, expected_status):
                 message = "Expected code of {} - received {} and message {}"
                 assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
+
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_lldp_neighbors(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -520,11 +483,10 @@ def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/lldp_neighbors/{}"
-    LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
+    hostnames = system_helper.get_hostnames()
+    for host in hostnames:
         LOG.info(host)
         if resource_valid:
             lldp_table = system_helper.get_host_lldp_neighbor_table(host)
@@ -537,7 +499,7 @@ def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
             LOG.tc_step(message.format(res))
             status_code, text = r.get(resource=res, auth=authorize_valid)
             message = "Retrieved: status_code: {} message: {}"
-            LOG.info(message.format(status_code, text))
+            LOG.debug(message.format(status_code, text))
             if status_code == 404:
                 pytest.skip("Unsupported resource in this configuration.")
             else:
@@ -546,6 +508,7 @@ def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
                 message = "Expected code of {} - received {} and message {}"
                 assert status_code == expected_status, message.format(expected_status, status_code, text)
 
+
 # @pytest.mark.parametrize(
 #     'authorize_valid,resource_valid,expected_status', [
 #         (True, True, 200),
@@ -553,7 +516,7 @@ def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
 #         (False, True, 401)
 #     ]
 # )
-# def test_GET_loads(authorize_valid, resource_valid, expected_status):
+# def test_GET_loads(sysinv_rest, authorize_valid, resource_valid, expected_status):
 #     """
 #     Test GET of <resource> with valid authentication.
 
@@ -569,7 +532,7 @@ def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
 #     Test Teardown:
 #         n/a
 #     """
-#     r = Rest('sysinv')
+#     r = sysinv_rest
 #     path = "/loads/{}"
 #     LOG.info(path)
 #     if resource_valid:
@@ -595,14 +558,12 @@ def test_GET_lldp_neighbors(authorize_valid, resource_valid, expected_status):
 #             message = "Expected code of {} - received {} and message {}"
 #             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_services(authorize_valid, resource_valid, expected_status):
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_services(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -618,9 +579,8 @@ def test_GET_services(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/services/{}"
-    LOG.info(path)
     if resource_valid:
         service_list = system_helper.get_service_list_table()
     else:
@@ -632,7 +592,7 @@ def test_GET_services(authorize_valid, resource_valid, expected_status):
         LOG.tc_step(message.format(res))
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -641,14 +601,14 @@ def test_GET_services(authorize_valid, resource_valid, expected_status):
             message = "Expected code of {} - received {} and message {}"
             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
+
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+]
 )
-def test_GET_servicenodes(authorize_valid, resource_valid, expected_status):
+def test_GET_servicenodes(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -664,9 +624,8 @@ def test_GET_servicenodes(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/servicenodes/{}"
-    LOG.info(path)
     if resource_valid:
         service_list = system_helper.get_servicenodes_list_table()
     else:
@@ -678,7 +637,7 @@ def test_GET_servicenodes(authorize_valid, resource_valid, expected_status):
         LOG.tc_step(message.format(res))
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -687,14 +646,13 @@ def test_GET_servicenodes(authorize_valid, resource_valid, expected_status):
             message = "Expected code of {} - received {} and message {}"
             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_servicegroup(authorize_valid, resource_valid, expected_status):
+
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_servicegroup(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -712,9 +670,8 @@ def test_GET_servicegroup(authorize_valid, resource_valid, expected_status):
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/servicegroup/{}"
-    LOG.info(path)
     if resource_valid:
         service_list = system_helper.get_servicegroups_list_table()
     else:
@@ -726,7 +683,7 @@ def test_GET_servicegroup(authorize_valid, resource_valid, expected_status):
         LOG.tc_step(message.format(res))
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:
@@ -736,16 +693,12 @@ def test_GET_servicegroup(authorize_valid, resource_valid, expected_status):
             assert status_code == expected_status, message.format(expected_status, status_code, text)
 
 
-@pytest.mark.parametrize(
-    'authorize_valid,resource_valid,expected_status', [
-        (True, True, 200),
-        (True, False,400),
-        (False, True, 401)
-    ]
-)
-def test_GET_service_parameter(authorize_valid, 
-                                   resource_valid, 
-                                   expected_status):
+@pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
+    (True, True, 200),
+    (True, False, 400),
+    (False, True, 401)
+])
+def test_GET_service_parameter(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
 
@@ -763,9 +716,8 @@ def test_GET_service_parameter(authorize_valid,
     Test Teardown:
         n/a
     """
-    r = Rest('sysinv')
+    r = sysinv_rest
     path = "/service_parameter/{}"
-    LOG.info(path)
     if resource_valid:
         service_list = system_helper.get_service_parameter_values(rtn_value='uuid')
     else: 
@@ -777,7 +729,7 @@ def test_GET_service_parameter(authorize_valid,
         LOG.tc_step(message.format(res))
         status_code, text = r.get(resource=res, auth=authorize_valid)
         message = "Retrieved: status_code: {} message: {}"
-        LOG.info(message.format(status_code, text))
+        LOG.debug(message.format(status_code, text))
         if status_code == 404:
             pytest.skip("Unsupported resource in this configuration.")
         else:

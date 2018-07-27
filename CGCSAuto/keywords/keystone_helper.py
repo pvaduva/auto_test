@@ -1,10 +1,9 @@
-import time
+import re
 
+from consts.auth import Tenant, HostLinuxCreds
 from utils import cli, exceptions, table_parser
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-
-from consts.auth import Tenant
 from keywords import common
 
 
@@ -258,7 +257,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
 
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
-    return 0, msg
+    return 0, output
 
 
 def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
@@ -318,10 +317,10 @@ def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
     return table_parser.get_value_two_col_table(table_, target_field)
 
 
-def is_https_lab(con_ssh=None, source_admin=True, auth_info=Tenant.ADMIN):
+def is_https_lab(con_ssh=None, source_openrc=True, auth_info=Tenant.ADMIN):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
-    table_ = table_parser.table(cli.openstack('endpoint list', source_admin_=source_admin, ssh_client=con_ssh,
+    table_ = table_parser.table(cli.openstack('endpoint list', source_openrc=source_openrc, ssh_client=con_ssh,
                                               auth_info=auth_info))
     con_ssh.exec_cmd('unset OS_REGION_NAME')    # Workaround for CGTS-8348
     filters = {'Service Name': 'keystone', 'Service Type': 'identity', 'Interface': 'public'}
@@ -339,4 +338,135 @@ def delete_users(user, fail_ok=False):
     Returns: tuple, (code, msg)
     """
     return cli.openstack('user delete', user, auth_info=Tenant.ADMIN, fail_ok=fail_ok)
+
+
+def get_projects(rtn_val='Name', auth_info=Tenant.ADMIN, con_ssh=None, strict=False, **filters):
+    """
+    Get list of Project names or IDs
+    Args:
+        rtn_val: Name or ID
+        auth_info:
+        con_ssh:
+        strict (bool): used for filters
+        filters
+
+    Returns:
+
+    """
+    table_ = table_parser.table(cli.openstack('project list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_values(table_, rtn_val, strict=strict, **filters)
+
+
+def create_project(name=None, rtn_val='ID', domain=None, parent=None, description=None, enable=None, con_ssh=None,
+                   rtn_exist=None, fail_ok=False, auth_info=Tenant.ADMIN, **properties):
+    """
+    Create a openstack project
+    Args:
+        name (str|None):
+        rtn_val (str): ID or Name. Whether to return project id or name if created successfully
+        domain (str|None):
+        parent (str|None):
+        description (str|None):
+        enable (bool|None):
+        con_ssh:
+        fail_ok:
+        auth_info:
+        **properties:
+
+    Returns (tuple):
+        (0, <project>)
+        (1, <std_err>)
+
+    """
+    if not name:
+        existing_names = get_projects(rtn_val='Name', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+        max_count = 0
+        end_str = ''
+        for name in existing_names:
+            match = re.match('tenant(\d+)(.*)', name)
+            if match:
+                count, end_str = match.groups()
+                max_count = max(int(count), max_count)
+        name = 'tenant{}{}'.format(max_count+1, end_str)
+
+    LOG.info("Create/Show openstack project {}".format(name))
+
+    arg_dict = {
+        'domain': domain,
+        'parent': parent,
+        'description': description,
+        'enable': True if enable is True else None,
+        'disable': True if enable is False else None,
+        'or-show': rtn_exist,
+        'property': properties,
+    }
+
+    arg_str = common.parse_args(args_dict=arg_dict, repeat_arg=True)
+    arg_str += ' {}'.format(name)
+
+    code, output = cli.openstack('project create', arg_str, auth_info=auth_info, ssh_client=con_ssh, rtn_list=True,
+                                 fail_ok=fail_ok)
+    if code > 0:
+        return 1, output
+
+    project_ = table_parser.get_value_two_col_table(table_parser.table(output), field=rtn_val)
+    LOG.info("Project {} successfully created/showed.".format(project_))
+
+    return 0, project_
+
+
+def create_user(name=None, rtn_val='name', domain=None, project=None, project_domain=None, rtn_exist=None,
+                password=HostLinuxCreds.get_password(), email=None, description=None, enable=None,
+                auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None):
+    """
+    Create an openstack user
+    Args:
+        name (str|None):
+        rtn_val: name or id
+        domain:
+        project (str|None): default project
+        project_domain:
+        rtn_exist (bool)
+        password:
+        email:
+        description:
+        enable:
+        auth_info:
+        fail_ok:
+        con_ssh:
+
+    Returns (tuple):
+        (0, <user>)
+        (1, <std_err>)
+
+    """
+
+    if not name:
+        name = 'user'
+        common.get_unique_name(name_str=name)
+
+    LOG.info("Create/Show openstack user {}".format(name))
+    arg_dict = {
+        'domain': domain,
+        'project': project,
+        'project-domain': project_domain,
+        'password': password,
+        'email': email,
+        'description': description,
+        'enable': True if enable is True else None,
+        'disable': True if enable is False else None,
+        'or-show': rtn_exist,
+    }
+
+    arg_str = '{} {}'.format(common.parse_args(args_dict=arg_dict), name)
+
+    code, output = cli.openstack('user create', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                 rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    user = table_parser.get_value_two_col_table(table_parser.table(output), field=rtn_val)
+    LOG.info("Openstack user {} successfully created/showed".format(user))
+
+    return 0, user
 

@@ -1,22 +1,18 @@
+import datetime
 import os
 import re
-import time
-import datetime
 
 from pytest import fixture, skip, mark
 
 from consts.auth import HostLinuxCreds
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import PatchingVars
-from keywords import host_helper
-from keywords import html_helper
-from keywords import patching_helper
-from keywords import system_helper
+from keywords import host_helper, patching_helper, system_helper, common, html_helper
+from utils import lab_info
 from utils import local_host
 from utils import table_parser, cli
-from utils.ssh import SSHClient, ControllerClient
+from utils.clients.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
-from utils import lab_info
 
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
@@ -246,15 +242,18 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
 
     for host in computes:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        LOG.info('compute node: {} is successfully installed'.format(host))
 
     for host in storages:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        LOG.info('storage node: {} is successfully installed'.format(host))
 
     while len(controllers) > 1:
-        host = controllers.pop()
+        host = controllers.pop(0)
 
         if not host_helper.is_active_controller(host, con_ssh=con_ssh):
             patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+            LOG.info('controller node: {} is successfully installed'.format(host))
         else:
             controllers.append(host)
 
@@ -268,6 +267,7 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
             host_helper.swact_host(host)
 
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        LOG.info('the previous active controller node: {} is successfully installed'.format(host))
         
     if patch_ids:
 
@@ -319,28 +319,28 @@ def remove_patches(patch_ids, con_ssh=None):
 
     return patch_ids_removed
 
-
-def connect_to_build_server(server=None, username='', password='', prompt=''):
-    public_ssh_key = local_host.get_ssh_key()
-    server = server or PatchingVars.get_patching_var('build_server')
-    LOG.info('patch_server={}'.format(server))
-
-    username = username or PatchingVars.get_patching_var('username')
-    password = password or PatchingVars.get_patching_var('password')
-
-    LOG.info('username={}, password={}'.format(username, password))
-
-    prompt = prompt or r'.*yow\-cgts[3-4]\-lx.*~\]\$'
-    LOG.info('prompt={}'.format(prompt))
-
-    ssh_to_server = SSHClient(server, user=username, password=password, initial_prompt='.*\$ ')
-    ssh_to_server.connect()
-    ssh_to_server.exec_cmd("bash")
-    ssh_to_server.set_prompt(prompt)
-    ssh_to_server.deploy_ssh_key(public_ssh_key)
-
-    LOG.info('ssh connection to server:{} established: {}'.format(server, ssh_to_server))
-    return ssh_to_server
+#
+# def connect_to_build_server(server=None, username='', password='', prompt=''):
+#     public_ssh_key = local_host.get_ssh_key()
+#     server = server or PatchingVars.get_patching_var('build_server')
+#     LOG.info('patch_server={}'.format(server))
+#
+#     username = username or PatchingVars.get_patching_var('username')
+#     password = password or PatchingVars.get_patching_var('password')
+#
+#     LOG.info('username={}, password={}'.format(username, password))
+#
+#     prompt = prompt or r'.*yow\-cgts[3-4]\-lx.*~\]\$'
+#     LOG.info('prompt={}'.format(prompt))
+#
+#     ssh_to_server = SSHClient(server, user=username, password=password, initial_prompt='.*\$ ')
+#     ssh_to_server.connect()
+#     ssh_to_server.exec_cmd("bash")
+#     ssh_to_server.set_prompt(prompt)
+#     ssh_to_server.deploy_ssh_key(public_ssh_key)
+#
+#     LOG.info('ssh connection to server:{} established: {}'.format(server, ssh_to_server))
+#     return ssh_to_server
 
 
 def find_patches_on_server(patch_dir, ssh_to_server, single_file_ok=False, build_server=None):
@@ -415,26 +415,25 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
 
     patch_build_server = PatchingVars.get_patching_var('patch_build_server')
     patch_dir = PatchingVars.get_patching_var('patch_dir')
-
-    ssh_to_server = connect_to_build_server(server=patch_build_server)
-
-    patch_dir_or_files = find_patches_on_server(patch_dir,
-                                                ssh_to_server,
-                                                single_file_ok=single_file_ok,
-                                                build_server=patch_build_server)
-
     dest_path = os.path.join(WRSROOT_HOME, 'patch-files-' + datetime.datetime.utcnow().isoformat())
     passing_patch_dir = os.path.join(dest_path, PATCH_PASSING_DIR_LOCAL)
     failing_patch_dir = os.path.join(dest_path, PATCH_FAILING_DIR_LOCAL)
 
     rt_code, output = patching_helper.run_cmd(
-        'mkdir -p {} {}'.format(passing_patch_dir, failing_patch_dir), con_ssh=con_ssh)
+            'mkdir -p {} {}'.format(passing_patch_dir, failing_patch_dir), con_ssh=con_ssh)
     assert 0 == rt_code, 'Failed to create patch dir:{} on the active-controller'.format(dest_path)
 
-    LOG.info('Downloading patch files to lab:{} from:{}:{}'.format(dest_path, patch_build_server, patch_dir_or_files))
+    with host_helper.ssh_to_build_server(patch_build_server) as ssh_to_server:
+        # ssh_to_server = connect_to_build_server(server=patch_build_server)
+        patch_dir_or_files = find_patches_on_server(patch_dir,
+                                                    ssh_to_server,
+                                                    single_file_ok=single_file_ok,
+                                                    build_server=patch_build_server)
 
-    ssh_to_server.rsync(patch_dir_or_files, html_helper.get_ip_addr(), passing_patch_dir,
-                        dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(), timeout=1200)
+        LOG.info('Downloading patch files to lab:{} from:{}:{}'.format(dest_path, patch_build_server,
+                                                                       patch_dir_or_files))
+        ssh_to_server.rsync(patch_dir_or_files, html_helper.get_ip_addr(), passing_patch_dir, timeout=1200,
+                            dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
 
     LOG.info('OK, patch files were downloaded to: {}:{}, from: {} on server: {}'.format(
         html_helper.get_ip_addr(), passing_patch_dir, patch_dir_or_files, patch_build_server))

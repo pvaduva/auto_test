@@ -97,7 +97,7 @@ def _ping6_vms(ssh_client, ipv6_addr, num_pings=5, timeout=60, fail_ok=False,):
     mark.p2('virtio'),
     mark.p2('e1000')
 ])
-def test_ipv6_subnet(vif_model):
+def test_ipv6_subnet(vif_model, skip_for_ovs):
     """
     Ipv6 Subnet feature test cases
 

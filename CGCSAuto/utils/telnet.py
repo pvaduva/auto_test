@@ -54,7 +54,6 @@ import re
 import time
 import socket
 import selectors
-
 try:
     from time import monotonic as _time
 except ImportError:
@@ -62,12 +61,12 @@ except ImportError:
 from utils import exceptions
 from utils.tis_log import LOG
 import sys
-
 sys.path.append('../sanityrefresh/labinstall')
 from constants import *
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
+
 
 __all__ = ["Telnet"]
 
@@ -96,6 +95,7 @@ EC = bytes([247])  # Erase Character
 EL = bytes([248])  # Erase Line
 GA = bytes([249])  # Go Ahead
 SB = bytes([250])  # Subnegotiation Begin
+
 
 # VT100 values
 ESC = bytes([27])  # Escape character
@@ -164,6 +164,7 @@ PRAGMA_HEARTBEAT = bytes([140])  # TELOPT PRAGMA HEARTBEAT
 EXOPL = bytes([255])  # Extended-Options-List
 NOOPT = bytes([0])
 
+
 # poll/select have the advantage of not requiring any extra file descriptor,
 # contrarily to epoll/kqueue (also, they require a single syscall).
 if hasattr(selectors, 'PollSelector'):
@@ -173,6 +174,7 @@ else:
 
 
 class Telnet:
+
     """Telnet interface class.
 
     An instance of this class represents a connection to a telnet
@@ -245,19 +247,19 @@ class Telnet:
         self.cookedq = b''
         self.eof = 0
         self.iacseq = b''  # Buffer for IAC sequence.
-        # -- mod begins
+# -- mod begins
         self.negotiate = negotiate
         self.vt100query = vt100query
         if self.vt100query:
             self.vt100querybuffer = b''  # Buffer for VT100 queries
-        # -- mod ends
+# -- mod ends
         self.sb = 0  # flag for SB and SE sequence.
         self.sbdataq = b''
         self.option_callback = None
-        # -- mod begins
+# -- mod begins
         self.logfile = logfile
         self.echo = None
-        # -- mod ends
+# -- mod ends
         if host is not None:
             self.open(host, port, timeout)
 
@@ -328,7 +330,7 @@ class Telnet:
 
         """
         if IAC in buffer:
-            buffer = buffer.replace(IAC, IAC + IAC)
+            buffer = buffer.replace(IAC, IAC+IAC)
         self.msg("send %r", buffer)
         self.sock.sendall(buffer)
         return buffer
@@ -345,7 +347,7 @@ class Telnet:
         self.process_rawq()
         i = self.cookedq.find(match)
         if i >= 0:
-            i = i + n
+            i = i+n
             buf = self.cookedq[:i]
             self.cookedq = self.cookedq[i:]
             return buf
@@ -355,12 +357,12 @@ class Telnet:
             selector.register(self, selectors.EVENT_READ)
             while not self.eof:
                 if selector.select(timeout):
-                    i = max(0, len(self.cookedq) - n)
+                    i = max(0, len(self.cookedq)-n)
                     self.fill_rawq()
                     self.process_rawq()
                     i = self.cookedq.find(match, i)
                     if i >= 0:
-                        i = i + n
+                        i = i+n
                         buf = self.cookedq[:i]
                         self.cookedq = self.cookedq[i:]
                         return buf
@@ -479,7 +481,7 @@ class Telnet:
                         continue
                     if c == b"\021":
                         continue
-                    # -- mod begins
+# -- mod begins
                     # deal with vt100 escape sequences
                     if self.vt100query:
                         if self.vt100querybuffer:
@@ -492,7 +494,7 @@ class Telnet:
                         if not self.vt100querybuffer and c == ESC:
                             self.vt100querybuffer += c
                     # deal with IAC sequences
-                    # -- mod ends
+# -- mod ends
                     if c != IAC:
                         buf[self.sb] = buf[self.sb] + c
                         continue
@@ -529,12 +531,11 @@ class Telnet:
                     self.iacseq = b''
                     opt = c
                     if cmd in (DO, DONT):
-                        self.msg('IAC %s %d',
-                                 cmd == DO and 'DO' or 'DONT', ord(opt))
+                        self.msg('IAC %s %d', cmd == DO and 'DO' or 'DONT', ord(opt))
                         if self.option_callback:
                             self.option_callback(self.sock, cmd, opt)
                         else:
-                            # -- mod begins
+# -- mod begins
                             if self.negotiate:
                                 # do some limited logic to use SGA if asked
                                 if cmd == DONT and opt == SGA:
@@ -544,15 +545,14 @@ class Telnet:
                                 else:
                                     self.sock.sendall(IAC + WONT + opt)
                             else:
-                                # -- mod ends
+# -- mod ends
                                 self.sock.sendall(IAC + WONT + opt)
                     elif cmd in (WILL, WONT):
-                        self.msg('IAC %s %d',
-                                 cmd == WILL and 'WILL' or 'WONT', ord(opt))
+                        self.msg('IAC %s %d', cmd == WILL and 'WILL' or 'WONT', ord(opt))
                         if self.option_callback:
                             self.option_callback(self.sock, cmd, opt)
                         else:
-                            # -- mod begins
+# -- mod begins
                             if self.negotiate:
                                 # do some limited logic to use SGA if asked
                                 if cmd == WONT and opt == SGA:
@@ -564,18 +564,18 @@ class Telnet:
                                 else:
                                     self.sock.sendall(IAC + DONT + opt)
                             else:
-                                # -- mod ends
+# -- mod ends
                                 self.sock.sendall(IAC + DONT + opt)
         except EOFError:  # raised by self.rawq_getchar()
             self.iacseq = b''  # Reset on EOF
             self.sb = 0
             pass
         self.cookedq = self.cookedq + buf[0]
-        # -- mod begins
+# -- mod begins
         self.log_write(buf[0])
         if self.echo:
             self.echo.write(buf[0].decode('utf-8', 'ignore'))
-        # -- mod ends
+# -- mod ends
         self.sbdataq = self.sbdataq + buf[1]
 
     def rawq_getchar(self):
@@ -589,7 +589,7 @@ class Telnet:
             self.fill_rawq()
             if self.eof:
                 raise EOFError
-        c = self.rawq[self.irawq:self.irawq + 1]
+        c = self.rawq[self.irawq:self.irawq+1]
         self.irawq = self.irawq + 1
         if self.irawq >= len(self.rawq):
             self.rawq = b''
@@ -653,10 +653,9 @@ class Telnet:
             line = sys.stdin.readline()
             if not line:
                 break
-            # -- mod begins
+# -- mod begins
             self.write(line)
-
-    # -- mod ends
+# -- mod ends
 
     def listener(self):
         """Helper for mt_interact() -- this executes in the other thread."""
@@ -667,9 +666,9 @@ class Telnet:
                 print('*** Connection closed by remote host ***')
                 return
             if data:
-                # -- mod begins
+# -- mod begins
                 sys.stdout.write(data)
-            # -- mod ends
+# -- mod ends
             else:
                 sys.stdout.flush()
 
@@ -729,7 +728,7 @@ class Telnet:
             raise EOFError
         return (-1, None, text)
 
-    # -- mod begins
+# -- mod begins
     def log_write(self, text):
         if not text:
             return
@@ -750,10 +749,9 @@ class Telnet:
                 # these messages when a node is being installed
                 # print(' following text caused a UNICODE ENCODE ERROR ')
                 pass
+# -- mod ends
 
-    # -- mod ends
-
-    # -- new functions begin
+# -- new functions begin
     def write_line(self, text):
         """Wrapper for write().
            Writes text followed by line separator in utf-8 encoding.
@@ -873,13 +871,13 @@ class Telnet:
         if not alt_prompt:
             # LOG.info('wait for special prompt:{}'.format(alt_prompt))
             # self.find_prompt(prompt=alt_prompt, timeout=timeout)
-            # else:
+        # else:
             self.find_prompt(timeout=TELNET_EXPECT_TIMEOUT)
 
         return int(rc), output
 
-    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT, show_output=True,
-                      alt_prompt=None):
+    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT,
+                      show_output=True, alt_prompt=None):
 
         cmd = 'sudo ' + cmd
 
@@ -1207,7 +1205,7 @@ class Telnet:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
             raise exceptions.TelnetException(msg)
 
-        if 0 <= index <= len(BIOS_TYPES) - 1:
+        if 0 <= index <= len(BIOS_TYPES)-1:
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
             bios_key_hr = BIOS_TYPE_FN_HUMAN_READ[index]
             install_timeout = INSTALL_TIMEOUTS[index]
@@ -1222,8 +1220,8 @@ class Telnet:
 
         # American Megatrends BIOS, e.g. IronPass
         if bios_type == BIOS_TYPES[0]:
-            boot_device_regex = next(
-                (value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                      if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
@@ -1363,8 +1361,8 @@ class Telnet:
                 LOG.info("Kickstart boot menu selection = {}".format(selection_menu_option))
                 self.write_line(selection_menu_option)
         elif bios_type == BIOS_TYPES[2]:
-            boot_device_regex = next(
-                (value for key, value in boot_device_dict.items() if key == node.name or key == node.personality), None)
+            boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                      if key == node.name or key == node.personality), None)
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
@@ -1418,7 +1416,7 @@ class Telnet:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 LOG.error(msg)
                 raise exceptions.TelnetException(msg)
-
+        
             if node.name == CONTROLLER0:
                 # self.get_read_until("Kickstart Boot Menu", 300)
                 self.get_read_until(boot_menu, 300)
@@ -1451,7 +1449,6 @@ class Telnet:
 
         return 0
 
-
 """
 def deploy_ssh_key(self):
     self.write_line("mkdir -p ~/.ssh/")
@@ -1461,10 +1458,8 @@ def deploy_ssh_key(self):
         self.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
         self.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 """
-
-
-def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False, negotiate=False, vt100query=False,
-            log_path=None, debug=False):
+def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False,
+            negotiate=False, vt100query=False, log_path=None, debug=False):
     """Establishes telnet connection to host."""
 
     if log_path:
@@ -1501,7 +1496,7 @@ def test():
     """
     debuglevel = 0
     while sys.argv[1:] and sys.argv[1] == '-d':
-        debuglevel = debuglevel + 1
+        debuglevel = debuglevel+1
         del sys.argv[1]
     host = 'localhost'
     if sys.argv[1:]:

@@ -1,20 +1,19 @@
-import os.path
-import time
 import datetime
-import threading
+import os.path
 import random
 import re
+import threading
+import time
 
 from pytest import mark, fixture, skip
 
-from consts.timeout import HostTimeout
-
-from utils import cli, table_parser
-from utils.tis_log import LOG
-from utils.ssh import SSHClient, ControllerClient
-from consts.proj_vars import ProjVar
-from keywords import mtc_helper, system_helper, host_helper
 from consts.auth import HostLinuxCreds
+from consts.proj_vars import ProjVar
+from consts.timeout import HostTimeout
+from keywords import mtc_helper, system_helper, host_helper
+from utils import cli, table_parser
+from utils.clients.ssh import SSHClient, ControllerClient
+from utils.tis_log import LOG
 
 _tested_procs = []
 _final_processes_status = {}
@@ -253,12 +252,24 @@ PROCESSES = {
         'cmd': '/usr/bin/python2 /bin/cinder-volume', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active', 'retries': 32},
 
+    # 'ceilometer-collector': {
+    #     'cmd': '/usr/bin/python2 /bin/ceilometer-collector', 'impact': 'swact',
+    #     'severity': 'critical', 'node_type': 'active'},
+
+    # 'ceilometer-api': {
+    #     'cmd': '/usr/bin/python2 /bin/ceilometer-api', 'impact': 'swact',
+    #     'severity': 'critical', 'node_type': 'active'},
+
+    'gnocchi-metricd': {
+        'cmd': '/usr/bin/python2 /bin/gnocchi-metricd', 'impact': 'swact',
+        'severity': 'critical', 'node_type': 'active'},
+
     'ceilometer-collector': {
         'cmd': '/usr/bin/python2 /bin/ceilometer-collector', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
-    'ceilometer-api': {
-        'cmd': '/usr/bin/python2 /bin/ceilometer-api', 'impact': 'swact',
+    'gnocchi-api': {
+        'cmd': '/usr/bin/python2 /bin/gnocchi-api', 'impact': 'swact',
         'severity': 'critical', 'node_type': 'active'},
 
     'ceilometer-agent-notification': {
@@ -1034,9 +1045,12 @@ class MonitoredProcess:
     mark.p1('cinder-api'),
     mark.p1('cinder-scheduler'),
     mark.p1('cinder-volume'),   # retries = 32
-    mark.p1('ceilometer-collector'),
-    mark.p1('ceilometer-api'),
+    # mark.p1('ceilometer-collector'),
+    # mark.p1('ceilometer-api'),
     mark.p1('ceilometer-agent-notification'),
+    mark.p1('gnocchi-metricd'),
+    mark.p1('gnocchi-api'),
+    # mark.p1('ceilometer-api'),
     mark.priorities('p1', 'sx_nightly')('heat-api'),
     mark.p1('heat-api-cfn'),
     mark.p1('heat-api-cloudwatch'),

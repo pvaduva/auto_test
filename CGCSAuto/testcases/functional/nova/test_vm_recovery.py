@@ -1,17 +1,16 @@
 import time
 
-from pytest import mark, fixture
+from pytest import mark
 
-from utils import exceptions
-from utils.ssh import NATBoxClient
-from utils.tis_log import LOG
-from utils.kpi import kpi_log_parser
-from consts.kpi_vars import VMRecoveryNova, VMRecoveryNetworking
-from consts.feature_marks import Features
-from consts.timeout import VMTimeout, EventLogTimeout
 from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
+from consts.feature_marks import Features
+from consts.kpi_vars import VMRecoveryNova, VMRecoveryNetworking
+from consts.timeout import VMTimeout, EventLogTimeout
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+from utils.clients.ssh import NATBoxClient
+from utils.kpi import kpi_log_parser
+from utils.tis_log import LOG
 
 
 # Note auto recovery metadata in image will not passed to vm if vm is booted from Volume
@@ -360,10 +359,9 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=VMRecoveryNetworking.NAME,
                                   kpi_val=duration/1000, uptime=5)
 
-        if collect_kpi:
-            kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
-                                      log_path=VMRecoveryNova.LOG_PATH, end_pattern=VMRecoveryNova.END.format(vm_id),
-                                      start_pattern=VMRecoveryNova.START.format(vm_id))
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name='vm_recovery', host=target_host,
+                                  log_path=VMRecoveryNova.LOG_PATH, end_pattern=VMRecoveryNova.END.format(vm_id),
+                                  start_pattern=VMRecoveryNova.START.format(vm_id), fail_ok=False)
     else:
         kill_kvm_and_recover(vm_id, target_host_=target_host)
 

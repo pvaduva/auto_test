@@ -1,20 +1,22 @@
 import re
+import os
 import time
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
-from utils import cli, exceptions, table_parser
-from utils.ssh import ControllerClient, SSHFromSSH, SSHClient
-from utils.tis_log import LOG
-from utils import telnet as telnetlib
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts import proj_vars
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds, ComplianceCreds
+from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
-from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts import proj_vars
 from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
+from utils import cli, exceptions, table_parser
+from utils import telnet as telnetlib
+from utils.clients.ssh import ControllerClient, SSHFromSSH, SSHClient
+from utils.tis_log import LOG
 
 
 @contextmanager
@@ -48,20 +50,25 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     if not prompt:
         prompt = '.*' + hostname + '\:~\$'
     original_host = con_ssh.get_hostname()
-    host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
-    host_ssh.connect()
-    current_host = host_ssh.get_hostname()
-    if not current_host == hostname:
-        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+    if original_host != hostname:
+        host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
+        host_ssh.connect(prompt=prompt)
+        current_host = host_ssh.get_hostname()
+        if not current_host == hostname:
+            raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, hostname))
+        close = True
+    else:
+        close = False
+        host_ssh = con_ssh
     try:
         yield host_ssh
     finally:
-        if current_host != original_host:
+        if close:
             host_ssh.close()
 
 
-def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_reboot_finish=True,
-                 check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
+def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_offline=True,
+                 wait_for_reboot_finish=True, check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
     """
     Reboot one or multiple host(s)
 
@@ -70,6 +77,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         timeout (int): timeout waiting for reboot to complete in seconds
         con_ssh (SSHClient): Active controller ssh
         fail_ok (bool): Whether it is okay or not for rebooting to fail on any host
+        wait_for_offline (bool): Whether to wait for host to be offline after reboot
         wait_for_reboot_finish (bool): whether to wait for reboot finishes before return
         check_hypervisor_up (bool):
         check_webservice_up (bool):
@@ -135,7 +143,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             LOG.info("Reconnected via fip. Waiting for system show cli to re-enable")
             _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
-    if not wait_for_reboot_finish:
+    if not wait_for_offline and not is_simplex:
         msg = "Hosts reboot -f cmd sent"
         LOG.info(msg)
         return -1, msg
@@ -155,8 +163,13 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         hostnames.append(controller)
         if not is_simplex:
             wait_for_hosts_states(
-                controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
-                con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
+                    controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
+                    con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
+
+    if not wait_for_reboot_finish:
+        msg = 'Host(s) in offline state'
+        LOG.info(msg)
+        return -1, msg
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
     unlocked_hosts_all = table_parser.get_values(table_, 'hostname', administrative='unlocked')
@@ -524,7 +537,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if swact:
         if is_active_controller(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
                 and len(system_helper.get_controllers()) > 1:
-            LOG.info("{} is active controller, swact first before attempt to lock.")
+            LOG.info("{} is active controller, swact first before attempt to lock.".format(host))
             swact_host(host, con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
             if is_aio_dup:
                 time.sleep(90)
@@ -946,7 +959,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     if not fail_ok:
         for host in res:
-            if res[host][0] not in [0, 4]:
+            if res[host][0] not in [-1, 0, 4]:
                 raise exceptions.HostPostCheckFailed(" Not all host(s) unlocked successfully. Detail: {}".format(res))
 
     LOG.info("Results for unlocking hosts: {}".format(res))
@@ -1030,22 +1043,20 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     while time.time() < cli_enable_end_time:
         try:
             LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
-
             check_sysinv_cli(con_ssh_=con_ssh, use_telnet_=use_telnet, con_telnet_=con_telnet)
             return True
 
         except:
-            if use_telnet:
-                pass
-            if not con_ssh._is_connected():
-                if reconnect:
-                    LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
-                    con_ssh.connect(retry_timeout=timeout)
-                else:
-                    LOG.error("system disconnected")
-                    if fail_ok:
-                        return False
-                    raise
+            if not use_telnet:
+                if not con_ssh._is_connected():
+                    if reconnect:
+                        LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
+                        con_ssh.connect(retry_timeout=timeout)
+                    else:
+                        LOG.error("system disconnected")
+                        if fail_ok:
+                            return False
+                        raise
 
             time.sleep(check_interval)
 
@@ -1540,7 +1551,8 @@ def get_up_hypervisors(con_ssh=None):
     return get_hypervisors(state='up', status='enabled', con_ssh=con_ssh)
 
 
-def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con_telnet=None):
+def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con_telnet=None,
+                    rtn_val='Hypervisor hostname'):
     """
     Return a list of hypervisors names in specified state and status. If None is set to state and status,
     all hypervisors will be returned.
@@ -1553,13 +1565,14 @@ def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con
         con_ssh (SSHClient):
         use_telnet
         con_telnet
+        rtn_val (str): target header. e.g., ID, Hypervisor hostname
 
     Returns (list): a list of hypervisor names. Return () if no match found.
         Always return () for small footprint lab. i.e., do not work with small footprint lab
     """
     table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh,
                                          use_telnet=use_telnet, con_telnet=con_telnet))
-    target_header = 'Hypervisor hostname'
+    target_header = rtn_val
 
     if state is None and status is None:
         return table_parser.get_column(table_, target_header)
@@ -1983,7 +1996,7 @@ def get_expected_vswitch_port_engine_map(host_ssh):
     return expt_map
 
 
-def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
+def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False):
     """
     Get values for given fields in system host-lvg-show table
     Args:
@@ -1991,6 +2004,7 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
         fields (str|list|tuple):
         lvg (str): e.g., nova-local (compute nodes), cgts-vg (controller/storage nodes)
         con_ssh (SSHClient):
+        strict (bool)
 
     Returns:
 
@@ -2004,7 +2018,7 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None):
 
     vals = []
     for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field, merge_lines=True)
+        val = table_parser.get_value_two_col_table(table_, field, merge_lines=True, strict=strict)
         if field in fields_to_convert:
             val = eval(val)
         vals.append(val)
@@ -2023,7 +2037,7 @@ def is_host_with_instance_backing(host, storage_type='image', con_ssh=None):
     return storage_type in host_lvg_inst_backing
 
 
-def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None, concurrent_ops=None, lock=True,
+def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size="5", concurrent_ops=None, lock=True,
                     unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.ADMIN, con_ssh=None):
     """
     Modify host lvg
@@ -2053,11 +2067,13 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
             inst_backing = 'image'
         elif 'lvm' in inst_backing:
             inst_backing = 'lvm'
-            if inst_lv_size is None and lvg == 'nova-local':
-                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh)[0]
-                inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
-                if inst_lv_size < 5120:        # cannot be smaller than 5g
-                    inst_lv_size = None
+            #if inst_lv_size is None and lvg == 'nova-local':
+            #    lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+            #                                           strict=False)[0]
+            #inst_lv_size = min(51200, int(lvm_vg_size) * 512)    # half of the nova-local size up to 50g
+            #    if inst_lv_size < 5120:        # cannot be smaller than 5g
+            #        inst_lv_size = None
+            inst_lv_size_mib = int(inst_lv_size) * 1024
         elif 'remote' in inst_backing:
             inst_backing = 'remote'
         else:
@@ -2073,10 +2089,10 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
             if inst_backing != post_inst_backing:
                 err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
 
-        if inst_lv_size is not None:
+        if inst_backing == 'lvm':
             post_inst_lv_size = params.get('instances_lv_size_mib', 0)
-            if int(inst_lv_size) != int(post_inst_lv_size):
-                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size)
+            if inst_lv_size_mib != int(post_inst_lv_size):
+                err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size, inst_lv_size_mib)
 
         if concurrent_ops is not None:
             post_concurrent_ops = params['concurrent_disk_operations']
@@ -2086,9 +2102,9 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
         return err_msg
 
     args_dict = {
-        '--instance_backing': inst_backing,
-        '--instances_lv_size_mib': inst_lv_size,
-        '--concurrent_disk_operations': concurrent_ops
+        '-b': inst_backing,
+        '-s': inst_lv_size,
+        '-c': concurrent_ops
     }
     args = ''
 
@@ -2243,7 +2259,7 @@ def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_
 
     Args:
         host_ssh (SSHFromSSH):
-        prev_cpus (list):
+        prev_cpus (None|float|int):
         expt_cpus (int|None)
         timeout (int):
         fail_ok (bool): whether to raise exception when allocated vcpus number did not change
@@ -2539,6 +2555,12 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     return vcpus
 
 
+def get_vcpu_pins_for_instance_via_virsh(host_ssh, instance_name):
+    vcpu_pins = get_values_virsh_xmldump(instance_name=instance_name, host_ssh=host_ssh,
+                                         tag_paths='cputune/vcpupin', target_type='dict')
+    return vcpu_pins
+
+
 def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     """
     Get hosts for each possible storage backing
@@ -2564,7 +2586,15 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
     return hosts
 
 
-def get_coredumps_and_crashreports():
+def get_coredumps_and_crashreports(move=True):
+    """
+    Get core dumps and crash reports from every host
+    Args:
+        move: whether to move coredumps and crashreports to local automation dir
+
+    Returns (dict):
+
+    """
     LOG.info("Getting existing system crash reports from /var/crash/ and coredumps from /var/lib/systemd/coredump/")
 
     hosts_tab = table_parser.table(cli.system('host-list'))
@@ -2580,14 +2610,59 @@ def get_coredumps_and_crashreports():
                     format(set(all_hosts) - set(hosts_to_check)))
 
     core_dumps_and_reports = {}
+    active_con = system_helper.get_active_controller_name()
+    con_ssh = ControllerClient.get_active_controller()
+    con_dir = '{}/coredumps_and_crashreports/'.format(WRSROOT_HOME)
+    con_ssh.exec_cmd('mkdir -p {}'.format(con_dir))
+    scp_to_local = False
+    ls_cmd = 'ls -l --time-style=+%Y-%d-%m_%H-%M-%S {} | cat'
+    core_dump_dir = '/var/lib/systemd/coredump/'
+    crash_report_dir = '/var/crash/'
     for host in hosts_to_check:
         with ssh_to_host(hostname=host) as host_ssh:
-            core_dump_output = host_ssh.exec_cmd('ls -l /var/lib/systemd/coredump/', fail_ok=False)[1]
+            core_dump_output = host_ssh.exec_cmd(ls_cmd.format(core_dump_dir), fail_ok=False)[1]
             core_dumps = core_dump_output.splitlines()[1:]
-            crash_report_output = host_ssh.exec_cmd('ls -l /var/crash/', fail_ok=False)[1]
+            crash_report_output = host_ssh.exec_cmd(ls_cmd.format(crash_report_dir), fail_ok=False)[1]
             crash_reports = crash_report_output.splitlines()[1:]
-
             core_dumps_and_reports[host] = core_dumps, crash_reports
+
+            if move:
+                if core_dumps:
+                    for line in core_dumps:
+                        timestamp, name = line.split(sep=' ')[-2:]
+                        new_name = '_'.join((host, timestamp, name))
+                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(core_dump_dir, name, core_dump_dir, new_name))
+
+                    scp_to_local = True
+                    host_ssh.scp_on_source(source_path='{}/*'.format(core_dump_dir),
+                                           dest_user=HostLinuxCreds.get_user(),
+                                           dest_ip=active_con, dest_path=con_dir,
+                                           dest_password=HostLinuxCreds.get_password())
+                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(core_dump_dir))
+
+                if crash_reports:
+                    for line in crash_reports:
+                        timestamp, name = line.split(sep=' ')[-2:]
+                        new_name = '_'.join((host, timestamp, name))
+                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(crash_report_dir, name, crash_report_dir,
+                                                                       new_name))
+
+                    scp_to_local = True
+                    host_ssh.scp_on_source(source_path='{}/*'.format(crash_report_dir),
+                                           dest_user=HostLinuxCreds.get_user(),
+                                           dest_ip=active_con, dest_path=con_dir,
+                                           dest_password=HostLinuxCreds.get_password())
+                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(crash_report_dir))
+
+    if scp_to_local:
+        con_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(con_dir))
+
+        log_dir = proj_vars.ProjVar.get_var('LOG_DIR')
+        coredump_and_crashreport_dir = os.path.join(log_dir, 'coredumps_and_crashreports')
+        os.makedirs(coredump_and_crashreport_dir, exist_ok=True)
+        source_path = '{}/*'.format(con_dir)
+        common.scp_from_active_controller_to_localhost(source_path=source_path, dest_path=coredump_and_crashreport_dir)
+        con_ssh.exec_cmd('rm -f {}/*'.format(con_dir))
 
     LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
     return core_dumps_and_reports
@@ -3202,7 +3277,7 @@ def wait_for_sm_dump_desired_states(controller, item_names=None, timeout=60, str
 
 # This is a copy from installer_helper due to blocking issues in installer_helper on importing non-exist modules
 @contextmanager
-def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+def ssh_to_build_server(bld_srv=None, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
                         prompt=None):
     """
     ssh to given build server.
@@ -3221,6 +3296,9 @@ def ssh_to_build_server(bld_srv=DEFAULT_BUILD_SERVER, user=SvcCgcsAuto.USER, pas
 
     """
     # Get build_server dict from bld_srv param.
+    if bld_srv is None:
+        bld_srv = DEFAULT_BUILD_SERVER
+
     if isinstance(bld_srv, str):
         for bs in BUILD_SERVERS:
             if bs['name'] in bld_srv or bs['ip'] == bld_srv:
@@ -3272,58 +3350,91 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
         test_server_conn.close()
 
 
+@contextmanager
+def ssh_to_compliance_server(server=ComplianceCreds.get_host(), user=ComplianceCreds.get_user(),
+                             password=ComplianceCreds.get_password(), prompt=None):
+    """
+    ssh to given compliance server
+
+    Args:
+        server:
+        user (str):
+        password (str):
+        prompt (str|None): expected prompt. such as: cumulus@tis-compliance-test-node:~$
+
+    Yields (SSHClient): ssh client for given compliance server and user
+
+    """
+    set_ps1 = False
+    if not prompt:
+        prompt = '.*{}@.*:.*\$ '.format(user)
+        set_ps1 = True
+    server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
+    server_conn.connect()
+    if set_ps1:
+        server_conn.exec_cmd(r'export PS1="\u@\h:\w\$ "')
+
+    try:
+        yield server_conn
+    finally:
+        server_conn.close()
+
+
 def get_host_co_processor_pci_list(hostname):
 
     host_pci_info = []
     with ssh_to_host(hostname) as host_ssh:
         LOG.info("Getting the Co-processor pci list for host {}".format(hostname))
-        cmd = " lspci -nnm | grep Co-processor | awk ' !/Virtual/'"
+        cmd = "lspci -nnm | grep Co-processor | grep --color=never -v -A 1 -E 'Device \[0000\]|Virtual'"
         rc, output = host_ssh.exec_cmd(cmd)
         if rc != 0:
             return host_pci_info
 
-        for pci_line in output.splitlines():
-            pci_attributes = pci_line.split('"')
-            while ' ' in pci_attributes:
-                pci_attributes.remove(' ')
-            while '' in pci_attributes:
-                pci_attributes.remove('')
+        # sample output:
+        # wcp7-12:
+        # 09:00.0 "Co-processor [0b40]" "Intel Corporation [8086]" "DH895XCC Series QAT [0435]" "Intel Corporation [8086]" "Device [35c5]"
+        # 09:01.0 "Co-processor [0b40]" "Intel Corporation [8086]" "DH895XCC Series QAT Virtual Function [0443]" "Intel Corporation [8086]" "Device [0000]"
 
-            pci_address = ("0000:{}".format(pci_attributes[0])).strip()
+        # wolfpass-13_14:
+        # 3f:00.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c8]" -r04 "Intel Corporation [8086]" "Device [35cf]"
+        # 3f:01.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c9]" -r04 "Intel Corporation [8086]" "Device [0000]"
+        # --
+        # da:00.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c8]" -r04 "Intel Corporation [8086]" "Device [35cf]"
+        # da:01.0 "Co-processor [0b40]" "Intel Corporation [8086]" "Device [37c9]" -r04 "Intel Corporation [8086]" "Device [0000]"
+        dev_sets = output.split('--\n')
+        for dev_set in dev_sets:
+            pdev_line, vdev_line = dev_set.strip().splitlines()
+            class_id, vendor_id, device_id = re.findall('\[([0-9a-fA-F]{4})\]', pdev_line)[0:3]
+            vf_class_id, vf_vendor_id, vf_device_id = re.findall('\[([0-9a-fA-F]{4})\]', vdev_line)[0:3]
+            assert vf_class_id == class_id
+            assert vf_vendor_id == vendor_id
+            assert device_id != vf_device_id
+
+            vendor_name = re.findall('\"([^\"]+) \[{}\]'.format(vendor_id), pdev_line)[0]
+            pci_alias = re.findall('\"([^\"]+) \[{}\]'.format(device_id), pdev_line)[0]
+            if pci_alias == 'Device':
+                pci_alias = None
+            else:
+                pci_alias = 'qat-{}-vf'.format(pci_alias.lower())
+            pci_address = ("0000:{}".format(pdev_line.split(sep=' "', maxsplit=1)[0]))
             pci_name = "pci_{}".format(pci_address.replace('.', '_').replace(':', '_').strip())
-            class_id = re.findall("Co-processor\s\[(.*)\]", pci_attributes[1])[0]
             # Ensure class id is at least 6 digits as displayed in nova device-list and system host-device-list
-            num_zero = 6 - len(class_id)
-            if num_zero > 0:
-                class_id += ''.join(['0']*num_zero)
-            vendor_name = pci_attributes[2].split(' [')[0]
-            LOG.info("vendor ={} pci_address = {} pci_name= {}".format(vendor_name, pci_address, pci_name))
-            vendor_id = (pci_attributes[2].split(' [')[1]).replace(']', '')
-            pci_alias = pci_attributes[3].split(' ')[0]
-            device_name = pci_attributes[3].split(' [')[0]
-            device_id = pci_attributes[3].split(' [')[1].replace(']', '')
+            class_id = (class_id + '000000')[0:6]
+
+            LOG.info("pci_name={} device_id={}".format(pci_name, device_id))
             pci_info = {'pci_address': pci_address,
                         'pci_name': pci_name,
                         'vendor_name': vendor_name,
                         'vendor_id': vendor_id,
                         'device_id': device_id,
                         'class_id': class_id,
-                        'pci-alias': 'qat-{}-vf'.format(pci_alias.lower()),
+                        'pci-alias': pci_alias,
+                        'vf_device_id': vf_device_id,
                         }
-            cmd2 = " lspci -nnm | grep Co-processor | grep \"{}\" | awk 'NR == 2'".format(device_name)
-            rc, vf_line = host_ssh.exec_cmd(cmd2)
-
-            if rc == 0:
-                vf_line_attr = vf_line.split('"')
-                while ' ' in vf_line_attr:
-                    vf_line_attr.remove(' ')
-                while '' in vf_line_attr:
-                    vf_line_attr.remove('')
-                vf_device_id = vf_line_attr[3].split(' [')[1].replace(']', '')
-                pci_info['vf_device_id'] = vf_device_id
 
             host_pci_info.append(pci_info)
-            LOG.info("The Co-processor pci list for host {}: {}".format(hostname, pci_info))
+
+        LOG.info("The Co-processor pci list for host {}: {}".format(hostname, host_pci_info))
 
     return host_pci_info
 
@@ -3846,7 +3957,7 @@ def enable_disable_hosts_devices(hosts, devices, enable=True):
         states = get_host_device_list_values(host=host_, field='enabled', list_all=True, **{key: devices})
         if (not enable) in states:
             try:
-                lock_host(host=host_)
+                lock_host(host=host_, swact=True)
                 for i in range(len(states)):
                     if states[i] is not enable:
                         device = devices[i]
@@ -3858,3 +3969,67 @@ def enable_disable_hosts_devices(hosts, devices, enable=True):
         assert not ((not enable) in post_states), "Some devices enabled!={} after unlock".format(enable)
 
     LOG.info("enabled={} set successfully for following devices on hosts {}: {}".format(enable, hosts, devices))
+
+
+def get_host_cmdline_options(host, con_ssh=None):
+    with ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_cmd('cat /proc/cmdline')[1]
+
+    return output
+
+
+@contextmanager
+def ssh_to_remote_node(host, username=None, password=None, prompt=None, con_ssh=None, use_telnet=False,
+                       telnet_session=None):
+    """
+    ssh to a external node from sshclient.
+
+    Args:
+        host (str|None): hostname or ip address of remote node to ssh to.
+        username (str):
+        password (str):
+        prompt (str):
+
+
+    Returns (SSHClient): ssh client of the host
+
+    Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
+                  remote_ssh.exec_cmd(cmd)
+
+    """
+
+    if not host:
+        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
+
+    if use_telnet and not telnet_session:
+        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+
+    if not con_ssh and not use_telnet:
+        con_ssh = ControllerClient.get_active_controller()
+
+    if not use_telnet:
+        default_user, default_password = LinuxUser.get_current_user_password()
+    else:
+        default_user = HostLinuxCreds.get_user()
+        default_password = HostLinuxCreds.get_password()
+
+    user = username if username else default_user
+    password = password if password else default_password
+    if use_telnet:
+        original_host = telnet_session.exec_cmd('hostname')[1]
+    else:
+        original_host = con_ssh.host
+
+    if not prompt:
+        prompt = '.*' + host + '\:~\$'
+
+    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
+    remote_ssh.connect()
+    current_host = remote_ssh.host
+    if not current_host == host:
+        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
+    try:
+        yield remote_ssh
+    finally:
+        if current_host != original_host:
+            remote_ssh.close()

@@ -22,6 +22,7 @@ import configparser
 import datetime
 import os
 import re
+import sys
 
 import pexpect
 
@@ -32,6 +33,8 @@ from utils.tis_log import LOG
 
 LOCAL_PATH = os.path.dirname(__file__)
 WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
+# WASSP_LIB = os.path.join(WASSP_PATH, '.venv_wassp', 'lib', 'python3.3', 'site-packages')
+# sys.path.append(WASSP_LIB)
 
 
 def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None, build_server=None):
@@ -44,7 +47,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     
     # get the environment variables
     lab = options['lab'] if options.get('lab') else ProjVar.get_var('LAB')
-    lab_name = lab['short_name'].upper()
+    lab_name = lab['short_name'].upper().replace('-', '_')
     build = options['build'] if options.get('build') else build
     build_server = options.get('build_server') if options.get('build_server') else build_server
     userstory = options.get('userstory') if options.get('userstory') else setup_consts.USERSTORY.upper()
@@ -53,18 +56,44 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         tag = ProjVar.get_var('REPORT_TAG')
     else:
         tag = options['tag'] if options.get('tag') else 'regression_%s_%s' % (build, lab_name)
+
+    system_type = ProjVar.get_var('SYS_TYPE')
+    if system_type:
+        if '+' in system_type:
+            count = system_type.count('+')
+            if count == 1:
+                system_type = 'regular'
+            elif count == 2:
+                system_type = 'storage'
+            else:
+                system_type = 'unknown'
+    else:
+        if lab.get('storage_nodes'):
+            system_type = 'storage'
+        elif lab.get('compute_nodes'):
+            system_type = 'regular'
+        elif lab.get('controller_nodes'):
+            if len(lab.get('controller_nodes')) == 1:
+                system_type = 'aio-sx'
+            else:
+                system_type = 'aio-dx'
+        else:
+            system_type = 'unknown'
+    system_type = system_type.upper()
+
     jira = options['jira'] if options.get('jira') else ''
     release_name = options['release_name']
     output = options['output']
     tester_name = options['tester_name'] if options.get('tester_name') else os.environ['USER']
-    
-    if log_dir is None:
-        logfile = options['logfile']
-    else:
-        everything_log = os.path.join(log_dir, 'TIS_AUTOMATION.log')
-        testres_log = os.path.join(log_dir, 'test_results.log')
-        # pytest_log = os.path.join(log_dir, 'pytestlog.log')
-        logfile = ','.join([everything_log, testres_log])
+
+    logfile = 'none'   # Do not upload log file. Too time consuming.
+    # if log_dir is None:
+    #     logfile = options['logfile']
+    # else:
+    #     everything_log = os.path.join(log_dir, 'TIS_AUTOMATION.log')
+    #     testres_log = os.path.join(log_dir, 'test_results.log')
+    #     # pytest_log = os.path.join(log_dir, 'pytestlog.log')
+    #     logfile = ','.join([everything_log, testres_log])
 
     # determine domain. config.ini > test path > setup_consts(default)
     if options['domain']:
@@ -101,10 +130,10 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
 
     # create a data file containing test information
     os.system("rm -rf %s" % output)
-    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -s '%s'"\
+    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -s '%s' -L '%s'"\
                  % (output, tag, tester_name, test_name, result, 
                     lab_name, build, userstory, domain,
-                    jira, logfile, release_name, build_server)
+                    jira, logfile, release_name, build_server, system_type)
 
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
     cmd = "%s %s" % (ini_writer, env_params)
@@ -155,19 +184,24 @@ def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=N
     
     # get the environment variables
     build = options.build
-    lab = options.lab
+    lab = options.lab.upper().replace('-', '_')
     userstory = options.userstory
     domain = options.domain
     release_name = options.release_name
     output = options.output
     tester_name = options.tester_name
     tag = options.tag
+    system_type = options.system_label
+    if isinstance(system_type, str):
+        system_type = system_type.upper()
+
     jira = ''
-    
-    if log_dir is None:
-        logfile = options.logfile
-    else:
-        logfile = os.path.join(log_dir, 'TIS_AUTOMATION.log')
+
+    logfile = 'none'
+    # if log_dir is None:
+    #     logfile = options.logfile
+    # else:
+    #     logfile = os.path.join(log_dir, 'TIS_AUTOMATION.log')
     
     if test_name is None:
         test_name = options.test_name
@@ -189,10 +223,10 @@ def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=N
     
     # create a data file containing test information
     os.system("rm -rf %s" % output)
-    env_params = "-o %s -x %s  -n %s -t %s -r %s -l %s -b %s -u %s -d %s -j %s -a '%s' -R %s"\
+    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -L '%s'"\
                  % (output, tag, tester_name, test_name, result, 
                     lab, build, userstory, domain,
-                    jira, logfile, release_name)
+                    jira, logfile, release_name, system_type)
     
     LOG.info("Saving results for test case: %s" % test_name)
     LOG.info('Query parameters: %s' % env_params)
@@ -222,6 +256,7 @@ def parse_user_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--build', dest='build', default=defaults['build'])
     parser.add_argument('-l', '--lab', dest='lab', default=defaults['lab'])
+    parser.add_argument('-L', '--system_label', dest='system_label', default=defaults['system_label'])
     parser.add_argument('-u', '--userstory', dest='userstory', default=defaults['userstory'])
     parser.add_argument('-d', '--domain', dest='domain', default=defaults['domain'])
     parser.add_argument('-r', '--result', dest='result', default=defaults['result'])

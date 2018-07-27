@@ -1,10 +1,9 @@
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID
-from utils.ssh import ControllerClient
-from utils.tis_log import LOG
 from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 ########################

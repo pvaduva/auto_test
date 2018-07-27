@@ -1,13 +1,13 @@
+import os
 import re
 import subprocess
-import os
 import sys
 
-from utils.ssh import SSHClient, CONTROLLER_PROMPT
+from consts.auth import Tenant, HostLinuxCreds
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
-from consts.auth import Tenant, HostLinuxCreds
 from keywords import system_helper
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT
 
 
 def get_lab_floating_ip(labname=None):
@@ -254,3 +254,38 @@ def get_lab_info(labname=None, log_dir=None):
     con_ssh.close()
     return build_id, sys_type
 
+
+def get_build_info(labname=None, log_dir=None):
+    con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
+
+    try:
+        code, output = con_ssh.exec_cmd('cat /etc/build.info')
+        build_path = ''
+        if code != 0:
+            build_id = build_host = job = build_by = sw_version = ''
+        else:
+            # get build_id
+            build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
+            build_id = build_id[0] if build_id else ''
+
+            # get build_host
+            build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
+            build_host = build_host[0].split(sep='.')[0] if build_host else ''
+
+            # get jenkins job
+            job = re.findall('''JOB=\"(.*)\"''', output)
+            job = job[0] if job else ''
+
+            sw_version = re.findall('''SW_VERSION=\"(.*)\"''', output)
+            sw_version = sw_version[0] if sw_version else ''
+
+            # get build_by
+            build_by = re.findall('''BUILD_BY=\"(.*)\"''', output)
+            build_by = build_by[0] if build_by else ''
+
+            if build_id.strip():
+                build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
+    finally:
+        con_ssh.close()
+
+    return build_id, job, build_by, build_host, build_path, sw_version

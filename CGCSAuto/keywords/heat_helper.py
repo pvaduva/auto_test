@@ -1,10 +1,11 @@
 import time
 
-from keywords import network_helper
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
-
-from consts.cgcs import GuestImages, HeatStackStatus
+from utils.clients.ssh import get_cli_client
+from consts.cgcs import GuestImages, HeatStackStatus, HEAT_CUSTOM_TEMPLATES
+from consts.filepaths import TestServerPath
+from keywords import network_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -78,27 +79,32 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
     raise exceptions.HeatError(err_msg)
 
 
-def get_stacks(name=None, con_ssh=None, auth_info=None):
+def get_stacks(name=None, con_ssh=None, auth_info=None, all_=True):
     """
     Get the stacks list based on name if given for a given tenant.
 
     Args:
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        all_ (bool): whether to display all stacks for admin user
         name (str): Given name for the heat stack
 
     Returns (str): Heat stack id of a specific tenant.
 
     """
-
-    table_ = table_parser.table(cli.heat('stack-list', ssh_client=con_ssh, auth_info=auth_info))
+    args = ''
+    if auth_info is not None:
+        if auth_info['user'] == 'admin' and all_:
+            args = '--a'
+    table_ = table_parser.table(cli.openstack('stack list', positional_args=args, ssh_client=con_ssh,
+                                              auth_info=auth_info))
     if name is not None:
         return table_parser.get_values(table_, 'id', stack_name=name)
     else:
         return table_parser.get_column(table_, 'id')
 
 
-def get_stack_status(stack_name, con_ssh=None, auth_info=None):
+def get_stack_status(stack_name, con_ssh=None, auth_info=None, all_=True):
     """
     Get the stacks status based on name if given for a given tenant.
 
@@ -106,13 +112,35 @@ def get_stack_status(stack_name, con_ssh=None, auth_info=None):
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         stack_name (str): Given name for the heat stack
+        all_ (bool): Whether to list all stacks for admin user
 
     Returns (str): Heat stack status of a specific tenant.
 
     """
-
-    table_ = table_parser.table(cli.heat('stack-list', ssh_client=con_ssh, auth_info=auth_info))
+    args = ''
+    if auth_info is not None:
+        if auth_info['user'] == 'admin' and all_:
+            args = '--a'
+    table_ = table_parser.table(cli.openstack('stack list', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'stack_status', stack_name=stack_name)
+
+
+def get_stack_resources(stack, rtn_val='resource_name', auth_info=None, con_ssh=None, **kwargs):
+    """
+
+    Args:
+        stack (str): id (or name) for the heat stack. ID is required if admin user is used to display tenant resource.
+        rtn_val: values to return
+        auth_info:
+        con_ssh:
+        kwargs: key/value pair to filer out the values to return
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('stack resource list --long', stack, auth_info=auth_info,
+                                              ssh_client=con_ssh))
+    return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
 
 
 def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, auth_info=None):
@@ -179,9 +207,10 @@ def get_heat_params(param_name=None):
         return None
 
 
-def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None, cleanup='function'):
+def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None, cleanup='function',
+                 timeout=300):
     """
-    Delete the given heat stack for a given tenant.
+    Create the given heat stack for a given tenant.
 
     Args:
         con_ssh (SSHClient): If None, active controller ssh will be used.
@@ -199,7 +228,7 @@ def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
 
     LOG.info("Create Heat Stack %s", params_string)
     exitcode, output = cli.heat('stack-create', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_list=True)
+                                fail_ok=fail_ok, timeout=timeout, rtn_list=True)
     if exitcode == 1:
         LOG.warning("Create heat stack request rejected.")
         return 1, output
@@ -215,3 +244,66 @@ def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
 
     LOG.info("Stack {} created successfully".format(stack_name))
     return 0, stack_name
+
+
+def update_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None, timeout=300):
+    """
+    Update the given heat stack for a given tenant.
+
+    Args:
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        fail_ok (bool):
+        params_string: Parameters to pass to the heat create cmd. ex: -f <stack.yaml> -P IMAGE=tis <stack_name>
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        stack_name (str): Given name for the heat stack
+
+    Returns (tuple): Status and msg of the heat deletion.
+    """
+
+    if not params_string:
+        raise ValueError("Parameters not provided.")
+
+    LOG.info("Create Heat Stack %s", params_string)
+    exitcode, output = cli.heat('stack-update', params_string, ssh_client=con_ssh, auth_info=auth_info,
+                                fail_ok=fail_ok, rtn_list=True)
+    if exitcode == 1:
+        LOG.warning("Create heat stack request rejected.")
+        return 1, output
+
+    LOG.info("Wait for Heat Stack Status to reach UPDATE_COMPLETE for stack %s", stack_name)
+    res, msg = wait_for_heat_status(stack_name=stack_name, status=HeatStackStatus.UPDATE_COMPLETE,
+                                    auth_info=auth_info, fail_ok=fail_ok,timeout=timeout)
+    if not res:
+        return 2, msg
+
+    LOG.info("Stack {} updated successfully".format(stack_name))
+    return 0, stack_name
+
+
+def get_custom_heat_files(file_name, file_dir=HEAT_CUSTOM_TEMPLATES, cli_client=None):
+    """
+
+    Args:
+        file_name:
+        file_dir:
+        cli_client:
+
+    Returns:
+
+    """
+    file_path = '{}/{}'.format(file_dir, file_name)
+
+    if cli_client is None:
+        cli_client = get_cli_client()
+
+    if not cli_client.file_exists(file_path=file_path):
+        LOG.debug('Create userdata directory if not already exists')
+        cmd = 'mkdir -p {}'.format(file_dir)
+        cli_client.exec_cmd(cmd, fail_ok=False)
+        source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
+        dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_file, dest_dir=file_dir,
+                                                                 dest_name=file_name, timeout=300, con_ssh=cli_client)
+        if dest_path is None:
+            raise exceptions.CommonError("Heat template file {} does not exist after download".format(file_path))
+
+    return file_path

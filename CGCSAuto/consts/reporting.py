@@ -1,4 +1,4 @@
 class UploadRes:
     USER_STORY = 'cgcsauto'
-    REL_NAME = 'Titanium Cloud R5'
+    REL_NAME = 'Titanium Cloud R6'
     TAG = 'cgcsauto'

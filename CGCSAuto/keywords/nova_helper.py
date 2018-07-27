@@ -1,6 +1,7 @@
 import random
 import re
 import math
+import ast
 
 from utils import cli, exceptions
 from utils import table_parser
@@ -492,20 +493,23 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
     return 0, srv_grp_id
 
 
-def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ssh=None, strict=False, regex=False,
-                      all_=True, **kwargs):
+def get_server_groups(name=None, project_id=None, policies=None, members=None, best_effort=None,
+                      auth_info=Tenant.ADMIN, con_ssh=None, strict=False, regex=False,
+                      all_=True):
     """
     Get server groups ids based on the given criteria
 
     Args:
         name (str): filter out server groups with given name
         project_id (str): filter out server groups for given tenant id
+        policies (str|list):
+        members (str|list):
+        best_effort (bool):
         auth_info (dict):
         con_ssh (SSHClient):
-        strict (bool): whether to do strict search for name and value(s) in kwargs
-        regex (bool): whether or not to use regex
+        strict (bool): whether to do strict search for given name
+        regex (bool): whether or not to use regex when for given name
         all_(bool): whether to append '--a' to cli
-        **kwargs: extra key/value pair(s) to filter the table. e.g., Policies = 'affinity'
 
     Returns (list): list of server groups ids
 
@@ -520,59 +524,109 @@ def get_server_groups(name=None, project_id=None, auth_info=Tenant.ADMIN, con_ss
     if project_id is not None:
         table_ = table_parser.filter_table(table_, strict=True, **{"Project Id": project_id})
 
-    return table_parser.get_values(table_, 'Id', strict=strict, regex=regex, **kwargs)
+    groups = table_parser.get_values(table_, 'Id')
+    if policies or members or (best_effort is not None):
+        if policies:
+            policies = [policies] if isinstance(policies, str) else policies
+        if members:
+            members = [members] if isinstance(members, str) else members
+        if best_effort is not None:
+            best_effort = 'true' if best_effort else 'false'
+
+        groups_to_check = list(groups)
+        table_dict = table_parser.row_dict_table(table_, key_header='Id')
+        for group in groups_to_check:
+            if policies:
+                actual_policies = eval(table_dict[group]['policies'])
+                if not set(policies).issubset(set(actual_policies)):
+                    groups.remove(group)
+                    continue
+
+            if members:
+                actual_members = eval(table_dict[group]['members'])
+                if not set(members).issubset(set(actual_members)):
+                    groups.remove(group)
+                    continue
+
+            if best_effort:
+                actual_flag = eval(table_dict[group]['metadata'])['wrs-sg:best_effort']
+                if best_effort != actual_flag:
+                    groups.remove(group)
+
+    LOG.info("Server groups found: {}".format(groups))
+    return groups
 
 
-def get_server_groups_info(server_groups=None, header='Policies', auth_info=None, con_ssh=None, strict=False, **kwargs):
+def get_server_groups_info(server_groups=None, headers=('Policies', 'Members'), auth_info=None, con_ssh=None,
+                           strict=False, **kwargs):
     """
     Get a server group(s) info as a list
 
     Args:
         server_groups (str|list): id(s) of server group(s).
-        header (str): header string for info. such as 'Member', 'Metadata', 'Policies'
-        strict
+        headers (str|list|tuple): header string for info. such as 'Member', 'Metadata', 'Policies'
         auth_info (dict):
         con_ssh (SSHClient):
+        strict
+        kwargs
 
-    Returns (list): server group(s) info as a list
+    Returns (dict): server group(s) info in dict. server group id as key, and values of specified headers as value.
+        Examples: {<server_group1>: [['affinity'], [<vm_id1>, <vm_id2>, ...]],
+                    <server_group2>: ['anti-affinity', []]}
 
     """
     table_ = table_parser.table(cli.nova('server-group-list', '--a', ssh_client=con_ssh, auth_info=auth_info))
 
-    filters = kwargs
-    if server_groups:
-        filters['Id'] = server_groups
+    if isinstance(headers, str):
+        headers = [headers]
 
-    return table_parser.get_values(table_, target_header=header, merge_lines=True, strict=strict, **filters)
+    if not server_groups:
+        server_groups = table_parser.get_column(table_, 'Id')
+    elif isinstance(server_groups, str):
+        server_groups = [server_groups]
+
+    srv_groups_info = {}
+    for group in server_groups:
+        group_table = table_parser.filter_table(table_, Id=group)
+        vals = []
+        for header in headers:
+            val = table_parser.get_values(group_table, target_header=header, merge_lines=True, strict=strict,
+                                          **kwargs)[0]
+            if header.lower() in ('policies', 'members', 'metadata'):
+                val = eval(val)
+            vals.append(val)
+
+        srv_groups_info[group] = vals
+
+    return srv_groups_info
 
 
-def get_server_group_info(group_id=None, group_name=None, header='Members', strict=False, auth_info=None, con_ssh=None):
+def get_server_group_info(group_id=None, group_name=None, headers=('Policies', 'Members'), strict=False,
+                          auth_info=None, con_ssh=None):
     """
     Get server group info for specified server group
     Args:
         group_id:
         group_name:
-        header:
+        headers (str|list|tuple):
         auth_info:
         strict
         con_ssh:
 
-    Returns (str|list|dict):
+    Returns (list):
 
     """
     filters = {}
     if group_name:
         filters['Name'] = group_name
 
-    values = get_server_groups_info(server_groups=group_id, header=header, auth_info=auth_info, strict=strict,
-                                    con_ssh=con_ssh, **filters)
-    assert len(values) == 1, "More than 1 server group filtered"
+    group_info = get_server_groups_info(server_groups=group_id, headers=headers, auth_info=auth_info, strict=strict,
+                                        con_ssh=con_ssh, **filters)
+    assert len(group_info) == 1, "More than 1 server group filtered"
 
-    value = values[0]
-    if header.lower() in ('policies', 'members', 'metadata'):
-        value = eval(value)
+    values = list(group_info.values())[0]
 
-    return value
+    return values
 
 
 def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh=None, **metadata):
@@ -611,13 +665,22 @@ def set_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_ssh
         return 1, output
 
     post_set_metadata = eval(table_parser.get_values(table_parser.table(output), 'Metadata', Id=srv_grp_id)[0])
-    for key, value in metadata_to_check.items():
-        if not post_set_metadata[key] == value:
-            msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
-            if fail_ok:
-                LOG.warning(msg)
-                return 2, msg
-            raise exceptions.NovaError(msg)
+    for key, value in metadata_to_check.copy().items():
+        if value == '':
+            if key in post_set_metadata:
+                msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
+                if fail_ok:
+                    LOG.warning(msg)
+                    return 2, msg
+                raise exceptions.NovaError(msg)
+            else:
+                metadata_to_check.pop(key) 
+        elif not post_set_metadata[key] == value:
+                msg = "Server group metadata {} is not set to {}".format(srv_grp_id, key, value)
+                if fail_ok:
+                    LOG.warning(msg)
+                    return 2, msg
+                raise exceptions.NovaError(msg)
 
     msg = "Server group metadata successfully set: {}".format(metadata_to_check)
     LOG.info(msg)
@@ -1166,25 +1229,38 @@ def _get_vm_volumes(novashow_table):
     return [volume['id'] for volume in volumes]
 
 
-def get_quotas(quotas=None, con_ssh=None, auth_info=None):
+def get_quotas(quotas=None, detail=None, con_ssh=None, auth_info=None):
     """
     Get limit for given quota(s) via nova quota-show
     Args:
         quotas (list|str): name of the quota(s), e.g., 'instances', ['instances', 'cores']
+        detail(str): name of the detail requested. Valid details: 'limit', 'reserved', 'in_use'
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (list): list of limit(s) of given quota(s)
 
     """
+    valid_details = ['limit', 'reserved', 'in_use']
+    args_ = ''
     if not quotas:
         quotas = 'instances'
     if isinstance(quotas, str):
         quotas = [quotas]
-    table_ = table_parser.table(cli.nova('quota-show', ssh_client=con_ssh, auth_info=auth_info))
+    if detail:
+        if detail not in valid_details:
+            raise ValueError("Please specify a valid detail. Valid details: {}".format(valid_details))
+        else:
+            args_ += '--detail'
+
+    table_ = table_parser.table(cli.nova('quota-show', args_, ssh_client=con_ssh, auth_info=auth_info))
     values = []
+
     for item in quotas:
-        values.append(int(table_parser.get_value_two_col_table(table_, item)))
+        if detail:
+            values.append(ast.literal_eval(table_parser.get_value_two_col_table(table_, item))[detail])
+        else:
+            values.append(int(table_parser.get_value_two_col_table(table_, item)))
 
     return values
 
@@ -1786,7 +1862,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     return 0, succ_msg
 
 
-def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_migration_list_table(con_ssh=None, auth_info=Tenant.ADMIN):
     """
     nova migration-list to collect migration history of each vm
     Args:
@@ -1795,7 +1871,7 @@ def run_migration_list(con_ssh=None, auth_info=Tenant.ADMIN):
 
     """
     LOG.info("Listing migration history...")
-    cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)
+    return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info))
 
 
 def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant.ADMIN):

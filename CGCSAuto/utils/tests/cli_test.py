@@ -1,7 +1,8 @@
 from consts import auth
+from consts.proj_vars import ProjVar
 from utils import cli
+from utils.clients.ssh import SSHClient, ControllerClient
 from utils.exceptions import CLIRejected
-from utils.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
 
 
@@ -19,9 +20,10 @@ def teardown_module():
 
 def test_nova():
     LOG.tc_func_start()
+    ProjVar.set_var(SOURCE_CREDENTIAL=True)
     cli.nova('list')
-    cli.source_admin()
     cli.nova('list', auth_info=None)
+    ProjVar.set_var(SOURCE_CREDENTIAL=None)
     LOG.tc_func_end()
 
 
@@ -34,8 +36,9 @@ def test_system():
         raise Exception("you should fail!")
     except CLIRejected:
         LOG.info("nova test passed without authentication")
-    cli.source_admin()
+    ProjVar.set_var(SOURCE_CREDENTIAL=True)
     cli.system('host-list', auth_info=None)
+    ProjVar.set_var(SOURCE_CREDENTIAL=None)
     LOG.tc_func_end()
 
 

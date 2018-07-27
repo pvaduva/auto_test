@@ -1,10 +1,10 @@
 import pytest
-from consts.lab import Labs
-from consts.lab import NatBoxes
 
 from consts.auth import Tenant, HostLinuxCreds
-from utils.ssh import ControllerClient, SSHClient, CONTROLLER_PROMPT
-from utils.ssh import NATBoxClient
+from consts.lab import Labs
+from consts.lab import NatBoxes
+from utils.clients.ssh import ControllerClient, SSHClient, CONTROLLER_PROMPT
+from utils.clients.ssh import NATBoxClient
 
 con_ssh = None
 

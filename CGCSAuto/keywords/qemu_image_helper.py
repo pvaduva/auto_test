@@ -2,14 +2,8 @@
 This module provides helper functions for qemu-img commands
 """
 
-import re
-import time
-import os
-from utils import table_parser, cli, exceptions
+from utils import cli, exceptions
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from keywords import system_helper, host_helper
-from consts.auth import Tenant
 
 
 def image_info(image_filename, conn_ssh=None, fail_ok=False):

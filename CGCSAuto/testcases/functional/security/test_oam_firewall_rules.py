@@ -3,14 +3,16 @@
 ##############################
 import time
 
+from pytest import fixture
 from consts.cgcs import EventLogID, Prompt
-from consts.filepaths import TestServerPath, WRSROOT_HOME
+from consts.filepaths import TestServerPath
+from consts.proj_vars import ProjVar
 from keywords import host_helper, system_helper, common, html_helper, keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
+from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient, NATBoxClient
 
 
 def test_status_firewall_reboot():
@@ -60,7 +62,7 @@ def test_firewall_rules_default():
     """
     # Cannot test connecting to the ports as they are in use.
 
-    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8774, 8776, 8777, 8778, 9292, 9696, 15491]
+    default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8041, 8774, 8776, 8778, 9292, 9696, 15491]
 
     from consts.proj_vars import ProjVar
     if ProjVar.get_var('REGION') != 'RegionOne':
@@ -112,7 +114,77 @@ def _check_ports_with_netstat(con_ssh, active_controller, ports):
     assert False, "Timed out waiting for ports {} to be listed in netstat. Expected to be open.".format(failed_ports)
 
 
-def test_firewall_rules_custom():
+@fixture(scope='module')
+def get_custom_firewall_rule():
+    custom_name = 'iptables.rules'
+    source = TestServerPath.TEST_SCRIPT + custom_name
+    user_file_dir = ProjVar.get_var('USER_FILE_DIR')
+    custom_path = common.scp_from_test_server_to_user_file_dir(source_path=source, dest_dir=user_file_dir,
+                                                               dest_name=custom_name)
+    assert custom_path is not None
+
+    return custom_path
+
+
+@fixture()
+def delete_file(get_custom_firewall_rule, request):
+    user_file_dir = ProjVar.get_var('USER_FILE_DIR')
+    invalid_rules_file = '{}iptables.rules.invalid.file'.format(user_file_dir)
+    invalid_rules_path = '{}iptables.rules.invalid'.format(user_file_dir)
+    firewall_rules_path = get_custom_firewall_rule
+    cli_client = get_cli_client()
+
+    def teardown():
+        try:
+            LOG.fixture_step("Cleanup Remove file: {}".format(invalid_rules_file))
+            cli_client.exec_cmd("rm {}".format(invalid_rules_file))
+        except:
+            pass
+    request.addfinalizer(teardown)
+
+    return invalid_rules_file, invalid_rules_path, firewall_rules_path, cli_client
+
+
+def test_invalid_firewall_rules(delete_file):
+    """
+    Verify invalid firewall install files name & invalid file
+    Test Setup:
+        - SCP iptables.rules from test server to lab
+
+    Test Steps:
+        - Install custom firewall rules with invalid file path
+        - Verify install failed with valid reason
+        - Install custom firewall rules with invalid file
+        - Verify install failed with valid reason
+
+    """
+    invalid_rules_file, invalid_rules_path, firewall_rules_path, cli_client = delete_file
+    LOG.info("firewall rules path {}".format(firewall_rules_path))
+
+    LOG.tc_step("Install firewall rules with invalid file name {}".format(invalid_rules_path))
+    code, output = cli.system('firewall-rules-install', invalid_rules_path, fail_ok=True, rtn_list=True)
+
+    LOG.tc_step("Verify Install firewall rules failed with invalid file name")
+    LOG.info("Invalid fireall rules return code:[{}] & output: [{}]".format(code, output))
+
+    assert 'Could not open file' in output, "Unexpected error"
+    assert code == 1, "Invalid firewall rules install expected to fail, reason received {}".format(output)
+
+    LOG.tc_step("Install firewall rules with invalid file")
+    cmd = "cp {} {}".format(firewall_rules_path, invalid_rules_file)
+    code, output = cli_client.exec_cmd(cmd)
+    LOG.info("Code: {} output: {}".format(code, output))
+    cli_client.exec_cmd("sed -e '3i invalid' -i {}".format(invalid_rules_file))
+
+    LOG.tc_step("Install firewall rules with invalid file name {}".format(invalid_rules_file))
+    code, output = cli.system('firewall-rules-install', invalid_rules_file, fail_ok=True, rtn_list=True)
+    LOG.info("Invalid firewall rules return code:[{}] & output: [{}]".format(code, output))
+
+    assert 'Error in custom firewall rule file' in output, "Unexpected output"
+    assert code == 1, "Invalid firewall rules exit code"
+
+
+def test_firewall_rules_custom(get_custom_firewall_rule):
     """
     Verify specified ports from the custom firewall rules are open and non-specified ports are closed.
 
@@ -131,14 +203,8 @@ def test_firewall_rules_custom():
         - Swact and check ports that are in the custom firewall rules are no longer open
     """
     # The following ports must be in the iptables.rules file or the test will fail
+    firewall_rules_path= get_custom_firewall_rule
     custom_ports = [1111, 1996, 1998, 1545]
-
-    LOG.tc_step("SCP iptables.rules file from the test server")
-    file_name = 'iptables.rules'
-    source = TestServerPath.TEST_SCRIPT + file_name
-    destination = WRSROOT_HOME
-    firewall_rules_path = common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=destination)
-    assert firewall_rules_path is not None
 
     LOG.tc_step("Installing custom firewall rules")
     _modify_firewall_rules(firewall_rules_path)
@@ -168,9 +234,11 @@ def test_firewall_rules_custom():
         _verify_port_from_natbox(con_ssh, port + 1, port_expected_open=False)
 
     LOG.tc_step("Removing custom firewall rules")
-    empty_firewall_rules_path = WRSROOT_HOME + "iptables-empty.rules"
-    con_ssh.exec_cmd("touch {}".format(empty_firewall_rules_path))
-    _modify_firewall_rules(empty_firewall_rules_path)
+    user_file_dir = ProjVar.get_var('USER_FILE_DIR')
+    empty_path = user_file_dir + "iptables-empty.rules"
+    client = get_cli_client()
+    client.exec_cmd('touch {}'.format(empty_path))
+    _modify_firewall_rules(empty_path)
 
     LOG.tc_step("Verify custom ports on {}".format(active_controller))
     for port in custom_ports:
@@ -218,7 +286,8 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
     :param port: (number) Port to test
     :param port_expected_open: (boolean)
     """
-    lab_ip = html_helper.get_ip_addr()
+    lab_ip = ProjVar.get_var('lab')['floating ip']
+    cli.system('show', source_openrc=True, force_source=True)
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)
@@ -256,7 +325,7 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
         end_event.set()
         listener_thread.wait_for_thread_end(timeout=10)
         con_ssh.send_control('c')
-        con_ssh.expect(Prompt.CONTROLLER_PROMPT)
+        con_ssh.expect(con_ssh.get_prompt())
 
 
 def _listen_on_port(port, end_event, timeout=300):

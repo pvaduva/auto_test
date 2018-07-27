@@ -110,6 +110,7 @@ class TisLogger(logging.getLoggerClass()):
             msg = "\n{} {} Step {}: {}".format(TC_SETUP_STEP_SEP, fixture_, fixture_step, msg)
             self._log(logging.INFO, msg, args, **kwargs)
 
+
 # register TiS logger
 logging.setLoggerClass(TisLogger)
 LOG = logging.getLogger('cgcs_log')

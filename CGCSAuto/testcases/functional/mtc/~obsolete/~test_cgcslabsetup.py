@@ -2,11 +2,11 @@ import os
 import subprocess
 from time import sleep
 
-from consts.proj_vars import ProjVar
 from consts.auth import HostLinuxCreds
 from consts.filepaths import WRSROOT_HOME
+from consts.proj_vars import ProjVar
 from keywords import host_helper
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 WRSUSER=HostLinuxCreds.get_user()

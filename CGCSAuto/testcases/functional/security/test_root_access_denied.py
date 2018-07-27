@@ -4,11 +4,12 @@
 
 
 from pytest import fixture, raises
+
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import ProjVar
 from keywords import common
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 from utils.tis_log import LOG
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 
 
 @fixture(scope='module')
@@ -39,7 +40,6 @@ def keyfile_setup(request):
 
     def delete_keyfile():
         LOG.fixture_step("cleanup files from the lab as root")
-        con_ssh = ControllerClient.get_active_controller()
         # clean up id_rsa.pub from wrsroot folder and authorized_keys in /home/root/.ssh/
         con_ssh.exec_cmd('rm /home/wrsroot/id_rsa.pub')
         con_ssh.exec_sudo_cmd('rm -f /home/root/.ssh/authorized_keys')
@@ -81,6 +81,3 @@ def test_root_access_denied(keyfile_setup):
         con_ssh.connect(retry=False, retry_timeout=30)
         con_ssh.close()
     assert 'permission denied' in str(excinfo.value)
-
-
-

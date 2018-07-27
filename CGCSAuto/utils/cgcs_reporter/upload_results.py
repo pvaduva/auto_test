@@ -1,10 +1,12 @@
 import re
 import psycopg2
+import html
 from contextlib import contextmanager
 from optparse import OptionParser
 
 from consts.lab import Labs
 from utils import local_host
+from utils.cgcs_reporter import parse_log
 
 HOST = 'tis-lab-auto-test-history.cumulus.wrs.com'
 USER = 'PV'
@@ -16,7 +18,8 @@ DB_NAME = 'TestHistory'
 def open_conn_and_get_cur(dbname, user, host, password, autocommit=True, close_cur=True, close_conn=True):
     conn = cursor = None
     try:
-        conn = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(dbname, user, host, password))
+        conn = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(dbname, user, host, password),
+                                connect_timeout=60)
         if autocommit:
             conn.set_session(autocommit=True)
         cursor = conn.cursor()
@@ -296,10 +299,14 @@ def upload_test_results(cursor, log_dir, tag=None):
         # print("{}".format(session_info))
         session_id = insert_test_session(cursor=cursor, **session_info)
 
+    search_forward = True if 'refstack' in log_dir else False
+    tracebacks = parse_log.get_tracebacks_from_pytestlog(log_dir, search_forward=search_forward)
     tests_info = __get_testcases_info(testcases_res=testcases_res, ends_at=ends_at)
     for test_info in tests_info:    # type: dict
         test_info['session_id'] = session_id
         test_name = test_info.pop('test_name')
+        if test_name in tracebacks:
+            test_info['comments'] = "<pre>" + html.escape(tracebacks[test_name]) + "</pre>"
         # print("{}".format(test_name))
         test_id = get_test_id(test_name, cursor=cursor)
         test_info['test_id'] = test_id
@@ -308,7 +315,9 @@ def upload_test_results(cursor, log_dir, tag=None):
     return session_id
 
 
-def upload_test_result(session_id, test_name, result, start_time, end_time, parse_name=False, **extra_info):
+def upload_test_result(session_id, test_name, result, start_time, end_time, traceback=None, search_forward=False,
+                       parse_name=False,
+                       **extra_info):
     """
     Upload result for single testcase to database
     Args:
@@ -317,11 +326,14 @@ def upload_test_result(session_id, test_name, result, start_time, end_time, pars
         result:
         start_time:
         end_time:
+        traceback (None|str|list):
+        search_forward(bool)
         parse_name (bool): whether to parse test_name
-        **extra_info: valid keys: jira, comments
+        **extra_info: valid keys: jira
 
     Returns (str|None): exec_id or None if record already exists
     """
+
     if parse_name:
         test_name = 'test_{}'.format(test_name.split('::test_', 1)[-1])
 
@@ -329,7 +341,14 @@ def upload_test_result(session_id, test_name, result, start_time, end_time, pars
         test_id = get_test_id(test_name, cursor=cursor)
         test_info = dict(session_id=session_id, test_id=test_id, result=result, start_time=start_time,
                          end_time=end_time)
-        for key in ('jira', 'comments'):
+
+        if traceback:
+            if isinstance(traceback, list):
+                traceback = traceback[0]
+            traceback = parse_log.parse_traceback(traceback, search_forward=search_forward)
+            test_info['comments'] = "<pre>" + html.escape(traceback) + "</pre>"
+
+        for key in 'jira':
             val = extra_info.get(key, None)
             if val:
                 test_info[key] = val

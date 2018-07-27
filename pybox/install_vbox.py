@@ -201,7 +201,17 @@ def install_controller_0(cont0_stream, controller_type, securityprofile, release
     LOG.info("Starting installation of controller-0")
     start_time=time.time()
     menu_selector(cont0_stream, controller_type, securityprofile, release, lowlatency, install_mode)
-    serial.expect_bytes(cont0_stream, 'login:', timeout=HostTimeout.INSTALL)
+
+    try:
+        serial.expect_bytes(cont0_stream, "login:", timeout=HostTimeout.INSTALL)
+    except Exception as e:
+        LOG.info("Connection failed for controller-0 with {}.".format(e))
+        ## Sometimes we get UnicodeDecodeError exception due to the output
+        ## of installation. So try one more time maybe
+        LOG.info("So ignore the exception and wait for controller-0 to be installed again.")
+        if HostTimeout.INSTALL > (time.time()-start_time):
+            serial.expect_bytes(cont0_stream, "login:", timeout=HostTimeout.INSTALL-(time.time()-start_time))
+
     LOG.info("Completed installation of controller-0.")
     kpi.CONT0INSTALL = time.time() - start_time
     # Change password on initial login
@@ -278,6 +288,7 @@ def test_install_nodes(cont0_stream, socks, streams, labname, host_list=None):
 
     for host in new_thread:
         host.start()
+        ## WEI Do NOT change this time value 
         time.sleep(2)
         threads.append(host)
     
@@ -311,7 +322,7 @@ def test_install_nodes(cont0_stream, socks, streams, labname, host_list=None):
             LOG.info("Connection failed for host {} with {}.".format(host, e))
             ## Sometimes we get UnicodeDecodeError exception due to the output 
             ## of installation. So try one more time maybe
-            LOG.info("WEI so try wait for {} login again?".format(host))
+            LOG.info("So ignore the exception and wait for {} login again.".format(host))
             if HostTimeout.HOST_INSTALL > (time.time()-start_time):
                 serial.expect_bytes(streams[host], "login:", HostTimeout.HOST_INSTALL-(time.time()-start_time))
             #serial.disconnect(socks[host])
@@ -400,8 +411,8 @@ def create_lab(vboxoptions):
     Takes about 4 mins
     """
     # Semantic checks
-    assert not (vboxoptions.aio == True and vboxoptions.storage), "AIO cannot have storage nodes"
-    assert not (vboxoptions.aio == True and vboxoptions.computes), "AIO cannot have compute nodes"
+    assert not (vboxoptions.aio and vboxoptions.storage), "AIO cannot have storage nodes"
+    assert not (vboxoptions.aio and vboxoptions.computes), "AIO cannot have compute nodes"
     assert not (
         vboxoptions.deletelab == True and vboxoptions.useexistinglab), "These options are incompatible with each other"
     ## WEI TODO: double check this
@@ -415,7 +426,7 @@ def create_lab(vboxoptions):
 
     # Delete VMs if the user requests it
     if vboxoptions.deletelab == True:
-        delete_lab()
+        delete_lab(vboxoptions.labname)
 
     # Pull in node configuration
     node_config = [getattr(Nodes, attr) for attr in dir(Nodes) if not attr.startswith('__')]
@@ -502,7 +513,7 @@ def create_lab(vboxoptions):
 
     ## WZWZ to debug
     if vboxoptions.debug_rest:
-        return
+        return controller_type
 
     # Determine ISO to use
     if vboxoptions.useexistingiso is False and vboxoptions.iso_location is None:
@@ -575,8 +586,7 @@ if __name__ == "__main__":
         delete_lab(vboxoptions.labname)
         restore_snapshot([vboxoptions.labname + "-controller-0"], "snapshot-AFTER-unlock-controller-0")
  
-    ## TODO (WEI): Sometimes compute nodes become locked/offline instead of locked/online
-    if vboxoptions.run_scripts and vboxoptions.debug_rest and not vboxoptions.install_lab:
+    if vboxoptions.run_scripts and vboxoptions.debug_rest and not vboxoptions.install_lab and not vboxoptions.aio:
         vm_list = get_all_vms(vboxoptions.labname, option="vms")
         restore_snapshot(vm_list, "snapshot-AFTER-lab-install")
         time.sleep(120)
@@ -626,8 +636,10 @@ if __name__ == "__main__":
         if (vboxoptions.release == 'R5' or vboxoptions.release == "R2") or vboxoptions.config_file:
             vboxoptions.configure = True
     if vboxoptions.controllers is None and vboxoptions.computes is None:
-        if vboxoptions.aio:
+        if vboxoptions.aio == 'AIO-DX':
             vboxoptions.controllers = 2
+        elif vboxoptions.aio == 'AIO-SX':
+            vboxoptions.controllers = 1
         else:
             vboxoptions.controllers = 2
             vboxoptions.computes = 2
@@ -671,9 +683,10 @@ if __name__ == "__main__":
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
                 setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip, password=vboxoptions.password)
 
+            ## WZWZ DEBUG
             ## Take snapshot
-            if vboxoptions.snapshot:
-                take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
+            #if vboxoptions.snapshot:
+            #    take_snapshot(vboxoptions.labname, "snapshot-BEFORE-config-controller")
 
         buildservers = [getattr(env.BuildServers, attr) for attr in dir(env.BuildServers) if not attr.startswith('__')]
         for item in buildservers:
@@ -683,7 +696,7 @@ if __name__ == "__main__":
             remote_server = None
 
         if vboxoptions.aio:
-            host_type = "AIO-DX"
+            host_type = vboxoptions.aio 
         else:
             host_type = "Standard"
 
@@ -732,8 +745,9 @@ if __name__ == "__main__":
                 LOG.info("Pausing to allow for manual configuration. Press enter to continue.")
                 input()
 
-            if vboxoptions.snapshot:
-                take_snapshot(vboxoptions.labname, "snapshot-AFTER-config-controller")
+            ## WZWZ DEBUG
+            #if vboxoptions.snapshot:
+            #    take_snapshot(vboxoptions.labname, "snapshot-AFTER-config-controller")
 
             if vboxoptions.release == 'R5':
                 # TODO (WEI): Remove it. cinder-volumes partition is created by lab_setup.sh
@@ -742,7 +756,7 @@ if __name__ == "__main__":
                 #if vboxoptions.lvm:
                 #    install_lab.enable_lvm(cont0_stream, vboxoptions.release)
 
-                # wait for online status, run lab_setup, unlock cont0, provision hosts, continue from before.
+                ## Wait for online status, run lab_setup, unlock cont0, provision hosts, continue from before.
                 install_lab.lab_setup_controller_0_locked(cont0_stream,
                                                           username=vboxoptions.username, password=vboxoptions.password)
 
@@ -781,7 +795,7 @@ if __name__ == "__main__":
                     serial.disconnect(socks[node])
                 socks = {}
                 streams = {}
-                sys.exist(1)
+                sys.exit(1)
             else: 
                 for node in node_list:
                     serial.disconnect(socks[node])
@@ -798,12 +812,12 @@ if __name__ == "__main__":
                 socks, streams = start_and_connect_nodes(host_list=node_list)
 
             try:
-                install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio=vboxoptions.aio,
+                install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio_type=vboxoptions.aio,
                              storage=vboxoptions.storage, release=vboxoptions.release, 
                              socks=socks, streams=streams, labname=vboxoptions.labname, 
                              username=vboxoptions.username, password=vboxoptions.password)
 
-                ## TODO: WEI uncomment it 
+                ## TODO(WEI): To uncomment it later 
                 #if vboxoptions.snapshot:
                 #    take_snapshot(vboxoptions.labname, "snapshot-AFTER-lab-setup")
             except Exception as e:

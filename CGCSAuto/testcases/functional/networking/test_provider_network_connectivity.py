@@ -1,8 +1,8 @@
-import time
 from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
 from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.recover_hosts import HostsToRecover
@@ -97,39 +97,6 @@ def revert_vlan_provider_nets(request, get_vlan_providernet):
         cli.neutron("providernet-update {} --mtu {}".format(providernet_name, mtu), auth_info=Tenant.ADMIN)
 
     request.addfinalizer(_revert)
-
-
-@fixture(scope='module', autouse=True)
-def modify_neutron_config(request):
-    host = system_helper.get_active_controller_name()
-
-    def get_audit_interval():
-        with host_helper.ssh_to_host(host) as host_ssh:
-            cmd = 'cat /etc/neutron/neutron.conf | grep --color=never pnet_audit_interval'
-            code, output = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-            pnet_audit_interval = output.split('=', 1)[-1].replace(" ", "")
-            return int(pnet_audit_interval)
-
-    def modify_pnet_audit_interval(old_interval, new_interval):
-        with host_helper.ssh_to_host(host) as host_ssh:
-            LOG.fixture_step("Setting pnet_audit_interval to {} seconds".format(new_interval))
-            cmd = "sed -i 's/#pnet_audit_interval = {}/#pnet_audit_interval = {}/' /etc/neutron/neutron.conf".format(
-                old_interval, new_interval)
-            host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-
-    old_interval = get_audit_interval()
-    new_interval = 30
-
-    def _modify():
-        modify_pnet_audit_interval(old_interval, new_interval)
-        assert get_audit_interval() == new_interval, "pnet_audit_interval was not changed to {}".format(new_interval)
-
-    def _revert():
-        modify_pnet_audit_interval(new_interval, old_interval)
-        assert get_audit_interval() == old_interval, "pnet_audit_interval was not changed to {}".format(old_interval)
-
-    request.addfinalizer(_revert)
-    _modify()
 
 
 def test_providernet_connectivity_no_connectivity(get_vlan_providernet):
@@ -253,9 +220,11 @@ def test_providernet_connectivity_reboot():
     small_footprint = system_helper.is_small_footprint()
 
     if small_footprint:
-        hypervisors.remove(system_helper.get_active_controller_name())
+        master_compute = system_helper.get_active_controller_name()
+        hypervisors.remove(master_compute)
         slave_computes = hypervisors
     else:
+        master_compute = hypervisors[0]
         slave_computes = hypervisors[1:]
 
     LOG.tc_step("Count pre-passed providernet tests")
@@ -263,36 +232,44 @@ def test_providernet_connectivity_reboot():
 
     LOG.tc_step("Reboot hosts: {}".format(slave_computes))
     HostsToRecover.add(slave_computes)
-    host_helper.reboot_hosts(slave_computes, wait_for_reboot_finish=False)
+    host_helper.reboot_hosts(slave_computes, wait_for_offline=False, wait_for_reboot_finish=False)
 
     LOG.tc_step("Verify the providernet connectivity test does not list {} as PASS".format(slave_computes))
     audit_id = network_helper.schedule_providernet_connectivity_test()[1]
     slave_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id, host_name=slave_computes)
     assert not slave_status, "Connectivity test still list results for rebooting computes"
 
+    LOG.tc_step("Verify providernet connectivity test status is unknown if only 1 compute available")
+    master_status, master_msgs = network_helper.get_providernet_connectivity_test_results(rtn_val=('status', 'message'),
+                                                                                          audit_id=audit_id,
+                                                                                          host_name=master_compute)
+    assert set(master_status) == {'UNKNOWN'}, "Master host is not in Unknown state after other computes reboot"
+    assert set(master_msgs) == {'Requires at least 2 nodes to run test for network segment'}
+
     if not small_footprint:
-        master_compute = hypervisors[0]
-        master_status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
-                                                                                 host_name=master_compute)
-        assert set(master_status) == {'UNKNOWN'}, "Master host is not in Unknown state after other computes reboot"
         LOG.tc_step("Reboot the last compute host: {}".format(master_compute))
         HostsToRecover.add(master_compute)
-        host_helper.reboot_hosts(master_compute, wait_for_reboot_finish=False)
+        host_helper.reboot_hosts(master_compute, wait_for_offline=False, wait_for_reboot_finish=False)
 
-        res = network_helper.schedule_providernet_connectivity_test(timeout=45, fail_ok=True)[0]
-        assert res == 1, "Still finding results when all hypervisors are rebooting"
-        LOG.tc_step("Verify the providernet connectivity test does not list PASS for any host")
-        status = network_helper.get_providernet_connectivity_test_results()
-        assert not status, "At least one compute is not rebooting"
+        res, audit_id = network_helper.schedule_providernet_connectivity_test(fail_ok=True, timeout=300)
+        if res == 0:
+            LOG.tc_step("Verify the providernet connectivity test does not list PASS for {}".format(master_compute))
+            status = network_helper.get_providernet_connectivity_test_results(audit_id=audit_id,
+                                                                              host_name=master_compute,
+                                                                              status='Pass')
+            assert not status, "At least one test result is pass for {} after reboot".format(master_compute)
+        else:
+            assert res == 1, "Expect no test to be listed"
 
     LOG.tc_step("Wait for {} to be available".format(hypervisors))
     host_helper.wait_for_hosts_ready(hypervisors)
 
     LOG.tc_step("Verify all the providernet connectivity tests PASS")
-    end_time = time.time() + 60
     post_passed = None
-    while time.time() < end_time:
-        network_helper.schedule_providernet_connectivity_test()
+    for i in range(2):
+        # set fail_ok=True because the output could be empty table due to all hosts rebooted, which is legit.
+        # In this case, it will chance to retry.
+        network_helper.schedule_providernet_connectivity_test(fail_ok=True)
         post_passed = network_helper.get_providernet_connectivity_test_results(rtn_val='segmentation_ids',
                                                                                status='PASS')
         if sorted(pre_passed) == sorted(post_passed):

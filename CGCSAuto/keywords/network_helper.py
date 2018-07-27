@@ -5,13 +5,13 @@ import time
 from collections import Counter
 
 from consts.auth import Tenant
-from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID
-from consts.filepaths import UserData, TiSPath
+from consts.cgcs import Networks, DNS_NAMESERVERS, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID, UUID
+from consts.filepaths import UserData
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
 from utils import table_parser, cli, exceptions
-from utils.ssh import NATBoxClient, ControllerClient
+from utils.clients.ssh import NATBoxClient, get_cli_client
 from utils.tis_log import LOG
 
 
@@ -225,7 +225,74 @@ def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False
     return 0, succ_msg
 
 
-def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+def update_subnet(subnet, unset=False, allocation_pool=None, dns_server=None, host_route=None, service_type=None,
+                  tag=None,  name=None, dhcp=None, gateway=None, description=None, auth_info=Tenant.ADMIN,
+                  fail_ok=False, con_ssh=None):
+    """
+    set/unset given setup
+    Args:
+        subnet (str):
+        unset (bool): set or unset
+        allocation_pool (None|str|tuple|list):
+        dns_server (None|str|tuple|list):
+        host_route (None|str|tuple|list):
+        service_type (None|str|tuple|list):
+        tag (None|bool):
+        name (str|None):
+        dhcp (None|bool):
+        gateway (str|None): valid str: <ip> or 'none'
+        description:
+        auth_info:
+        fail_ok:
+        con_ssh:
+
+    Returns:
+
+    """
+    LOG.info("Update subnet {}".format(subnet))
+    set_no = ['no', '', False]
+    unset_all = ['all', True]
+
+    arg_dict = {
+        'allocation-pool': allocation_pool,
+        'dns-nameserver': dns_server,
+        'host-route': host_route,
+        'service-type': service_type,
+        'tag': tag if tag not in set_no+unset_all else None,
+    }
+
+    if unset:
+        arg_dict.update(**{'all-tag': True if tag in unset_all else None})
+        cmd = 'unset'
+    else:
+        set_only_dict = {
+            'name': name,
+            'dhcp': True if dhcp is True else None,
+            'gateway': gateway,
+            'description': description,
+            'no-dhcp': True if dhcp in set_no else None,
+            'no-tag': True if tag in set_no else None,
+            'no-dns-nameservers': True if dns_server in set_no else None,
+            'no-host-route': True if host_route in set_no else None,
+            'no-allocation-pool': True if allocation_pool in set_no else None
+        }
+        arg_dict.update(**set_only_dict)
+        cmd = 'set'
+
+    arg_str = common.parse_args(args_dict=arg_dict, repeat_arg=True)
+    arg_str += ' {}'.format(subnet)
+
+    code, output = cli.openstack('subnet {}'.format(cmd), arg_str, ssh_client=con_ssh, auth_info=auth_info,
+                                 rtn_list=True, fail_ok=fail_ok)
+
+    if code > 0:
+        return 1, output
+
+    LOG.info("Subnet {} updated successfully".format(subnet))
+    return 0, subnet
+
+
+def get_subnets(name=None, cidr=None, strict=True, regex=False, rtn_val='id', auth_info=None, con_ssh=None):
     """
     Get subnets ids based on given criteria.
 
@@ -234,6 +301,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, 
         cidr (str): cidr of the subnet
         strict (bool): whether to perform strict search on given name and cidr
         regex (bool): whether to use regext to search
+        rtn_val
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -246,7 +314,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, auth_info=None, 
     if cidr is not None:
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
 
-    return table_parser.get_column(table_, 'id')
+    return table_parser.get_column(table_, rtn_val)
 
 
 def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, con_ssh=None):
@@ -1073,7 +1141,10 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
 
     tenant = auth_info['tenant']
     mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])
-    return _get_net_ids(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)[0]
+    mgmt_ids = _get_net_ids(mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info)
+    if not mgmt_ids:
+        raise exceptions.TiSError("No {} found via 'neutron net-list'. Please set up system".format(mgmt_net_name))
+    return mgmt_ids[0]
 
 
 def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
@@ -1098,7 +1169,7 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     return net_ids[0]
 
 
-def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
+def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, rtn_val='id'):
     """
     Get a list of tenant network ids that match the given net_names for a specific tenant.
 
@@ -1106,6 +1177,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         net_names (str or list): list of tenant network name(s) to get id(s) for
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
+        rtn_val (str): id or name
 
     Returns (list): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
 
@@ -1119,7 +1191,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None):
         if isinstance(net_names, str):
             net_names = [net_names]
         table_ = table_parser.filter_table(table_, name=net_names, strict=False)
-        return table_parser.get_column(table_, 'id')
+        return table_parser.get_column(table_, rtn_val)
 
 
 def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None):
@@ -1395,7 +1467,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
 
     if name is None:
         name = 'router'
-    name = '-'.join([tenant, name, str(common.Count.get_router_count())])
+        name = '-'.join([tenant, name, str(common.Count.get_router_count())])
     args = name
 
     if str(admin_state_down).lower() == 'true':
@@ -1404,7 +1476,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
     tenant_id = keystone_helper.get_tenant_ids(tenant, con_ssh=con_ssh)[0]
 
     args_dict = {
-        '--tenant-id': tenant_id if auth_info == Tenant.ADMIN else None,
+        '--tenant-id': tenant_id if (auth_info == Tenant.ADMIN and tenant != Tenant.ADMIN) else None,
         '--distributed': distributed,
         '--ha': ha,
     }
@@ -1534,6 +1606,19 @@ def delete_router(router_id, del_ifs=True, auth_info=Tenant.ADMIN, con_ssh=None,
 
 
 def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        router_id:
+        subnet:
+        port:
+        auth_info:
+        con_ssh:
+        fail_ok:
+
+    Returns:
+
+    """
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
 
@@ -1557,12 +1642,16 @@ def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None,
     if code == 1:
         return 1, output, if_source
 
-    if subnet is not None and not router_subnet_exists(router_id, subnet):
-        msg = "Subnet {} is not shown in router-port-list for router {}".format(subnet, router_id)
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, msg, if_source
-        raise exceptions.NeutronError(msg)
+    if subnet is not None:
+        if not re.match(UUID, subnet):
+            subnet = get_subnets(name=subnet, auth_info=auth_info, con_ssh=con_ssh)[0]
+
+        if not router_subnet_exists(router_id, subnet):
+            msg = "Subnet {} is not shown in router-port-list for router {}".format(subnet, router_id)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg, if_source
+            raise exceptions.NeutronError(msg)
 
     # TODO: Add check if port is used to add interface.
 
@@ -1588,12 +1677,16 @@ def delete_router_interface(router_id, subnet=None, port=None, auth_info=None, c
     if code == 1:
         return 1, output
 
-    if subnet is not None and router_subnet_exists(router_id, subnet):
-        msg = "Subnet {} is still shown in router-port-list for router {}".format(subnet, router_id)
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, msg
-        raise exceptions.NeutronError(msg)
+    if subnet is not None:
+        if not re.match(UUID, subnet):
+            subnet = get_subnets(name=subnet, auth_info=auth_info, con_ssh=con_ssh)[0]
+
+        if router_subnet_exists(router_id, subnet):
+            msg = "Subnet {} is still shown in router-port-list for router {}".format(subnet, router_id)
+            if fail_ok:
+                LOG.warning(msg)
+                return 2, msg
+            raise exceptions.NeutronError(msg)
 
     succ_msg = "Interface is deleted successfully for router {}.".format(router_id)
     LOG.info(succ_msg)
@@ -1641,13 +1734,13 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_
         router_id = get_tenant_router(con_ssh=con_ssh)
 
     if not extnet_id:
-        extnet_id = get_ext_networks(con_ssh=con_ssh)[0]
+        extnet_id = get_ext_networks(con_ssh=con_ssh, auth_info=auth_info)[0]
 
     args = ' '.join([args, router_id, extnet_id])
 
     # Clear first if gateway already set
-    if clear_first and get_router_ext_gateway_info(router_id):
-        clear_router_gateway(router_id=router_id, check_first=False)
+    if clear_first and get_router_ext_gateway_info(router_id, auth_info=auth_info, con_ssh=con_ssh):
+        clear_router_gateway(router_id=router_id, check_first=False, auth_info=auth_info, con_ssh=con_ssh)
 
     code, output = cli.neutron('router-gateway-set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                rtn_list=True)
@@ -1655,7 +1748,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_
     if code == 1:
         return 1, output
 
-    post_ext_gateway = get_router_ext_gateway_info(router_id)
+    post_ext_gateway = get_router_ext_gateway_info(router_id, auth_info=auth_info, con_ssh=con_ssh)
 
     if not extnet_id == post_ext_gateway['network_id']:
         msg = "Failed to set gateway of external network {} for router {}".format(extnet_id, router_id)
@@ -2021,7 +2114,7 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
                 return 2, msg
             raise exceptions.NeutronError(msg)
 
-    succ_msg = "Neutron quota(s) updated successfully to: {}.".format(kwargs)
+    succ_msg = "Neutron quota(s) updated successfully for tenant {} to: {}.".format(tenant_id, kwargs)
     LOG.info(succ_msg)
     return 0, succ_msg
 
@@ -2273,28 +2366,33 @@ def __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=0, auth_info=Tenant.
     return filtered_ips
 
 
-def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD):
+def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD, vshell=False):
     """
     Get the eth name for given mac address on the ssh client provided
     Args:
         ssh_client (SSHClient): usually a vm_ssh
         mac_addr (str): such as "fa:16:3e:45:0d:ec"
         timeout (int): max time to wait for the given mac address appear in ip addr
+        vshell (bool): if True, get eth name from "vshell port-list"
 
     Returns (str): The first matching eth name for given mac. such as "eth3"
 
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
-        if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
+        if not vshell:
+            if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
 
-            code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
-            # sample output:
-            # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
-            # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
+                code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
+                # sample output:
+                # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
+                # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff
 
-            return output.split(sep=':')[1].strip()
-
+                return output.split(sep=':')[1].strip()
+        else:
+            code, output = ssh_client.exec_cmd('vshell port-list | grep {}'.format(mac_addr))
+            #|uuid|id|type|name|socket|admin|oper|mtu|mac-address|pci-address|network-uuid|network-name
+            return output.split(sep='|')[4].strip()
         time.sleep(1)
     else:
         LOG.warning("Cannot find provided mac address {} in 'ip addr'".format(mac_addr))
@@ -3172,7 +3270,7 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
 
 def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr=None, subnet_id=None, strict=False,
-              auth_info=Tenant.ADMIN, con_ssh=None):
+              auth_info=Tenant.ADMIN, con_ssh=None, merge_lines=True):
     """
     Get a list of ports with given arguments
     Args:
@@ -3207,7 +3305,7 @@ def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr
         if value:
             kwargs[key] = value
 
-    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=merge_lines, **kwargs)
     return ports
 
 
@@ -3298,7 +3396,7 @@ def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Ten
     if kwargs:
         table_ = table_parser.filter_table(table_, **kwargs)
 
-    return table_parser.row_dict_table(table_, key_header='pci alias')
+    return table_parser.row_dict_table(table_, key_header=header_key)
 
 
 def get_tenant_routers_for_vms(vms, con_ssh=None):
@@ -3325,7 +3423,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
 
     vms_tenants = list(set(vms_tenants))
 
-    all_routers = get_routers(auth_info=Tenant.ADMIN)
+    all_routers = get_routers(auth_info=auth_info)
     vms_routers = []
     for router in all_routers:
         router_tenant = get_router_info(router, field=field, strict=True, auth_info=auth_info, con_ssh=con_ssh)
@@ -3864,6 +3962,23 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
                                               pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
                                               con_ssh=None, strict=True, **filters):
+    """
+
+    Args:
+        rtn_val (str|tuple|list):
+        seg_id:
+        host:
+        pnet_id:
+        pnet_name:
+        audit_id:
+        auth_info:
+        con_ssh:
+        strict:
+        **filters:
+
+    Returns:
+
+    """
     args = []
     if audit_id:
         args.append('--audit-uuid {}'.format(audit_id))
@@ -3883,10 +3998,24 @@ def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, hos
         return None
 
     table_ = table_parser.table(out)
-    return table_parser.get_values(table_, rtn_val, merge_lines=True, strict=strict, **filters)
+
+    is_str = False
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+        is_str = True
+
+    vals = []
+    table_ = table_parser.filter_table(table_=table_, strict=strict, **filters)
+    for field in rtn_val:
+        vals.append(table_parser.get_values(table_, field, merge_lines=True))
+
+    if is_str:
+        vals = vals[0]
+
+    return vals
 
 
-def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=300,
+def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=600,
                                            fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     args = []
     if host:
@@ -3904,17 +4033,32 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
 
     if wait_for_test:
         LOG.info("Wait for test with audit uuid {} to be listed".format(audit_id))
+        prev_vals = None
         end_time = time.time() + timeout
         while time.time() < end_time:
-            if get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh):
+            vals = get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh,
+                                                             rtn_val='segmentation_ids')
+            if vals and vals == prev_vals:
                 LOG.info("providernet connectivity test scheduled successfully.")
                 return 0, audit_id
+
+            prev_vals = vals
+            time.sleep(30)
+
         else:
-            if fail_ok:
-                return 1, "Failed to find results with scheduled UUID"
-            raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
-                                          "seconds after running 'neutron providernet-connectivity-test-schedule'".
-                                          format(audit_id, timeout))
+            if prev_vals:
+                LOG.warning("providernet connectivity test scheduled, but did not reach stable output in {} seconds".
+                            format(timeout))
+                return 2, audit_id
+            else:
+                if fail_ok:
+                    return 1, "Failed to find results with scheduled UUID"
+                raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
+                                              "seconds after running 'neutron providernet-connectivity-test-schedule'".
+                                              format(audit_id, timeout))
+
+    else:
+        return -1, audit_id
 
 
 def get_dpdk_user_data(con_ssh=None):
@@ -3928,12 +4072,12 @@ def get_dpdk_user_data(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.USERDATA
+    file_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
     file_name = UserData.DPDK_USER_DATA
     file_path = file_dir + file_name
 
     if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+        con_ssh = get_cli_client()
 
     if con_ssh.file_exists(file_path=file_path):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
@@ -4076,7 +4220,7 @@ def create_pci_alias_for_devices(dev_type, hosts=None, devices=None, alias_names
             class_id = DevClassID.GPU
         else:
             class_id = DevClassID.USB
-        devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True,
+        devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True, regex=True,
                                                           **{'class id': class_id})
     elif isinstance(devices, str):
         devices = [devices]
@@ -4133,3 +4277,806 @@ def _check_pci_alias_created(devices, con_ssh=None):
         created_alias = pci_alias_dict[pci_alias]
         assert param_.get('vendor id') == created_alias['vendor id']
         assert param_.get('device id') == created_alias['device id']
+
+
+def create_port_pair(ingress_port, egress_port, name=None, description=None, service_func_param=None, fail_ok=False,
+                     con_ssh=None, auth_info=None):
+    """
+    Create port pair
+
+    Args:
+        ingress_port (str):
+        egress_port (str):
+        name (str|None):
+        description (str|None):
+        service_func_param (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, <port_pair_id>)     # successfully created
+        (1, <std_err>)          # create CLI rejected
+
+    """
+    if not name:
+        name = 'port_pair'
+        name = common.get_unique_name(name_str=name)
+
+    arg = '--ingress {} --egress {} {}'.format(ingress_port, egress_port, name)
+    if description:
+        arg = '--description {} {}'.format(description, arg)
+    if service_func_param:
+        arg = '--service-function-parameters {} {}'.format(service_func_param, arg)
+
+    LOG.info("Creating port pair {}".format(name))
+    code, output = cli.openstack(cmd='sfc port pair create', positional_args=arg, fail_ok=fail_ok,
+                                 ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    pair_id = table_parser.get_value_two_col_table(table_, field='ID')
+    LOG.info("Port pair {} created successfully".format(pair_id))
+    return 0, pair_id
+
+
+def delete_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Delete port pairs
+    Args:
+        port_pairs (str|list|tuple|None):
+        value: ID or Name
+        check_first (bool):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple): (<code>(int), <successfully_deleted_pairs>(list), <rejected_pairs>(list), <rejection_messages>list)
+        (0, <successfully_deleted_pairs>(list), [], [])
+        (1, <successfully_deleted_pairs_if_any>, <rejected_pairs>(list), <rejection_messages>list)    # fail_ok=True
+
+    """
+    if not port_pairs:
+        port_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+    else:
+        if isinstance(port_pairs, str):
+            port_pairs = [port_pairs]
+
+        if check_first:
+            existing_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+            port_pairs = list(set(port_pairs) - set(existing_pairs))
+
+    if not port_pairs:
+        msg = 'Port pair(s) do not exist. Do nothing.'
+        LOG.info(msg)
+        return -1, [], [], []
+
+    succ_pairs = []
+    rejected_pairs = []
+    errors = []
+    LOG.info("Deleting port pair(s): {}".format(port_pairs))
+    for port_pair in port_pairs:
+        code, output = cli.openstack(cmd='sfc port pair delete', positional_args=port_pair, fail_ok=fail_ok,
+                                     ssh_client=con_ssh, auth_info=auth_info, rtn_list=True)
+
+        if code > 0:
+            rejected_pairs.append(port_pair)
+            errors.append(output)
+        else:
+            succ_pairs.append(port_pair)
+
+    post_del_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+    failed_pairs = list(set(succ_pairs) - set(post_del_pairs))
+
+    assert not failed_pairs, "Some port-pair(s) still exist after deletion: {}".format(failed_pairs)
+    if rejected_pairs:
+        code = 1
+        LOG.info("Deletion rejected for following port-pair(s): {}".format(rejected_pairs))
+    else:
+        code = 0
+        LOG.info("Port pair(s) deleted successfully.")
+
+    return code, succ_pairs, rejected_pairs, errors
+
+
+def get_port_pairs(rtn_val='ID', con_ssh=None, auth_info=None, **filters):
+    """
+    Get port pairs
+    Args:
+        rtn_val (str): header of the table. ID or Name
+        con_ssh:
+        auth_info:
+        **filters:
+
+    Returns (list):
+
+    """
+    arg = '--print-empty'
+    table_ = table_parser.table(cli.openstack(cmd='sfc port pair list', positional_args=arg, ssh_client=con_ssh,
+                                              auth_info=auth_info))
+    return table_parser.get_values(table_, target_header=rtn_val, **filters)
+
+
+def create_port_pair_group(port_pairs=None, port_pair_val='ID', name=None, description=None, group_param=None,
+                           fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Create a port pair group
+    Args:
+        port_pairs (str|list|tuple|None):
+        port_pair_val (str): ID or Name
+        name (str|None):
+        description (str|None):
+        group_param (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, <port pair group id>)
+        (1, <std_err>)
+
+    """
+    arg = ''
+    if port_pairs:
+        if isinstance(port_pairs, str):
+            port_pairs = [port_pairs]
+        port_pairs = list(port_pairs)
+        for port_pair in port_pairs:
+            arg += ' --port-pair {}'.format(port_pair)
+
+    if description:
+        arg += ' --description {}'.format(description)
+    if group_param:
+        arg += ' --port-pair-group-parameters {}'.format(group_param)
+
+    if not name:
+        name = 'port_pair_group'
+        name = common.get_unique_name(name_str=name)
+    arg = '{} {}'.format(arg, name)
+
+    LOG.info("Creating port pair group {}".format(name))
+    code, output = cli.openstack('sfc port pair group create', arg, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    group_id = table_parser.get_value_two_col_table(table_, 'ID')
+
+    # Check specified port-pair(s) are in created group
+    port_pairs_in_group = eval(table_parser.get_value_two_col_table(table_, 'Port Pair'))
+    if port_pairs:
+        if port_pair_val.lower() != 'id':
+            pair_ids = []
+            for port_pair in port_pairs:
+                port_pair_id = get_port_pairs(Name=port_pair, con_ssh=con_ssh, auth_info=auth_info)[0]
+                pair_ids.append(port_pair_id)
+            port_pairs = pair_ids
+        assert sorted(port_pairs_in_group) == sorted(port_pairs), "Port pairs expected in group: {}. Actual: {}".\
+            format(port_pairs, port_pairs_in_group)
+    else:
+        assert not port_pairs_in_group, "Port pair(s) exist in group even though no port pair is specified"
+
+    LOG.info("Port pair group {} created successfully".format(name))
+    return 0, group_id
+
+
+def set_port_pair_group(group, port_pairs=None, name=None, description=None, fail_ok=False, con_ssh=None,
+                        auth_info=None):
+    """
+    Set port pair group with given values
+    Args:
+        group (str): port pair group to set
+        port_pairs (list|str|tuple|None): port pair(s) to add
+        name (str|None):
+        description (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, "Port pair group set successfully")
+        (1, <std_err>)
+
+    """
+    LOG.info("Setting port pair group {}".format(group))
+    arg = ''
+    verify = {}
+    if port_pairs is not None:
+        if port_pairs:
+            if isinstance(port_pairs, str):
+                port_pairs = [port_pairs]
+            port_pairs = list(port_pairs)
+            for port_pair in port_pairs:
+                arg += ' --port-pair {}'.format(port_pair)
+
+            verify['Port Pair'] = port_pairs
+        else:
+            arg += ' --no-port-pair'
+            verify['Port Pair'] = []
+
+    if name is not None:
+        arg += ' --name {}'.format(name)
+        verify['Name'] = name
+    if description is not None:
+        arg += ' --description {}'.format(description)
+        verify['Description'] = description
+
+    arg = '{} {}'.format(arg, group)
+    code, output = cli.openstack('sfc port pair group set', positional_args=arg, fail_ok=fail_ok, auth_info=auth_info,
+                                 ssh_client=con_ssh, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    LOG.info("Verify port pair group is set correctly")
+    table_ = table_parser.table(output)
+    for key, val in verify.items():
+        actual_val = table_parser.get_value_two_col_table(table_, key)
+        if isinstance(val, list):
+            actual_val = eval(actual_val)
+            if val:
+                assert set(val) <= set(actual_val), "Port pair(s) set: {}; pairs in group: {}".format(val, actual_val)
+                assert len(set(actual_val)) == len(actual_val), "Duplicated item found in Port pairs field: {}".\
+                    format(actual_val)
+            else:
+                assert not actual_val, "Port pair still exist in group {} after setting to no: {}".\
+                    format(group, actual_val)
+        else:
+            assert val == actual_val, "Value set for {} is {} ; actual: {}".format(key, val, actual_val)
+
+    msg = "Port pair group set successfully"
+    LOG.info("Port pair group set successfully")
+    return 0, msg
+
+
+def unset_port_pair_group(group, port_pairs='all', fail_ok=False, con_ssh=None, auth_info=None):
+    """
+    Remove port pair(s) from a group
+    Args:
+        group (str):
+        port_pairs (str|list|tuple|None): port_pair(s). When 'all': remove all port pairs from group.
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns:
+        (0, <remaining port pairs in group>(list))
+        (1, <std_err>(str))
+
+    """
+    LOG.info("Unsetting port pair group {}".format(group))
+    arg = ''
+    if port_pairs == 'all':
+        arg = '--all-port-pair'
+    else:
+        if isinstance(port_pairs, str):
+            port_pairs = [port_pairs]
+        port_pairs = list(port_pairs)
+
+        for port_pair in port_pairs:
+            arg += ' --port-pair {}'.format(port_pair)
+
+    arg = '{} {}'.format(arg, group)
+
+    code, output = cli.openstack('sfc port pair group unset', positional_args=arg, fail_ok=fail_ok, rtn_list=True,
+                                 ssh_client=con_ssh, auth_info=auth_info)
+
+    if code > 0:
+        return 1, output
+
+    LOG.info("Verify port pair group is unset correctly")
+    table_ = table_parser.table(output)
+    actual_pairs = eval(table_parser.get_value_two_col_table(table_, 'Port Pair'))
+    if port_pairs == 'all':
+        assert not actual_pairs
+    else:
+        unremoved_pairs = list(set(actual_pairs) & set(port_pairs))
+        assert not unremoved_pairs
+
+    LOG.info("Port pairs are successfully removed from group {}".format(group))
+    return 0, actual_pairs
+
+
+def delete_port_pair_group(group, check_first=True, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Delete given port pair group
+    Args:
+        group (str):
+        check_first (bool): Whether to check before deletion
+        fail_ok (bool):
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, 'Port pair group <group> does not exist. Skip deleting.')      # check_first=True
+        (0, 'Port pair group <group> successfully deleted')
+        (1, <std_err>)      # CLI rejected. fail_ok=True
+
+    """
+    if check_first:
+        group_id = get_port_pair_group_value(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                             fail_ok=True)
+        if group_id is None:
+            msg = 'Port pair group {} does not exist. Skip deleting.'.format(group)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info("Deleting port pair group {}".format(group))
+    code, output = cli.openstack('sfc port pair group delete', group, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info, rtn_list=True)
+
+    if code > 0:
+        return 1, output
+
+    group_id = get_port_pair_group_value(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                         fail_ok=True)
+    assert group_id is None, "Port pair group {} still exists after deletion".format(group)
+
+    msg = 'Port pair group {} successfully deleted'.format(group)
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_port_pair_groups(rtn_val='ID', auth_info=None, con_ssh=None):
+    """
+    Get port pair groups
+    Args:
+        rtn_val (str): ID or Name
+        auth_info:
+        con_ssh:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('sfc port pair group list --print-empty', auth_info=auth_info,
+                                              ssh_client=con_ssh))
+
+    return table_parser.get_column(table_, header=rtn_val)
+
+
+def get_port_pair_group_value(group, field='Port Pair', fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Get port pair group value from 'openstack sfc port pair group show'
+    Args:
+        group (str):
+        field (str):
+        fail_ok (bool):
+        auth_info:
+        con_ssh:
+
+    Returns (None|str|dict|list):
+        None    # if group does not exist. Only when fail_ok=True
+        str|dict|list   # value of given field.
+
+    """
+    code, output = cli.openstack('sfc port pair group show', group, auth_info=auth_info, ssh_client=con_ssh,
+                                 fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+    if 'port pair' in field.lower():
+        value = eval(value)
+
+    return value
+
+
+def get_flow_classifiers(rtn_val='ID', auth_info=None, con_ssh=None):
+    """
+    Get flow classifiers
+    Args:
+        rtn_val (str): ID or Name
+        auth_info:
+        con_ssh:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('sfc flow classifier list --print-empty', auth_info=auth_info,
+                                              ssh_client=con_ssh))
+
+    return table_parser.get_column(table_, header=rtn_val)
+
+
+def get_port_chains(rtn_val='ID', auth_info=None, con_ssh=None):
+    """
+    Get flow classifiers
+    Args:
+        rtn_val (str): ID or Name
+        auth_info:
+        con_ssh:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('sfc port chain list --print-empty', auth_info=auth_info,
+                                              ssh_client=con_ssh))
+
+    return table_parser.get_column(table_, header=rtn_val)
+
+
+def create_port_chain(port_pair_groups, name=None, flow_classifiers=None, description=None, chain_param=None,
+                      auth_info=None, fail_ok=False, con_ssh=None):
+    """
+    Create port chain
+    Args:
+        port_pair_groups (str|list|tuple):
+        name (str|None):
+        flow_classifiers (str|list|tuple|None):
+        description (str|None):
+        chain_param (str|None):
+        auth_info:
+        fail_ok:
+        con_ssh:
+
+    Returns (tuple):
+        (1, <std_err>)      # CLI rejected. fail_ok=True
+        (0, <port_chain_id>)
+
+    """
+    if isinstance(port_pair_groups, str):
+        port_pair_groups = [port_pair_groups]
+    arg = ' '.join(['--port-pair-group {}'.format(group) for group in port_pair_groups])
+
+    if flow_classifiers:
+        if isinstance(flow_classifiers, str):
+            flow_classifiers = [flow_classifiers]
+        flow_classifier_arg = ' '.join(['--flow-classifier {}'.format(item) for item in flow_classifiers])
+        arg = '{} {}'.format(flow_classifier_arg, arg)
+
+    if description:
+        arg = '--description {} {}'.format(description, arg)
+
+    if chain_param:
+        arg = '--chain-parameters {} {}'.format(chain_param, arg)
+
+    if not name:
+        name = 'port_chain'
+        name = common.get_unique_name(name_str=name)
+
+    arg = '{} {}'.format(arg, name)
+
+    LOG.info("Creating port chain {}".format(name))
+
+    code, output = cli.openstack('sfc port chain create', arg, fail_ok=fail_ok, auth_info=auth_info, rtn_list=True,
+                                 ssh_client=con_ssh)
+
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output, combine_multiline_entry=True)
+    port_chain_id = table_parser.get_value_two_col_table(table_, 'ID')
+
+    LOG.info("Port chain {} successfully created".format(name))
+    return 0, port_chain_id
+
+
+def update_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, fail_ok=False,
+                      con_ssh=None, auth_info=None):
+    """
+    Set port chain with given values
+    Args:
+        port_chain (str): port chain to set
+        port_pair_groups (list|str|tuple|None): port pair group(s) to add. Use '' if no port pair group is desired
+        flow_classifiers (list|str|tuple|None): flow classifier(s) to add. Use '' if no flow classifier is desired
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, "Port chain set successfully")
+        (1, <std_err>)
+
+    """
+    LOG.info("Setting port chain {}".format(port_chain))
+    arg = ''
+    verify = {}
+    arg_dict = {'flow-classifier': flow_classifiers,
+                'port-pair-group': port_pair_groups
+                }
+    for key, val in arg_dict.items():
+        if val is not None:
+            verify_key = key.replace('-', ' ') + 's'
+            if val:
+                if isinstance(val, str):
+                    val = [val]
+                val = list(val)
+                for val_ in val:
+                    arg += ' --{} {}'.format(key, val_)
+
+                verify[verify_key] = port_pair_groups
+            else:
+                arg += ' --no-{}'.format(key)
+                verify[verify_key] = []
+
+    if not verify:
+        raise ValueError('port_pair_groups or flow_classifiers has to be specified')
+
+    arg = '{} {}'.format(arg, port_chain)
+    code, output = cli.openstack('sfc port chain set', positional_args=arg, fail_ok=fail_ok, auth_info=auth_info,
+                                 ssh_client=con_ssh, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    LOG.info("Verify items in port chain {} are set correctly".format(port_chain))
+    table_ = table_parser.table(output)
+    for key, val in verify.items():
+        actual_val = table_parser.get_value_two_col_table(table_, key)
+        actual_val = eval(actual_val)
+
+        if val:
+            assert set(val) <= set(actual_val), "Requested {}(s) to add to port chain: {}; Actual value: {}".\
+                format(key, val, actual_val)
+            assert len(set(actual_val)) == len(actual_val), "Duplicated item found in port chain {}s field: {}".\
+                format(key, actual_val)
+        else:
+            assert not actual_val, "{} still exist in port chain after set to no: {}".format(key, actual_val)
+
+    msg = "Port chain set successfully"
+    LOG.info(msg)
+    return 0, msg
+
+
+def unset_port_chain(port_chain, flow_classifiers=None, port_pair_groups=None, fail_ok=False, con_ssh=None,
+                     auth_info=None):
+    """
+    Remove port pair(s) from a group
+    Args:
+        port_chain (str):
+        flow_classifiers (str|list|tuple|None): flow_classifier(s) to remove.
+            When 'all': remove all flow_classifiers from group.
+        port_pair_groups (str|list|tuple|None): port_pair_group(s) to remove.
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns:
+        (0, "Port chain unset successfully")
+        (1, <std_err>(str))
+
+    """
+    LOG.info("Unsetting port chain {}".format(port_chain))
+    arg = ''
+    verify = {}
+    if flow_classifiers:
+        if flow_classifiers == 'all':
+            arg = '--all-flow-classifier'
+            verify['Flow Classifiers'] = []
+        else:
+            if isinstance(flow_classifiers, str):
+                flow_classifiers = [flow_classifiers]
+            flow_classifiers = list(flow_classifiers)
+
+            for flow_classifier in flow_classifiers:
+                arg += ' --flow-classifier {}'.format(flow_classifier)
+            verify['Flow Classifiers'] = list(flow_classifiers)
+
+    if port_pair_groups:
+        if isinstance(port_pair_groups, str):
+            port_pair_groups = [port_pair_groups]
+        for item in port_pair_groups:
+            arg += ' --port-pair-group {}'.format(item)
+        verify['Port Pair Groups'] = list(port_pair_groups)
+
+    arg = '{} {}'.format(arg, port_chain)
+
+    code, output = cli.openstack('sfc port chain unset', positional_args=arg, fail_ok=fail_ok, rtn_list=True,
+                                 ssh_client=con_ssh, auth_info=auth_info)
+
+    if code > 0:
+        return 1, output
+
+    LOG.info("Verify items in port chain {} are unset correctly".format(port_chain))
+    table_ = table_parser.table(output)
+    for key, val in verify.items():
+        actual_val = eval(table_parser.get_value_two_col_table(table_, key))
+        if not val:
+            assert not actual_val, "{} still exists in port chain after unset all: {}".format(key, actual_val)
+        else:
+            unremoved_items = list(set(actual_val) & set(val))
+            assert not unremoved_items, "{} still exists in port chain after unset: {}".format(key, unremoved_items)
+
+    msg = "Port chain unset successfully"
+    LOG.info(msg)
+    return 0, msg
+
+
+def delete_port_chain(port_chain, check_first=True, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Delete given port pair group
+    Args:
+        port_chain (str):
+        check_first (bool): Whether to check before deletion
+        fail_ok (bool):
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, 'Port chain <chain> does not exist. Skip deleting.')      # check_first=True
+        (0, 'Port chain <chain> successfully deleted')
+        (1, <std_err>)      # CLI rejected. fail_ok=True
+
+    """
+    if check_first:
+        chain_id = get_port_pair_group_value(group=port_chain, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                             fail_ok=True)
+        if chain_id is None:
+            msg = 'Port chain {} does not exist. Skip deleting.'.format(port_chain)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info("Deleting port chain {}".format(port_chain))
+    code, output = cli.openstack('sfc port chain delete', port_chain, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info, rtn_list=True)
+
+    if code > 0:
+        return 1, output
+
+    chain_id = get_port_chain_value(port_chain=port_chain, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                    fail_ok=True)
+    assert chain_id is None, "Port chain {} still exists after deletion".format(port_chain)
+
+    msg = 'Port chain {} successfully deleted'.format(port_chain)
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_port_chain_value(port_chain, field='Flow Classifiers', fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Get port chain value from 'openstack sfc port chain show'
+    Args:
+        port_chain (str):
+        field (str):
+        fail_ok (bool):
+        auth_info:
+        con_ssh:
+
+    Returns (None|str|dict|list):
+        None    # if chain does not exist. Only when fail_ok=True
+        str|dict|list   # value of given field.
+
+    """
+    code, output = cli.openstack('sfc port chain show', port_chain, auth_info=auth_info, ssh_client=con_ssh,
+                                 fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+    if re.search('groups|classifiers', field.lower()):
+        value = eval(value)
+
+    return value
+
+
+def get_flow_classifier_value(flow_classifier, field='Protocol', fail_ok=False, auth_info=None, con_ssh=None):
+    """
+        Get flow classifier value from 'openstack sfc flow classifier show'
+        Args:
+            flow_classifier (str):
+            field (str):
+            fail_ok (bool):
+            auth_info:
+            con_ssh:
+
+        Returns (None|str|dict|list):
+            None    # if flow classifier does not exist. Only when fail_ok=True
+            str|dict|list   # value of given field.
+
+        """
+    code, output = cli.openstack('sfc flow classifier show', flow_classifier, auth_info=auth_info, ssh_client=con_ssh,
+                                 fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+
+    return value
+
+
+def create_flow_classifier(name=None, description=None, protocol=None, ether_type=None, source_port=None,
+                           dest_port=None, source_ip_prefix=None, dest_ip_prefix=None, logical_source_port=None,
+                           logical_dest_port=None, l7_param=None, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Create a flow classifier
+    Args:
+        name:
+        description:
+        protocol:
+        ether_type:
+        source_port:
+        dest_port:
+        source_ip_prefix:
+        dest_ip_prefix:
+        logical_source_port:
+        logical_dest_port:
+        l7_param:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (0, <flow_classifier_id>)
+        (1, <std_err>)
+
+    """
+    arg_dict = {
+        'description': description,
+        'protocol': protocol,
+        'ethertype': ether_type,
+        'logical-source-port': logical_source_port,
+        'logical-destination-port': logical_dest_port,
+        'source-ip-prefix': source_ip_prefix,
+        'destination-ip-prefix': dest_ip_prefix,
+        'l7-parameters': l7_param,
+        'source-port': source_port,
+        'destination-port': dest_port,
+    }
+
+    args = []
+    for key, val in arg_dict.items():
+        if val is not None:
+            args.append('--{} {}'.format(key, val))
+
+    arg = ' '.join(args)
+    if not name:
+        name = 'flow_classifier'
+        name = common.get_unique_name(name_str=name)
+
+    arg += ' {}'.format(name)
+
+    LOG.info("Creating flow classifier {}".format(name))
+    code, output = cli.openstack('sfc flow classifier create', arg, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True, ssh_client=con_ssh)
+
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    id_ = table_parser.get_value_two_col_table(table_, 'ID')
+
+    msg = "Flow classifier {} successfully created.".format(id_)
+    LOG.info(msg)
+    return 0, id_
+
+
+def delete_flow_classifier(flow_classifier, check_first=True, fail_ok=False, auth_info=None, con_ssh=None):
+    """
+    Delete flow classifier
+    Args:
+        flow_classifier (str):
+        check_first:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+        (-1, Flow classifier <flow_classifier> does not exist. Skip deletion.")
+        (0, "Flow classifier <flow_classifier> successfully deleted")
+        (1, <std_err>)
+
+    """
+    if check_first:
+        info = get_flow_classifier_value(flow_classifier, field='ID', fail_ok=True, con_ssh=con_ssh,
+                                         auth_info=auth_info)
+        if info is None:
+            msg = "Flow classifier {} does not exist. Skip deletion.".format(flow_classifier)
+            LOG.info(msg)
+            return -1, msg
+
+    code, output = cli.openstack('sfc flow classifier delete', flow_classifier, auth_info=auth_info, fail_ok=fail_ok,
+                                 ssh_client=con_ssh, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    post_del_id = get_flow_classifier_value(flow_classifier, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                            fail_ok=True)
+    assert post_del_id is None, "Flow classifier {} still exists after deletion".format(flow_classifier)
+
+    msg = "Flow classifier {} successfully deleted".format(flow_classifier)
+    LOG.info(msg)
+    return 0, msg

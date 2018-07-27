@@ -3,20 +3,11 @@ import re
 from utils.horizon.pages.project.network import floatingipspage
 
 
-class FloatingIPTable(floatingipspage.FloatingIPTable):
-
-    ALLOCATE_IP_FORM_FIELDS = ("pool", "tenant", "floating_ip_address")
-
-
 class FloatingipsPage(floatingipspage.FloatingipsPage):
 
     PARTIAL_URL = 'admin/floating_ips'
 
-    @property
-    def floatingips_table(self):
-        return FloatingIPTable(self.driver)
-
-    def allocate_floatingip(self, pool=None, tenant='tenant1', floating_ip_address=None):
+    def allocate_floatingip(self, pool=None, tenant=None, floating_ip_address=None):
         floatingip_form = self.floatingips_table.allocate_ip()
         if pool is not None:
             floatingip_form.pool.text = pool

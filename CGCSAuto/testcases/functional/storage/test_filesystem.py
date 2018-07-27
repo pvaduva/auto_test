@@ -1,21 +1,18 @@
 import ast
-import re
 import math
+import re
 import time
 
 from pytest import fixture, skip, mark
 
-from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailState
 from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from testfixtures.recover_hosts import HostsToRecover
 
-
-DRBDFS = ['backup', 'cgcs', 'database', 'img-conversions', 'scratch', 'extension']
+DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
 @fixture()
@@ -49,7 +46,7 @@ def freespace_check():
     free_space = out.rstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
     free_space = int(ast.literal_eval(free_space))
-    if free_space <= 10:
+    if free_space <= 20:
         skip("Not enough free space to complete test.")
 
 
@@ -308,7 +305,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     1.  Increase the size of backup to allow for test to proceed.
     2.  Wait for alarms to clear and then check the underlying filesystem is
     updated
-    2.  Attempt to resize the cgcs filesystem.  This should be successful.
+    2.  Attempt to resize the glance filesystem.  This should be successful.
     3.  Attempt to resize cgcs again immediately.  This should be rejected.
 
     Assumptions:
@@ -341,7 +338,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     filesystem_helper.check_controllerfs(**drbdfs_val)
 
     drbdfs_val = {}
-    fs = "img-conversions"
+    fs = "database"
     LOG.tc_step("Determine the current filesystem size")
     drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
@@ -350,9 +347,6 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     LOG.tc_step("Increase the size of filesystems")
     filesystem_helper.modify_controllerfs(**drbdfs_val)
-
-    # Display active alarms to delay the second modify and to assist debugging
-    system_helper.get_alarms_table()
 
     LOG.tc_step("Attempt to increase the size of the filesystem again")
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
@@ -380,7 +374,7 @@ def _test_modify_drdb():
 
     """
 
-    drbdfs = ['backup', 'cgcs', 'database', 'img-conversions']
+    drbdfs = ['backup', 'glance', 'database', 'img-conversions']
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step("Determine the available free space on the system")
@@ -400,7 +394,7 @@ def _test_modify_drdb():
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
 
-    LOG.tc_step("Increase the size of the backup and cgcs filesystem")
+    LOG.tc_step("Increase the size of the backup and glance filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
     if float(free_space) > 10:
@@ -410,7 +404,7 @@ def _test_modify_drdb():
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
     rc, out = con_ssh.exec_cmd(cmd)
-    partition_name = "cgcs"
+    partition_name = "glance"
     partition_value = drbdfs_val[partition_name]
     cgcs_free_space = math.trunc(backup_freespace / 2)
     new_partition_value = backup_freespace + int(partition_value)
@@ -455,18 +449,18 @@ def _test_increase_cinder():
 
     table_ = table_parser.table(cli.system("host-disk-list controller-0 --nowrap"))
     cont0_dev_node = table_parser.get_values(table_, "device_node", **{"device_path": cont0_devpath})
-    cont0_total_mib = table_parser.get_values(table_, "size_mib", **{"device_path": cont0_devpath})
-    cont0_avail_mib = table_parser.get_values(table_, "available_mib", **{"device_path": cont0_devpath})
+    cont0_total_gib = table_parser.get_values(table_, "size_gib", **{"device_path": cont0_devpath})
+    cont0_avail_gib = table_parser.get_values(table_, "available_gib", **{"device_path": cont0_devpath})
 
-    if cont0_total_mib[0] == cont0_avail_mib[0]:
+    if cont0_total_gib[0] == cont0_avail_gib[0]:
         skip("Insufficient disk space to execute test")
 
     LOG.info("The cinder device node for controller-0 is: {}".format(cont0_dev_node))
-    LOG.info("Total disk space in MiB is: {}".format(cont0_total_mib[0]))
-    LOG.info("Available free space in MiB is: {}".format(cont0_avail_mib[0]))
+    LOG.info("Total disk space in MiB is: {}".format(cont0_total_gib[0]))
+    LOG.info("Available free space in MiB is: {}".format(cont0_avail_gib[0]))
 
-    cont0_total_gib = math.trunc(int(cont0_total_mib[0]) / 1024)
-    cont0_avail_gib = math.trunc(int(cont0_avail_mib[0]) / 1024)
+    cont0_total_gib = math.trunc(int(cont0_total_gib[0]))
+    cont0_avail_gib = math.trunc(int(cont0_avail_gib[0]))
     LOG.info("Total disk space in GiB is: {}".format(cont0_total_gib))
     LOG.info("Available free space in GiB is: {}".format(cont0_avail_gib))
 
@@ -493,6 +487,7 @@ def _test_increase_cinder():
     assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
 
 
+@mark.usefixtures("freespace_check")
 @mark.usefixtures("storage_precheck")
 def test_increase_ceph_mon():
     """

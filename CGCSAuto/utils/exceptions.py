@@ -181,7 +181,7 @@ class VLMError(TiSError):
     message = "VLM Operation Error."
 
 
-class SWiftError(TiSError):
+class SwiftError(TiSError):
     message = "Swift error."
 
 
@@ -203,3 +203,15 @@ class RestoreSystem(TiSError):
 
 class StorageError(TiSError):
     message = 'Storage error.'
+
+
+class HorizonError(TiSError):
+    message = 'Horizon error.'
+
+
+class IxiaError(TiSError):
+    message = 'Ixia error.'
+
+
+class RefStackError(TiSError):
+    message = 'RefStack test(s) failed.'

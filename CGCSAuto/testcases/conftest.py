@@ -1,13 +1,12 @@
-import os
+from threading import Event
 
 import pytest
-from threading import Event
 
 import setups
 from consts.auth import CliAuth, Tenant
+from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import ProjVar
-from consts.cgcs import REGION_MAP
-
+from utils.tis_log import LOG
 
 natbox_ssh = None
 con_ssh = None
@@ -15,16 +14,18 @@ initialized = False
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_test_session(global_setup):
+def setup_test_session(global_setup, request):
     """
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
+    LOG.fixture_step("(session) Setting up test session...")
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    setups.set_env_vars(con_ssh)
 
-    setups.copy_files_to_con1()
+    # rsync files between controllers
+    setups.copy_test_files()
 
+    # set up natbox connection and copy keyfile
     global natbox_ssh
     try:
         natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'),
@@ -36,24 +37,45 @@ def setup_test_session(global_setup):
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
     # set build id to be used to upload/write test results
-    build_id, build_server = setups.get_build_info(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_server)
+    setups.get_build_info(con_ssh)
 
+    # Enable keystone debug
     if ProjVar.get_var('KEYSTONE_DEBUG'):
         setups.enable_disable_keystone_debug(enable=True, con_ssh=con_ssh)
 
+    # Set global vars
     setups.set_session(con_ssh=con_ssh)
 
+    # Ensure tis and natbox still connected
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     natbox_ssh.flush()
     natbox_ssh.connect(retry=True)
 
+    # collect telnet logs for all hosts
     if ProjVar.get_var('COLLECT_TELNET'):
         end_event = Event()
         threads = setups.collect_telnet_logs_for_nodes(end_event=end_event)
         ProjVar.set_var(TELNET_THREADS=(threads, end_event))
 
+    # set global var for sys_type
     setups.set_sys_type(con_ssh=con_ssh)
+
+    # set up remote cli clients
+    client = con_ssh
+    if ProjVar.get_var('REMOTE_CLI'):
+        LOG.fixture_step("(session) Install remote cli clients in virtualenv")
+        client = setups.setup_remote_cli_client()
+        ProjVar.set_var(USER_FILE_DIR=ProjVar.get_var('TEMP_DIR'))
+
+        def remove_remote_cli():
+            LOG.fixture_step("(session) Remove remote cli clients")
+            client.exec_cmd('rm -rf {}/*'.format(ProjVar.get_var('TEMP_DIR')))
+            client.close()
+            from utils.clients.local import RemoteCLIClient
+            RemoteCLIClient.remove_remote_cli_clients()
+            ProjVar.set_var(REMOTE_CLI=None)
+            ProjVar.set_var(USER_FILE_DIR=WRSROOT_HOME)
+        request.addfinalizer(remove_remote_cli)
 
 
 def pytest_collectstart():

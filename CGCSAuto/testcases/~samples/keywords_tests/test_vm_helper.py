@@ -2,9 +2,8 @@ import time
 from pytest import mark
 
 from utils.tis_log import LOG
-
+from consts.auth import Tenant
 from keywords import vm_helper, network_helper, glance_helper
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 def test_boot_vms():
@@ -43,3 +42,12 @@ def test_boot_and_ping_vm(guest_os, opensuse11_image, opensuse12_image, opensuse
 
     vm_id = vm_helper.boot_vm(guest_os=guest_os, source='image', cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+
+def test_non_primary_tenant():
+    vm_1 = vm_helper.boot_vm(cleanup='function', auth_info=Tenant.TENANT1)[1]
+    vm_2 = vm_helper.launch_vms(vm_type='dpdk', auth_info=Tenant.TENANT1)[0][0]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
+    vm_helper.ping_vms_from_natbox(vm_ids=vm_2)
+    vm_helper.ping_vms_from_vm(vm_2, vm_1, net_types='mgmt')

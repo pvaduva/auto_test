@@ -1,16 +1,9 @@
-import time
-from pytest import mark, fixture, skip
-from utils.ssh import SSHClient, ControllerClient
-from utils.tis_log import LOG
-from keywords import install_helper, host_helper, system_helper, cinder_helper, \
-    storage_helper,  local_storage_helper, glance_helper, vm_helper, nova_helper, common
-from consts.cgcs import EventLogID, GuestImages,Networks
-from consts.build_server import Server, get_build_server_info
-from consts.auth import SvcCgcsAuto, Tenant
-from consts.cgcs import Prompt
-from consts.filepaths import WRSROOT_HOME, TestServerPath
-from consts.proj_vars import ProjVar, InstallVars
+from consts.auth import Tenant
+from consts.proj_vars import ProjVar
+from keywords import system_helper, vm_helper, nova_helper
 from testfixtures.resource_mgmt import ResourceCleanup
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 def test_launch_vms_pre_upgrade():
@@ -34,7 +27,6 @@ def test_launch_vms_pre_upgrade():
     current_version = system_helper.get_system_software_version()
 
     for tenant in tenants:
-
         tenant_cred_file = '/home/wrsroot/openrc.{}'.format(tenant)
         tenant_passwd = Tenant.TENANT1['password'] if tenant == Tenant.TENANT1['user'] else Tenant.TENANT2['password']
         if '*' in tenant_passwd:

@@ -1,3 +1,15 @@
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
 import contextlib
 
 import selenium.common.exceptions as Exceptions
@@ -13,7 +25,7 @@ class BaseWebObject:
 
     def __init__(self, driver):
         self.driver = driver
-        self.explicit_wait = 400     # selenium.explicit_wait matt
+        self.explicit_wait = 400     # unlock a host usually need more than 300 seconds
 
     def _is_element_present(self, *locator):
         with self.waits_disabled():
@@ -61,7 +73,7 @@ class BaseWebObject:
         return self.driver.find_element(*locator)
 
     def _get_elements(self, *locator):
-        return self.driver.find_elements(*locator) #####
+        return self.driver.find_elements(*locator)
 
     def _fill_field_element(self, data, field_element):
         field_element.clear()
@@ -84,7 +96,7 @@ class BaseWebObject:
         self.driver.implicitly_wait(0)
 
     def _turn_on_implicit_wait(self):
-        self.driver.implicitly_wait(10)  # selenium.implicitly_wait matt 10
+        self.driver.implicitly_wait(10)
 
     def _wait_until(self, predicate, timeout=None, poll_frequency=0.001):
         """Wait until the value returned by predicate is not False.

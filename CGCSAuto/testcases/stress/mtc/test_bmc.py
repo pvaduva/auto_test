@@ -13,15 +13,15 @@ This module verifies that the sensors were correctly added.
 """
 
 import random
-from pytest import mark, skip, fixture
 
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
+from pytest import mark, skip, fixture
 
 from consts.cgcs import EventLogID, HostTask, HostAdminState, HostAvailState, HostOperState
 from consts.timeout import HostTimeout
 from keywords import system_helper, host_helper, bmc_helper, common
 from testfixtures.recover_hosts import HostsToRecover
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
 
 
 @fixture(scope='function', autouse=True)

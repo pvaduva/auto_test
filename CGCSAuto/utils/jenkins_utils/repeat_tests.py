@@ -8,7 +8,7 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
         test_cases = _get_tests_from_file(file_path=file_path)
         if not test_cases:
             print("No testcases listed in {}.".format(file_path))
-            return
+            exit(1)
     elif test_cases:
         if isinstance(test_cases, str):
             test_cases = [test_cases]
@@ -31,6 +31,7 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
     elif resultlog:
         params.append('--resultlog={}'.format(resultlog))
 
+    params.append('--noconsolelog')
     params += test_cases
 
     print("pytest params: {}".format(params))
@@ -43,10 +44,19 @@ def _get_tests_from_file(file_path):
         with open(file_path, mode='r') as f:
             raw_tests = f.read().splitlines()
 
-        for t in raw_tests:
-            t = t.strip()
-            if 'test_' in t:
-                tests.append(t)
+        if "test_results.log" in file_path:
+            for t in raw_tests:
+                t = t.strip()
+                if t.startswith("FAIL"):
+                    split_line = t.split('\t')
+                    tests.append(split_line[2])
+
+        else:
+            for t in raw_tests:
+                t = t.strip()
+                if 'test_' in t:
+                    tests.append(t)
+
     except FileNotFoundError:
         # No ping failures
         pass

@@ -1,14 +1,16 @@
-import time, random
+import random
+import time
+
 from pytest import fixture, skip, mark
 
-from utils.tis_log import LOG
-from utils import table_parser, exceptions, cli
-from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
-from consts.cgcs import VMStatus, GuestImages
 from consts.auth import Tenant
+from consts.cgcs import VMStatus, GuestImages
+from consts.proj_vars import ProjVar
+from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.verify_fixtures import check_alarms
-from utils.ssh import ControllerClient
+from utils import table_parser, exceptions, cli
+from utils.tis_log import LOG
+from utils.clients.ssh import get_cli_client
 
 
 @fixture(scope='module', autouse=True)
@@ -211,54 +213,39 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
 
     """
     pre_alarms = pre_alarm_
+    vm_ids = []
     for vm in vms_:
-
-        LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm['id']))
-        vm_state = nova_helper.get_vm_status(vm['id'])
+        vm_id = vm['id']
+        vm_ids.append(vm_id)
+        LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
+        vm_state = nova_helper.get_vm_status(vm_id)
         assert vm_state == VMStatus.ACTIVE, 'VM {} state is {}; Not in ACTIVATE state as expected'\
-            .format(vm['id'], vm_state)
+            .format(vm_id, vm_state)
 
         LOG.tc_step("Verify  VM can be pinged from NAT box...")
-        rc, boot_time = check_vm_boot_time(vm['id'])
+        rc, boot_time = check_vm_boot_time(vm_id)
         assert rc, "VM is not pingable after {} seconds ".format(boot_time)
 
         LOG.tc_step("Verify Login to VM and check filesystem is rw mode....")
-        assert is_vm_filesystem_rw(vm['id']), 'rootfs filesystem is not RW as expected for VM {}'\
+        assert is_vm_filesystem_rw(vm_id), 'rootfs filesystem is not RW as expected for VM {}'\
             .format(vm['display_name'])
 
-
     LOG.tc_step("Checking if live migration is required to put the vms to a single compute....")
-    host_0 = nova_helper.get_vm_host((vms_[0])['id'])
-    host_1 = nova_helper.get_vm_host((vms_[1])['id'])
+    host_0 = nova_helper.get_vm_host(vm_ids[0])
+    host_1 = nova_helper.get_vm_host(vm_ids[1])
 
     if host_0 != host_1:
-        LOG.tc_step("Attempting to live migrate  vm {} to host {} ....".format((vms_[1])['display_name'],
-                                                                               host_0))
-        code, msg = vm_helper.live_migrate_vm((vms_[1])['id'], host_0)
+        LOG.tc_step("Attempting to live migrate  vm {} to host {} ....".format((vms_[1])['display_name'], host_0))
+        code, msg = vm_helper.live_migrate_vm(vm_ids[1], destination_host=host_0)
         LOG.tc_step("Verify live migration succeeded...")
         assert code == 0, "Live migration of vm {} to host {} did not success".format((vms_[1])['display_name'],
                                                                                       host_0)
 
     LOG.tc_step("Verify both VMs are in same host....")
+    assert host_0 == nova_helper.get_vm_host(vm_ids[1]), "VMs are not in the same compute host"
 
-    assert host_0 == nova_helper.get_vm_host((vms_[1])['id']), "VMs are not in the same compute host"
-
-    LOG.tc_step("Rebooting compute {} to initiate vm evacuation .....")
-    rc, msg = host_helper.reboot_hosts(host_0, fail_ok=True)
-    assert rc == 0, "{} reboot not succeeded; return code: {}; detail error message: {}".format(host_0, rc, msg)
-
-    LOG.tc_step("Verify VMs are evacuated.....")
-
-    computes = host_helper.get_up_hypervisors()
-    computes.remove(host_0)
-    after_evac_host_0 = nova_helper.get_vm_host((vms_[0])['id'])
-    after_evac_host_1 = nova_helper.get_vm_host((vms_[1])['id'])
-
-    assert after_evac_host_0 and after_evac_host_0 != host_0, "VM {} evacuation failed; " \
-        "current host: {}; expected host: {}".format((vms_[0])['id'], after_evac_host_0, host_1)
-
-    assert after_evac_host_1 and after_evac_host_1 != host_0, "VM {} evacuation failed; " \
-        "current host: {}; expected host: {}".format((vms_[0])['id'], after_evac_host_1, host_1)
+    LOG.tc_step("Rebooting compute {} to initiate vm evacuation .....".format(host_0))
+    vm_helper.evacuate_vms(host=host_0, vms_to_check=vm_ids, ping_vms=True)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode....")
     assert is_vm_filesystem_rw((vms_[0])['id']), 'After evacuation the rootfs filesystem is not RW as expected ' \
@@ -381,8 +368,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
 
     LOG.tc_step("Booting instance vm_0...")
 
-    rc, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')
-    assert rc == 0, "VM vm_0 did not succeed: reason {}".format(msg)
+    vm_id = vm_helper.boot_vm(name='vm_0', source='volume', source_id=vol_id_0, cleanup='function')[1]
     time.sleep(5)
 
     LOG.tc_step("Verify  VM can be pinged from NAT box...")
@@ -399,17 +385,13 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'volumes rootfs filesystem is not RW as expected.'
 
     LOG.tc_step("Attemping live migrate VM...")
-    code, msg = vm_helper.live_migrate_vm(vm_id=vm_id,  fail_ok=True)
-    LOG.tc_step("Verify live migration succeeded...")
-    assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
+    vm_helper.live_migrate_vm(vm_id=vm_id)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
     assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After live migration rootfs filesystem is not RW'
 
     LOG.tc_step("Attempting  cold migrate VM...")
-    code, msg = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
-    LOG.tc_step("Verify cold migration succeeded...")
-    assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
+    vm_helper.cold_migrate_vm(vm_id)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
     assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After cold migration rootfs filesystem is not RW'
@@ -417,16 +399,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     before_host_0 = nova_helper.get_vm_host(vm_id)
 
     LOG.tc_step("Rebooting compute {} to initiate vm evacuation .....".format(before_host_0))
-    rc, msg = host_helper.reboot_hosts(before_host_0, fail_ok=False)
-
-    assert rc == 0, "{} reboot not succeeded; return code: {}; detail error message: {}".format(before_host_0, rc, msg)
-
-    LOG.tc_step("Verify VMs are evacuated.....")
-
-    after_evac_host_0 = nova_helper.get_vm_host(vm_id)
-
-    assert after_evac_host_0 != before_host_0, "VM {} evacuation failed; " \
-        "previous host: {}; current host: {}".format(vm_id, before_host_0, after_evac_host_0)
+    vm_helper.evacuate_vms(host=before_host_0, vms_to_check=vm_id, ping_vms=True)
 
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
     assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After evacuation filesystem is not RW'
@@ -505,16 +478,16 @@ def get_user_data_file():
 
     auth_info = Tenant.get_primary()
     tenant = auth_info['tenant']
-    user_data_file = "/home/wrsroot/userdata/{}_test_userdata.txt".format(tenant)
-    controller_ssh = ControllerClient.get_active_controller()
+    user_data_file = "{}/userdata/{}_test_userdata.txt".format(ProjVar.get_var('USER_FILE_DIR'), tenant)
+    client = get_cli_client()
     cmd = "test -e {}".format(user_data_file)
-    rc = controller_ssh.exec_cmd(cmd)[0]
+    rc = client.exec_cmd(cmd)[0]
     if rc != 0:
         cmd = "cat <<EOF > {}\n" \
               "#cloud-config\n\nruncmd: \n - /etc/init.d/sshd restart\n" \
               "EOF".format(user_data_file)
         print(cmd)
-        code, output = controller_ssh.exec_cmd(cmd)
+        code, output = client.exec_cmd(cmd)
         LOG.info("Code: {} output: {}".format(code, output))
 
     return user_data_file

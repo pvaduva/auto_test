@@ -11,6 +11,7 @@ from pytest import fixture
 from consts.cgcs import LocalStorage
 from consts.filepaths import WRSROOT_HOME
 
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils import cli
 from keywords import common
@@ -295,16 +296,33 @@ class TestLocalStorage:
         assert 0 != rtn_code, 'Should fail to apply storage-profile:{} to unlocked host:{}' \
             .format(prof_uuid, compute_unlocked)
 
-        LOG.tc_step('Choose a host with different storage backing to apply the storage-profile')
-        compute_dest = self._choose_compute_unlocked_diff_type(ls_type=local_storage_type)
-        if not compute_dest:
-            skip("No unlocked host with different storage backing to apply storageprofile")
+        computes_list = system_helper.get_computes()
+        del computes_list[compute_src]
 
-        LOG.info('target compute:{}'.format(compute_dest))
-        LOG.debug('Check if the storprofile is applicable to the target compute')
-        if not local_storage_helper.is_storprof_applicable_to(host=compute_dest, profile=prof_uuid):
-            msg = 'storage-profile:{} is not applicable to compute:{}'.format(prof_uuid, compute_dest)
-            skip(msg)
+        found_match = False
+        for compute_dest in computes_list:
+            LOG.info("Checking compute {} is compatible with {}".format(compute_dest, compute_src))
+            if not local_storage_helper.is_storprof_applicable_to(host=compute_dest, profile=prof_uuid):
+                msg = 'storage-profile:{} is not applicable to compute:{}'.format(prof_uuid, compute_dest)
+                LOG.info(msg)
+            else:
+                found_match = True
+                msg = 'Found compute with applicable hardware: {}'.format(compute_dest)
+                LOG.info(msg)
+                break
+
+        if not found_match:
+            skip("No compute found with matching hardware")
+
+        con_ssh = ControllerClient.get_active_controller()
+
+        # Change storage backing if needed
+        if compute_dest in host_helper.get_hosts_in_storage_aggregate(local_storage_type, con_ssh=con_ssh, up_only=False):
+            backends = ['image', 'lvm', 'remote']
+            backends.remove(local_storage_type)
+            host_helper.modify_host_lvg(compute_dest, inst_backing=backends[0])
+
+        host_helper.lock_host(compute_dest)
 
         LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(prof_uuid, compute_dest))
         rtn_code, output = self.apply_storage_profile(compute_dest, ls_type=local_storage_type, profile=prof_uuid)
@@ -601,7 +619,7 @@ class TestLocalStorage:
 
         LOG.tc_step('Apply the storage-profile via CLI profile-import {}'.format(local_file))
         remote_file = self.get_remote_storprofile_file(local_storage_type=local_storage_type)
-        common.scp_to_active_controller(local_file, remote_file)
+        common.scp_from_localhost_to_active_controller(local_file, remote_file)
 
         rtn_code, output = self.import_storprofile_profile(profile_file=remote_file)
         assert 0 == rtn_code, 'Failed to import storage-profile'.format(remote_file)

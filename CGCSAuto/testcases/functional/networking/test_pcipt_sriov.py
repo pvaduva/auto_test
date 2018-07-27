@@ -150,18 +150,7 @@ def test_evacuate_pci_vm(vif_model_check):
         vm_ssh.exec_sudo_cmd('sync')
 
     LOG.tc_step("Reboot vm host {}".format(host))
-    host_helper.reboot_hosts(host, wait_for_reboot_finish=False)
-    HostsToRecover.add(host, scope='function')
-
-    LOG.tc_step("Wait for vm to reach ERROR or REBUILD state with best effort")
-    vm_helper.wait_for_vms_values(vm_id, values=[VMStatus.ERROR, VMStatus.REBUILD], fail_ok=True, timeout=120)
-
-    LOG.tc_step("Verify vm is evacuated to other host")
-    vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=300, fail_ok=False)
-    post_evac_host = nova_helper.get_vm_host(vm_id)
-    assert post_evac_host != host, "VM is on the same host after original host rebooted."
-
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    vm_helper.evacuate_vms(host=host, vms_to_check=vm_id, ping_vms=True, wait_for_host_up=False)
 
     if 'pci-passthrough' == vif_model:
         LOG.tc_step("Add vlan to pci-passthrough interface for VM again after evacuation due to interface change.")
@@ -342,7 +331,7 @@ class TestVmPCIOperations:
 
         return self.numa_node
 
-    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=3):
+    def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=20):
 
         LOG.tc_step('Check PCIPT/SRIOV numa/irq-cpu-affinity/alias on VM afer {}'.format(msg_prefx))
 
@@ -413,8 +402,6 @@ class TestVmPCIOperations:
             while not cpus_matched and count < retries:
                 count += 1
 
-                time.sleep(retry_interval)
-
                 indices_to_pcpus = vm_helper.parse_cpu_list(self.pci_irq_affinity_mask)
 
                 vm_pcpus = []
@@ -429,12 +416,14 @@ class TestVmPCIOperations:
                         LOG.warn(
                             'Mismatched CPU list after {}: expected/affin-mask cpu list:{}, actual:{}, '
                             'pci_info:{}'.format(msg_prefx, expected_pcpus_for_irqs, pci_info['cpulist'], pci_info))
+
                         LOG.warn('retries:{}'.format(count))
                         cpus_matched = False
                         break
                 vm_pci_infos.clear()
                 vm_topology.clear()
 
+                time.sleep(retry_interval)
                 vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
                 # vm_pci_infos.pop('pci_addr_list')
 
@@ -654,5 +643,21 @@ class TestVmPCIOperations:
         vm_helper.reboot_vm(self.vm_id, hard=True)
         LOG.tc_step("Check vm still pingable over mgmt and {} nets after nova reboot hard".format(self.net_type))
         self.wait_check_vm_states(step='hard-reboot')
+        vm_helper.ping_vms_from_vm(
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+
+        LOG.fixture_step("Create a flavor with dedicated cpu policy")
+        resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048)[1]
+        ResourceCleanup.add('flavor', resize_flavor, scope='module')
+
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+        nova_helper.set_flavor_extra_specs(flavor=resize_flavor, **extra_specs)
+
+        origin_host = nova_helper.get_vm_host(vm_id=vm_id)
+        LOG.info("Orignal host where VM {} hosted is {}".format(vm_id, origin_host))
+        LOG.tc_step("Resize the vm and verify if it becomes Active")
+        vm_helper.resize_vm(self.vm_id, resize_flavor)
+        new_host = nova_helper.get_vm_host(self.vm_id)
+        LOG.info("New host where VM {} resized {}".format(vm_id, new_host))
         vm_helper.ping_vms_from_vm(
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)

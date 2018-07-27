@@ -4,15 +4,10 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-import logging
-import time
-import re
-import sys
-from pytest import fixture, mark, skip, raises, fail
+from pytest import mark, skip
+
+from keywords import system_helper, host_helper
 from utils.tis_log import LOG
-from utils import cli, exceptions
-from utils.ssh import ControllerClient
-from keywords import vm_helper, nova_helper, system_helper, host_helper, cinder_helper, glance_helper
 
 
 @mark.domain_sanity

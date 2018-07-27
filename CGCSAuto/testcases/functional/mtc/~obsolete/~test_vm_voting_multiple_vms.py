@@ -4,20 +4,17 @@
 # of this software may be licensed only pursuant to the terms
 # of an applicable Wind River license agreement.
 
-import re
-
 import time
-import sys
-from pytest import fixture, mark
-from utils import cli
-from utils import table_parser
-from utils.ssh import NATBoxClient
-from utils.tis_log import LOG
-from consts.timeout import VMTimeout, EventLogTimeout
-from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus, EventLogID
+
+from pytest import fixture
+
 from consts.auth import Tenant
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, system_helper
+from consts.cgcs import FlavorSpec, EventLogID
+from consts.timeout import EventLogTimeout
+from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
+from utils import cli
+from utils.tis_log import LOG
 
 
 @fixture(scope='module')

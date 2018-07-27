@@ -5,15 +5,14 @@ on CEPH-related helper functions.
 
 import re
 import time
-import ast
 
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-
-from utils import table_parser, cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
+from consts.cgcs import EventLogID, BackendState, BackendTask
 from keywords import system_helper, host_helper
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient, get_cli_client
+from utils.tis_log import LOG
 
 
 def is_ceph_healthy(con_ssh=None):
@@ -88,9 +87,9 @@ def get_osd_host(osd_id, con_ssh=None):
         - Return hostname or -1 if not found
         - Return message
     """
-    storage_hosts = system_helper.get_storage_nodes()
+    storage_hosts = system_helper.get_storage_nodes(con_ssh=con_ssh)
     for host in storage_hosts:
-        table_ = table_parser.table(cli.system('host-stor-list', host))
+        table_ = table_parser.table(cli.system('host-stor-list', host, ssh_client=con_ssh))
         osd_list = table_parser.get_values(table_, 'osdid')
         if str(osd_id) in osd_list:
             msg = 'OSD ID {} is on host {}'.format(osd_id, host)
@@ -187,12 +186,12 @@ def get_osds(host=None, con_ssh=None):
 
     Args:
         con_ssh(SSHClient)
-        host - the host to ssh into
+        host(str|None): the host to ssh into
     Returns:
         (list) List of OSDs on the host.  Empty list if none.
     """
 
-    def _get_osds_per_host(host, osd_list, con_ssh=None):
+    def _get_osds_per_host(host_, osd_list_, con_ssh_=None):
         """
         Return the OSDs on a system.
 
@@ -203,10 +202,10 @@ def get_osds(host=None, con_ssh=None):
             Nothing.  Update osd_list by side-effect.
         """
 
-        table_ = table_parser.table(cli.system('host-stor-list', host, ssh_client=con_ssh))
-        osd_list = osd_list + table_parser.get_values(table_, 'osdid', function='osd')
+        table_ = table_parser.table(cli.system('host-stor-list', host_, ssh_client=con_ssh_))
+        osd_list_ = osd_list_ + table_parser.get_values(table_, 'osdid', function='osd')
 
-        return osd_list
+        return osd_list_
 
     osd_list = []
 
@@ -226,6 +225,7 @@ def is_osd_up(osd_id, con_ssh=None):
 
     Args:
         osd_id (int) - ID of OSD we want to query
+        con_ssh
 
     Returns:
         (bool) True if OSD is up, False if OSD is down
@@ -303,16 +303,16 @@ def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
         This function does a wget on the provided urls.
         """
         for url in urls:
-            cmd = 'wget {} --no-check-certificate -P {}'.format(url, img_dest)
-            rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=7200)
-            assert not rtn_code, out
+            cmd_ = 'wget {} --no-check-certificate -P {}'.format(url, img_dest)
+            rtn_code_, out_ = con_ssh.exec_cmd(cmd_, expect_timeout=7200)
+            assert not rtn_code, out_
 
     centos_image_location = \
-    ['http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2', \
-     'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2']
+        ['http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2',
+         'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2']
 
     ubuntu_image_location = \
-    ['https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img']
+        ['https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img']
 
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
@@ -330,10 +330,9 @@ def download_images(dload_type='all', img_dest='~/images/', con_ssh=None):
         LOG.info("Downloading centos image")
         _wget(centos_image_location)
 
-    #return image_names
 
-def find_images(con_ssh, image_type='qcow2', location='~/images'):
-    '''
+def find_images(con_ssh=None, image_type='qcow2', image_name=None, location=None):
+    """
     This function finds all images of a given type, in the given location.
     This is designed to save test time, to prevent downloading images if not
     necessary.
@@ -351,20 +350,26 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
         - image_names(list): list of image names of a given type, e.g.
           'cgcs-guest.img' or all images if the user specified 'all' as the
           argument to image_type.
-    '''
+    """
 
     image_names = []
+    if not location:
+        location = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+    if not con_ssh:
+        con_ssh = get_cli_client()
 
     cmd = 'ls {}'.format(location)
     rtn_code, out = con_ssh.exec_cmd(cmd)
     image_list = out.split()
     LOG.info('Found the following files: {}'.format(image_list))
-    if image_type == 'all':
-        return image_list
+    if image_type == 'all' and not image_name:
+        return image_list, location
 
     # Return a list of image names where the image type matches what the user
     # is looking for, e.g. qcow2
     for image in image_list:
+        if image_name and image_name not in image:
+            continue
         image_path = location + "/" + image
         cmd = 'qemu-img info {}'.format(image_path)
         rtn_code, out = con_ssh.exec_cmd(cmd)
@@ -372,7 +377,7 @@ def find_images(con_ssh, image_type='qcow2', location='~/images'):
             image_names.append(image)
 
     LOG.info('{} images available: {}'.format(image_type, image_names))
-    return image_names
+    return image_names, location
 
 
 def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
@@ -403,8 +408,8 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
     return image_size
 
 
-def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=False,
-                           services=None, lock_unlock=True, fail_ok=False, con_ssh=None):
+def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=None,
+                           services=None, lock_unlock=False, fail_ok=False, con_ssh=None):
     """
     Modify ceph storage backend pool allocation
 
@@ -414,7 +419,9 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         glance:
         ephemeral:
         object_gib:
+        object_gateway (bool|None)
         services (str|list|tuple):
+        lock_unlock (bool): whether to wait for config out-of-date alarms against controllers and lock/unlock them
         fail_ok:
         con_ssh:
 
@@ -447,22 +454,38 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
             args += ' glance_pool_gib={}'.format(glance)
         if ephemeral:
             args += ' ephemeral_pool_gib={}'.format(ephemeral)
-        if object_gateway:
+        if object_gateway is not None:
             args += ' object_gateway={}'.format(object_gateway)
         if object_gib:
             args += ' object_pool_gib={}'.format(object_gib)
 
     code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    if lock_unlock:
+        from testfixtures.recover_hosts import HostsToRecover
+        LOG.info("Lock unlock controllers and ensure config out-of-date alarms clear")
+        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=30, fail_ok=False,
+                                     entity_id='controller-')
+
+        active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
+        for controller in [standby_controller, active_controller]:
+            if not controller:
+                continue
+            HostsToRecover.add(controller)
+            host_helper.lock_host(controller, swact=True, con_ssh=con_ssh)
+            wait_for_storage_backend_vals(backend=backend,
+                                          **{'task': BackendTask.RECONFIG_CONTROLLER,   # TODO is this right?
+                                             'state': BackendState.CONFIGURING})
+
+            host_helper.unlock_host(controller, con_ssh=con_ssh)
+
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, fail_ok=False)
+
     # TODO return new values of storage allocation and check they are the right values
-    if code == 0:
-        backend_info = get_storage_backend_info(backend)
-        return 0, backend_info
-    else:
-        msg = " Fail to modify storage backend allocations: {}".format(out)
-        LOG.warning(msg)
-        if fail_ok:
-            return code, out
-        raise exceptions.CLIRejected(msg)
+    updated_backend_info = get_storage_backend_info(backend)
+    return 0, updated_backend_info
 
 
 def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
@@ -505,6 +528,7 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.
         backend (str): storage backend to get info (e.g. ceph)
         keys (list|str): keys to return, e.g., ['name', 'backend', 'task']
         con_ssh:
+        auth_info
 
     Returns: dict  {'cinder_pool_gib': 202, 'glance_pool_gib': 20, 'ephemeral_pool_gib': 0,
                     'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
@@ -580,7 +604,7 @@ def get_storage_backends(rtn_val='backend', con_ssh=None, **filters):
     if table_:
         if filters:
             table_ = table_parser.filter_table(table_, **filters)
-        backends = table_parser.get_column(table_, 'backend')
+        backends = table_parser.get_column(table_, rtn_val)
     return backends
 
 
@@ -636,7 +660,6 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
     """
 
     if backend is not 'ceph':
-        rc = 1
         msg = "Invalid backend {} specified. Valid choices are {}".format(backend, ['ceph'])
         if fail_ok:
             return 1, msg
@@ -654,7 +677,7 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         cmd += ' --ceph_mon_dev_controller_1_uuid {}'.format(ceph_mon_dev_controller_1_uuid)
 
     cmd += " {}".format(backend)
-    controler_ssh = ControllerClient.get_active_controller()
+    controler_ssh = con_ssh if con_ssh else ControllerClient.get_active_controller()
     controler_ssh.send(cmd)
     index = controler_ssh.expect([controler_ssh.prompt, '\[yes/N\]'])
     if index == 1:

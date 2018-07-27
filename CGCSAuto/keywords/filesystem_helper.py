@@ -1,11 +1,8 @@
 import ast
 import re
 
-from keywords import system_helper, host_helper
 from utils import cli, table_parser
-from utils.tis_log import LOG
-from pytest import fixture, mark, skip
-from utils.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient
 
 
 def get_controllerfs(filesystem, rtn_value="size"):

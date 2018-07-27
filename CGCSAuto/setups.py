@@ -1,31 +1,27 @@
-import re
-import os
-import time
 import configparser
+import os
+import re
 import threading
+import time
+
 import pexpect
 
 import setup_consts
-from utils.tis_log import LOG
-from utils import exceptions, lab_info
-from utils.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    TelnetClient, TELNET_LOGIN_PROMPT, SSHFromSSH
-from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
-from utils import local_host
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, REGION_MAP
-from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
+from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
-from consts import build_server as build_server_consts
-
-<<<<<<< HEAD
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, install_helper
-=======
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper
->>>>>>> develop
-from keywords.common import scp_to_local
-from keywords.install_helper import ssh_to_build_server, get_git_name
+from keywords.common import scp_to_local, scp_from_active_controller_to_localhost
+from utils import exceptions, lab_info
+from utils import local_host
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
+    SSHFromSSH
+from utils.clients.local import RemoteCLIClient
+from utils.clients.telnet import TELNET_LOGIN_PROMPT, TelnetClient
+from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
+from utils.tis_log import LOG
 
 
 def less_than_two_controllers():
@@ -71,7 +67,9 @@ def setup_vbox_tis_ssh(lab):
 
 
 def set_env_vars(con_ssh):
-    # TODO: delete this after source to bash issue is fixed on centos
+    # This is no longer needed
+    return
+
     con_ssh.exec_cmd("bash")
 
     prompt_cmd = con_ssh.exec_cmd("echo $PROMPT_COMMAND")[1]
@@ -111,11 +109,37 @@ def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
     nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
     ProjVar.set_var(natbox_ssh=nat_ssh)
 
-    __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
+    _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
+    _copy_pubkey()
     return nat_ssh
 
 
-def __copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
+def _copy_pubkey():
+    with host_helper.ssh_to_host('controller-0') as con_0_ssh:
+        pubkey_path = '{}/key.pub'.format(WRSROOT_HOME)
+        if not con_0_ssh.file_exists(pubkey_path):
+            try:
+                LOG.info("Attempt to copy public key to both controllers and localhost if applicable")
+                # copy public key to key.pub
+                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path))
+
+                if not system_helper.is_simplex():
+                    # copy publickey to controller-1
+                    con_0_ssh.scp_on_source(source_path=pubkey_path, dest_path=pubkey_path,
+                                            dest_ip='controller-1',
+                                            dest_user=HostLinuxCreds.get_user(),
+                                            dest_password=HostLinuxCreds.get_password(), timeout=30)
+            except:
+                pass
+
+        # copy public key to localhost
+        if ProjVar.get_var('REMOTE_CLI') and con_0_ssh.file_exists(pubkey_path):
+            dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'key.pub')
+            scp_from_active_controller_to_localhost(source_path=pubkey_path, dest_path=dest_path, timeout=60)
+            LOG.info("Public key file copied to localhost")
+
+
+def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -278,10 +302,11 @@ def get_tis_timestamp(con_ssh):
 
 def get_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
+    build_path = None
     if code != 0:
-        build_id = ' '
-        build_host = ' '
+        build_id = build_host = job = build_by = ' '
     else:
+        # get build_id
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
         if build_id and build_id[0] != 'n/a':
             build_id = build_id[0]
@@ -293,13 +318,27 @@ def get_build_info(con_ssh):
             else:
                 build_id = ' '
 
+        # get build_host
         build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
         build_host = build_host[0].split(sep='.')[0] if build_host else ' '
 
-    return build_id, build_host
+        # get jenkins job
+        job = re.findall('''JOB=\"(.*)\"''', output)
+        job = job[0] if job else ' '
+
+        # get build_by
+        build_by = re.findall('''BUILD_BY=\"(.*)\"''', output)
+        build_by = build_by[0] if build_by else 'jenkins'   # Assume built by jenkins although this is likely wrong
+
+        if build_id.strip():
+            build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
+
+    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path)
+
+    return build_id, build_host, job, build_by
 
 
-def copy_files_to_con1():
+def _rsync_files_to_con1():
     if less_than_two_controllers():
         LOG.info("Less than two controllers on system. Skip copying file to controller-1.")
         return
@@ -322,13 +361,11 @@ def copy_files_to_con1():
           "/home/wrsroot/* controller-1:/home/wrsroot/"
 
     timeout = 1800
-
     with host_helper.ssh_to_host("controller-0") as con_0_ssh:
         LOG.info("rsync files from controller-0 to controller-1...")
         con_0_ssh.send(cmd)
 
         end_time = time.time() + timeout
-
         while time.time() < end_time:
             index = con_0_ssh.expect([con_0_ssh.prompt, PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout,
                                      searchwindowsize=100)
@@ -348,6 +385,10 @@ def copy_files_to_con1():
 
         else:
             raise exceptions.TimeoutException("Timed out rsync files to controller-1")
+
+
+def copy_test_files():
+    _rsync_files_to_con1()
 
 
 def get_auth_via_openrc(con_ssh):
@@ -441,14 +482,13 @@ def collect_telnet_logs_for_nodes(end_event):
 
 def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, timeout=None, collect_interval=60):
     node_telnet = TelnetClient(host=telnet_ip, prompt=prompt, port=telnet_port, hostname=hostname)
-    node_telnet.send()
-    time.sleep(3)
-    node_telnet.flush()
     if not timeout:
         timeout = 3600 * 48
     end_time = time.time() + timeout
+    failure_count = 0
     while time.time() < end_time:
         if end_event.is_set():
+            node_telnet.close()
             break
         try:
             # Read out everything in output buffer every minute
@@ -457,11 +497,18 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
             node_telnet.flush()
         except Exception as e:
             node_telnet.logger.error('Failed to collect telnet log. {}'.format(e))
+            node_telnet.close()
+            failure_count += 1
+            if failure_count >= 5:
+                node_telnet.logger.error("5 failures encountered to collect telnet logs. Abort.")
+                raise
+            time.sleep(60)      # cool down period if telnet connection fails
     else:
         node_telnet.logger.warning('Collect telnet log timed out')
+        node_telnet.close()
 
 
-def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, controller0_ceph_mon_device,
+def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
                        controller1_ceph_mon_device, ceph_mon_gib):
 
     if not lab and not installconf_path:
@@ -475,6 +522,10 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
     host_build_dir = None
     guest_image = None
     files_server = None
+    hosts_bulk_add = None
+    boot_if_settings = None
+    tis_config = None
+    lab_setup = None
     heat_templates = None
     license_path = None
     out_put_dir = None
@@ -483,7 +534,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
         LOG.info("The test lab is a VBOX TiS setup")
 
     if installconf_path:
-        installconf = configparser.ConfigParser(allow_no_value=True)
+
+        installconf = configparser.ConfigParser()
         installconf.read(installconf_path)
 
         # Parse lab info
@@ -519,13 +571,10 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
                       'STORAGES': 'storage_nodes'}
 
         for confkey, constkey in naming_map.items():
-            if confkey in nodes_info:
-                value_in_conf = nodes_info[confkey]
-                if value_in_conf:
-                    barcodes = value_in_conf.split(sep=' ')
-                    lab_to_install[constkey] = barcodes
-            else:
-                continue
+            value_in_conf = nodes_info[confkey]
+            if value_in_conf:
+                barcodes = value_in_conf.split(sep=' ')
+                lab_to_install[constkey] = barcodes
 
         if not lab_to_install['controller_nodes']:
             errors.append("Nodes barcodes have to be provided for custom lab")
@@ -542,19 +591,26 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
         # Parse files info
         conf_files = installconf['CONF_FILES']
         conf_files_server = conf_files['FILES_SERVER']
-        conf_files_dir = conf_files['FILES_DIR']
         conf_license_path = conf_files['LICENSE_PATH']
+        conf_tis_config = conf_files['TIS_CONFIG_PATH']
+        conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
+        conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
+        conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
         conf_guest_image = conf_files['GUEST_IMAGE_PATH']
         conf_heat_templates = conf_files['HEAT_TEMPLATES']
 
         if conf_files_server:
             files_server = conf_files_server
-        if conf_files_dir:
-            files_dir = conf_files_dir
-        else:
-            files_dir = "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir, lab_name)
         if conf_license_path:
             license_path = conf_license_path
+        if conf_tis_config:
+            tis_config = conf_tis_config
+        if conf_boot_if_settings:
+            boot_if_settings = conf_boot_if_settings
+        if conf_hosts_bulk_add:
+            hosts_bulk_add = conf_hosts_bulk_add
+        if conf_labsetup:
+            lab_setup = conf_labsetup
         if conf_guest_image:
             guest_image = conf_guest_image
         if conf_heat_templates:
@@ -576,15 +632,8 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
 
     lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
 
-    # TODO: this will fail if labconf_path leads a ini without files_server and/or files_dir
-    lab_to_install.update(get_info_from_lab_files(files_server, files_dir))
-    if 'mode' not in lab_to_install:
-        if 'storage_nodes' in lab_to_install:
-            lab_to_install['mode'] = "storage"
-        else:
-            lab_to_install['mode'] = "standard"
-
     if 'compute_nodes' in lab_to_install:
+
         lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
     if 'storage_nodes' in lab_to_install:
         lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
@@ -621,15 +670,15 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
 
-    lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
-
-
-    InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup, wipedisk=wipedisk,
+    InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
                                  build_server=build_server,
                                  host_build_dir=host_build_dir,
                                  guest_image=guest_image,
                                  files_server=files_server,
-                                 files_dir=files_dir,
+                                 hosts_bulk_add=hosts_bulk_add,
+                                 boot_if_settings=boot_if_settings,
+                                 tis_config=tis_config,
+                                 lab_setup=lab_setup,
                                  heat_templates=heat_templates,
                                  license_path=license_path,
                                  out_put_dir=out_put_dir,
@@ -640,7 +689,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, wipedisk, c
 
 
 def is_https(con_ssh):
-    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_admin=True)
+    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=True)
 
 
 def scp_vswitch_log(con_ssh, hosts, log_path=None):
@@ -671,7 +720,7 @@ def scp_vswitch_log(con_ssh, hosts, log_path=None):
 
 
 def list_migration_history(con_ssh):
-    nova_helper.run_migration_list(con_ssh=con_ssh)
+    nova_helper.get_migration_list_table(con_ssh=con_ssh)
 
 
 def get_version_and_patch_info():
@@ -773,156 +822,31 @@ def set_sys_type(con_ssh):
     sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
     ProjVar.set_var(SYS_TYPE=sys_type)
 
-<<<<<<< HEAD
-# TODO: currently no support for installing lab as a single controller node
-# Fix: overwrite the controller nodes in the lab with supplied ones
-# Do we want this as a fix? It requires the user to supply each controller node if they want a certain lab
-# Should we have the user create their own install configuration file if they want to install a lab with only 1 controller?
-def write_installconf(lab, controller, lab_files_server, lab_files_dir, build_server, tis_build_dir, compute, storage,
-                      license_path, guest_image, heat_templates):
-    # Setup variables
-    lab_name = lab if lab != "" else None
-    lab_dict = None
-    controller_nodes = controller.split(',') if controller is not None and controller is not '' else None
-    compute_nodes = compute.split(',') if compute is not None and compute is not '' else None
-    storage_nodes = storage.split(',') if storage is not None and storage is not '' else None
-    __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
-    host_build_dir = tis_build_dir if tis_build_dir and tis_build_dir != "" else BuildServerPath.DEFAULT_HOST_BUILD_PATH
-    files_server = lab_files_server if lab_files_server and lab_files_server != "" else __build_server
-    files_dir = lab_files_dir if lab_files_dir and lab_files_dir != "" else None
 
-    # Get lab info
-    if files_server and files_dir:
-        try:
-            lab_info = get_info_from_lab_files(files_server, files_dir)
-            lab_dict = get_lab_dict(get_git_name(lab_info["name"]))
-        except exceptions.BuildServerError:
-            LOG.error("--file_server must be a valid build server. "
-                          "Checking --{} argument for lab information".format("controller" if controller_nodes else "lab"))
-            files_server = build_server_consts.DEFAULT_BUILD_SERVER['name']
-        except ValueError:
-            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
-                          "configuration and try again. "
-                          "Checking --{} argument for lab information".format("controller" if controller_nodes else "lab"))
-            files_dir = None
-        except AssertionError:
-            LOG.error("Please ensure --file_dir was entered correctly and exists in {}. "
-                          "Checking --{} argument for lab information".format(files_server,
-                                                                            "controller" if controller_nodes else "lab"))
-            files_dir = None
+def arp_for_fip(lab, con_ssh):
+    fip = lab['floating ip']
+    code, output = con_ssh.exec_cmd('ip addr | grep -B 4 {} | grep --color=never BROADCAST'.format(fip))
+    if output:
+        target_str = output.splitlines()[-1]
+        dev = target_str.split(sep=': ')[1].split('@')[0]
+        con_ssh.exec_cmd('arping -c 3 -A -q -I {} {}'.format(dev, fip))
 
-    if controller_nodes and not lab_dict:
-        labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
-        labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
-        for lab_info in labs:
-            if 'controller_nodes' in lab_info:
-                for barcode in lab_info['controller_nodes']:
-                    if str(barcode) in controller_nodes:
-                        lab_dict = lab_info
-                        files_dir = \
-                            "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                                                get_git_name(
-                                                                                                    lab_dict['name']))
-                        if compute_nodes:
-                            lab_dict["compute_nodes"] = [int(node) for node in compute_nodes]
-                        if storage_nodes:
-                            lab_dict["storage_nodes"] = [int(node) for node in storage_nodes]
-
-    if lab_name and not lab_dict:
-        if controller_nodes:
-            LOG.error("could not find lab with {} as a controller node. Checking --lab argument".format(controller_nodes))
-        lab_dict = get_lab_dict(lab_name)
-        files_dir = "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                                        get_git_name(lab_dict['name']))
-
-    # TODO: if the user ends up getting both error messages that could be contradictory
-    if not lab_dict:
-        raise ValueError("Either --lab=<lab_name> or --file_dir=<full path of lab configuration files> "
-                         "or --controller=<Comma-separated list of VLM barcodes for controllers> "
-                         "has to be provided")
-
-    # Write .ini file
-    config = configparser.ConfigParser(allow_no_value=True)
-    config.optionxform = str
-    labconf_lab_dict = {}
-
-    # [LAB] section
-    for lab_key in lab_dict.keys():
-        if lab_key == "name":
-            labconf_key = "LAB_NAME"
-            labconf_lab_dict[labconf_key] = lab_dict[lab_key]
-            continue
-        labconf_key = lab_key.replace(" ", "_")
-        labconf_key = labconf_key.replace("-","")
-        labconf_key = labconf_key.upper()
-        labconf_lab_dict[labconf_key] = lab_dict[lab_key]
-
-    # [NODES] section
-    node_keys = [key for key in labconf_lab_dict if 'NODE' in key]
-    node_values = [' '.join(list(map(str, labconf_lab_dict.pop(k)))) for k in node_keys]
-    node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
-
-    # [BUILD] and [CONF_FILES] section
-    build_dict = {"BUILD_SERVER": build_server, "TIS_BUILD_PATH": tis_build_dir}
-    files_dict = {"FILES_SERVER": files_server, "FILES_DIR": files_dir, "LICENSE_PATH": license_path,
-                 "GUEST_IMAGE_PATH": guest_image, "HEAT_TEMPLATES": heat_templates}
-
-    config["LAB"] = labconf_lab_dict
-    config["NODES"] = node_dict
-    config["BUILD"] = build_dict
-    config["CONF_FILES"] = files_dict
-
-    # TODO: figure out where these actually go and how they're named
-    install_config_name = "{}_install_conf.ini".format(lab_dict['short_name'])
-    install_config_path = "{}/{}".format(BuildServerPath.INSTALL_CONFIG_PATH, install_config_name)
-    with ssh_to_build_server() as install_file_server:
-        with open(install_config_path, "w") as install_config_file:
-            os.chmod(install_config_path, 0o777)
-            config.write(install_config_file)
-            install_config_file.close()
-
-    return install_config_path
-
-# TODO: figure out if you want to use the defaults as a backup or not
-# TODO: rename vars
-def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir=None):
-    # Configuration server has to be a valid build server
-    # Ideally it'd be nice to be able to have it as any server but logon gets complicated at that point and I don't see why it would be any other server
-    # If the configuration directory is given use that to get the system info
-    # Otherwise the host_build_dir and lab_name is required for the default path to the configuration directory. Both of which have defaults if not provided
-
-    SPACING = 13
-    lab_info_dict = {}
-    # TODO: We could also use os to see if it's an actual path
-    if conf_dir:
-       lab_files_path = conf_dir
-    else:
-        lab_files_path = "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(host_build_dir,
-                                                                                             get_git_name(lab_name))
-
-    with ssh_to_build_server(conf_server) as ssh_conn:
-        cmd = 'grep -r SYSTEM_ {}'.format(lab_files_path)
-        grep_cmd = ssh_conn.exec_cmd(cmd, rm_date=False)
-        assert grep_cmd[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
-
-        lab_info = grep_cmd[1].replace(' ', '')
-        lab_info_list = lab_info.split('\n')
-        for line in lab_info_list:
-            key = line[line.find('SYSTEM') + SPACING:line.find('=')].lower()
-            val = line[line.find('=') + 1:].lower()
-            lab_info_dict[key] = val.replace('"', '')
-        # Workaround for r430 labs
-        lab_name = lab_info_dict["name"]
-        last_num = -1
-        if not lab_name[last_num].isdigit():
-            while not lab_name[last_num].isdigit():
-                last_num -= 1
-            lab_info_dict["name"] = lab_name[:last_num+1]
-
-        return lab_info_dict
-=======
 
 def collect_sys_net_info(lab):
+    """
+    Collect networking related info on system if system cannot be reached.
+    Only applicable to hardware systems.
+
+    Args:
+        lab (dict): lab to collect networking info for.
+
+    Following info will be collected:
+        - ping/ssh fip/uip from NatBox and Test server
+        - if able to ssh to lab, collect ip neigh, ip route, ip addr.
+            - ping/ssh NatBox from lab
+            - ping lab default gateway from NatBox
+
+    """
     LOG.warning("Collecting system network info upon session setup failure")
     res_ = {}
     source_user = SvcCgcsAuto.USER
@@ -930,6 +854,7 @@ def collect_sys_net_info(lab):
     source_prompt = SvcCgcsAuto.PROMPT
 
     dest_info_collected = False
+    arp_sent = False
     for source_server in ('natbox', 'ts'):
         source_ip = NatBoxes.NAT_BOX_HW['ip'] if source_server == 'natbox' else SvcCgcsAuto.SERVER
         source_ssh = SSHClient(source_ip, source_user, source_pwd, initial_prompt=source_prompt)
@@ -999,10 +924,52 @@ def collect_sys_net_info(lab):
                                                                             ssh_client=nat_ssh_, fail_ok=True)[0]
                                 res_['ping_default_gateway_from_natbox'] = True if \
                                     pkt_loss_rate_ < 100 else False
+
+                            # send arp if unable to ping fip from natbox
+                            if res_.get('ping_fip_from_natbox') is False:
+                                arp_for_fip(lab=lab, con_ssh=dest_ssh)
+                                arp_sent = True
                         dest_ssh.close()
                     except:
                         LOG.warning('Failed to ssh to lab {} from {}'.format(ip_type_, source_server))
 
         source_ssh.close()
-        LOG.info("Lab networking info collected: {}".format(res_))
->>>>>>> develop
+
+    if arp_sent:
+        source_ip = NatBoxes.NAT_BOX_HW['ip']
+        nat_ssh = SSHClient(source_ip, source_user, source_pwd, initial_prompt=source_prompt)
+        nat_ssh.connect()
+        pkt_loss_rate_ = network_helper.ping_server(server=lab['floating ip'], ssh_client=nat_ssh, fail_ok=True)[0]
+        if pkt_loss_rate_ == 100:
+            LOG.warning('Failed to ping lab fip from natbox after arp')
+            res_['ping_fip_from_natbox_after_arp'] = False
+        else:
+            res_['ping_fip_from_natbox_after_arp'] = True
+
+    LOG.info("Lab networking info collected: {}".format(res_))
+
+
+def setup_remote_cli_client():
+    """
+    Download openrc files from horizon and install remote cli clients to virtualenv
+    Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
+
+    Returns (RemoteCliClient)
+
+    """
+    from keywords import horizon_helper
+    # download openrc files
+    horizon_helper.download_openrc_files()
+
+    # install remote cli clients
+    client = RemoteCLIClient.get_remote_cli_client()
+
+    # copy test files
+    LOG.info("Copy test files from controller to localhost for remote cli tests")
+    for dir_name in ('images/', 'heat/', 'userdata/'):
+        dest_path = '{}/{}'.format(ProjVar.get_var('TEMP_DIR'), dir_name)
+        os.makedirs(dest_path, exist_ok=True)
+        common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
+                                                       dest_path=dest_path, is_dir=True)
+
+    return client

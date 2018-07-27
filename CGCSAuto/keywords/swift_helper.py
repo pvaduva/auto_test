@@ -3,11 +3,14 @@ This module provides helper functions for swift client based testing, with a foc
 on SWIFT object-storage related helper functions.
 """
 
-from utils import cli, exceptions
-from utils.tis_log import LOG
-from utils.ssh import ControllerClient
-from keywords import keystone_helper, html_helper
 from consts.auth import Tenant
+from keywords import keystone_helper, html_helper
+from utils import cli, exceptions
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
+
+
+# TODO: Any usage of localfile to upload/create objects need to be updated to adapt to remote_cli case.
 
 
 def upload_objects(container, file_or_directory, segment_size=None, segment_container=None, leave_segments=False,
@@ -79,7 +82,7 @@ def upload_objects(container, file_or_directory, segment_size=None, segment_cont
         if fail_ok:
             return rc, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def delete_objects(container=None, objects=None, delete_all=False, leave_segments=False, header=None,
@@ -121,7 +124,7 @@ def delete_objects(container=None, objects=None, delete_all=False, leave_segment
             if fail_ok:
                 return rc, msg
             else:
-                raise exceptions.SWiftError(msg)
+                raise exceptions.SwiftError(msg)
     else:
         if leave_segments:
             args_ += " --leave-segments"
@@ -158,7 +161,7 @@ def delete_objects(container=None, objects=None, delete_all=False, leave_segment
                     if fail_ok:
                         return 2, msg
                     else:
-                        raise exceptions.SWiftError(msg)
+                        raise exceptions.SwiftError(msg)
 
                 else:
                     return 0, "Container {} deleted successfully".format(container)
@@ -168,7 +171,7 @@ def delete_objects(container=None, objects=None, delete_all=False, leave_segment
             if fail_ok:
                 return rc, msg
             else:
-                raise exceptions.SWiftError(msg)
+                raise exceptions.SwiftError(msg)
 
 
 def delete_swift_container(container, con_ssh=None, fail_ok=False):
@@ -208,7 +211,7 @@ def create_swift_container(container, con_ssh=None, fail_ok=False):
         if fail_ok:
             return 1, None
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
     try:
         cli.swift('post', container, ssh_client=con_ssh)
 
@@ -224,7 +227,7 @@ def create_swift_container(container, con_ssh=None, fail_ok=False):
             LOG.warning(msg)
             return 2, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def post(container=None, object_=None, read_acl=None, write_acl=None, sync_to=None, sync_key=None,
@@ -281,7 +284,7 @@ def post(container=None, object_=None, read_acl=None, write_acl=None, sync_to=No
         if fail_ok:
             return rc, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def copy(container=None, object_=None, dest_container=None, dest_object=None, fresh_metadata=False,
@@ -308,7 +311,7 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
     public_url = get_swift_public_url()
     token = html_helper.get_user_token()
 
-    cmd = 'curl --insecure -i {}/'.format(public_url)
+    cmd = 'curl -i {}/'.format(public_url)
     if object_:
         cmd += "{}/{} -X COPY -H \"X-Auth-Token: {}\"".format(container, object_, token)
     else:
@@ -346,7 +349,7 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
         if fail_ok:
             return rc, msg
         else:
-            raise exceptions.SWiftError(msg)
+            raise exceptions.SwiftError(msg)
 
 
 def get_swift_containers(con_ssh=None, fail_ok=False):
@@ -392,8 +395,6 @@ def get_swift_container_stat_info(container=None, object_=None, con_ssh=None):
         for pair in value_pairs:
             key_value = pair.split(':')
             stat_values[key_value[0].strip()] = key_value[1].strip()
-
-        LOG.info("swift stat output: {}".format(stat_values))
     else:
         msg = "Fail to get status of swift container/object {}:{}".\
             format(container + "/" + object if object else container, out)
@@ -480,7 +481,7 @@ def download_objects(container=None, objects=None, download_all=False, out_file=
             if fail_ok:
                 return rc, [], msg
             else:
-                raise exceptions.SWiftError(msg)
+                raise exceptions.SwiftError(msg)
 
 
 def get_swift_public_url():

@@ -33,7 +33,6 @@ def test_lock_active_controller_reject(no_simplex):
     LOG.tc_step("Lock active controller and ensure it fail to lock")
     exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False, check_first=False)
     assert exit_code == 1, 'Expect locking active controller to be rejected. Actual: {}'.format(cmd_output)
-
     status = host_helper.get_hostshow_value(active_controller, 'administrative')
     assert status == 'unlocked', "Fail: The active controller was locked."
 
@@ -103,12 +102,22 @@ def test_lock_unlock_host(host_type, collect_kpi):
 
     if collect_kpi:
         LOG.info("Collect kpi for lock/unlock {}".format(host_type))
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostLock.NAME.format(host_type), host=None,
-                                  log_path=HostLock.LOG_PATH, end_pattern=HostLock.END.format(host),
-                                  start_pattern=HostLock.START.format(host), start_path=HostLock.START_PATH,
-                                  init_time=init_time)
+        code_lock, out_lock = kpi_log_parser.record_kpi(local_kpi_file=collect_kpi,
+                                                        kpi_name=HostLock.NAME.format(host_type),
+                                                        host=None, log_path=HostLock.LOG_PATH,
+                                                        end_pattern=HostLock.END.format(host),
+                                                        start_pattern=HostLock.START.format(host),
+                                                        start_path=HostLock.START_PATH,
+                                                        init_time=init_time)
 
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=HostUnlock.NAME.format(host_type), host=None,
-                                  log_path=HostUnlock.LOG_PATH, end_pattern=HostUnlock.END[host_type].format(host),
-                                  init_time=init_time, start_pattern=HostUnlock.START.format(host),
-                                  start_path=HostUnlock.START_PATH)
+        time.sleep(30)      # delay in sysinv log vs nova hypervisor list
+        code_unlock, out_unlock = kpi_log_parser.record_kpi(local_kpi_file=collect_kpi,
+                                                            kpi_name=HostUnlock.NAME.format(host_type), host=None,
+                                                            log_path=HostUnlock.LOG_PATH,
+                                                            end_pattern=HostUnlock.END[host_type].format(host),
+                                                            init_time=init_time,
+                                                            start_pattern=HostUnlock.START.format(host),
+                                                            start_path=HostUnlock.START_PATH)
+
+        assert code_lock == 0, 'Failed to collect kpi for host-lock {}. Error: \n'.format(host, out_lock)
+        assert code_unlock == 0, 'Failed to collect kpi for host-unlock {}. Error: \n'.format(host, out_lock)

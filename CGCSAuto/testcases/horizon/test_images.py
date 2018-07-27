@@ -4,22 +4,24 @@ from utils.horizon.pages.admin.compute import imagespage as admin_imagespage
 from utils.horizon.pages.project.compute import instancespage
 from pytest import fixture
 from utils.horizon import helper
+from testfixtures.horizon import tenant_home_pg, driver, admin_home_pg
 from utils.tis_log import LOG
+from consts import horizon
 
 
-class TestImagesBasic(helper.AdminTestCase):
+class TestImagesBasic:
 
     IMAGE_NAME = None
 
     @fixture(scope='function')
-    def images_pg(self, home_pg, request):
+    def images_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Images')
         self.IMAGE_NAME = helper.gen_resource_name('image')
-        images_pg = imagespage.ImagesPage(home_pg.driver)
+        images_pg = imagespage.ImagesPage(admin_home_pg.driver)
         images_pg.go_to_target_page()
 
         def teardown():
-            LOG.fixture_step('Back to Groups page')
+            LOG.fixture_step('Back to Images page')
             images_pg.go_to_target_page()
 
         request.addfinalizer(teardown)
@@ -54,12 +56,13 @@ class TestImagesBasic(helper.AdminTestCase):
             assert images_pg.is_image_active(self.IMAGE_NAME)
 
             LOG.tc_step('Delete image {}.'.format(self.IMAGE_NAME))
-            images_pg.delete_image(self.IMAGE_NAME)
+            images_pg.delete_image_by_row(self.IMAGE_NAME)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
             assert not images_pg.find_message_and_dismiss(messages.ERROR)
 
             LOG.tc_step('Verify the image does not appear in the table after deletion')
             assert not images_pg.is_image_present(self.IMAGE_NAME)
+            horizon.test_result = True
 
     def test_update_image_metadata(self, images_pg):
         """
@@ -96,6 +99,7 @@ class TestImagesBasic(helper.AdminTestCase):
 
             LOG.tc_step('Delete the image {}.'.format(self.IMAGE_NAME))
             images_pg.delete_image(self.IMAGE_NAME)
+            horizon.test_result = True
 
     def test_remove_protected_image(self, images_pg):
         """
@@ -150,6 +154,7 @@ class TestImagesBasic(helper.AdminTestCase):
 
             LOG.tc_step('Verify the image does not appear in the table after deletion')
             assert not images_pg.is_image_present(self.IMAGE_NAME)
+            horizon.test_result = True
 
     def test_edit_image_description_and_name(self, images_pg):
         """
@@ -198,6 +203,7 @@ class TestImagesBasic(helper.AdminTestCase):
             images_pg.go_to_target_page()
             images_pg.delete_image(new_image_name)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
     def test_create_volume_from_image(self, images_pg):
         """
@@ -249,6 +255,7 @@ class TestImagesBasic(helper.AdminTestCase):
             images_pg.go_to_target_page()
             images_pg.delete_image(self.IMAGE_NAME)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
     def test_filter_images(self, images_pg):
         """
@@ -296,17 +303,18 @@ class TestImagesBasic(helper.AdminTestCase):
             LOG.tc_step('Delete image {}.'.format(self.IMAGE_NAME))
             admin_images_pg.delete_image(self.IMAGE_NAME)
             assert admin_images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
 
-class TestImagesAdvanced(helper.TenantTestCase):
+class TestImagesAdvanced:
 
     IMAGE_NAME = None
 
     @fixture(scope='function')
-    def images_pg(self, home_pg, request):
+    def images_pg(self, tenant_home_pg, request):
         LOG.fixture_step('Go to Project > Compute > Images')
         self.IMAGE_NAME = helper.gen_resource_name('image')
-        images_pg = imagespage.ImagesPage(home_pg.driver)
+        images_pg = imagespage.ImagesPage(tenant_home_pg.driver)
         images_pg.go_to_target_page()
 
         def teardown():
@@ -346,7 +354,9 @@ class TestImagesAdvanced(helper.TenantTestCase):
 
             instance_name = helper.gen_resource_name('image_instance')
             LOG.tc_step('Launch new instance {} from image.'.format(instance_name))
-            images_pg.launch_instance_from_image(self.IMAGE_NAME, instance_name)
+            images_pg.launch_instance_from_image(self.IMAGE_NAME, instance_name,
+                                                 flavor_name='small', network_names=['tenant1-mgmt-net'],
+                                                 create_new_volume=False)
             instance_pg = instancespage.InstancesPage(images_pg.driver)
             instance_pg.go_to_target_page()
             assert not instance_pg.find_message_and_dismiss(messages.ERROR)
@@ -355,7 +365,7 @@ class TestImagesAdvanced(helper.TenantTestCase):
             assert instance_pg.is_instance_active(instance_name)
 
             LOG.tc_step('Delete instance {}.'.format(instance_name))
-            instance_pg.delete_instance(instance_name)
+            instance_pg.delete_instance_by_row(instance_name)
             assert not instance_pg.find_message_and_dismiss(messages.ERROR)
             assert instance_pg.is_instance_deleted(instance_name)
 
@@ -363,6 +373,7 @@ class TestImagesAdvanced(helper.TenantTestCase):
             images_pg.go_to_target_page()
             images_pg.delete_image(self.IMAGE_NAME)
             assert images_pg.find_message_and_dismiss(messages.SUCCESS)
+            horizon.test_result = True
 
 
 

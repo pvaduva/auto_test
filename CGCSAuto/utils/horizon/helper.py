@@ -1,64 +1,13 @@
-from selenium import webdriver
-from utils.horizon.pages import loginpage
-from consts import horizon
-from pytest import fixture
 import contextlib
 import tempfile
 import os
 import time
+
+from selenium import webdriver
+from pyvirtualdisplay import Display
+
+from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
-
-
-driver0 = webdriver.Firefox()
-driver0.maximize_window()
-
-
-class Browser:
-    @fixture(scope="session")
-    def driver(self, request):
-        driver = driver0
-
-        def teardown():
-            driver.quit()
-        request.addfinalizer(teardown)
-
-        return driver
-
-
-class AdminTestCase(Browser):
-
-    @fixture(scope='class')
-    def home_pg(self, driver, request):
-        LOG.fixture_step('Login as Admin')
-        login_pg = loginpage.LoginPage(driver)
-        login_pg.go_to_target_page()
-        home_pg = login_pg.login(horizon.ADMIN_USERNAME,
-                                 horizon.ADMIN_PASSWORD)
-
-        def teardown():
-            LOG.fixture_step('Logout')
-            home_pg.log_out()
-        request.addfinalizer(teardown)
-
-        return home_pg
-
-
-class TenantTestCase(Browser):
-
-    @fixture(scope='class')
-    def home_pg(self, driver, request):
-        LOG.fixture_step('Login as Tenant')
-        login_pg = loginpage.LoginPage(driver)
-        login_pg.go_to_target_page()
-        home_pg = login_pg.login(horizon.TENANT_USERNAME,
-                                 horizon.TENANT_PASSWORD)
-
-        def teardown():
-            LOG.fixture_step('Logout')
-            home_pg.log_out()
-        request.addfinalizer(teardown)
-
-        return home_pg
 
 
 @contextlib.contextmanager
@@ -91,3 +40,47 @@ def gen_resource_name(resource="", timestamp=True):
         tstamp = time.strftime("%d-%m-%H-%M-%S")
         fields.append(tstamp)
     return "_".join(fields)
+
+
+class HorizonDriver:
+    driver_info = []
+
+    @classmethod
+    def get_driver(cls):
+        if cls.driver_info:
+            return cls.driver_info[0][0]
+
+        LOG.info("Setting Firefox download preferences")
+        profile = webdriver.FirefoxProfile()
+        # Change default download directory to automation logs dir
+        # 2 - download to custom folder
+        horizon_dir = ProjVar.get_var('LOG_DIR') + '/horizon'
+        os.makedirs(horizon_dir, exist_ok=True)
+        profile.set_preference("browser.download.folderList", 2)
+        profile.set_preference("browser.download.manager.showWhenStarting", False)
+        profile.set_preference("browser.download.dir", horizon_dir)
+        profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/plain,application/x-shellscript")
+        # profile.update_preferences()
+        display = None
+        try:
+            display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
+            display.start()
+        except:
+            pass
+        driver_ = webdriver.Firefox(firefox_profile=profile)
+        # driver_.maximize_window()
+        cls.driver_info.append((driver_, display))
+        LOG.info("Web driver created with download preference set")
+        return driver_
+
+    @classmethod
+    def quit_driver(cls, *driver_display):
+        if cls.driver_info:
+            driver_, display_ = cls.driver_info[0]
+            driver_.quit()
+            if display_:
+                display_.stop()
+            cls.driver_info = []
+            profile = webdriver.FirefoxProfile()
+            profile.set_preference("browser.download.folderList", 1)
+            LOG.info("Quit web driver and reset Firefox download folder to default")

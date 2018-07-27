@@ -3,14 +3,16 @@ from utils.horizon.pages.identity import userspage
 from pytest import fixture
 from utils.horizon import helper
 from utils.tis_log import LOG
+from testfixtures.horizon import admin_home_pg, driver
+from consts import horizon
 
 
-class TestUser(helper.AdminTestCase):
+class TestUser:
 
     @fixture(scope='function')
-    def users_pg(self, home_pg, request):
+    def users_pg(self, admin_home_pg, request):
         LOG.fixture_step('Go to Identity > Users')
-        users_pg = userspage.UsersPage(home_pg.driver)
+        users_pg = userspage.UsersPage(admin_home_pg.driver)
         users_pg.go_to_target_page()
 
         def teardown():
@@ -58,4 +60,5 @@ class TestUser(helper.AdminTestCase):
 
         LOG.tc_step('Verify the user does not appear in the table after deletion')
         assert not users_pg.is_user_present(self.USER_NAME)
+        horizon.test_result = True
 

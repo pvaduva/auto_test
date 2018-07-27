@@ -11,10 +11,7 @@ from time import sleep
 class VolumesTable(tables.TableRegion):
     name = 'volumes'
 
-    # This form is applicable for volume creation from image only.
-    # Volume creation from volume requires additional 'volume_source' field
-    # which is available only in case at least one volume is already present.
-    CREATE_VOLUME_FROM_IMAGE_FORM_FIELDS = (
+    CREATE_VOLUME_FORM_FIELDS = (
         "name", "description", "volume_source_type", "image_source", "volume_source",
         "type", "size", "availability_zone")
 
@@ -26,17 +23,23 @@ class VolumesTable(tables.TableRegion):
 
     UPLOAD_VOLUME_FORM_FIELDS = ("image_name", "disk_format")
 
+    CHANGE_VOLUME_TYPE_FORM_FIELDS = ("name", "volume_type", "migration_policy")
+
     @tables.bind_table_action('create')
     def create_volume(self, create_button):
         create_button.click()
         self.wait_till_spinner_disappears()
         return forms.FormRegion(
-            self.driver, field_mappings=self.CREATE_VOLUME_FROM_IMAGE_FORM_FIELDS)
+            self.driver, field_mappings=self.CREATE_VOLUME_FORM_FIELDS)
 
     @tables.bind_table_action('delete')
     def delete_volume(self, delete_button):
         delete_button.click()
-        self.wait_till_spinner_disappears()
+        return forms.BaseFormRegion(self.driver)
+
+    @tables.bind_row_action('delete')
+    def delete_volume_by_row(self, delete_button, row):
+        delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
     @tables.bind_row_action('edit')
@@ -45,6 +48,13 @@ class VolumesTable(tables.TableRegion):
         self.wait_till_spinner_disappears()
         return forms.FormRegion(self.driver,
                                 field_mappings=self.EDIT_VOLUME_FORM_FIELDS)
+
+    @tables.bind_row_action('retype')
+    def change_volume_type(self, change_button, row):
+        change_button.click()
+        self.wait_till_spinner_disappears()
+        return forms.FormRegion(self.driver,
+                                field_mappings=self.CHANGE_VOLUME_TYPE_FORM_FIELDS)
 
     @tables.bind_row_action('snapshots')
     def create_snapshot(self, create_snapshot_button, row):
@@ -62,13 +72,13 @@ class VolumesTable(tables.TableRegion):
                                 field_mappings=self.EXTEND_VOLUME_FORM_FIELDS)
 
     @tables.bind_row_action('launch_volume_ng')
-    def launch_volume_as_instance(self, launch_volume_button, row):
+    def launch_as_instance(self, launch_volume_button, row):
         launch_volume_button.click()
         self.wait_till_spinner_disappears()
         return instancespage.LaunchInstanceForm(self.driver)
 
     @tables.bind_row_action('upload_to_image')
-    def upload_volume_to_image(self, upload_button, row):
+    def upload_to_image(self, upload_button, row):
         upload_button.click()
         self.wait_till_spinner_disappears()
         return forms.FormRegion(self.driver,
@@ -85,16 +95,6 @@ class VolumesPage(basepage.BasePage):
     PARTIAL_URL = 'project/volumes'
     VOLUMES_TABLE_NAME_COLUMN = 'Name'
     VOLUMES_TABLE_STATUS_COLUMN = 'Status'
-    VOLUMES_TABLE_TYPE_COLUMN = 'Type'
-    VOLUMES_TABLE_SIZE_COLUMN = 'Size'
-    VOLUMES_TABLE_BOOTABLE_COLUMN = 'Bootable'
-    VOLUMES_TABLE_ATTACHED_COLUMN = 'Attached To'
-    IMAGE_NAME = 'tis-centos-guest (1.5 GiB)'
-    VOLUME_SIZE = '2'
-
-    def __init__(self, driver):
-        super(VolumesPage, self).__init__(driver)
-        self._page_title = "Volumes"
 
     def _get_row_with_volume_name(self, name):
         return self.volumes_table.get_row(
@@ -109,10 +109,8 @@ class VolumesPage(basepage.BasePage):
         return VolumesTable(self.driver)
 
     def create_volume(self, volume_name, description=None,
-                      volume_source_type=None,
-                      volume_size=2,
-                      source_name=None
-                      ):
+                      volume_source_type=None, source_name=None,
+                      type=None, volume_size=None, availability_zone=None):
         volume_form = self.volumes_table.create_volume()
         volume_form.name.text = volume_name
         if description is not None:
@@ -121,9 +119,14 @@ class VolumesPage(basepage.BasePage):
             volume_form.volume_source_type.text = volume_source_type
             if volume_source_type == 'Image':
                 volume_form.image_source.text = source_name
+                if type is not None:
+                    volume_form.type.text = type
             if volume_source_type == 'Volume':
                 volume_form.volume_source.text = source_name
-        volume_form.size.value = volume_size
+        if volume_size is not None:
+            volume_form.size.value = volume_size
+        if availability_zone is not None:
+            volume_form.availability_zone.text = availability_zone
         volume_form.submit()
 
     def delete_volume(self, name):
@@ -132,22 +135,27 @@ class VolumesPage(basepage.BasePage):
         confirm_delete_volumes_form = self.volumes_table.delete_volume()
         confirm_delete_volumes_form.submit()
 
+    def delete_volume_by_row(self, name):
+        row = self._get_row_with_volume_name(name)
+        confirm_delete_volumes_form = self.volumes_table.delete_volume_by_row(row)
+        confirm_delete_volumes_form.submit()
+
     def delete_volumes(self, volumes_names):
         for volume_name in volumes_names:
             self._get_row_with_volume_name(volume_name).mark()
         confirm_delete_volumes_form = self.volumes_table.delete_volume()
         confirm_delete_volumes_form.submit()
 
-    def edit_volume(self, name, new_name=None, description=None, bootable=True):
+    def edit_volume(self, name, new_name=None, description=None, bootable=None):
         row = self._get_row_with_volume_name(name)
         volume_edit_form = self.volumes_table.edit_volume(row)
-        if new_name:
+        if new_name is not None:
             volume_edit_form.name.text = new_name
-        if description:
+        if description is not None:
             volume_edit_form.description.text = description
-        if bootable:
+        if bootable is True:
             volume_edit_form.bootable.mark()
-        elif not bootable:
+        if bootable is False:
             volume_edit_form.bootable.unmark()
         volume_edit_form.submit()
 
@@ -169,11 +177,11 @@ class VolumesPage(basepage.BasePage):
         return self.volumes_table.are_rows_deleted(
             lambda: self._get_rows_with_volumes_names(volumes_names))
 
-    def create_volume_snapshot(self, volume, snapshot, description='test'):
+    def create_volume_snapshot(self, volume_name, snapshot_name, description=None):
         from utils.horizon.pages.project.volumes.shotspage import VolumesnapshotsPage
-        row = self._get_row_with_volume_name(volume)
+        row = self._get_row_with_volume_name(volume_name)
         snapshot_form = self.volumes_table.create_snapshot(row)
-        snapshot_form.name.text = snapshot
+        snapshot_form.name.text = snapshot_name
         if description is not None:
             snapshot_form.description.text = description
         snapshot_form.submit()
@@ -185,54 +193,71 @@ class VolumesPage(basepage.BasePage):
         extend_volume_form.new_size.value = new_size
         extend_volume_form.submit()
 
-    def upload_volume_to_image(self, name, image_name, disk_format):
-        row = self._get_row_with_volume_name(name)
-        upload_volume_form = self.volumes_table.upload_volume_to_image(row)
+    def upload_to_image(self, volume_name, image_name, disk_format=None):
+        row = self._get_row_with_volume_name(volume_name)
+        upload_volume_form = self.volumes_table.upload_to_image(row)
         upload_volume_form.image_name.text = image_name
-        upload_volume_form.disk_format.value = disk_format
+        if disk_format is not None:
+            upload_volume_form.disk_format.value = disk_format
         upload_volume_form.submit()
 
-    def get_size(self, name):
-        row = self._get_row_with_volume_name(name)
-        size = str(row.cells[self.VOLUMES_TABLE_SIZE_COLUMN].text)
-        return int(size[:-3])
+    def change_volume_type(self, volume_name, type=None, migration_policy=None):
+        row = self._get_row_with_volume_name(volume_name)
+        change_volume_type_form = self.volumes_table.change_volume_type(row)
+        if type is not None:
+            change_volume_type_form.type.text = type
+        if migration_policy is not None:
+            change_volume_type_form.migration_policy.text = migration_policy
+        change_volume_type_form.submit()
 
-    def launch_instance(self, name, instance_name, available_zone=None):
+    def launch_as_instance(self, name, instance_name, availability_zone=None, count=None,
+                           boot_source_type=None, create_new_volume=None,
+                           delete_volume_on_instance_delete=None, volume_size=None,
+                           source_name=None, flavor_name=None, network_names=None):
         row = self._get_row_with_volume_name(name)
-        instance_form = self.volumes_table.launch_volume_as_instance(row)
-        instance_form.FIELDS['name'].text = instance_name
-        # instance_form.FIELDS['availability-zone'].value = 'string:nova'
+        instance_form = self.volumes_table.launch_as_instance(row)
+        instance_form.fields['name'].text = instance_name
+        if availability_zone is not None:
+            instance_form.fields['availability-zone'].text = availability_zone
+        if count is not None:
+            instance_form.fields['instance-count'].value = count
         instance_form.switch_to(1)
-        # instance_form.FIELDS['Delete Volume on Instance Delete'].click_yes()
+        if boot_source_type is not None:
+            instance_form.fields['boot-source-type'].text = boot_source_type
+        sleep(1)
+        instance_form._init_tab_fields(1)
+        if create_new_volume is True:
+            instance_form.fields['Create New Volume'].click_yes()
+            if delete_volume_on_instance_delete is True:
+                instance_form.fields['Delete Volume on Instance Delete'].click_yes()
+            if delete_volume_on_instance_delete is False:
+                instance_form.fields['Delete Volume on Instance Delete'].click_no()
+        if create_new_volume is False:
+            instance_form.fields['Create New Volume'].click_no()
+        if volume_size is not None:
+            instance_form.fields['volume-size'].value = volume_size
+        if source_name is not None:
+            instance_form.addelement('Name', source_name)
         instance_form.switch_to(2)
-        instance_form.addelement('Name', 'small')
+        instance_form.addelement('Name', flavor_name)
         instance_form.switch_to(3)
-        instance_form.addelement('Network', 'tenant1-net0')
+        instance_form.addelements('Network', network_names)
         instance_form.submit()
-
-    def get_attach_instance(self, name):
-        row = self._get_row_with_volume_name(name)
-        attach_instance = row.cells[self.VOLUMES_TABLE_ATTACHED_COLUMN].text
-        return attach_instance
 
     def attach_volume_to_instance(self, volume, instance):
         row = self._get_row_with_volume_name(volume)
         attach_form = self.volumes_table.manage_attachments(row)
         attach_form.attach_instance(instance)
 
-    def is_volume_attached_to_instance(self, volume, instance):
-        row = self._get_row_with_volume_name(volume)
-        return instance in row.cells[self.VOLUMES_TABLE_ATTACHED_COLUMN].text
-
-    def is_volume_bootable(self, volume):
-        row = self._get_row_with_volume_name(volume)
-        return row.cells[self.VOLUMES_TABLE_BOOTABLE_COLUMN].text == 'Yes'
-
     def detach_volume_from_instance(self, volume, instance):
         row = self._get_row_with_volume_name(volume)
         attachment_form = self.volumes_table.manage_attachments(row)
         detach_form = attachment_form.detach(volume, instance)
         detach_form.submit()
+
+    def get_volume_info(self, volume_name, header):
+        row = self._get_row_with_volume_name(volume_name)
+        return row.cells[header].text
 
 
 class VolumeAttachForm(forms.BaseFormRegion):
