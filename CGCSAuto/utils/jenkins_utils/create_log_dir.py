@@ -4,7 +4,7 @@ from optparse import OptionParser
 import setups
 
 
-def create_log_dir(lab, logs_dir=None, sub_dir=None):
+def create_log_dir(lab, logs_dir=None, sub_dir=None, mkdir=True):
     # compute directory for all logs based on resultlog arg, lab, and timestamp on local machine
     logs_dir = logs_dir.strip() if logs_dir else os.path.expanduser("~")
     automation_logs = 'AUTOMATION_LOGS'
@@ -16,7 +16,8 @@ def create_log_dir(lab, logs_dir=None, sub_dir=None):
     lab = lab.lower().replace('-', '_')
     labname = setups.get_lab_dict(lab).get('short_name').replace('-', '_').lower().strip()
     session_dir = os.path.join(logs_dir, automation_logs, labname, strftime('%Y%m%d%H%M'))
-    os.makedirs(session_dir, exist_ok=True)
+    if mkdir:
+        os.makedirs(session_dir, exist_ok=True)
 
     return session_dir
 
@@ -41,10 +42,11 @@ if __name__ == '__main__':
                       help='home directory for automation logs. e.g., /sandbox')
     parser.add_option('--subdir', '--sub-dir', '--sub_dir', action='store', type='string', dest='sub_dir',
                       help='Sub-folder under AUTOMATION_LOGS dir, such as refstack')
-
+    parser.add_option('--nomkdir', '--no-mkdir', action='store_true', dest='no_mkdir', help="Don't mkdir")
     options, args = parser.parse_args()
     auto_home = options.logs_dir
     sub_dir = options.sub_dir
+    no_mkdir = options.no_mkdir
 
-    log_dir = create_log_dir(lab=args[0], logs_dir=auto_home, sub_dir=sub_dir)
+    log_dir = create_log_dir(lab=args[0], logs_dir=auto_home, sub_dir=sub_dir, mkdir=(not no_mkdir))
     print(log_dir)
