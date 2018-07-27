@@ -824,7 +824,9 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  iso_path=iso_path,
                                  stop=stop,
                                  drop_num=drop,
-                                 patch_dir=patch_dir
+                                 patch_dir=patch_dir,
+                                 multi_region=multi_region_lab,
+                                 dist_cloud=dist_cloud_lab
                                  )
 
 
