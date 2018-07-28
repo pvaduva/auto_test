@@ -796,13 +796,8 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         lab_to_install['local_user'] = username
         lab_to_install['local_password'] = password
 
-    if resume:
-        if isinstance(resume, str) and resume.isdigit():
-            resume = int(resume)
-        else:
-            resume = fresh_install_helper.get_resume_step(lab_to_install)
-    if stop is not None:
-        stop = int(stop)
+    if resume is True:
+        resume = fresh_install_helper.get_resume_step(lab_to_install)
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
                                  skips=skip,
@@ -1270,6 +1265,7 @@ def setup_remote_cli_client():
     return client
 
 
+# TODO: handle ip's as hostnames
 def initialize_server(server_hostname, prompt=None):
     if prompt is None:
         prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', server_hostname)

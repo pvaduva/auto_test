@@ -35,6 +35,7 @@ def install_setup():
     file_server = InstallVars.get_install_var("FILES_SERVER")
     iso_host = InstallVars.get_install_var("ISO_HOST")
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
+    guest_server = InstallVars.get_install_var("GUEST_SERVER")
 
     bld_server = initialize_server(build_server)
     if file_server == bld_server.name:
@@ -49,13 +50,19 @@ def install_setup():
         patch_server = bld_server
     else:
         patch_server = initialize_server(patch_server)
+    if guest_server == bld_server.name:
+        guest_server_obj = bld_server
+    else:
+        guest_server_obj = initialize_server(guest_server)
+
 
     fresh_install_helper.set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 
     servers = {
                "build": bld_server,
                "lab_files": file_server_obj,
-               "patches": patch_server
+               "patches": patch_server,
+               "guest": guest_server_obj
                }
 
     directories = {"build": build_dir,
@@ -83,7 +90,7 @@ def install_setup():
                       "active_controller": active_con}
 
     LOG.info("Setting up {} boot".format(boot["boot_type"]))
-    if not InstallVars.get_install_var("RESUME") and "0" not in skip_list:
+    if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
 
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj)
@@ -125,7 +132,7 @@ def pytest_runtest_teardown(item):
             controller0_node.telnet_conn.login()
         rc, output = controller0_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)
         LOG.info(output)
-    except:
+    except Exception:
         pass
     LOG.fixture_step("unreserving hosts")
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
@@ -134,12 +141,10 @@ def pytest_runtest_teardown(item):
     for install_testcase in install_testcases:
         if install_testcase in item.nodeid:
             LOG.fixture_step("Writing install step to {}".format(progress_file_path))
-            file_exists = os.path.isfile(progress_file_path)
-            if file_exists:
-                with open(progress_file_path, "w") as progress_file:
-                    progress_file.write(item.nodeid + "\n")
-                    progress_file.write("End step: {}".format(str(final_step)))
-                    progress_file.close()
-                os.chmod(progress_file_path, 0o755)
-                break
+            with open(progress_file_path, "w+") as progress_file:
+                progress_file.write(item.nodeid + "\n")
+                progress_file.write("End step: {}".format(str(final_step)))
+                progress_file.close()
+            os.chmod(progress_file_path, 0o755)
+            break
     LOG.info("Fresh Install Completed")

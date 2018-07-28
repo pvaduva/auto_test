@@ -27,64 +27,40 @@ def test_simplex_install(install_setup):
          """
     lab = install_setup["lab"]
     controller0_node = lab["controller-0"]
-    skips = install_setup["skips"]
-    skip_labsetup = "setup" in skips
     final_step = install_setup["control"]["stop"]
     patch_dir = install_setup["directories"]["patches"]
     patch_server = install_setup["servers"]["patches"]
+    guest_server = install_setup["servers"]["guest"]
 
-    if final_step <= 0:
+    fresh_install_helper.set_final_step(final_step)
+    if final_step == '0' or final_step == "setup":
         skip("stopping at install step: {}".format(LOG.test_step))
 
-    LOG.tc_step("Install Controller")
-    if fresh_install_helper.do_step():
-        fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
-                                                patch_server_conn=patch_server.ssh_conn)
-    if LOG.test_step == final_step:
-        skip("stopping at install step: {}".format(LOG.test_step))
-
+    fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
+                                            patch_server_conn=patch_server.ssh_conn)
     controller0_node.telnet_conn.login()
+    controller0_node.telnet_conn.flush()
     fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
-    LOG.tc_step("Download lab files")
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
-    if fresh_install_helper.do_step():
-        fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,
-                                                load_path=InstallVars.get_install_var("TIS_BUILD_DIR"),
-                                                license_path=InstallVars.get_install_var("LICENSE"),
-                                                guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
-    if LOG.test_step == final_step:
-        skip("stopping at install step: {}".format(LOG.test_step))
+    fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,
+                                            guest_server=guest_server,
+                                            load_path=InstallVars.get_install_var("TIS_BUILD_DIR"),
+                                            license_path=InstallVars.get_install_var("LICENSE"),
+                                            guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
-    LOG.tc_step("Configure controller")
-    if fresh_install_helper.do_step():
-        fresh_install_helper.configure_controller(controller0_node)
-    if LOG.test_step == final_step:
-        skip("stopping at install step: {}".format(LOG.test_step))
-
+    fresh_install_helper.configure_controller(controller0_node)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    LOG.tc_step("Run lab setup")
-    if fresh_install_helper.do_step() and not skip_labsetup:
-        rc, msg = install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-        assert rc == 0, msg
-    if LOG.test_step == final_step:
-        skip("stopping at install step: {}".format(LOG.test_step))
+    fresh_install_helper.run_lab_setup(controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
         setup_tis_ssh(lab)
     host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
 
-    LOG.tc_step("Check heat resources")
-    if fresh_install_helper.do_step():
-        install_helper.setup_heat(con_ssh=controller0_node.ssh_conn)
-    if LOG.test_step == final_step:
-        skip("stopping at install step: {}".format(LOG.test_step))
+    fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
 
-    LOG.tc_step("Attempt to run post install scripts")
-    if fresh_install_helper.do_step():
-        rc, msg = install_helper.post_install()
-        LOG.info(msg)
-        assert rc >= 0, msg
+    fresh_install_helper.attempt_to_run_post_install_scripts()
+    fresh_install_helper.reset_global_vars()

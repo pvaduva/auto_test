@@ -131,6 +131,16 @@ class InstallVars:
         if patch_dir and patch_dir.find(":/") != -1:
             patch_server = patch_dir[:iso_path.find(":")]
             patch_dir = patch_dir[iso_path.find("/"):]
+        guest_server = __build_server
+        if guest_image:
+            if guest_image.find(":/") != -1:
+                guest_server = guest_image[:guest_image.find(":")]
+                guest_image_path = guest_image[guest_image.find("/"):]
+            else:
+                guest_image_path = guest_image
+        else:
+            guest_image_path = BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop_num), BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+
 
         cls.__var_dict = {
             'LAB': lab,
@@ -163,8 +173,8 @@ class InstallVars:
 
             # Generic
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
-            'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop_num),
-                                                                                                 BuildServerPath.DEFAULT_GUEST_IMAGE_PATH),
+            'GUEST_IMAGE': guest_image_path,
+            'GUEST_SERVER': guest_server,
             'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
             'OUT_PUT_DIR': out_put_dir,
             'BUILD_ID': None,

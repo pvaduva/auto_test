@@ -491,7 +491,7 @@ def pytest_addoption(parser):
     # Install
     parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
                      help=resumeinstall_help, const=True, nargs='?', default=False)
-    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=99)
+    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default='99')
     parser.addoption('--skip', dest='skiplist', action='store', nargs='*', help=skip_help)
     parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
     parser.addoption('--boot', dest='boot_list', action='store', default='pxe', help=boot_help)
