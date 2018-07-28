@@ -48,8 +48,7 @@ class Labs:
         'controller_nodes': [21786, 21788],
         'compute_nodes': [21789, 21791],
         'storage_nodes': [21790, 21787],
-        'ixia_ports': [{'port': (3, 3), 'range': (632, 663)}, {'port': (3, 4), 'range': (632, 663)},
-                       {'port': (3, 5), 'range': (664, 695)}, {'port': (3, 6), 'range': (664, 695)}],
+        'ixia_ports': [{'port': (3, 3), 'range': (632, 663)}, {'port': (3, 4), 'range': (664, 695)}],
     }
 
     IP_14_17 = {
@@ -71,7 +70,7 @@ class Labs:
         'controller-1 ip': '128.224.150.169',
         'controller_nodes': [22354, 22357],
         'compute_nodes': [22431, 22432, 22433, 22434],
-        'ixia_ports': [{'port': (2, 5), 'range': (1160, 1209)}, {'port': (2, 6), 'range': (1210, 1259)}],
+        'ixia_ports': [{'port': (2, 5), 'range': (1210, 1259)}, {'port': (2, 6), 'range': (1260, 1309)}],
     }
 
     IP_20_27 = {
@@ -106,7 +105,7 @@ class Labs:
         'controller_nodes': [21750, 23964],
         'system_type': 'CPE',
         'system_mode': 'duplex',
-        'ixia_ports': [{'port': (6, 1), 'range': (1952, 2051)}, {'port': (6, 2), 'range': (1952, 2051)}],
+        'ixia_ports': [{'port': (6, 1), 'range': (1952, 2001)}, {'port': (6, 2), 'range': (2002, 2051)}],
     }
 
     IP_33_36 = {
@@ -117,7 +116,7 @@ class Labs:
         'controller-1 ip': '128.224.151.148',
         'controller_nodes': [20509, 20550],
         'compute_nodes': [21720, 21721],
-        'ixia_ports': [{'port': (6, 3), 'range': (2052, 2151)}, {'port': (6, 4), 'range': (2052, 2151)}],
+        'ixia_ports': [{'port': (6, 3), 'range': (2052, 2101)}, {'port': (6, 4), 'range': (2102, 2151)}],
     }
 
     IP_37_40 = {
@@ -140,7 +139,7 @@ class Labs:
         'controller_nodes': [22715, 22716],
         'compute_nodes': [22719, 22720, 23915, 22722],
         'storage_nodes': [23954, 23955, 23916, 22717, 22718, 22721],
-        'ixia_ports': [{'port': (5, 1), 'range': (1852, 1951)}, {'port': (5, 2), 'range': (1852, 1951)}],
+        'ixia_ports': [{'port': (5, 1), 'range': (1852, 1884)}, {'port': (5, 2), 'range': (1918, 1951)}],
     }
 
     PV1 = {
@@ -239,7 +238,7 @@ class Labs:
         'controller_nodes': [46808],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (1, 1), 'range': (600, 649)}, {'port': (1, 2), 'range': (650, 699)}],
+        'ixia_ports': [{'port': (1, 1), 'range': (600, 633)}, {'port': (1, 2), 'range': (667, 699)}],
     }
 
     SM_2 = {
@@ -250,7 +249,7 @@ class Labs:
         'controller_nodes': [23907],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (1, 3), 'range': (700, 749)}, {'port': (1, 4), 'range': (750, 799)}],
+        'ixia_ports': [{'port': (1, 3), 'range': (700, 733)}, {'port': (1, 4), 'range': (767, 799)}],
     }
 
     SM_3 = {
@@ -261,7 +260,7 @@ class Labs:
         'controller_nodes': [23514],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (6, 9), 'range': (600, 699)}, {'port': (6, 10), 'range': (700, 749)}],
+        'ixia_ports': [{'port': (6, 9), 'range': (600, 649)}, {'port': (6, 10), 'range': (700, 749)}],
     }
 
     SM_4 = {
@@ -303,7 +302,7 @@ class Labs:
         'controller-1 ip': '128.224.150.70',
         'controller_nodes': [23198, 23199],
         'compute_nodes': [23200, 23201],
-        'ixia_ports': [{'port': (5, 5), 'range': (2252, 2351)}, {'port': (5, 6), 'range': (2252, 2351)}],
+        'ixia_ports': [{'port': (5, 5), 'range': (2252, 2284)}, {'port': (5, 6), 'range': (2318, 2350)}],
     }
 
     WCP_7_12 = {
@@ -316,7 +315,7 @@ class Labs:
         'controller_nodes': [23202, 23203],
         'compute_nodes': [23206, 23207],
         'storage_nodes': [23204, 23205],
-        'ixia_ports': [{'port': (5, 11), 'range': (2352, 2451)}, {'port': (5, 12), 'range': (2352, 2451)}],
+        'ixia_ports': [{'port': (5, 11), 'range': (2352, 2384)}, {'port': (5, 12), 'range': (2418, 2451)}],
     }
 
     WCP_13_14 = {
@@ -336,7 +335,7 @@ class Labs:
         'floating ip': '128.224.150.133',
         'controller-0 ip': '128.224.150.133',
         'controller_nodes': [23213],
-        'ixia_ports': [{'port': (5, 13), 'range': (2453, 2484)}, {'port': (5, 14), 'range': (2419, 2551)}],
+        'ixia_ports': [{'port': (5, 13), 'range': (2452, 2484)}, {'port': (5, 14), 'range': (2518, 2551)}],
     }
 
     WCP_14 = {
@@ -358,7 +357,7 @@ class Labs:
         'controller_nodes': [23215, 23216],
         'compute_nodes': [23219, 23220, 23221, 23222],
         'storage_nodes': [23217, 23218],
-        'ixia_ports': [{'port': (5, 15), 'range': (2552, 2651)}, {'port': (5, 16), 'range': (2552, 2651)}],
+        'ixia_ports': [{'port': (5, 15), 'range': (2552, 2584)}, {'port': (5, 16), 'range': (2618, 2651)}],
     }
 
     WCP_35_60 = {
@@ -385,7 +384,7 @@ class Labs:
         'controller_nodes': [23280, 23281],
         'system_type': 'CPE',
         'system_mode': 'duplex',
-        'ixia_ports': [{'port': (8, 5), 'range': (600, 749)}, {'port': (8, 6), 'range': (600, 749)}],
+        'ixia_ports': [{'port': (8, 5), 'range': (600, 649)}, {'port': (8, 6), 'range': (700, 749)}],
     }
 
     WCP_63_66 = {
@@ -397,7 +396,7 @@ class Labs:
         'controller_nodes': [23282, 23283],
         'compute_nodes': [23284, 23285],
         'tpm_installed': True,
-        'ixia_ports': [{'port': (8, 9), 'range': (750, 899)}, {'port': (8, 10), 'range': (750, 899)}],
+        'ixia_ports': [{'port': (8, 9), 'range': (750, 799)}, {'port': (8, 10), 'range': (850, 899)}],
     }
 
     WCP_67 = {
@@ -409,7 +408,7 @@ class Labs:
         'controller_nodes': [23286],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (8, 1), 'range': (2702, 2751)}, {'port': (8, 2), 'range': (2802, 2851)}],
+        'ixia_ports': [{'port': (8, 1), 'range': (2703, 2752)}, {'port': (8, 2), 'range': (2802, 2851)}],
     }
 
     WCP_68 = {
@@ -541,7 +540,7 @@ class Labs:
         'controller_nodes': [23290],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (6, 11), 'range': (3153, 3201)}, {'port': (6, 12), 'range': (3253, 3301)}],
+        'ixia_ports': [{'port': (6, 11), 'range': (3152, 3201)}, {'port': (6, 12), 'range': (3252, 3301)}],
     }
 
     WCP_113_121 = {
@@ -574,7 +573,7 @@ class Labs:
         'controller_nodes': [62031, 29957],
         'system_type': 'CPE',
         'system_mode': 'duplex',
-        'ixia_ports': [{'port': (8, 7), 'range': (1700, 1849)}, {'port': (8, 8), 'range': (1700, 1849)}],
+        # 'ixia_ports': [{'port': (8, 7), 'range': (1700, 1849)}, {'port': (8, 8), 'range': (1700, 1849)}],
     }
 
     WP_03_07 = {
