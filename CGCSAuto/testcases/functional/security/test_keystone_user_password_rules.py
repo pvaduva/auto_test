@@ -141,12 +141,30 @@ def get_valid_password(user_name=None):
         if len(password) < total_length:
             password += ''.join(random.choice(alphabet) for _ in range(total_length - len(password)+1))
 
-        # password = password.replace('\\', ',')
-        # password = password.replace('`', ':')
-        # password = password.replace('-', '<')
-        # password = password.replace('!', '@')
-        password = re.sub('.{', '{{', password)
-        password = re.sub('.}', '}}', password)
+        # START OF TEMP WORKAROUND FOR CGTS-8504 AND CGTS-9067
+        list_of_chars = list(password)
+
+        if (list_of_chars[0] == '{') or (list_of_chars[0] == '}') or (list_of_chars[0] == '-'):
+            list_of_chars[0] = 'a'
+
+        if (list_of_chars[-1] == '{') or (list_of_chars[-1] == '}'):
+            list_of_chars[-1] = 'a'
+
+        for index, char in enumerate(list_of_chars):
+            next_char = list_of_chars[index + 1] if index != len(list_of_chars) - 1 else ''
+
+            if char == '{':
+                if next_char == '{' or next_char == '}':
+                    list_of_chars[index + 1] = 'a'
+                    list_of_chars[index - 1] = '{'
+                else:
+                    list_of_chars[index - 1] = '{'
+            if char == '}':
+                if next_char != '{':
+                    list_of_chars[index - 1] = '}'
+
+        password = ''.join(list_of_chars)
+        # END OF TEMP WORKAROUND FOR CGTS-8504 AND CGTS-9067
 
         if not is_last_used(password, user_name=user_name) and password not in frequently_used_words:
             break
