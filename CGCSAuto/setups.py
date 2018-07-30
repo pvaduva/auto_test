@@ -938,7 +938,7 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     else:
         raise ValueError("Could not access lab files")
     ssh_conn = install_helper.establish_ssh_connection(conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
-                                                       initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, conf_server))
+                                                       initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, '.*'))
     assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
 
     # check lab configuration for special cases (i.e. distributed cloud or multi region)
@@ -1268,7 +1268,7 @@ def setup_remote_cli_client():
 # TODO: handle ip's as hostnames
 def initialize_server(server_hostname, prompt=None):
     if prompt is None:
-        prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', server_hostname)
+        prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', '.*')
 
     server_conn = SSHClient(server_hostname, user=SvcCgcsAuto.USER,
                             password=SvcCgcsAuto.PASSWORD, initial_prompt=prompt)
