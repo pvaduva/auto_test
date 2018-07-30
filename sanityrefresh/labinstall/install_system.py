@@ -1070,6 +1070,14 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
         log.error(msg)
         wr_exit()._exit(1, msg)
 
+    # Remove patches
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S rm -rf " + WRSROOT_PATCHES_DIR
+    output = node.telnet_conn.exec_cmd(cmd)[1]
+    if find_error_msg(output):
+        msg = "Failed to remove patch directory: " + WRSROOT_PATCHES_DIR
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
     node.telnet_conn.write_line("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
     log.info("Patch application requires a reboot.")
     log.info("Controller0 reboot has started")
@@ -1935,7 +1943,6 @@ def main():
     skip_pxebootcfg = args.skip_pxebootcfg
     config_region = args.config_region
 
-    install_timestr = time.strftime("%Y%m%d-%H%M%S")
     continue_install = args.continue_install
 
     if iso_host and iso_path and not iso_install:
@@ -1953,17 +1960,21 @@ def main():
     if burn_usb or boot_usb:
         skip_feed = True
 
+    install_output_dir = None
     if args.output_dir:
         output_dir = args.output_dir
-
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+        if re.match('.*/\d+/?$', output_dir):
+            install_output_dir = output_dir
     else:
         prefix = re.search("\w+", __file__).group(0) + "."
         suffix = ".logs"
         output_dir = tempfile.mkdtemp(suffix, prefix)
 
-    install_output_dir = os.path.join(output_dir, install_timestr)
+    if not install_output_dir:
+        # create subdir only if not already supplied
+        install_timestr = time.strftime("%Y%m%d-%H%M%S")
+        install_output_dir = os.path.join(output_dir, install_timestr)
+
     os.makedirs(install_output_dir, exist_ok=True)
 
     log_level = args.log_level
