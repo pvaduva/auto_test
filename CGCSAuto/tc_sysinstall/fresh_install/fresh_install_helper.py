@@ -104,7 +104,14 @@ def do_step(step_name=None):
         resume = last_session_step == current_step_num or last_session_step == step_name and not completed_resume_step
     else:
         resume = True
-    do = resume and current_step_num not in skip_list and step_name not in skip_list
+    in_skip_list = False
+    for skip_step in skip_list:
+        if step_name in skip_step:
+            if "lab_setup" in step_name and "lab_setup" in skip_step:
+                in_skip_list = step_name[-1] == skip_step[-1]
+            else:
+                in_skip_list = True
+    do = resume and current_step_num not in skip_list and not in_skip_list
     if 'lab_setup' in step_name:
         global lab_setup_count
         step_name = step_name + '-{}'.format(lab_setup_count)

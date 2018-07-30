@@ -211,7 +211,7 @@ class Prompt:
     PASSWORD_PROMPT = '.*assword\:[ ]?$|assword for .*:[ ]?$'
     LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
-    BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
+    BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.* '
     TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
     TIS_NODE_PROMPT_BASE = '{}\:~\$ '
     ADD_HOST = '.*\(yes/no\).*'
