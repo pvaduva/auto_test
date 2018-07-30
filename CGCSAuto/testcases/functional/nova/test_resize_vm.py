@@ -191,9 +191,12 @@ class TestResizeSameHost:
         vm_helper.resize_vm(vm_id, dest_flavor_id, revert=True, fail_ok=False)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
+        swap_size = swap
         LOG.tc_step("Check files after resize revert")
+        if storage_backing == 'remote' and swap and dest_flavor[2]:
+            swap_size = dest_flavor[2]
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, root=root, ephemeral=ephemeral,
-                                    swap=swap, vm_type=boot_source, vm_action=None, file_paths=file_paths,
+                                    swap=swap_size, vm_type=boot_source, vm_action=None, file_paths=file_paths,
                                     content=content, disks=vm_disks, check_volume_root=True)
 
         prev_host = nova_helper.get_vm_host(vm_id)
