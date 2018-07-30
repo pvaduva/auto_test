@@ -1070,6 +1070,14 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
         log.error(msg)
         wr_exit()._exit(1, msg)
 
+    # Remove patches
+    cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S rm -rf " + WRSROOT_PATCHES_DIR
+    output = node.telnet_conn.exec_cmd(cmd)[1]
+    if find_error_msg(output):
+        msg = "Failed to remove patch directory: " + WRSROOT_PATCHES_DIR
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
     node.telnet_conn.write_line("echo " + WRSROOT_PASSWORD + " | sudo -S reboot")
     log.info("Patch application requires a reboot.")
     log.info("Controller0 reboot has started")
