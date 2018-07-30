@@ -9,7 +9,6 @@ from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars
 
 lab_setup_count = 0
-final_step = '99'
 completed_resume_step = False
 
 
@@ -18,15 +17,6 @@ def set_lab_setup_count(val=0):
     lab_setup_count = val
 
     return lab_setup_count
-
-
-def set_final_step(val=None):
-    global final_step
-    if val is None:
-        val = InstallVars.get_install_var("STOP")
-    final_step = val
-
-    return final_step
 
 
 def set_completed_resume_step(val=False):
@@ -38,10 +28,9 @@ def set_completed_resume_step(val=False):
 
 def reset_global_vars():
     lab_setup_count = set_lab_setup_count(0)
-    final_step = set_final_step('99')
     completed_resume_step = set_completed_resume_step(False)
 
-    return lab_setup_count, final_step, completed_resume_step
+    return lab_setup_count, completed_resume_step
 
 
 def set_preinstall_projvars(build_dir, build_server):
@@ -99,6 +88,10 @@ def do_step(step_name=None):
     skip_list = InstallVars.get_install_var("SKIP")
     current_step_num = str(LOG.test_step)
     last_session_step = InstallVars.get_install_var("RESUME")
+    if 'lab_setup' in step_name:
+        global lab_setup_count
+        step_name = step_name + '-{}'.format(lab_setup_count)
+        lab_setup_count += 1
     # if resume flag is given do_step if it's currently the specified resume step or a step after that point
     if last_session_step:
         resume = last_session_step == current_step_num or last_session_step == step_name and not completed_resume_step
@@ -112,10 +105,6 @@ def do_step(step_name=None):
             else:
                 in_skip_list = True
     do = resume and current_step_num not in skip_list and not in_skip_list
-    if 'lab_setup' in step_name:
-        global lab_setup_count
-        step_name = step_name + '-{}'.format(lab_setup_count)
-        lab_setup_count += 1
     for step_to_skip in skip_list:
         step_to_skip = step_to_skip.lower()
         if step_to_skip in step_name:
@@ -128,7 +117,9 @@ def do_step(step_name=None):
     return do
 
 
-def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None, patch_dir=None, patch_server_conn=None):
+def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None, patch_dir=None,
+                       patch_server_conn=None, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     if usb is None:
@@ -153,7 +144,8 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
 
 
 def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None, lab_files_dir=None,
-                       load_path=None, guest_path=None, license_path=None, lab=None):
+                       load_path=None, guest_path=None, license_path=None, lab=None, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if lab_files_dir is None:
         lab_files_dir = InstallVars.get_install_var('LAB_FILES_DIR')
     if load_path is None or load_path == BuildServerPath.DEFAULT_HOST_BUILD_PATH:
@@ -236,7 +228,8 @@ def set_software_version_var(con_ssh=None, use_telnet=False, con_telnet=None):
     return system_version
 
 
-def configure_controller(controller0_node):
+def configure_controller(controller0_node, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -254,7 +247,8 @@ def configure_controller(controller0_node):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def bulk_add_hosts(lab=None, con_ssh=None):
+def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if not lab:
         lab = InstallVars.get_install_var('LAB')
     if not con_ssh:
@@ -269,7 +263,8 @@ def bulk_add_hosts(lab=None, con_ssh=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def boot_hosts(boot_device_dict=None, host_objects=None):
+def boot_hosts(boot_device_dict=None, host_objects=None, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Boot"
     if host_objects is None:
         lab = InstallVars.get_install_var('LAB')
@@ -311,11 +306,12 @@ def boot_hosts(boot_device_dict=None, host_objects=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         install_helper.boot_hosts(boot_device_dict, nodes=host_objects)
-    if LOG.test_step == final_step or test_step == final_step:
+    if LOG.test_step == InstallVars.get_install_var("STOP") or test_step == InstallVars.get_install_var("STOP"):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def unlock_hosts(hostnames=None, con_ssh=None):
+def unlock_hosts(hostnames=None, con_ssh=None, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Unlock"
     if hostnames is None:
         lab = InstallVars.get_install_var('LAB')
@@ -368,7 +364,8 @@ def unlock_hosts(hostnames=None, con_ssh=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh):
+def run_lab_setup(con_ssh, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -379,7 +376,8 @@ def run_lab_setup(con_ssh):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def check_heat_resources(con_ssh, sys_type=None):
+def check_heat_resources(con_ssh, sys_type=None, final_step=None):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if not sys_type:
         sys_type = ProjVar.get_var('SYS_TYPE')
     test_step = "Check heat resources"

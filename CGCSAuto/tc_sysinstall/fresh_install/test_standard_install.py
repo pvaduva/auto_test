@@ -43,7 +43,6 @@ def test_standard_install(install_setup):
     patch_server = install_setup["servers"]["patches"]
     guest_server = install_setup["servers"]["guest"]
 
-    fresh_install_helper.set_final_step(final_step)
     if final_step == '0' or final_step == "setup":
         skip("stopping at install step: {}".format(LOG.test_step))
 
