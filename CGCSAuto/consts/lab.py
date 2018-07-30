@@ -149,8 +149,8 @@ class Labs:
         'controller-0 ip': '128.224.151.198',
         'controller-1 ip': '128.224.151.199',
         'controller_nodes': [23136, 23138],
-        'compute_nodes': [23135, 23137, 23140, 23143, 23139, 23141, 23142, 23096],
-        'storage_nodes': [23146, 23147],
+        'compute_nodes': [23147, 23146, 23140, 23143, 23139, 23141, 23142, 23096],
+        'storage_nodes': [23135, 23137],
         'tpm_installed': True,
     }
 
