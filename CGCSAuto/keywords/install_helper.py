@@ -11,7 +11,7 @@ from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE
-from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
+from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
@@ -716,25 +716,25 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
-        copy_setup_logs_to_log_dir(con_ssh=con_ssh)
+        scp_logs_to_log_dir([LogPath.LAB_SETUP_PATH, LogPath.HEAT_SETUP_PATH], con_ssh=con_ssh)
         return rc, msg
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
 
 
-def copy_setup_logs_to_log_dir(con_ssh=None, log_dir=None):
+def scp_logs_to_log_dir(log_paths, con_ssh=None, log_dir=None):
+    if isinstance(log_paths, str):
+        log_paths = [log_paths]
     if not log_dir:
         log_dir = ProjVar.get_var('LOG_DIR')
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
-    logs = ['lab_setup.group0.log', 'launch_heat_stacks.log']
 
-    for log in logs:
-        path = WRSROOT_HOME + log
-        log_exists = con_ssh.exec_cmd('test -f {}'.format(path))[0] == 0
+    for log in log_paths:
+        log_exists = con_ssh.exec_cmd('test -f {}'.format(log))[0] == 0
         if log_exists:
             LOG.info("Copying {} to {}".format(log, log_dir))
-            common.scp_to_local(source_path=path, source_ip=con_ssh.host, dest_path=log_dir)
+            common.scp_to_local(source_path=log, source_ip=con_ssh.host, dest_path=log_dir)
 
 
 def launch_vms_post_install():
@@ -3130,10 +3130,11 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
-        con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
+        #con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
         if "failed" in output:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
+            scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_PATH], con_ssh=con_telnet)
             raise exceptions.CLIRejected(err_msg)
         else:
             LOG.info("Controller configured")

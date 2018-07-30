@@ -127,3 +127,9 @@ class TuxlabServerPath:
 
 class IxiaPath:
     CFG_500FPS = "D:/CGCS/IxNetwork/cgcsauto/pair_at_500fps.ixncfg"
+
+
+class LogPath:
+    LAB_SETUP_PATH = '/home/wrsroot/lab_setup.group0.log'
+    HEAT_SETUP_PATH = '/home/wrsroot/launch_heat_stacks.log'
+    CONFIG_CONTROLLER_PATH = '/var/log/puppet/latest/puppet.log'
