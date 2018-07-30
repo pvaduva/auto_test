@@ -2310,6 +2310,8 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         # Reconnect telnet session
         LOG.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
+        LOG.info("Removing patches")
+        remove_patches(lab)
         if boot_usb:
             setup_networking(controller0)
 
@@ -2437,6 +2439,30 @@ def apply_patches(lab, build_server, patch_dir):
 
         LOG.info("Querying patches ... ")
         assert patching_helper.run_patch_cmd("query", con_ssh=con_ssh)[0] == 0, "Failed to query patches"
+
+
+def remove_patches(lab):
+    patch_dir = WRSROOT_HOME + "patches/"
+    controller0_node = lab["controller-0"]
+    if controller0_node.ssh_conn:
+        con_ssh = controller0_node.ssh_conn
+    elif controller0_node.telnet_conn:
+        con_ssh = controller0_node.telnet_conn
+    else:
+        con_ssh = None
+    rc, output = con_ssh.exec_cmd("ls -1 --color=none {}".format(patch_dir))
+    if rc != 0:
+        msg = 'No patch directory'
+        LOG.debug(msg)
+        return 1, msg
+
+    if output is not None:
+        for patch in output.splitlines():
+            rc, output = con_ssh.exec_cmd("rm {}".format(patch_dir + patch))
+            if rc != 0:
+                LOG.debug("Failed to remove {}".format(patch))
+
+    return 0, ''
 
 
 def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
