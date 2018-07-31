@@ -153,6 +153,9 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
     if pool_size == 'default' and pre_swift_check[0]:
         skip("Swift is already provisioned")
 
+    if pool_size == 'fixed_size' and pre_swift_check[0]:
+        skip("Swift is already provisioned and set to non-default pool value")
+
     object_pool_gib = None
     cinder_pool_gib = ceph_backend_info['cinder_pool_gib']
 
