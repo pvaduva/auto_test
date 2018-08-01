@@ -48,8 +48,9 @@ def get_ip_address_str(ip=None):
         return None
 
 
-def create_network(name=None, shared=False, tenant_name=None, network_type=None, segmentation_id=None,
-                   physical_network=None, vlan_transparent=None, fail_ok=False, auth_info=None, con_ssh=None):
+def create_network(name=None, shared=None, tenant_name=None, network_type=None, segmentation_id=None, qos=None,
+                   physical_network=None, vlan_transparent=None, port_security=None, avail_zone=None, external=None,
+                   default=None, tags=None, fail_ok=False, auth_info=None, con_ssh=None):
 
     """
     Create a network for given tenant
@@ -58,14 +59,18 @@ def create_network(name=None, shared=False, tenant_name=None, network_type=None,
         name (str): name of the network
         shared (bool)
         tenant_name: such as tenant1, tenant2.
-        network_type (str): The physical mechanism by which the virtual network is
-                        implemented
-        segmentation_id: w VLAN ID for VLAN networks
+        network_type (str): The physical mechanism by which the virtual network is implemented
+        segmentation_id (None|str): w VLAN ID for VLAN networks
         physical_network (str): Name of the physical network over which the virtual
                         network is implemented
-        vlan_transparent(True/False): Create a VLAN transparent network
+        vlan_transparent(None|bool): Create a VLAN transparent network
+        port_security (None|bool)
+        avail_zone (None|str)
+        external (None|bool)
+        default (None|bool): applicable only if external=True.
+        tags (None|False|str|list|tuple)
         fail_ok (bool):
-        auth_info (dict): run the neutron subnet-create cli using these authorization info
+        auth_info (dict): run 'openstack network create' cli using these authorization info
         con_ssh (SSHClient):
 
     Returns (tuple): (rnt_code (int), net_id (str), message (str))
@@ -74,43 +79,62 @@ def create_network(name=None, shared=False, tenant_name=None, network_type=None,
     if name is None:
         name = common.get_unique_name(name_str='net')
 
-    args = ' ' + name
+    args = name
     if tenant_name is not None:
         tenant_id = keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
-        args += ' --tenant-id ' + format(tenant_id)
+        args += ' --tenant-id ' + tenant_id
 
-    if shared:
-        args += ' --shared'
-    if segmentation_id is not None:
-        args += ' --provider:segmentation_id ' + segmentation_id
-    if network_type is not None:
-        args += ' --provider:network_type ' + network_type
-    if physical_network is not None:
-        args += ' --provider:physical_network ' + physical_network
+    if shared is not None:
+        args += ' --shared' if shared else ' --no-share'
     if vlan_transparent is not None:
-        args += ' vlan-transparent ' + vlan_transparent
+        args += ' --transparent-vlan' if vlan_transparent else ' --no-transparent-vlan'
+    if port_security is not None:
+        args += ' --enable-port-security' if port_security else ' --disable-port-security'
+
+    if external:
+        args += ' --external'
+        if default is not None:
+            args += ' --default' if default else ' --no-default'
+    elif external is False:
+        args += ' --internal'
+
+    if tags is False:
+        args += ' --no-tag'
+    elif tags:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            args += ' --tag ' + tag
+
+    if segmentation_id:
+        args += ' --provider:segmentation_id ' + segmentation_id
+    if network_type:
+        args += ' --provider:network_type ' + network_type
+    if physical_network:
+        args += ' --provider:physical_network ' + physical_network
+    if avail_zone:
+        args += ' --availability-zone-hint ' + avail_zone
+    if qos:
+        args += ' --wrs-tm:qos ' + qos
 
     LOG.info("Creating network: Args: {}".format(args))
-    code, output = cli.neutron('net-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_list=True)
+    code, output = cli.openstack('network create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True)
     if code == 1:
-        return 1, '', output
+        return 1, output
 
     table_ = table_parser.table(output)
-    net_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
+    net_tenant_id = table_parser.get_value_two_col_table(table_, 'project_id')
     net_id = table_parser.get_value_two_col_table(table_, 'id')
 
     expt_tenant_name = tenant_name if tenant_name else common.get_tenant_name(auth_info)
     if net_tenant_id != keystone_helper.get_tenant_ids(expt_tenant_name)[0]:
-        msg = "Subnet {} is not for tenant: {}".format(net_id, expt_tenant_name)
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, net_id, msg
+        msg = "Network {} is not for tenant: {}".format(net_id, expt_tenant_name)
         raise exceptions.NeutronError(msg)
 
     succ_msg = "Network {} is successfully created for tenant {}".format(net_id, expt_tenant_name)
     LOG.info(succ_msg)
-    return 0, net_id, succ_msg
+    return 0, net_id
 
 
 def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gateway=False, dns_servers=None,
@@ -187,7 +211,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
                                rtn_list=True)
 
     if code == 1:
-        return 1, '', output
+        return 1, output
 
     table_ = table_parser.table(output)
     subnet_tenant_id = table_parser.get_value_two_col_table(table_, 'tenant_id')
@@ -203,7 +227,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
 
     succ_msg = "Subnet {} is successfully created for tenant {}".format(subnet_id, expt_tenant_name)
     LOG.info(succ_msg)
-    return 0, subnet_id, succ_msg
+    return 0, subnet_id
 
 
 def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
@@ -1609,14 +1633,15 @@ def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None,
     """
 
     Args:
-        router_id:
-        subnet:
-        port:
-        auth_info:
+        router_id (str|None):
+        subnet (str|None):
+        port (str|None):
+        auth_info (dict):
         con_ssh:
-        fail_ok:
+        fail_ok (bool):
 
-    Returns:
+    Returns (tuple):
+
 
     """
     if router_id is None:
@@ -1640,24 +1665,20 @@ def add_router_interface(router_id=None, subnet=None, port=None, auth_info=None,
                                fail_ok=fail_ok)
 
     if code == 1:
-        return 1, output, if_source
+        return 1, output
 
     if subnet is not None:
         if not re.match(UUID, subnet):
             subnet = get_subnets(name=subnet, auth_info=auth_info, con_ssh=con_ssh)[0]
-
         if not router_subnet_exists(router_id, subnet):
             msg = "Subnet {} is not shown in router-port-list for router {}".format(subnet, router_id)
-            if fail_ok:
-                LOG.warning(msg)
-                return 2, msg, if_source
             raise exceptions.NeutronError(msg)
 
     # TODO: Add check if port is used to add interface.
 
     succ_msg = "Interface is successfully added to router {}".format(router_id)
     LOG.info(succ_msg)
-    return 0, succ_msg, if_source
+    return 0, if_source
 
 
 def delete_router_interface(router_id, subnet=None, port=None, auth_info=None, con_ssh=None, fail_ok=False):
@@ -3122,7 +3143,7 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
-def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None,
+def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None, port_security=None,
                 admin_state_down=None, mac_addr=None, vnic_type=None, security_groups=None, no_security_groups=None,
                 extra_dhcp_opts=None, qos_pol=None, allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None,
                 wrs_vif=None, fail_ok=False, auth_info=None, con_ssh=None):
@@ -3137,6 +3158,7 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
                                     "subnet_id=SUBNET_2,ip_address=IP_ADDR_2]
         device_id (str): device id of this port
         device_owner (str): Device owner of this port
+        port_security (None|bool):
         admin_state_down (bool): Set admin state up to false
         mac_addr (str):  MAC address of this port
         vnic_type: one of the: <direct | direct-physical | macvtap | normal | baremetal>
@@ -3165,11 +3187,13 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
         raise ValueError("network id is required")
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0] if tenant else None
 
-    args = ''
+    args = '--network {}'.format(net_id)
     args_dict = {
         '--admin-state-down': admin_state_down,
         '--no-security-groups': no_security_groups,
         '--no-allowed-address-pairs': no_allowed_addr_pairs,
+        '--enable-port-security': True if port_security else None,
+        '--disable-port-security': True if port_security is False else None,
     }
 
     for key, val in args_dict.items():
@@ -3177,7 +3201,6 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
             args += ' {}'.format(key)
 
     kwargs_dict = {
-        '--name': name,
         '--tenant-id': tenant_id,
         '--device-id': device_id,
         '--device-owner': device_owner,
@@ -3207,10 +3230,10 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
             for val in vals:
                 args += ' {} {}'.format(key, val)
 
-    args += ' {}'.format(net_id)
+    args += ' {}'.format(name)
 
-    code, output = cli.neutron('port-create', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
-                               auth_info=auth_info)
+    code, output = cli.openstack('port create', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+                                 auth_info=auth_info)
 
     if code == 1:
         return code, output

@@ -139,12 +139,11 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
         total = table_parser.get_column(post_computes_tab, header)[0]
         if isinstance(total, list):
             total = sum([int(item) for item in total if item != ''])
-        post_avail_mems += total
-    # post_avail_mems = [int(mem) for mem in post_avail_mems]
+        post_avail_mems += int(total)
 
     LOG.tc_step("Check memory is taken from mem page pool that matches mem_page_size - {} via vm-topology.".
                 format(mem_page_size))
     assert pre_used_mem + 1024 == post_used_mem, "Used memory is not increased by 1024MiB"
     if mem_page_size != 'small':
-        assert pre_avail_mems - 1024 == post_avail_mems, ("Available memory in {} page pool is not decreased "
-                                                                    "by 1024MiB").format(mem_page_size)
+        assert pre_avail_mems - 1024 == post_avail_mems, \
+            "Available memory in {} page pool is not decreased by 1024MiB".format(mem_page_size)

@@ -68,7 +68,8 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
 
 
 def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=False, wait_for_offline=True,
-                 wait_for_reboot_finish=True, check_hypervisor_up=True, check_webservice_up=True, force_reboot=True):
+                 wait_for_reboot_finish=True, check_hypervisor_up=True, check_webservice_up=True, force_reboot=True,
+                 check_up_time=True):
     """
     Reboot one or multiple host(s)
 
@@ -82,6 +83,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         check_hypervisor_up (bool):
         check_webservice_up (bool):
         force_reboot (bool): whether to add -f, i.e., sudo reboot [-f]
+        check_up_time (bool): Whether to ensure active controller uptime is more than 15 minutes before rebooting
 
     Returns (tuple): (rtn_code, message)
         (-1, "Reboot host command sent") Reboot host command is sent, but did not wait for host to be back up
@@ -95,12 +97,12 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     if isinstance(hostnames, str):
         hostnames = [hostnames]
 
-    reboot_con = False
-    controller = system_helper.get_active_controller_name(con_ssh)
+    reboot_active = False
+    active_con = system_helper.get_active_controller_name(con_ssh)
     hostnames = list(set(hostnames))
-    if controller in hostnames:
-        reboot_con = True
-        hostnames.remove(controller)
+    if active_con in hostnames:
+        reboot_active = True
+        hostnames.remove(active_con)
 
     res, out = cli.system('host-list', rtn_list=True)
     LOG.info('\n{}'.format(out))
@@ -125,8 +127,13 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         con_ssh.expect(timeout=120)
 
     # reconnect to lab and wait for system up if rebooting active controller
-    if reboot_con:
-        LOG.info("Rebooting active controller: {}".format(controller))
+    if reboot_active:
+        if check_up_time:
+            LOG.info("Ensure active controller uptime is at least 15 minutes before rebooting.")
+            uptime = int(get_hostshow_value(active_con, field='uptime'))
+            time.sleep(max(0, 910-uptime))
+
+        LOG.info("Rebooting active controller: {}".format(active_con))
         con_ssh.send('sudo reboot -f')
         index = con_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         if index == 0:
@@ -159,11 +166,11 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             hosts_info = get_host_show_values_for_hosts(hostnames, ['task', 'availability'], con_ssh=con_ssh)
             raise exceptions.HostError("Some hosts are not rebooting. \nHosts info:{}".format(hosts_info))
 
-    if reboot_con:
-        hostnames.append(controller)
+    if reboot_active:
+        hostnames.append(active_con)
         if not is_simplex:
             wait_for_hosts_states(
-                    controller, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
+                    active_con, timeout=HostTimeout.FAIL_AFTER_REBOOT, fail_ok=True, check_interval=10, duration=8,
                     con_ssh=con_ssh, availability=[HostAvailState.OFFLINE, HostAvailState.FAILED])
 
     if not wait_for_reboot_finish:

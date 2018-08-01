@@ -1950,7 +1950,7 @@ def get_service_parameter_values(rtn_value='value', service=None, section=None, 
 
 
 def create_service_parameter(service, section, name, value, con_ssh=None, fail_ok=False,
-                             check_first=True, modify_existing=True, verify=True):
+                             check_first=True, modify_existing=True, verify=True, apply=False):
     """
     Add service-parameter
     system service-parameter-add (service) (section) (name)=(value)
@@ -1972,9 +1972,10 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
     if check_first:
         val = get_service_parameter_values(service=service, section=section, name=name, con_ssh=con_ssh)
         if val:
-            msg = "The service parameter {} {} {} already exists".format(service, section, name)
+            val = val[0]
+            msg = "The service parameter {} {} {} already exists. value: {}".format(service, section, name, val)
             LOG.info(msg)
-            if modify_existing:
+            if value != val and modify_existing:
                 return modify_service_parameter(service, section, name, value,
                                                 con_ssh=con_ssh, fail_ok=fail_ok, check_first=False, verify=verify)
             return -1, msg
@@ -1998,6 +1999,8 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
     LOG.info("Service parameter was added with the correct value")
     uuid = get_service_parameter_values(rtn_value='uuid', service=service, section=section, name=name,
                                         con_ssh=con_ssh)[0]
+    if apply:
+        apply_service_parameters(service, wait_for_config=True, con_ssh=con_ssh)
 
     return 0, uuid
 

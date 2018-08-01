@@ -4,27 +4,38 @@ from pytest import fixture, mark
 from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus
-from keywords import network_helper, nova_helper, vm_helper
+from keywords import network_helper, nova_helper, vm_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
-def base_vm():
-    tenant_net_id = network_helper.create_network(name='net_without_subnet')[1]
+def base_vm(setups):
+    port_security = None if system_helper.is_avs() else False
+    LOG.fixture_step("Create a network without subnet{}".format('' if port_security is None else
+                                                                ' with port security disabled'))
+    tenant_net_id = network_helper.create_network(name='net_without_subnet', port_security=port_security)[1]
     ResourceCleanup.add('network', tenant_net_id)
+
     mgmt_net_id = network_helper.get_mgmt_net_id()
     mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
     tenant_net_nic = {'net-id': tenant_net_id, 'vif-model': 'virtio'}
     nics = [mgmt_nic, tenant_net_nic]
+    LOG.fixture_step("Create a VM with one nic using network without subnet")
     vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
+    LOG.fixture_step("Assign an ip to the nic over network without subnet")
     _assign_ip_to_nic(vm_id)
 
-    return vm_id, mgmt_nic, tenant_net_id
+    return vm_id, mgmt_nic, tenant_net_id, port_security
 
 
-@fixture(scope='module', autouse=True)
-def update_net_quota(request):
+@fixture(scope='module')
+def setups(request):
+    if not system_helper.is_avs():
+        LOG.fixture_step("Add port_security service parameter")
+        system_helper.create_service_parameter(service='network', section='ml2', name='extension_drivers',
+                                               value='port_security')
+
     network_quota = network_helper.get_quota('network')
     instance_quota = nova_helper.get_quotas('instances')[0]
     network_helper.update_quotas(network=network_quota + 20)
@@ -44,6 +55,7 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model
     """
     Sample test case for Boot an instance with network without subnet
     Args:
+        skip_for_ovs: skip test if avp is specified
         base_vm (tuple): (base_vm_id, mgmt_nic, tenant_net_id)
         if_attach_arg (str): whether to attach via port_id or net_id
         vif_model (str): vif_model to pass to interface-attach cli, or None
@@ -67,10 +79,11 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model
 
     """
 
-    base_vm_id, mgmt_nic, tenant_net_id = base_vm
+    base_vm_id, mgmt_nic, tenant_net_id, port_security = base_vm
 
     if if_attach_arg == 'port_id':
-        tenant_port_id = network_helper.create_port(tenant_net_id, 'port_without_subnet')[1]
+        tenant_port_id = network_helper.create_port(tenant_net_id, 'port_without_subnet',
+                                                    port_security=port_security)[1]
         ResourceCleanup.add('port', tenant_port_id)
         tenant_net_nic = {'port-id': tenant_port_id, 'vif-model': vif_model}
     else:
@@ -81,7 +94,8 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model
                                       cleanup='function')[1]
 
     for vm_actions in [['cold_migrate'], ['live_migrate'], ['suspend', 'resume'], ['stop', 'start']]:
-        tenant_port_id = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_net_id)
+        tenant_port_id = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model,
+                                                            tenant_net_id)
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
@@ -103,7 +117,7 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
     Args:
         base_vm_id (str): base vm id
         vm_under_test (str): vm id of instance to be tested
-        vm_actions (str):
+        vm_actions (list|tuple):
         vif_model (str):
         tenant_net_id (str):
 
@@ -138,13 +152,14 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
 
     return tenant_port_id
 
+
 def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_port_id):
 
     """
     Args:
         base_vm_id (str): base vm id
         vm_under_test (str): vm id of instance to be tested
-        vm_actions (str):
+        vm_actions (list|tuple):
         vif_model (str):
         tenant_port_id (str):
 
@@ -172,11 +187,13 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
         network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
+
 def _remove_dhclient_cache(vm_id):
     dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         if vm_ssh.file_exists(dhclient_leases_cache):
             vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
+
 
 def _assign_ip_to_nic(vm_id):
     """
