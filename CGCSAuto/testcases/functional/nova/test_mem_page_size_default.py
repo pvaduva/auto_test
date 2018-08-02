@@ -133,7 +133,12 @@ def test_vm_mem_pool(flavor_1g, mem_page_size, volume_):
     # Calculate used and available memories after booting vm
     post_computes_tab = system_helper.get_vm_topology_tables('computes')[0]
     post_computes_tab = table_parser.filter_table(post_computes_tab, Host=vm_host)
-    post_used_mem = sum([int(mem) for mem in table_parser.get_column(post_computes_tab, 'U:memory')[0]])
+    post_used_mems = table_parser.get_column(post_computes_tab, 'U:memory')[0]
+    if isinstance(post_used_mems, list):
+        post_used_mem = sum([int(mem) for mem in post_used_mems])
+    else:
+        post_used_mem = int(post_used_mems)
+
     post_avail_mems = 0
     for header in avail_headers:
         total = table_parser.get_column(post_computes_tab, header)[0]
