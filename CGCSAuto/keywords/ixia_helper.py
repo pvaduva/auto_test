@@ -445,6 +445,7 @@ class IxiaSession(object):
 
         if validate:
             vport = '/'.join(interface.split('/')[:-1])
+
             def _validate(vport, interface):
                 self._ixnet.execute("clearNeighborTable", vport)
                 self._ixnet.execute('sendArpAndNS', interface)

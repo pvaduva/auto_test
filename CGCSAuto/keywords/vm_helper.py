@@ -805,7 +805,7 @@ def __compose_args(optional_args_dict, *other_args):
 
 def __merge_dict(base_dict, merge_dict):
     # identical to {**base_dict, **merge_dict} in python3.6+
-    d = dict(base_dict) # id() will be different, making a copy
+    d = dict(base_dict)     # id() will be different, making a copy
     for k in merge_dict:
         d[k] = merge_dict[k]
     return d
@@ -4937,7 +4937,8 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
         ixia_session.configure(trafficItem, biDirectional=bidirectional)
 
         # set tracking options
-        ixia_session.configure(trafficItem + '/tracking',
+        ixia_session.configure(
+            trafficItem + '/tracking',
             trackBy=["trackingenabled0", "vlanVlanId0", "ipv4SourceIp0", "ipv4DestIp0"])
         ixia_session.configure(ixia_session.getRoot() + "/traffic/statistics/packetLossDuration", enabled=True)
 
@@ -5075,7 +5076,8 @@ def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.16.33.0/24", cid
 
     nics = [{'net-id': network_helper.get_mgmt_net_id(), 'vif-model': 'virtio'},
             {'net-id': nw_primary, 'vif-model': vif_model},
-            {'net-id': nw_secondary, 'vif-model': vif_model},]
+            {'net-id': nw_secondary, 'vif-model': vif_model},
+            ]
     vms, nics = launch_vms(
         vm_type=vm_type, count=1, ping_vms=True, nics=nics)
     vm_id = vms[0]
@@ -5086,4 +5088,3 @@ def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.16.33.0/24", cid
         setup_avr_routing(vm_id)
 
     return vm_id
-

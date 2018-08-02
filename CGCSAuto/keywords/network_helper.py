@@ -2489,7 +2489,7 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD, vshell=False
                 return output.split(sep=':')[1].strip()
         else:
             code, output = ssh_client.exec_cmd('vshell port-list | grep {}'.format(mac_addr))
-            #|uuid|id|type|name|socket|admin|oper|mtu|mac-address|pci-address|network-uuid|network-name
+            # |uuid|id|type|name|socket|admin|oper|mtu|mac-address|pci-address|network-uuid|network-name
             return output.split(sep='|')[4].strip()
         time.sleep(1)
     else:
@@ -5230,4 +5230,3 @@ def vconsole(ssh_client):
     LOG.info("Exiting vconsole")
     ssh_client.set_prompt(original_prompt)
     ssh_client.exec_cmd("quit")
-

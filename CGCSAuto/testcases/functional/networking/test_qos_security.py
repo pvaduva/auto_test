@@ -29,6 +29,7 @@ def update_network_quotas_primary(request):
         network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota, network=nw_quota)
     request.addfinalizer(teardown)
 
+
 @fixture(scope='module')
 def update_network_quotas_secondary(request):
     tenant = Tenant.get_secondary()['tenant']
@@ -42,6 +43,7 @@ def update_network_quotas_secondary(request):
         LOG.fixture_step("Reverting network and subnet quotas for {}".format(tenant))
         network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota, network=nw_quota)
     request.addfinalizer(teardown)
+
 
 @fixture(scope='module')
 def update_network_quotas(request, update_network_quotas_primary, update_network_quotas_secondary):
@@ -64,15 +66,19 @@ class TestPacketTypeSecurityRuleEnforcement(object):
             "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_secondary(), cleanup='class')
 
         # required by ping_vms
-        cli.openstack("security group rule create",
+        cli.openstack(
+            "security group rule create",
             "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.ADMIN)
-        cli.openstack("security group rule create",
+        cli.openstack(
+            "security group rule create",
             "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.ADMIN)
 
         # required by routing and ssh (TCP), could be restricted to ranges over internal-network and mgmt-network
-        cli.openstack("security group rule create",
+        cli.openstack(
+            "security group rule create",
             "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.ADMIN)
-        cli.openstack("security group rule create",
+        cli.openstack(
+            "security group rule create",
             "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.ADMIN)
 
         yield sg_primary, sg_secondary
@@ -92,7 +98,8 @@ class TestPacketTypeSecurityRuleEnforcement(object):
         """
         sg_primary, sg_secondary = security_groups
 
-        vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type,
+        vm_test, vm_observer = vm_helper.launch_vm_pair(
+            vm_type,
             primary_kwargs=dict(sec_group_name=sg_primary),
             secondary_kwargs=dict(sec_group_name=sg_secondary))
 
@@ -150,7 +157,8 @@ class TestPacketTypeSecurityRuleEnforcement(object):
         """
         sg_primary, sg_secondary = security_groups
 
-        vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type,
+        vm_test, vm_observer = vm_helper.launch_vm_pair(
+            vm_type,
             primary_kwargs=dict(sec_group_name=sg_primary),
             secondary_kwargs=dict(sec_group_name=sg_secondary))
 
@@ -276,9 +284,11 @@ def udp_allow(sg_primary, sg_secondary):
 def qos_apply(net_id, qos_id, request):
     old_qos = network_helper.get_net_info(net_id=net_id, field='wrs-tm:qos')
     network_helper.update_net_qos(net_id, qos_id)
+
     def teardown():
         if old_qos:
             network_helper.update_net_qos(net_id, old_qos)
+
     request.addfinalizer(teardown)
     return old_qos
 
@@ -402,7 +412,7 @@ def test_qos_weight_enforced(request):
         vm_helper.scp_to_vm(vm, DPDKPktgen.src(), DPDKPktgen.dst())
 
     # high[0]->high[1] 100%;    high[1]<-high[0] 1%
-    #  low[0]-> low[0] 100%;     low[1]<- low[0] 1%
+    #  low[0]-> low[1] 100%;     low[1]<- low[0] 1%
     for vms in [vms_high, vms_low]:
         for (vm1, vm2), rate in zip([vms, reversed(list(vms))], [100, 1]):
 
@@ -418,7 +428,8 @@ def test_qos_weight_enforced(request):
             assert dst_mac is not None, "mac not resolved for {}".format(dst_ip)
 
             with vm_helper.ssh_to_vm_from_natbox(vm1) as vm_ssh:
-                DPDKPktgen.configure(vm_ssh,
+                DPDKPktgen.configure(
+                    vm_ssh,
                     "set 0 dst ip {}".format(dst_ip),
                     "set 0 src ip {}".format(network_helper.get_data_ips_for_vms(vm1)[0] + '/24'),
                     "set 0 dst mac {}".format(dst_mac),
@@ -525,9 +536,10 @@ def test_qos_phb_enforced(vm_type, ixia_supported, request, update_network_quota
     nic_test = (network_helper.get_data_ips_for_vms(vm_test)[0], vm_test)
     nic_observer = (network_helper.get_data_ips_for_vms(vm_test)[1], vm_test)
 
-    with vm_helper.traffic_between_vms([(nic_test, nic_observer)] * 8,
-                                        fps=2, fps_type="percentLineRate",
-                                        bidirectional=True, start_traffic=False) as session:
+    with vm_helper.traffic_between_vms(
+            [(nic_test, nic_observer)] * 8,
+            fps=2, fps_type="percentLineRate", bidirectional=True, start_traffic=False) as session:
+
         LOG.tc_step("Setup traffic items with PHBs and frameRates")
         for trafficItem in session.getList(session.getRoot()+'/traffic', 'trafficItem'):
             name = session.getAttribute(trafficItem, 'name')

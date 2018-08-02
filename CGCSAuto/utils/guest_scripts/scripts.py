@@ -1,6 +1,7 @@
 import os
 from consts.proj_vars import ProjVar
 
+
 class TisInitServiceScript(object):
     script_path = "/etc/init.d/tis_automation_init.sh"
     configuration_path = "/etc/init.d/tis_automation_init.config"
@@ -52,6 +53,7 @@ WantedBy=multi-user.target
     def dst(cls):
         return cls.script_path
 
+
 class KPktgen(object):
     script_path = "/root/kpktgen.sh"
     configuration_path = "/root/kpktgen.config"
@@ -73,6 +75,7 @@ class KPktgen(object):
     @classmethod
     def start(cls, vm_ssh):
         vm_ssh.exec_sudo_cmd("nohup bash {} &>/dev/null &".format(cls.script_path))
+
 
 class DPDKPktgen(object):
     script_path = "/root/dpdk_pktgen.sh"
@@ -96,4 +99,5 @@ class DPDKPktgen(object):
     def start(cls, vm_ssh):
         # dpdk pktgen REQUIRES a tty (fails during initialization otherwise)
         # echo-ing 'quit' will not work, use 'kill' with 'ps aux | grep nohup' to terminate
-        vm_ssh.exec_sudo_cmd("nohup socat EXEC:{},pty PTY,link=pktgen.pty,echo=0,icanon=0 &>/dev/null &".format(cls.script_path))
+        vm_ssh.exec_sudo_cmd(
+            "nohup socat EXEC:{},pty PTY,link=pktgen.pty,echo=0,icanon=0 &>/dev/null &".format(cls.script_path))
