@@ -331,7 +331,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
                                            con_ssh=con_ssh)
 
         if res_unlock:
-            res_1 = wait_for_subfunction_ready(hosts, fail_ok=fail_ok, con_ssh=con_ssh)
+            res_1 = wait_for_task_clear_and_subfunction_ready(hosts, fail_ok=fail_ok, con_ssh=con_ssh)
             res_unlock = res_unlock and res_1
 
         if controllers:
@@ -353,34 +353,36 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
     return res_lock and res_unlock
 
 
-def wait_for_subfunction_ready(hosts, fail_ok=False, con_ssh=None, use_telnet=False, con_telnet=None,
-                               timeout=HostTimeout.SUBFUNC_READY):
+def wait_for_task_clear_and_subfunction_ready(hosts, fail_ok=False, con_ssh=None, use_telnet=False, con_telnet=None,
+                                              timeout=HostTimeout.SUBFUNC_READY):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    hosts_to_check = []
-    for host in hosts:
-        tab_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh,
-                                             use_telnet=use_telnet, con_telnet=con_telnet,
-                                             fail_ok=False))
-        if 'subfunction_avail' in table_parser.get_column(tab_, 'Property'):
-            if table_parser.get_value_two_col_table(tab_, 'subfunction_avail') != HostAvailState.AVAILABLE \
-                    or table_parser.get_value_two_col_table(tab_, 'subfunction_oper') != HostOperState.ENABLED:
-                hosts_to_check.append(host)
+    hosts_to_check = list(hosts)
+    # hosts_to_check = []
+    # for host in hosts:
+    #     tab_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh,
+    #                                          use_telnet=use_telnet, con_telnet=con_telnet,
+    #                                          fail_ok=False))
+    #     if 'subfunction_avail' in table_parser.get_column(tab_, 'Property'):
+    #         if table_parser.get_value_two_col_table(tab_, 'subfunction_avail') != HostAvailState.AVAILABLE \
+    #                 or table_parser.get_value_two_col_table(tab_, 'subfunction_oper') != HostOperState.ENABLED:
+    #             hosts_to_check.append(host)
+    #
+    # if not hosts_to_check:
+    #     LOG.info("No host to check or host subfunctions already enabled/available")
+    #     return True
 
-    if not hosts_to_check:
-        LOG.info("No host to check or host subfunctions already enabled/available")
-        return True
-
-    LOG.info("Waiting for subfunctions enable/available for hosts: {}".format(hosts_to_check))
+    LOG.info("Waiting for task clear and subfunctions enable/available (if applicable) for hosts: {}".
+             format(hosts_to_check))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        hosts_vals = get_host_show_values_for_hosts(hosts_to_check, ['subfunction_avail', 'subfunction_oper'],
+        hosts_vals = get_host_show_values_for_hosts(hosts_to_check, ['subfunction_avail', 'subfunction_oper', 'task'],
                                                     con_ssh=con_ssh, use_telnet=use_telnet,
                                                     con_telnet=con_telnet)
         for host, vals in hosts_vals.items():
-            if vals['subfunction_avail'] == HostAvailState.AVAILABLE and \
-                            vals['subfunction_oper'] == HostOperState.ENABLED:
+            if not vals['task'] and vals['subfunction_avail'] in ('', HostAvailState.AVAILABLE) and \
+                    vals['subfunction_oper'] in ('', HostOperState.ENABLED):
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
@@ -1039,8 +1041,8 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         time.sleep(10)
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
                                                               con_telnet=con_telnet_)
-        wait_for_subfunction_ready(hosts=active_con, con_ssh=con_ssh_, use_telnet=use_telnet_,
-                                   con_telnet=con_telnet_)
+        wait_for_task_clear_and_subfunction_ready(hosts=active_con, con_ssh=con_ssh_, use_telnet=use_telnet_,
+                                                  con_telnet=con_telnet_)
         LOG.info("'system cli enabled")
 
     if not use_telnet:

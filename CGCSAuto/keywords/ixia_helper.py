@@ -475,7 +475,7 @@ class IxiaSession(object):
             commit (bool):
                 whether or not this change is commited immediately
                 (also implicitly commits all previously uncommited configs)
-            **kwargs (dict):
+            **kwargs:
                 Attribute values to set.
                 i.e., attributeName='true'
 

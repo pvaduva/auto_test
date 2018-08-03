@@ -6,14 +6,13 @@ import random
 import re
 import time
 import ipaddress
-from collections import Counter
 from contextlib import contextmanager, ExitStack
 import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath, IxiaPath
+from consts.filepaths import VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
@@ -23,7 +22,6 @@ from testfixtures.recover_hosts import HostsToRecover
 from utils import exceptions, cli, table_parser, multi_thread
 from utils import local_host
 from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
-from utils.clients.local import LocalHostClient
 from utils.guest_scripts.scripts import TisInitServiceScript
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
@@ -681,6 +679,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if poll:
         args_ += ' --poll'
 
+    pre_boot_vms = []
     if not (min_count is None and max_count is None):
         name_str = name + '-'
         pre_boot_vms = nova_helper.get_vms(auth_info=auth_info, con_ssh=con_ssh, strict=False, name=name_str)
@@ -1453,6 +1452,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         fail_ok (bool): Whether it's okay to have 100% packet loss rate.
         use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
         sep_file (str|None)
+        net_types (str|list|tuple)
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -1751,6 +1751,7 @@ def scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout=60, validate=Tr
     natbox_client.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
 
     # calculate sha1sum
+    src_sha1 = None
     if validate:
         src_sha1 = natbox_client.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
         src_sha1 = src_sha1.split(' ')[0]
@@ -1793,7 +1794,6 @@ def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_s
         validate (bool): verify src and dest sha1sum
         source_ssh (SSHClient|None): the source ssh session, or None to use 'localhost'
         natbox_client (NATBoxClient|None):
-        sha1sum (str|None): validates the source file prior to operation, or None to skip, only used if validate=True
 
     Returns (None):
 
@@ -1880,9 +1880,9 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         natbox_client = NATBoxClient.get_natbox_client()
 
     try:
-        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
-                             user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
-                             retry_timeout=retry_timeout)
+        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port,
+                             vm_img_name=vm_image_name, user=username, password=password, prompt=prompt,
+                             timeout=timeout, retry=retry, retry_timeout=retry_timeout)
     except:
         LOG.warning('Failed to ssh to VM {}! Collecting vm console log'.format(vm_id))
         get_console_logs(vm_ids=vm_id)
@@ -2128,6 +2128,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
 
     vms_to_del_str = ' '.join(vms_to_del)
 
+    vols_to_del = []
     if delete_volumes:
         vols_to_del = cinder_helper.get_volumes_attached_to_vms(vms=vms_to_del, auth_info=auth_info, con_ssh=con_ssh)
 
@@ -2592,7 +2593,7 @@ def parse_cpu_list(list_in_str, prefix=''):
 def _parse_cpu_siblings(siblings_str):
     results = []
 
-    found = re.search(r'[,]?\s*siblings:\s*((\{\d+,\d+\})(,(\{\d+,\d+\}))*)', siblings_str, re.IGNORECASE)
+    found = re.search(r'[,]?\s*siblings:\s*(({\d+,\d+\})(,({\d+,\d+\}))*)', siblings_str, re.IGNORECASE)
 
     if found:
         for cpus in found.group(1).split('},'):
@@ -3049,6 +3050,7 @@ def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=3, timeout=180):
 
 def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=None):
 
+    pre_vm_host = None
     if check_host_unchanged:
         pre_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
 
@@ -3645,8 +3647,6 @@ def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_t
                 LOG.info("Writing in vm continues...")
                 time.sleep(write_interval)
 
-        except:
-            raise
         finally:
             vm_ssh_.send_control('c')
 
@@ -3819,6 +3819,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
     HostsToRecover.add(host)
     is_swacted = False
+    standby = None
     if wait_for_host_up:
         active, standby = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
         if standby and active == host:
@@ -3884,8 +3885,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
         LOG.info("All vms are successfully evacuated to other host")
         return 0, []
-    except:
-        raise
+
     finally:
         if vlm:
             LOG.tc_step("Powering on {} from vlm".format(host))
@@ -3898,6 +3898,8 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
             if is_swacted:
                 host_helper.wait_for_tasks_affined(standby, con_ssh=con_ssh)
             time.sleep(60)      # Give some idle time before continue.
+            if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+                system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CPU_USAGE_HIGH, fail_ok=True, check_interval=30)
 
 
 def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova', vms_num=5):
