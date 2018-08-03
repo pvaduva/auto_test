@@ -1524,15 +1524,15 @@ def get_titanium_backup_filenames_usb(pattern=None, usb_device=None, con_ssh=Non
     """
 
     if pattern is None:
-        pattern = TITANIUM_BACKUP_FILE_PATTERN
+        pattern = r'titanium_backup_(\.\w)*.+_(.*)_(system|images)\.tgz'
     found_backup_files = []
 
     backup_files = get_backup_files_from_usb(pattern=pattern, usb_device=usb_device, con_ssh=con_ssh)
 
     lab = InstallVars.get_install_var("LAB")
-    system_name = lab['name']
+    system_name = lab['name'].strip()
     for file in backup_files:
-        if system_name.strip() in file:
+        if system_name in file:
             LOG.info("Found matching backup file: {}".format(file))
             found_backup_files.append(file)
 
@@ -1867,7 +1867,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
                  .format(copy_to_usb, get_usb_mount_point(usb_device=copy_to_usb)))
     date = time.strftime(BACKUP_FILE_DATE_STR)
     build_id = ProjVar.get_var('BUILD_ID')
-    backup_file_name = "{}{}_{}_{}".format(PREFIX_BACKUP_FILE, date, build_id, lab_system_name)
+    backup_file_name = "{}{}_{}_{}".format(backup_file_prefix, date, build_id, lab_system_name)
     cmd = 'config_controller --backup {}'.format(backup_file_name)
 
     # max wait 1800 seconds for config controller backup to finish

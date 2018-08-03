@@ -43,7 +43,15 @@ def pre_system_backup():
                     }
 
     if backup_dest == 'usb':
-        assert system_helper.get_active_controller_name() == 'controller-0', "controller-0 is not the active controller"
+        _backup_info['dest'] = 'usb'
+        active_controller_name = system_helper.get_active_controller_name()
+        if active_controller_name != 'controller-0':
+            msg = "controller-0 is not the active controller"
+            LOG.info(msg + ", try to swact the host")
+            host_helper.swact_host(active_controller_name)
+            active_controller_name = system_helper.get_active_controller_name()
+            assert active_controller_name == 'controller-0', msg
+
         LOG.tc_step("Checking if  a USB flash drive is plugged in controller-0 node... ")
         usb_device = install_helper.get_usb_device_name()
         assert usb_device, "No USB found in controller-0"
@@ -75,6 +83,8 @@ def pre_system_backup():
         _backup_info['backup_dest_full_path'] = BackupRestore.USB_BACKUP_PATH
 
     elif backup_dest == 'local':
+        _backup_info['dest'] = 'local'
+
         # save backup files in Test Server which local
         backup_dest_path = BackupVars.get_backup_var('BACKUP_DEST_PATH')
         backup_dest_full_path = '{}/{}'.format(backup_dest_path, lab['short_name'])
@@ -156,7 +166,10 @@ def test_backup(pre_system_backup):
                 usb_part2 = k
         copy_to_usb = usb_part2
 
-    install_helper.backup_system(backup_dest=backup_dest, backup_dest_path=backup_info['backup_dest_full_path'],
+    backup_file_prefix = get_backup_file_name_prefix(backup_info)
+
+    install_helper.backup_system(backup_file_prefix, backup_dest=backup_dest,
+                                 backup_dest_path=backup_info['backup_dest_full_path'],
                                  dest_server=dest_server, copy_to_usb=copy_to_usb)
 
     # storage lab start backup image files separately if it's a storage lab
@@ -530,7 +543,22 @@ def lock_unlock_host(backup_ifno, con_ssh, vms):
                                      administrative='unlocked',
                                      availability='available',
                                      vim_progress_status='services-enabled')
-    vm_helper.ping_vms_from_natbox(target_vm)
+
+    for tried in range(5):
+        pingable, message = vm_helper.ping_vms_from_natbox(target_vm, fail_ok=(tried < 4))
+        if pingable:
+            LOG.info('failed to ping VM:{}, try again in 20 seconds'.format(target_vm))
+            time.sleep(20)
+        else:
+            LOG.info('Succeeded to ping VM:{}'.format(target_vm))
+            break
+    if backup_info.get('dest', 'local') == 'usb':
+        active_controller_name = system_helper.get_active_controller_name()
+        if active_controller_name != 'controller-0':
+            LOG.info('current active_controller: ' + active_controller_name + ', restore to controller-0 in case it was not after swact')
+            host_helper.swact_host()
+            active_controller_name = system_helper.get_active_controller_name()
+            LOG.info('current active_controller should be restored to controller-0, actual:' + active_controller_name)
 
 
 def pre_backup_test(backup_info, con_ssh):
@@ -545,3 +573,16 @@ def pre_backup_test(backup_info, con_ssh):
 
     LOG.info('Lock and unlock computes')
     lock_unlock_host(backup_info, con_ssh, vms)
+
+
+def get_backup_file_name_prefix(backup_info):
+    from consts import cgcs
+
+    core_name = cgcs.PREFIX_BACKUP_FILE
+    if backup_info.get('dest', 'local') == 'usb':
+        core_name += '.usb'
+    if backup_info.get('is_storage_lab', False):
+        core_name += '.ceph'
+
+    return core_name
+
