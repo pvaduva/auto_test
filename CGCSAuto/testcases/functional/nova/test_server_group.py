@@ -85,10 +85,9 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
             - vms receive notification when other vm is paused
         - Attempt to delete the server group and make sure if fails due to having members
         - If server group messaging is off, verify server_group_app is not included in vm
-        - If server group has enough hosts, check live migration_id
-            - Try to live migrate one of the vms
-            - If anti_affinity, migration should not succeeds
-            - If affinity, migration should succeed
+        - If server group has enough hosts, check migrations
+            - Try to live/cold migrate one of the vms, and check they succeed/fail based on server group setting
+            - If server group message enabled, check server group message still works after migration
 
     Teardown:
         - Delete created vms, flavor, server group
@@ -161,34 +160,44 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     if host_count > 1:
         # TC6566 verified here
         expt_fail = not best_effort and (policy == 'affinity' or (policy == 'anti_affinity' and host_count-vms_num < 1))
-        LOG.tc_step("Attempt to live migrate VMs and ensure it {}".format('fails' if expt_fail else 'pass'))
 
-        vm_hosts_after_mig = []
-        for vm in members:
-            code, output = vm_helper.live_migrate_vm(vm, fail_ok=True)
-            if expt_fail:
-                assert code == 2, "CLI command was not rejected as expected. {}".format(output)
-            else:
-                assert code == 0, "Live migrate failed. {}".format(output)
-            vm_host = nova_helper.get_vm_host(vm)
-            vm_hosts_after_mig.append(vm_host)
+        for action in ('live_migrate', 'cold_migrate'):
+            LOG.tc_step("Attempt to {} VMs and ensure it {}".format(action, 'fails' if expt_fail else 'pass'))
+            vm_hosts_after_mig = []
+            for vm in members:
+                code, output = vm_helper.perform_action_on_vm(vm, action=action, fail_ok=True)
+                if expt_fail:
+                    assert 2 == code, "{} was not rejected. {}".format(action, output)
+                else:
+                    assert 0 == code, "{} failed. {}".format(action, output)
+                vm_host = nova_helper.get_vm_host(vm)
+                vm_hosts_after_mig.append(vm_host)
+                vm_helper.wait_for_vm_pingable_from_natbox(vm)
 
-        if not best_effort:
-            if policy == 'affinity':
-                assert len(list(set(vm_hosts_after_mig))) == 1
-            else:
-                assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some V"
+            if not best_effort:
+                if policy == 'affinity':
+                    assert len(list(set(vm_hosts_after_mig))) == 1
+                else:
+                    assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some VMs are on same host with " \
+                                                                          "strict anti-affinity polity"
+
+        if srv_grp_msg_flv:
+            LOG.tc_step("Check server group message after attempted migrations")
+            check_server_group_messaging_enabled(vms=members, action='message')
 
     if srv_grp_msging:
         for vm in members:
             GuestLogs.remove(vm)
 
 
-def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):
+def _wait_for_srv_grp_msg(vm_id, msg, timeout, res_events, listener_event, sent_event):
     with vm_helper.ssh_to_vm_from_natbox(vm_id, retry_timeout=60) as vm_ssh:
         vm_ssh.send('server_group_app')
         # vm_ssh.expect('\r\n\r\n', timeout=1, searchwindowsize=100)
-
+        listener_event.set()
+        sent_event.wait_for_event()
+        received_event = Events("Server group message received on VM {}".format(vm_id))
+        res_events.append(received_event)
         end_time = time.time() + timeout
         while time.time() < end_time:
             code = vm_ssh.expect('\r\n\r\n', fail_ok=True, timeout=timeout)
@@ -197,7 +206,7 @@ def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):
 
             current_output = vm_ssh.cmd_output
             if re.search(msg, current_output):
-                event.set()
+                received_event.set()
                 vm_ssh.send_control('c')
                 vm_ssh.expect(searchwindowsize=100, timeout=5)
                 break
@@ -205,21 +214,21 @@ def _wait_for_srv_grp_msg(vm_id, msg, timeout, event):
             assert False, "Expected msg did not appear within timeout"
 
 
-def trigger_srv_grp_msg(vm_id, action, timeout=60, event=None):
+def trigger_srv_grp_msg(vm_id, action, timeout=60, sent_event=None):
     if action == 'message':
-        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, event=event)
+        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, sent_event=sent_event)
     elif action == 'pause':
         vm_helper.pause_vm(vm_id=vm_id)
+        sent_event.set()
 
 
-def _send_srv_grp_msg(vm_id, msg, timeout, event):
+def _send_srv_grp_msg(vm_id, msg, timeout, sent_event):
     with vm_helper.ssh_to_vm_from_natbox(vm_id, close_ssh=False) as sender_ssh:
         sender_ssh.send("server_group_app '{}'".format(msg))
         sender_ssh.expect('\r\n\r\n')
-        if event is None:
-            time.sleep(timeout)
-        else:
-            event.wait_for_event(timeout=timeout, fail_ok=True)
+        if sent_event:
+            sent_event.set()
+        time.sleep(timeout)
 
 
 def check_server_group_messaging_enabled(vms, action):
@@ -229,30 +238,46 @@ def check_server_group_messaging_enabled(vms, action):
 
     if action == 'message':
         msg = MSG
-        timeout = 90
+        timeout = 120
     elif action == 'pause':
         msg = '{}.*paused'.format(vm_sender)
         timeout = 180
     else:
         raise ValueError("Unknown action - '{}' provided".format(action))
 
-    res_event = Events("srv group messaging result")
+    res_events = []
+    sent_event = Events("srv msg/event triggered")
+    listener_event = Events("VM started listening to server group messages")
     vm_threads = []
+    sender_thread = None
 
-    for vm in vms:
-        new_thread = MThread(_wait_for_srv_grp_msg, vm, msg, timeout, res_event)
-        new_thread.start_thread(timeout=timeout+30)
-        vm_threads.append(new_thread)
+    try:
+        for vm in vms:
+            listener_event.clear()
+            new_thread = MThread(_wait_for_srv_grp_msg, vm, msg, timeout=timeout, res_events=res_events,
+                                 listener_event=listener_event, sent_event=sent_event)
+            new_thread.start_thread(timeout=timeout+30)
+            vm_threads.append(new_thread)
+            listener_event.wait_for_event()
 
-    time.sleep(5)
-    # this 60 seconds timeout is hardcoded for action == 'message' scenario to send the message out
-    sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, 60, res_event)
-    sender_thread.start_thread(timeout=timeout)
+        time.sleep(5)
+        # this 60 seconds timeout is hardcoded for action == 'message' scenario to send the message out
+        sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, timeout=60, sent_event=sent_event)
+        sender_thread.start_thread(timeout=timeout)
 
-    for vm_thr in vm_threads:
-        vm_thr.wait_for_thread_end()
+        sent_event.wait_for_event()
+        for res_event in res_events:
+            res_event.wait_for_event()
 
-    sender_thread.wait_for_thread_end()
+    finally:
+        # wait for server group msg to be received
+        for vm_thr in vm_threads:
+            vm_thr.wait_for_thread_end(timeout=30)
+
+        if sender_thread:
+            sender_thread.wait_for_thread_end(timeout=30)
+            if action == 'pause':
+                vm_helper.unpause_vm(vm_sender)
 
 
 def check_server_group_messaging_disabled(vms):
