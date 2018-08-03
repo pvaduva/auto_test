@@ -3897,6 +3897,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
             host_helper.wait_for_tasks_affined(host=host, con_ssh=con_ssh)
             if is_swacted:
                 host_helper.wait_for_tasks_affined(standby, con_ssh=con_ssh)
+            time.sleep(60)      # Give some idle time before continue.
 
 
 def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova', vms_num=5):

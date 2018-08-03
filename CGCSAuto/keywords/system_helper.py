@@ -337,7 +337,7 @@ def get_active_standby_controllers(con_ssh=None, use_telnet=False, con_telnet=No
 
 
 def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value=None, query_type=None, con_ssh=None,
-                     mgmt_affecting=False, auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None, retry=0):
+                     mgmt_affecting=None, auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None, retry=0):
     """
     Get active alarms_and_events dictionary with given criteria
     Args:
@@ -346,6 +346,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         query_key (str): one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
         query_value (str): expected value for given key
         query_type (str): data type of value. one of these: 'string', 'integer', 'float', 'boolean'
+        mgmt_affecting (bool)
         con_ssh (SSHClient):
         auth_info (dict):
         use_telnet
@@ -398,7 +399,7 @@ def _compose_alarm_table(output, uuid=False):
 
 def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=None, entity_id=None,
                severity=None, time_stamp=None, strict=False, show_suppress=False, query_key=None, query_value=None,
-               query_type=None, mgmt_affecting=False, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True,
+               query_type=None, mgmt_affecting=None, con_ssh=None, auth_info=Tenant.ADMIN, combine_entries=True,
                use_telnet=False, con_telnet=None):
     """
     Get a list of alarms with values for specified fields.
@@ -414,6 +415,7 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
         query_key (str): key in --query <key>=<value> passed to system alarm-list
         query_value (str): value in --query <key>=<value> passed to system alarm-list
         query_type (str): 'string', 'integer', 'float', or 'boolean'
+        mgmt_affecting (bool)
         con_ssh (SSHClient):
         auth_info (dict):
         combine_entries (bool): return list of strings when set to True, else return a list of tuples.
@@ -1965,6 +1967,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
         modify_existing (bool): Whether to modify the service parameter if it already exists
         verify: this enables to skip the verification. sometimes not all values are displayed in the
                  service-parameter-list, ex password
+        apply (bool): whether to apply service parameter after add
 
     Returns (tuple): (rtn_code, err_msg or param_uuid)
 
@@ -2206,26 +2209,24 @@ def get_system_health_query_upgrade(con_ssh=None):
                 failed[k.strip()] = v.strip()
             elif "Locked or disabled hosts" in k:
                 failed[k.strip()] = v.strip()
-
-
         elif "Missing manifests" in line:
             failed[line] = line
         elif "alarms found" in line:
-            if len (line.split(',')) > 1:
-                failed["managment affecting"] = int(line.split(',')[1].strip()[1])
+            if len(line.split(',')) > 1:
+                failed["management affecting"] = int(line.split(',')[1].strip()[1])
 
     if len(failed) == 0:
         LOG.info("system health is OK to start upgrade......")
         return 0, None,  None
 
-    actions = { "lock_unlock": [[], ""],
-                "force_upgrade": [False, ''],
-                "swact": [False, ''],
-                }
+    actions = {"lock_unlock": [[], ''],
+               "force_upgrade": [False, ''],
+               "swact": [False, ''],
+               }
 
     for k, v in failed.items():
         if "No alarms" in k:
-            alarms = True
+            # alarms = True
             table_ = table_parser.table(cli.system('alarm-list --uuid'))
             alarm_severity_list = table_parser.get_column(table_, "Severity")
             if len(alarm_severity_list) > 0 and \
@@ -2234,21 +2235,19 @@ def get_system_health_query_upgrade(con_ssh=None):
                 LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
                 actions["force_upgrade"] = [True, "Minor alarms present"]
 
-        elif "managment affecting" in k:
+        elif "management affecting" in k:
             if v == 0:
                 # non management affecting alarm present  use  foce upgrade
-                LOG.warn("System health query upgrade found non managment affecting alarms: {}"
-                         .format(k))
-                actions["force_upgrade"] = [True, "Non managment affecting  alarms present"]
+                LOG.warning("System health query upgrade found non management affecting alarms: {}".format(k))
+                actions["force_upgrade"] = [True, "Non management affecting  alarms present"]
 
             else:
                 # major/critical alarm present,  management affecting
                 LOG.error("System health query upgrade found major or critical alarms.")
                 return 1, failed, None
 
-
         elif "Missing manifests" in k:
-            manifest = True
+            # manifest = True
 
             if "controller-1" in k:
                 if "controller-1" not in actions["lock_unlock"][0]:
@@ -2260,12 +2259,12 @@ def get_system_health_query_upgrade(con_ssh=None):
             actions["lock_unlock"][1] += "Missing manifests;"
 
         elif any(s in k for s in ("Cinder configuration", "Incomplete configuration")):
-            cinder_config = True
+            # cinder_config = True
             actions["swact"][0] = True
             actions["swact"][1] += "Invalid Cinder configuration;"
 
         elif "Placement Services Enabled" in k or "Hosts missing placement configuration" in k:
-            placement_services = True
+            # placement_services = True
             if "controller-1" in v:
                 if "controller-1" not in actions["lock_unlock"][0]:
                     actions["lock_unlock"][0].append("controller-1")
@@ -2297,7 +2296,6 @@ def get_system_health_query(con_ssh=None):
         return 1, failed
     else:
         return 0, None
-
 
 
 def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
@@ -3441,3 +3439,22 @@ def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None,):
     else:
         return None
 
+
+def get_controller_uptime(con_ssh):
+    """
+    Get uptime for all controllers. If no standby controller, then we only calculate for current active controller.
+    Args:
+        con_ssh
+
+    Returns (int): in seconds
+    """
+    active_con, standby_con = get_active_standby_controllers(con_ssh=con_ssh)
+    from keywords.host_helper import get_hostshow_value
+    active_con_uptime = int(get_hostshow_value(host=active_con, field='uptime', con_ssh=con_ssh))
+
+    con_uptime = active_con_uptime
+    if standby_con:
+        standby_con_uptime = int(get_hostshow_value(host=standby_con, field='uptime', con_ssh=con_ssh))
+        con_uptime = min(active_con_uptime, standby_con_uptime)
+
+    return con_uptime

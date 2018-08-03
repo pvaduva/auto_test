@@ -129,9 +129,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     # reconnect to lab and wait for system up if rebooting active controller
     if reboot_active:
         if check_up_time:
-            LOG.info("Ensure active controller uptime is at least 15 minutes before rebooting.")
-            uptime = int(get_hostshow_value(active_con, field='uptime'))
-            time.sleep(max(0, 910-uptime))
+            LOG.info("Ensure uptime for controller(s) is at least 15 minutes before rebooting.")
+            time_to_sleep = max(0, 910 - system_helper.get_controller_uptime(con_ssh=con_ssh))
+            time.sleep(time_to_sleep)
 
         LOG.info("Rebooting active controller: {}".format(active_con))
         con_ssh.send('sudo reboot -f')
