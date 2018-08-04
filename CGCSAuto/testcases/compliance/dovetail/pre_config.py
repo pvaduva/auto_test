@@ -1,14 +1,16 @@
-import os
 import configparser
 import yaml
-from consts.auth import HostLinuxCreds, CliAuth, Tenant
+from utils.tis_log import LOG
+from consts.auth import HostLinuxCreds, CliAuth, Tenant, ComplianceCreds
 from keywords import vlm_helper, host_helper
-from utils.clients.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient, SSHClient
 from utils import table_parser
 from consts.filepaths import Dovetail
 
+DOVETAIL_HOST = 'tis-dovetail-test-node.cumulus.wrs.com'
 
-def env_config_generate(floating_ip):
+
+def env_config_generate(floating_ip, server_ssh):
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
     con_ssh.exec_cmd('source /etc/nova/openrc')
@@ -20,34 +22,47 @@ def env_config_generate(floating_ip):
     password_admin = Tenant.ADMIN['password']
     config = configparser.ConfigParser()
     config.optionxform = str
-    config[None] = {'# Project-level authentication scope (name or ID), recommend admin project.':'',
-                        'export OS_PROJECT_NAME':user_admin,
-                        '# For identity v2, it uses OS_TENANT_NAME rather than OS_PROJECT_NAME.':'',
-                        'export OS_TENANT_NAME':user_admin,
-                        '# Authentication username, belongs to the project above, recommend admin user.':'',
-                        'export OS_USERNAME':user_admin,
-                        '# Authentication password. Use your own password':'',
-                        'export OS_PASSWORD':password_admin,
-                        '# Authentication URL, one of the endpoints of keystone service. If this is v3 version, \n# there need some extra variables as follows.' : '',
-                        'export OS_AUTH_URL' : Dovetail.OS_AUTH_URL.format(floating_ip),
-                        '# Default is 2.0. If use keystone v3 API, this should be set as 3.': '',
-                        'export OS_IDENTITY_API_VERSION':CliAuth.get_var('OS_IDENTITY_API_VERSION'),
-                        '# Domain name or ID containing the user above. \n# Command to check the domain: openstack user show <OS_USERNAME>':'',
-                        'export OS_USER_DOMAIN_NAME':'Default',
-                        '# Domain name or ID containing the project aove.':'',
-                        '# Command to check the domain: openstack project show <OS_PROJECT_NAME>':'',
-                        'export OS_PROJECT_DOMAIN_NAME':'Default',
-                        '# Special environment parameters for https. \n# If using https + cacert, the path of cacert file should be provided. \n# The cacert file should be put at $DOVETAIL_HOME/pre_config. \n#export OS_CACERT=/home/opnfv/dovetail/pre_config/cacert.pem \n\n# If using https + no cacert, should add OS_INSECURE environment parameter.':'',
-                        'export OS_INSECURE':'True',
-                        "export DOVETAIL_HOME":'/home/dovetail',
-                        'export OS_PROJECT_ID':projectID_admin,
-                        'export OS_REGION_NAME':'"RegionOne"'}
+    filepath = '${DOVETAIL_HOME}/pre_config/env_config.sh'
 
-    with open('${DOVETAIL_HOME}/pre_config/env_config.sh', 'w+') as configfile:
-      config.write(configfile, space_around_delimiters=False)
+    server_ssh.exec_cmd('sed -i "s/^export OS_PROJECT_NAME=.*/export OS_PROJECT_NAME= {}/g" {}'.format(user_admin, filepath))
+    server_ssh.exec_cmd('sed -i "s/^export OS_TENANT_NAME=.*/export OS_TENANT_NAME= {}/g" {}'.format(user_admin, filepath))
+    server_ssh.exec_cmd('sed -i "s/^export OS_USERNAME=.*/export OS_USERNAME= {}/g" {}'.format(user_admin, filepath))
+    server_ssh.exec_cmd('sed -i "s/^export OS_PASSWORD=.*/export OS_PASSWORD= {}/g" {}'.format(password_admin, filepath))
+    server_ssh.exec_cmd('sed -i "s/^export OS_AUTH_URL=.*/export OS_AUTH_URL= {}/g" {}'.format(Dovetail.OS_AUTH_URL.format((floating_ip)), filepath))
+    server_ssh.exec_cmd('sed -i "s/^export OS_IDENTITY_API_VERSION=.*/export OS_IDENTITY_API_VERSION= {}/g" {}'.format(CliAuth.get_var('OS_IDENTITY_API_VERSION'), filepath))
+    server_ssh.exec_cmd('sed -i "s/^export OS_PROJECT_ID=.*/export OS_PROJECT_ID= {}/g" {}'.format(projectID_admin, filepath))
 
 
-def pod_generate_2plus2(n1ip, n2ip, n3ip, n4ip):
+    # config[None] = {'# Project-level authentication scope (name or ID), recommend admin project.':'',
+    #                     'export OS_PROJECT_NAME':user_admin,
+    #                     '# For identity v2, it uses OS_TENANT_NAME rather than OS_PROJECT_NAME.':'',
+    #                     'export OS_TENANT_NAME':user_admin,
+    #                     '# Authentication username, belongs to the project above, recommend admin user.':'',
+    #                     'export OS_USERNAME':user_admin,
+    #                     '# Authentication password. Use your own password':'',
+    #                     'export OS_PASSWORD':password_admin,
+    #                     '# Authentication URL, one of the endpoints of keystone service. If this is v3 version, \n# there need some extra variables as follows.' : '',
+    #                     'export OS_AUTH_URL' : Dovetail.OS_AUTH_URL.format(floating_ip),
+    #                     '# Default is 2.0. If use keystone v3 API, this should be set as 3.': '',
+    #                     'export OS_IDENTITY_API_VERSION':CliAuth.get_var('OS_IDENTITY_API_VERSION'),
+    #                     '# Domain name or ID containing the user above. \n# Command to check the domain: openstack user show <OS_USERNAME>':'',
+    #                     'export OS_USER_DOMAIN_NAME':'Default',
+    #                     '# Domain name or ID containing the project aove.':'',
+    #                     '# Command to check the domain: openstack project show <OS_PROJECT_NAME>':'',
+    #                     'export OS_PROJECT_DOMAIN_NAME':'Default',
+    #                     '# Special environment parameters for https. \n# If using https + cacert, the path of cacert file should be provided. \n# The cacert file should be put at $DOVETAIL_HOME/pre_config. \n#export OS_CACERT=/home/opnfv/dovetail/pre_config/cacert.pem \n\n# If using https + no cacert, should add OS_INSECURE environment parameter.':'',
+    #                     'export OS_INSECURE':'True',
+    #                     "export DOVETAIL_HOME":'/home/dovetail',
+    #                     'export OS_PROJECT_ID':projectID_admin,
+    #                     'export OS_REGION_NAME':'"RegionOne"'}
+    #
+    # with open('${DOVETAIL_HOME}/pre_config/env_config.sh', 'w+') as configfile:
+    #   config.write(configfile, space_around_delimiters=False)
+
+
+def pod_generate_2plus2(n1ip, n2ip, n3ip, n4ip, server_ssh):
+
+    server_ssh.exec_sudo_cmd('')
     sample = '''nodes:
 -
     name: node1
@@ -85,24 +100,32 @@ def pod_generate_2plus2(n1ip, n2ip, n3ip, n4ip):
                         {'name': 'node3', 'role': 'Compute', 'ip': n3ip, 'user': 'root', 'password': 'Li69nux*'},
                         {'name': 'node4', 'role': 'Compute', 'ip': n4ip, 'user': 'root', 'password': 'Li69nux*'}]}
 
-    with open('${DOVETAIL_HOME}/pre_config/pod.yaml', 'w+') as yaml_file:
-        yaml_file.write(yaml.dump(config, default_flow_style=False))
+    # server_ssh.exec_sudo_cmd('rm -f ${DOVETAIL_HOME}/pre_config/pod.yaml')
+    # server_ssh.exec_sudo_cmd('cat '+yaml.dump(config, default_flow_style=False)+ ' >> ${DOVETAIL_HOME}/pre_config/pod.yaml')
+
+    # with open('./pod.yaml', 'w+') as yaml_file:
+    #     yaml_file.write(yaml.dump(config, default_flow_style=False))
+
     return config
 
 
-def tempest_conf_generate_2plus2():
-    sample = '''compute:
-  # The minimum number of compute nodes expected.
+def tempest_conf_generate_2plus2(server_ssh):
 
-  #   # This should be no less than 2 and no larger than the compute nodes the SUT actually has.
-  min_compute_nodes: 2
-  #
-  # Expected device name when a volume is attached to an instance.
-  volume_device_name: vdb
-'''
-    sample = yaml.load(sample)
-    with open('${DOVETAIL_HOME}/pre_config/tempest_conf.yaml', 'w+') as yaml_file:
-        yaml_file.write(yaml.dump(sample, default_flow_style=False))
+    server_ssh.exec_sudo_cmd('sed -i "s/^min_compute_nodes:.*/min_compute_nodes: 2/g" ${DOVETAIL_HOME}/pre_config/tempest_conf.yaml')
+    server_ssh.exec_sudo_cmd('sed -i "s/^volume_device_name:.*/volume_device_name: vdb/g" ${DOVETAIL_HOME}/pre_config/tempest_conf.yaml')
+
+#     sample = '''compute:
+#   # The minimum number of compute nodes expected.
+#
+#   #   # This should be no less than 2 and no larger than the compute nodes the SUT actually has.
+#   min_compute_nodes: 2
+#   #
+#   # Expected device name when a volume is attached to an instance.
+#   volume_device_name: vdb
+# '''
+#     sample = yaml.load(sample)
+#     with open('${DOVETAIL_HOME}/pre_config/tempest_conf.yaml', 'w+') as yaml_file:
+#         yaml_file.write(yaml.dump(sample, default_flow_style=False))
 
 
 def fix_sshd_file(con_ssh):
@@ -118,13 +141,36 @@ def fix_sshd_file(con_ssh):
 # main
 ##############################
 def test():
-    os.system("export DOVETAIL_HOME="+Dovetail.DOVETAIL_HOME)
-    os.system('mkdir -p ${DOVETAIL_HOME}/pre_config')
+    cumulus = ComplianceCreds()
+    cumulus.set_host(DOVETAIL_HOST)
+    cumulus_host = cumulus.get_host()
+    cumulus_user = cumulus.get_user()
+    cumulus_password = cumulus.get_password()
+    CUMULUS_PROMPT = '.*@.*:.*\$ '
+
+    LOG.info("Connecting to cumulus")
+
+    server_ssh = SSHClient(cumulus_host, cumulus_user, cumulus_password, True, CUMULUS_PROMPT)
+    server_ssh.connect()
+
+    LOG.info("Connected to cumulus")
+
+    server_ssh.exec_sudo_cmd('su - dovetail')
+
+    LOG.info("Changed over to dovetail user")
+
+    LOG.info("export DOVETAIL_HOME="+Dovetail.DOVETAIL_HOME)
+
+    server_ssh.exec_cmd("export DOVETAIL_HOME="+Dovetail.DOVETAIL_HOME)
+    server_ssh.exec_cmd('mkdir -p ${DOVETAIL_HOME}/pre_config')
+
     lab_info = vlm_helper.get_lab_dict()
     # controller0_ip = lab_info.get('controller-0 ip')
 
     floating_ip = lab_info.get('floating ip')
     # controller1_ip = lab_info.get('controller-1 ip')
+
+    LOG.info("Connecting to active Controller")
 
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
@@ -141,9 +187,11 @@ def test():
     compute1_ip = compute1_ip[-1]
     compute1_ip = compute1_ip[2:]
 
-    pod_generate_2plus2('192.168.204.3', '192.168.204.3', compute0_ip, compute1_ip)
-    tempest_conf_generate_2plus2()
-    env_config_generate(floating_ip)
+    LOG.info("Generating YAML files")
+
+    #pod_generate_2plus2('192.168.204.3', '192.168.204.3', compute0_ip, compute1_ip, server_ssh)
+    tempest_conf_generate_2plus2(server_ssh)
+    env_config_generate(floating_ip, server_ssh)
 
     password = HostLinuxCreds.get_password()
 
@@ -152,7 +200,7 @@ def test():
     for x in nodes:
         with host_helper.ssh_to_host(x) as con_ssh:
             fix_sshd_file(con_ssh)
-            con_ssh.exec_cmd('wall Fixed ' + x)
+            LOG.info('Fixed sshd file in ' + x)
             con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
             con_ssh.exec_sudo_cmd('systemctl restart sshd')
             # con_ssh.close()
@@ -161,110 +209,19 @@ def test():
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
 
+    LOG.info("Finding and repairing monitor.py")
+
     stdout = con_ssh.exec_cmd('ps -fC nova-api | grep -v UID | wc')
     stdout = stdout[1]
     stdout = stdout.split()
     stdout = stdout[0]
-    filepath = os.system("printf 'kumuluz\n' | sudo find / -name monitor_process.py")
+    filepath = server_ssh.exec_sudo_cmd("find / -name monitor_process.py")
+    server_ssh.exec_sudo_cmd("sed -ie 's/processes=.*/processes="+stdout+"/g' "+filepath)
 
-    monitor = '''##############################################################################
-# Copyright (c) 2015 Huawei Technologies Co.,Ltd. and others
-#
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Apache License, Version 2.0
-# which accompanies this distribution, and is available at
-# http://www.apache.org/licenses/LICENSE-2.0
-##############################################################################
-from __future__ import absolute_import
-import logging
-import yardstick.ssh as ssh
+    LOG.info("Running Dovetail")
 
-from yardstick.benchmark.scenarios.availability.monitor import basemonitor
-
-LOG = logging.getLogger(__name__)
-
-
-class MonitorProcess(basemonitor.BaseMonitor):
-    """docstring for MonitorApi"""
-
-    __monitor_type__ = "process"
-
-    def setup(self):
-        host = self._context[self._config["host"]]
-
-        self.connection = ssh.SSH.from_node(host, defaults={"user": "root"})
-        self.connection.wait(timeout=600)
-        LOG.debug("ssh host success!")
-        self.check_script = self.get_script_fullpath(
-            "ha_tools/check_process_python.bash")
-        self.process_name = self._config["process_name"]
-
-    def monitor_func(self):
-        with open(self.check_script, "r") as stdin_file:
-            exit_status, stdout, stderr = self.connection.execute(
-                "sudo /bin/sh -s {0}".format(self.process_name),
-                stdin=stdin_file)
-
-        # if not stdout or int(stdout) < self.monitor_data[self.process_name]:
-            # LOG.info("the (%s) processes are in recovery, %d < %d !", self.process_name, int(stdout), self.monitor_data[self.process_name])
-            # return False
-
-        if self.process_name == "nova-api":
-           if not stdout or int(stdout) < '''+stdout+''':
-               LOG.info("the (%s) processes are in recovery, %d < %d !", self.process_name, int(stdout), '''+stdout+''')
-               return False
-        else:
-           if not stdout or int(stdout) < self.monitor_data[self.process_name]:
-               LOG.info("the (%s) processes are in recovery, %d < %d !", self.process_name, int(stdout), self.monitor_data[self.process_name])
-               return False
-
-        LOG.info("the (%s) processes have been fully recovered!",
-                 self.process_name)
-        return True
-
-    def verify_SLA(self):
-        LOG.debug("the _result:%s", self._result)
-        outage_time = self._result.get('outage_time', None)
-        max_outage_time = self._config["sla"]["max_recover_time"]
-        if outage_time > max_outage_time:
-            LOG.error("SLA failure: %f > %f", outage_time, max_outage_time)
-            return False
-        else:
-            LOG.info("the sla is passed")
-            return True
-
-
-def _test():    # pragma: no cover
-    host = {
-        "ip": "10.20.0.5",
-        "user": "root",
-        "key_filename": "/root/.ssh/id_rsa"
-    }
-    context = {"node1": host}
-    monitor_configs = []
-    config = {
-        'monitor_type': 'process',
-        'process_name': 'nova-api',
-        'host': "node1",
-        'monitor_time': 1,
-        'sla': {'max_recover_time': 5}
-    }
-    monitor_configs.append(config)
-
-    p = basemonitor.MonitorMgr()
-    p.init_monitors(monitor_configs, context)
-    p.start_monitors()
-    p.wait_monitors()
-    p.verify_SLA()
-
-
-if __name__ == '__main__':    # pragma: no cover
-    _test()
-'''
-
-    file = open(filepath, 'w+')
-    file.write(monitor)
-    os.system('export DOVETAIL_HOME='+Dovetail.DOVETAIL_HOME)
-    os.system('source ${DOVETAIL_HOME}/pre_config/env_config.sh')
-    os.system("printf 'kumuluz\n' | sudo docker run --privileged=true -it -e DOVETAIL_HOME=$DOVETAIL_HOME -v $DOVETAIL_HOME:$DOVETAIL_HOME -v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash")
-    os.system('dovetail run --testsuite ovp.1.0.0')
+    server_ssh.exec_cmd('export DOVETAIL_HOME='+Dovetail.DOVETAIL_HOME)
+    server_ssh.exec_cmd('source ${DOVETAIL_HOME}/pre_config/env_config.sh')
+    server_ssh.exec_sudo_cmd("docker run --privileged=true -it -e DOVETAIL_HOME=$DOVETAIL_HOME -v $DOVETAIL_HOME:$DOVETAIL_HOME -v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash")
+    # os.system('dovetail run --testsuite ovp.1.0.0')
+    server_ssh.exec_cmd('dovetail run --testsuite madatory')
