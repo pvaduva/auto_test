@@ -1405,11 +1405,8 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
                          format(valid_net_types, net_types))
 
-    if vshell and 'data' not in net_types:
-        LOG.warning("'data' is not included in net_types, while vshell ping is only supported on 'data' network")
-
     vms_ips = []
-    vshell_ips = []
+    vshell_ips_dict = dict(data=[], internal=[])
     if 'mgmt' in net_types:
         mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not mgmt_ips:
@@ -1427,7 +1424,7 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         if not data_ips:
             raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
         if vshell:
-            vshell_ips += data_ips
+            vshell_ips_dict['data'] = data_ips
         else:
             vms_ips += data_ips
 
@@ -1435,14 +1432,17 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not internal_ips:
             raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
-        vms_ips += internal_ips
+        if vshell:
+            vshell_ips_dict['internal'] = internal_ips
+        else:
+            vms_ips += internal_ips
 
-    return vms_ips, vshell_ips
+    return vms_ips, vshell_ips_dict
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
               net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False,
-              sep_file=None):
+              sep_file=None, source_net_types=None):
     """
 
     Args:
@@ -1455,6 +1455,14 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
         sep_file (str|None)
         net_types (str|list|tuple)
+        source_net_types (str|list|tuple|None):
+            vshell specific
+            None:   use the same net_type s as the target IPs'
+            str:    use the specified net_type for all target IPs
+            tuple:  (net_type_data, net_type_internal)
+                use net_type_data for data IPs
+                use net_type_internal for internal IPs
+            list:   same as tuple
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -1465,7 +1473,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         }
 
     """
-    vms_ips, vshell_ips = _get_vms_ips(vm_ids=vm_ids, net_types=net_types, con_ssh=con_ssh, vshell=vshell)
+    vms_ips, vshell_ips_dict = _get_vms_ips(vm_ids=vm_ids, net_types=net_types, con_ssh=con_ssh, vshell=vshell)
 
     res_bool = False
     res_dict = {}
@@ -1475,10 +1483,27 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
                                                           timeout=timeout, fail_ok=True, vshell=False)[0]
             res_dict[ip] = packet_loss_rate
 
-        for vshell_ip in vshell_ips:
-            packet_loss_rate = network_helper.ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                          timeout=timeout, fail_ok=True, vshell=True)[0]
-            res_dict[vshell_ip] = packet_loss_rate
+        for net_type, vshell_ips in vshell_ips_dict.items():
+
+            if source_net_types is None:
+                pass
+            elif isinstance(source_net_types, str):
+                net_type = source_net_types
+            else:
+                net_type_data, net_type_internal = source_net_types
+                if net_type == 'data':
+                    net_type = net_type_data
+                elif net_type == 'internal':
+                    net_type = net_type_internal
+                else:
+                    raise ValueError(net_type)
+
+            for vshell_ip in vshell_ips:
+                packet_loss_rate = network_helper.ping_server(server=vshell_ip, ssh_client=ssh_client,
+                                                              num_pings=num_pings,
+                                                              timeout=timeout, fail_ok=True,
+                                                              vshell=True, net_type=net_type)[0]
+                res_dict[vshell_ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
         if res_bool:
@@ -1603,7 +1628,8 @@ def wait_for_cloud_init_finish(vm_id, timeout=300, con_ssh=None):
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
                      num_pings=5, timeout=60, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
+                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None,
+                     vshell=False, source_net_types=None):
     """
 
     Args:
@@ -1630,7 +1656,14 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         vshell (bool): whether to ping vms' data interface through internal interface.
             Usage: when set to True, use 'vshell ping --count 3 <other_vm_data_ip> <internal_if_id>'
                 - dpdk vms should be booted from lab_setup scripts
-                - 'data' has to be included in net_types
+        source_net_types (str|list|tuple|None):
+            vshell specific
+            None:   use the same net_type s as the target IPs'
+            str:    use the specified net_type for all target IPs
+            tuple:  (net_type_data, net_type_internal)
+                use net_type_data for data IPs
+                use net_type_internal for internal IPs
+            list:   same as tuple
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -1672,7 +1705,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                 res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
                                 timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
                                 retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
-                                vshell=vshell, sep_file=f_path)
+                                vshell=vshell, sep_file=f_path, source_net_types=source_net_types)
                 return res
 
     except:
@@ -4690,7 +4723,7 @@ def setup_kernel_routing(vm_id, **kwargs):
         TisInitServiceScript.start(ssh_client)
 
 
-def setup_avr_routing(vm_id, **kwargs):
+def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
     """
     Setup avr routing (vswitch L3) function for the specified VM
     replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
@@ -4701,6 +4734,13 @@ def setup_avr_routing(vm_id, **kwargs):
     Args:
         vm_id (str):
             the VM to be configured
+        mtu (int):
+            1500 by default
+            for jumbo frames (9000), tenant net support is required
+        vm_type (str):
+            PCI NIC_DEVICE
+            vhost: "${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_VIRTIO}:${PCI_SUBDEVICE_NET}"
+            any other: "${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_MEMORY}:${PCI_SUBDEVICE_AVP}" (default)
         kwargs (dict):
             kwargs for TisInitServiceScript.configure
 
@@ -4729,12 +4769,21 @@ def setup_avr_routing(vm_id, **kwargs):
         items = items[:2]
 
     for (ip, netmask), ct in zip(items, range(len(items))):
-        interfaces.append("""\"{},{},eth{},1500\"""".format(ip, netmask, ct))
+        interfaces.append("""\"{},{},eth{},{}\"""".format(ip, netmask, ct, str(mtu)))
+
+    NIC_DEVICE = ""
+    if vm_type == 'vhost':
+        NIC_DEVICE = "\"${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_VIRTIO}:${PCI_SUBDEVICE_NET}\""
 
     scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
         TisInitServiceScript.configure(
-            ssh_client, NIC_COUNT=str(len(items)), FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
+            ssh_client, NIC_DEVICE=NIC_DEVICE,
+            NIC_COUNT=str(len(items)), FUNCTIONS="avr,",
+            ROUTES="""(
+    #ROUTING_STUB
+)""",
+            ADDRESSES="""(
     {}
 )
 """.format("\n    ".join(interfaces)), **kwargs)
@@ -5036,16 +5085,18 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **l
     if vm_type == 'virtio' or vm_type == 'avp':
         setup_kernel_routing(vm_test)
         setup_kernel_routing(vm_observer)
-    elif vm_type == 'dpdk':
-        setup_avr_routing(vm_test)
-        setup_avr_routing(vm_observer)
+    elif vm_type == 'dpdk' or vm_type == 'vhost' or vm_type == 'vswitch':
+        setup_avr_routing(vm_test, vm_type=vm_type)
+        setup_avr_routing(vm_observer, vm_type=vm_type)
 
     route_vm_pair(vm_test, vm_observer)
 
     return vm_test, vm_observer
 
 
-def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.16.33.0/24", cidr_tenant2="172.18.33.0/24"):
+def launch_vm_with_both_providernets(vm_type,
+                                     cidr_tenant1="172.16.33.0/24", cidr_tenant2="172.18.33.0/24",
+                                     skip_routing=False):
     """
     Launch a VM connected with both provider nets (data0, data1)
     IPv4 subnets only
@@ -5053,6 +5104,12 @@ def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.16.33.0/24", cid
     Args:
         vm_type (str):
             one of 'virtio', 'avp', 'dpdk'
+        cidr_tenant1 (str):
+            cidr for tenant1's subnet, shall be unique on the system
+        cidr_tenant2 (str):
+            cidr for tenant2's subnet, shall be unique on the system
+        skip_routing (bool):
+            skip default routing setups (for advanced configs)
 
     Returns (str):
         vm_id
@@ -5085,9 +5142,10 @@ def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.16.33.0/24", cid
         vm_type=vm_type, count=1, ping_vms=True, nics=nics)
     vm_id = vms[0]
 
-    if vm_type == 'virtio' or vm_type == 'avp':
-        setup_kernel_routing(vm_id)
-    elif vm_type == 'dpdk':
-        setup_avr_routing(vm_id)
+    if not skip_routing:
+        if vm_type == 'virtio' or vm_type == 'avp':
+            setup_kernel_routing(vm_id)
+        elif vm_type == 'dpdk' or vm_type == 'vhost' or vm_type == 'vswitch':
+            setup_avr_routing(vm_id, vm_type=vm_type)
 
     return vm_id

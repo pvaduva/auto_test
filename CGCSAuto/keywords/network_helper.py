@@ -2663,7 +2663,8 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
 
-def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshell=False, interface=None, retry=0):
+def ping_server(server, ssh_client, num_pings=5, timeout=60,
+                fail_ok=False, vshell=False, interface=None, retry=0, net_type='internal'):
     """
 
     Args:
@@ -2674,6 +2675,8 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshe
         fail_ok (bool): whether to raise exception if packet loss rate is 100%
         vshell (bool): whether to ping via 'vshell ping' cmd
         interface (str): interface uuid. vm's internal interface-uuid will be used when unset
+        retry (int):
+        net_type (str): 'data', 'mgmt', or 'internal', only used for vshell=True and interface=None
 
     Returns (int): packet loss percentile, such as 100, 0, 25
 
@@ -2689,12 +2692,15 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60, fail_ok=False, vshe
                 packet_loss_rate = __PING_LOSS_MATCH.findall(output)[-1]
         else:
             if not interface:
-                interface = _get_interfaces_via_vshell(ssh_client, net_type='internal')[0]
+                interface = _get_interfaces_via_vshell(ssh_client, net_type=net_type)[0]
             cmd = 'vshell ping --count {} {} {}'.format(num_pings, server, interface)
             code, output = ssh_client.exec_cmd(cmd=cmd, expect_timeout=timeout)
             if code != 0:
                 packet_loss_rate = 100
             else:
+                if "ERROR" in output:
+                    # usually due to incorrectly selected interface (no route to destination)
+                    raise ValueError("vshell ping rejected, output={}".format(output))
                 packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
         packet_loss_rate = int(packet_loss_rate)
