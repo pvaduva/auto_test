@@ -85,10 +85,10 @@ def pre_restore_checkup():
             LOG.info("Connection established with controller-0 ....")
             ControllerClient.set_active_controller(ssh_client=controller_conn)
 
-            LOG.tc_step("Checking if a USB flash drive with backup files is plugged in... ")
+            LOG.info("Checking if a USB flash drive with backup files is plugged in... ")
             usb_device_name = install_helper.get_usb_device_name(con_ssh=controller_conn)
             assert usb_device_name, "No USB found "
-            LOG.tc_step("USB flash drive found, checking for backup files ... ")
+            LOG.info("USB flash drive found, checking for backup files ... ")
             usb_part_info = install_helper.get_usb_device_partition_info(usb_device=usb_device_name,
                                                                          con_ssh=controller_conn)
             assert usb_part_info and len(usb_part_info) > 0, "No USB or partition found"

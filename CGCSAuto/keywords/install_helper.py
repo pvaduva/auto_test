@@ -3,13 +3,12 @@ import os
 import re
 import threading
 import time
-from contextlib import contextmanager
 
 import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.auth import Tenant, CliAuth
-from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
+# from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
@@ -239,7 +238,7 @@ def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
                                       int(node_obj.telnet_port),
                                       negotiate=node_obj.telnet_negotiate,
                                       port_login=True if node_obj.telnet_login_prompt else False,
-                                      vt100query=node_obj.telnet_vt100query,\
+                                      vt100query=node_obj.telnet_vt100query,
                                       log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
                                       ".telnet.log", debug=False)
 
@@ -1175,7 +1174,7 @@ def delete_backup_files_from_usb(usb_device, con_ssh=None):
     """
     Deletes backup files from the usb to make it ready for next backup.
     Args:
-        usb_info:
+        usb_device:
         con_ssh:
 
     Returns (bool):
@@ -1648,21 +1647,22 @@ def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
                 if cinder_helper.delete_volume_snapshots(id, con_ssh=con_ssh, force=True)[0] == 0:
                     LOG.info(" Deleted snapshot id {} ... ".format(id))
 
-        restored_cinder_volumes = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
+        restored_cinder_volumes, volumes_in_db = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
 
         LOG.info("Restored volumes: {}".format(restored_cinder_volumes))
         restored = len(restored_cinder_volumes)
 
-        if restored > 0:
-            if restored == len(cinder_volume_backups):
-                LOG.info("All volumes restored successfully")
-                return 0, restored_cinder_volumes
-            else:
-                LOG.info("NOT all volumes were restored")
-                return -1, restored_cinder_volumes
+        if restored != len(volumes_in_db):
+            LOG.info("NOT all volumes were restored, restored:{}, should to be restored:{}".format(restored, len(volumes_in_db)))
+            return -1, restored_cinder_volumes
+
+        elif restored > 0:
+            LOG.info("All volumes restored successfully")
+            return 0, restored_cinder_volumes
+
         else:
-            LOG.info("Fail to restore any of the volumes")
-            return 2, None
+            LOG.info("OK, no volumes recorded in DB hence none needs to be restored")
+            return 0, []
 
 
 def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
@@ -1691,7 +1691,7 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
             volume_backup = os.path.basename(volume_backup_path)
             vol_id = volume_backup[7:-20]
             if vol_id not in volumes:
-                LOG.warning("The volume {} does not exist; cannot be imported".format(vol_id))
+                LOG.warning("The volume {} does not exist; cannot be imported, volume_backup:{}".format(vol_id, volume_backup_path))
                 continue
 
             LOG.info("Importing Volume id={} ...".format(vol_id))
@@ -1707,7 +1707,7 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
             imported_volumes.append(vol_id)
             LOG.info("Volume id={} imported successfully\n".format(vol_id))
 
-    return imported_volumes
+    return imported_volumes, volumes
 
 
 def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None, copy_to_usb=None,
@@ -2158,11 +2158,10 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     Boots controller-0 either from tuxlab or USB.
     Args:
         bld_server_conn:
-        load_path:
         patch_dir_paths:
         boot_usb:
         small_footprint:
-        lowlat:
+        low_latency:
         clone_install:
         system_restore:
 
@@ -2230,7 +2229,7 @@ def apply_patches(lab, build_server, patch_dir):
 
     Args:
         lab:
-        server:
+        build_server:
         patch_dir:
 
     Returns:
