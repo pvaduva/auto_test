@@ -431,10 +431,12 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
                 LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
 
                 LOG.info('-launch VMs from the image: {}'.format(image_id))
-                vm_id = vm_helper.launch_vms('vswitch', image=image_id, boot_source='image')
-                vms_added.append(vm_id)
-
-                LOG.info('-OK, 1 VM from image boot up {}'.format(vm_id))
+                vms_added += vm_helper.launch_vms('vswitch',
+                                            image=image_id, 
+                                            boot_source='image', 
+                                            auth_info=Tenant.TENANT1, 
+                                            con_ssh=con_ssh)[0]
+                LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
                 break
             else:
                 LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
@@ -446,11 +448,10 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
     vm_count = len(vms_added) + len(vm_types)
     adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
 
-    vm_ids = []
     for vm_type in vm_types:
-        vm_ids += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+        vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
 
-    return vm_ids
+    return vms_added
 
 
 def pre_backup_setup(backup_info, con_ssh):
