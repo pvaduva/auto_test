@@ -7,11 +7,11 @@ from utils import cli, table_parser
 from consts.cgcs import EventLogID, NtpPool
 from time import sleep
 
+
 def test_ntp_alarm_in_sync_with_ntpq_stats():
     for host in system_helper.get_controllers():
         LOG.tc_step("Check ntp alarm and 'ntpq -pn'")
         host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
-
 
 
 def test_system_ntp_modify():
@@ -52,9 +52,7 @@ def test_system_ntp_modify():
     sleep(5)
     LOG.tc_step ("Checking config status of controllers and lock/unlock to clear")
     if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
-        rc, output = host_helper.lock_unlock_controllers()
-        assert rc == 0, "Failed to lock/unlock controller: {}".format(output)
-
+        host_helper.lock_unlock_controllers()
 
     LOG.tc_step("Verifying that config out of date alarms cleared...")
     system_helper.wait_for_alarms_gone([EventLogID.CONFIG_OUT_OF_DATE, ], fail_ok=False)

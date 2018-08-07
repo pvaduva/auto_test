@@ -7,10 +7,11 @@ from xml.etree import ElementTree
 from consts import proj_vars
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds, ComplianceCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
-from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
+
 from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
 from utils import cli, exceptions, table_parser
@@ -386,7 +387,7 @@ def wait_for_task_clear_and_subfunction_ready(hosts, fail_ok=False, con_ssh=None
                 hosts_to_check.remove(host)
 
         if not hosts_to_check:
-            LOG.info("Hosts subfunctions are now in enabled/available states")
+            LOG.info("Hosts task cleared and subfunctions (if applicable) are now in enabled/available states")
             return True
 
         time.sleep(3)
@@ -1243,6 +1244,8 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
                 return 3, "Swact did not start within {}".format(swact_start_timeout)
             raise exceptions.HostPostCheckFailed("Timed out waiting for swact. SSH to {} is still alive.".
                                                  format(con_ssh.host))
+        time.sleep(5)
+
     LOG.info("ssh to {} disconnected, indicating swacting initiated.".format(con_ssh.host))
 
     # permission denied is received when ssh right after swact initiated. Add delay to avoid sanity failure
@@ -3167,7 +3170,7 @@ def get_sm_dump_items(controller, item_names=None, con_ssh=None):
     get sm dump dict for specified items
     Args:
         controller (str|SSHClient): hostname or ssh client for a controller such as controller-0, controller-1
-        item_names (list|str): such as 'oam-services', or ['oam-ip', 'oam-services']
+        item_names (list|str|None): such as 'oam-services', or ['oam-ip', 'oam-services']
         con_ssh (SSHClient):
 
     Returns (dict): such as {'oam-services': {'desired-state': 'active', 'actual-state': 'active'},
@@ -3687,38 +3690,137 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
     return candidate_hosts
 
 
-def lock_unlock_controllers():
+def lock_unlock_controllers(host_recover='function', alarm_ok=False, no_standby_ok=False):
     """
     lock/unlock both controller to get rid of the config out of date situations
 
-    Returns (list): return code and msg
+    Args:
+        host_recover (None|str): try to recover host if lock/unlock fails
+        alarm_ok (bool)
+        no_standby_ok (bool)
+
+    Returns (tuple): return code and msg
 
     """
     active, standby = system_helper.get_active_standby_controllers()
     if standby:
-        LOG.info("(Session) Locking unlocking controllers to complete action")
+        LOG.info("Locking unlocking controllers to complete action")
+        from testfixtures.recover_hosts import HostsToRecover
+        if host_recover:
+            HostsToRecover.add(hostnames=standby, scope=host_recover)
         lock_host(standby)
         unlock_host(standby)
+        if host_recover:
+            HostsToRecover.remove(hostnames=standby, scope=host_recover)
         drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=standby,
-                                                     strict=False, fail_ok=True, timeout=300)
+                                                     strict=False, fail_ok=alarm_ok, timeout=300, check_interval=20)
         if not drbd_res:
             return 1, "400.001 alarm is not cleared within timeout after unlock standby"
 
         lock_host(active, swact=True)
         unlock_host(active)
         drbd_res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, entity_id=active,
-                                                     strict=False, fail_ok=True, timeout=300)
+                                                     strict=False, fail_ok=alarm_ok, timeout=300)
         if not drbd_res:
             return 1, "400.001 alarm is not cleared within timeout after unlock standby"
+
     elif system_helper.is_simplex():
-        LOG.info("(Session) Simplex lab - lock/unlock controller to complete action")
+        LOG.info("Simplex system - lock/unlock only controller")
         lock_host('controller-0', swact=False)
         unlock_host('controller-0')
-    else:
-        LOG.warning("Standby controller unavailable. Skip lock unlock controllers.")
-        return 1, "Standby controller unavailable. Skip lock unlock controllers"
 
-    return 0, "Locking unlocking controllers completed"
+    else:
+        LOG.warning("Standby controller unavailable. Unable to lock active controller.")
+        if no_standby_ok:
+            return 2, 'No standby available, thus unable to lock/unlock controllers'
+        else:
+            raise exceptions.HostError("Unable to lock/unlock controllers due to no standby controller")
+
+    return 0, "Locking unlocking controller(s) completed"
+
+
+def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, recover_scope='function'):
+    """
+    Lock/unlock hosts simultaneously when possible.
+    Args:
+        hosts (str|list):
+        force_lock (bool): lock without migrating vms out
+        con_ssh:
+        recover_scope (None|str):
+
+    Returns:
+
+    """
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    last_compute = last_storage = last_controller = None
+    from keywords import nova_helper
+    from testfixtures.recover_hosts import HostsToRecover
+
+    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
+    controllers = list(set(controllers) & set(hosts))
+    computes_to_lock = list(set(computes) & set(hosts))
+    storages = list(set(storages) & set(hosts))
+
+    hosts_to_lock = list(computes_to_lock)
+    if not force_lock and len(computes) == len(computes_to_lock) and nova_helper.get_vms():
+        # leave a compute if there are vms on system and force lock=False
+        last_compute = hosts_to_lock.pop()
+
+    active = None
+    if len(controllers) > 1:
+        active, standby = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
+        hosts_to_lock.append(standby)
+        controllers.remove(standby)
+        last_controller = active
+
+    if storages:
+        if controllers and 'storage-0' in storages:
+            last_storage = 'storage-0'
+            storages.remove(last_storage)
+        hosts_to_lock += storages
+
+    LOG.info("Lock/unlock: {}".format(hosts_to_lock))
+    hosts_locked = []
+    try:
+        for host in hosts_to_lock:
+            HostsToRecover.add(hostnames=host, scope=recover_scope)
+            lock_host(host, con_ssh=con_ssh, force=force_lock)
+            hosts_locked.append(host)
+
+    finally:
+        if hosts_locked:
+            unlock_hosts(hosts=hosts_locked, con_ssh=con_ssh)
+            wait_for_hosts_ready(hosts=hosts_locked, con_ssh=con_ssh)
+            HostsToRecover.remove(hosts_locked, scope=recover_scope)
+
+        LOG.info("Lock/unlock last compute {} and storage {} if any".format(last_compute, last_storage))
+        hosts_locked_next = []
+        try:
+            for host in (last_compute, last_storage):
+                if host:
+                    HostsToRecover.add(host, scope=recover_scope)
+                    lock_host(host=host, con_ssh=con_ssh)
+                    hosts_locked_next.append(host)
+        finally:
+            if hosts_locked_next:
+                unlock_hosts(hosts_locked_next, con_ssh=con_ssh)
+                wait_for_hosts_ready(hosts_locked_next, con_ssh=con_ssh)
+                HostsToRecover.remove(hosts_locked_next, scope=recover_scope)
+
+            if last_controller:
+                if active and system_helper.is_two_node_cpe(con_ssh=con_ssh):
+                    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CPU_USAGE_HIGH, check_interval=30,
+                                                      timeout=300, con_ssh=con_ssh, entity_id=active)
+                LOG.info("Lock/unlock {}".format(last_controller))
+                HostsToRecover.add(last_controller, scope=recover_scope)
+                lock_host(last_controller, swact=True, con_ssh=con_ssh, force=force_lock)
+                unlock_hosts(last_controller, con_ssh=con_ssh)
+                wait_for_hosts_ready(last_controller, con_ssh=con_ssh)
+                HostsToRecover.remove(last_controller, scope=recover_scope)
+
+    LOG.info("Hosts lock/unlock completed: {}".format(hosts))
 
 
 def get_traffic_control_info(con_ssh=None, port=None):

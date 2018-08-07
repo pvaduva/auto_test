@@ -44,6 +44,12 @@ class HostsToRecover():
     }
 
     @classmethod
+    def __check_scope(cls, scope):
+        valid_scope = cls.__hosts_to_recover.keys()
+        if scope not in valid_scope:
+            raise ValueError("scope has to be one of the following: {}".format(valid_scope))
+
+    @classmethod
     def add(cls, hostnames, scope='function'):
         """
         Add host(s) to recover list. Will wait for host(s) to recover as test teardown.
@@ -52,14 +58,35 @@ class HostsToRecover():
             hostnames (str|list):
 
         """
-        valid_scope = cls.__hosts_to_recover.keys()
-        if scope not in valid_scope:
-            raise ValueError("scope has to be one of the following: {}".format(valid_scope))
+        if scope is None:
+            return
 
+        cls.__check_scope(scope)
         if isinstance(hostnames, str):
             hostnames = [hostnames]
 
         cls.__hosts_to_recover[scope] += hostnames
+
+    @classmethod
+    def remove(cls, hostnames, scope='function'):
+        """
+        Remove host(s) from recover list. Only remove one instance if host has multiple occurances in the recover list.
+
+        Args:
+            hostnames (str|list|tuple):
+            scope:
+
+        """
+        if scope is None:
+            return
+
+        cls.__check_scope(scope)
+
+        if isinstance(hostnames, str):
+            hostnames = [hostnames]
+
+        for host in hostnames:
+            cls.__hosts_to_recover[scope].remove(host)
 
     @classmethod
     def _reset(cls, scope):

@@ -51,7 +51,7 @@ def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_o
 
     if ret == 0 and host_helper.get_hostshow_value('controller-0','config_status') == 'Config out-of-date':
             # need to lock/unlock standby and swact lock/unlock
-        ret, out = host_helper.lock_unlock_controllers()
+        ret, out = host_helper.lock_unlock_controllers(alarm_ok=True)
         if ret == 1:
             return 1, out
 
@@ -91,7 +91,7 @@ def enable_disable_murano_agent(enable=True, con_ssh=None, auth_info=Tenant.ADMI
     if ret != 0:
         return 1, out
 
-    if host_helper.get_hostshow_value('controller-0','config_status') == 'Config out-of-date':
+    if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
             # need to lock/unlock standby and swact lock/unlock
         ret, out = host_helper.lock_unlock_controllers()
         if ret != 0:
