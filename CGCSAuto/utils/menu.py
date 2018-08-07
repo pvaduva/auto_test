@@ -308,7 +308,7 @@ class KickstartOption(Option):
                 tag_dict["security"] = "extended"
 
             if "lowlat" in option_name or "low lat" in option_name or "low_lat" in option_name:
-                tag_dict["type"] = "lowlatency"
+                tag_dict["type"] = "lowlat"
 
             if "graphic" in option_name:
                 tag_dict["console"] = "graphical"
