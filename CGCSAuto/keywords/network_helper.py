@@ -4180,8 +4180,9 @@ def get_dpdk_user_data(con_ssh=None):
         con_ssh = get_cli_client()
 
     if con_ssh.file_exists(file_path=file_path):
-        LOG.info('userdata {} already exists. Return existing path'.format(file_path))
-        return file_path
+        # LOG.info('userdata {} already exists. Return existing path'.format(file_path))
+        # return file_path
+        con_ssh.exec_cmd('rm -f {}'.format(file_path), fail_ok=False)
 
     LOG.debug('Create userdata directory if not already exists')
     cmd = 'mkdir -p {};touch {}'.format(file_dir, file_path)

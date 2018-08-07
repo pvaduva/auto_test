@@ -12,7 +12,7 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils.guest_scripts.scripts import DPDKPktgen
 from testfixtures.fixture_resources import ResourceCleanup
-from keywords import network_helper, vm_helper, common, nova_helper, host_helper, ixia_helper
+from keywords import network_helper, vm_helper, common, nova_helper, host_helper, ixia_helper, system_helper
 
 
 @fixture(scope='module')
@@ -48,6 +48,12 @@ def update_network_quotas_secondary(request):
 @fixture(scope='module')
 def update_network_quotas(request, update_network_quotas_primary, update_network_quotas_secondary):
     pass
+
+
+@fixture(scope='function')
+def skip_if_25G():
+    if ProjVar.get_var("LAB")['name'] in ["yow-cgcs-wildcat-61_62", "yow-cgcs-wildcat-63_66"]:
+        skip("25G labs are not supported for this testcase due to insufficient stress")
 
 
 @mark.parametrize('vm_type', [
@@ -341,7 +347,7 @@ def ensure_vms_on_same_host(vms, *args, **kwargs):
     return most_common
 
 
-def test_qos_weight_enforced(request):
+def test_qos_weight_enforced(request, skip_if_25G):
     """
     Verify QoS weights are impacting networks
     DPDK-only test case (kpktgen does not supply enough Tx rate)
@@ -360,6 +366,9 @@ def test_qos_weight_enforced(request):
     Test Teardown:
         - Delete qoses, vms, volumes, flavors
     """
+    if not system_helper.is_avs():
+        skip("vshell not available on ovs systems")
+
     vm_type = 'dpdk'
     vif_model = 'avp'
 
@@ -439,16 +448,18 @@ def test_qos_weight_enforced(request):
                     "set 0 rate {}".format(rate),
                     # "start 0 arp request",
                     "start 0")
+                # 60s delay, as once started, the network becomes extremely unstable -> SSH Failure
                 DPDKPktgen.start(vm_ssh)
 
+    time.sleep(60)   # wait for all DPDKPktgen to start
+    con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step("Reset vswitch statistics")
     # synchornized reference point
     for host in [compute_A, compute_B]:
-        with host_helper.ssh_to_host(host) as host_ssh:
-            host_ssh.exec_cmd("vshell engine-stats-clear", fail_ok=False)
-            host_ssh.exec_cmd("vshell port-stats-clear", fail_ok=False)
-            host_ssh.exec_cmd("vshell interface-stats-clear", fail_ok=False)
-            host_ssh.exec_cmd("vshell network-stats-clear", fail_ok=False)
+        con_ssh.exec_cmd("vshell -H {} engine-stats-clear".format(host), fail_ok=False)
+        con_ssh.exec_cmd("vshell -H {} port-stats-clear".format(host), fail_ok=False)
+        con_ssh.exec_cmd("vshell -H {} interface-stats-clear".format(host), fail_ok=False)
+        con_ssh.exec_cmd("vshell -H {} network-stats-clear".format(host), fail_ok=False)
 
     wait = 60
     LOG.tc_step("Wait for {} seconds".format(wait))
@@ -456,17 +467,19 @@ def test_qos_weight_enforced(request):
 
     # check vshell rx-es for vports;
     LOG.tc_step("Verify QoS weights are impacting drop rates of two tenant networks under stress-ed host")
-    with host_helper.ssh_to_host(compute_A) as host_ssh:   # for post mortem analysis
-        host_ssh.exec_cmd("vshell engine-stats-list", fail_ok=False)
-        host_ssh.exec_cmd("vshell port-stats-list", fail_ok=False)
-        host_ssh.exec_cmd("vshell interface-stats-list", fail_ok=False)
-        host_ssh.exec_cmd("vshell network-stats-list", fail_ok=False)
-    with host_helper.ssh_to_host(compute_B) as host_ssh:   # analyze Rx side stats
-        host_ssh.exec_cmd("vshell engine-stats-list", fail_ok=False)
-        succ, ifaces = host_ssh.exec_cmd("vshell interface-list", fail_ok=False)
-        succ, port_stats = host_ssh.exec_cmd("vshell port-stats-list", fail_ok=False)
-        succ, iface_stats = host_ssh.exec_cmd("vshell interface-stats-list", fail_ok=False)
-        succ, nw_stats = host_ssh.exec_cmd("vshell network-stats-list", fail_ok=False)
+
+    # for post mortem analysis
+    con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_A), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_A), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_A), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_A), fail_ok=False)
+
+    # analyze Rx side stats
+    con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_B), fail_ok=False)
+    succ, ifaces = con_ssh.exec_cmd("vshell -H {} interface-list".format(compute_B), fail_ok=False)
+    succ, port_stats = con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_B), fail_ok=False)
+    succ, iface_stats = con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_B), fail_ok=False)
+    succ, nw_stats = con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_B), fail_ok=False)
 
     rx_high_id = network_helper.get_ports(ip_addr=network_helper.get_data_ips_for_vms(vms_high[1])[0])[0]
     rx_low_id = network_helper.get_ports(ip_addr=network_helper.get_data_ips_for_vms(vms_low[1])[0])[0]
@@ -488,7 +501,7 @@ def test_qos_weight_enforced(request):
     LOG.info(" low rx-Gbps : {:>10.2f}".format(rx_low_bytes/125000000/wait))
 
     assert abs(rx_high_bytes/rx_low_bytes - weight_high/weight_low) < 0.3*weight_high/weight_low,   \
-        "weight policy deviated by more than 10%"
+        "weight policy deviated by more than 30%"
 
 
 def setup_busy_loop_net(host, vlan_a, vlan_b, request, mtu=1492, eth='eth0'):
@@ -517,7 +530,7 @@ def setup_busy_loop_net(host, vlan_a, vlan_b, request, mtu=1492, eth='eth0'):
     'virtio',
     'avp',
 ])
-def test_qos_phb_enforced(vm_type, ixia_supported, request, update_network_quotas):
+def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_network_quotas):
     """
     Verify QoS PHB policies are applied via traffic, driven by Ixia
     PHB precedence weights are hardcoded
@@ -532,6 +545,9 @@ def test_qos_phb_enforced(vm_type, ixia_supported, request, update_network_quota
     Test Teardown:
         - Delete vms, volumes, flavors, networks, subnets
     """
+    if not system_helper.is_avs():
+        skip("cannot properly setup guests without avs")
+
     vm_test = vm_helper.launch_vm_with_both_providernets(vm_type)
     nic_test = (network_helper.get_data_ips_for_vms(vm_test)[0], vm_test)
     nic_observer = (network_helper.get_data_ips_for_vms(vm_test)[1], vm_test)

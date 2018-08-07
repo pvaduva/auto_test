@@ -3,6 +3,8 @@
 # the original version from /usr/local/bin/launch_pktgen.sh
 # written by Allain Legacy
 
+sleep 60
+
 PKTGEN=${PKTGEN:-/usr/local/bin/pktgen}
 HUGETLBMNT=${HUGETLBMNT:-/dev/hugepages}
 
