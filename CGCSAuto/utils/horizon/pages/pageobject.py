@@ -6,7 +6,7 @@ from time import sleep
 
 class PageObject(basewebobject.BaseWebObject):
     """Base class for page objects."""
-    BASE_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
+    # BASE_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
     PARTIAL_URL = None
 
     def __init__(self, driver=None):
@@ -21,7 +21,11 @@ class PageObject(basewebobject.BaseWebObject):
 
     @property
     def base_url(self):
-        base_url = self.BASE_URL  # horizon url matt
+        from consts.auth import CliAuth
+        prefix = 'http'
+        if CliAuth.get_var('HTTPS'):
+            prefix = 'https'
+        base_url = '{}://{}'.format(prefix, ProjVar.get_var("LAB")['floating ip'])    # horizon url matt
         if not base_url.endswith('/'):
             base_url += '/'
         return base_url
@@ -77,4 +81,3 @@ class PageObject(basewebobject.BaseWebObject):
     def go_to_target_page(self):
         self.driver.get(self.target_url)
         sleep(1)
-

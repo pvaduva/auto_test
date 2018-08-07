@@ -170,6 +170,7 @@ def set_dns_servers(subnet_list, dns_servers=None):
 
     """
     LOG.info("DNS servers are set to: {}".format(dns_servers))
+
     if not dns_servers:
         LOG.info("Clearing DNS entries")
         for subnet in subnet_list:
@@ -199,7 +200,7 @@ def func_recover(request):
 
         for host in HOSTS_AFFECTED:
             if host_helper.get_hostshow_value(host, 'config_status') == 'Config out-of-date':
-                LOG.info("Lock/unlock {} to clear config out-of-date status")
+                LOG.info("Lock/unlock {} to clear config out-of-date status".format(host))
                 host_helper.lock_unlock_hosts(hosts=host, force_lock=True)
 
     request.addfinalizer(teardown)
@@ -277,7 +278,7 @@ def test_ping_between_vms_using_hostnames():
 
     LOG.tc_step("Modify DNS entries for each subnet in the network")
     subnet_list = get_subnets(net_name)
-    set_dns_servers(net_name, subnet_list)
+    set_dns_servers(subnet_list)
 
     LOG.tc_step("Launch two VMs using the same network")
     nics = [{"net-id": mgmt_net_id, "vif-model": "virtio"}]

@@ -3754,7 +3754,7 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, recover_scope='func
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    last_compute = last_storage = last_controller = None
+    last_compute = last_storage = None
     from keywords import nova_helper
     from testfixtures.recover_hosts import HostsToRecover
 
@@ -3768,17 +3768,16 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, recover_scope='func
         # leave a compute if there are vms on system and force lock=False
         last_compute = hosts_to_lock.pop()
 
-    active = None
-    if len(controllers) > 1:
-        active, standby = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
-        hosts_to_lock.append(standby)
-        controllers.remove(standby)
-        last_controller = active
+    active, standby = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
 
-    if storages:
-        if controllers and 'storage-0' in storages:
+    if standby and standby in controllers:
+        hosts_to_lock.append(standby)
+
+        if storages and 'storage-0' in storages:
+            # storage-0 cannot be locked with any controller
             last_storage = 'storage-0'
             storages.remove(last_storage)
+    if storages:
         hosts_to_lock += storages
 
     LOG.info("Lock/unlock: {}".format(hosts_to_lock))
@@ -3803,22 +3802,23 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, recover_scope='func
                     HostsToRecover.add(host, scope=recover_scope)
                     lock_host(host=host, con_ssh=con_ssh)
                     hosts_locked_next.append(host)
+
         finally:
             if hosts_locked_next:
                 unlock_hosts(hosts_locked_next, con_ssh=con_ssh)
                 wait_for_hosts_ready(hosts_locked_next, con_ssh=con_ssh)
                 HostsToRecover.remove(hosts_locked_next, scope=recover_scope)
 
-            if last_controller:
+            if active in controllers:
                 if active and system_helper.is_two_node_cpe(con_ssh=con_ssh):
                     system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CPU_USAGE_HIGH, check_interval=30,
                                                       timeout=300, con_ssh=con_ssh, entity_id=active)
-                LOG.info("Lock/unlock {}".format(last_controller))
-                HostsToRecover.add(last_controller, scope=recover_scope)
-                lock_host(last_controller, swact=True, con_ssh=con_ssh, force=force_lock)
-                unlock_hosts(last_controller, con_ssh=con_ssh)
-                wait_for_hosts_ready(last_controller, con_ssh=con_ssh)
-                HostsToRecover.remove(last_controller, scope=recover_scope)
+                LOG.info("Lock/unlock {}".format(active))
+                HostsToRecover.add(active, scope=recover_scope)
+                lock_host(active, swact=True, con_ssh=con_ssh, force=force_lock)
+                unlock_hosts(active, con_ssh=con_ssh)
+                wait_for_hosts_ready(active, con_ssh=con_ssh)
+                HostsToRecover.remove(active, scope=recover_scope)
 
     LOG.info("Hosts lock/unlock completed: {}".format(hosts))
 

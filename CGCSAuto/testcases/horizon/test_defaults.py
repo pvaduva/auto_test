@@ -3,7 +3,7 @@ from utils.horizon.regions import messages
 from time import sleep
 from utils.horizon.pages.admin.system import defaultspage
 from pytest import fixture
-from testfixtures.horizon import admin_home_pg, driver
+from testfixtures.horizon import admin_home_pg      # DO NOT remove
 from utils.tis_log import LOG
 from consts import horizon
 

@@ -28,6 +28,7 @@ class VideoRecorder(object):
         self._cmd = ['ffmpeg', '-f', 'x11grab', '-r', str(frame_rate),
                      '-video_size', '{}x{}'.format(width, height),
                      '-i', '{}.0'.format(display), self.file_path]
+        self._popen = None
 
     def start(self):
         if self.is_launched:
@@ -54,6 +55,7 @@ class VideoRecorder(object):
                 if self._popen.poll() is not None:
                     return
 
+            LOG.info("Killing video recorder process")
             os.kill(self._popen.pid, signal.SIGTERM)
 
         t = Thread(target=terminate_avconv)
