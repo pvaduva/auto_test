@@ -84,10 +84,10 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
     args = name
     if tenant_name is not None:
         tenant_id = keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
-        args += ' --tenant-id ' + tenant_id
+        args += ' --project ' + tenant_id
 
     if shared is not None:
-        args += ' --shared' if shared else ' --no-share'
+        args += ' --share' if shared else ' --no-share'
     if vlan_transparent is not None:
         args += ' --transparent-vlan' if vlan_transparent else ' --no-transparent-vlan'
     if port_security is not None:

@@ -371,7 +371,7 @@ def test_qos_weight_enforced(request):
     mgmt_net = network_helper.get_mgmt_net_id(auth_info=Tenant.get_primary())
 
     LOG.tc_step("Create QoS policies with different weights")
-    weight_high, weight_low = 100, 1
+    weight_high, weight_low = 100, 10
     qos_high = network_helper.create_qos(scheduler={'weight': weight_high}, tenant_name=Tenant.get_primary()['tenant'])[1]
     qos_low = network_helper.create_qos(scheduler={'weight': weight_low}, tenant_name=Tenant.get_primary()['tenant'])[1]
 
@@ -487,7 +487,7 @@ def test_qos_weight_enforced(request):
     LOG.info(" low rx-bytes: {:>10}".format(rx_low_bytes))
     LOG.info(" low rx-Gbps : {:>10.2f}".format(rx_low_bytes/125000000/wait))
 
-    assert abs(rx_high_bytes/rx_low_bytes - weight_high/weight_low) < 0.1*weight_high/weight_low,   \
+    assert abs(rx_high_bytes/rx_low_bytes - weight_high/weight_low) < 0.3*weight_high/weight_low,   \
         "weight policy deviated by more than 10%"
 
 
