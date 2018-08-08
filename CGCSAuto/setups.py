@@ -443,14 +443,13 @@ def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute
                         format(lab_arg, lab_name))
         lab_arg = lab_name
 
+    if controller_arg:
+        lab_dict = get_lab_from_install_args(lab_arg, controller_arg, compute_arg, storage_arg, lab_files_dir,
+                                             build_server)
+
     if lab_dict is None:
         if lab_arg:
             lab_dict = get_lab_dict(lab_arg)
-        else:
-            LOG.warning("lab is not specified via cmdline! Using install args to find lab")
-            lab_dict = get_lab_from_install_args(lab_arg, controller_arg, compute_arg, storage_arg, lab_files_dir,
-                                                 build_server)
-
     return lab_dict
 
 
@@ -725,9 +724,6 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
     if errors:
         raise ValueError("Install param error(s): {}".format(errors))
 
-    # compute directory for all logs based on lab, and timestamp on local machine
-    out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
-
     # add lab resource type and any other lab information in the lab files
     if low_latency:
         try:
@@ -809,7 +805,6 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  files_dir=files_dir,
                                  heat_templates=heat_templates,
                                  license_path=license_path,
-                                 out_put_dir=out_put_dir,
                                  controller0_ceph_mon_device=controller0_ceph_mon_device,
                                  controller1_ceph_mon_device=controller1_ceph_mon_device,
                                  ceph_mon_gib=ceph_mon_gib,

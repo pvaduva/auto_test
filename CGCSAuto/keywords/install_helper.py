@@ -180,7 +180,7 @@ def get_mgmt_boot_device(node):
 
 
 def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_power_on=False, close_telnet_conn=True,
-                            small_footprint=False, wait_for_thread=False):
+                            small_footprint=None, wait_for_thread=False, security=None, low_latency=None, boot_usb=None):
 
     lab = InstallVars.get_install_var("LAB")
     node = lab[hostname]
@@ -208,7 +208,8 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
                                    name=node.name,
                                    args=(node, boot_device),
                                    kwargs={'upgrade': upgrade, 'vlm_power_on': vlm_power_on,
-                                           'close_telnet_conn': close_telnet_conn,'small_footprint':small_footprint})
+                                           'close_telnet_conn': close_telnet_conn, 'small_footprint': small_footprint,
+                                           'security': security, 'low_latency': low_latency, 'boot_usb': boot_usb})
 
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
@@ -219,6 +220,8 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
+    return node_thread
+
 
 def bring_node_console_up(node, boot_device,
                           boot_usb=None,
@@ -227,8 +230,7 @@ def bring_node_console_up(node, boot_device,
                           vlm_power_on=False,
                           close_telnet_conn=True,
                           small_footprint=None,
-                          security=None,
-                          clone_install=False,):
+                          security=None,):
     """
     Initiate the boot and installation operation.
     Args:
@@ -260,21 +262,6 @@ def bring_node_console_up(node, boot_device,
         node.telnet_conn.close()
 
 
-def boot_hosts(boot_device, nodes=None):
-    threads = []
-    usb = ("usb" in InstallVars.get_install_var("BOOT_TYPE") or "burn" in InstallVars.get_install_var("BOOT_TYPE"))
-    for node in nodes:
-        boot_usb = node.name == "controller-0" and usb
-        node_thread = threading.Thread(target=bring_node_console_up, name=node.name,
-                                       args=(node, boot_device),
-                                       kwargs={'vlm_power_on': True, "close_telnet_conn": True, "boot_usb": boot_usb,})
-        threads.append(node_thread)
-        LOG.info("Starting thread for {}".format(node_thread.name))
-        node_thread.start()
-    for thread in threads:
-        thread.join()
-
-
 def get_non_controller_system_hosts():
 
     hosts = system_helper.get_hostnames()
@@ -289,9 +276,6 @@ def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
     if node_obj.telnet_login_prompt:
         _telnet_conn.send("\r\n")
-
-
-
 
     return _telnet_conn
 
@@ -2266,8 +2250,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           low_latency=low_latency,
                           security=security,
                           vlm_power_on=True,
-                          close_telnet_conn=False,
-                          clone_install=clone_install)
+                          close_telnet_conn=False,)
 
     LOG.info("Initial login and password set for " + controller0.name)
     reset = True

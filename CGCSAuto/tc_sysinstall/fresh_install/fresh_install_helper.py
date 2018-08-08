@@ -1,5 +1,6 @@
 import re
 from pytest import skip
+import threading
 
 from keywords import install_helper, system_helper, vlm_helper, host_helper
 from utils.tis_log import LOG
@@ -263,16 +264,15 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def boot_hosts(boot_device_dict=None, host_objects=None, final_step=None):
+def boot_hosts(boot_device_dict=None, hostnames=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Boot"
-    if host_objects is None:
+    if hostnames is None:
         lab = InstallVars.get_install_var('LAB')
-        host_objects = [lab[hostname] for hostname in lab['hosts'] if 'controller-0' not in hostname]
+        hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
     if boot_device_dict is None:
         lab = InstallVars.get_install_var('LAB')
-        boot_device_dict = lab['boot_device_dict']
-    hostnames = [host.name for host in host_objects]
+        boot_device_dict = lab.get('boot_device_dict')
     controllers = []
     computes = []
     storages = []
@@ -303,10 +303,15 @@ def boot_hosts(boot_device_dict=None, host_objects=None, final_step=None):
     else:
         test_step += " other lab hosts"
 
+    threads = []
     LOG.tc_step(test_step)
     if do_step(test_step):
-        install_helper.boot_hosts(boot_device_dict, nodes=host_objects)
-    if LOG.test_step == InstallVars.get_install_var("STOP") or test_step == InstallVars.get_install_var("STOP"):
+        for hostname in hostnames:
+            threads.append(install_helper.open_vlm_console_thread(hostname, boot_device_dict, wait_for_thread=False,
+                                                                  vlm_power_on=True, close_telnet_conn=True))
+        for thread in threads:
+            thread.join()
+    if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
