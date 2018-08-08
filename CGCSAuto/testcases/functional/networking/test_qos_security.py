@@ -634,3 +634,78 @@ def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_
 
         LOG.tc_step("Verifying PHB policies enforced")
         assert not fail, "framerates are not properly distributed by PHB weights after max. framerate reached"
+
+
+@mark.parametrize('vm_type', [
+    'virtio',
+    'avp',
+    'dpdk',
+])
+def test_jumbo_frames(vm_type, ixia_supported, update_network_quotas):
+    """
+    Verify jumbo frames processed correctly
+
+    Test Steps:
+        - Launch a pair of test VMs
+        - Setup routing with MTU fetched from VMs' tenant network
+        - Configure traffic frameSize
+        - Start traffic and verify loss
+
+    Test Teardown:
+        - Delete vms, volumes, flavors
+    """
+    for tenant in [Tenant.get_primary(), Tenant.get_secondary()]:
+        tenant_net = network_helper.get_tenant_net_id(auth_info=tenant)
+        if network_helper.get_net_info(tenant_net, field='provider:network_type') != 'vlan':
+            skip("Tenant {}'s providernet is not on vlan".format(tenant['tenant']))
+
+    LOG.tc_step("Launch a pair of test VMs")
+    vms, nics = vm_helper.launch_vms(
+        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary())
+    vm_test = vms[0]
+    tenant_net = nics[1]['net-id']
+    providernet = network_helper.get_net_info(tenant_net, field='provider:physical_network')
+    vm_test_mtu = int(network_helper.get_providernets(name=providernet, rtn_val='mtu')[0])
+
+    vms, nics = vm_helper.launch_vms(
+        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary())
+    vm_observer = vms[0]
+    tenant_net = nics[1]['net-id']
+    providernet = network_helper.get_net_info(tenant_net, field='provider:physical_network')
+    vm_observer_mtu = int(network_helper.get_providernets(name=providernet, rtn_val='mtu')[0])
+
+    if vm_test_mtu != vm_observer_mtu:
+        LOG.warning("Mismatched MTUs for data network(s) launched for VMs, taking the smaller one")
+    mtu = min(vm_test_mtu, vm_observer_mtu)
+
+    LOG.tc_step("Configuring VMs with MTU={}".format(mtu))
+    if vm_type == 'virtio' or vm_type == 'avp':
+        vm_helper.setup_kernel_routing(vm_test)
+        vm_helper.setup_kernel_routing(vm_observer)
+    elif vm_type == 'dpdk' or vm_type == 'vhost' or vm_type == 'vswitch':
+        vm_helper.setup_avr_routing(vm_test, vm_type=vm_type, mtu=mtu)
+        vm_helper.setup_avr_routing(vm_observer, vm_type=vm_type, mtu=mtu)
+
+    vm_helper.route_vm_pair(vm_test, vm_observer)
+
+    for flow_mtu in [1500, 3000, 9216]:
+        with vm_helper.traffic_between_vms(
+                [(vm_test, vm_observer)],
+                fps=1000, bidirectional=True, mtu=flow_mtu, start_traffic=False) as session:
+
+            LOG.tc_step("Configure traffic frameSize to {}".format(flow_mtu))
+            for trafficItem in session.getList(session.getRoot()+'/traffic', 'trafficItem'):
+                configElement = session.getList(trafficItem, 'configElement')[0]
+                session.configure(configElement+'/frameSize', fixedSize=flow_mtu, type='fixed')
+
+            LOG.tc_step("Start traffic and verify loss")
+            session.traffic_start()
+            time.sleep(10)
+
+            loss = int(float(session.get_statistics('traffic item statistics', fail_ok=False)[0]['Loss %']))
+            LOG.info("Observed Loss %: {}".format(loss))
+
+            if mtu < flow_mtu:
+                assert loss >= 99, "expected loss when sending frame > provider_mtu"
+            else:
+                assert loss <= 1, "expected no loss when sending frame <= provider_mtu"

@@ -347,10 +347,10 @@ class IxiaSession(object):
             return vports
 
     def configure_protocol_interface(self, port, ipv4=None, ipv6=None,
-                                     vlan_id=None, mac_address=None,
+                                     vlan_id=None, mac_address=None, mtu=1500,
                                      description=None, chassis=None,
                                      interface=None, create_if_nonexistent=False,
-                                     validate=True, validate_timeout=60):
+                                     validate=True, validate_timeout=300):
         """
         Configure a Protocol Interface.
         In order to re-configure for an existing interface, specify 'interface='.
@@ -369,6 +369,8 @@ class IxiaSession(object):
                 interface VLAN ID, or None to skip vlan configurations
             mac_address (str|None):
                 interface mac address, or None to use default
+            mtu (int):
+                interface mtu
             description (str|None):
                 interface description in the configuration, or None to use default
             chassis (str|None):
@@ -441,6 +443,8 @@ class IxiaSession(object):
         if mac_address is not None:
             self.configure(interface + '/ethernet', macAddress=mac_address)
 
+        self.configure(interface, mtu=mtu)
+
         LOG.info("Protocol Interface Configuration Complete: {}".format(interface))
 
         if validate:
@@ -450,7 +454,11 @@ class IxiaSession(object):
                 self._ixnet.execute("clearNeighborTable", vport)
                 self._ixnet.execute('sendArpAndNS', interface)
                 time.sleep(5)
-                for neighbor in self.getList(vport, 'discoveredNeighbor'):
+                neighbors = self.getList(vport, 'discoveredNeighbor')
+                if not neighbors:
+                    return False
+
+                for neighbor in neighbors:
                     r, val = common.wait_for_val_from_func(
                         False, 5, 1, self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
                     if not r:

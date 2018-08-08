@@ -4688,9 +4688,9 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
 
     if validate:
         LOG.info("Validating route(s) across data")
-        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1)
+        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1, source_net_types='internal')
         if bidirectional:
-            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2)
+            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2, source_net_types='internal')
 
     return interfaces
 
@@ -4793,7 +4793,7 @@ def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
 
 @contextmanager
 def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=True,
-                        fps=1000, fps_type="framesPerSecond", start_traffic=True):
+                        fps=1000, fps_type="framesPerSecond", mtu=1500, start_traffic=True):
     """
     Create traffic between VMs during 'operation'
     Statistics can be retrieved through ixia_session.get_statistics
@@ -4827,6 +4827,8 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
         fps_type (str):
             "framesPerSecond" or "percentLineRate"
             specifies the scale for 'fps'
+        mtu (int):
+            interface mtu
         start_traffic (bool):
             start traffic before yielding ixia_session
 
@@ -4960,9 +4962,9 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             else:
                 raise ValueError("No available IPs in subnet")
             if ipaddress.ip_address(ip).version == 4:
-                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan, mtu=mtu)
             else:
-                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan, mtu=mtu)
             source_ifs[ip] = iface
 
         dest_ifs = dict()
@@ -4977,9 +4979,9 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             else:
                 raise ValueError("No available IPs in subnet")
             if ipaddress.ip_address(ip).version == 4:
-                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan, mtu=mtu)
             else:
-                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan, mtu=mtu)
             dest_ifs[ip] = iface
 
         # assuming the configuration only has one trafficItem in it
@@ -5095,8 +5097,8 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **l
 
 
 def launch_vm_with_both_providernets(vm_type,
-                                     cidr_tenant1="172.16.33.0/24", cidr_tenant2="172.18.33.0/24",
-                                     skip_routing=False):
+                                     cidr_tenant1="172.168.33.0/24", cidr_tenant2="172.186.33.0/24",
+                                     skip_routing=False, cleanup='function'):
     """
     Launch a VM connected with both provider nets (data0, data1)
     IPv4 subnets only
@@ -5110,26 +5112,28 @@ def launch_vm_with_both_providernets(vm_type,
             cidr for tenant2's subnet, shall be unique on the system
         skip_routing (bool):
             skip default routing setups (for advanced configs)
+        cleanup (str):
+            cleanup level, shared with networks and VMs created
 
     Returns (str):
         vm_id
     """
     nw_primary = network_helper.create_network(name=common.get_unique_name(name_str='tenant1-net'),
                                                shared=True, tenant_name=Tenant.TENANT1['tenant'],
-                                               auth_info=Tenant.ADMIN, cleanup='function')[1]
+                                               auth_info=Tenant.ADMIN, cleanup=cleanup)[1]
     nw_secondary = network_helper.create_network(name=common.get_unique_name(name_str='tenant2-net'),
                                                  shared=True, tenant_name=Tenant.TENANT2['tenant'],
-                                                 auth_info=Tenant.ADMIN, cleanup='function')[1]
+                                                 auth_info=Tenant.ADMIN, cleanup=cleanup)[1]
 
     # subnet_list = table_parser.table(cli.neutron('subnet-list'))
     # cidrs = table_parser.get_column(subnet_list, 'cidr')
 
     network_helper.create_subnet(nw_primary, cidr=cidr_tenant1, dhcp=True, no_gateway=True,
-                                 tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.ADMIN, cleanup='function')
+                                 tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.ADMIN, cleanup=cleanup)
     network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
-                                 tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.ADMIN, cleanup='function')
+                                 tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.ADMIN, cleanup=cleanup)
 
-    if vm_type == 'virtio':
+    if vm_type == 'virtio' or vm_type== 'vhost':
         vif_model = 'virtio'
     else:
         vif_model = 'avp'
@@ -5139,7 +5143,7 @@ def launch_vm_with_both_providernets(vm_type,
             {'net-id': nw_secondary, 'vif-model': vif_model},
             ]
     vms, nics = launch_vms(
-        vm_type=vm_type, count=1, ping_vms=True, nics=nics)
+        vm_type=vm_type, count=1, ping_vms=True, nics=nics, cleanup=cleanup)
     vm_id = vms[0]
 
     if not skip_routing:
