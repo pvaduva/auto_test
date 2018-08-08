@@ -18,7 +18,7 @@ class TestDashboardHelp:
 
         if not system_helper.is_avs():
             skip('No support page available for STX')
-        
+
         admin_home_pg.go_to_help_page()
         admin_home_pg._wait_until(
             lambda _: admin_home_pg.is_nth_window_opened(2))

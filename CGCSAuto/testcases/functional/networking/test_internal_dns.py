@@ -192,16 +192,22 @@ def func_recover(request):
         """
         global UNRESTORED_DNS_SERVERS
         global NET_NAME
+        global HOSTS_AFFECTED
 
         if UNRESTORED_DNS_SERVERS:
-            LOG.info("Restoring DNS entries to: {}".format(UNRESTORED_DNS_SERVERS))
+            LOG.fixture_step("Restoring DNS entries to: {}".format(UNRESTORED_DNS_SERVERS))
             subnet_list = get_subnets(NET_NAME)
             set_dns_servers(subnet_list, UNRESTORED_DNS_SERVERS)
+            UNRESTORED_DNS_SERVERS = []
 
-        for host in HOSTS_AFFECTED:
-            if host_helper.get_hostshow_value(host, 'config_status') == 'Config out-of-date':
-                LOG.info("Lock/unlock {} to clear config out-of-date status".format(host))
-                host_helper.lock_unlock_hosts(hosts=host, force_lock=True)
+        if system_helper.get_alarms(alarm_id=EventLogID.CONFIG_OUT_OF_DATE):
+            LOG.fixture_step("Config out-of-date alarm(s) present, check {} and lock/unlock if host config out-of-date".
+                             format(HOSTS_AFFECTED))
+            for host in HOSTS_AFFECTED:
+                if host_helper.get_hostshow_value(host, 'config_status') == 'Config out-of-date':
+                    LOG.info("Lock/unlock {} to clear config out-of-date status".format(host))
+                    host_helper.lock_unlock_hosts(hosts=host)
+            HOSTS_AFFECTED = []
 
     request.addfinalizer(teardown)
 
