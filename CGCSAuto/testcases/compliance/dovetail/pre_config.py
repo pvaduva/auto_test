@@ -1,8 +1,10 @@
 import configparser
 import yaml
+import time
+import re
 from utils.tis_log import LOG
 from consts.auth import HostLinuxCreds, CliAuth, Tenant, ComplianceCreds
-from keywords import vlm_helper, host_helper
+from keywords import vlm_helper, host_helper, system_helper
 from utils.clients.ssh import ControllerClient, SSHClient
 from utils import table_parser
 from consts.filepaths import Dovetail
@@ -62,51 +64,63 @@ def env_config_generate(floating_ip, server_ssh):
 
 def pod_generate_2plus2(n1ip, n2ip, n3ip, n4ip, server_ssh):
 
-    server_ssh.exec_sudo_cmd('')
-    sample = '''nodes:
--
-    name: node1
-    role: Controller
-    ip: 128.224.151.192
-    user: root
-    password: Li69nux*
-    # key_filename: /home/dovetail/pre_config/id_rsa
--
-    name: node2
-    role: Controller
-    ip: 192.168.204.4
-    user: root
-    password: Li69nux*
-    # key_filename: /home/dovetail/pre_config/id_rsa
--
-    name: node3
-    role: Compute
-    ip: 192.168.204.175
-    user: root
-    password: Li69nux*
-    # key_filename: /home/dovetail/pre_config/id_rsa
--
-    name: node4
-    role: Compute
-    ip: 192.168.204.208
-    user: root
-    password: Li69nux*
-    # key_filename: /home/dovetail/pre_config/id_rsa
-'''
-    yaml.load(sample)
+    filepath = '${DOVETAIL_HOME}/pre_config/pod.yaml'
+    pod_yaml = server_ssh.exec_sudo_cmd('cat ' + filepath)
+    pod_yaml = pod_yaml[-1]
+    controller_0_ip_tochange = re.findall("ip:.*", pod_yaml)[0]
+    controller_1_ip_tochange = re.findall("ip:.*", pod_yaml)[1]
+    compute_0_ip_tochange = re.findall("ip:.*", pod_yaml)[2]
+    compute_1_ip_tochange = re.findall("ip:.*", pod_yaml)[3]
 
-    config = {'nodes': [{'name': 'node1', 'role': 'Controller', 'ip': n1ip, 'user': 'root', 'password': 'Li69nux*'},
-                        {'name': 'node2', 'role': 'Controller', 'ip': n2ip, 'user': 'root', 'password': 'Li69nux*'},
-                        {'name': 'node3', 'role': 'Compute', 'ip': n3ip, 'user': 'root', 'password': 'Li69nux*'},
-                        {'name': 'node4', 'role': 'Compute', 'ip': n4ip, 'user': 'root', 'password': 'Li69nux*'}]}
+    server_ssh.exec_cmd('sed -i "s/^.*'+controller_0_ip_tochange+'.*/    ip: '+n1ip+'/g" {}'.format(filepath))
+    server_ssh.exec_cmd('sed -i "s/^.*'+controller_1_ip_tochange+'.*/    ip: '+n2ip+'/g" {}'.format(filepath))
+    server_ssh.exec_cmd('sed -i "s/^.*'+compute_0_ip_tochange+'.*/    ip: '+n3ip+'/g" {}'.format(filepath))
+    server_ssh.exec_cmd('sed -i "s/^.*'+compute_1_ip_tochange+'.*/    ip: '+n4ip+'/g" {}'.format(filepath))
 
-    # server_ssh.exec_sudo_cmd('rm -f ${DOVETAIL_HOME}/pre_config/pod.yaml')
-    # server_ssh.exec_sudo_cmd('cat '+yaml.dump(config, default_flow_style=False)+ ' >> ${DOVETAIL_HOME}/pre_config/pod.yaml')
-
-    # with open('./pod.yaml', 'w+') as yaml_file:
-    #     yaml_file.write(yaml.dump(config, default_flow_style=False))
-
-    return config
+#     sample = '''nodes:
+# -
+#     name: node1
+#     role: Controller
+#     ip: 128.224.151.192
+#     user: root
+#     password: Li69nux*
+#     # key_filename: /home/dovetail/pre_config/id_rsa
+# -
+#     name: node2
+#     role: Controller
+#     ip: 192.168.204.4
+#     user: root
+#     password: Li69nux*
+#     # key_filename: /home/dovetail/pre_config/id_rsa
+# -
+#     name: node3
+#     role: Compute
+#     ip: 192.168.204.175
+#     user: root
+#     password: Li69nux*
+#     # key_filename: /home/dovetail/pre_config/id_rsa
+# -
+#     name: node4
+#     role: Compute
+#     ip: 192.168.204.208
+#     user: root
+#     password: Li69nux*
+#     # key_filename: /home/dovetail/pre_config/id_rsa
+# '''
+#     yaml.load(sample)
+#
+#     config = {'nodes': [{'name': 'node1', 'role': 'Controller', 'ip': n1ip, 'user': 'root', 'password': 'Li69nux*'},
+#                         {'name': 'node2', 'role': 'Controller', 'ip': n2ip, 'user': 'root', 'password': 'Li69nux*'},
+#                         {'name': 'node3', 'role': 'Compute', 'ip': n3ip, 'user': 'root', 'password': 'Li69nux*'},
+#                         {'name': 'node4', 'role': 'Compute', 'ip': n4ip, 'user': 'root', 'password': 'Li69nux*'}]}
+#
+#     # server_ssh.exec_sudo_cmd('rm -f ${DOVETAIL_HOME}/pre_config/pod.yaml')
+#     # server_ssh.exec_sudo_cmd('cat '+yaml.dump(config, default_flow_style=False)+ ' >> ${DOVETAIL_HOME}/pre_config/pod.yaml')
+#
+#     # with open('./pod.yaml', 'w+') as yaml_file:
+#     #     yaml_file.write(yaml.dump(config, default_flow_style=False))
+#
+#     return config
 
 
 def tempest_conf_generate_2plus2(server_ssh):
@@ -146,7 +160,7 @@ def test():
     cumulus_host = cumulus.get_host()
     cumulus_user = cumulus.get_user()
     cumulus_password = cumulus.get_password()
-    CUMULUS_PROMPT = '.*@.*:.*\$ '
+    CUMULUS_PROMPT = '.*@.*:.* '
 
     LOG.info("Connecting to cumulus")
 
@@ -175,7 +189,6 @@ def test():
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
     compute0_ip = con_ssh.exec_cmd('nslookup compute-0')
-
     compute0_ip = compute0_ip[1]
     compute0_ip = compute0_ip.split('Address')
     compute0_ip = compute0_ip[-1]
@@ -189,22 +202,39 @@ def test():
 
     LOG.info("Generating YAML files")
 
-    #pod_generate_2plus2('192.168.204.3', '192.168.204.3', compute0_ip, compute1_ip, server_ssh)
+    pod_generate_2plus2('192.168.204.3', '192.168.204.3', compute0_ip, compute1_ip, server_ssh)
     tempest_conf_generate_2plus2(server_ssh)
     env_config_generate(floating_ip, server_ssh)
 
     password = HostLinuxCreds.get_password()
 
+    active_con = system_helper.get_active_controller_name()
     nodes = ['controller-0', 'controller-1', 'compute-0', 'compute-1']
+    for host in nodes:
+        with host_helper.ssh_to_host(host) as host_ssh:
+            LOG.info('Fixing sshd file in ' + host)
+            fix_sshd_file(host_ssh)
 
-    for x in nodes:
-        with host_helper.ssh_to_host(x) as con_ssh:
-            fix_sshd_file(con_ssh)
-            LOG.info('Fixed sshd file in ' + x)
-            con_ssh.exec_sudo_cmd("printf '" + password + "\n" + password + "\n" + password + "\n' | passwd root", )
-            con_ssh.exec_sudo_cmd('systemctl restart sshd')
-            # con_ssh.close()
-            # input("press enter to continue")
+            LOG.info("Setting root password on {}".format(host))
+            host_ssh.send("sudo passwd root")
+            host_ssh.expect('.*[pP]assword:.*')
+            host_ssh.send(password)
+            host_ssh.expect('.*[Nn]ew [Pp]assword:.*')
+            host_ssh.send(password)
+
+            LOG.info('Restarting SSH client'.format(host))
+            host_ssh.send("sudo systemctl restart sshd")
+
+            if host == active_con:
+                LOG.info("Active controller sshd restarting. Sleeping 5 seconds before reconnect attempt.")
+                time.sleep(5)
+                con_ssh.connect()
+            else:
+                host_ssh.expect('Connection to.*closed.')
+
+            LOG.info("Restarted host {}".format(host))
+
+
 
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.connect()
@@ -215,13 +245,16 @@ def test():
     stdout = stdout[1]
     stdout = stdout.split()
     stdout = stdout[0]
-    filepath = server_ssh.exec_sudo_cmd("find / -name monitor_process.py")
+    filepath = server_ssh.exec_sudo_cmd("find / -name monitor_process.py")[-1]
+    LOG.info('Fixing monitor.py located at '+filepath)
+    filepath = filepath[-1]
     server_ssh.exec_sudo_cmd("sed -ie 's/processes=.*/processes="+stdout+"/g' "+filepath)
 
-    LOG.info("Running Dovetail")
-
+    LOG.info("Sourcing config files")
     server_ssh.exec_cmd('export DOVETAIL_HOME='+Dovetail.DOVETAIL_HOME)
     server_ssh.exec_cmd('source ${DOVETAIL_HOME}/pre_config/env_config.sh')
+
+    LOG.info("Starting Docker Container")
     server_ssh.exec_sudo_cmd("docker run --privileged=true -it -e DOVETAIL_HOME=$DOVETAIL_HOME -v $DOVETAIL_HOME:$DOVETAIL_HOME -v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash")
-    # os.system('dovetail run --testsuite ovp.1.0.0')
+    LOG.info("Starting Dovetail Testsuite Mandatory")
     server_ssh.exec_cmd('dovetail run --testsuite madatory')
