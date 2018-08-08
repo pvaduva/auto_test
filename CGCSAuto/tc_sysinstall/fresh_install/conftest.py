@@ -18,10 +18,16 @@ def install_setup():
     barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"]
+    install_type = ProjVar.get_var('SYS_TYPE')
 
+    LOG.tc_setup_start("{} install".format(install_type))
+    LOG.fixture_step("Reserve hosts")
+    LOG.info("Unreservering {}".format(lab["hosts"]))
     vlm_helper.force_unreserve_hosts(lab["hosts"])
+    LOG.info("Reservering {}".format(lab["hosts"]))
     for barcode in barcodes:
         local_host.reserve_vlm_console(barcode, "AUTO: lab installation")
+    LOG.fixture_step("Attempt to reset port on controller-0")
     if active_con.telnet_conn is None:
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
         try:
@@ -36,6 +42,8 @@ def install_setup():
     iso_host = InstallVars.get_install_var("ISO_HOST")
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
+    servers = [file_server, iso_host, patch_server, guest_server]
+    LOG.fixture_step("Establishing connection to {}".format(servers))
 
     bld_server = initialize_server(build_server)
     if file_server == bld_server.name:
@@ -89,8 +97,8 @@ def install_setup():
                       "skips": skip_list,
                       "active_controller": active_con}
 
-    LOG.info("Setting up {} boot".format(boot["boot_type"]))
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
+        LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
 
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj)
@@ -105,7 +113,7 @@ def install_setup():
             install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
-            LOG.info("attempting to wipe disks")
+            LOG.fixture_step("Attempting to wipe disks")
             try:
                 active_con.telnet_conn.login()
                 install_helper.wipe_disk_hosts(lab["hosts"])
@@ -117,7 +125,7 @@ def install_setup():
 
 @pytest.mark.tryfirst
 def pytest_runtest_teardown(item):
-# Try first so that the failed tc_step can be written
+# Try first so that the failed fixture_step can be written
     final_step = LOG.test_step
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
