@@ -164,7 +164,7 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("Downloading heat templates")
-        install_helper.download_heat_templates(lab, build_server, load_path)
+        install_helper.download_heat_templates(lab, build_server, load_path, heat_path=load_path + InstallVars.get_install_var("HEAT_TEMPLATES"))
         LOG.info("Downloading guest image")
         install_helper.download_image(lab, guest_server, guest_path)
         LOG.info("Copying license")
@@ -237,9 +237,8 @@ def configure_controller(controller0_node, final_step=None):
         install_helper.controller_system_config(con_telnet=controller0_node.telnet_conn)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-        if do_step("lab_setup"):
-            LOG.info("running lab setup")
-            install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        LOG.info("running lab setup")
+        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(controller0_node.name))
             install_helper.unlock_controller(controller0_node.name, con_ssh=controller0_node.ssh_conn, available_only=False)
@@ -369,13 +368,16 @@ def unlock_hosts(hostnames=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh, final_step=None):
+def run_lab_setup(con_ssh, final_step=None, ovs=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    ovs = InstallVars.get_install_var("OVS") if ovs is None else ovs
+    if ovs and lab_setup_count == 0:
+        LOG.debug("setting up ovs lab_setup configuration")
+        con_ssh.exec_cmd("mv lab_setup_ovs.conf lab_setup.conf")
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
-        assert rc == 0, msg
+        install_helper.run_setup_script(con_ssh=con_ssh, fail_ok=False, config=True)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))

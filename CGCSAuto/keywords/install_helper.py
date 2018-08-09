@@ -515,16 +515,19 @@ def download_image(lab, server, guest_path):
                               dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, image_file),
-                                        dest_path=TiSPath.IMAGES)
+                                                           dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
                               lab['controller-0 ip'],
                               TiSPath.IMAGES, pre_opts=pre_opts)
 
 
-def download_heat_templates(lab, server, load_path):
+def download_heat_templates(lab, server, load_path, heat_path=None):
 
-    heat_path = load_path + BuildServerPath.HEAT_TEMPLATES
+    if not heat_path:
+        heat_path = load_path + BuildServerPath.HEAT_TEMPLATES
+    else:
+        heat_path = heat_path
 
     cmd = "test -e " + heat_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(

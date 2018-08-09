@@ -38,6 +38,7 @@ def pytest_configure(config):
     stop_step = config.getoption('stop_step')
     drop_num = config.getoption('drop_num')
     patch_dir = config.getoption('patch_dir')
+    ovs = config.getoption('ovs_config')
 
     if not install_conf:
         install_conf = setups.write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
@@ -45,13 +46,13 @@ def pytest_configure(config):
                                                 tis_build_dir=tis_build_dir, build_server=build_server,
                                                 license_path=install_license, guest_image=guest_image,
                                                 heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
-                                                security=security, low_latency=low_lat, stop=stop_step)
+                                                security=security, low_latency=low_lat, stop=stop_step, ovs=ovs)
 
     setups.set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
                               installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
                               controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                               boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                              patch_dir=patch_dir)
+                              patch_dir=patch_dir, ovs=ovs)
     print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
 
 

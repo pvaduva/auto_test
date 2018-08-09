@@ -609,7 +609,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
         node_telnet.close()
 
 
-def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device, drop, patch_dir,
+def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device, drop, patch_dir, ovs,
                        controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency, stop):
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -816,12 +816,13 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  drop_num=drop,
                                  patch_dir=patch_dir,
                                  multi_region=multi_region_lab,
-                                 dist_cloud=dist_cloud_lab
+                                 dist_cloud=dist_cloud_lab,
+                                 ovs=ovs,
                                  )
 
 
 def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, drop, patch_dir,
-                      license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop):
+                      license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop, ovs):
     """
     Writes a file in ini format of the fresh_install variables
     Args:

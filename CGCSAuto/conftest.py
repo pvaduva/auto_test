@@ -436,6 +436,7 @@ def pytest_addoption(parser):
                 'usb: Boot from load existing on USB \n' \
                 'iso: iso install flag'
     iso_path_help = 'Full path to ISO file. Default is <build-dir'
+    ovs_help = 'Run using lab_setup_ovs.conf rather than lab_setup.conf (for StarlingX install)'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -537,6 +538,7 @@ def pytest_addoption(parser):
                      default=BuildServerPath.HEAT_TEMPLATES, help=heat_help)
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
+    parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
