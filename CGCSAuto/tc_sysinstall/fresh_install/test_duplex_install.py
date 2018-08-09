@@ -67,6 +67,7 @@ def test_duplex_install(install_setup):
     fresh_install_helper.boot_hosts(boot_device)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.unlock_hosts(["controller-1"], con_ssh=controller0_node.ssh_conn)
 
