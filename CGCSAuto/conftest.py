@@ -170,10 +170,17 @@ def pytest_runtest_makereport(item, call, __multicall__):
             if val[0] == 'Failed':
                 global tc_end_time
                 tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
-                _write_results(res_in_tests='Failed', test_name=test_name)
+                _write_results(res_in_tests='FAIL', test_name=test_name)
                 TestRes.FAILNUM += 1
                 if ProjVar.get_var('PING_FAILURE'):
                     setups.add_ping_failure(test_name=test_name)
+
+                try:
+                    from utils.cgcs_reporter import parse_log
+                    parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
+                except Exception as e:
+                    LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
+
                 pytest.exit("Skip rest of the iterations upon stress test failure")
 
     if no_teardown and report.when == 'call':
@@ -695,8 +702,17 @@ def pytest_unconfigure(config):
         LOG.debug(e)
         pass
 
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if not log_dir:
+        try:
+            from utils.clients.ssh import ControllerClient
+            con_ssh = ControllerClient.get_active_controller()
+            con_ssh.close()
+        except:
+            pass
+        return
+
     try:
-        log_dir = ProjVar.get_var('LOG_DIR')
         tc_res_path = log_dir + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
         build_server = ProjVar.get_var('BUILD_SERVER')
@@ -756,13 +772,6 @@ def pytest_unconfigure(config):
         setups.list_migration_history(con_ssh=con_ssh)
     except:
         LOG.warning("Failed to run nova migration-list")
-
-    vswitch_info_hosts = list(set(ProjVar.get_var('VSWITCH_INFO_HOSTS')))
-    if vswitch_info_hosts:
-        try:
-            setups.scp_vswitch_log(hosts=vswitch_info_hosts, con_ssh=con_ssh)
-        except Exception as e:
-            LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
 
     if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure

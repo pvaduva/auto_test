@@ -280,7 +280,24 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('endpoint list', ssh_client=con_ssh, auth_info=auth_info))
+    pre_args_dict = {
+        '--service': service_name,
+        '--interface': interface,
+        '--region': region,
+        }
+
+    pre_args = []
+    for key, val in pre_args_dict.items():
+        if val:
+            pre_args.append('{}={}'.format(key, val))
+    pre_args_str = ' '.join(pre_args)
+
+    output = cli.openstack('endpoint list', positional_args=pre_args_str, ssh_client=con_ssh, auth_info=auth_info)
+    if not output.strip():
+        LOG.warning("No endpoints returned with param: {}".format(pre_args_str))
+        return []
+
+    table_ = table_parser.table(output)
 
     args_dict = {
         'ID': endpoint_id,

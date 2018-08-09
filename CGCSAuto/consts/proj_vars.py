@@ -10,7 +10,6 @@ class ProjVar:
                   'BUILD_PATH': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
-                  'VSWITCH_INFO_HOSTS': [],
                   'SW_VERSION': [],
                   'PATCH': None,
                   'SESSION_ID': None,

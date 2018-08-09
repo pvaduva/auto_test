@@ -8,7 +8,7 @@ import time
 
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import EventLogID, BackendState, BackendTask
+from consts.cgcs import EventLogID, BackendState, BackendTask, MULTI_REGION_MAP
 from keywords import system_helper, host_helper
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, get_cli_client
@@ -808,7 +808,7 @@ def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rt
                       con_ssh=None, auth_info=Tenant.ADMIN):
     auth_info_tmp = dict(auth_info)
     region = ProjVar.get_var('REGION')
-    if region != 'RegionOne':
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
         if service != 'cinder':
             auth_info_tmp['region'] = 'RegionOne'
 

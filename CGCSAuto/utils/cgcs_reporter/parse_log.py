@@ -16,7 +16,11 @@ def _get_failed_test_names(log_dir):
             [test_name, test_name, ...]
 
     """
-    with open("{}/test_results.log".format(log_dir), 'r') as file:
+    test_res_path = "{}/test_results.log".format(log_dir)
+    if not path.exists(test_res_path):
+        return []
+
+    with open(test_res_path, 'r') as file:
         failed_tests = []
 
         for line in file:
@@ -125,6 +129,9 @@ def parse_test_steps(log_dir, failures_only=True):
     test_found = False
     test_steps_length = 0
     test_steps = []
+
+    if failures_only and not failed_tests:
+        return
 
     with open("{}/TIS_AUTOMATION.log".format(log_dir), 'r') as file, \
             open("{}/test_steps.log".format(log_dir), 'w') as log:

@@ -619,7 +619,7 @@ class SSHClient:
         if exit_code != 0:
             msg = "SCP failed - {}".format(self.cmd_output)
             if fail_ok:
-                LOG.error(msg)
+                LOG.warning(msg)
             else:
                 raise exceptions.SSHException(msg)
 

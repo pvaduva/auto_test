@@ -3559,29 +3559,27 @@ def collect_networking_info(routers=None, vms=None, sep_file=None):
     res_bool, res_dict = ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
     if sep_file:
         res_str = "succeeded" if res_bool else 'failed'
-        content = "Ping router interfaces {}: {}\n".format(res_str, res_dict)
+        content = "#### Ping router interfaces {} ####\n{}\n".format(res_str, res_dict)
         common.write_to_file(sep_file, content=content)
 
     if ProjVar.get_var('ALWAYS_COLLECT'):
         common.collect_software_logs()
 
-    hosts = []
+    hosts = host_helper.get_up_hypervisors()
     for router in routers:
         router_host = get_router_info(router_id=router, field='wrs-net:host')
-        if router_host:
+        if router_host and router_host not in hosts:
             hosts.append(router_host)
-        else:
-            LOG.error("Router {} has no host, it may be down.".format(router))
+        LOG.info("Router {} is hosted on {}".format(router, router_host))
 
     if hosts:
-        LOG.info("Collect vswitch.info for {} router(s) on router host(s): ".format(routers, hosts))
+        is_avs = system_helper.is_avs()
+        vswitch_type = 'avs' if is_avs else 'ovs'
+        LOG.info("Collect {}.info for {} router(s) on router host(s): ".format(vswitch_type, routers, hosts))
         for host in hosts:
-            ProjVar.get_var('VSWITCH_INFO_HOSTS').append(host)
-            collect_vswitch_info_on_host(host)
-
-        if sep_file:
-            content = "vswitch.info collected for {} under {}\n".format(hosts, ProjVar.get_var('PING_FAILURE_DIR'))
-            common.write_to_file(sep_file, content=content)
+            content = collect_vswitch_info_on_host(host, vswitch_type, collect_extra_ovs=(not is_avs))
+            if sep_file:
+                common.write_to_file(sep_file, content=content)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
@@ -3604,10 +3602,31 @@ def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
     return res_bool, res_dict
 
 
-def collect_vswitch_info_on_host(host):
+def collect_vswitch_info_on_host(host, vswitch_type, collect_extra_ovs=False):
+    """
+
+    Args:
+        host (str):
+        vswitch_type (str): avs or ovs
+
+    Returns:
+
+    """
     with host_helper.ssh_to_host(host) as host_ssh:
-        host_ssh.exec_sudo_cmd('/etc/collect.d/collect_vswitch', searchwindowsize=50, get_exit_code=False)
-        # vswitch log will be saved to /scratch/var/extra/vswitch.info on the compute host
+        host_ssh.exec_sudo_cmd('/etc/collect.d/collect_{}'.format(vswitch_type), searchwindowsize=50,
+                               get_exit_code=False)
+        vswitch_info_path = '/scratch/var/extra/{}.info'.format(vswitch_type)
+        vswitch_info = host_ssh.exec_cmd('cat {}'.format(vswitch_info_path), searchwindowsize=50)[1]
+        content = '\n##### {} {}.info collected ##### \n{}\n'.format(host, vswitch_type, vswitch_info)
+        host_ssh.exec_sudo_cmd('rm -f {}'.format(vswitch_info_path))
+        if collect_extra_ovs:
+            content += "\n#### Additional ovs cmds on {} #### ".format(host)
+            for cmd in ('ovs-ofctl show br-int', 'ovs-ofctl dump-flows br-int', 'ovs-appctl dpif/dump-flows br-int'):
+                output = host_ssh.exec_sudo_cmd(cmd)[1]
+                content += '\nSent: sudo {}\nOutput:\n{}\n'.format(cmd, output)
+
+        # vswitch log will be saved to /scratch/var/extra/avs.info on the compute host
+    return content
 
 
 def get_pci_device_numa_nodes(hosts):

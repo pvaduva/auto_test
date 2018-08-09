@@ -833,10 +833,12 @@ def get_any_keypair(auth_info=None, con_ssh=None):
         pubkey_dir = ProjVar.get_var('USER_FILE_DIR')
         pubkey_path = '{}/key.pub'.format(pubkey_dir)
         args_ = '--pub-key {} keypair-{}'.format(pubkey_path, user)
-        table_ = table_parser.table(cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh))
+        cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh)
+        table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
         if key_name not in table_parser.get_column(table_, 'Name'):
             raise exceptions.CLIRejected("Failed to add {}".format(key_name))
         LOG.info("Keypair {} added.".format(key_name))
+
     return key_name
 
 
@@ -1568,7 +1570,7 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
         vm_args = '{}{}'.format(args, vm_id)
         output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
         console_logs[vm_id] = output
-        content += "Console log for vm {}:\n{}\n".format(vm_id, output)
+        content += "\n#### Console log for vm {} ####\n{}\n".format(vm_id, output)
 
     if sep_file:
         common.write_to_file(sep_file, content=content)
@@ -1683,26 +1685,24 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
             with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                        prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip,
                                        use_fip=from_fip) as from_vm_ssh:
-                _collect_vm_networking_info(vm_ssh=from_vm_ssh, sep_file=f_path)
+                _collect_vm_networking_info(vm_ssh=from_vm_ssh, sep_file=f_path, vm_id=from_vm)
 
             LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
             for vm_ in to_vms:
                 with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
-                    _collect_vm_networking_info(to_ssh, sep_file=f_path)
+                    _collect_vm_networking_info(to_ssh, sep_file=f_path, vm_id=vm_)
         except:
             pass
 
         raise
 
 
-def _collect_vm_networking_info(vm_ssh, sep_file=None):
-    content = 'VM network info collected when logged in via {}:'.format(vm_ssh.host)
-    output = vm_ssh.exec_cmd('ip addr', get_exit_code=False)[1]
-    content += '\nSent: ip addr\nOutput:\n{}\n'.format(output)
-    output = vm_ssh.exec_cmd('ip neigh', get_exit_code=False)[1]
-    content += '\nSent: ip neigh\nOutput:\n{}\n'.format(output)
-    output = vm_ssh.exec_cmd('ip route', get_exit_code=False)[1]
-    content += '\nSent: ip route\nOutput:\n{}\n'.format(output)
+def _collect_vm_networking_info(vm_ssh, sep_file=None, vm_id=None):
+    vm = vm_id if vm_id else ''
+    content = '#### VM network info collected when logged into vm {}via {} ####'.format(vm, vm_ssh.host)
+    for cmd in ('ip addr', 'ip neigh', 'ip route'):
+        output = vm_ssh.exec_cmd(cmd, get_exit_code=False)[1]
+        content += '\nSent: {}\nOutput:\n{}\n'.format(cmd, output)
 
     if sep_file:
         common.write_to_file(sep_file, content=content)

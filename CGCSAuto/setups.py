@@ -8,7 +8,7 @@ import pexpect
 
 import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
-from consts.cgcs import Prompt, REGION_MAP
+from consts.cgcs import Prompt, MULTI_REGION_MAP, DIST_CLOUD_REGION_PATTERN
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
@@ -692,33 +692,6 @@ def is_https(con_ssh):
     return keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=True)
 
 
-def scp_vswitch_log(con_ssh, hosts, log_path=None):
-    source_file = '/scratch/var/extra/vswitch.info'
-    for host in hosts:
-
-        dest_file = "{}_vswitch.info".format(host)
-        dest_file = '{}/{}'.format(WRSROOT_HOME, dest_file)
-
-        if host == 'controller-0':
-            LOG.info('cp vswitch log to {}'.format(dest_file))
-            con_ssh.exec_cmd('cp {} {}'.format(source_file, dest_file))
-        else:
-            LOG.info("scp vswitch log from {} to controller-0".format(host))
-            con_ssh.scp_files(source_file, dest_file, source_server=host, dest_server='controller-0',
-                              source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
-                              dest_password=HostLinuxCreds.get_password(), dest_user='', timeout=30, sudo=True,
-                              sudo_password=None, fail_ok=True)
-
-    LOG.info("SCP vswitch log from lab to automation log dir")
-    if log_path is None:
-        log_path = '{}/{}'.format(WRSROOT_HOME, '*_vswitch.info')
-    source_ip = ProjVar.get_var('LAB')['controller-0 ip']
-    dest_dir = ProjVar.get_var('PING_FAILURE_DIR')
-    scp_to_local(dest_path=dest_dir,
-                 source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
-                 source_path=log_path, source_ip=source_ip, timeout=60)
-
-
 def list_migration_history(con_ssh):
     nova_helper.get_migration_list_table(con_ssh=con_ssh)
 
@@ -806,16 +779,36 @@ def add_ping_failure(test_name):
 
 
 def set_region(region=None):
+    """
+    set global variable region.
+    This needs to be called after CliAuth.set_vars, since the custom region value needs to override what is
+    specified in openrc file.
+
+    local region and auth url is saved in CliAuth, while the remote region and auth url is saved in Tenant.
+
+    Args:
+        region: region to set
+
+    """
     local_region = CliAuth.get_var('OS_REGION_NAME')
     if not region:
         region = local_region
     Tenant.set_region(region=region)
     ProjVar.set_var(REGION=region)
-    for tenant in ('tenant1', 'tenant2'):
-        region_tenant = '{}{}'.format(tenant, REGION_MAP[region])
-        Tenant.update_tenant_dict(tenant, username=region_tenant, tenant=region_tenant)
-        if region != local_region:
-            keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
+    if region in MULTI_REGION_MAP:
+        for tenant in ('tenant1', 'tenant2'):
+            region_tenant = '{}{}'.format(tenant, MULTI_REGION_MAP[region])
+            Tenant.update_tenant_dict(tenant, username=region_tenant, tenant=region_tenant)
+            if region != local_region:
+                keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
+    elif re.search(DIST_CLOUD_REGION_PATTERN, region):
+        # sub-cloud tests can be run controller, but not the other way round
+        urls = keystone_helper.get_endpoints(region=region, rtn_val='URL', interface='internal',
+                                             service_name='keystone')
+        if not urls:
+            raise ValueError("No internal endpoint found for region {}. Invalid value for --region with specified lab."
+                             "sub-cloud tests can be run on controller, but not the other way round".format(region))
+        Tenant.set_url(urls[0])
 
 
 def set_sys_type(con_ssh):

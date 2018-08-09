@@ -69,10 +69,10 @@ def _get_stress_ng_heat(con_ssh=None):
 
     # update heat file for multi-region system
     from consts.proj_vars import ProjVar
-    from consts.cgcs import REGION_MAP
+    from consts.cgcs import MULTI_REGION_MAP
     region = ProjVar.get_var("REGION")
-    if region != 'RegionOne':
-        region_str = REGION_MAP.get(region)
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
+        region_str = MULTI_REGION_MAP.get(region)
         con_ssh.exec_cmd("sed -i 's/tenant2-net/tenant2{}-net/g' {}".format(region_str, file_path))
         con_ssh.exec_cmd("sed -i 's/tenant2-mgmt-net/tenant2{}-mgmt-net/g' {}".format(region_str, file_path))
 

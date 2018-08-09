@@ -43,10 +43,13 @@ PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
 
-REGION_MAP = {'RegionOne': '',
-              'RegionTwo': '-R2'}
+MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
+
+DIST_CLOUD_REGION_PATTERN = 'SystemController|subcloud'
+
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
+
 
 class NtpPool:
     NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
@@ -120,14 +123,15 @@ class Networks:
 
     @classmethod
     def mgmt_net_name_pattern(cls):
+        region = ''
         from consts.proj_vars import ProjVar
-        region = REGION_MAP[ProjVar.get_var('REGION')]
+        region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
         return 'tenant\d{}-mgmt-net'.format(region)
 
     @classmethod
     def data_net_name_pattern(cls):
         from consts.proj_vars import ProjVar
-        region = REGION_MAP[ProjVar.get_var('REGION')]
+        region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
         return 'tenant\d{}-net'.format(region)
 
 
