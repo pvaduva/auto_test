@@ -40,7 +40,7 @@ def pod_update_2plus2(n1ip, n2ip, n3ip, n4ip, server_ssh):
     server_ssh.exec_cmd('sed -i "s/^.*'+compute_1_ip_tochange+'.*/    ip: '+n4ip+'/g" {}'.format(Dovetail.POD_DIR))
 
 
-def pod_update_non_standard(con0, con1, compute_ips, storage_ips, server_ssh):
+def pod_update(con0, con1, compute_ips, storage_ips, server_ssh):
     server_ssh.exec_cmd('~/pre_config$ cp ~/templates/pod.yaml ~/pre_config/')
     pod_yaml = server_ssh.exec_sudo_cmd('cat ' + Dovetail.POD_DIR)
     pod_yaml = pod_yaml[-1]
@@ -54,27 +54,28 @@ def pod_update_non_standard(con0, con1, compute_ips, storage_ips, server_ssh):
     server_ssh.exec_cmd('sed -i "s/^.*' + compute_0_ip_tochange + '.*/    ip: ' + compute_ips[0] + '/g" {}'.format(Dovetail.POD_DIR))
     server_ssh.exec_cmd('sed -i "s/^.*' + compute_1_ip_tochange + '.*/    ip: ' + compute_ips[1] + '/g" {}'.format(Dovetail.POD_DIR))
 
-    template_compute = '''-
-    name: {}
-    role: {}
-    ip: {}
-    user: root
-    password: Li69nux*
-#    key_filename: /home/cumulus/.ssh/id_rsa
-'''
+    if len(compute_ips)>2 or len(storage_ips)>0:
+        template_compute = '''-
+        name: {}
+        role: {}
+        ip: {}
+        user: root
+        password: Li69nux*
+    #    key_filename: /home/cumulus/.ssh/id_rsa
+    '''
 
-    for i in range(2,len(compute_ips)):
-        server_ssh.exec_cmd('echo "'+template_compute.format('node'+str(i+3),'compute', compute_ips[i])+'" >> '+Dovetail.POD_DIR)
+        for i in range(2,len(compute_ips)):
+            server_ssh.exec_cmd('echo "'+template_compute.format('node'+str(i+3),'compute', compute_ips[i])+'" >> '+Dovetail.POD_DIR)
 
-    for i in range(len(storage_ips)):
-        server_ssh.exec_cmd('echo "'+template_compute.format('node'+str(i+len(compute_ips)+3),'storage', storage_ips[i])+'" >> '+Dovetail.POD_DIR)
-
+        for i in range(len(storage_ips)):
+            server_ssh.exec_cmd('echo "'+template_compute.format('node'+str(i+len(compute_ips)+3),'storage', storage_ips[i])+'" >> '+Dovetail.POD_DIR)
 
 
 def tempest_conf_update(computes, server_ssh):
 
     server_ssh.exec_sudo_cmd('sed -i "s/.*min_compute_nodes:.*/  min_compute_nodes: '+str(computes)+'/g" '+Dovetail.TEMPEST_CONF_DIR)
     server_ssh.exec_sudo_cmd('sed -i "s/.*volume_device_name:.*/  volume_device_name: vdb/g" ' + Dovetail.TEMPEST_CONF_DIR)
+
 
 @fixture()
 def fix_sshd_file(con_ssh):

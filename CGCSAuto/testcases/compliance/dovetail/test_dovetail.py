@@ -10,6 +10,16 @@ from pytest import fixture, skip, mark
 
 TESTAREA_MANDATORY_MAX_TIMEOUT = 20000
 
+def extract_ip(node):
+    con_ssh=ControllerClient.get_active_controller()
+    ip = con_ssh.exec_cmd('nslookup ' + node)
+    ip = ip[1]
+    ip = ip.split('Address')
+    ip = ip[-1]
+    ip = ip[2:]
+    return ip
+
+
 @fixture()
 def restore_sshd_file_teardown(request):
     def teardown():
@@ -61,27 +71,16 @@ def test_dovetail():
     con_ssh = ControllerClient.get_active_controller()
 
     for computes in compute_nodes:
-        ip = con_ssh.exec_cmd('nslookup ' + computes)
-        ip = ip[1]
-        ip = ip.split('Address')
-        ip = ip[-1]
-        ip = ip[2:]
+        ip = extract_ip(computes)
         compute_ips.append(ip)
 
     for storage in storage_nodes:
-        ip = con_ssh.exec_cmd('nslookup ' + storage)
-        ip = ip[1]
-        ip = ip.split('Address')
-        ip = ip[-1]
-        ip = ip[2:]
+        ip = extract_ip(storage)
         storage_ips.append(ip)
 
     LOG.info("Generating YAML files")
 
-    if len(compute_ips) == 2:
-        pre_config.pod_update_2plus2('192.168.204.3', '192.168.204.4', compute_ips[0], compute_ips[1], server_ssh)
-    else:
-        pre_config.pod_update_non_standard('192.168.204.3', '192.168.204.4', compute_ips, storage_ips, server_ssh)
+    pre_config.pod_update('192.168.204.3', '192.168.204.4', compute_ips, storage_ips, server_ssh)
 
     pre_config.tempest_conf_update(len(compute_ips), server_ssh)
     pre_config.env_config_update(floating_ip, server_ssh)
