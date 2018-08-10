@@ -285,7 +285,7 @@ class Option(object):
         cmd = ''
         for input in key:
             cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
-        LOG.info("selecting {} option".format(self.name))
+        LOG.info("entering {} to select {} option".format("+".join(key), self.name))
         telnet_conn.write(str.encode(cmd))
 
 

@@ -2176,8 +2176,8 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
         LOG.error(msg)
         return False
 
-    LOG.info("Copy load into feed directory")
     feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    LOG.info("Copy load into {}".format(feed_path))
     tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
     tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
 
@@ -2189,13 +2189,14 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
-    bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force", "-v", "--chmod=Du=rwx"],
-                          pre_opts=pre_opts, timeout=HostTimeout.INSTALL_LOAD)
+    bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path,
+                                       dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
+                                       extra_opts=["--delete", "--force", "-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                                       timeout=HostTimeout.INSTALL_LOAD)
     bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
                           dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
                           timeout=HostTimeout.INSTALL_LOAD)
-    LOG.info("Create new symlink to feed directory")
+    LOG.info("Create new symlink to {}".format(feed_path))
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
         msg = "Failed to remove feed"
         LOG.error(msg)

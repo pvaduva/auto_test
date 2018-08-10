@@ -237,7 +237,7 @@ def configure_controller(controller0_node, final_step=None):
         install_helper.controller_system_config(con_telnet=controller0_node.telnet_conn)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-        LOG.info("running lab setup")
+        LOG.info("running lab_setup.sh")
         install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(controller0_node.name))
@@ -258,6 +258,7 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
     if do_step(test_step):
         rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=con_ssh)
         assert rc == 0, msg
+        LOG.info("system host-bulk-add added: {}".format(added_hosts))
         # assert added_hosts[0] + added_hosts[1] + added_hosts[2] == hosts, "hosts_bulk_add failed to add all hosts
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -377,6 +378,7 @@ def run_lab_setup(con_ssh, final_step=None, ovs=None):
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
+        LOG.info("running lab_setup.sh")
         install_helper.run_setup_script(con_ssh=con_ssh, fail_ok=False, config=True)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
