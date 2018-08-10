@@ -163,6 +163,6 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
-    from_vm = random.choice(vms)
+    from_vm = vms[0]
     LOG.tc_step("Ping vms' over management and data networks from vm {}, and verify ping successful.".format(from_vm))
     vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt', 'internal'], fail_ok=False)
