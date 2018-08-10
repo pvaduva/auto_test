@@ -1,11 +1,5 @@
 WRSROOT_HOME = '/home/wrsroot/'
 
-
-class Dovetail:
-    DOVETAIL_HOME = '/home/dovetail'
-    OS_AUTH_URL = "'http://{}:5000/v3'"
-
-
 class TiSPath:
     TIS_UBUNTU_PATH = '/home/wrsroot/userdata/ubuntu_if_config.sh'
     TIS_CENTOS_PATH = '/home/wrsroot/userdata/centos_if_config.sh'
