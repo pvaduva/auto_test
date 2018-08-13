@@ -1,19 +1,29 @@
 import os
 import re
+import time
+import random
 import configparser
 
 from pytest import fixture, skip
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server
-from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore
+from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore, PREFIX_BACKUP_FILE
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
+
+from keywords import cinder_helper
+from keywords import common
+from keywords import host_helper
 from keywords import html_helper
-from keywords import install_helper, cinder_helper, glance_helper, common, system_helper, host_helper
+from keywords import install_helper
+from keywords import keystone_helper
+from keywords import glance_helper
+from keywords import nova_helper
+from keywords import system_helper
 from keywords import vm_helper
 
-from utils.clients.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient, NATBoxClient
 from utils.tis_log import LOG
 from setups import collect_tis_logs
 
@@ -35,6 +45,8 @@ def pre_system_backup():
 
     LOG.info("Preparing lab for system backup....")
     backup_dest = BackupVars.get_backup_var("BACKUP_DEST")
+
+    NATBoxClient.set_natbox_client()
 
     _backup_info = {'backup_dest': backup_dest,
                     'usb_parts_info': None,
@@ -116,6 +128,7 @@ def pre_system_backup():
 
     collect_logs('before_br')
 
+    _backup_info['is_storage_lab'] = (len(system_helper.get_storage_nodes()) > 0)
     return _backup_info
 
 
@@ -173,8 +186,7 @@ def test_backup(pre_system_backup):
                                  dest_server=dest_server, copy_to_usb=copy_to_usb)
 
     # storage lab start backup image files separately if it's a storage lab
-    # if number of storage nodes is greater than 0
-    if len(system_helper.get_storage_nodes()) > 0:
+    if backup_info.get('is_storage_lab', False):
 
         LOG.tc_step("Storage lab detected. copying images to backup.")
         image_ids = glance_helper.get_images()
@@ -305,7 +317,11 @@ def get_build_info():
 
 
 def adjust_cinder_quota(con_ssh, increase, backup_info):
-    free_space, total_space, unit = cinder_helper.get_lvm_usage(con_ssh)
+    if backup_info.get('is_storage_lab', False):
+        free_space, total_space, unit = -1, -1, 1
+    else:
+        free_space, total_space, unit = cinder_helper.get_lvm_usage(con_ssh)
+
     LOG.info('lvm space: free:{}, total:{}'.format(free_space, total_space))
 
     quotas = ['gigabytes', 'per_volume_gigabytes', 'volumes']
@@ -361,7 +377,10 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
 
     volumes = {}
     count_volumes = 0
+    if total_volume_size < 0:
+        total_volume_size = 1 + sum([int(n) for n in volume_sizes])
     free_space = total_volume_size
+
     for name, size in zip(volume_names, volume_sizes):
         size = int(size)
         if 0 < per_volume_size < size:
@@ -390,7 +409,6 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
 
 
 def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
-    from keywords import nova_helper
     quotas = {'instances': {}, 'cores': {}, 'ram': {}}
     limit_usage = ['limit', 'reserved', 'in_use']
     tenant = backup_info['tenant']
@@ -455,7 +473,6 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
 
 
 def pre_backup_setup(backup_info, con_ssh):
-    from keywords import keystone_helper
 
     tenant = Tenant.TENANT1
     backup_info['tenant'] = tenant
@@ -484,8 +501,6 @@ def pre_backup_setup(backup_info, con_ssh):
 
 
 def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
-    import random
-    from keywords import vm_helper, nova_helper
 
     hyporvisors = host_helper.get_up_hypervisors(con_ssh=con_ssh)
     if len(hyporvisors) < 2:
@@ -523,10 +538,7 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
         LOG.info('detailed VM info: {}'.format(vm_info))
 
 
-def lock_unlock_host(backup_ifno, con_ssh, vms):
-    from keywords import nova_helper
-    from keywords import host_helper
-    import random
+def lock_unlock_host(backup_info, con_ssh, vms):
 
     target_vm = random.choice(vms)
     LOG.info('lock and unlock the host of VM:{}'.format(target_vm))
@@ -566,7 +578,10 @@ def pre_backup_test(backup_info, con_ssh):
     LOG.tc_step('Pre-backup testing')
     LOG.info('Backup-info:{}'.format(backup_info))
 
-    vms, volumes, images = pre_backup_setup(backup_info, con_ssh)
+    created = pre_backup_setup(backup_info, con_ssh)
+    vms = created['vms']
+    volumes = created['volumes'];
+    images = created['images'];
     LOG.info('OK, createed VMs:{}, volumes:{}, images:{}'.format(vms, volumes, images))
 
     LOG.info('Do VM migration tests')
@@ -577,9 +592,8 @@ def pre_backup_test(backup_info, con_ssh):
 
 
 def get_backup_file_name_prefix(backup_info):
-    from consts import cgcs
 
-    core_name = cgcs.PREFIX_BACKUP_FILE
+    core_name = PREFIX_BACKUP_FILE
     if backup_info.get('dest', 'local') == 'usb':
         core_name += '.usb'
     if backup_info.get('is_storage_lab', False):

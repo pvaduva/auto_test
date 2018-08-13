@@ -33,7 +33,7 @@ MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
 PREFIX_BACKUP_FILE = 'titanium_backup_'
-TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
+TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + r'(\.\w)*.+_(.*)_(system|images)\.tgz'
 IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
 CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
