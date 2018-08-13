@@ -43,8 +43,12 @@ def dovetail_setup(dovetail_pre_check):
 
     LOG.info("Generating YAML files")
 
+<<<<<<< HEAD
     # pre_config.pod_update('192.168.204.3', '192.168.204.4', compute_ips, storage_ips)
     pre_config.pod_update(floating_ip, '192.168.204.4', compute_ips, storage_ips)
+=======
+    pre_config.pod_update('192.168.204.3', '192.168.204.4', compute_ips, storage_ips)
+>>>>>>> 859086f8... Made Changes asked in Code Review, added system precheck as well as teardown. Also added conftest.py
 
     pre_config.tempest_conf_update(len(compute_ips))
     pre_config.env_config_update(floating_ip)

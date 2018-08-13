@@ -1,3 +1,5 @@
+from keywords import keystone_helper
+
 VM_ROUTE_VIA = '10.10.10.50'
 
 # Refstack consts:
@@ -14,6 +16,6 @@ class RefStack:
 class Dovetail:
     DOVETAIL_HOST = 'tis-dovetail-test-node.cumulus.wrs.com'
     DOVETAIL_HOME = '/home/dovetail'
-    OS_AUTH_URL = "'http://{}:5000/v3'"
-    TEMPEST_CONF_DIR = '{}/pre_config/tempest_conf.yaml'.format(DOVETAIL_HOME)
-    POD_DIR = '{}/pre_config/pod.yaml'.format(DOVETAIL_HOME)
+    OS_AUTH_URL = keystone_helper.get_endpoints(service_name='keystone', interface='public', region='RegionOne', rtn_val='url')[0]
+    TEMPEST_CONF = '{}/pre_config/tempest_conf.yaml'.format(DOVETAIL_HOME)
+    POD = '{}/pre_config/pod.yaml'.format(DOVETAIL_HOME)
