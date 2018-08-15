@@ -514,6 +514,19 @@ def test_restore(restore_setup):
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
+        LOG.tc_step('Run restore-complete (CGTS-9756)')
+        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+        controller_node.telnet_conn.login()
+        controller_node.telnet_conn.exec_cmd(cmd, extra_expects=[' will reboot on completion'])
+
+        LOG.info('- wait untill reboot completes, ')
+        time.sleep(120)
+        LOG.info('- confirm the active controller is actually back online')
+        controller_node.telnet_conn.login()
+
+        LOG.tc_step("reconnecting to the active controller after restore-complete")
+        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+
         if not compute_configured:
             LOG.tc_step('Old-load on AIO/CPE lab: config its compute functionalities')
             # LOG.warn('compute-config-complete was obsoleted by CGTS-9756!!!')
