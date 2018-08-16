@@ -208,6 +208,28 @@ class IxiaSession(object):
                 LOG.warn("(IxiaResource) {} release failed".format(res))
         self._ixia_resources.clear()
 
+    def set_default_chassis(self, chassis=None):
+        """
+        Set the default chassis
+        if no chassis available, raises IxiaError
+
+        Args:
+            chassis (str|None):
+                identifier, or None to use the 1st existing one
+
+        Returns (str):
+            the chassis identifier
+        """
+        if chassis is None:
+            existing = self.getList(self.getRoot()+'/availableHardware', 'chassis')
+            if not existing:
+                raise IxiaError("Cannot set default chassis if no chassis exists")
+            chassis = existing[0]
+
+        LOG.info("Setting default chassis to {}".format(chassis))
+        self._chassis = chassis
+        return chassis
+
     def add_chassis(self, chassis_ip=None, timeout=60, default=True, clear=False):
         """
         Add a chassis to the current configuration.
@@ -248,7 +270,7 @@ class IxiaSession(object):
         chassis = self._ixnet.remapIds(chassis)[0]
 
         if (default):
-            self._chassis = chassis
+            chassis = self.set_default_chassis(chassis)
 
         # verify the chassis is ready
         succ, val = common.wait_for_val_from_func('ready', timeout, 1,
@@ -264,39 +286,45 @@ class IxiaSession(object):
         Clear a port's ownership.
 
         Args:
-            port (tuple):
+            port (tuple|str):
                 [0] card # on the chassis
                 [1] port # on the card
+                or str as the full port_id
             chassis (str):
                 the chassis identifier, or None to use the default
 
         """
         if chassis is None:
             chassis = self._chassis
-        assert chassis is not None, "no default chassis connected"
+        if chassis is None:
+            chassis = self.set_default_chassis()
 
-        card, port = port
+        if isinstance(port, str):
+            port_id = port
+        else:
+            card, port = port
+            port_id = self.__craft_port_id(card, port, chassis)
 
-        # LOG.info(f"Clearing port: {chassis}/card:{card}/port:{port}")
-        LOG.info("Clearing port: " + self.__craft_port_id(card, port, chassis))
+        LOG.info("Clearing port: " + port_id)
         try:
-            # self._ixnet.execute('clearOwnership', f"{chassis}/card:{card}/port:{port}")
-            self._ixnet.execute('clearOwnership', self.__craft_port_id(card, port, chassis))
+            self._ixnet.execute('clearOwnership', port_id)
         except Exception as err:
             # Unable to release ownership is ok when the configuration is blanked already
             pass
 
-    def connect_ports(self, ports, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
+    def connect_ports(self, ports=None, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
         """
         Connect physical ports on the chassis to virtual ports.
         In order to use the existing setups from ixncfgs, mark existing=True.
 
         Args:
-            ports (list):
+            ports (list|None):
                 list of 'port'
-                port (tuple):
+                port (tuple|str):
                     [0] card # on the chassis
                     [1] port # on the card
+                    or str as the full port_id
+                if None, get all ports from existing connected vports
             chassis (str):
                 the chassis identifier, or None to use the default
             clear_ownership (bool):
@@ -314,7 +342,16 @@ class IxiaSession(object):
         """
         if chassis is None:
             chassis = self._chassis
-        assert chassis is not None, "no default chassis connected"
+        if chassis is None:
+            chassis = self.set_default_chassis()
+
+        if ports is None:
+            if not existing:
+                LOG.warning("existing shall be True when reconnecting all vports")
+            existing = True
+            ports = list()
+            for vport in self.getList(self.getRoot(), 'vport'):
+                ports.append(self.getAttribute(vport, 'assignedTo'))
 
         if clear_ownership:
             for port in ports:
@@ -331,9 +368,13 @@ class IxiaSession(object):
             vports = self.getList(self.getRoot(), 'vport')
 
         vport_map = dict()
-        for vport, (card, port) in zip(vports, ports):
-            vport_map[(card, port)] = vport
-            port_id = self.__craft_port_id(card, port, chassis)
+        for vport, port in zip(vports, ports):
+            if isinstance(port, str):
+                port_id = port
+            else:
+                card, port = port
+                port_id = self.__craft_port_id(card, port, chassis)
+            vport_map[port_id] = vport
             self._port_map[port_id] = vport
             LOG.info("Connecting port: {}, vport = {}".format(port_id, vport))
             self._ixnet.setAttribute(vport, '-connectedTo', port_id)
@@ -359,6 +400,7 @@ class IxiaSession(object):
             port (tuple):
                 [0] card # on the chassis
                 [1] port # on the card
+                or str as the full port_id
             ipv4 (tuple|None):
                 [0] interface address
                 [1] interface gateway
@@ -397,13 +439,17 @@ class IxiaSession(object):
 
         if chassis is None:
             chassis = self._chassis
-        assert chassis is not None, "no default chassis connected"
+        if chassis is None:
+            chassis = self.set_default_chassis()
 
-        card, port = port
-        port_id = self.__craft_port_id(card, port, chassis)
+        if isinstance(port, str):
+            port_id = port
+        else:
+            card, port = port
+            port_id = self.__craft_port_id(card, port, chassis)
 
-        if description is None:
-            description = "{}/{}".format(card, port)
+            if description is None:
+                description = "{}/{}".format(card, port)
 
         if interface is None:
             interface = self._ixnet.add(self._port_map[port_id], "interface")
