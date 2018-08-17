@@ -256,7 +256,7 @@ def testcase_log(msg, nodeid, separator=None, log_type=None):
 ########################
 # Command line options #
 ########################
-
+@pytest.mark.tryfirst
 def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
