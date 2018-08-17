@@ -247,6 +247,43 @@ def create_env(name, con_ssh=None, auth_info=None, fail_ok=False):
 
     return 0, env_id
 
+def create_session (env_id, con_ssh=None, auth_info=None, fail_ok=False):
+    """
+    Create a Murano Session
+    Args:
+        env_id:
+        con_ssh:
+        auth_info:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if env_id is None:
+        raise ValueError("Murano env id has to be specified.")
+
+    LOG.info("Creating a Murano Session in Environment {}".format(env_id))
+    code, output = cli.murano('environment-session-create', env_id, ssh_client=con_ssh, auth_info=auth_info,
+                              fail_ok=fail_ok, rtn_list=True)
+
+    if code == 1:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    session_id = table_parser.get_value_two_col_table(table_, 'id')
+    msg = "Session succesfully created session {}".format(session_id)
+    return 0, msg
+
+def add_app_to_env(env_id, session_id, image_id, con_ssh=None, auth_info=None, fail_ok=False):
+    if env_id is None:
+        env_id = create_env('test_env')
+
+    if session_id is None:
+        session_id = create_session(env_id)
+    with host_helper.ssh_to_build_server() as build_ssh
+    cli.murano('scp /folk/cgts/users/jsun3/com.wrs.titanium.murano.examples.demo.zip wrsroot@')
+
 
 def delete_env(env_id, con_ssh=None, auth_info=None, fail_ok=False):
     """
