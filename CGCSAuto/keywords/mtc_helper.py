@@ -51,13 +51,12 @@ KILL_PROC_EVENT_FORMAT = {
         ),
     },
 
-    #
-    # set 200.006 controller-1 'acpid' process has failed. Auto recovery in progress. host=controller-1.process=acpid	minor
+    # set 200.006 controller-1 'acpid' process has failed.
+    # Auto recovery in progress. host=controller-1.process=acpid	minor
     'pmon': {
         'event_id': '200.006',
         # controller-1 critical 'sm' process has failed and could not be auto-recovered gracefully.
-            # Auto- recovery progression by host reboot is required and in progress.
-        #  host=controller-1.process=sm
+        # Auto- recovery progression by host reboot is required and in progress. host=controller-1.process=sm
         'critical': (
                 r'([^\s]+) ([^\s]+) \'([^\']+)\' process has ([^\s]+) and could not be auto-recovered gracefully. '
                 r'Auto.recovery progression by host reboot is required and in progress.',
@@ -67,10 +66,11 @@ KILL_PROC_EVENT_FORMAT = {
         # | host=compute-2.process= | major | process is in progress.
         'major': (
                 r'([^\s]+) is ([^\s]+) due to the failure of its \'([^\']+)\' process. Auto recovery of this ([^\s]+) '
-                    r'process is in progress.',
+                r'process is in progress.',
                 r'host=([^\.]+)\.process=([^\s]+)'
              ),
-        # clear 	200.006 	compute-2 'mtclogd' process has failed. Auto recovery in progress. 	host=compute-2.process=mtclogd 	minor
+        # clear 	200.006 	compute-2 'mtclogd' process has failed. Auto recovery in progress.
+        # host=compute-2.process=mtclogd 	minor
         # "compute-2 'mtclogd' process has failed. Auto recovery in progress."
         # set compute-1 'ntpd' process has failed. Manual recovery is required.
         'minor': (
@@ -375,14 +375,14 @@ def is_controller_swacted(prev_active, prev_standby,
 
         except Exception as e:
             LOG.warn('erred, indicating system is in unstable state, meaning probably swacting is in process. '
-                     'previous active-controller:{}, previous standby-controller:{}\nerror message:{}'.format(
-                prev_active, prev_standby, e))
+                     'previous active-controller:{}, previous standby-controller:{}\nerror message:{}'.
+                     format(prev_active, prev_standby, e))
 
             if retry >= 4:
                 LOG.error('Fail the test after retry {} times, system remains in unstable state, '
                           'meaning probably swacting is in process. previous active-controller:{}, '
-                          'previous standby-controller:{}\nerror message:{}'.format(
-                    retry, prev_active, prev_standby, e))
+                          'previous standby-controller:{}\nerror message:{}'.
+                          format(retry, prev_active, prev_standby, e))
                 raise
 
         time.sleep(10)
@@ -392,7 +392,7 @@ def is_controller_swacted(prev_active, prev_standby,
 
 def search_event(event_id='', type_id='', instance_id='', severity='', start='', end='', limit=30,
                  con_ssh=None, auth_info=Tenant.ADMIN, strict=False, regex=False, **kwargs):
-    """Search for event using system event-list
+    """Search for event using fm event-list
 
     Args:
         event_id (str):       Event ID to search for
@@ -416,15 +416,12 @@ def search_event(event_id='', type_id='', instance_id='', severity='', start='',
     criteria = []
 
     if event_id:
-        #criteria.append('event_log_id="{}"'.format(event_id))
         criteria.append('event_log_id={}'.format(event_id))
 
     if start:
-        #criteria.append('start="{}"'.format(start))
         criteria.append('start={}'.format(start))
 
     if end:
-        #criteria.append('end={}'.format(end))
         criteria.append('end={}'.format(end))
 
     if type_id:
@@ -498,8 +495,8 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
 
         if not events_table or not events_table['values']:
             LOG.warn('run{:02d} for process:{}: Empty event table?!\nevens_table:{}\nevent_id={}, '
-                     'start={}\nkeys={}, severify={}'.format(
-                retry, service, events_table, event_log_id, start_time, search_keys, severity))
+                     'start={}\nkeys={}, severify={}'.
+                     format(retry, service, events_table, event_log_id, start_time, search_keys, severity))
             continue
 
         for event in events_table['values']:
@@ -507,8 +504,8 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
                 actual_event_id = event[3].strip()
                 if actual_event_id != event_log_id:
                     LOG.warn('Irrelevant event? event-list quering broken?!'
-                             ' looking-for-event-id={}, actual-event-id={}, event={}'.format(
-                        event_log_id, actual_event_id, event))
+                             ' looking-for-event-id={}, actual-event-id={}, event={}'.
+                             format(event_log_id, actual_event_id, event))
                     continue
 
                 actual_state = event[2]
@@ -560,7 +557,7 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
                         return 0, tuple(matched_events)
 
             except IndexError:
-                LOG.error('CLI system event-list changed its output format?\nsearching keys={}'.format(search_keys))
+                LOG.error('CLI fm event-list changed its output format?\nsearching keys={}'.format(search_keys))
                 raise
 
         LOG.warn('No matched event found at try:{}, will sleep {} seconds and retry'
@@ -651,6 +648,7 @@ def check_impact(impact, service_name, host='', last_events=None,
         host (str):         the host to check
         last_events (dict)  the last events before action
         expecting_impact (bool):    if the IMPACT should happen
+        timeout
         process_type (str):         type of the process: sm, pm, other
         con_ssh:                    ssh connection/client to the active controller
         **kwargs:
@@ -666,7 +664,7 @@ def check_impact(impact, service_name, host='', last_events=None,
     prev_standby = kwargs.get('standby_controller', 'controller-1')
     severity = kwargs.get('severity', 'major')
 
-    if impact in ('swact'):
+    if impact == 'swact':
         if expecting_impact:
             return is_controller_swacted(prev_active, prev_standby, con_ssh=con_ssh,
                                          swact_start_timeout=max(timeout/2, 20), swact_complete_timeout=timeout)
@@ -678,13 +676,13 @@ def check_impact(impact, service_name, host='', last_events=None,
             service_name, host, target_status=impact, expecting=expecting_impact,
             process_type=process_type, last_events=last_events, con_ssh=con_ssh)
 
-    elif impact in ('disabled-failed'):
+    elif impact == 'disabled-failed':
 
         if host == prev_active:
             LOG.info('Killing PMON process:{} on active host:{} will trigger swact. impact:{}, '
                      'severity:{}'.format(service_name, host, impact, severity))
             swacted = is_controller_swacted(prev_active, prev_standby, con_ssh=con_ssh,
-                                        swact_start_timeout=20, swact_complete_timeout=timeout)
+                                            swact_start_timeout=20, swact_complete_timeout=timeout)
             assert swacted, 'Active-controller must be swacted before been taken into disabled-failed status'
 
         operational, available = impact.split('-')
@@ -879,7 +877,6 @@ def kill_sm_process_and_verify_impact(
 
         timeout = time.time() + action_timeout * (retries/2 if retries > 2 else 1)
 
-        #count = 0
         while time.time() < timeout:
             count += 1
 
@@ -888,7 +885,7 @@ def kill_sm_process_and_verify_impact(
 
             try:
                 pid, proc_name = get_process_info(name, cmd=cmd, host=host, process_type=process_type,
-                                                   pid_file=pid_file, con_ssh=con_ssh)[0:2]
+                                                  pid_file=pid_file, con_ssh=con_ssh)[0:2]
 
             except pexpect.exceptions.EOF:
                 LOG.warn('retry{:02d}-{:02d}: Failed to get process id for {} on host:{}, swacted unexpectedly?'.format(
@@ -926,7 +923,6 @@ def kill_sm_process_and_verify_impact(
 
             with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
                 code, output = con.exec_sudo_cmd(kill_cmd, fail_ok=True)
-                #assert 0 == code, 'Failed to kill pid:{}, cmd={}, output=<{}>, at run:{}, already terminated?'.format(
                 if 0 != code:
                     # it happens occasionaly
                     LOG.error('Failed to kill pid:{}, cmd={}, output=<{}>, at run:{}, already terminated?'.format(
@@ -970,7 +966,6 @@ def kill_sm_process_and_verify_impact(
                                                   process_type=process_type, con_ssh=con_ssh)[0:2]
 
                 return pid, active_controller
-
 
     return -3, host
 

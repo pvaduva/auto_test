@@ -14,7 +14,7 @@ from utils.tis_log import LOG
 # Remove following test as it's covered by test_timestamp_order.py and test_event_suppression.py
 def _test_delete_alarm():
     """
-    Attempt to delete system alarm with 'system alarm-delete' cli and verify it's working
+    Attempt to delete system alarm with 'fm alarm-delete' cli and verify it's working
     sample cli:
         fmClientCli -c "### ###600.005###alarm###system.vm###host=compute-0.vm=$i### ###critical###'oam' port
         ###processing-error###cpu-cycles-limit-exceeded### ###True###True###"
@@ -25,7 +25,7 @@ def _test_delete_alarm():
         - setup a sample alarm using fmClientCli command
 
     Test Steps:
-        - delete the sample alarm with the 'system alarm-delete'
+        - delete the sample alarm with the 'fm alarm-delete'
         - make sure the alarm was deleted as expected
 
     Teardown:
@@ -40,7 +40,7 @@ def _test_delete_alarm():
     ssh_client = ControllerClient.get_active_controller()
     cmd_output = ssh_client.exec_cmd(cmd, fail_ok=False)[1]
 
-    LOG.tc_step("Check generated alarm is shown in system alarm-list")
+    LOG.tc_step("Check generated alarm is shown in fm alarm-list")
     uuid = re.findall(pattern=UUID, string=cmd_output)[0]
 
     alarms_tab = system_helper.get_alarms_table(uuid=True)
@@ -49,8 +49,8 @@ def _test_delete_alarm():
 
     # delete alarm
     LOG.tc_step("Execute alarm-delete command to delete the alarm created above")
-    exit_code, cmd_output = cli.system('alarm-delete', uuid, auth_info=Tenant.ADMIN, fail_ok=True)
-    assert exit_code == 0, "Expected system alarm-delete to execute successfully but failed with error: " \
+    exit_code, cmd_output = cli.fm('alarm-delete', uuid, auth_info=Tenant.ADMIN, fail_ok=True)
+    assert exit_code == 0, "Expected fm alarm-delete to execute successfully but failed with error: " \
                            "{}".format(cmd_output)
 
     post_alarms_tab = system_helper.get_alarms_table(uuid=True)

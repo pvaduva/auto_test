@@ -168,7 +168,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
         - Create a flavor with heartbeat set to true, and auto recovery set to given value in extra spec
         - Create a volume from tis image
         - Boot a vm with the flavor and the volume
-        - Verify guest heartbeat is established via system event-logs
+        - Verify guest heartbeat is established via fm event-logs
         - Set vm to unhealthy state via touch /tmp/unhealthy
         - Verify vm auto recovery behavior is as expected based on auto recovery setting in flavor
 

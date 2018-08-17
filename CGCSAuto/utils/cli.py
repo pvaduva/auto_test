@@ -310,3 +310,13 @@ def murano(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, c
     return exec_cli('murano', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+
+
+def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
+       flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_openrc=None, err_only=False,
+       timeout=CLI_TIMEOUT, rtn_list=False, force_source=False):
+
+    return exec_cli('fm', sub_cmd=cmd, positional_args=positional_args, flags=flags,
+                    ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, force_source=force_source)

@@ -472,7 +472,7 @@ def check_if_ready_for_patching():
         skip('Not all hosts are unlocked, skip patch testing')
         return
 
-    alarm_table = table_parser.table(cli.system('alarm-list'))
+    alarm_table = table_parser.table(cli.fm('alarm-list'))
     alarm_severity_list = table_parser.get_column(alarm_table, 'Severity')
     assert 'major' or 'critical' not in alarm_severity_list, \
         'There are active alarms:{}, skip patch testing'

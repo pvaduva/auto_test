@@ -55,7 +55,6 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
         exitcode, output = simplex_host_upgrade(con_ssh=con_ssh)
         return exitcode, output
 
-
     exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info,
                                   rtn_list=True, fail_ok=True, timeout=timeout)
     if exitcode == 1:
@@ -292,7 +291,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
     if alarms:
         # Check if it alarm
-        table_ = table_parser.table(cli.system('alarm-list'))
+        table_ = table_parser.table(cli.fm('alarm-list'))
         alarm_severity_list = table_parser.get_column(table_, "Severity")
         if len(alarm_severity_list) > 0 and \
                 ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
@@ -348,30 +347,28 @@ def get_system_health_query_upgrade_2(con_ssh=None):
             elif "Locked or disabled hosts" in k:
                 failed[k.strip()] = v.strip()
 
-
         elif "Missing manifests" in line:
             failed[line] = line
         elif "alarms found" in line:
-            if len (line.split(',')) > 1:
+            if len(line.split(',')) > 1:
                 failed["managment affecting"] = int(line.split(',')[1].strip()[1])
-
 
     if len(failed) == 0:
         LOG.info("system health is OK to start upgrade......")
         return 0, None,  None
 
-    actions = { "lock_unlock": [[], ""],
-                "force_upgrade": [False, ''],
-                "swact": [False, ''],
-                }
+    actions = {"lock_unlock": [[], ""],
+               "force_upgrade": [False, ''],
+               "swact": [False, ''],
+               }
 
     for k, v in failed.items():
         if "No alarms" in k:
-            alarms = True
-            table_ = table_parser.table(cli.system('alarm-list --uuid'))
+            table_ = table_parser.table(cli.fm('alarm-list --uuid'))
             alarm_severity_list = table_parser.get_column(table_, "Severity")
-            if len(alarm_severity_list) > 0 and \
-                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
+            if len(alarm_severity_list) > 0 \
+                    and "major" not in alarm_severity_list \
+                    and "critical" not in alarm_severity_list:
                 # minor alarm present
                 LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
                 actions["force_upgrade"] = [True, "Minor alarms present"]
@@ -388,10 +385,8 @@ def get_system_health_query_upgrade_2(con_ssh=None):
                 LOG.error("System health query upgrade found major or critical alarms.")
                 return 1, failed, None
 
-
         elif "Missing manifests" in k:
-            manifest = True
-
+            # manifest = True
             if "controller-1" in k:
                 if "controller-1" not in actions["lock_unlock"][0]:
                     actions["lock_unlock"][0].append("controller-1")
@@ -402,12 +397,11 @@ def get_system_health_query_upgrade_2(con_ssh=None):
             actions["lock_unlock"][1] += "Missing manifests;"
 
         elif any(s in k for s in ("Cinder configuration", "Incomplete configuration")):
-            cinder_config = True
-            actions["swact"][0] = True
-            actions["swact"][1] += "Invalid Cinder configuration;"
+            # cinder_config = True
+            actions["swact"] = [True, actions["swact"][1] + "Invalid Cinder configuration;"]
 
         elif "Placement Services Enabled" in k or "Hosts missing placement configuration" in k:
-            placement_services = True
+            # placement_services = True
             if "controller-1" in v:
                 if "controller-1" not in actions["lock_unlock"][0]:
                     actions["lock_unlock"][0].append("controller-1")
@@ -771,7 +765,7 @@ def orchestration_upgrade_hosts(upgraded_hosts, orchestration_nodes, storage_app
         upgrade_hosts_ = list(orchestration_nodes)
         upgraded_computes = len([h for h in upgraded_hosts if 'storage' not in h and 'controller' not in h])
         computes_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' not in h and 'controller' not in h])
-        storages_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' in h])
+        # storages_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' in h])
 
         if maximum_parallel_computes:
             num_parallel_computes = int(maximum_parallel_computes)
@@ -902,7 +896,7 @@ def get_upgraded_hosts(upgrade_version, con_ssh=None, fail_ok=False, source_cred
     return table_parser.get_values(table_, 'hostname')
 
 
-def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
+def wait_for_upgrade_states(states, timeout=60, check_interval=6, fail_ok=False):
     """
      Waits for the  upgrade state to be changed.
 
@@ -918,7 +912,7 @@ def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
     end_time = time.time() + timeout
     if not states:
         raise ValueError("Expected host state(s) has to be specified via keyword argument states")
-    state_match=False
+    state_match = False
     while time.time() < end_time:
         table_ = system_upgrade_show()[1]
         act_state = table_parser.get_value_two_col_table(table_, "state")
@@ -930,8 +924,8 @@ def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
     if state_match:
         return True
     if fail_ok:
-       LOG.warning(msg)
-       return False
+        LOG.warning(msg)
+        return False
     raise exceptions.TimeoutException(msg)
 
 
@@ -963,5 +957,3 @@ def simplex_host_upgrade(con_ssh=None, fail_ok=False):
             raise exceptions.CLIRejected(err_msg)
     else:
         return 0, "host upgrade success"
-
-

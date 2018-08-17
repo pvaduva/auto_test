@@ -54,7 +54,7 @@ def pre_check_upgrade():
 
     # check no active alarms in system
 
-    table_ = table_parser.table(cli.system('alarm-list'))
+    table_ = table_parser.table(cli.fm('alarm-list'))
     alarm_severity_list = table_parser.get_column(table_, "Severity")
 
     LOG.info("Alarm Severity List: {}".format(alarm_severity_list))

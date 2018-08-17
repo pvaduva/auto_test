@@ -372,8 +372,8 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
 
     output = None
     for i in range(retry+1):
-        code, output = cli.system('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                  rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
+        code, output = cli.fm('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
         if code == 0:
             table_ = table_parser.table(output, combine_multiline_entry=True)
             table_ = _compose_alarm_table(table_, uuid=uuid)
@@ -382,7 +382,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         if i < retry:
             time.sleep(5)
     else:
-        raise exceptions.CLIRejected('system alarm-list cli got rejected after {} retries: {}'.format(retry, output))
+        raise exceptions.CLIRejected('fm alarm-list cli got rejected after {} retries: {}'.format(retry, output))
 
 
 def _compose_alarm_table(output, uuid=False):
@@ -412,8 +412,8 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
         time_stamp (str):
         strict (bool): whether to perform strict filter on reason text, entity_id, severity, or time_stamp
         show_suppress (bool): whether to show suppressed alarms. Default to False.
-        query_key (str): key in --query <key>=<value> passed to system alarm-list
-        query_value (str): value in --query <key>=<value> passed to system alarm-list
+        query_key (str): key in --query <key>=<value> passed to fm alarm-list
+        query_value (str): value in --query <key>=<value> passed to fm alarm-list
         query_type (str): 'string', 'integer', 'float', or 'boolean'
         mgmt_affecting (bool)
         con_ssh (SSHClient):
@@ -478,7 +478,7 @@ def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.ADMIN):
     if uuid:
         args += ' --uuid'
     args += ' --nowrap --nopaging'
-    table_ = table_parser.table(cli.system('event-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.fm('event-suppress-list', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_
 
 
@@ -495,8 +495,8 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.ADMIN):
     """
     LOG.info("Un-suppress all events")
     args = '--nowrap --nopaging'
-    code, output = cli.system('event-unsuppress-all',  positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
-                              auth_info=auth_info, rtn_list=True)
+    code, output = cli.fm('event-unsuppress-all',  positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
+                          auth_info=auth_info, rtn_list=True)
 
     if code == 1:
         return 1, output
@@ -594,8 +594,8 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
     if show_suppress:
         args += ' --include_suppress'
 
-    table_ = table_parser.table(cli.system('event-list ', args, ssh_client=con_ssh, auth_info=auth_info,
-                                           use_telnet=use_telnet, con_telnet=con_telnet,))
+    table_ = table_parser.table(cli.fm('event-list ', args, ssh_client=con_ssh, auth_info=auth_info,
+                                       use_telnet=use_telnet, con_telnet=con_telnet,))
     # table_ = _compose_events_table(table_, uuid=uuid)
     return table_
 
@@ -627,7 +627,7 @@ def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=No
                     strict=True, check_interval=3, event_log_id=None, entity_type_id=None, entity_instance_id=None,
                     severity=None, start=None, end=None, **kwargs):
     """
-    Wait for event(s) to appear in system event-list
+    Wait for event(s) to appear in fm event-list
     Args:
         timeout (int): max time to wait in seconds
         num (int): max number of event logs to return
@@ -675,7 +675,7 @@ def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=No
 
         time.sleep(check_interval)
 
-    msg = "Event(s) did not appear in system event-list within timeout."
+    msg = "Event(s) did not appear in fm event-list within timeout."
     if fail_ok:
         LOG.warning(msg)
         return []
@@ -715,8 +715,8 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADM
     res = {}
     failed_clis = []
     for alarm in alarms:
-        code, out = cli.system('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
-                               use_telnet=use_telnet, con_telnet=con_telnet)
+        code, out = cli.fm('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                           use_telnet=use_telnet, con_telnet=con_telnet)
         res[alarm] = code, out
 
         if code != 0:
@@ -750,7 +750,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
                         use_telnet=False, con_telnet=None, fail_ok=False, con_ssh=None,
                         auth_info=Tenant.ADMIN):
     """
-    Wait for given alarm to disappear from system alarm-list
+    Wait for given alarm to disappear from fm alarm-list
     Args:
         alarm_id (str): such as 200.009
         entity_id (str): entity instance id for the alarm (strict as defined in param)
@@ -768,7 +768,7 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
 
     """
 
-    LOG.info("Waiting for alarm {} to disappear from system alarm-list".format(alarm_id))
+    LOG.info("Waiting for alarm {} to disappear from fm alarm-list".format(alarm_id))
     build_ver = get_system_software_version(con_ssh=con_ssh, use_telnet=use_telnet,
                                             con_telnet=con_telnet)
 
@@ -778,8 +778,8 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
 
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alarms_tab = table_parser.table(cli.system(alarmcmd, ssh_client=con_ssh, auth_info=auth_info,
-                                                   use_telnet=use_telnet, con_telnet=con_telnet))
+        alarms_tab = table_parser.table(cli.fm(alarmcmd, ssh_client=con_ssh, auth_info=auth_info,
+                                               use_telnet=use_telnet, con_telnet=con_telnet))
         alarms_tab = _compose_alarm_table(alarms_tab, uuid=False)
 
         alarm_tab = table_parser.filter_table(alarms_tab, **{'Alarm ID': alarm_id})
@@ -793,11 +793,11 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None, strict=False
             if kwargs:
                 alarms = table_parser.get_values(alarm_tab, target_header='Alarm ID', strict=strict, **kwargs)
                 if not alarms:
-                    LOG.info("Alarm {} with {} is not displayed in system alarm-list".format(alarm_id, kwargs))
+                    LOG.info("Alarm {} with {} is not displayed in fm alarm-list".format(alarm_id, kwargs))
                     return True
 
         else:
-            LOG.info("Alarm {} is not displayed in system alarm-list".format(alarm_id))
+            LOG.info("Alarm {} is not displayed in fm alarm-list".format(alarm_id))
             return True
 
         time.sleep(check_interval)
@@ -864,7 +864,7 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
 
         time.sleep(check_interval)
 
-    err_msg = "Alarm {} did not appear in system alarm-list within {} seconds".format(kwargs, timeout)
+    err_msg = "Alarm {} did not appear in fm alarm-list within {} seconds".format(kwargs, timeout)
     if fail_ok:
         LOG.warning(err_msg)
         return False, None
@@ -875,7 +875,7 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
 def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
                          auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
     """
-    Wait for given alarms_and_events to be gone from system alarm-list
+    Wait for given alarms_and_events to be gone from fm alarm-list
     Args:
         alarms (list): list of tuple. [(<alarm_id1>, <entity_id1>), ...]
         timeout (int):
@@ -890,7 +890,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
 
     """
     pre_alarms = list(alarms)   # Don't update the original list
-    LOG.info("Waiting for alarms_and_events to disappear from system alarm-list: {}".format(pre_alarms))
+    LOG.info("Waiting for alarms_and_events to disappear from fm alarm-list: {}".format(pre_alarms))
     alarms_to_check = pre_alarms.copy()
 
     alarms_cleared = []
@@ -931,7 +931,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
 def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_ssh=None,
                              auth_info=Tenant.ADMIN, use_telnet=False, con_telnet=None):
     """
-    Wait for all alarms_and_events to be cleared from system alarm-list
+    Wait for all alarms_and_events to be cleared from fm alarm-list
     Args:
         timeout (int):
         check_interval (int):
@@ -945,7 +945,7 @@ def wait_for_all_alarms_gone(timeout=120, check_interval=3, fail_ok=False, con_s
 
     """
 
-    LOG.info("Waiting for all existing alarms_and_events to disappear from system alarm-list: {}".format(get_alarms()))
+    LOG.info("Waiting for all existing alarms_and_events to disappear from fm alarm-list: {}".format(get_alarms()))
 
     end_time = time.time() + timeout
     while time.time() < end_time:
@@ -2227,10 +2227,11 @@ def get_system_health_query_upgrade(con_ssh=None):
     for k, v in failed.items():
         if "No alarms" in k:
             # alarms = True
-            table_ = table_parser.table(cli.system('alarm-list --uuid'))
+            table_ = table_parser.table(cli.fm('alarm-list --uuid'))
             alarm_severity_list = table_parser.get_column(table_, "Severity")
-            if len(alarm_severity_list) > 0 and \
-                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
+            if len(alarm_severity_list) > 0 \
+                    and "major" not in alarm_severity_list \
+                    and "critical" not in alarm_severity_list:
                 # minor alarm present
                 LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
                 actions["force_upgrade"] = [True, "Minor alarms present"]
@@ -2260,8 +2261,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
         elif any(s in k for s in ("Cinder configuration", "Incomplete configuration")):
             # cinder_config = True
-            actions["swact"][0] = True
-            actions["swact"][1] += "Invalid Cinder configuration;"
+            actions["swact"] = [True, actions["swact"][1] + "Invalid Cinder configuration;"]
 
         elif "Placement Services Enabled" in k or "Hosts missing placement configuration" in k:
             # placement_services = True

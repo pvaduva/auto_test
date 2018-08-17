@@ -2376,7 +2376,7 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None, cl
 
     # expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
     # _wait_for_vm_status(vm_id, expt_reboot, check_interval=0, fail_ok=False)
-    LOG.info("Wait for vm reboot events to appear in system event-list")
+    LOG.info("Wait for vm reboot events to appear in fm event-list")
     expt_reason = 'hard-reboot' if hard else 'soft-reboot'
     system_helper.wait_for_events(timeout=30, num=10, entity_instance_id=vm_id, start=start_time, fail_ok=False,
                                   strict=False, **{'Event Log ID': EventLogID.REBOOT_VM_ISSUED,
