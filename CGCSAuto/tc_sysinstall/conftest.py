@@ -43,12 +43,12 @@ def pytest_configure(config):
 
     if not install_conf:
         install_conf = setups.write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
-                                                lab_files_dir=lab_file_dir, drop=drop_num, patch_dir=patch_dir,
+                                                lab_files_dir=lab_file_dir, patch_dir=patch_dir,
                                                 tis_build_dir=tis_build_dir, build_server=build_server,
                                                 license_path=install_license, guest_image=guest_image,
                                                 heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                                 security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
-                                                boot_server=boot_server)
+                                                boot_server=boot_server, resume=resume_install, skip=skiplist)
 
     setups.set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
                               installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,

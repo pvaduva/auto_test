@@ -429,7 +429,7 @@ def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute
                 lab_dict['short_name']))
 
     if installconf_path:
-        installconf = configparser.ConfigParser()
+        installconf = configparser.ConfigParser(allow_no_value=True)
         installconf.read(installconf_path)
 
         # Parse lab info
@@ -609,16 +609,19 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
         node_telnet.close()
 
 
-def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon_device, drop, patch_dir, ovs, boot_server,
-                       controller1_ceph_mon_device, ceph_mon_gib, wipedisk, boot, iso_path, security, low_latency, stop):
+def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
+                       patch_dir=None, ovs=False, boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None,
+                       wipedisk=False, boot="pxe", iso_path=None, security="standard", low_latency=False, stop=99):
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
     elif not installconf_path:
-        installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None, drop=drop,
+        installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
                                              lab_files_dir=None, build_server=BuildServerPath.DEFAULT_BUILD_SERVER,
                                              compute=None, storage=None, license_path=None, guest_image=None,
-                                             heat_templates=None, security=security, low_latency=low_latency, stop=stop)
+                                             heat_templates=None, security=security, low_latency=low_latency, stop=stop,
+                                             skip=skip, resume=resume, boot_server=boot_server, boot=boot,
+                                             iso_path=iso_path, ovs=ovs, patch_dir=patch_dir)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -689,10 +692,16 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         build_info = installconf['BUILD']
         conf_build_server = build_info['BUILD_SERVER']
         conf_host_build_dir = build_info['TIS_BUILD_PATH']
+        conf_iso_path = build_info["BUILD_ISO_PATH"]
+        conf_patch_dir = build_info["PATCHES"]
         if conf_build_server:
             build_server = conf_build_server
         if conf_host_build_dir:
             host_build_dir = conf_host_build_dir
+        if conf_iso_path:
+            iso_path = conf_iso_path
+        if conf_patch_dir:
+            patch_dir = conf_patch_dir
 
         # Parse files info
         conf_files = installconf['CONF_FILES']
@@ -701,7 +710,7 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
         conf_license_path = conf_files['LICENSE_PATH']
         conf_guest_image = conf_files['GUEST_IMAGE_PATH']
         conf_heat_templates = conf_files['HEAT_TEMPLATES']
-
+        conf_ovs = eval(conf_files['OVS_CONFIG'])
         if conf_files_server:
             files_server = conf_files_server
         if conf_files_dir:
@@ -714,6 +723,27 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
             guest_image = conf_guest_image
         if conf_heat_templates:
             heat_templates = conf_heat_templates
+        ovs = conf_ovs
+
+        boot_info = installconf["BOOT"]
+        conf_boot_server = boot_info["BOOT_SERVER"]
+        conf_low_latency = eval(boot_info["LOW_LATENCY_INSTALL"])
+        conf_boot_type = boot_info["BOOT_TYPE"]
+        if conf_boot_server:
+            boot_server = conf_boot_server
+        low_latency = conf_low_latency
+        if conf_boot_type:
+            boot = conf_boot_type
+
+        installer_steps = installconf["CONTROL"]
+        conf_resume_step = eval(installer_steps["RESUME_POINT"])
+        conf_final_step = installer_steps["STOP_POINT"]
+        conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
+        resume = conf_resume_step
+        if conf_final_step:
+            stop = conf_final_step
+        if conf_skip_steps:
+            skip = eval(conf_skip_steps)
 
     else:
         lab_to_install = get_lab_dict(lab)
@@ -822,9 +852,9 @@ def set_install_params(lab, skip, resume, installconf_path, controller0_ceph_mon
                                  )
 
 
-def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, drop, patch_dir,
+def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, patch_dir,
                       license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop, ovs,
-                      boot_server):
+                      boot_server, resume, skip):
     """
     Writes a file in ini format of the fresh_install variables
     Args:
@@ -885,13 +915,19 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
     node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
 
     # [BUILD] and [CONF_FILES] section
-    build_dict = {"BUILD_SERVER": build_server, "TIS_BUILD_PATH": tis_build_dir}
+    build_dict = {"BUILD_SERVER": build_server, "TIS_BUILD_PATH": tis_build_dir, "BUILD_ISO_PATH": iso_path,
+                  "PATCHES": patch_dir}
     files_dict = {"FILES_SERVER": files_server, "FILES_DIR": files_dir, "LICENSE_PATH": license_path,
-                 "GUEST_IMAGE_PATH": guest_image, "HEAT_TEMPLATES": heat_templates}
+                 "GUEST_IMAGE_PATH": guest_image, "HEAT_TEMPLATES": heat_templates, "OVS_CONFIG": str(ovs)}
+    boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server, "SECURITY_PROFILE": security,
+                 "LOW_LATENCY_INSTALL": low_latency}
+    control_dict = {"RESUME_POINT": resume, "STEPS_TO_SKIP": skip, "STOP_POINT": stop}
     config["LAB"] = labconf_lab_dict
     config["NODES"] = node_dict
     config["BUILD"] = build_dict
     config["CONF_FILES"] = files_dict
+    config["BOOT"] = boot_dict
+    config["CONTROL"] = control_dict
 
     install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
     install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name

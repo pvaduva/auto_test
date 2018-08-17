@@ -90,7 +90,8 @@ class InstallVars:
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume,
+    def set_install_vars(cls, lab,
+                         resume=False,
                          wipedisk=False,
                          skips=None,
                          build_server=None,
