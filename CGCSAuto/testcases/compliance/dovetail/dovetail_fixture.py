@@ -10,18 +10,22 @@ from pytest import fixture, skip, mark
 
 CUMULUS_PROMPT = '.*@.*:.* '
 
-@fixture(scope='session')
+@fixture(scope='session', autouse=True)
 def dovetail_pre_check():
     LOG.info('Checking if lab is compatiable')
     if system_helper.is_small_footprint():
         skip('Dovetail can only be run on a standard or storage lab')
 
 
-@fixture(scope='session')
+@fixture(scope='session', autouse=True)
 def dovetail_setup(dovetail_pre_check):
+    LOG.tc_func_start('DOVETAIL COMPLIANCE TESTING')
     LOG.tc_step('Starting Dovetail Test on Cumulus Server {}'.format(Dovetail.DOVETAIL_HOST))
+    ComplianceCreds().set_user(Dovetail.DOVETAIL_USER)
+    ComplianceCreds().set_password(Dovetail.DOVETAIL_PASSWORD)
     ComplianceCreds().set_host(Dovetail.DOVETAIL_HOST)
 
+    print('The Password is {} and the user is {} onto host {}'.format(ComplianceCreds().get_password(), ComplianceCreds.get_user(), ComplianceCreds.get_host()))
     floating_ip = ProjVar.get_var('LAB')['floating ip']
 
     system_nodes = system_helper.get_hostnames()
@@ -43,12 +47,7 @@ def dovetail_setup(dovetail_pre_check):
 
     LOG.info("Generating YAML files")
 
-<<<<<<< HEAD
-    # pre_config.pod_update('192.168.204.3', '192.168.204.4', compute_ips, storage_ips)
-    pre_config.pod_update(floating_ip, '192.168.204.4', compute_ips, storage_ips)
-=======
     pre_config.pod_update('192.168.204.3', '192.168.204.4', compute_ips, storage_ips)
->>>>>>> 859086f8... Made Changes asked in Code Review, added system precheck as well as teardown. Also added conftest.py
 
     pre_config.tempest_conf_update(len(compute_ips))
     pre_config.env_config_update(floating_ip)
@@ -85,11 +84,9 @@ def dovetail_setup(dovetail_pre_check):
     output = con_ssh.exec_cmd('ps -fC nova-api | grep -v UID | wc')[1]
     nova_proc_count = output.split()[0]
 
-    with host_helper.ssh_to_compliance_server() as server_ssh:
-        server_ssh.exec_sudo_cmd('su - dovetail')
-        filepath = server_ssh.exec_sudo_cmd("find / -name monitor_process.py")[-1]
+    with host_helper.ssh_to_compliance_server(prompt=CUMULUS_PROMPT) as server_ssh:
+        filepath = server_ssh.exec_sudo_cmd("find / -name monitor_process.py")[1]
         LOG.info('Fixing monitor.py located at {}'.format(filepath))
-        filepath = filepath[-1]
         server_ssh.exec_sudo_cmd("sed -ie 's/processes=.*/processes={}/g' {}".format(nova_proc_count, filepath))
 
     LOG.info("Updating Quotas")
@@ -105,3 +102,25 @@ def extract_ip(node):
     ip = ip[-1][2:]
     return ip
 
+@fixture()
+def restore_sshd_file_teardown(request):
+    def teardown():
+        """
+        Removes the edits made to the sshd_config file
+        Returns:
+
+        """
+        LOG.info('Repairing sshd_config file')
+
+        system_nodes = system_helper.get_hostnames()
+        for host in system_nodes:
+            with host_helper.ssh_to_host(host) as host_ssh:
+                host_ssh.exec_sudo_cmd("sed -ie 's/PermitRootLogin yes/PermitRootLogin no/g' /etc/ssh/sshd_config")
+                host_ssh.exec_sudo_cmd("sed -ie 's/#Match User root/Match User root/g' /etc/ssh/sshd_config")
+                host_ssh.exec_sudo_cmd(
+                    "sed -ie 's/ #PasswordAuthentication no/ PasswordAuthentication no/g' /etc/ssh/sshd_config")
+                host_ssh.exec_sudo_cmd("sed -ie 's/#Match Address/Match Address/g' /etc/ssh/sshd_config")
+                host_ssh.exec_sudo_cmd(
+                    "sed -ie 's/#PermitRootLogin without-password/PermitRootLogin without-password/g' /etc/ssh/sshd_config")
+        LOG.info('Root Login capability removed')
+    request.addfinalizer(teardown)

@@ -3363,8 +3363,7 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
 
 
 @contextmanager
-def ssh_to_compliance_server(server=ComplianceCreds.get_host(), user=ComplianceCreds.get_user(),
-                             password=ComplianceCreds.get_password(), prompt=None):
+def ssh_to_compliance_server(server=None, user=None, password=None, prompt=None):
     """
     ssh to given compliance server
 
@@ -3377,8 +3376,15 @@ def ssh_to_compliance_server(server=ComplianceCreds.get_host(), user=ComplianceC
     Yields (SSHClient): ssh client for given compliance server and user
 
     """
+    if server is None:
+        server = ComplianceCreds.get_host()
+    if user is None:
+        user = ComplianceCreds.get_user()
+    if password is None:
+        password = ComplianceCreds.get_password()
+
     set_ps1 = False
-    if not prompt:
+    if prompt is None:
         prompt = '.*{}@.*:.*\$ '.format(user)
         set_ps1 = True
     server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
@@ -3390,7 +3396,6 @@ def ssh_to_compliance_server(server=ComplianceCreds.get_host(), user=ComplianceC
         yield server_conn
     finally:
         server_conn.close()
-
 
 def get_host_co_processor_pci_list(hostname):
 

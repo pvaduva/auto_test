@@ -11,7 +11,7 @@ from pytest import fixture, skip, mark
 TESTAREA_MANDATORY_MAX_TIMEOUT = 20000
 CUMULUS_PROMPT = '.*@.*:.* '
 
-@mark.usefixtures('preconfig.restore_sshd_file_teardown')
+@mark.usefixtures('restore_sshd_file_teardown')
 def test_dovetail():
     """
     Test the Dovetail Compliance Suite through Cumulus Server
@@ -41,7 +41,6 @@ def test_dovetail():
     # server_ssh.connect()
     # LOG.info("Connected to cumulus")
     #
-    # server_ssh.exec_sudo_cmd('su - dovetail')
     # LOG.info("Changed over to dovetail user")
     #
     # floating_ip = ProjVar.get_var('LAB')['floating ip']
@@ -110,16 +109,17 @@ def test_dovetail():
     # LOG.info("Updating Quotas")
     # nova_helper.update_quotas(tenant='admin', instances=20, cores=50)
     # cinder_helper.update_quotas(tenant='admin', volumes=100, snapshots=100)
-    # network_helper.update_quotas(tenant_name='admin', port=500, floatingip=100, subnet=100, network=100)
-
-    with host_helper.ssh_to_compliance_server() as server_ssh:
-        server_ssh.exec_sudo_cmd('su - dovetail')
+    # # network_helper.update_quotas(tenant_name='admin', port=500, floatingip=100, subnet=100, network=100)
+    # ComplianceCreds().set_user(Dovetail.DOVETAIL_USER)
+    # ComplianceCreds().set_password(Dovetail.DOVETAIL_PASSWORD)
+    # ComplianceCreds().set_host(Dovetail.DOVETAIL_HOST)
+    with host_helper.ssh_to_compliance_server(prompt=CUMULUS_PROMPT) as server_ssh:
         LOG.info("Sourcing config files")
         server_ssh.exec_cmd('source {}/pre_config/env_config.sh'.format(Dovetail.DOVETAIL_HOME))
 
         LOG.info("Starting Docker Container")
         code, output = server_ssh.exec_sudo_cmd(
-            "docker run --privileged=true -it -e DOVETAIL_HOME={} -v $DOVETAIL_HOME:{} -v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash".format(Dovetail.DOVETAIL_HOME, Dovetail.DOVETAIL_HOME))
+            "docker run --privileged=true -it -e DOVETAIL_HOME={} -v {}:{} -v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash".format(Dovetail.DOVETAIL_HOME, Dovetail.DOVETAIL_HOME, Dovetail.DOVETAIL_HOME))
         print(output)
         LOG.info("Starting Dovetail Testarea Mandatory")
         server_ssh.exec_cmd('dovetail run --testarea mandatory', expect_timeout=TESTAREA_MANDATORY_MAX_TIMEOUT, fail_ok=False)

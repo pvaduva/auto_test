@@ -9,14 +9,14 @@ from pytest import fixture, skip, mark
 CUMULUS_PROMPT = '.*@.*:.* '
 
 def env_config_update(floating_ip):
-    projectID_admin = keystone_helper.get_tenant_ids(tenant_name=Tenant.ADMIN['tenant'])
+    projectID_admin = keystone_helper.get_tenant_ids(tenant_name=Tenant.ADMIN['tenant'])[0]
 
     user_admin = Tenant.ADMIN['user']
     password_admin = Tenant.ADMIN['password']
     filepath = '{}/pre_config/env_config.sh'.format(Dovetail.DOVETAIL_HOME)
+    Dovetail.set_os_auth_url(keystone_helper.get_endpoints(service_name='keystone', interface='public', region='RegionOne', rtn_val='url')[0])
 
     with host_helper.ssh_to_compliance_server(prompt=CUMULUS_PROMPT) as server_ssh:
-        server_ssh.exec_sudo_cmd('su - dovetail')
         server_ssh.exec_cmd('sed -i "s/^export OS_PROJECT_NAME=.*/export OS_PROJECT_NAME={}/g" {}'.format(user_admin, filepath))
         server_ssh.exec_cmd('sed -i "s/^export OS_TENANT_NAME=.*/export OS_TENANT_NAME={}/g" {}'.format(user_admin, filepath))
         server_ssh.exec_cmd('sed -i "s/^export OS_USERNAME=.*/export OS_USERNAME={}/g" {}'.format(user_admin, filepath))
@@ -28,7 +28,6 @@ def env_config_update(floating_ip):
 
 def pod_update(con0, con1, compute_ips, storage_ips):
     with host_helper.ssh_to_compliance_server(prompt=CUMULUS_PROMPT) as server_ssh:
-        server_ssh.exec_sudo_cmd('su - dovetail')
         server_ssh.exec_cmd('cp {}/templates/pod.yaml {}/pre_config/'.format(Dovetail.DOVETAIL_HOME, Dovetail.DOVETAIL_HOME))
         pod_yaml = server_ssh.exec_sudo_cmd('cat {}'.format(Dovetail.POD))[1]
         ips = re.findall("ip:.*", pod_yaml)
@@ -61,7 +60,6 @@ def pod_update(con0, con1, compute_ips, storage_ips):
 
 def tempest_conf_update(computes):
     with host_helper.ssh_to_compliance_server(prompt=CUMULUS_PROMPT) as server_ssh:
-        server_ssh.exec_sudo_cmd('su - dovetail')
         server_ssh.exec_sudo_cmd('sed -i "s/.*min_compute_nodes:.*/  min_compute_nodes: {}/g" {}'.format(str(computes), Dovetail.TEMPEST_CONF))
         server_ssh.exec_sudo_cmd('sed -i "s/.*volume_device_name:.*/  volume_device_name: vdb/g" {}'.format(Dovetail.TEMPEST_CONF))
 
@@ -75,25 +73,3 @@ def fix_sshd_file(con_ssh):
     con_ssh.exec_sudo_cmd("sed -ie 's/PermitRootLogin without-password/#PermitRootLogin without-password/g' /etc/ssh/sshd_config")
 
 
-@fixture()
-def restore_sshd_file_teardown(request):
-    def teardown():
-        """
-        Removes the edits made to the sshd_config file
-        Returns:
-
-        """
-        LOG.info('Repairing sshd_config file')
-
-        system_nodes = system_helper.get_hostnames()
-        for host in system_nodes:
-            with host_helper.ssh_to_host(host) as host_ssh:
-                host_ssh.exec_sudo_cmd("sed -ie 's/PermitRootLogin yes/PermitRootLogin no/g' /etc/ssh/sshd_config")
-                host_ssh.exec_sudo_cmd("sed -ie 's/#Match User root/Match User root/g' /etc/ssh/sshd_config")
-                host_ssh.exec_sudo_cmd(
-                    "sed -ie 's/ #PasswordAuthentication no/ PasswordAuthentication no/g' /etc/ssh/sshd_config")
-                host_ssh.exec_sudo_cmd("sed -ie 's/#Match Address/Match Address/g' /etc/ssh/sshd_config")
-                host_ssh.exec_sudo_cmd(
-                    "sed -ie 's/#PermitRootLogin without-password/PermitRootLogin without-password/g' /etc/ssh/sshd_config")
-        LOG.info('Root Login capability removed')
-    request.addfinalizer(teardown)
