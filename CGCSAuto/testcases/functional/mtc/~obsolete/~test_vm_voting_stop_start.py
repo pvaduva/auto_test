@@ -98,7 +98,7 @@ def test_vm_voting_stop_start(vm_):
     LOG.tc_step("Attempt to stop a VM")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
+        exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=True)
         assert ('Unable to stop the specified server' in output)
 
     LOG.tc_step("Remove the /tmp/vote_no_to_stop file")
@@ -108,7 +108,7 @@ def test_vm_voting_stop_start(vm_):
     LOG.tc_step("Verify a VM can be stopped")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=False)
+        exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=False)
 
     time.sleep(30)
     events_tab = system_helper.get_events_table()
@@ -119,7 +119,7 @@ def test_vm_voting_stop_start(vm_):
     LOG.tc_step("Verify a VM can be started again")
     time.sleep(310)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('start', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+        exitcode, output = cli.nova('start', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True,
                                     fail_ok=False)
 
     time.sleep(120)

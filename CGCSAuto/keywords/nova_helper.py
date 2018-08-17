@@ -6,6 +6,7 @@ import ast
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
+from consts.proj_vars import ProjVar
 from consts.auth import Tenant
 from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
 from keywords import keystone_helper, host_helper, common
@@ -14,7 +15,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
-                  is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None,
+                  is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None,
                   storage_backing=None, check_storage_backing=True):
     """
     Create a flavor with given criteria.
@@ -167,7 +168,7 @@ def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
     return flavor in table_parser.get_column(table_, header=header)
 
 
-def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Delete given flavor(s)
     Args:
@@ -302,7 +303,7 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     return flavor_id
 
 
-def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **extra_specs):
+def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False, **extra_specs):
     """
     Set given extra specs for a flavor
     Args:
@@ -357,7 +358,7 @@ def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok
     return code, msg
 
 
-def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,
+def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'),
                              con_ssh=None):
     """
     Unset specific extra spec(s) from given flavor.
@@ -416,7 +417,7 @@ def unset_flavor_extra_specs(flavor, extra_specs, check_first=True, fail_ok=Fals
         return 0, success_msg
 
 
-def get_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get extra specs of a flavor as dictionary
     Args:
@@ -494,7 +495,7 @@ def create_server_group(name=None, policy='affinity', best_effort=None, max_grou
 
 
 def get_server_groups(name=None, project_id=None, policies=None, members=None, best_effort=None,
-                      auth_info=Tenant.ADMIN, con_ssh=None, strict=False, regex=False,
+                      auth_info=Tenant.get('admin'), con_ssh=None, strict=False, regex=False,
                       all_=True):
     """
     Get server groups ids based on the given criteria
@@ -734,7 +735,7 @@ def unset_server_group_metadata(srv_grp_id, fail_ok=False, auth_info=None, con_s
     return 0, msg
 
 
-def server_group_exists(srv_grp_id, auth_info=Tenant.ADMIN, con_ssh=None):
+def server_group_exists(srv_grp_id, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Return True if given server group exists else False
 
@@ -752,7 +753,7 @@ def server_group_exists(srv_grp_id, auth_info=Tenant.ADMIN, con_ssh=None):
     return srv_grp_id in existing_server_groups
 
 
-def delete_server_groups(srv_grp_ids=None, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_server_groups(srv_grp_ids=None, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Delete server group(s)
 
@@ -855,7 +856,7 @@ def get_all_vms(return_val='ID', con_ssh=None):
     Returns (list): list of all vms on the system
 
     """
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     return table_parser.get_column(table_, return_val)
 
 
@@ -902,7 +903,7 @@ def get_vm_storage_type(vm_id, con_ssh=None):
     # TODO: Update to get it from nova show directly
     flavor_id = get_vm_flavor(vm_id=vm_id, rtn_val='id')
 
-    table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
     return extra_specs['aggregate_instance_extra_specs:storage']
 
@@ -941,7 +942,7 @@ def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=Tru
         return table_parser.get_column(table_, return_val)
 
 
-def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get vm nova show values for given fields
     Args:
@@ -962,12 +963,12 @@ def get_vm_nova_show_values(vm_id, fields, strict=False, con_ssh=None, auth_info
     return values
 
 
-def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
     return get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
 
 
 def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True):
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     vm_ids = table_parser.get_values(table_, 'ID', strict=strict, regex=regex, Name=vm_name.strip())
     if not vm_ids:
         if fail_ok:
@@ -978,7 +979,7 @@ def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok
 
 
 def get_vm_name_from_id(vm_id, con_ssh=None):
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     return table_parser.get_values(table_, 'Name', ID=vm_id)[0]
 
 
@@ -998,7 +999,7 @@ def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
     return _get_vm_volumes(table_)
 
 
-def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.ADMIN, use_openstack_cmd=False):
+def get_vm_nova_show_value(vm_id, field, strict=False, con_ssh=None, auth_info=Tenant.get('admin'), use_openstack_cmd=False):
     """
     Get vm nova show value for given field
     Args:
@@ -1028,7 +1029,7 @@ def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):
     return table_parser.get_value_two_col_table(table_, 'fault', merge_lines=True)
 
 
-def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get value of specified field for given vm(s) as a dictionary.
     Args:
@@ -1052,7 +1053,7 @@ def get_vms_info(vm_ids=None, field='Status', con_ssh=None, auth_info=Tenant.ADM
     return dict(zip(vm_ids, info))
 
 
-def get_vm_flavor(vm_id, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_flavor(vm_id, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get flavor id of given vm
 
@@ -1083,7 +1084,7 @@ def get_vm_host(vm_id, con_ssh=None):
     Returns:
 
     """
-    return get_vm_nova_show_value(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    return get_vm_nova_show_value(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.get('admin'))
 
 
 def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):
@@ -1097,7 +1098,7 @@ def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):
     Returns (list): A list of VMs' ID under a hypervisor
 
     """
-    table_ = table_parser.table(cli.nova('hypervisor-servers', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('hypervisor-servers', hostname, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     return table_parser.get_column(table_, rtn_val)
 
 
@@ -1137,7 +1138,7 @@ def get_key_pair(name=None, con_ssh=None, auth_info=None):
         return table_parser.get_column(table_, 'Name')
 
 
-def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def vm_exists(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Return True if VM with given id exists. Else False.
 
@@ -1207,7 +1208,7 @@ def get_vm_image_name(vm_id, auth_info=None, con_ssh=None):
         image_show_table = table_parser.table(cli.glance('image-show', image_id))
         image_name = table_parser.get_value_two_col_table(image_show_table, 'name')
     else:      # booted from volume
-        vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.ADMIN))
+        vol_show_table = table_parser.table(cli.cinder('show', boot_info['id'], auth_info=Tenant.get('admin')))
         image_meta_data = table_parser.get_value_two_col_table(vol_show_table, 'volume_image_metadata')
         image_meta_data = table_parser.convert_value_to_dict_cinder(image_meta_data)
         image_name = image_meta_data['image_name']
@@ -1265,7 +1266,8 @@ def get_quotas(quotas=None, detail=None, con_ssh=None, auth_info=None):
     return values
 
 
-def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.get('admin'),
+                  sys_con_for_dc=True, **kwargs):
     """
     Update quota(s) with given key/value pair(s)
     Args:
@@ -1295,10 +1297,16 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
         args_ += '--force '
     args_ += tenant_id
 
+    if not auth_info:
+        auth_info = Tenant.get_primary()
+
+    if ProjVar.get_var('IS_DC') and sys_con_for_dc and auth_info['region'] != 'SystemController':
+        auth_info = Tenant.get(auth_info['user'], dc_region='SystemController')
+
     cli.nova('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
 
 
-# def set_image_metadata(image, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
+# def set_image_metadata(image, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None, **kwargs):
 #     """
 #     Set image metadata with given key/value pair(s)
 #     Args:
@@ -1358,7 +1366,7 @@ def update_quotas(tenant=None, force=False, con_ssh=None, auth_info=Tenant.ADMIN
 #     return 0, msg
 
 
-def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_image_metadata(image, meta_keys, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get specified metadata as a dictionary for given image
     Args:
@@ -1387,7 +1395,7 @@ def get_image_metadata(image, meta_keys, auth_info=Tenant.ADMIN, con_ssh=None):
     return results
 
 
-# def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+# def delete_image_metadata(image, meta_keys, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
 #     """
 #      Unset specific extra spec(s) from given flavor.
 #
@@ -1450,7 +1458,7 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
     Returns (str): flavor_id
 
     """
-    table_ = table_parser.table(cli.nova('flavor-show', from_flavor_id, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('flavor-show', from_flavor_id, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
 
     extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
     ephemeral = table_parser.get_value_two_col_table(table_, 'ephemeral', strict=False)
@@ -1473,7 +1481,7 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
     return new_flavor_id
 
 
-def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=True, auth_info=Tenant.ADMIN,
+def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=True, auth_info=Tenant.get('admin'),
                           con_ssh=None, rtn_int=True):
     """
     Get provider net info from "nova providernet-show"
@@ -1499,7 +1507,7 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
 
 def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_configured', 'pci_pfs_used',
                                                                     'pci_vfs_configured', 'pci_vfs_used'),
-                                            auth_info=Tenant.ADMIN, con_ssh=None):
+                                            auth_info=Tenant.get('admin'), con_ssh=None):
     """
     get pci interface usage
     Args:
@@ -1523,7 +1531,7 @@ def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_con
 
 
 def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
-                           net_id=None, net_name=None, auth_info=Tenant.ADMIN, con_ssh=None):
+                           net_id=None, net_name=None, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get vm interface info for given nic from nova show
     Args:
@@ -1596,12 +1604,12 @@ def get_vm_instance_name(vm_id, con_ssh=None):
     return get_vm_nova_show_value(vm_id, ":instance_name", strict=False, con_ssh=con_ssh)
 
 
-def get_nova_services_table(auth_info=Tenant.ADMIN, con_ssh=None):
+def get_nova_services_table(auth_info=Tenant.get('admin'), con_ssh=None):
     return table_parser.table(cli.nova('service-list', ssh_client=con_ssh, auth_info=auth_info))
 
 
 def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=True, fail_ok=False, con_ssh=None,
-                     auth_info=Tenant.ADMIN):
+                     auth_info=Tenant.get('admin')):
     """
     Add a aggregate with given name and availability zone.
 
@@ -1657,7 +1665,7 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=Tru
     return 0, actual_values[0]
 
 
-def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get a list of aggregates
 
@@ -1682,7 +1690,7 @@ def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, aut
     return table_parser.get_values(aggregates_tab, rtn_val, **kwargs)
 
 
-def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Add a aggregate with given name and availability zone.
 
@@ -1731,7 +1739,7 @@ def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, c
 
 
 def remove_hosts_from_aggregate(aggregate, hosts=None, check_first=True, fail_ok=False, con_ssh=None,
-                                auth_info=Tenant.ADMIN):
+                                auth_info=Tenant.get('admin')):
     """
     Remove hosts from specified aggregate
 
@@ -1754,7 +1762,7 @@ def remove_hosts_from_aggregate(aggregate, hosts=None, check_first=True, fail_ok
                                        fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
 
 
-def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Add host(s) to specified aggregate
 
@@ -1778,7 +1786,7 @@ def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, co
 
 
 def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, check_first=True, fail_ok=False,
-                                       con_ssh=None, auth_info=Tenant.ADMIN):
+                                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Remove/Add hosts from/to given aggregate
 
@@ -1862,7 +1870,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     return 0, succ_msg
 
 
-def get_migration_list_table(con_ssh=None, auth_info=Tenant.ADMIN):
+def get_migration_list_table(con_ssh=None, auth_info=Tenant.get('admin')):
     """
     nova migration-list to collect migration history of each vm
     Args:
@@ -1874,7 +1882,7 @@ def get_migration_list_table(con_ssh=None, auth_info=Tenant.ADMIN):
     return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info))
 
 
-def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     nova migration-list to collect migration history of each vm
     Args:

@@ -9,7 +9,7 @@ from keywords import common
 
 def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, start=None, stop=None, overlap=None,
                             refresh=None, resource_ids=None, extra_query=None, fail_ok=False,
-                            auth_info=Tenant.ADMIN, con_ssh=None):
+                            auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get measurements via 'openstack metric measures aggregation'
     Args:
@@ -65,7 +65,7 @@ def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, s
 
 
 def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val='id', fail_ok=False,
-                     auth_info=Tenant.ADMIN, con_ssh=None):
+                     auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get metric info via 'openstack metric show'
     Args:
@@ -102,7 +102,7 @@ def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val
     return table_parser.get_value_two_col_table(table_, rtn_val)
 
 
-def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get metrics values via 'openstack metric list'
     Args:

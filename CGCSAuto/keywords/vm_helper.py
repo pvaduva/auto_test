@@ -9,7 +9,7 @@ import ipaddress
 from contextlib import contextmanager, ExitStack
 import pexpect
 
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
     VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import VMPath, UserData, TestServerPath, IxiaPath
@@ -238,7 +238,7 @@ def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
         return False
 
 
-def get_vm_volume_attachments(vm_id, vol_id=None, rtn_val='device', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_volume_attachments(vm_id, vol_id=None, rtn_val='device', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get volume attachments for given vm
     Args:
@@ -554,6 +554,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     name = common.get_unique_name(name, resource_type='vm')
 
+    # Handle mandatory arg - key_name
+    key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
+
     # Handle mandatory arg - flavor
     if flavor is None:
         flavor = nova_helper.get_basic_flavor(auth_info=auth_info, con_ssh=con_ssh, guest_os=guest_os)
@@ -633,9 +636,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
             if not snapshot_id:
                 raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
-
-    # Handle mandatory arg - key_name
-    key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
 
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
@@ -748,7 +748,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
-                                                                              con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+                                                                              con_ssh=con_ssh, auth_info=Tenant.get('admin'))
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -832,6 +832,16 @@ def get_any_keypair(auth_info=None, con_ssh=None):
     else:
         pubkey_dir = ProjVar.get_var('USER_FILE_DIR')
         pubkey_path = '{}/key.pub'.format(pubkey_dir)
+        if not con_ssh:
+            con_ssh = ControllerClient.get_active_controller()
+
+        if ProjVar.get_var('IS_DC') and not con_ssh.file_exists(pubkey_path):
+            LOG.info("Copy public key from central region to subcloud")
+            sys_con = ControllerClient.get_active_controller('central_region')
+            sys_con.scp_on_source(source_path=pubkey_path, dest_ip=auth_info['region'],
+                                  dest_path=pubkey_path, dest_user=HostLinuxCreds.get_user(),
+                                  dest_password=HostLinuxCreds.get_password(), timeout=60)
+
         args_ = '--pub-key {} keypair-{}'.format(pubkey_path, user)
         cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh)
         table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -924,7 +934,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
 
 
 def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, force=None, fail_ok=False,
-                    auth_info=Tenant.ADMIN):
+                    auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -978,7 +988,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
 
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
     before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
-                                                       auth_info=Tenant.ADMIN)
+                                                       auth_info=Tenant.get('admin'))
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before live migrate: {}".format(before_status))
 
@@ -1004,7 +1014,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     while time.time() < end_time:
         time.sleep(2)
         status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
-                                                    auth_info=Tenant.ADMIN)
+                                                    auth_info=Tenant.get('admin'))
         if status == before_status:
             LOG.info("Live migrate vm {} completed".format(vm_id))
             break
@@ -1102,7 +1112,7 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     return ''
 
 
-def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -1204,7 +1214,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     return 0, success_msg
 
 
-def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
     Resize vm to given flavor
 
@@ -1347,7 +1357,7 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
 
 
 def wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
-                       con_ssh=None, auth_info=Tenant.ADMIN):
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -1389,7 +1399,7 @@ def wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_C
 def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
         cmd = 'resize-revert' if revert else 'resize-confirm'
 
-        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.get('admin'), rtn_list=True,
                         fail_ok=fail_ok)
 
 
@@ -1593,7 +1603,7 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
     content = ''
     for vm_id in vm_ids:
         vm_args = '{}{}'.format(args, vm_id)
-        output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
+        output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.get('admin'))
         console_logs[vm_id] = output
         content += "\n#### Console log for vm {} ####\n{}\n".format(vm_id, output)
 
@@ -1870,7 +1880,7 @@ def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_s
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
                           vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True,
-                          auth_info=Tenant.ADMIN):
+                          auth_info=Tenant.get('admin')):
     """
     ssh to a vm from natbox.
 
@@ -1960,7 +1970,7 @@ class VMInfo:
     __instances = {}
     active_controller_ssh = None
 
-    def __init__(self, vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    def __init__(self, vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
         """
 
         Args:
@@ -2065,7 +2075,7 @@ class VMInfo:
 
     def get_storage_type(self):
         flavor_id = self.get_flavor_id()
-        table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh, auth_info=Tenant.ADMIN))
+        table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh, auth_info=Tenant.get('admin')))
         extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
         return extra_specs['aggregate_instance_extra_specs:storage']
 
@@ -2073,7 +2083,7 @@ class VMInfo:
         if self.boot_info['type'] == 'image':
             return True
         flavor_id = self.get_flavor_id()
-        table_ = table_parser.table(cli.nova('flavor-list', ssh_client=self.con_ssh, auth_info=Tenant.ADMIN))
+        table_ = table_parser.table(cli.nova('flavor-list', ssh_client=self.con_ssh, auth_info=Tenant.get('admin')))
         swap = table_parser.get_values(table_, 'Swap', ID=flavor_id)[0]
         ephemeral = table_parser.get_values(table_, 'Ephemeral', ID=flavor_id)[0]
         return bool(swap or int(ephemeral))
@@ -2102,7 +2112,7 @@ class VMInfo:
 
 
 def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False,
-               stop_first=True, con_ssh=None, auth_info=Tenant.ADMIN):
+               stop_first=True, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Delete given vm(s) (and attached volume(s)). If None vms given, all vms on the system will be deleted.
 
@@ -2154,7 +2164,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         vms_to_del = vms
 
     if stop_first:  # best effort only
-        active_vms = nova_helper.get_vms(vms=vms_to_del, auth_info=Tenant.ADMIN, con_ssh=con_ssh, all_vms=True,
+        active_vms = nova_helper.get_vms(vms=vms_to_del, auth_info=Tenant.get('admin'), con_ssh=con_ssh, all_vms=True,
                                          Status=VMStatus.ACTIVE)
         if active_vms:
             stop_vms(active_vms, fail_ok=True, con_ssh=con_ssh, auth_info=auth_info)
@@ -2209,7 +2219,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
 
 
 def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=True,
-                          check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                          check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Wait for specific vm to be removed from nova list
 
@@ -2260,7 +2270,7 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
 
 
 def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
-                        check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                        check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
 
     """
     Wait for specific vms to reach any of the given state(s)
@@ -2288,7 +2298,7 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     res_pass = {}
     res_fail = {}
     end_time = time.time() + timeout
-    arg = '--all-tenants' if auth_info == Tenant.ADMIN else ''
+    arg = '--all-tenants' if auth_info == Tenant.get('admin') else ''
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('list', positional_args=arg, ssh_client=con_ssh, auth_info=auth_info))
 
@@ -2312,7 +2322,7 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     raise exceptions.VMPostCheckFailed(fail_msg)
 
 
-def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Set vm state to error or active via nova reset-state.
 
@@ -2505,7 +2515,7 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
 
 
 def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fail_ok=False, con_ssh=None,
-               auth_info=Tenant.ADMIN, **metadata):
+               auth_info=Tenant.get('admin'), **metadata):
 
     if image_id is None:
         image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
@@ -2548,7 +2558,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
     return 0, succ_msg
 
 
-def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Scale up/down vm cpu
 
@@ -2638,7 +2648,7 @@ def _parse_cpu_siblings(siblings_str):
     return results
 
 
-def get_vm_pci_dev_info_via_nova_show(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_pci_dev_info_via_nova_show(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get vm pci devices info via nova show. Returns a list of dictionaries.
     Args:
@@ -2855,7 +2865,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
     return instance_topology_all
 
 
-def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
+def perform_action_on_vm(vm_id, action, auth_info=Tenant.get('admin'), con_ssh=None, **kwargs):
     """
     Perform action on a given vm.
 
@@ -4561,10 +4571,10 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
         vms = [vms]
 
     info = dict()
-    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.ADMIN))
-    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.ADMIN))
+    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.get('admin')))
+    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.get('admin')))
     for vm in vms:
-        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.ADMIN))
+        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.get('admin')))
         nics = table_parser.get_value_two_col_table(table, "wrs-if:nics")
         if not issubclass(type(nics), list):
             nics = [nics]
@@ -4660,9 +4670,9 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
 
     LOG.info("Collecting VMs' networks")
     interfaces = {
-        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.ADMIN),
+        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.get('admin')),
               "internal": network_helper.get_internal_ips_for_vms(vm1)},
-        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.ADMIN),
+        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.get('admin')),
               "internal": network_helper.get_internal_ips_for_vms(vm2)},
     }
 
@@ -4866,7 +4876,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
     for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=True).items():
         for ip, subnet_id, mac in ports:
             if ip in src or ip in dest:
-                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.ADMIN))
+                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.get('admin')))
                 cidr = table_parser.get_value_two_col_table(table, "cidr")
                 net_type = table_parser.get_value_two_col_table(table, "wrs-provider:network_type")
                 seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
@@ -5120,18 +5130,15 @@ def launch_vm_with_both_providernets(vm_type,
     """
     nw_primary = network_helper.create_network(name=common.get_unique_name(name_str='tenant1-net'),
                                                shared=True, tenant_name=Tenant.TENANT1['tenant'],
-                                               auth_info=Tenant.ADMIN, cleanup=cleanup)[1]
+                                               auth_info=Tenant.get('admin'), cleanup=cleanup)[1]
     nw_secondary = network_helper.create_network(name=common.get_unique_name(name_str='tenant2-net'),
                                                  shared=True, tenant_name=Tenant.TENANT2['tenant'],
-                                                 auth_info=Tenant.ADMIN, cleanup=cleanup)[1]
-
-    # subnet_list = table_parser.table(cli.neutron('subnet-list'))
-    # cidrs = table_parser.get_column(subnet_list, 'cidr')
+                                                 auth_info=Tenant.get('admin'), cleanup=cleanup)[1]
 
     network_helper.create_subnet(nw_primary, cidr=cidr_tenant1, dhcp=True, no_gateway=True,
-                                 tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.ADMIN, cleanup=cleanup)
+                                 tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
     network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
-                                 tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.ADMIN, cleanup=cleanup)
+                                 tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
 
     if vm_type == 'virtio' or vm_type== 'vhost':
         vif_model = 'virtio'

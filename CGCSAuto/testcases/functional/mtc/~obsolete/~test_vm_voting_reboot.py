@@ -101,13 +101,13 @@ def test_vm_voting_reboot(vm_):
     LOG.tc_step("Verify that attempts to soft reboot the VM is not allowed")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
+        exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=True)
         assert ('action-rejected' in output)
 
     LOG.tc_step("Verify that attempts to hard reboot the VM is not allowed")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('reboot --hard', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
+        exitcode, output = cli.nova('reboot --hard', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=True)
         assert ('action-rejected' in output)
 
     LOG.tc_step("Remove the /tmp/vote_no_to_reboot file")
@@ -117,7 +117,7 @@ def test_vm_voting_reboot(vm_):
     LOG.tc_step("Verify the VM can be rebooted")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=False)
+        exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=False)
 
     time.sleep(30)
     events_tab = system_helper.get_events_table()
@@ -130,7 +130,7 @@ def test_vm_voting_reboot(vm_):
     LOG.tc_step("Verify the VM can be hard rebooted")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('reboot --hard', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+        exitcode, output = cli.nova('reboot --hard', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True,
                                     fail_ok=False)
 
     time.sleep(30)

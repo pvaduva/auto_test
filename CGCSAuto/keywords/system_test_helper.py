@@ -83,7 +83,7 @@ def launch_heat_stack():
     heat_template_file = file_dir + file_name + "/"
 
     pre_req_stack_name = "pre_req"
-    stack_id_pre_req = heat_helper.get_stacks(name=pre_req_stack_name, auth_info=Tenant.ADMIN)
+    stack_id_pre_req = heat_helper.get_stacks(name=pre_req_stack_name, auth_info=Tenant.get('admin'))
     if not stack_id_pre_req:
         LOG.tc_step("Creating pre-request heat stack to create images and flavors")
         default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
@@ -93,7 +93,7 @@ def launch_heat_stack():
         pre_req_params = '-f {} -P LOCATION={} {}'.format(pre_req_template_path, image_file_path, pre_req_stack_name)
         LOG.info("Creating heat stack for pre-req, images and flavors")
         heat_helper.create_stack(stack_name=pre_req_stack_name, params_string=pre_req_params,
-                             auth_info=Tenant.ADMIN, cleanup=None)
+                             auth_info=Tenant.get('admin'), cleanup=None)
 
     keypair_stack_name = 'Tenant1_Keypair'
     stack_id_key_pair = heat_helper.get_stacks(name=keypair_stack_name)

@@ -476,6 +476,23 @@ class Labs:
         'ixia_ports': [{'port': (7, 11), 'range': (3602, 3651)}, {'port': (7, 12), 'range': (3702, 3751)}],
     }
 
+    WCP_82_83 = {
+        'short_name': 'wcp_82_83',
+        'name': 'yow-cgcs-wildcat-82_83',
+        'floating ip': '128.224.151.95',
+        'controller-0 ip': '128.224.151.96',
+        'controller-1 ip': '128.224.151.97',
+        'controller_nodes': [23320, 23321],
+    }
+
+    WCP_84 = {
+        'short_name': 'wcp_84',
+        'name': 'yow-cgcs-wildcat-84',
+        'floating ip': '128.224.151.4',
+        'controller-0 ip': '128.224.151.4',
+        'controller_nodes': [23322],
+    }
+
     WCP_85_89 = {
         'short_name': 'wcp_85_89',
         'name': 'yow-cgcs-wildcat-85_89',
@@ -485,6 +502,32 @@ class Labs:
         'controller_nodes': [23323, 23324],
         'compute_nodes': [23325, 23326, 23327],
         'ixia_ports': [{'port': (7, 13), 'range': (3752, 3801)}, {'port': (7, 14), 'range': (3852, 3901)}],
+    }
+
+    WCP_85_86 = {
+        'short_name': 'wcp_85_86',
+        'name': 'yow-cgcs-wildcat-85_86',
+        'floating ip': '128.224.150.224',
+        'controller-0 ip': '128.224.150.244',
+        'controller-1 ip': '128.224.150.202',
+        'controller_nodes': [23323, 23324],
+    }
+
+    WCP_87_88 = {
+        'short_name': 'wcp_87_88',
+        'name': 'yow-cgcs-wildcat-87_88',
+        'floating ip': '128.224.151.66',
+        'controller-0 ip': '128.224.151.86',
+        'controller-1 ip': '128.224.151.229',
+        'controller_nodes': [23325, 23326],
+    }
+
+    WCP_89 = {
+        'short_name': 'wcp_89',
+        'name': 'yow-cgcs-wildcat-89',
+        'floating ip': '128.224.151.2',
+        'controller-0 ip': '128.224.151.2',
+        'controller_nodes': [23327],
     }
 
     WCP_90_91 = {
@@ -685,12 +728,58 @@ class Labs:
         'controller-1 ip': 'unknown_con1_ip',
     }
 
+    # Distributed Cloud
+    WCP_80_91 = {
+        'short_name': 'wcp_80_91',
+        'name': 'distributed cloud',
+        'floating ip': WCP_90_91['floating ip'],
+        'central_region': WCP_90_91,
+        'subcloud-1': WCP_80_84,     # wcp80-81(84)
+        'subcloud-2': WCP_82_83,     # wcp82-83
+        'subcloud-3': WCP_84,      # wcp84
+        'subcloud-4': WCP_85_86,
+        'subcloud-5': WCP_87_88,
+        'subcloud-6': WCP_89,
+    }
+
     NO_LAB = None
 
 
-def edit_lab_entry():
-    # TODO
-    raise NotImplementedError
+def update_lab(lab_dict_name=None, lab_name=None, floating_ip=None, **kwargs):
+    """
+    Update/Add lab dict params for specified lab
+    Args:
+        lab_dict_name (str|None):
+        lab_name (str|None): lab short_name. This is used only if lab_dict_name is not specified
+        floating_ip (str|None):
+        **kwargs: Some possible keys: subcloud-1, name, etc
+
+    Returns (dict): updated lab dict
+
+    """
+    if not lab_dict_name or not lab_name:
+        from consts.proj_vars import ProjVar
+        lab_name = ProjVar.get_var('LAB').get('short_name', None)
+        if not lab_name:
+            raise ValueError("lab_dict_name or lab_name needs to be specified")
+
+    if floating_ip:
+        kwargs.update(**{'floating ip': floating_ip})
+
+    if not kwargs:
+        raise ValueError("Please specify floating_ip and/or kwargs")
+
+    if not lab_dict_name:
+        attr_names = [attr for attr in dir(Labs) if not attr.startswith('__')]
+        lab_names = [getattr(Labs, attr).get('short_name') for attr in attr_names]
+        lab_index = lab_names.index(lab_name.lower().strip())
+        lab_dict_name = attr_names[lab_index]
+    else:
+        lab_dict_name = lab_dict_name.upper().replace('-', '_')
+
+    lab_dict = getattr(Labs, lab_dict_name)
+    lab_dict.update(kwargs)
+    return lab_dict
 
 
 def get_lab_dict(lab, key='short_name'):

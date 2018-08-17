@@ -45,7 +45,7 @@ def pytest_configure(config):
 def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
     # check if all nodes are unlocked
     assert system_helper.are_hosts_unlocked(con_ssh), \

@@ -175,13 +175,13 @@ def set_dns_servers(subnet_list, dns_servers=None):
         LOG.info("Clearing DNS entries")
         for subnet in subnet_list:
             args = " {} --dns_nameservers action=clear".format(subnet)
-            cli.neutron('subnet-update', args, auth_info=Tenant.ADMIN)
+            cli.neutron('subnet-update', args, auth_info=Tenant.get('admin'))
     else:
         LOG.info("Setting DNS entries to: {}".format(dns_servers))
         for subnet in subnet_list:
             dns_string = " ".join(dns_servers)
             args = " {} --dns_nameservers list=true {}".format(subnet, dns_string)
-            cli.neutron("subnet-update", args, auth_info=Tenant.ADMIN)
+            cli.neutron("subnet-update", args, auth_info=Tenant.get('admin'))
 
 
 @fixture(scope='function', autouse=True)

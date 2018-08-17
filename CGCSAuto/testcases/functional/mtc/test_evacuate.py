@@ -152,7 +152,7 @@ class TestEvacKPI:
         return hosts
 
         # router_id = network_helper.get_tenant_router()
-        # is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+        # is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
         #
         # def teardown():
         #     if is_dvr:

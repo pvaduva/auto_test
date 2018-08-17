@@ -62,7 +62,7 @@ def cleanup_users(request):
 def delete_users(users):
     if users and len(users) > 0:
         command = 'user delete {}'.format(' '.join(users))
-        openstack(command, auth_info=Tenant.ADMIN, fail_ok=False)
+        openstack(command, auth_info=Tenant.get('admin'), fail_ok=False)
 
 
 def save_used_password(user_name, password):
@@ -388,7 +388,7 @@ def verify_login(user_name, password, is_admin=True, expecting_pass=True):
 
 def get_user_auth_info(user_name, password, project=None, in_admin_project=False):
     if in_admin_project:
-        auth_info = copy.copy(Tenant.ADMIN)
+        auth_info = copy.copy(Tenant.get('admin'))
 
     elif not project:
         auth_info = copy.copy(Tenant.get_primary())
@@ -402,7 +402,7 @@ def get_user_auth_info(user_name, password, project=None, in_admin_project=False
     return auth_info
 
 
-def add_role(user_name, password, project=Tenant.ADMIN):
+def add_role(user_name, password, project=Tenant.get('admin')):
     LOG.info('Attempt to add role: user_name:{}, password:{}, project:{}\n'.format(user_name, password, project))
 
     if project == 'admin':
@@ -415,12 +415,12 @@ def add_role(user_name, password, project=Tenant.ADMIN):
     role_id = keystone_helper.get_role_ids(role_name)[0]
 
     command = 'role add --project {} --user {} {}'.format(project_id, user_name, role_id)
-    openstack(command, auth_info=Tenant.ADMIN, fail_ok=False)
+    openstack(command, auth_info=Tenant.get('admin'), fail_ok=False)
 
 
 def create_user(user_name, role, del_if_existing=False, project_name_id=None, project_dommain='default',
                 domain='default', password='Li69nux*', email='', description='', enable=True,
-                auth_info=Tenant.ADMIN, fail_ok=False):
+                auth_info=Tenant.get('admin'), fail_ok=False):
 
     existing_user = keystone_helper.get_user_ids(user_name, auth_info=auth_info)
     if existing_user:
@@ -449,7 +449,7 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
 
     command = 'user create --{} {}'.format(' --'.join(args), user_name)
 
-    auth_info = auth_info or Tenant.ADMIN
+    auth_info = auth_info or Tenant.get('admin')
 
     code, output = openstack(command, fail_ok=True, auth_info=auth_info)
     assert code == 0 or fail_ok, 'Failed to create user:{}, error code:{}, output:\n{}'.format(user_name, code, output)
@@ -461,13 +461,13 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
     else:
         if role == 'admin':
             is_addmin = True
-            user_of_admin = Tenant.ADMIN['user']
-            role_of_admin = keystone_helper.get_assigned_roles(project=Tenant.ADMIN['tenant'], user=user_of_admin)[0]
+            user_of_admin = Tenant.get('admin')['user']
+            role_of_admin = keystone_helper.get_assigned_roles(project=Tenant.get('admin')['tenant'], user=user_of_admin)[0]
             LOG.info('attempt to add role to user:{}, with role from admin:{}, role:{}\n'.format(
                 user_name, user_of_admin, role_of_admin))
 
-            add_role(user_name, password, project=Tenant.ADMIN['tenant'])
-            LOG.info('OK, successfully add user to role:{}, user:{}\n'.format(Tenant.ADMIN, user_name))
+            add_role(user_name, password, project=Tenant.get('admin')['tenant'])
+            LOG.info('OK, successfully add user to role:{}, user:{}\n'.format(Tenant.get('admin'), user_name))
 
         else:
             is_addmin = False

@@ -32,6 +32,7 @@ class ProjVar:
                   'USER_FILE_DIR': WRSROOT_HOME,
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
+                  'IS_DC': False,
                   }
 
     @classmethod

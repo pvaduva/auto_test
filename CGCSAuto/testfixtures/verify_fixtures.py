@@ -119,11 +119,11 @@ def check_vms(request):
         request: caller of this fixture. i.e., test func.
     """
     LOG.fixture_step("Gathering system VMs info before test begins.")
-    before_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.ADMIN)
+    before_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.get('admin'))
 
     def verify_vms():
         LOG.fixture_step("Verifying system VMs after test ended...")
-        after_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.ADMIN)
+        after_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.get('admin'))
 
         # compare status between the status of each VMs before/after the test
         common_vms = set(before_vms_status) & set(after_vms_status)

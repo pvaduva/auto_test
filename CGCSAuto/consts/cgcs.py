@@ -44,9 +44,7 @@ PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
 
 MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
-
-DIST_CLOUD_REGION_PATTERN = 'SystemController|subcloud'
-
+SUBCLOUD_PATTERN = 'subcloud'
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
@@ -565,6 +563,7 @@ class HeatStackStatus:
     CREATE_COMPLETE = 'CREATE_COMPLETE'
     UPDATE_COMPLETE = 'UPDATE_COMPLETE'
     UPDATE_FAILED = 'UPDATE_FAILED'
+    DELETE_FAILED = 'DELETE_FAILED'
 
 
 class VimEventID:

@@ -117,18 +117,18 @@ def test_create_backup(con_ssh=None):
     # storage lab end
 
     # execute backup available volume command
-    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.ADMIN)
+    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.get('admin'))
     vol_files = ''
     for vol_id in vol_ids:
         print('hi: '+vol_id+cinder_helper.get_volume_states(vol_id, 'status')['status'])
         if cinder_helper.get_volume_states(vol_id, 'status')['status'] == 'available':
             # export available volume to ~/opt/backups
             LOG.tc_step("export available volumes ")
-            table_ = table_parser.table(cli.cinder('export', vol_id, auth_info=Tenant.ADMIN))
+            table_ = table_parser.table(cli.cinder('export', vol_id, auth_info=Tenant.get('admin')))
 
             # wait for volume copy to complete
             wait_for_volume_state(vol_id, 'volume:backup_status', 'Export completed', timeout=100, fail_ok=True,
-                                  check_interval=3, auth_info=Tenant.ADMIN)
+                                  check_interval=3, auth_info=Tenant.get('admin'))
 
             # copy it to the test server
             vol_files = vol_files + '/opt/backups/volume-' + vol_id + '* '
@@ -138,13 +138,13 @@ def test_create_backup(con_ssh=None):
             LOG.tc_step("export in use volumes volumes ")
             snapshot_name = 'snapshot_'+vol_id
             cli_args = '--force True --name '+snapshot_name+' '+vol_id
-            table_ = table_parser.table(cli.cinder('snapshot-create', cli_args, auth_info=Tenant.ADMIN))
+            table_ = table_parser.table(cli.cinder('snapshot-create', cli_args, auth_info=Tenant.get('admin')))
             snap_shot_id = table_parser.get_values(table_, 'Value', Property='id')
             print(snap_shot_id)
             # temp sleep wait for snap-shot creation finish
             time.sleep(120)
             # export in-use volume snapshot to ~/opt/backups
-            table_ = table_parser.table(cli.cinder('snapshot-export', snap_shot_id, auth_info=Tenant.ADMIN))
+            table_ = table_parser.table(cli.cinder('snapshot-export', snap_shot_id, auth_info=Tenant.get('admin')))
             # temp sleep wait for snap-export to finish
             time.sleep(120)
             # copy it to the test server

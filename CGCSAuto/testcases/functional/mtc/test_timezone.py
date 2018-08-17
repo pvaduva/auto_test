@@ -316,14 +316,14 @@ def test_modify_timezone_cli_timestamps(cli_timestamp_teardown, get_out_of_date_
     LOG.tc_step("Getting timestamps before timezone change")
 
     LOG.info("Getting ceilometer timestamp")
-    table_ = table_parser.table(cli.ceilometer("event-list", "--limit 1", auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.ceilometer("event-list", "--limit 1", auth_info=Tenant.get('admin')))
     ceilometer_event_id = table_parser.get_column(table_, 'Message ID')[0]
     ceilometer_pre_timestamp = table_parser.get_column(table_, 'Generated')[0]
 
     LOG.info("Getting cinder timestamp")
-    cinder_volume_id = cinder_helper.create_volume(auth_info=Tenant.ADMIN)[1]
+    cinder_volume_id = cinder_helper.create_volume(auth_info=Tenant.get('admin'))[1]
     ResourceCleanup.add('volume', cinder_volume_id)
-    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.get('admin')))
     cinder_pre_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
     LOG.info("Getting glance timestamp")
@@ -359,11 +359,11 @@ def test_modify_timezone_cli_timestamps(cli_timestamp_teardown, get_out_of_date_
     LOG.tc_step("Getting timestamps after timezone change")
 
     LOG.info("Getting ceilometer timestamp")
-    table_ = table_parser.table(cli.ceilometer("event-show {}".format(ceilometer_event_id), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.ceilometer("event-show {}".format(ceilometer_event_id), auth_info=Tenant.get('admin')))
     ceilometer_post_timestamp = table_parser.get_value_two_col_table(table_, 'generated')
 
     LOG.info("Getting cinder timestamp")
-    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.get('admin')))
     cinder_post_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
     LOG.info("Getting glance timestamp")

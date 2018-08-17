@@ -207,8 +207,8 @@ def test_backup(pre_system_backup):
     # execute backup available volume command
     LOG.tc_step("Cinder Volumes backup ...")
 
-    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.ADMIN, status='Available')
-    vol_ids += cinder_helper.get_volumes(auth_info=Tenant.ADMIN, status='in-use')
+    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='Available')
+    vol_ids += cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='in-use')
     if len(vol_ids) > 0:
         LOG.info("Exporting cinder volumes: {}".format(vol_ids))
         exported = install_helper.export_cinder_volumes(backup_dest=backup_dest,
@@ -333,7 +333,7 @@ def adjust_cinder_quota(con_ssh, increase, backup_info):
     max_per_volume_size = int(cinder_quotas[1])
     max_volumes = int(cinder_quotas[2])
 
-    current_volumes = cinder_helper.get_volumes(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+    current_volumes = cinder_helper.get_volumes(auth_info=Tenant.get('admin'), con_ssh=con_ssh)
 
     LOG.info('Cinder VOLUME usage: current number of volumes:{}, max allowed:{}, all limites:{}'.format(
         len(current_volumes), max_volumes, cinder_quotas))
@@ -351,7 +351,7 @@ def adjust_cinder_quota(con_ssh, increase, backup_info):
         try:
             cinder_helper.update_quotas(tenant=tenant['user'],
                                         con_ssh=con_ssh,
-                                        auth_info=Tenant.ADMIN,
+                                        auth_info=Tenant.get('admin'),
                                         volumes=new_volume_limit)
         except Exception as e:
             LOG.info('Failed to increase the Cinder quota for number of volumes to:{} from:{}, error:{}'.format(

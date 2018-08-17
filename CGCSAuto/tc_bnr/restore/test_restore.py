@@ -405,7 +405,7 @@ def test_restore(restore_setup):
     backup_src_path = RestoreVars.get_restore_var('backup_src_path'.upper())
 
     controller_node = lab[controller0]
-    con_ssh = ControllerClient.get_active_controller(lab_name=lab['short_name'], fail_ok=True)
+    con_ssh = ControllerClient.get_active_controller(name=lab['short_name'], fail_ok=True)
 
     if not con_ssh:
         LOG.info ("Establish ssh connection with {}".format(controller0))

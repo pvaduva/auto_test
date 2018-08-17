@@ -13,7 +13,7 @@ from utils.clients.ssh import ControllerClient, SSHClient
 
 def pre_check_patch():
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
 
     # Check system health for patch orchestration;

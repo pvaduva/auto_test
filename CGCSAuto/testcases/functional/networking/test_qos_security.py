@@ -74,18 +74,18 @@ class TestPacketTypeSecurityRuleEnforcement(object):
         # required by ping_vms
         cli.openstack(
             "security group rule create",
-            "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.ADMIN)
+            "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
         cli.openstack(
             "security group rule create",
-            "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.ADMIN)
+            "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
 
         # required by routing and ssh (TCP), could be restricted to ranges over internal-network and mgmt-network
         cli.openstack(
             "security group rule create",
-            "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.ADMIN)
+            "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
         cli.openstack(
             "security group rule create",
-            "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.ADMIN)
+            "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
 
         yield sg_primary, sg_secondary
 
@@ -133,8 +133,8 @@ class TestPacketTypeSecurityRuleEnforcement(object):
         vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type)
 
         LOG.tc_step("Add security groups to launched VMs")
-        cli.nova('add-secgroup', "{} {}".format(vm_test, sg_primary), auth_info=Tenant.ADMIN)
-        cli.nova('add-secgroup', "{} {}".format(vm_observer, sg_secondary), auth_info=Tenant.ADMIN)
+        cli.nova('add-secgroup', "{} {}".format(vm_test, sg_primary), auth_info=Tenant.get('admin'))
+        cli.nova('add-secgroup', "{} {}".format(vm_observer, sg_secondary), auth_info=Tenant.get('admin'))
 
         with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) as session:
             LOG.tc_step("Verify UDP traffic is not allowed")
@@ -190,8 +190,8 @@ class TestPacketTypeSecurityRuleEnforcement(object):
             assert not succ, "udp traffic successfully passed through"
 
             LOG.tc_step("Disassociate the security group, verify UDP traffic is allowed")
-            cli.openstack("server remove security group {} {}".format(vm_test, sg_primary), auth_info=Tenant.ADMIN)
-            cli.openstack("server remove security group {} {}".format(vm_observer, sg_secondary), auth_info=Tenant.ADMIN)
+            cli.openstack("server remove security group {} {}".format(vm_test, sg_primary), auth_info=Tenant.get('admin'))
+            cli.openstack("server remove security group {} {}".format(vm_observer, sg_secondary), auth_info=Tenant.get('admin'))
             session.get_frames_delta(stable=True)
 
 
@@ -271,20 +271,20 @@ def udp_allow(sg_primary, sg_secondary):
     table = table_parser.table(
         cli.openstack(
             "security group rule create", "--protocol udp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary),
-            auth_info=Tenant.ADMIN))
+            auth_info=Tenant.get('admin')))
     udp_primary = table_parser.get_value_two_col_table(table, 'id')
 
     table = table_parser.table(
         cli.openstack(
             "security group rule create", "--protocol udp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary),
-            auth_info=Tenant.ADMIN))
+            auth_info=Tenant.get('admin')))
     udp_secondary = table_parser.get_value_two_col_table(table, 'id')
 
     yield sg_primary, sg_secondary
 
     LOG.info("Deleting UDP ingress rules for {} and {}".format(sg_primary, sg_secondary))
-    cli.openstack("security group rule delete", udp_primary, auth_info=Tenant.ADMIN)
-    cli.openstack("security group rule delete", udp_secondary, auth_info=Tenant.ADMIN)
+    cli.openstack("security group rule delete", udp_primary, auth_info=Tenant.get('admin'))
+    cli.openstack("security group rule delete", udp_secondary, auth_info=Tenant.get('admin'))
 
 
 def qos_apply(net_id, qos_id, request):

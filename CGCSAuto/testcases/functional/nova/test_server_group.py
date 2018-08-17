@@ -214,21 +214,26 @@ def _wait_for_srv_grp_msg(vm_id, msg, timeout, res_events, listener_event, sent_
             assert False, "Expected msg did not appear within timeout"
 
 
-def trigger_srv_grp_msg(vm_id, action, timeout=60, sent_event=None):
+def trigger_srv_grp_msg(vm_id, action, timeout=60, sent_event=None, rcv_event=None):
     if action == 'message':
-        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, sent_event=sent_event)
+        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, sent_event=sent_event, rcv_event=rcv_event)
     elif action == 'pause':
         vm_helper.pause_vm(vm_id=vm_id)
         sent_event.set()
 
 
-def _send_srv_grp_msg(vm_id, msg, timeout, sent_event):
+def _send_srv_grp_msg(vm_id, msg, timeout, sent_event, rcv_event):
     with vm_helper.ssh_to_vm_from_natbox(vm_id, close_ssh=False) as sender_ssh:
         sender_ssh.send("server_group_app '{}'".format(msg))
         sender_ssh.expect('\r\n\r\n')
         if sent_event:
             sent_event.set()
-        time.sleep(timeout)
+
+        if not isinstance(rcv_event, list):
+            rcv_event = [rcv_event]
+
+        for event in rcv_event:
+            event.wait_for_event(timeout=timeout)
 
 
 def check_server_group_messaging_enabled(vms, action):
@@ -238,10 +243,10 @@ def check_server_group_messaging_enabled(vms, action):
 
     if action == 'message':
         msg = MSG
-        timeout = 120
+        timeout = 180
     elif action == 'pause':
         msg = '{}.*paused'.format(vm_sender)
-        timeout = 180
+        timeout = 240
     else:
         raise ValueError("Unknown action - '{}' provided".format(action))
 
@@ -262,7 +267,8 @@ def check_server_group_messaging_enabled(vms, action):
 
         time.sleep(5)
         # this 60 seconds timeout is hardcoded for action == 'message' scenario to send the message out
-        sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, timeout=60, sent_event=sent_event)
+        sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, timeout=60, sent_event=sent_event,
+                                rcv_event=res_events)
         sender_thread.start_thread(timeout=timeout)
 
         sent_event.wait_for_event()
@@ -408,7 +414,7 @@ def test_server_group_update():
     ResourceCleanup.add(resource_type='server_group', resource_id=srv_grp_id)
 
     LOG.tc_step("Check server group Project ID")
-    project_id = nova_helper.get_server_groups_info(srv_grp_id, auth_info=Tenant.ADMIN,
+    project_id = nova_helper.get_server_groups_info(srv_grp_id, auth_info=Tenant.get('admin'),
                                                     headers='Project Id')[srv_grp_id][0]
     tenant_id = keystone_helper.get_tenant_ids()[0]
     assert project_id == tenant_id

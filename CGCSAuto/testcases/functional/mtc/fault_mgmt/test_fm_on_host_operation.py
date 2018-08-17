@@ -57,7 +57,7 @@ def _test_system_alarm_list_on_compute_reboot():
 
 
 @mark.sanity
-def test_system_alarms_and_events_on_lock_unlock_compute():
+def test_system_alarms_and_events_on_lock_unlock_compute(no_simplex):
     """
     Verify fm alarm-show command
 
@@ -82,6 +82,8 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
     compute_host = host_helper.get_up_hypervisors()[0]
     if compute_host == system_helper.get_active_controller_name():
         compute_host = system_helper.get_standby_controller_name()
+        if not compute_host:
+            skip('Standby controller unavailable')
 
     LOG.tc_step("Lock a nova hypervisor host {}".format(compute_host))
     pre_lock_time = common.get_date_in_format()

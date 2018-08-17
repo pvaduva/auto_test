@@ -353,7 +353,7 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
 
 
 def get_swift_containers(con_ssh=None, fail_ok=False):
-    rc, out = cli.swift('list', ssh_client=con_ssh, auth_info=Tenant.ADMIN, fail_ok=True)
+    rc, out = cli.swift('list', ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=True)
     if rc == 0:
         if out:
             return 0, out.split('\n'), None
@@ -389,7 +389,7 @@ def get_swift_container_stat_info(container=None, object_=None, con_ssh=None):
     if object_:
         args += " {}".format(object_)
 
-    rc, out = cli.swift('stat', args, ssh_client=con_ssh, auth_info=Tenant.ADMIN, fail_ok=True)
+    rc, out = cli.swift('stat', args, ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=True)
     if rc == 0:
         value_pairs = out.split('\n')
         for pair in value_pairs:

@@ -7,6 +7,7 @@ from consts.auth import CliAuth, Tenant
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
 
 natbox_ssh = None
 con_ssh = None
@@ -21,9 +22,6 @@ def setup_test_session(global_setup, request):
     """
     LOG.fixture_step("(session) Setting up test session...")
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-
-    # rsync files between controllers
-    setups.copy_test_files()
 
     # set up natbox connection and copy keyfile
     global natbox_ssh
@@ -60,6 +58,9 @@ def setup_test_session(global_setup, request):
     # set global var for sys_type
     setups.set_sys_type(con_ssh=con_ssh)
 
+    # rsync files between controllers
+    setups.copy_test_files()
+
     # set up remote cli clients
     client = con_ssh
     if ProjVar.get_var('REMOTE_CLI'):
@@ -90,8 +91,12 @@ def pytest_collectstart():
         CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
         if setups.is_https(con_ssh):
             CliAuth.set_vars(HTTPS=True)
-        Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+
+        auth_url = CliAuth.get_var('OS_AUTH_URL')
+        Tenant.set_url(auth_url)
         setups.set_region(region=None)
+        if ProjVar.get_var('IS_DC'):
+            Tenant.set_url(url=auth_url, central_region=True)
         initialized = True
 
 
@@ -99,9 +104,9 @@ def pytest_runtest_teardown(item):
     # print('')
     # message = 'Teardown started:'
     # testcase_log(message, item.nodeid, log_type='tc_teardown')
-    if con_ssh:
-        con_ssh.flush()
-        con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
+    for con_ssh_ in ControllerClient.get_active_controllers(current_thread_only=True):
+        con_ssh_.flush()
+        con_ssh_.connect(retry=True, retry_interval=3, retry_timeout=300)
     if natbox_ssh:
         natbox_ssh.flush()
         natbox_ssh.connect(retry=False)

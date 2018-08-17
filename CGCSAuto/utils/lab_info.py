@@ -109,7 +109,7 @@ def __get_lab_ssh(labname, log_dir=None):
         ProjVar.set_var(log_dir=log_dir)
 
     ProjVar.set_var(lab=lab)
-    ProjVar.set_var(source_admin=Tenant.ADMIN)
+    ProjVar.set_var(source_admin=Tenant.get('admin'))
     con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                         CONTROLLER_PROMPT)
     con_ssh.connect()

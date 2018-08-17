@@ -84,7 +84,7 @@ def launch_instance_on_compute(network_name=None,
     time.sleep(10)
     for vm_id in vm_ids:
         show_instance_table = table_parser.table(cli.nova('show {}'.format(vm_id),
-                                                          ssh_client=None, auth_info=Tenant.ADMIN))
+                                                          ssh_client=None, auth_info=Tenant.get('admin')))
 
         search_name = table_parser.get_values(show_instance_table,
                                               'Value',

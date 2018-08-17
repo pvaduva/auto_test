@@ -85,16 +85,16 @@ def refstack_setup(refstack_pre_check, request):
     LOG.fixture_step("Setup public router if not already done.")
     external_net_id = network_helper.get_ext_networks()[0]
     public_router = 'public-router0'
-    pub_routers = network_helper.get_routers(name=public_router, auth_info=Tenant.ADMIN)
+    pub_routers = network_helper.get_routers(name=public_router, auth_info=Tenant.get('admin'))
     if not pub_routers:
         LOG.info("Create public router and add interfaces")
-        public_router_id = network_helper.create_router(name=public_router, tenant=Tenant.ADMIN['tenant'])[1]
+        public_router_id = network_helper.create_router(name=public_router, tenant=Tenant.get('admin')['tenant'])[1]
         network_helper.set_router_gateway(router_id=public_router_id, extnet_id=external_net_id)
 
         internal_subnet = 'internal0-subnet0-1'
         gateway = '10.1.1.1'
         network_helper.update_subnet(subnet=internal_subnet, gateway=gateway)
-        network_helper.add_router_interface(router_id=public_router_id, subnet=internal_subnet, auth_info=Tenant.ADMIN)
+        network_helper.add_router_interface(router_id=public_router_id, subnet=internal_subnet, auth_info=Tenant.get('admin'))
 
     keystone_pub = keystone_helper.get_endpoints(rtn_val='URL', interface='public', service_name='keystone')[0]
     keystone_pub_url = keystone_pub.split('/v')[0] + '/'

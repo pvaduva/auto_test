@@ -81,7 +81,7 @@ def wait_for_con_drbd_sync_complete():
 @fixture(scope='session')
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     more_than_one_controllers = wait_for_con_drbd_sync_complete
-    prev_pswd = Tenant.ADMIN['password']
+    prev_pswd = Tenant.get('admin')['password']
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))

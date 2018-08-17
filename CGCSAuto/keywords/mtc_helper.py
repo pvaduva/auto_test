@@ -391,9 +391,9 @@ def is_controller_swacted(prev_active, prev_standby,
 
 
 def search_event(event_id='', type_id='', instance_id='', severity='', start='', end='', limit=30,
-                 con_ssh=None, auth_info=Tenant.ADMIN, strict=False, regex=False, **kwargs):
-    """Search for event using fm event-list
-
+                 con_ssh=None, auth_info=Tenant.get('admin'), strict=False, regex=False, **kwargs):
+    """
+    Search for event using fm event-list
     Args:
         event_id (str):       Event ID to search for
         type_id (str):        Type ID

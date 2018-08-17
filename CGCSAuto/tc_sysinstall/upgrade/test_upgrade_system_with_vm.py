@@ -54,7 +54,7 @@ def vms_with_upgrade():
     vm2_name = "vol_ephemswap"
     vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, auth_info=Tenant.TENANT2, cleanup='function')[1]
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     vm_helper.wait_for_vm_pingable_from_natbox(vm1)
     vm_helper.wait_for_vm_pingable_from_natbox(vm2)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT2)
@@ -76,7 +76,7 @@ def vms_with_upgrade():
     vm5_name = 'image_ephemswap'
     vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', auth_info=Tenant.TENANT2, cleanup='function')[1]
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm4)
     vm_helper.wait_for_vm_pingable_from_natbox(vm5)

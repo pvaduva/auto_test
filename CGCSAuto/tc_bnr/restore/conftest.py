@@ -32,7 +32,7 @@ def pytest_configure(config):
     RestoreVars.set_restore_var(low_latency=low_latency)
 
     ProjVar.set_var(always_collect=True)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
 
 def pytest_runtest_teardown(item):
@@ -55,7 +55,6 @@ def setup_build_vars(request):
         try:
             con_ssh = ControllerClient.get_active_controller()
             setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-            setups.set_env_vars(con_ssh)
             setups.copy_test_files()
 
             # set build id to be used to upload/write test results

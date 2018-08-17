@@ -21,7 +21,7 @@ from utils.tis_log import LOG
 
 
 @contextmanager
-def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None):
+def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=None, timeout=60):
     """
     ssh to a host from ssh client.
 
@@ -52,7 +52,8 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
         prompt = '.*' + hostname + '\:~\$'
     original_host = con_ssh.get_hostname()
     if original_host != hostname:
-        host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt)
+        host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt,
+                              timeout=timeout)
         host_ssh.connect(prompt=prompt)
         current_host = host_ssh.get_hostname()
         if not current_host == hostname:
@@ -568,7 +569,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         extra_msg = 'force '
 
     exitcode, output = cli.system('host-lock', positional_arg, ssh_client=con_ssh, fail_ok=fail_ok,
-                                  auth_info=Tenant.ADMIN, rtn_list=True, use_telnet=use_telnet,
+                                  auth_info=Tenant.get('admin'), rtn_list=True, use_telnet=use_telnet,
                                   con_telnet=con_telnet)
 
     if exitcode == 1:
@@ -670,7 +671,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
-                use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_hypervisor_up=True,
+                use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin'), check_hypervisor_up=True,
                 check_webservice_up=True, check_subfunc=True, check_first=True):
     """
     Unlock given host
@@ -832,7 +833,7 @@ def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
     raise exceptions.HostError(err)
 
 
-def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
+def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'),
                  check_hypervisor_up=False, check_webservice_up=False, use_telnet=False, con_telnet=None):
     """
     Unlock given hosts. Please use unlock_host() keyword if only one host needs to be unlocked.
@@ -1164,7 +1165,7 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
     if hostname is None:
         hostname = active_host
 
-    exitcode, msg = cli.system('host-swact', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN, fail_ok=fail_ok,
+    exitcode, msg = cli.system('host-swact', hostname, ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=fail_ok,
                                rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
     if exitcode == 1:
         return 1, msg
@@ -1359,7 +1360,7 @@ def get_hosts(hosts=None, con_ssh=None, **states):
     return table_parser.get_values(table_, 'hostname', **states)
 
 
-def get_nova_hosts(zone='nova', status='enabled', state='up', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_nova_hosts(zone='nova', status='enabled', state='up', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get nova hosts listed in nova host-list.
 
@@ -1473,13 +1474,13 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None):
     elif 'remote' in aggregate:
         aggregate = 'remote_storage_hosts'
     else:
-        aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+        aggregates_tab = table_parser.table(cli.nova('aggregate-list', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
         avail_aggregates = table_parser.get_column(aggregates_tab, 'Name')
         if aggregate not in avail_aggregates:
             LOG.warning("Requested aggregate {} is not in nova aggregate-list".format(aggregate))
             return []
 
-    table_ = table_parser.table(cli.nova('aggregate-show', aggregate, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('aggregate-show', aggregate, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     hosts = table_parser.get_values(table_, 'Hosts', Name=aggregate)[0]
     hosts = hosts.split(',')
     if len(hosts) == 0 or hosts == ['']:
@@ -1582,7 +1583,7 @@ def get_hypervisors(state=None, status=None, con_ssh=None, use_telnet=False, con
     Returns (list): a list of hypervisor names. Return () if no match found.
         Always return () for small footprint lab. i.e., do not work with small footprint lab
     """
-    table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.ADMIN, ssh_client=con_ssh,
+    table_ = table_parser.table(cli.nova('hypervisor-list', auth_info=Tenant.get('admin'), ssh_client=con_ssh,
                                          use_telnet=use_telnet, con_telnet=con_telnet))
     target_header = rtn_val
 
@@ -1660,7 +1661,7 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_paths, target_type='el
 
 
 def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
-                    auth_info=Tenant.ADMIN, **kwargs):
+                    auth_info=Tenant.get('admin'), **kwargs):
     """
     Modify host cpu to given key-value pairs. i.e., system host-cpu-modify -f <function> -p<id> <num of cores> <host>
     Notes: This assumes given host is already locked.
@@ -1730,7 +1731,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     return 0, msg
 
 
-def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Compares the cpu function assignments of a host and a cpu profile.
 
@@ -1809,7 +1810,7 @@ def compare_host_to_cpuprofile(host, profile_uuid, fail_ok=False, con_ssh=None, 
 
 
 def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, fail_ok=False, con_ssh=None,
-                      auth_info=Tenant.ADMIN):
+                      auth_info=Tenant.get('admin')):
     """
     Apply the given cpu profile to the host.
     Assumes the host is already locked.
@@ -1852,7 +1853,7 @@ def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, 
 
 
 def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', thread=0, con_ssh=None,
-                                    auth_info=Tenant.ADMIN):
+                                    auth_info=Tenant.get('admin')):
     """
     Get processor/logical cpu cores/per processor on thread 0 for given function for host via system host-cpu-list
 
@@ -1936,7 +1937,7 @@ def get_host_threads_count(host, con_ssh=None):
 
 
 def get_host_procs(hostname, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     procs = table_parser.get_column(table_, 'processor')
     return sorted(set(procs))
 
@@ -2050,7 +2051,7 @@ def is_host_with_instance_backing(host, storage_type='image', con_ssh=None):
 
 
 def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size="5", concurrent_ops=None, lock=True,
-                    unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.ADMIN, con_ssh=None):
+                    unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Modify host lvg
 
@@ -2175,7 +2176,7 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size="5",
 
 
 def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, unlock=True, wait_for_host_aggregate=True,
-                             fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                             fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -2348,7 +2349,7 @@ def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', numa_node=None, con
     return hosts_cpus
 
 
-def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get info from nova hypervisor-show for specified field
     Args:
@@ -2401,7 +2402,7 @@ def get_hypervisor_list_info(hosts=None, con_ssh=None):
         {'compute-0': {'id': <uuid>, 'state': 'up', 'status': 'enabled'}}
 
     """
-    table_ = table_parser.table(cli.nova('hypervisor-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('hypervisor-list', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     if hosts:
         table_ = table_parser.filter_table(table_, **{'Hypervisor hostname': hosts})
 
@@ -2774,17 +2775,50 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
     return rtn_code, res
 
 
-def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, con_ssh=None,
+                                      auth_info=Tenant.get('admin')):
+    """
+
+    Args:
+        pci_type (str|list|tuple): pci-sriov, pci-passthrough
+        up_hosts_only:
+        con_ssh:
+        auth_info:
+
+    Returns (dict): hosts and pnets with ALL specified pci devs
+
+    """
     state = 'up' if up_hosts_only else None
     hosts = get_hypervisors(state=state)
 
     hosts_pnets_with_pci = {}
+    if isinstance(pci_type, str):
+        pci_type = [pci_type]
+
     for host_ in hosts:
-        pnets_ = system_helper.get_host_interfaces_info(host_, rtn_val='provider networks', net_type=pci_type,
-                                                        con_ssh=con_ssh, auth_info=auth_info)
-        if pnets_ and pnets_ != 'None':
-            pnets_ = pnets_[0].split(sep=',')
-            hosts_pnets_with_pci[host_] = pnets_
+        pnets_list_for_host = []
+        for pci_type_ in pci_type:
+            pnets_for_type = []
+            pnets_list = system_helper.get_host_interfaces_info(host_, rtn_val='provider networks', net_type=pci_type_,
+                                                            con_ssh=con_ssh, auth_info=auth_info)
+
+            for pnets_str in pnets_list:
+                if pnets_str != 'None':
+                    pnets_for_type += pnets_str.split(',')
+
+            if pnets_for_type:
+                pnets_list_for_host.append(pnets_for_type)
+            else:
+                pnets_list_for_host = []
+                break
+
+        if pnets_list_for_host:
+            pnets_final = pnets_list_for_host[0]
+            for pnets_ in pnets_list_for_host[1:]:
+                pnets_final = list(set(pnets_final) & set(pnets_))
+
+            if pnets_final:
+                hosts_pnets_with_pci[host_] = pnets_final
 
     if not hosts_pnets_with_pci:
         LOG.info("No {} interface found from any of following hosts: {}".format(pci_type, hosts))
@@ -2801,7 +2835,7 @@ def is_active_controller(host, con_ssh=None, use_telnet=False, con_telnet=None):
     return personality.lower() == 'Controller-Active'.lower()
 
 
-def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                  lock=False, unlock=False):
     """
     Upgrade given host
@@ -2892,7 +2926,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     return 0, None
 
 
-def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                   lock=False, unlock=False):
     """
     Upgrade given hosts list one by one
@@ -2942,7 +2976,7 @@ def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     return 0, "hosts {} upgrade done ".format(hosts_to_upgrade)
 
 
-def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.ADMIN,
+def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.get('admin'),
                                               fail_ok=False, con_ssh=None):
     """
     Waits until upgrade data migration is complete or fail
@@ -3062,7 +3096,7 @@ def get_upgraded_host_names(upgrade_release, con_ssh=None):
     return table_parser.get_column(table_, "hostname")
 
 
-def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                    lock=False, unlock=False):
     """
     Downgrade given host
@@ -3925,7 +3959,7 @@ def clear_local_storage_cache(host, con_ssh=None):
             root_ssh.exec_cmd('sync;echo 3 > /proc/sys/vm/drop_caches', fail_ok=True)
 
 
-def get_host_device_list_values(host, field='name', list_all=False, con_ssh=None, auth_info=Tenant.ADMIN, strict=True,
+def get_host_device_list_values(host, field='name', list_all=False, con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
                                 regex=False, **kwargs):
     """
     Get the parsed version of the output from system host-device-list <host>
@@ -3958,7 +3992,7 @@ def get_host_device_list_values(host, field='name', list_all=False, con_ssh=None
     return values
 
 
-def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get host device values for given fields via system host-device-show
     Args:
@@ -3991,7 +4025,7 @@ def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.
 
 
 def modify_host_device(host, device, new_name=None, new_state=None, check_first=True, lock_unlock=False, fail_ok=False,
-                       con_ssh=None, auth_info=Tenant.ADMIN):
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Modify host device to given name or state.
     Args:

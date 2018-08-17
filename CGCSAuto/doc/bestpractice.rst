@@ -168,9 +168,9 @@ Action Keywords to Perform An Action
      * Default value: None Pass this param to applicable CLI commands ran by the keyword.
    * auth_info (dict): Auth info for running the cli commands
 
-     * default value: None or Tenant.ADMIN
+     * default value: None or Tenant.get('admin')
      * When None, the Primary Tenant that was set for the whole test session will be used to run the CLI command
-     * Some cli will have to be run by admin, thus default value will be set to Tenant.ADMIN. But we should still add the auth_info flag to Action Keyword to allow negative test with non-admin tenant.
+     * Some cli will have to be run by admin, thus default value will be set to Tenant.get('admin'). But we should still add the auth_info flag to Action Keyword to allow negative test with non-admin tenant.
 
 Info Keywords to Retrieve Info
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -184,7 +184,7 @@ Info Keywords to Retrieve Info
      * Default value: None Pass this param to applicable CLI commands ran by the keyword
    * auth_info (dict):
 
-     * Optional if all CLIs used in the keyword has to be run by admin. i.e., keyword can hardcode Tenant.ADMIN to run all the CLI
+     * Optional if all CLIs used in the keyword has to be run by admin. i.e., keyword can hardcode Tenant.get('admin') to run all the CLI
      * Mandatory if any CLI(s) used in the keyword should be run by a tenant.
 
 Other Conventions

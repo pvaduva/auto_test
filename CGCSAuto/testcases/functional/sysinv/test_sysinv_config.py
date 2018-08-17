@@ -96,7 +96,7 @@ def test_system_type_is_readonly():
     change_to_system_type = SystemType.CPE
     if cur_system_type == SystemType.CPE:
         change_to_system_type = SystemType.STANDARD
-    code, msg = system_helper.modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.ADMIN,
+    code, msg = system_helper.modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'),
                                             system_mode='{}'.format(change_to_system_type))
 
     LOG.tc_step('Verify system rejected to change System Type to {}'.format(change_to_system_type))
@@ -174,7 +174,7 @@ class TestRetentionPeriod:
         else:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.ADMIN,
+        code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.get('admin'),
                                                        period=new_retention_period, name=name, check_first=False)
 
         LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
@@ -254,7 +254,7 @@ class TestDnsSettings:
 
         def restore_dns_settings():
             LOG.info('Restore the DNS-servers to the original:{}'.format(self.dns_servers))
-            system_helper.set_dns_servers(fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+            system_helper.set_dns_servers(fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                                           nameservers=self.dns_servers)
             # nameservers=','.join(self.dns_servers))
 
@@ -322,7 +322,7 @@ class TestDnsSettings:
 
         LOG.tc_step('\nAttempt to change the DNS servers to: {}'.format(ip_addr_list))
         code, msg = system_helper.set_dns_servers(fail_ok=expect_fail,
-                                                  auth_info=Tenant.ADMIN,
+                                                  auth_info=Tenant.get('admin'),
                                                   nameservers=ip_addr_list,
                                                   with_action_option=with_action_option,
                                                   con_ssh=None)

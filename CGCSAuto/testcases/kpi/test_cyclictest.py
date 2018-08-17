@@ -111,7 +111,7 @@ def get_hypervisor():
 
 
 def get_cpu_info(hypervisor):
-    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.ADMIN)
+    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.get('admin'))
     table = table_parser.table(output)
     cpu_info = table_parser.get_value_two_col_table(table, 'cpu_info')
 

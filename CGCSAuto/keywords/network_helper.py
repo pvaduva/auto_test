@@ -201,7 +201,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         '--gateway': gateway,
         '--ip-version': ip_version,
         '--subnetpool': subnet_pool,
-        'allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None,
+        '--allocation-pool': "start={},end={}".format(alloc_pool['start'], alloc_pool['end']) if alloc_pool else None,
         '--ipv6-ra-mode': "dhcpv6-stateful " if ip_version == 6 else None,
         '--ipv6-address-mode': "dhcpv6-stateful " if ip_version == 6 else None
     }
@@ -236,7 +236,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
     return 0, subnet_id
 
 
-def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_subnet(subnet_id, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     LOG.info("Deleting subnet {}".format(subnet_id))
     code, output = cli.neutron('subnet-delete', subnet_id, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                fail_ok=True)
@@ -256,7 +256,7 @@ def delete_subnet(subnet_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False
 
 
 def update_subnet(subnet, unset=False, allocation_pool=None, dns_server=None, host_route=None, service_type=None,
-                  tag=None,  name=None, dhcp=None, gateway=None, description=None, auth_info=Tenant.ADMIN,
+                  tag=None, name=None, dhcp=None, gateway=None, description=None, auth_info=Tenant.get('admin'),
                   fail_ok=False, con_ssh=None):
     """
     set/unset given setup
@@ -347,7 +347,7 @@ def get_subnets(name=None, cidr=None, strict=True, regex=False, rtn_val='id', au
     return table_parser.get_column(table_, rtn_val)
 
 
-def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.ADMIN, con_ssh=None):
+def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.get('admin'), con_ssh=None):
     """
     Get specified info for given network
 
@@ -391,7 +391,7 @@ def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=Non
 
 def set_network(net_id, name=None, enable=None, share=None, enable_port_security=None, external=None, default=None,
                 provider_net_type=None, provider_phy_net=None, provider_segment=None, transparent_vlan=None,
-                auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None, **kwargs):
+                auth_info=Tenant.get('admin'), fail_ok=False, con_ssh=None, **kwargs):
     """
     Update network with given parameters
     Args:
@@ -536,7 +536,7 @@ def create_security_group(name, project=None, description=None, auth_info=None, 
     return identifier
 
 
-def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.ADMIN):
+def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.get('admin')):
     """
     Delete a security group
     Args:
@@ -551,7 +551,7 @@ def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.ADMIN):
     return cli.openstack("security group delete", group_id, fail_ok=fail_ok, auth_info=auth_info)
 
 
-def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Update network qos to given value
     Args:
@@ -709,7 +709,7 @@ def create_floating_ip(extnet_id=None, tenant_name=None, port_id=None, fixed_ip_
     return 0, actual_fip_addr
 
 
-def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
     Delete a floating ip
 
@@ -727,7 +727,7 @@ def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ss
 
     """
     if fip_val == 'ip':
-        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'), con_ssh=con_ssh)
     args = floating_ip
 
     code, output = cli.neutron('floatingip-delete', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
@@ -736,7 +736,7 @@ def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ss
     if code == 1:
         return 1, output
 
-    post_deletion_ips = get_floating_ids_from_ips(con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+    post_deletion_ips = get_floating_ids_from_ips(con_ssh=con_ssh, auth_info=Tenant.get('admin'))
     if floating_ip in post_deletion_ips:
         msg = "Floating ip {} still exists in floatingip-list.".format(floating_ip)
         if fail_ok:
@@ -749,7 +749,7 @@ def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ss
     return 0, succ_msg
 
 
-def get_floating_ips(fixed_ip=None, port_id=None, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_floating_ips(fixed_ip=None, port_id=None, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get all floating ips.
 
@@ -778,7 +778,7 @@ def get_floating_ips(fixed_ip=None, port_id=None, auth_info=Tenant.ADMIN, con_ss
     return table_parser.get_values(table_, 'floating_ip_address', **params_dict)
 
 
-def get_floating_ids_from_ips(floating_ips=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_floating_ids_from_ips(floating_ips=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get ids of floating ips
 
@@ -799,7 +799,7 @@ def get_floating_ids_from_ips(floating_ips=None, con_ssh=None, auth_info=Tenant.
     return table_parser.get_column(table_, 'id')
 
 
-def get_floating_ip_info(fip, fip_val='ip', field='fixed_ip_address', auth_info=Tenant.ADMIN, con_ssh=None):
+def get_floating_ip_info(fip, fip_val='ip', field='fixed_ip_address', auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get floating ip info for given field.
     Args:
@@ -824,7 +824,7 @@ def get_floating_ip_info(fip, fip_val='ip', field='fixed_ip_address', auth_info=
     return val
 
 
-def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
     Disassociate a floating ip
 
@@ -841,7 +841,7 @@ def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, 
 
     """
     if fip_val == 'ip':
-        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'), con_ssh=con_ssh)[0]
     args = floating_ip
     code, output = cli.neutron('floatingip-disassociate', args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
@@ -863,7 +863,7 @@ def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.ADMIN, 
     return 0, succ_msg
 
 
-def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_info=Tenant.ADMIN, con_ssh=None,
+def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_info=Tenant.get('admin'), con_ssh=None,
                           fail_ok=False):
     """
     Associate a floating ip to management net ip of given vm.
@@ -891,7 +891,7 @@ def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_inf
     fip_ip = None
     if fip_val == 'ip':
         fip_ip = floating_ip
-        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.ADMIN, con_ssh=con_ssh)[0]
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'), con_ssh=con_ssh)[0]
     args += ' ' + floating_ip
 
     port = get_vm_port(vm=vm_ip, vm_val='ip', con_ssh=con_ssh)
@@ -913,7 +913,7 @@ def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_inf
 
 
 # TODO reduce timeout to 30s after issue fixed.
-def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=300, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=300, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     end_time = time.time() + timeout
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('list --a', ssh_client=con_ssh, auth_info=auth_info))
@@ -927,7 +927,7 @@ def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=300, fail_ok=False, con_ss
         raise exceptions.TimeoutException(msg)
 
 
-def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_port(vm, vm_val='id', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get port id of a vm
 
@@ -966,7 +966,7 @@ def get_neutron_port(name=None, con_ssh=None, auth_info=None):
     return table_parser.get_values(table_, 'id', strict=False, name=name)
 
 
-def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.ADMIN,
+def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=False, auth_info=Tenant.get('admin'),
                      merge_lines=False, **kwargs):
     """
     Get the neutron provider net list based on name if given
@@ -992,7 +992,7 @@ def get_providernets(name=None, rtn_val='id', con_ssh=None, strict=False, regex=
 
 
 def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
-                           auth_info=Tenant.ADMIN, con_ssh=None):
+                           auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -1023,7 +1023,7 @@ def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=Non
     return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
 
 
-def get_providernet_ranges_dict(providernet_name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_providernet_ranges_dict(providernet_name=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get the neutron provider net ranges based on name if given for ADMIN user.
 
@@ -1101,7 +1101,7 @@ def get_qos_names(qos_ids=None, con_ssh=None, auth_info=None):
 
 
 def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
-               con_ssh=None, auth_info=Tenant.ADMIN, cleanup='function'):
+               con_ssh=None, auth_info=Tenant.get('admin'), cleanup='function'):
     """
     Args:
         name(str): Name of the QoS to be created.
@@ -1174,7 +1174,7 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
     return 0, qos_id
 
 
-def delete_qos(qos_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_qos(qos_id, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
 
     Args:
@@ -1326,7 +1326,7 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
         return table_parser.get_column(table_, 'id')
 
 
-def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
+def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -1346,7 +1346,7 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
-def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
+def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -1367,12 +1367,12 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn
                                 exclude_nets=exclude_nets)
 
 
-def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
+def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
     return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.EXT_IP, vms=vms,
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
-def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False, exclude_nets=None):
+def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IP pattern is "192.168.xxx.x(xx)".
@@ -1392,7 +1392,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dic
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
-def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.ADMIN, rtn_dict=False,
+def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False,
                          use_fip=False, exclude_nets=None):
 
     table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
@@ -1409,7 +1409,7 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
     vms_nets = table_parser.get_column(table_, 'Networks')
     #
     # if use_fip:
-    #     floatingips = get_floating_ips(auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+    #     floatingips = get_floating_ips(auth_info=Tenant.get_tenant('admin'), con_ssh=con_ssh)
 
     if exclude_nets:
         if isinstance(exclude_nets, str):
@@ -1538,7 +1538,7 @@ def get_tenant_router(router_name=None, auth_info=None, con_ssh=None):
     return routers[0]
 
 
-def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get value of specified field for given router via neutron router-show
 
@@ -1561,7 +1561,7 @@ def get_router_info(router_id=None, field='status', strict=True, auth_info=Tenan
 
 
 def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state_down=False, fail_ok=False,
-                  auth_info=Tenant.ADMIN, con_ssh=None):
+                  auth_info=Tenant.get('admin'), con_ssh=None):
     # Process args
     if tenant is None:
         tenant = Tenant.get_primary()['tenant']
@@ -1577,7 +1577,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
     tenant_id = keystone_helper.get_tenant_ids(tenant, con_ssh=con_ssh)[0]
 
     args_dict = {
-        '--tenant-id': tenant_id if (auth_info == Tenant.ADMIN and tenant != Tenant.ADMIN) else None,
+        '--tenant-id': tenant_id if (auth_info == Tenant.get('admin') and tenant != Tenant.get('admin')) else None,
         '--distributed': distributed,
         '--ha': ha,
     }
@@ -1617,7 +1617,7 @@ def create_router(name=None, tenant=None, distributed=None, ha=None, admin_state
     return 0, router_id, succ_msg
 
 
-def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -1646,7 +1646,7 @@ def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info
 def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None):
     LOG.info("Creating subnet of tenant-mgmt-net to add interface to router.")
 
-    nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     existing_subnets = table_parser.get_values(nets_tab, 'subnets', id=net_id, merge_lines=False)[0]
     existing_subnets = ','.join(existing_subnets)
 
@@ -1678,7 +1678,7 @@ def create_mgmt_subnet(net_id=None, name=None, cidr=None, gateway=None, dhcp=Non
                          fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh)
 
 
-def delete_router(router_id, del_ifs=True, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_router(router_id, del_ifs=True, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
 
     if del_ifs:
         LOG.info("Deleting subnet interfaces attached to router {}".format(router_id))
@@ -1791,14 +1791,14 @@ def delete_router_interface(router_id, subnet=None, port=None, auth_info=None, c
     return 0, succ_msg
 
 
-def router_subnet_exists(router_id, subnet_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def router_subnet_exists(router_id, subnet_id, con_ssh=None, auth_info=Tenant.get('admin')):
     subnets_ids = get_router_subnets(router_id, auth_info=auth_info, con_ssh=con_ssh)
 
     return subnet_id in subnets_ids
 
 
 def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_ip=None, fail_ok=False,
-                       auth_info=Tenant.ADMIN, con_ssh=None, clear_first=True):
+                       auth_info=Tenant.get('admin'), con_ssh=None, clear_first=True):
     """
     Set router gateway with given snat, ip settings.
 
@@ -1875,7 +1875,7 @@ def set_router_gateway(router_id=None, extnet_id=None, enable_snat=False, fixed_
     return 0, succ_msg
 
 
-def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None, check_first=True):
+def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None, check_first=True):
     """
     Clear router gateway
 
@@ -1919,7 +1919,7 @@ def clear_router_gateway(router_id=None, fail_ok=False, auth_info=Tenant.ADMIN, 
 
 
 def __set_router_openstack(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None,
-                           router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+                           router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
 
@@ -1962,7 +1962,7 @@ def __set_router_openstack(name=None, admin_state_up=None, distributed=None, no_
 
 
 def _update_router(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None,
-                   external_gateway_info=None, router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+                   external_gateway_info=None, router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -2062,7 +2062,7 @@ def get_router_ext_gateway_subnet_ip_address(router_id, auth_info=None, con_ssh=
 
 
 def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=False, fail_ok=False, con_ssh=None,
-                                   auth_info=Tenant.ADMIN):
+                                   auth_info=Tenant.get('admin')):
     """
     Update router external gateway SNAT
 
@@ -2101,7 +2101,7 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
 
 
 def update_router_distributed(router_id=None, distributed=True, pre_admin_down=True, post_admin_up=True,
-                              post_admin_up_on_failure=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                              post_admin_up_on_failure=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Update router to distributed or centralized
 
@@ -2120,7 +2120,7 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
     """
     if pre_admin_down:
         _update_router(admin_state_up=False, router_id=router_id, fail_ok=False, con_ssh=con_ssh,
-                       auth_info=Tenant.ADMIN)
+                       auth_info=Tenant.get('admin'))
 
     try:
         code, output = _update_router(distributed=distributed, router_id=router_id, fail_ok=fail_ok, con_ssh=con_ssh,
@@ -2138,7 +2138,7 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
     if code == 1:
         return 1, output
 
-    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+    post_distributed_val = get_router_info(router_id, 'distributed', auth_info=Tenant.get('admin'), con_ssh=con_ssh)
     if post_distributed_val.lower() != str(distributed).lower():
         msg = "Router {} is not updated to distributed={}".format(router_id, distributed)
         if fail_ok:
@@ -2150,7 +2150,7 @@ def update_router_distributed(router_id=None, distributed=True, pre_admin_down=T
     return 0, succ_msg
 
 
-def get_quota(quota_name, tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_quota(quota_name, tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tenant.get('admin')):
 
     if not tenant_id:
         if tenant_name is None:
@@ -2161,7 +2161,8 @@ def get_quota(quota_name, tenant_name=None, tenant_id=None, con_ssh=None, auth_i
     return int(table_parser.get_values(quotas_tab, quota_name, **{'tenant_id': tenant_id})[0])
 
 
-def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False, **kwargs):
+def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False,
+                  sys_con_for_dc=True, **kwargs):
     """
     Update neutron quota(s).
 
@@ -2171,6 +2172,7 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
+        sys_con_for_dc (bool): switch to use system controller for Distributed Cloud system
         **kwargs: key(str)=value(int) pair(s) to update. such as: network=100, port=50
             possible keys: network, subnet, port, router, floatingip, security-group, security-group-rule, vip, pool,
                             member, health-monitor
@@ -2195,6 +2197,12 @@ def update_quotas(tenant_name=None, tenant_id=None, con_ssh=None, auth_info=Tena
         args_ += '--{} {} '.format(key, kwargs[key])
 
     args_ += tenant_id
+
+    if not auth_info:
+        auth_info = Tenant.get_primary()
+
+    if ProjVar.get_var('IS_DC') and sys_con_for_dc and auth_info['region'] != 'SystemController':
+        auth_info = Tenant.get(auth_info['user'], dc_region='SystemController')
 
     code, output = cli.neutron('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                                rtn_list=True)
@@ -2261,84 +2269,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
     return nova_pci_devices
 
 
-def get_pci_interface_info(interface='pthru', filepath=None, con_ssh=None):
-    """
-    Get pci interface override info from lab_setup.conf
-    Args:
-        interface (str): 'pthru' or 'sriov'
-        filepath (str): lab_setup.conf file path if not in default location
-        con_ssh (SSHClient):
-
-    Returns (str): such as "ethernet|0000:06:00.1+0|${DATAMTU}|data0b|4". Returns '' if given interface info not found.
-
-    """
-    valid_interfaces = ['pthru', 'sriov']
-    interface = 'pthru' if interface == 'pcipt' else interface
-
-    if interface not in valid_interfaces:
-        raise ValueError("Interface has to be one of the following: {}".format(valid_interfaces))
-
-    if filepath is None:
-        filepath = "lab_setup.conf"
-
-    interface_override_name = "{}_interfaces".format(interface)
-    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con0_ssh:
-        sriov_if_override = con0_ssh.exec_cmd("cat {} | grep -i {}".format(filepath, interface_override_name))[1]
-
-    if not sriov_if_override:
-        LOG.warning("{} is not found in lab_setup".format(interface_override_name.upper()))
-        return ''
-
-    if 'No such file or directory' in sriov_if_override:
-        raise ValueError("File '{}' cannot be found".format(filepath))
-
-    ifs = sriov_if_override.split('\n')
-    info = []
-    for data in ifs:
-        intf = data.split('=')[-1]
-        # remove lines with blank entries or are commented out
-        if intf == '\"\"' or intf == '\'\'' or '#' in data:
-            continue
-        info.append(intf)
-
-    if not info:
-        LOG.warning("There is no {} interface set in lab_setup.conf".format(interface))
-        return ''
-    return info[0]
-
-
-def get_providernet_for_interface(interface='pthru', rtn_val='id', filepath=None, con_ssh=None, auth_info=Tenant.ADMIN):
-    """
-    Get provider net id for SRIOV or PCI-passthrough interface
-
-    Args:
-        interface (str): 'pthru' or 'sriov'
-        rtn_val (str): 'id' or 'name'
-        filepath: lab_setup.conf path to retrive the info from
-        con_ssh (SSHClient):
-        auth_info (dict):
-
-    Returns (str):  id of the provider net for SRIOV interface. Returns empty string if not found.
-
-    """
-    pci_if_override = get_pci_interface_info(interface=interface, filepath=filepath, con_ssh=con_ssh)
-
-    if 'No such file or directory' in pci_if_override:
-        raise ValueError("File '{}' cannot be found".format(filepath))
-
-    provider_net_name = re.findall('\{DATAMTU\}\|(.*)[ |\"]', pci_if_override)
-
-    if not provider_net_name:
-        return ''
-
-    provider_net_name = provider_net_name[0]
-
-    LOG.info("Providernet name: {}".format(provider_net_name))
-    return get_providernets(name='.*{}$'.format(provider_net_name), rtn_val=rtn_val, con_ssh=con_ssh, strict=True,
-                            regex=True, auth_info=auth_info)[0]
-
-
-def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth_info=Tenant.ADMIN, strict=True,
+def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
                                 regex=False, exclude=False, **kwargs):
     """
 
@@ -2368,22 +2299,7 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
     return list(networks)
 
 
-def get_pci_nets(vif='sriov', rtn_val='name', vlan_id=0, con_ssh=None, auth_info=Tenant.ADMIN):
-
-    pnet_id = get_providernet_for_interface(interface=vif, rtn_val='id', con_ssh=con_ssh, auth_info=auth_info)
-
-    nets = get_networks_on_providernet(pnet_id, rtn_val, con_ssh=con_ssh, auth_info=auth_info, vlan_id=vlan_id)
-    if 'sriov' in vif:
-        first_seg = get_first_segment_of_providernet(pnet_id, pnet_val='id', con_ssh=con_ssh)
-        untagged_net = get_net_on_segment(pnet_id, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
-        if untagged_net in nets:
-            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
-                     format(untagged_net, pnet_id))
-            nets.remove(untagged_net)
-    return nets
-
-
-def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
+def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Filter out ips with given subnet vlan id.
     This is mainly used by finding vlan 0 ip to ping from a list of internal net ips.
@@ -2421,7 +2337,7 @@ def filter_ips_with_subnet_vlan_id(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_s
     return filtered_ips
 
 
-def __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=0, auth_info=Tenant.ADMIN, con_ssh=None):
+def __filter_ips_with_subnet_vlan_id_openstack(ips, vlan_id=0, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Filter out ips with given subnet vlan id.
     This is mainly used by finding vlan 0 ip to ping from a list of internal net ips.
@@ -2498,7 +2414,7 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD, vshell=False
 
 
 def create_providernet_range(providernet, range_min, range_max, rtn_val='id', range_name=None, shared=True,
-                             tenant_id=None, group=None, port=None, ttl=None, auth_info=Tenant.ADMIN, con_ssh=None,
+                             tenant_id=None, group=None, port=None, ttl=None, auth_info=Tenant.get('admin'), con_ssh=None,
                              fail_ok=False):
     """
     Create a provider net range for given providernet with specified min and max range values
@@ -2574,7 +2490,7 @@ def create_providernet_range(providernet, range_min, range_max, rtn_val='id', ra
         return 0, range_name
 
 
-def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
     Delete providernet range
     Args:
@@ -2613,12 +2529,12 @@ def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, 
     return 0, output
 
 
-def get_providernet_range_name_from_id(range_id, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_providernet_range_name_from_id(range_id, auth_info=Tenant.get('admin'), con_ssh=None):
     table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'name', id=range_id)[0]
 
 
-def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get nics of vm as a list of dictionaries.
 
@@ -2731,7 +2647,23 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60,
 
 
 def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict=False, con_ssh=None,
-                       auth_info=Tenant.ADMIN):
+                       auth_info=Tenant.get('admin'), rtn_all=False):
+    """
+
+    Args:
+        pci_type (str|tuple|list):
+        vlan_id:
+        net_name:
+        strict:
+        con_ssh:
+        auth_info:
+
+    Returns (None|str|list): None if no network for given pci type; 2 nets(list) if CX nics; 1 net otherwise.
+
+    """
+    if isinstance(pci_type, str):
+        pci_type = [pci_type]
+
     hosts_and_pnets = host_helper.get_hosts_and_pnets_with_pci_devs(pci_type=pci_type, up_hosts_only=True,
                                                                     con_ssh=con_ssh, auth_info=auth_info)
     if not hosts_and_pnets:
@@ -2743,28 +2675,52 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
     pnet_name = hosts_and_pnets[host][0]
     kwargs = {'vlan_id': vlan_id} if vlan_id is not None else {}
     nets = list(set(get_networks_on_providernet(pnet_name, rtn_val='name', **kwargs)))
-    if pci_type == 'pci-sriov':
-        first_seg = get_first_segment_of_providernet(pnet_name, pnet_val='name', con_ssh=con_ssh)
-        untagged_net = get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
-        if untagged_net in nets:
-            LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
-                     format(untagged_net, pnet_name))
-            nets.remove(untagged_net)
 
-    # print("pnet: {}; Nets: {}".format(pnet_name, nets))
-    final_nets = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
-    vm_net = final_nets[-1]
-    if pci_type == 'pci-passthrough':
+    nets_list_all_types = []
+    for pci_type_ in pci_type:
+        if pci_type_ == 'pci-sriov':
+            # Exclude network on first segment
+            # The switch is setup with untagged frames for the first segment within the range.
+            # This is suitable for PCI passthrough, but would not work for SRIOV
+            first_seg = get_first_segment_of_providernet(pnet_name, pnet_val='name', con_ssh=con_ssh)
+            untagged_net = get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name', con_ssh=con_ssh)
+            if untagged_net in nets:
+                LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
+                         format(untagged_net, pnet_name))
+                nets.remove(untagged_net)
 
-        port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
-        host_nic = system_helper.get_host_ports_values(host, header='device type', **{'name': port})[0]
-        if re.match(MELLANOX4, host_nic):
-            vm_net = final_nets[0:2]
+        # print("pnet: {}; Nets: {}".format(pnet_name, nets))
+        nets_for_type = _get_preferred_nets(nets=nets, net_name=net_name, strict=strict)
+        if not nets_for_type:
+            nets_list_all_types = []
+            break
 
-    return vm_net
+        nets_list_all_types.append(nets_for_type)
+
+    final_nets = None
+    cx_for_pcipt = False
+    if nets_list_all_types:
+        final_nets = set(nets_list_all_types[0])
+        for nets_ in nets_list_all_types[1:]:
+            final_nets.intersection_update(set(nets_))
+        final_nets = list(final_nets)
+        if final_nets:
+            if 'pci-passthrough' in pci_type:
+                port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
+                host_nic = system_helper.get_host_ports_values(host, header='device type', **{'name': port})[0]
+                if re.match(MELLANOX4, host_nic):
+                    cx_for_pcipt = True
+
+            if not rtn_all:
+                final_nets = final_nets[0:2] if cx_for_pcipt else final_nets[-1]
+
+    if rtn_all:
+        final_nets = final_nets, cx_for_pcipt
+
+    return final_nets
 
 
-def get_first_segment_of_providernet(providernet, pnet_val='id', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_first_segment_of_providernet(providernet, pnet_val='id', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get first segment id within the range of given providernet
     Args:
@@ -2785,7 +2741,7 @@ def get_first_segment_of_providernet(providernet, pnet_val='id', con_ssh=None, a
     return first_seg
 
 
-def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get network name on given prvidernet with specified segment id
     Args:
@@ -2806,7 +2762,7 @@ def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_i
 
 
 def get_pci_nets_with_min_hosts(min_hosts=2, pci_type='pci-sriov', up_hosts_only=True, vlan_id=0, net_name=None,
-                                strict=False, con_ssh=None, auth_info=Tenant.ADMIN):
+                                strict=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -2923,7 +2879,7 @@ def _get_preferred_nets(nets, net_name=None, strict=False):
 
 
 def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp',
-                                tenant=None, description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                                tenant=None, description=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -2962,7 +2918,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
         return 1,  msg
 
     args_dict = {
-        '--tenant-id': tenant_id if auth_info == Tenant.ADMIN else None,
+        '--tenant-id': tenant_id if auth_info == Tenant.get('admin') else None,
         '--inside_addr': inside_addr,
         '--inside-port': inside_port,
         '--outside-port': outside_port,
@@ -3013,7 +2969,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
 
 def create_port_forwarding_rule_for_vm(vm_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp',
-                                       description=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                                       description=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -3053,7 +3009,7 @@ def create_port_forwarding_rule_for_vm(vm_id, inside_addr=None, inside_port=None
 
 def update_portforwarding_rule(portforwarding_id, inside_addr=None, inside_port=None, outside_port=None,
                                protocol=None, description=None, fail_ok=False,
-                               auth_info=Tenant.ADMIN, con_ssh=None):
+                               auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -3100,7 +3056,7 @@ def update_portforwarding_rule(portforwarding_id, inside_addr=None, inside_port=
                        rtn_list=True, force_neutron=True)
 
 
-def delete_portforwarding_rules(pf_ids, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_portforwarding_rules(pf_ids, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
     Deletes list of portforwarding rules
 
@@ -3124,7 +3080,7 @@ def delete_portforwarding_rules(pf_ids, auth_info=Tenant.ADMIN, con_ssh=None, fa
     return 0, None
 
 
-def delete_portforwarding_rule(portforwarding_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_portforwarding_rule(portforwarding_id, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
     Deletes a single portforwarding rule
     Args:
@@ -3205,7 +3161,7 @@ def get_portforwarding_rules(router_id=None, inside_addr=None, inside_port=None,
     return table_parser.get_values(table_, 'id', **final_params)
 
 
-def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=True, auth_info=Tenant.ADMIN,
+def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=True, auth_info=Tenant.get('admin'),
                                  con_ssh=None):
     """
     Get value of specified field for given portforwarding rule
@@ -3335,7 +3291,7 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
     return 0, port_id
 
 
-def delete_port(port_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_port(port_id, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Delete given port
     Args:
@@ -3376,7 +3332,7 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
 
 
 def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr=None, subnet_id=None, strict=False,
-              auth_info=Tenant.ADMIN, con_ssh=None, merge_lines=True):
+              auth_info=Tenant.get('admin'), con_ssh=None, merge_lines=True):
     """
     Get a list of ports with given arguments
     Args:
@@ -3455,7 +3411,7 @@ def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
 
 
 def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_configured', 'pci_vfs_used'),
-                                       con_ssh=None, auth_info=Tenant.ADMIN):
+                                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get PCI device used number of vfs value for given device id
 
@@ -3487,7 +3443,7 @@ def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_co
     return counts
 
 
-def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
     table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
 
     values = table_parser.get_values(table_, field, **kwargs)
@@ -3497,7 +3453,7 @@ def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Ten
     return values
 
 
-def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Tenant.ADMIN, **kwargs):
+def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Tenant.get('admin'), **kwargs):
     table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
     if kwargs:
         table_ = table_parser.filter_table(table_, **kwargs)
@@ -3519,7 +3475,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None):
     if isinstance(vms, str):
         vms = [vms]
 
-    auth_info = Tenant.ADMIN
+    auth_info = Tenant.get('admin')
     field = 'tenant_id'
     vms_tenants = []
     for vm in vms:
@@ -3553,7 +3509,7 @@ def collect_networking_info(routers=None, vms=None, sep_file=None):
                 vms = [vms]
             routers = get_tenant_routers_for_vms(vms=vms)
         else:
-            routers = get_routers(name='tenant[12]-router', regex=True, auth_info=Tenant.ADMIN)
+            routers = get_routers(name='tenant[12]-router', regex=True, auth_info=Tenant.get('admin'))
     elif isinstance(routers, str):
         routers = [routers]
 
@@ -3681,7 +3637,7 @@ def get_pci_procs(hosts, net_type='pci-sriov'):
     return hosts_procs
 
 
-def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Wait for neutron agents to be alive
     Args:
@@ -3723,7 +3679,7 @@ def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, 
 
 
 def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, strict=False,
-               auth_info=Tenant.ADMIN, con_ssh=None):
+               auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get a list of trunks with given arguments
     Args:
@@ -3755,7 +3711,7 @@ def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, s
 
 
 def create_trunk(port_id, tenant_name=None, name=None, admin_state_up=True, sub_ports=None,
-                 fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+                 fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """Create a trunk via API.
     Args:
         port_id: Parent port of trunk.
@@ -3823,7 +3779,7 @@ def create_trunk(port_id, tenant_name=None, name=None, admin_state_up=True, sub_
     return 0, trunk_id, succ_msg
 
 
-def delete_trunk(trunk_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_trunk(trunk_id, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Delete given trunk
     Args:
@@ -3863,7 +3819,7 @@ def delete_trunk(trunk_id, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
     return 0, succ_msg
 
 
-def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """Add subports to a trunk via API.
     Args:
         trunk_id: Trunk id to add the subports
@@ -3908,7 +3864,7 @@ def add_trunk_subports(trunk_id, sub_ports=None, fail_ok=False, con_ssh=None, au
 
 
 def remove_trunk_subports(trunk_id, tenant_name=None, sub_ports=None, fail_ok=False, con_ssh=None,
-                          auth_info=Tenant.ADMIN):
+                          auth_info=Tenant.get('admin')):
     """Remove subports from a trunk via API.
     Args:
         trunk_id: Trunk id to remove the subports from
@@ -3967,7 +3923,7 @@ def get_networks(name=None, cidr=None, strict=True, regex=False, auth_info=None,
     return table_parser.get_column(table_, 'id')
 
 
-def delete_network(network_id, auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=False):
+def delete_network(network_id, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
      Delete given network
      Args:
@@ -4085,7 +4041,7 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 
 
 def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, host=None, pnet_id=None,
-                                              pnet_name=None, audit_id=None, auth_info=Tenant.ADMIN,
+                                              pnet_name=None, audit_id=None, auth_info=Tenant.get('admin'),
                                               con_ssh=None, strict=True, **filters):
     """
 
@@ -4141,7 +4097,7 @@ def get_providernet_connectivity_test_results(rtn_val='status', seg_id=None, hos
 
 
 def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wait_for_test=True, timeout=600,
-                                           fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                                           fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     args = []
     if host:
         args.append('--host {}'.format(host))

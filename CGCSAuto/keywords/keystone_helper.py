@@ -8,7 +8,7 @@ from keywords import common
 
 
 def get_role_ids(role_name, con_ssh=None):
-    table_ = table_parser.table(cli.openstack('role list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.openstack('role list', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     return table_parser.get_values(table_, 'ID', Name=role_name)
 
 
@@ -25,11 +25,11 @@ def get_tenant_ids(tenant_name=None, con_ssh=None):
     """
     if tenant_name is None:
         tenant_name = Tenant.get_primary()['tenant']
-    table_ = table_parser.table(cli.openstack('project list', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.openstack('project list', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     return table_parser.get_values(table_, 'ID', Name=tenant_name)
 
 
-def get_user_ids(user_name=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_user_ids(user_name=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Return a list of user id(s) with given user name.
 
@@ -48,7 +48,7 @@ def get_user_ids(user_name=None, con_ssh=None, auth_info=Tenant.ADMIN):
 
 def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=None, group=None, group_domain=None,
                        project_domain=None, user_domain=None, inherited=None, check_first=True, fail_ok=False,
-                       con_ssh=None, auth_info=Tenant.ADMIN):
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Add or remove given role for specified user and tenant. e.g., add admin role to tenant2 user on tenant2 project
 
@@ -152,7 +152,7 @@ def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=
 
 def get_assigned_roles(rtn_val='Role', names=True, role=None, user=None, project=None, user_domain=None, group=None,
                        group_domain=None, domain=None, project_domain=None, inherited=None, effective_only=None,
-                       con_ssh=None, auth_info=Tenant.ADMIN):
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get values from 'openstack role assignment list' table
 
@@ -212,7 +212,7 @@ def get_assigned_roles(rtn_val='Role', names=True, role=None, user=None, project
 
 
 def update_user(user, name=None, project=None, password=None, project_doamin=None, email=None, description=None,
-                enable=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                enable=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
 
     LOG.info("Updating {}...".format(user))
     arg = ''
@@ -244,7 +244,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
 
     if name or project or password:
         tenant_dictname = user.upper()
-        Tenant.update_tenant_dict(tenant_dictname, username=name, password=password, tenant=project)
+        Tenant.update(tenant_dictname, username=name, password=password, tenant=project)
 
     if password and user == 'admin':
         from consts.proj_vars import ProjVar
@@ -261,7 +261,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
 
 
 def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
-                  region=None, url=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                  region=None, url=None, strict=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get a list of endpoints with given arguments
     Args:
@@ -330,11 +330,11 @@ def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
 
     """
     args = endpoint_id
-    table_ = table_parser.table(cli.openstack('endpoint show', args,  ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.openstack('endpoint show', args,  ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     return table_parser.get_value_two_col_table(table_, target_field)
 
 
-def is_https_lab(con_ssh=None, source_openrc=True, auth_info=Tenant.ADMIN):
+def is_https_lab(con_ssh=None, source_openrc=True, auth_info=Tenant.get('admin')):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
     table_ = table_parser.table(cli.openstack('endpoint list', source_openrc=source_openrc, ssh_client=con_ssh,
@@ -354,10 +354,10 @@ def delete_users(user, fail_ok=False):
 
     Returns: tuple, (code, msg)
     """
-    return cli.openstack('user delete', user, auth_info=Tenant.ADMIN, fail_ok=fail_ok)
+    return cli.openstack('user delete', user, auth_info=Tenant.get('admin'), fail_ok=fail_ok)
 
 
-def get_projects(rtn_val='Name', auth_info=Tenant.ADMIN, con_ssh=None, strict=False, **filters):
+def get_projects(rtn_val='Name', auth_info=Tenant.get('admin'), con_ssh=None, strict=False, **filters):
     """
     Get list of Project names or IDs
     Args:
@@ -375,7 +375,7 @@ def get_projects(rtn_val='Name', auth_info=Tenant.ADMIN, con_ssh=None, strict=Fa
 
 
 def create_project(name=None, rtn_val='ID', domain=None, parent=None, description=None, enable=None, con_ssh=None,
-                   rtn_exist=None, fail_ok=False, auth_info=Tenant.ADMIN, **properties):
+                   rtn_exist=None, fail_ok=False, auth_info=Tenant.get('admin'), **properties):
     """
     Create a openstack project
     Args:
@@ -396,7 +396,7 @@ def create_project(name=None, rtn_val='ID', domain=None, parent=None, descriptio
 
     """
     if not name:
-        existing_names = get_projects(rtn_val='Name', auth_info=Tenant.ADMIN, con_ssh=con_ssh)
+        existing_names = get_projects(rtn_val='Name', auth_info=Tenant.get('admin'), con_ssh=con_ssh)
         max_count = 0
         end_str = ''
         for name in existing_names:
@@ -434,7 +434,7 @@ def create_project(name=None, rtn_val='ID', domain=None, parent=None, descriptio
 
 def create_user(name=None, rtn_val='name', domain=None, project=None, project_domain=None, rtn_exist=None,
                 password=HostLinuxCreds.get_password(), email=None, description=None, enable=None,
-                auth_info=Tenant.ADMIN, fail_ok=False, con_ssh=None):
+                auth_info=Tenant.get('admin'), fail_ok=False, con_ssh=None):
     """
     Create an openstack user
     Args:

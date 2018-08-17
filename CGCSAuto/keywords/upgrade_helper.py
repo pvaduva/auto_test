@@ -13,7 +13,7 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                  lock=False, unlock=False):
     """
     Upgrade given host
@@ -107,7 +107,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     return 0, None
 
 
-def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                   lock=False, unlock=False):
     """
     Upgrade given hosts list one by one
@@ -157,7 +157,7 @@ def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     return 0, "hosts {} upgrade done ".format(hosts_to_upgrade)
 
 
-def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.ADMIN,
+def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.get('admin'),
                                               fail_ok=False, con_ssh=None):
     """
     Waits until upgrade data migration is complete or fail

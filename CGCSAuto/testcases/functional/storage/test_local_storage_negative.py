@@ -87,7 +87,7 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
     HostsToRecover.add(host_name)
     host_helper.lock_host(host_name, swact=True)
     exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
-                                  auth_info=Tenant.ADMIN, rtn_list=True)
+                                  auth_info=Tenant.get('admin'), rtn_list=True)
     host_helper.unlock_host(host_name)
 
     assert exitcode == 1 and any(expt in output for expt in expt_err_list)

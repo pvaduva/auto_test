@@ -13,6 +13,7 @@ from consts import build_server as build_server_consts
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from utils.cgcs_reporter import parse_log
 from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
 
 
@@ -94,7 +95,7 @@ def _write_results(res_in_tests, test_name):
             global tracebacks
             search_forward = True if ComplianceVar.get_var('REFSTACK_SUITE') else False
             try:
-                from utils.cgcs_reporter import upload_results, parse_log
+                from utils.cgcs_reporter import upload_results
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
                                                   traceback=tracebacks, parse_name=True, search_forward=search_forward)
@@ -176,7 +177,6 @@ def pytest_runtest_makereport(item, call, __multicall__):
                     setups.add_ping_failure(test_name=test_name)
 
                 try:
-                    from utils.cgcs_reporter import parse_log
                     parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
                 except Exception as e:
                     LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
@@ -365,6 +365,11 @@ def pytest_configure(config):
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
                      always_collect=always_collect, horizon_visible=horizon_visible)
+
+    if lab.get('central_region'):
+        ProjVar.set_var(IS_DC=True)
+        ProjVar.set_var(PRIMARY_SUBCLOUD=config.getoption('subcloud'))
+
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
@@ -435,6 +440,7 @@ def pytest_addoption(parser):
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
+    subcloud_help = "Default subcloud used for automated test when boot vm, etc. 'subcloud-1' if unspecified."
     telnetlog_help = "Collect telnet logs throughout the session"
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
@@ -469,6 +475,7 @@ def pytest_addoption(parser):
     parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
+    parser.addoption('--subcloud', action='store', metavar='subcloud', default='subcloud-1', help=subcloud_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
@@ -706,8 +713,9 @@ def pytest_unconfigure(config):
     if not log_dir:
         try:
             from utils.clients.ssh import ControllerClient
-            con_ssh = ControllerClient.get_active_controller()
-            con_ssh.close()
+            ssh_list = ControllerClient.get_active_controllers(fail_ok=True)
+            for con_ssh_ in ssh_list:
+                con_ssh_.close()
         except:
             pass
         return
@@ -763,7 +771,6 @@ def pytest_unconfigure(config):
             LOG.warning("Unable to upload KPIs. {}".format(e.__str__()))
 
     try:
-        from utils.cgcs_reporter import parse_log
         parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
     except Exception as e:
         LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
@@ -781,10 +788,12 @@ def pytest_unconfigure(config):
         except:
             LOG.warning("'collect all' failed.")
 
-    try:
-        con_ssh.close()
-    except:
-        pass
+    ssh_list = ControllerClient.get_active_controllers(fail_ok=True, current_thread_only=True)
+    for con_ssh_ in ssh_list:
+        try:
+            con_ssh_.close()
+        except:
+            pass
 
 
 def pytest_collection_modifyitems(items):

@@ -75,7 +75,7 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
             if not con_ssh:
                 if not ProjVar.get_var('LAB'):
                     ProjVar.set_var(lab=lab)
-                    ProjVar.set_var(source_admin=Tenant.ADMIN)
+                    ProjVar.set_var(source_admin=Tenant.get('admin'))
                 con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                     CONTROLLER_PROMPT)
                 con_ssh.connect()

@@ -8,14 +8,14 @@ from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import GuestImages
 from consts.proj_vars import ProjVar
 from consts.timeout import ImageTimeout
-from keywords import common, system_helper, host_helper
+from keywords import common, system_helper, host_helper, dc_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
 from utils.tis_log import LOG
 
 
-def get_images(images=None, rtn_val='id', auth_info=Tenant.ADMIN, con_ssh=None, strict=True, exclude=False, **kwargs):
+def get_images(images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True, exclude=False, **kwargs):
     """
     Get a list of image id(s) that matches the criteria
     Args:
@@ -102,14 +102,15 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
     """
 
     if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
+        name = 'central_region' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=name)
 
     if 0 == con_ssh.exec_cmd('ceph df')[0]:
         # assume image storage for ceph is sufficient
         return True
 
     if image_host_ssh is None:
-        image_host_ssh = get_cli_client()
+        image_host_ssh = get_cli_client(central_region=True)
 
     file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
     avail_size = get_avail_image_space(con_ssh=con_ssh)
@@ -247,7 +248,8 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
 def create_image(name=None, image_id=None, source_image_file=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
-                 auth_info=Tenant.ADMIN, fail_ok=False, ensure_sufficient_space=True, **properties):
+                 auth_info=Tenant.get('admin'), fail_ok=False, ensure_sufficient_space=True, sys_con_for_dc=True,
+                 wait_for_subcloud_sync=True, **properties):
     """
     Create an image with given criteria.
 
@@ -269,6 +271,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         auth_info (dict):
         fail_ok (bool):
         ensure_sufficient_space (bool): Ensure glance image storage is sufficient to create new image
+        sys_con_for_dc (bool): create image on system controller if it's distributed cloud
         **properties: key=value pair(s) of properties to associate with the image
 
     Returns (tuple): (rtn_code(int), message(str))      # 1, 2 only applicable if fail_ok=True
@@ -290,8 +293,18 @@ def create_image(name=None, image_id=None, source_image_file=None,
     elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
         properties['hw_firmware_type'] = 'uefi'
 
+    if sys_con_for_dc and ProjVar.get_var('IS_DC'):
+        con_ssh = ControllerClient.get_active_controller('central_region')
+        create_auth = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController').copy()
+        image_host_ssh = get_cli_client(central_region=True)
+    else:
+        if not con_ssh:
+            con_ssh = ControllerClient.get_active_controller()
+        image_host_ssh = get_cli_client()
+        create_auth = auth_info
+
     if ensure_sufficient_space:
-        if not is_image_storage_sufficient(img_file_path=file_path):
+        if not is_image_storage_sufficient(img_file_path=file_path, con_ssh=con_ssh, image_host_ssh=image_host_ssh):
             skip('Insufficient image storage for creating glance image from {}'.format(file_path))
 
     source_str = file_path
@@ -344,15 +357,14 @@ def create_image(name=None, image_id=None, source_image_file=None,
     for key, value in optional_args.items():
         if value is not None:
             optional_args_str = ' '.join([optional_args_str, key, str(value)])
+
     try:
         LOG.info("Creating image {}...".format(name))
         LOG.info("glance image-create {}".format(optional_args_str))
         code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
-                                  auth_info=auth_info, timeout=timeout, rtn_list=True)
+                                  auth_info=create_auth, timeout=timeout, rtn_list=True)
     except:
         # This is added to help debugging image-create failure in case of insufficient space
-        if con_ssh is None:
-            con_ssh = ControllerClient.get_active_controller()
         con_ssh.exec_cmd('df -h', fail_ok=True, get_exit_code=False)
         raise
 
@@ -362,7 +374,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
     if code == 1:
         return 1, actual_id, output
 
-    in_active = wait_for_image_states(actual_id, con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    in_active = wait_for_image_states(actual_id, con_ssh=con_ssh, auth_info=create_auth, fail_ok=fail_ok)
     if not in_active:
         return 2, actual_id, "Image status is not active."
 
@@ -372,9 +384,34 @@ def create_image(name=None, image_id=None, source_image_file=None,
             return 3, actual_id, msg
         raise exceptions.ImageError(msg)
 
+    if wait_for_subcloud_sync:
+        wait_for_image_sync_on_subcloud(image_id=image_id)
+
     msg = "Image {} is created successfully".format(actual_id)
     LOG.info(msg)
     return 0, actual_id, msg
+
+
+def wait_for_image_sync_on_subcloud(image_id):
+    if ProjVar.get_var('IS_DC'):
+        if dc_helper.get_subclouds(rtn_val='sync', name=ProjVar.get_var('PRIMARY_SUBCLOUD'))[0] == 'in-sync':
+            auth_info = Tenant.get_primary()
+            wait_for_image_appear(image_id, auth_info=auth_info)
+
+
+def wait_for_image_appear(image_id, auth_info=None, timeout=900, fail_ok=False):
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        images = get_images(auth_info=auth_info)
+        if image_id in images:
+            return True
+
+        time.sleep(20)
+
+    if not fail_ok:
+        raise exceptions.StorageError("Glance image {} did not appear within {} seconds.".format(image_id, timeout))
+
+    return False
 
 
 def wait_for_image_states(image_id, status='active', timeout=ImageTimeout.STATUS_CHANGE, check_interval=3,
@@ -402,7 +439,7 @@ def wait_for_image_states(image_id, status='active', timeout=ImageTimeout.STATUS
 
 
 def _wait_for_images_deleted(images, timeout=ImageTimeout.STATUS_CHANGE, fail_ok=True,
-                             check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                             check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
     """
         check if a specific field still exist in a specified column of glance image-list
 
@@ -443,7 +480,7 @@ def _wait_for_images_deleted(images, timeout=ImageTimeout.STATUS_CHANGE, fail_ok
                                           ". Given images: {}. Images still exist: {}.".format(images, imgs_to_check))
 
 
-def image_exists(image_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def image_exists(image_id, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Args:
         image_id:
@@ -458,7 +495,7 @@ def image_exists(image_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
 
 def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok=False, con_ssh=None,
-                  auth_info=Tenant.ADMIN):
+                  auth_info=Tenant.get('admin'), sys_con_for_dc=True):
     """
     Delete given images
 
@@ -469,6 +506,7 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
+        sys_con_for_dc (bool): For DC system, whether to delete image on SystemController.
     Returns (tuple):
         (-1, "None of the given image(s) exist on system. Do nothing.")
         (0, "image(s) deleted successfully")
@@ -499,6 +537,10 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
 
     imgs_to_del_str = ' '.join(imgs_to_del)
 
+    if sys_con_for_dc and ProjVar.get_var('IS_DC'):
+        con_ssh = ControllerClient.get_active_controller('central_region')
+        auth_info = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController')
+
     LOG.debug("images to delete: {}".format(imgs_to_del))
     exit_code, cmd_output = cli.glance('image-delete', imgs_to_del_str, ssh_client=con_ssh, fail_ok=fail_ok,
                                        rtn_list=True, auth_info=auth_info, timeout=timeout)
@@ -520,7 +562,7 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
     return 0, "image(s) deleted successfully"
 
 
-def get_image_properties(image, property_keys, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_image_properties(image, property_keys, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -572,7 +614,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=No
     dest_name = GuestImages.IMAGE_FILES[img_os][2]
     ts_source_name = GuestImages.IMAGE_FILES[img_os][0]
     if con_ssh is None:
-        con_ssh = get_cli_client()
+        con_ssh = get_cli_client(central_region=True)
 
     if ts_source_name:
         # img saved on test server. scp from test server
@@ -651,7 +693,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
     return img_id
 
 
-def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Set or unset a glance image with multiple vif-Queues
     Args:
@@ -685,7 +727,7 @@ def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, au
     return res, out
 
 
-def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -729,7 +771,7 @@ def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenan
 def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None, container_format=None,
               disk_format=None, architecture=None, instance_id=None, kernel_id=None, os_distro=None,
               os_version=None, ramdisk_id=None, activate=None, project=None, project_domain=None, tags=None,
-              protected=None, visibility=None, membership=None, con_ssh=None, auth_info=Tenant.ADMIN):
+              protected=None, visibility=None, membership=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Set image properties/metadata
     Args:
@@ -844,7 +886,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
     return 0, msg
 
 
-def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Check image settings via openstack image show.
     Args:

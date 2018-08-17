@@ -370,7 +370,7 @@ def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
         prompt = Prompt.CONTROLLER_PROMPT
     else:
         shell_code = 2
-        prompt = '\[{}@{} \({}\)\]\$'.format(user_name, hostname, Tenant.ADMIN['user'])
+        prompt = '\[{}@{} \({}\)\]\$'.format(user_name, hostname, Tenant.get('admin')['user'])
 
     LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not exist'.format(user_name))
     created, user_info = _make_sure_user_exist(user_name, sudoer=sudo_type, shell=shell_code, delete_if_existing=True)
@@ -400,7 +400,7 @@ def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
 
         # lshell_env_setup are set to run openstack user list
         LOG.tc_step("Execute openstack command 'openstack user list'")
-        cli.openstack('user list', auth_info=Tenant.ADMIN, ssh_client=ssh_con)
+        cli.openstack('user list', auth_info=Tenant.get('admin'), ssh_client=ssh_con)
 
     finally:
         if logged_in:

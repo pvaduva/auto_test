@@ -100,9 +100,9 @@ class LdapUserManager(object, metaclass=Singleton):
     """
 
     LINUX_ROOT_PASSWORD = HostLinuxCreds.get_password()
-    KEYSTONE_USER_NAME = Tenant.ADMIN['user']
+    KEYSTONE_USER_NAME = Tenant.get('admin')['user']
     KEYSTONE_USER_DOMAIN_NAME = 'Default'
-    KEYSTONE_PASSWORD = Tenant.ADMIN['password']
+    KEYSTONE_PASSWORD = Tenant.get('admin')['password']
     PROJECT_NAME = 'admin'
     PROJECT_DOMAIN_NAME = 'Default'
 
@@ -982,7 +982,7 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
     return ''.join(invalid_password)
 
 
-def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
     Modify the state of the lab from HTTP/HTTPS through 'system modify https_enable=<bool>'
 

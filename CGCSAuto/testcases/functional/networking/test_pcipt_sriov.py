@@ -16,22 +16,18 @@ from testfixtures.recover_hosts import HostsToRecover
 @fixture(scope='module', params=['pci-passthrough', 'pci-sriov'])
 def vif_model_check(request):
     vif_model = request.param
-    LOG.fixture_step("Check if lab is configured with {} interface".format(vif_model))
 
-    interface = 'sriov' if 'sriov' in vif_model else 'pthru'
-    pci_info = network_helper.get_pci_interface_info(interface=interface)
-    if not pci_info:
-        skip("{} interface not found in lab_setup.conf".format(vif_model))
-
-    LOG.fixture_step("Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
-    # pci_nets = network_helper.get_pci_nets(vif=interface, rtn_val='name')
+    LOG.fixture_step("Get a network that supports {} to boot vm".format(vif_model))
     primary_tenant = Tenant.get_primary()
     primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
+    other_tenant = Tenant.get_secondary()
 
     tenant_net = "{}-net"
     extra_pcipt_net = extra_pcipt_net_name = None
     pci_net = network_helper.get_pci_vm_network(pci_type=vif_model)
+    if not pci_net:
+        skip("{} interface not found".format(vif_model))
+
     if isinstance(pci_net, list):
         pci_net, extra_pcipt_net_name = pci_net
         extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
@@ -83,7 +79,7 @@ def vif_model_check(request):
 
         LOG.fixture_step("Get seg_id for {} to prepare for vlan tagging on pci-passthough device later".format(pci_net))
         seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.ADMIN)
+                                             auto_info=Tenant.get('admin'))
         assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net)
 
     else:
@@ -94,7 +90,7 @@ def vif_model_check(request):
     if extra_pcipt_net:
         nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
         extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id', strict=False,
-                                                         auto_info=Tenant.ADMIN)
+                                                         auto_info=Tenant.get('admin'))
         seg_id = {pci_net: seg_id,
                   extra_pcipt_net_name: extra_pcipt_seg_id}
 

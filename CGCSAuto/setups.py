@@ -8,12 +8,12 @@ import pexpect
 
 import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
-from consts.cgcs import Prompt, MULTI_REGION_MAP, DIST_CLOUD_REGION_PATTERN
+from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME
 from consts.lab import Labs, add_lab_entry, NatBoxes
 from consts.proj_vars import ProjVar, InstallVars
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper
-from keywords.common import scp_to_local, scp_from_active_controller_to_localhost
+from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
+    dc_helper
 from utils import exceptions, lab_info
 from utils import local_host
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
@@ -24,8 +24,8 @@ from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERF
 from utils.tis_log import LOG
 
 
-def less_than_two_controllers():
-    return len(system_helper.get_controllers()) < 2
+def less_than_two_controllers(con_ssh=None, auth_info=Tenant.get('admin')):
+    return len(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) < 2
 
 
 def setup_tis_ssh(lab):
@@ -66,37 +66,6 @@ def setup_vbox_tis_ssh(lab):
     return con_ssh
 
 
-def set_env_vars(con_ssh):
-    # This is no longer needed
-    return
-
-    con_ssh.exec_cmd("bash")
-
-    prompt_cmd = con_ssh.exec_cmd("echo $PROMPT_COMMAND")[1]
-    tmout_val = con_ssh.exec_cmd("echo $TMOUT")[1]
-    hist_time = con_ssh.exec_cmd("echo $HISTTIMEFORMAT")[1]
-    source = False
-
-    if prompt_cmd != 'date':
-        if prompt_cmd:
-            con_ssh.exec_cmd('''sed -i '/export PROMPT_COMMAND=.*/d' ~/.bashrc''')
-
-        con_ssh.exec_cmd('''echo 'export PROMPT_COMMAND="date"' >> ~/.bashrc''')
-        source = True
-
-    if tmout_val != '0':
-        con_ssh.exec_cmd("echo 'export TMOUT=0' >> ~/.bashrc")
-        source = True
-
-    if '%Y-%m-%d %T' not in hist_time:
-        con_ssh.exec_cmd('''echo 'export HISTTIMEFORMAT="%Y-%m-%d %T "' >> ~/.bashrc''')
-        source = True
-
-    if source:
-        con_ssh.exec_cmd("source ~/.bashrc")
-        LOG.debug("Environment variable(s) updated.")
-
-
 def setup_primary_tenant(tenant):
     Tenant.set_primary(tenant)
     LOG.info("Primary Tenant for test session is set to {}".format(tenant['tenant']))
@@ -135,7 +104,7 @@ def _copy_pubkey():
         # copy public key to localhost
         if ProjVar.get_var('REMOTE_CLI') and con_0_ssh.file_exists(pubkey_path):
             dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'key.pub')
-            scp_from_active_controller_to_localhost(source_path=pubkey_path, dest_path=dest_path, timeout=60)
+            common.scp_from_active_controller_to_localhost(source_path=pubkey_path, dest_path=dest_path, timeout=60)
             LOG.info("Public key file copied to localhost")
 
 
@@ -338,15 +307,18 @@ def get_build_info(con_ssh):
     return build_id, build_host, job, build_by
 
 
-def _rsync_files_to_con1():
-    if less_than_two_controllers():
+def _rsync_files_to_con1(con_ssh=None, central_region=False, file_to_check=None):
+    region = 'RegionOne' if central_region else None
+    auth_info = Tenant.get('admin', dc_region=region)
+    if less_than_two_controllers(auth_info=auth_info, con_ssh=con_ssh):
         LOG.info("Less than two controllers on system. Skip copying file to controller-1.")
         return
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
-    file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
+    if not file_to_check:
+        file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
     try:
-        with host_helper.ssh_to_host("controller-1") as con_1_ssh:
+        with host_helper.ssh_to_host("controller-1", con_ssh=con_ssh) as con_1_ssh:
             if con_1_ssh.file_exists(file_to_check):
                 LOG.info("Test files already exist on controller-1. Skip rsync.")
                 return
@@ -355,13 +327,11 @@ def _rsync_files_to_con1():
         LOG.error("Cannot ssh to controller-1. Skip rsync. \nException caught: {}".format(e.__str__()))
         return
 
-    # cmd = 'scp -q -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null controller-0:/home/wrsroot/* ' \
-    #       'controller-1:/home/wrsroot/'
     cmd = "rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' " \
           "/home/wrsroot/* controller-1:/home/wrsroot/"
 
     timeout = 1800
-    with host_helper.ssh_to_host("controller-0") as con_0_ssh:
+    with host_helper.ssh_to_host("controller-0", con_ssh=con_ssh) as con_0_ssh:
         LOG.info("rsync files from controller-0 to controller-1...")
         con_0_ssh.send(cmd)
 
@@ -388,7 +358,15 @@ def _rsync_files_to_con1():
 
 
 def copy_test_files():
-    _rsync_files_to_con1()
+    con_ssh = None
+    central_region = False
+    if ProjVar.get_var('IS_DC'):
+        _rsync_files_to_con1(con_ssh=ControllerClient.get_active_controller(name=ProjVar.get_var('PRIMARY_SUBCLOUD')),
+                             file_to_check='{}/heat/README'.format(WRSROOT_HOME), central_region=central_region)
+        con_ssh = ControllerClient.get_active_controller(name='central_region')
+        central_region = True
+
+    _rsync_files_to_con1(con_ssh=con_ssh, central_region=central_region)
 
 
 def get_auth_via_openrc(con_ssh):
@@ -399,7 +377,8 @@ def get_auth_via_openrc(con_ssh):
                   'OS_PROJECT_DOMAIN_NAME',
                   'OS_IDENTITY_API_VERSION',
                   'OS_REGION_NAME',
-                  'OS_INTERFACE']
+                  'OS_INTERFACE',
+                  'OS_KEYSTONE_REGION_NAME']
 
     code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
     if code != 0:
@@ -533,6 +512,7 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
+    installconf = None
     if installconf_path:
 
         installconf = configparser.ConfigParser()
@@ -792,17 +772,21 @@ def set_region(region=None):
     """
     local_region = CliAuth.get_var('OS_REGION_NAME')
     if not region:
-        region = local_region
+        if ProjVar.get_var('IS_DC'):
+            region = 'SystemController'
+        else:
+            region = local_region
     Tenant.set_region(region=region)
     ProjVar.set_var(REGION=region)
     if region in MULTI_REGION_MAP:
+        # Multi-region lab
         for tenant in ('tenant1', 'tenant2'):
             region_tenant = '{}{}'.format(tenant, MULTI_REGION_MAP[region])
-            Tenant.update_tenant_dict(tenant, username=region_tenant, tenant=region_tenant)
+            Tenant.update(tenant, username=region_tenant, tenant=region_tenant)
             if region != local_region:
                 keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
-    elif re.search(DIST_CLOUD_REGION_PATTERN, region):
-        # sub-cloud tests can be run controller, but not the other way round
+    elif re.search(SUBCLOUD_PATTERN, region):
+        # Distributed cloud, lab specified is a subcloud.
         urls = keystone_helper.get_endpoints(region=region, rtn_val='URL', interface='internal',
                                              service_name='keystone')
         if not urls:
@@ -811,7 +795,56 @@ def set_region(region=None):
         Tenant.set_url(urls[0])
 
 
+def set_dc_vars():
+    if not ProjVar.get_var('IS_DC') or ControllerClient.get_active_controller(name='central_region', fail_ok=True):
+        return
+
+    central_con_ssh = ControllerClient.get_active_controller()
+    ControllerClient.set_active_controller(central_con_ssh, name='central_region')
+    sub_clouds = dc_helper.get_subclouds(avail='online', con_ssh=central_con_ssh)
+    LOG.info("Online subclouds: {}".format(sub_clouds))
+
+    primary_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
+    lab = ProjVar.get_var('LAB')
+
+    for subcloud in sub_clouds:
+        subcloud_lab = lab.get(subcloud, None)
+        if not subcloud_lab:
+            raise ValueError('Please add {} to {} in consts/lab.py'.format(subcloud, lab['short_name']))
+
+        LOG.info("Create ssh connection to {}, and add to ControllerClient".format(subcloud))
+        subcloud_ssh = SSHClient(subcloud_lab['floating ip'],
+                                 HostLinuxCreds.get_user(),
+                                 HostLinuxCreds.get_password(),
+                                 CONTROLLER_PROMPT)
+
+        try:
+            subcloud_ssh.connect(retry=True, retry_timeout=30)
+            ControllerClient.set_active_controller(subcloud_ssh, name=subcloud)
+        except exceptions.SSHRetryTimeout as e:
+            if subcloud == primary_subcloud:
+                raise
+            LOG.warning('Cannot connect to {} via its floating ip. {}'.format(subcloud, e.__str__()))
+            continue
+
+        LOG.info("Add {} to DC_MAP".format(subcloud))
+        subcloud_auth = get_auth_via_openrc(subcloud_ssh)
+        auth_url = subcloud_auth['OS_AUTH_URL']
+        region = subcloud_auth['OS_REGION_NAME']
+        Tenant.add_dc_region(region_info={subcloud: {'auth_url': auth_url, 'region': region}})
+
+        if subcloud == primary_subcloud:
+            LOG.info("Set default cli auth to use {}".format(subcloud))
+            Tenant.set_region(region=region)
+            Tenant.set_url(url=auth_url)
+
+    LOG.info("Set default controller ssh to {} in ControllerClient".format(primary_subcloud))
+    ControllerClient.set_default_ssh(primary_subcloud)
+
+
 def set_sys_type(con_ssh):
+    set_dc_vars()
+
     sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
     ProjVar.set_var(SYS_TYPE=sys_type)
 
