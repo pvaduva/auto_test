@@ -40,15 +40,11 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             if fail_ok: return exit_code, command_output
             if not fail_ok: raise exception
     """
-    lab = ProjVar.get_var('LAB')
     if use_telnet and con_telnet is None:
         raise ValueError("No Telnet session provided")
 
     if auth_info is None:
         auth_info = Tenant.get_primary()
-
-    if 'auth_url' in lab:
-        Tenant.set_url(lab['auth_url'])
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)
