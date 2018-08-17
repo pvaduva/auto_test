@@ -728,6 +728,8 @@ def get_usb_device_name(con_ssh=None):
     if rc != 0:
         msg = "No USB found in lab node. Please plug in usb ."
         LOG.info(msg)
+        return ''
+
     else:
         usb_ls = output.strip().splitlines()[0].split("->").pop()
 
@@ -738,7 +740,7 @@ def get_usb_device_name(con_ssh=None):
         LOG.info("USB device is: {}".format(usb_device))
 
     LOG.info("USB device is: {}".format(usb_device))
-    if 'sd' not in usb_device or len(usb_device) != 3:
+    if usb_device and 'sd' not in usb_device or len(usb_device) != 3:
         return None
     return usb_device
 
