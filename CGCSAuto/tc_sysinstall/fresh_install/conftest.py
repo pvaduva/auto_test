@@ -63,7 +63,6 @@ def install_setup():
     else:
         guest_server_obj = initialize_server(guest_server)
 
-
     fresh_install_helper.set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 
     servers = {
@@ -137,11 +136,11 @@ def pytest_runtest_teardown(item):
         controller0_node = lab["controller-0"]
         if controller0_node.telnet_conn is None:
             controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
-            controller0_node.telnet_conn.login()
+        controller0_node.telnet_conn.login()
         rc, output = controller0_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)
         LOG.info(output)
     except Exception:
-        pass
+        raise
     LOG.fixture_step("unreserving hosts")
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 

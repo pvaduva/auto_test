@@ -3549,8 +3549,8 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
         else:
             raise exceptions.BackupSystem(msg)
 
-    cmd = "sudo rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(barcode, barcode)
-    tuxlab_conn.exec_cmd(cmd)
+    cmd = "rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(barcode, barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd)
 
     cmd = "test -f " + iso_full_path
     assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
@@ -3573,24 +3573,24 @@ def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
         tuxlab_conn.deploy_ssh_key()
 
     cmd = "chmod -R 777 /tmp/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
     cmd = "umount /media/iso/{}; echo if we fail we ignore it".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
     cmd = "rm -rf /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
     cmd = "mkdir -p /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     cmd = "mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode, barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
     cmd = "mount -o remount,exec,dev /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
     cmd = "rm -rf /export/pxeboot/pxelinux.cfg/{}".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
     cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{} -t /export/pxeboot/pxelinux.cfg/{}".format(
         barcode, barcode, barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     cmd = "umount /media/iso/{}".format(barcode)
-    assert tuxlab_conn.exec_sudo_cmd(cmd)[0] == 0
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
 
     tuxlab_conn.close()
 

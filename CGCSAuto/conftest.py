@@ -511,6 +511,8 @@ def pytest_addoption(parser):
                      action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
+    parser.addoption('--boot-server', '--boot_server', dest='boot_server',
+                     help='server to boot from. Default is yow-tuxlab2')
 
     # install help
     file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \

@@ -24,6 +24,7 @@ def pytest_configure(config):
     install_conf = config.getoption('installconf')
     lab_file_dir = config.getoption('file_dir')
     build_server = config.getoption('build_server')
+    boot_server = config.getoption('boot_server')
     tis_build_dir = config.getoption('tis_build_dir')
     install_license = config.getoption('upgrade_license')
     heat_templates = config.getoption('heat_templates')
@@ -46,13 +47,14 @@ def pytest_configure(config):
                                                 tis_build_dir=tis_build_dir, build_server=build_server,
                                                 license_path=install_license, guest_image=guest_image,
                                                 heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
-                                                security=security, low_latency=low_lat, stop=stop_step, ovs=ovs)
+                                                security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
+                                                boot_server=boot_server)
 
     setups.set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
                               installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
                               controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                               boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                              patch_dir=patch_dir, ovs=ovs)
+                              patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
     print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
 
 
