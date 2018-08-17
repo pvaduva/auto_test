@@ -55,7 +55,10 @@ def pytest_configure(config):
                               controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                               boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                               patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
-    print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
+    print(" Pre Configure Install vars:")
+    install_vars = InstallVars.get_install_vars().items()
+    for var, value in install_vars:
+        print("{}: {}".format(var, value))
 
 
 #@pytest.fixture(scope='session', autouse=True)
