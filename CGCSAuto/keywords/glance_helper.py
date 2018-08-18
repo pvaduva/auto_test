@@ -385,7 +385,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         raise exceptions.ImageError(msg)
 
     if wait_for_subcloud_sync:
-        wait_for_image_sync_on_subcloud(image_id=image_id)
+        wait_for_image_sync_on_subcloud(image_id=actual_id)
 
     msg = "Image {} is created successfully".format(actual_id)
     LOG.info(msg)
