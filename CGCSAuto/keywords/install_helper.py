@@ -3233,8 +3233,7 @@ def post_install(controller0_node=None):
     else:
         connection = ControllerClient.get_active_controller()
 
-    rc = connection.exec_cmd("test -d /home/wrsroot/postinstall/")[0]
-    LOG.debug(rc)
+    rc, msg = connection.exec_cmd("test -d /home/wrsroot/postinstall/")
     if rc == 0:
         scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
         if len(scripts) > 0:
