@@ -1,7 +1,7 @@
 from pytest import skip
 import threading
 
-from consts.cgcs import SysType
+from consts.cgcs import SysType, Prompt
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars
 from keywords import host_helper, system_helper, install_helper, vlm_helper
@@ -61,6 +61,8 @@ def test_standard_install(install_setup):
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
     fresh_install_helper.configure_controller(controller0_node)
+    controller0_node.telnet_conn.hostname = "controller\-[01]"
+    controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
