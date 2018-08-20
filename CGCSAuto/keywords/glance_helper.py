@@ -249,7 +249,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
                  auth_info=Tenant.get('admin'), fail_ok=False, ensure_sufficient_space=True, sys_con_for_dc=True,
-                 wait_for_subcloud_sync=True, **properties):
+                 wait_for_subcloud_sync=True, cleanup=None, **properties):
     """
     Create an image with given criteria.
 
@@ -272,6 +272,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
         fail_ok (bool):
         ensure_sufficient_space (bool): Ensure glance image storage is sufficient to create new image
         sys_con_for_dc (bool): create image on system controller if it's distributed cloud
+        wait_for_subcloud_sync (bool):
+        cleanup (str|None): add to teardown list. 'function', 'class', 'module', 'session', or None
         **properties: key=value pair(s) of properties to associate with the image
 
     Returns (tuple): (rtn_code(int), message(str))      # 1, 2 only applicable if fail_ok=True
@@ -370,6 +372,8 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     table_ = table_parser.table(output)
     actual_id = table_parser.get_value_two_col_table(table_, 'id')
+    if cleanup and actual_id:
+        ResourceCleanup.add('image', actual_id, scope=cleanup)
 
     if code == 1:
         return 1, actual_id, output
@@ -495,7 +499,7 @@ def image_exists(image_id, con_ssh=None, auth_info=Tenant.get('admin')):
 
 
 def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok=False, con_ssh=None,
-                  auth_info=Tenant.get('admin'), sys_con_for_dc=True):
+                  auth_info=Tenant.get('admin'), sys_con_for_dc=True, del_subcloud_cache=True):
     """
     Delete given images
 
@@ -507,6 +511,8 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
         con_ssh (SSHClient):
         auth_info (dict):
         sys_con_for_dc (bool): For DC system, whether to delete image on SystemController.
+        del_subcloud_cache (bool): Whether to delete glance cache on subclouds after glance image-deleted.
+            glance image cache will expire on subcloud after 24 hours otherwise.
     Returns (tuple):
         (-1, "None of the given image(s) exist on system. Do nothing.")
         (0, "image(s) deleted successfully")
@@ -557,6 +563,17 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
         msg = "Delete image cli ran successfully but some image(s) {} did not disappear within {} seconds".\
             format(images_undeleted, timeout)
         return 2, msg
+
+    if ProjVar.get_var('IS_DC') and del_subcloud_cache:
+        LOG.info("Attempt to delete glance image cache on subclouds.")
+        # glance image cache on subcloud expires only after 24 hours of glance image-delete. So it will fill up the
+        # /opt/cgcs file system quickly in automated tests. Workaround added to manually delete the glance cache.
+        subclouds = dc_helper.get_subclouds(rtn_val='name', avail='online', sync='in-sync')
+        for subcloud in subclouds:
+            subcoud_ssh = ControllerClient.get_active_controller(name=subcloud, fail_ok=True)
+            if subcoud_ssh:
+                for img in images_deleted:
+                    subcoud_ssh.exec_sudo_cmd('rm -f /opt/cgcs/glance/image-caches/{}'.format(img))
 
     LOG.info("image(s) are successfully deleted: {}".format(imgs_to_del))
     return 0, "image(s) deleted successfully"
@@ -680,9 +697,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
 
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
-                                  container_format='bare', fail_ok=False)[1]
-            if cleanup:
-                ResourceCleanup.add('image', resource_id=img_id, scope=cleanup)
+                                  container_format='bare', fail_ok=False, cleanup=cleanup)[1]
         except:
             raise
         finally:

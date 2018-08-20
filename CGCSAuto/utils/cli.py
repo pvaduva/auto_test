@@ -87,12 +87,6 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                          "--os-user-domain-name Default --os-project-domain-name Default".
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
 
-            if cmd == 'dcmanager':
-                # workaround for CGTS-10031
-                flags.replace('--os-project-name', '--os-tenant-name')
-            else:
-                flags += ' --os-region-name {}'.format(auth_info['region'])
-
             # Add additional auth args for https lab
             if CliAuth.get_var('HTTPS'):
                 if cmd in ['openstack', 'sw-manager']:
@@ -103,7 +97,14 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                 if cmd == 'sw-manager':
                     flags += ' --os-interface internal'
 
+            if cmd == 'dcmanager':
+                # workaround for CGTS-10031
+                auth_args.replace('--os-project-name', '--os-tenant-name')
+            else:
+                flags += ' --os-region-name {}'.format(auth_info['region'])
+
             flags = '{} {}'.format(auth_args.strip(), flags.strip())
+
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
 
     # workaround for CGTS-10031
@@ -342,9 +343,9 @@ def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=No
        timeout=CLI_TIMEOUT, rtn_list=False, force_source=False):
 
     # FIXME: temp workaround to maintain backward compatibility for non-STX build until TC branch is created.
-    job = ProjVar.get_var('JOB')
+    build = ProjVar.get_var('BUILD_ID')
     cmd_ = 'fm'
-    if job and 'CGCS_6.0_Host' in job:
+    if build and build < '2018-08-19':
         cmd_ = 'system'
     return exec_cli(cmd_, sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
