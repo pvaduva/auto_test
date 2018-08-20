@@ -1614,7 +1614,7 @@ def get_cinder_volume_backup_filenames_usb(pattern=None, con_ssh=None):
     return get_backup_files_from_usb(pattern=pattern, con_ssh=con_ssh)
 
 
-def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
+def restore_cinder_volumes_from_backup(con_ssh=None, fail_ok=False):
     """
     Restores cinder volumes from backup files for system restore. If volume snaphot exist for a volume, it will be
     deleted before restoring the volume
@@ -2367,11 +2367,11 @@ def get_lab_info(barcode):
 def run_cpe_compute_config_complete(controller0_node, controller0):
     output_dir = ProjVar.get_var('LOG_DIR')
 
-    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
-
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
+
+    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
 
     telnet_client = controller0_node.telnet_conn
 

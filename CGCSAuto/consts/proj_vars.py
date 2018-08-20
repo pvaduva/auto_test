@@ -335,6 +335,7 @@ class RestoreVars:
             'SKIP_SETUP_FEED': False,
             'SKIP_REINSTALL': False,
             'LOW_LATENCY': False,
+            'CINDER_BACKUP': False,
         }
 
     @classmethod

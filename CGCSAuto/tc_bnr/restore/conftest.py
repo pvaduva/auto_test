@@ -21,6 +21,7 @@ def pytest_configure(config):
     skip_setup_feed = config.getoption('skip_setup_feed')
     skip_reinstall = config.getoption('skip_reinstall')
     low_latency = config.getoption('low_latency')
+    cinder_backup = config.getoption('cinder_backup')
 
     setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
@@ -30,6 +31,7 @@ def pytest_configure(config):
     RestoreVars.set_restore_var(skip_setup_feed=skip_setup_feed)
     RestoreVars.set_restore_var(skip_reinstall=skip_reinstall)
     RestoreVars.set_restore_var(low_latency=low_latency)
+    RestoreVars.set_restore_var(cinder_backup=cinder_backup)
 
     ProjVar.set_var(always_collect=True)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
