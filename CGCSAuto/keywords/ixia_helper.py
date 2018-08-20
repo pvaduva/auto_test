@@ -11,8 +11,8 @@ from utils.exceptions import IxiaError
 try:
     import IxNetwork
 except ImportError as err:
-    LOG.warn(str(err))
-    LOG.warn("keywords/ixia_helper is not available")
+    LOG.warning(str(err))
+    LOG.warning("keywords/ixia_helper is not available")
 
     class ImportFailedModule(object):
         def __init__(self, imp_err):
@@ -205,7 +205,7 @@ class IxiaSession(object):
                 IxiaResource.release(res)
             except:
                 # this would usually require manual cleanup
-                LOG.warn("(IxiaResource) {} release failed".format(res))
+                LOG.warning("(IxiaResource) {} release failed".format(res))
         self._ixia_resources.clear()
 
     def set_default_chassis(self, chassis=None):
@@ -461,11 +461,11 @@ class IxiaSession(object):
             self._ixnet.execute('sendArpAndNS', interface)
         except IxNetwork.IxNetError as err:
             if create_if_nonexistent:
-                LOG.warn("the specified interface does not exist, creating instead")
+                LOG.warning("the specified interface does not exist, creating instead")
                 interface = self._ixnet.add(self._port_map[port_id], "interface")
                 self._ixnet.commit()
                 interface = self.__remapIds(interface)
-                LOG.warn("interface created: {}".format(interface))
+                LOG.warning("interface created: {}".format(interface))
             else:
                 raise IxiaError("specified interface does not exist")
         self.configure(interface, enabled='true', description=description)
@@ -939,7 +939,7 @@ class IxiaSession(object):
             if not succ:
                 msg = "timeout occurred when waiting for view {} to become ready. isReady={}".format(view, val)
                 if fail_ok:
-                    LOG.warn(msg)
+                    LOG.warning(msg)
                     continue
                 raise IxiaError(msg)
 
