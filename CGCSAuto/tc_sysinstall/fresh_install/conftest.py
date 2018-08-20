@@ -140,7 +140,7 @@ def pytest_runtest_teardown(item):
         rc, output = controller0_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)
         LOG.info(output)
     except Exception:
-        raise
+        pass
     LOG.fixture_step("unreserving hosts")
     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
