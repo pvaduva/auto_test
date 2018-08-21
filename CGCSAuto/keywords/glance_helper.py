@@ -579,7 +579,9 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
                 subcoud_ssh = ControllerClient.get_active_controller(name=subcloud, fail_ok=True)
                 if subcoud_ssh:
                     for img in images_deleted:
-                        subcoud_ssh.exec_sudo_cmd('rm -f /opt/cgcs/glance/image-caches/{}'.format(img))
+                        img_path = '/opt/cgcs/glance/image-cache/{}'.format(img)
+                        if subcoud_ssh.file_exists(img_path):
+                            subcoud_ssh.exec_sudo_cmd('rm -f {}'.format(img_path))
 
     LOG.info("image(s) are successfully deleted: {}".format(imgs_to_del))
     return 0, "image(s) deleted successfully"
