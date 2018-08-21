@@ -50,7 +50,7 @@ def test_event_list(event_option, severity):
     assert alarm_generate_succ, "Alarm / LOG Generated"
 
     LOG.tc_step('Query ' + event_option + ' ' + severity)
-    query_tab = system_helper.get_events_table(num=limit, show_only=event_option,
+    query_tab = system_helper.get_events_table(limit=limit, show_only=event_option,
                                                query_key='severity', query_value=severity)
 
     LOG.tc_step('Verify test result')

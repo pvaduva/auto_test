@@ -158,7 +158,7 @@ def _perform_action(vm_id, action, expt_fail):
             assert not vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, fail_ok=True), \
                 "The vm is still pingable after stop"
 
-            events_tab = system_helper.get_events_table(num=10)
+            events_tab = system_helper.get_events_table(limit=10)
             reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False,
                                               **{'Entity Instance ID': vm_id, 'State': 'log'})
             assert re.search('Stop complete for instance .* now disabled on host', '\n'.join(reasons)), \
@@ -168,7 +168,7 @@ def _perform_action(vm_id, action, expt_fail):
             vm_helper.start_vms(vm_id)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-            events_tab = system_helper.get_events_table(num=10)
+            events_tab = system_helper.get_events_table(limit=10)
             reasons = table_parser.get_values(events_tab, 'Reason Text', strict=False,
                                               **{'Entity Instance ID': vm_id, 'State': 'log'})
             assert re.search('Start complete for instance .* now enabled on host', '\n'.join(reasons)), \

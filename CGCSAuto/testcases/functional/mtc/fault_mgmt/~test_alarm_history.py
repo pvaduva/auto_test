@@ -45,7 +45,7 @@ def _test_system_alarm_on_host_lock():
                      "{0}".format(alarm[0]))
 
     # Get the historical list of alarms
-    hist_alarm_table = system_helper.get_events_table(num=15, uuid=True)
+    hist_alarm_table = system_helper.get_events_table(limit=15, show_uuid=True)
 
     # Check that a valid alarm header is present
     alarm_header = ['UUID', 'Time Stamp', 'State', 'Event Log ID', 'Reason Text', 'Entity Instance ID', 'Severity']
@@ -96,7 +96,7 @@ def _test_system_alarm_on_host_lock():
 
     # Verify the new alarms are present in the historical list in state 'set'
     # Get the historical list of alarms
-    hist_alarm_table = system_helper.get_events_table(num=15, uuid=True)
+    hist_alarm_table = system_helper.get_events_table(limit=15, show_uuid=True)
 
     for name in new_alarm_list:
         kwargs = {"Event Log ID": name}
@@ -114,7 +114,7 @@ def _test_system_alarm_on_host_lock():
 
     #Verify the alarm clear is shown in the historical table
     LOG.info("Verify event-list command returns list of active alarms")
-    hist_alarm_table = system_helper.get_events_table(num=15, uuid=True)
+    hist_alarm_table = system_helper.get_events_table(limit=15, show_uuid=True)
 
     for name in new_alarm_list:
         kwargs = {"Event Log ID": name}

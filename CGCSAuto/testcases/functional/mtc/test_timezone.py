@@ -88,9 +88,9 @@ def test_modify_timezone_alarm_timestamps(get_out_of_date_alarms):
         - N/A
     """
     LOG.tc_step("Gathering pre-modify timezone data")
-    table_ = system_helper.get_events_table(num=1, uuid=True)
-    event_uuid = table_parser.get_column(table_, 'UUID')
-    pre_timestamp = table_parser.get_column(table_, 'Time Stamp')
+    event = system_helper.get_events(rtn_vals=('UUID', 'Event Log ID', 'Entity Instance ID', 'State', 'Time Stamp'),
+                                     limit=1, combine_entries=False)[0]
+    event_uuid, event_log_id, entity_instance_id, event_state, pre_timestamp = event
     post_timestamp = ''
 
     current_timezone = get_timezone()
@@ -107,12 +107,14 @@ def test_modify_timezone_alarm_timestamps(get_out_of_date_alarms):
     system_helper.wait_for_alarms_gone(out_of_date_alarms)
 
     LOG.tc_step("Waiting for timezone change to effect events/alarms")
-    timeout = time.time() + 30
+    timeout = time.time() + 60
     while time.time() < timeout:
-        table_ = mtc_helper.search_event(**{"UUID": event_uuid})
-        post_timestamp = table_parser.get_column(table_, 'Time Stamp')
+        post_event = system_helper.get_events(rtn_vals=('Time Stamp', ), event_id=event_log_id,
+                                              entity_id=entity_instance_id, uuid=event_uuid, state=event_state)[0]
+        post_timestamp = post_event[0]
         if pre_timestamp != post_timestamp:
             break
+        time.sleep(5)
 
     LOG.tc_step("Checking timezone change effected timestamp")
     assert pre_timestamp != post_timestamp, "Timestamp did not change with timezone change."

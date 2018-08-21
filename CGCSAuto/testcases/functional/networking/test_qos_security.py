@@ -215,10 +215,7 @@ def test_max_reached_creation_fail(tenant):
     Test Teardown:
         - Delete security groups created
     """
-    if tenant == 'tenant1':
-        auth_info = Tenant.TENANT1
-    elif tenant == 'tenant2':
-        auth_info = Tenant.TENANT2
+    auth_info = Tenant.get(tenant)
 
     # nova_helper.get_quotas uses nova quota-show, which does not include secgroup* fields
     LOG.tc_step("Retrive quota and usage information")

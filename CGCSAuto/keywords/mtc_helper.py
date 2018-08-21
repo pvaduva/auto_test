@@ -7,10 +7,8 @@ from io import StringIO
 
 import pexpect
 
-from consts.auth import Tenant
 from consts.timeout import MTCTimeout
 from keywords import system_helper, host_helper
-from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -390,73 +388,6 @@ def is_controller_swacted(prev_active, prev_standby,
     return 0 == code
 
 
-def search_event(event_id='', type_id='', instance_id='', severity='', start='', end='', limit=30,
-                 con_ssh=None, auth_info=Tenant.get('admin'), strict=False, regex=False, **kwargs):
-    """
-    Search for event using fm event-list
-    Args:
-        event_id (str):       Event ID to search for
-        type_id (str):        Type ID
-        instance_id (str):    Entity Instance ID
-        severity (str):       valid values include: critical, major, minor
-        start (str):          start time of events
-        end (str):            end time of events
-        limit (int):          upper limit of number of records to get
-        con_ssh:        connection to the active controller
-        auth_info:      Authentitcation information
-        strict (bool):
-        regex (bool):   using regex
-        **kwargs:
-
-    Returns:
-        table of events matching the searching criteria
-    """
-
-    base_cmd = 'event-list --nowrap --nopaging --include_suppress --uuid'
-    criteria = []
-
-    if event_id:
-        criteria.append('event_log_id={}'.format(event_id))
-
-    if start:
-        criteria.append('start={}'.format(start))
-
-    if end:
-        criteria.append('end={}'.format(end))
-
-    if type_id:
-        criteria.append('entity_type_id="{}"'.format(type_id))
-
-    if instance_id:
-        criteria.append('entity_instance_id="{}"'.format(instance_id))
-
-    if severity:
-        criteria.append('severity="{}"'.format(severity))
-
-    limit = '-l {}'.format(limit) if limit >= 1 else ''
-
-    query = '' 
-    if criteria:
-        query = '-q "{}"'.format(';'.join(criteria))
-
-    cmd = '{} {} {}'.format(base_cmd, limit, query)
-
-    table = table_parser.table(cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info))
-
-    matched = table
-    if table and table['values'] and kwargs:
-        matched = table_parser.filter_table(table, strict=strict, regex=regex, **kwargs)
-
-    if matched['values']:
-        pass
-    else:
-        LOG.warn('No matched events found')
-        LOG.info('search event: cmd={}'.format(cmd))
-        LOG.info('search event kwargs={}'.format(kwargs))
-
-    return matched
-
-
 def wait_for_sm_process_events(service, host, target_status, expecting=True, severity='major',
                                last_events=None, process_type='sm', timeout=60, interval=3, con_ssh=None):
 
@@ -489,8 +420,8 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
     while time.time() < stop_time:
         retry += 1
         matched_events[:] = []
-        events_table = search_event(
-            event_id=event_log_id,
+        events_table = system_helper.get_events_table(
+            event_log_id=event_log_id, show_uuid=True,
             start=start_time, limit=10, con_ssh=con_ssh, regex=True, **search_keys)
 
         if not events_table or not events_table['values']:
@@ -816,8 +747,8 @@ def is_process_running(pid, host, con_ssh=None, retries=3, interval=3):
     return False, ''
 
 
-def _get_last_events_timestamps(limit=1, event_log_id=''):
-    latest_events = search_event(event_id=event_log_id, limit=limit)
+def _get_last_events_timestamps(limit=1, event_log_id=None):
+    latest_events = system_helper.get_events_table(limit=limit, event_log_id=event_log_id, show_uuid=True)
 
     return latest_events
 

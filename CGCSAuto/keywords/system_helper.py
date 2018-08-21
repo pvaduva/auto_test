@@ -462,6 +462,8 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
     rtn_vals_list = zip(*rtn_vals_list)
     if combine_entries:
         rtn_vals_list = ['::::'.join(vals) for vals in rtn_vals_list]
+    else:
+        rtn_vals_list = list(rtn_vals_list)
 
     return rtn_vals_list
 
@@ -529,15 +531,81 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.get('adm
     return 0, succ_msg
 
 
-def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, event_log_id=None, entity_type_id=None,
-                     entity_instance_id=None, severity=None, start=None, end=None, query_key=None,
+def get_events(rtn_vals=('Event Log ID', 'Entity Instance ID'), limit=10, event_id=None, entity_id=None,
+               severity=None, show_suppress=False, start=None, end=None, state=None, show_uuid=True,
+               strict=False, time_stamp=None, reason_text=None, uuid=None,
+               con_ssh=None, auth_info=Tenant.get('admin'), combine_entries=True, use_telnet=False, con_telnet=None):
+    """
+    Get a list of alarms with values for specified fields.
+    Args:
+        rtn_vals (tuple): fields to get values for
+        limit (int)
+        event_id (str): filter event using event log id
+        reason_text (str): reason text to filter out the table (strict defined in param)
+        entity_id (str): entity instance id to filter out the table (strict defined in param)
+        severity (str): severity such as 'critical', 'major'
+        show_suppress (bool): whether to show suppressed events. Default to False.
+        show_uuid (bool): Whether to show uuid in event table
+        start (str): display events after this time stamp
+        end (str): display events prior to this time stamp
+        time_stamp (str): exact timestamp for the event, filter after events displayed
+        uuid (str)
+        strict (bool): whether to perform strict filter on reason text, or time_stamp
+        con_ssh (SSHClient):
+        auth_info (dict):
+        combine_entries (bool): return list of strings when set to True, else return a list of tuples.
+            e.g., when True, returns ["800.003::::cluster=829851fa", "250.001::::host=controller-0"]
+                  when False, returns [("800.003", "cluster=829851fa"), ("250.001", "host=controller-0")]
+        use_telnet
+        con_telnet
+
+    Returns (list): list of events with values of specified fields
+
+    """
+
+    table_ = get_events_table(show_uuid=show_uuid, limit=limit, event_log_id=event_id, entity_instance_id=entity_id,
+                              show_suppress=show_suppress, con_ssh=con_ssh, auth_info=auth_info,
+                              use_telnet=use_telnet, con_telnet=con_telnet, start=start, end=end, severity=severity)
+
+    kwargs_dict = {
+        'Reason Text': reason_text,
+        'Time Stamp': time_stamp,
+        'UUID': uuid,
+        'State': state,
+    }
+
+    kwargs = {}
+    for key, value in kwargs_dict.items():
+        if value is not None:
+            kwargs[key] = value
+
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+
+    rtn_vals_list = []
+    for header in rtn_vals:
+        vals = table_parser.get_column(table_, header)
+        if not vals:
+            vals = []
+        rtn_vals_list.append(vals)
+
+    LOG.warning('{}'.format(rtn_vals_list))
+    rtn_vals_list = list(zip(*rtn_vals_list))
+    if combine_entries:
+        rtn_vals_list = ['::::'.join(vals) for vals in rtn_vals_list]
+
+    return rtn_vals_list
+
+
+def get_events_table(limit=5, show_uuid=False, show_only=None, show_suppress=False, event_log_id=None,
+                     entity_type_id=None, entity_instance_id=None, severity=None, start=None, end=None, query_key=None,
                      query_value=None, query_type=None, con_ssh=None, auth_info=Tenant.get('admin'), use_telnet=False,
-                     con_telnet=None):
+                     con_telnet=None, regex=False, **kwargs):
     """
     Get a list of events with given criteria as dictionary
     Args:
-        num (int): max number of event logs to return
-        uuid (bool): whether to show uuid
+        limit (int): max number of event logs to return
+        show_uuid (bool): whether to show uuid
         show_only (str): 'alarms_and_events' or 'logs' to return only alarms_and_events or logs
         show_suppress (bool): whether or not to show suppressed alarms_and_events
         query_key (str): OBSOLETE. one of these: 'event_log_id', 'entity_instance_id', 'uuid', 'severity',
@@ -554,11 +622,13 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
         auth_info (dict):
         use_telnet
         con_telnet
+        regex (bool):
+        **kwargs: filter table after table returned
 
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
     """
-    args = '-l {}'.format(num)
+    args = '-l {}'.format(limit)
     if query_key is not None:
         if query_key in ['event_log_id', 'entity_type_id', 'entity_instance_id', 'severity', 'start', 'end']:
             if eval(query_key) is not None:
@@ -591,7 +661,7 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
         args += " -q '{}'".format(query_string)
 
     args += ' --nowrap --nopaging'
-    if uuid:
+    if show_uuid:
         args += ' --uuid'
     if show_only:
         args += ' --{}'.format(show_only.lower())
@@ -600,7 +670,10 @@ def get_events_table(num=5, uuid=False, show_only=None, show_suppress=False, eve
 
     table_ = table_parser.table(cli.fm('event-list ', args, ssh_client=con_ssh, auth_info=auth_info,
                                        use_telnet=use_telnet, con_telnet=con_telnet,))
-    # table_ = _compose_events_table(table_, uuid=uuid)
+
+    if kwargs:
+        table_ = table_parser.filter_table(table_, regex=regex, **kwargs)
+
     return table_
 
 
@@ -665,7 +738,7 @@ def wait_for_events(timeout=60, num=30, uuid=False, show_only=None, query_key=No
     """
     end_time = time.time() + timeout
     while time.time() < end_time:
-        events_tab = get_events_table(num=num, uuid=uuid, show_only=show_only, event_log_id=event_log_id,
+        events_tab = get_events_table(limit=num, show_uuid=uuid, show_only=show_only, event_log_id=event_log_id,
                                       entity_type_id=entity_type_id, entity_instance_id=entity_instance_id,
                                       severity=severity, start=start, end=end, query_key=query_key,
                                       query_value=query_value, query_type=query_type,

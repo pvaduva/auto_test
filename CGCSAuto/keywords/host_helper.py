@@ -1032,7 +1032,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
     return rtn
 
 
-def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=5,
+def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=10,
                                    reconnect=True, use_telnet=False,  con_telnet=None):
     cli_enable_end_time = time.time() + timeout
 
