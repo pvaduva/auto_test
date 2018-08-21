@@ -27,7 +27,7 @@ def create_node_boot_dict(configname, settings_filepath=None, settings_server_co
         if settings_server_conn:
             boot_device_dict = {}
             rc, output = settings_server_conn.exec_cmd("cat {}".format(settings_filepath))
-            for line in output.splitlines:
+            for line in output.splitlines():
                 if line and re.search("(controller|compute|storage)-\d+", line):
                     key = line[:line.find("=")].strip()
                     val = line[line.find("=") + 1:].strip()
