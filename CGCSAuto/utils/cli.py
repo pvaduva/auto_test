@@ -97,10 +97,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                 if cmd == 'sw-manager':
                     flags += ' --os-interface internal'
 
-            if cmd == 'dcmanager':
-                # workaround for CGTS-10031
-                auth_args.replace('--os-project-name', '--os-tenant-name')
-            else:
+            if cmd != 'dcmanager':
                 flags += ' --os-region-name {}'.format(auth_info['region'])
 
             flags = '{} {}'.format(auth_args.strip(), flags.strip())
@@ -109,7 +106,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
     # workaround for CGTS-10031
     if complete_cmd.startswith('dcmanager'):
-        complete_cmd.replace('--os-project-name', '--os-tenant-name')
+        complete_cmd = complete_cmd.replace('--os-project-name', '--os-tenant-name')
 
     if use_telnet:
         exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, timeout=timeout)

@@ -396,11 +396,14 @@ def create_image(name=None, image_id=None, source_image_file=None,
     return 0, actual_id, msg
 
 
-def wait_for_image_sync_on_subcloud(image_id):
+def wait_for_image_sync_on_subcloud(image_id, timeout=1000, delete=False):
     if ProjVar.get_var('IS_DC'):
-        if dc_helper.get_subclouds(rtn_val='sync', name=ProjVar.get_var('PRIMARY_SUBCLOUD'))[0] == 'in-sync':
+        if dc_helper.get_subclouds(rtn_val='management', name=ProjVar.get_var('PRIMARY_SUBCLOUD'))[0] == 'managed':
             auth_info = Tenant.get_primary()
-            wait_for_image_appear(image_id, auth_info=auth_info)
+            if delete:
+                _wait_for_images_deleted(images=image_id, auth_info=auth_info, fail_ok=False, timeout=timeout)
+            else:
+                wait_for_image_appear(image_id, auth_info=auth_info, timeout=timeout)
 
 
 def wait_for_image_appear(image_id, auth_info=None, timeout=900, fail_ok=False):
@@ -499,7 +502,8 @@ def image_exists(image_id, con_ssh=None, auth_info=Tenant.get('admin')):
 
 
 def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok=False, con_ssh=None,
-                  auth_info=Tenant.get('admin'), sys_con_for_dc=True, del_subcloud_cache=True):
+                  auth_info=Tenant.get('admin'), sys_con_for_dc=True, wait_for_subcloud_sync=True,
+                  del_subcloud_cache=True):
     """
     Delete given images
 
@@ -564,16 +568,18 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
             format(images_undeleted, timeout)
         return 2, msg
 
-    if ProjVar.get_var('IS_DC') and del_subcloud_cache:
-        LOG.info("Attempt to delete glance image cache on subclouds.")
-        # glance image cache on subcloud expires only after 24 hours of glance image-delete. So it will fill up the
-        # /opt/cgcs file system quickly in automated tests. Workaround added to manually delete the glance cache.
-        subclouds = dc_helper.get_subclouds(rtn_val='name', avail='online', sync='in-sync')
-        for subcloud in subclouds:
-            subcoud_ssh = ControllerClient.get_active_controller(name=subcloud, fail_ok=True)
-            if subcoud_ssh:
-                for img in images_deleted:
-                    subcoud_ssh.exec_sudo_cmd('rm -f /opt/cgcs/glance/image-caches/{}'.format(img))
+    if ProjVar.get_var('IS_DC') and wait_for_subcloud_sync:
+        wait_for_image_sync_on_subcloud(images_deleted, timeout=1000, delete=True)
+        if del_subcloud_cache:
+            LOG.info("Attempt to delete glance image cache on subclouds.")
+            # glance image cache on subcloud expires only after 24 hours of glance image-delete. So it will fill up the
+            # /opt/cgcs file system quickly in automated tests. Workaround added to manually delete the glance cache.
+            subclouds = dc_helper.get_subclouds(rtn_val='name', avail='online', mgmt='managed')
+            for subcloud in subclouds:
+                subcoud_ssh = ControllerClient.get_active_controller(name=subcloud, fail_ok=True)
+                if subcoud_ssh:
+                    for img in images_deleted:
+                        subcoud_ssh.exec_sudo_cmd('rm -f /opt/cgcs/glance/image-caches/{}'.format(img))
 
     LOG.info("image(s) are successfully deleted: {}".format(imgs_to_del))
     return 0, "image(s) deleted successfully"
