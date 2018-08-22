@@ -28,8 +28,7 @@ def telnet_logger(host):
 
 
 TELNET_REGEX = '([\w]+-[\d]+)[ login:|:~\$]'
-TELNET_LOGIN_PROMPT = '[controller|compute|storage]-[\d]+ login:'
-TELNET_LOGIN_PROMPT_BASE = '{}(-[\d]+)? login:'
+TELNET_LOGIN_PROMPT = Prompt.LOGIN_PROMPT
 NEWPASSWORD_PROMPT = ''
 
 
@@ -95,11 +94,7 @@ class TelnetClient(Telnet):
 
     def login(self, expect_prompt_timeout=3, fail_ok=False):
         self.send()
-        if self.hostname:
-            login_prompt = TELNET_LOGIN_PROMPT_BASE.format(self.hostname)
-        else:
-            login_prompt = TELNET_LOGIN_PROMPT
-        index = self.expect([login_prompt, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
+        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
         self.flush()
         code = 0
         if index == 0:
