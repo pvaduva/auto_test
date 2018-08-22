@@ -29,6 +29,7 @@ class HostTimeout:
     POST_INSTALL_SCRIPTS = 3600
 
 
+
 class VMTimeout:
     STATUS_CHANGE = 300
     STATUS_VERIFY_RESIZE = 30

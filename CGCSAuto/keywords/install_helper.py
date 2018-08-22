@@ -13,7 +13,7 @@ from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FI
     PREFIX_CLONED_IMAGE_FILE
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar
-from consts.timeout import HostTimeout
+from consts.timeout import HostTimeout, ImageTimeout
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, vlm_helper, common, network_helper
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
@@ -512,7 +512,7 @@ def download_image(lab, server, guest_path):
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
             server.ssh_conn.rsync(guest_path, local_ip, os.path.join(temp_path, image_file),
                               dest_user=lab['local_user'],
-                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+                              dest_password=lab['local_password'], pre_opts=local_pre_opts, timeout=ImageTimeout.CREATE)
 
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, image_file),
                                                            dest_path=TiSPath.IMAGES)
