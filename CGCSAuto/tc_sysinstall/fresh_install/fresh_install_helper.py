@@ -84,36 +84,35 @@ def set_build_id(build_dir, build_server_conn=None):
 
 def do_step(step_name=None):
     global completed_resume_step
-    if step_name:
-        step_name = step_name.lower().replace(' ', '_')
     skip_list = InstallVars.get_install_var("SKIP")
     current_step_num = str(LOG.test_step)
-    last_session_step = InstallVars.get_install_var("RESUME")
-    if 'lab_setup' in step_name:
-        global lab_setup_count
-        step_name = step_name + '-{}'.format(lab_setup_count)
-        lab_setup_count += 1
-    # if resume flag is given do_step if it's currently the specified resume step or a step after that point
-    if last_session_step:
-        resume = last_session_step == current_step_num or last_session_step == step_name and not completed_resume_step
-    else:
-        resume = True
+    resume_step = InstallVars.get_install_var("RESUME")
     in_skip_list = False
-    for skip_step in skip_list:
-        if step_name in skip_step:
-            if "lab_setup" in step_name and "lab_setup" in skip_step:
-                in_skip_list = step_name[-1] == skip_step[-1]
-            else:
-                in_skip_list = True
-    do = resume and current_step_num not in skip_list and not in_skip_list
-    for step_to_skip in skip_list:
-        step_to_skip = step_to_skip.lower()
-        if step_to_skip in step_name:
-            do = False
-            break
+
+    if step_name:
+        step_name = step_name.lower().replace(' ', '_')
+        if step_name == 'run_lab_setup':
+            global lab_setup_count
+            step_name = step_name + '-{}'.format(lab_setup_count)
+            lab_setup_count += 1
+        for skip_step in skip_list:
+            if step_name in skip_step.lower() or current_step_num == skip_step:
+                if "lab_setup" in step_name and "lab_setup" in skip_step:
+                    in_skip_list = step_name[-1] == skip_step[-1]
+                else:
+                    in_skip_list = True
+    else:
+        in_skip_list = current_step_num in skip_list
+    # if resume flag is given do_step if it's currently the specified resume step or a step after that point
+    if resume_step:
+        on_resume_step = (resume_step == current_step_num or resume_step == step_name) and not completed_resume_step
+    else:
+        on_resume_step = True
+    do = (completed_resume_step or on_resume_step) and not in_skip_list
     if not do:
         LOG.info("Skipping step")
-    completed_resume_step = resume
+    elif not completed_resume_step:
+        set_completed_resume_step(True)
 
     return do
 
