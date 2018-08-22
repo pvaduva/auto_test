@@ -513,13 +513,12 @@ def download_image(lab, server, guest_path):
             server.ssh_conn.rsync(guest_path, local_ip, os.path.join(temp_path, image_file),
                               dest_user=lab['local_user'],
                               dest_password=lab['local_password'], pre_opts=local_pre_opts, timeout=ImageTimeout.CREATE)
-
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, image_file),
                                                            dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
                               lab['controller-0 ip'],
-                              TiSPath.IMAGES, pre_opts=pre_opts)
+                              TiSPath.IMAGES, pre_opts=pre_opts, timeout=ImageTimeout.CREATE)
 
 
 def download_heat_templates(lab, server, load_path, heat_path=None):
