@@ -736,7 +736,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
             boot = conf_boot_type
 
         installer_steps = installconf["CONTROL"]
-        conf_resume_step = eval(installer_steps["RESUME_POINT"])
+        conf_resume_step = installer_steps["RESUME_POINT"]
         conf_final_step = installer_steps["STOP_POINT"]
         conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
         resume = conf_resume_step
