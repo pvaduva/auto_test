@@ -104,7 +104,7 @@ def do_step(step_name=None):
     else:
         in_skip_list = current_step_num in skip_list
     # if resume flag is given do_step if it's currently the specified resume step or a step after that point
-    if resume_step and resume_step.capitliaze != "False":
+    if resume_step:
         on_resume_step = (resume_step == current_step_num or resume_step == step_name) and not completed_resume_step
     else:
         on_resume_step = True
