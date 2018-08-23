@@ -77,7 +77,7 @@ def handle_args():
           R4 - 17.06
           R5 - 17.07
         """,
-        choices=['R2', 'R3', 'R4', 'R5'],
+        choices=['R2', 'R3', 'R4', 'R5', 'R6'],
         type=str,
         required=False)
 
@@ -243,6 +243,28 @@ def handle_args():
         Turn on host i/o caching 
         """,
         action='store_true')
+    parser.add_argument("--controller-disks", help=
+        """
+        Select the number of disks for an AIO controller vm. default is 2
+        """,
+        type=int, choices=[1,2,3])
+    parser.add_argument("--hostonly-adapter", help=
+        """
+        which host only network to use for setup. 
+        lab_setup.conf will change this later. 
+        """,
+        type=str)
+    parser.add_argument("--hostadapter-ip", help=
+        """
+        The IP address of the host only adapter
+        default is 10.10.10.254
+        """,
+        type=str)
+    parser.add_argument("--conf-files", help=
+        """
+        Path to the config file to use 
+        """,
+        action='append')
     # WEI TODO: remove 
     #parser.add_argument("--lvm", help=
     #    """
