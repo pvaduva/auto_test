@@ -1341,7 +1341,7 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
     LOG.info("Setting 1G memory to: {}".format(hugepage_num))
     mem_vals = get_host_mem_values(
             host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
-            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
+            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[int(proc_id)]
 
     pre_4k_total, pre_2m_total, pre_1g_total, pre_2m_avail, pre_mem_avail = [int(val) for val in mem_vals]
 
@@ -1473,7 +1473,7 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
     LOG.info("Setting host {}'s proc_id {} to contain {} 4k pages".format(host, proc_id, smallpage_num))
     mem_vals = get_host_mem_values(
             host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
-            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
+            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[proc_id]
 
     page_4k_total, page_2m_total, page_1g_total, page_2m_avail, mem_avail = [int(val) for val in mem_vals]
 
@@ -1514,23 +1514,30 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
         return 0, "4k memory is modified to {} in pending.".format(smallpage_num)
 
 
-def get_host_mem_values(host, headers, proc_id, wait_for_update=True, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_ssh=None, auth_info=Tenant.get('admin'),
+                        rtn_dict=True):
     """
     Get host memory values
     Args:
         host (str): hostname
-        headers (list):
-        proc_id (int|str): such as 0, '1'
+        headers (list|tuple):
+        proc_id (int|str|None|tuple|list): such as 0, '1'
         wait_for_update (bool): wait for vm_hp_pending_2M and vm_hp_pending_1G to be None (CGTS-7499)
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (list):
+    Returns (dict|list):  {<proc>(int): <mems>(list), ... } or [<proc0_mems>(list), <proc1_mems>(list), ...]
+        e.g., {0: [62018, 1]}
 
     """
 
     cmd = 'host-memory-list --nowrap'
     table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(proc_id, (str, int)):
+        proc_id = [int(proc_id)]
+    elif proc_id is None:
+        proc_id = [int(proc) for proc in table_parser.get_column(table_, 'processor')]
 
     if wait_for_update:
         end_time = time.time() + 300
@@ -1539,7 +1546,7 @@ def get_host_mem_values(host, headers, proc_id, wait_for_update=True, con_ssh=No
             pending_1g = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_1G')]
 
             for i in range(len(pending_2m)):
-                if pending_2m[i] or pending_1g[i]:
+                if (pending_2m[i] is not None) or (pending_1g[i] is not None):
                     break
             else:
                 LOG.debug("No pending 2M or 1G mem pages")
@@ -1551,12 +1558,25 @@ def get_host_mem_values(host, headers, proc_id, wait_for_update=True, con_ssh=No
         else:
             raise exceptions.SysinvError("mem_total is smaller than mem_avail in 5 minutes")
 
-    res = []
-    for header in headers:
-        value = table_parser.get_values(table_, header, strict=False, **{'processor': str(proc_id)})[0]
-        res.append(value)
+    res = {}
+    res_list = []
+    for proc in proc_id:
+        vals = []
+        for header in headers:
+            value = table_parser.get_values(table_, header, strict=False, **{'processor': str(proc)})[0]
+            try:
+                value = eval(value)
+            finally:
+                vals.append(value)
+        if rtn_dict:
+            res[proc] = vals
+        else:
+            res_list.append(vals)
 
-    return res
+    if rtn_dict:
+        return res
+    else:
+        return res_list
 
 
 def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.get('admin'), con_ssh=None):
@@ -1573,7 +1593,7 @@ def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.get('admin'), con
     """
     mem_vals = get_host_mem_values(
         host, ['mem_total(MiB)', 'mem_avail(MiB)', 'avs_hp_size(MiB)', 'avs_hp_total'],
-        proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)
+        proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[int(proc_id)]
 
     mem_total, mem_avail, avs_hp_size, avs_hp_total = [int(val) for val in mem_vals]
 

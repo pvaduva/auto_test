@@ -1660,7 +1660,71 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_paths, target_type='el
         return values_list
 
 
-def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
+def _get_actual_mems(host):
+    headers = ('mem_avail(MiB)', 'vm_hp_total_1G', 'vm_hp_pending_1G')
+    displayed_mems = system_helper.get_host_mem_values(host=host, headers=headers, wait_for_update=False)
+
+    actual_mems = {}
+    for proc in displayed_mems:
+        mem_avail, total_1g, pending_1g = displayed_mems[proc]
+        actual_1g = total_1g if pending_1g is None else pending_1g
+
+        args = '-2M {} {} {}'.format(mem_avail, host, proc)
+        code, output = cli.system('host-memory-modify', args, fail_ok=True, rtn_list=True)
+        if code == 0:
+            raise exceptions.SysinvError('system host-memory-modify is not rejected when 2M pages exceeds mem_avail')
+
+        # Processor 0:No available space for 2M huge page allocation, max 2M pages: 27464
+        actual_mem = int(re.findall('max 2M pages: (\d+)', output)[0]) * 2
+        actual_mems[proc] = (actual_mem, actual_1g)
+
+    return actual_mems
+
+
+def modify_host_memory(host, proc, gib_1g=None, gib_4k_range=None, actual_mems=None,
+                       con_ssh=None, auth_into=Tenant.get('admin')):
+    """
+
+    Args:
+        host (str):
+        gib_1g (None|int): 1g page to set
+        gib_4k_range (None|tuple):
+            None: no requirement on 4k page
+            tuple: (min_val(None|int), max_val(None|int)) make sure 4k page total gib fall between the range (inclusive)
+        actual_mems
+        con_ssh
+        auth_into
+
+    Returns:
+
+    """
+    args = ''
+    if not actual_mems:
+        actual_mems = _get_actual_mems(host=host)
+    mib_avail, page_1g = actual_mems[proc]
+
+    if gib_1g is not None:
+        page_1g = gib_1g
+        args += ' -1G {}'.format(gib_1g)
+    mib_avail_2m = mib_avail - page_1g*1024
+
+    if gib_4k_range:
+        min_4k, max_4k = gib_4k_range
+        if min_4k is not None and max_4k is not None:
+            gib_4k_final = (min_4k + max_4k)/2
+        elif min_4k is not None:
+            gib_4k_final = min_4k + 2
+        else:
+            gib_4k_final = max(0, max_4k-2)
+        mib_avail_2m = mib_avail_2m - gib_4k_final*1024
+
+    page_2m = int(mib_avail_2m/2)
+    args += ' -2M {} {} {}'.format(page_2m, host, proc)
+
+    cli.system('host-memory-modify', args, ssh_client=con_ssh, auth_info=auth_into)
+
+
+def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=False, con_ssh=None,
                     auth_info=Tenant.get('admin'), **kwargs):
     """
     Modify host cpu to given key-value pairs. i.e., system host-cpu-modify -f <function> -p<id> <num of cores> <host>
@@ -1668,7 +1732,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
 
     Args:
         host (str): hostname of host to be modified
-        function (str): cpu function to modify. e.g., 'shared'
+        cpu_function (str): cpu function to modify. e.g., 'shared'
         timeout (int): Timeout waiting for system host-cpu-modify cli to return
         fail_ok (bool):
         con_ssh (SSHClient):
@@ -1681,7 +1745,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
         (2, "Number of actual log_cores for <proc_id> is different than number set. Actual: <num>, expect: <num>")
 
     """
-    LOG.info("Modifying host {} CPU function {} to {}".format(host, function, kwargs))
+    LOG.info("Modifying host {} CPU function {} to {}".format(host, cpu_function, kwargs))
 
     if not kwargs:
         raise ValueError("At least one key-value pair such as p0=1 has to be provided.")
@@ -1700,7 +1764,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
     if not proc_args:
         raise ValueError("At least one key-value pair should have non-None value. e.g., p1=2")
 
-    subcmd = ' '.join(['host-cpu-modify', '-f', function.lower().strip(), proc_args])
+    subcmd = ' '.join(['host-cpu-modify', '-f', cpu_function.lower().strip(), proc_args])
     code, output = cli.system(subcmd, host, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info, timeout=timeout,
                               rtn_list=True)
 
@@ -1709,7 +1773,7 @@ def modify_host_cpu(host, function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail_ok=
 
     LOG.info("Post action check for host-cpu-modify...")
     table_ = table_parser.table(output)
-    table_ = table_parser.filter_table(table_, assigned_function=function)
+    table_ = table_parser.filter_table(table_, assigned_function=cpu_function)
 
     threads = get_host_threads_count(host, con_ssh=con_ssh)
 

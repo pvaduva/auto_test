@@ -69,7 +69,7 @@ class GuestImages:
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
     # Image files name and size from yow-cgcs-test.wrs.com:/sandbox/images
-    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
+    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>, <actual file size>
     IMAGE_FILES = {
         'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 3, 'ubuntu_14.qcow2', 0.3),
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),

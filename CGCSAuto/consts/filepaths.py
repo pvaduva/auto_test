@@ -119,3 +119,8 @@ class IxiaPath:
     CFG_500FPS = "D:/CGCS/IxNetwork/cgcsauto/pair_at_500fps.ixncfg"
     WCP35_60_Traffic = "D:/CGCS/IxNetwork/cgcsauto/WCP35_L3_208Vms.ixncfg"
     CFG_UDP = "D:/CGCS/IxNetwork/cgcsauto/udp.ixncfg"
+
+
+class CompConfPath:
+    COMP_EXTEND = '/etc/nova/compute_extend.conf'
+    COMP_RESERVED = '/etc/nova/compute_reserved.conf'
