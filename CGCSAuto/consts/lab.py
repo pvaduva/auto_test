@@ -773,7 +773,7 @@ def update_lab(lab_dict_name=None, lab_name=None, floating_ip=None, **kwargs):
     Returns (dict): updated lab dict
 
     """
-    if not lab_dict_name or not lab_name:
+    if not lab_name and not lab_dict_name:
         from consts.proj_vars import ProjVar
         lab_name = ProjVar.get_var('LAB').get('short_name', None)
         if not lab_name:
