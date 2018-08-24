@@ -666,7 +666,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
     Get or create a glance image with given guest OS
     Args:
         guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
-                cgcs-guest, vxworks-guest
+                cgcs-guest, vxworks-guest, debian-8-m-agent
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
         cleanup (str|None)

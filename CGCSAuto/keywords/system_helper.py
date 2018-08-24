@@ -3026,7 +3026,7 @@ def disable_murano(con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     if res == 1:
         return 1, output
 
-    msg = "Enabled Murano Service"
+    msg = "Disabled Murano Service"
 
     return 0, msg
 
