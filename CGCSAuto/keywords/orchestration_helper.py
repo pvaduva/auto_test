@@ -529,7 +529,7 @@ def get_current_strategy_details(orchestration, conn_ssh=None):
         apply_phase_values = {}
         if len(strategy_lines) > 0:
             for line in strategy_lines:
-                pairs = line.split(':')
+                pairs = line.split(':', 1)
                 strategy_values[pairs[0].strip()] = pairs[1].strip()
             rtn['strategy'] = strategy_values
         if len(build_phase_lines) > 0:
@@ -543,7 +543,7 @@ def get_current_strategy_details(orchestration, conn_ssh=None):
 
         if len(apply_phase_lines) > 0:
             for line in apply_phase_lines:
-                pairs = line.split(':')
+                pairs = line.split(':', 1)
                 if pairs[0].strip() == "stages":
                     break
                 apply_phase_values[pairs[0].strip()] = pairs[1].strip()
