@@ -8,7 +8,7 @@ import time
 
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import EventLogID, BackendState, BackendTask
+from consts.cgcs import EventLogID, BackendState, BackendTask, MULTI_REGION_MAP
 from keywords import system_helper, host_helper
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, get_cli_client
@@ -506,7 +506,7 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
             raise exceptions.TimeoutException(err_msg)
 
 
-def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.ADMIN):
+def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.get('admin')):
     # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
     if 'ceph' in backend:
         backend = 'ceph-store'
@@ -520,7 +520,7 @@ def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.ADMI
     return table_
 
 
-def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get storage backend pool allocation info
 
@@ -556,7 +556,7 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.
     return backend_info
 
 
-def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.get('admin')):
     table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
     vals = []
     if isinstance(fields, str):
@@ -694,7 +694,7 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         return rc, output
 
 
-def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.ADMIN, **filters):
+def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.get('admin'), **filters):
     table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
 
     filters['FS Name'] = fs_name
@@ -805,10 +805,10 @@ def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True)
 
 
 def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rtn_val='free capacity (GiB)',
-                      con_ssh=None, auth_info=Tenant.ADMIN):
+                      con_ssh=None, auth_info=Tenant.get('admin')):
     auth_info_tmp = dict(auth_info)
     region = ProjVar.get_var('REGION')
-    if region != 'RegionOne':
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
         if service != 'cinder':
             auth_info_tmp['region'] = 'RegionOne'
 

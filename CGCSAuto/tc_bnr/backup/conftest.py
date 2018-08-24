@@ -38,15 +38,14 @@ def setup_test_session(global_setup):
     TIS ssh was already set up at collecting phase.
     """
 
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    setups.set_env_vars(con_ssh)
     setups.copy_test_files()
 
     # set build id to be used to upload/write test results
     setups.get_build_info(con_ssh)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
     setups.set_session(con_ssh=con_ssh)
 

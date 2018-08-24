@@ -6,10 +6,11 @@ from pexpect import EOF
 from string import ascii_lowercase, ascii_uppercase, digits
 
 from consts.auth import Tenant, HostLinuxCreds, CliAuth
-from consts.cgcs import Prompt
+from consts.cgcs import Prompt, EventLogID
 from consts.proj_vars import ProjVar
-from consts.filepaths import SecurityPath, BuildServerPath, WRSROOT_HOME
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from utils.tis_log import LOG
+from utils import exceptions
 from utils.clients.ssh import ControllerClient, SSHClient, SSHFromSSH
 from keywords import system_helper, keystone_helper
 
@@ -99,9 +100,9 @@ class LdapUserManager(object, metaclass=Singleton):
     """
 
     LINUX_ROOT_PASSWORD = HostLinuxCreds.get_password()
-    KEYSTONE_USER_NAME = Tenant.ADMIN['user']
+    KEYSTONE_USER_NAME = Tenant.get('admin')['user']
     KEYSTONE_USER_DOMAIN_NAME = 'Default'
-    KEYSTONE_PASSWORD = Tenant.ADMIN['password']
+    KEYSTONE_PASSWORD = Tenant.get('admin')['password']
     PROJECT_NAME = 'admin'
     PROJECT_DOMAIN_NAME = 'Default'
 
@@ -981,47 +982,58 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
     return ''.join(invalid_password)
 
 
-def modify_https(enable_https=True, check_first=True, timeout=400, check_interval=20, con_ssh=None,
-                 auth_info=Tenant.ADMIN, fail_ok=False):
+def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
     Modify the state of the lab from HTTP/HTTPS through 'system modify https_enable=<bool>'
 
     Args:
         enable_https (bool): True/False to enable https or not
         check_first (bool): if user want to check if the lab is already in the state that user try to enable
-        timeout (int): seconds before CLI timeout
-        check_interval (int): seconds between each interval check
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
 
-    Returns:
+    Returns (tuple):
+        (-1, msg)
+        (0, msg)
+        (1, <std_err>)
 
     """
-
     if check_first:
-        lab_state = keystone_helper.is_https_lab()
-        if lab_state and enable_https:
-            return -1, "lab is already in https state"
-        elif not lab_state and not enable_https:
-            return -1, "lab is already in http state"
+        is_https = keystone_helper.is_https_lab(source_openrc=False)
+        if (is_https and enable_https) or (not is_https and not enable_https):
+            msg = "Https is already {}. Do nothing.".format('enabled' if enable_https else 'disabled')
+            LOG.info(msg)
+            return -1, msg
 
-    res, output = system_helper.set_system_info(fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
-                                                https_enabled='{}'.format(str(enable_https).lower()))
-
+    LOG.info("Modify system to {} https".format('enable' if enable_https else 'disable'))
+    res, output = system_helper.modify_system(fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
+                                              https_enabled='{}'.format(str(enable_https).lower()))
     if res == 1:
         return 1, output
 
-    system_helper.wait_for_alarm_gone("250.001", con_ssh=con_ssh, timeout=timeout, check_interval=check_interval,
-                                      fail_ok=False)
+    LOG.info("Wait up to 60s for config out-of-date alarm with best effort.")
+    system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id='controller-', strict=False,
+                                 con_ssh=con_ssh, timeout=60, fail_ok=True)
 
-    if enable_https:
-        CliAuth.set_vars(HTTPS=True)
-        msg = "Enabled HTTPS on lab"
-        LOG.info('TODO: install certificate for https. There will be a warning msg if self-signed certificate is used')
+    LOG.info("Wait up to 600s for config out-of-date alarm to clear.")
+    system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE, con_ssh=con_ssh, timeout=600,
+                                      check_interval=20, fail_ok=False)
+
+    LOG.info("Wait up to 300s for public endpoints to be updated")
+    expt_status = 'enabled' if enable_https else 'disabled'
+    end_time = time.time() + 300
+    while time.time() < end_time:
+        if keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=False) == enable_https:
+            break
+        time.sleep(10)
     else:
-        CliAuth.set_vars(HTTPS=False)
-        msg = "Enabled HTTP on lab"
+        raise exceptions.KeystoneError("Https is not {} in 'openstack endpoint list'".format(expt_status))
+
+    msg = 'Https is {} successfully'.format(expt_status)
+    LOG.info(msg)
+    # TODO: install certificate for https. There will be a warning msg if self-signed certificate is used
+    CliAuth.set_vars(HTTPS=enable_https)
 
     return 0, msg
 

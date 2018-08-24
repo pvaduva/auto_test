@@ -33,6 +33,8 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 </html>
 """
 
+COMPLIANCE_PATTERN = 'refstack|compliance'
+
 
 def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None):
     """
@@ -76,8 +78,6 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches = \
             _get_local_results(source)
 
-    log_path = re.sub(TEST_SERVER_FS_AUTOLOG, TEST_SERVER_HTTP_AUTOLOG, log_path, count=1)
-
     lab = lab.upper()
     if not sys_config:
         try:
@@ -85,19 +85,30 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         except:
             sys_config = 'Unknown'
 
+    if patches:
+        patches = "\n<b>Patches: </b>{}".format(patches)
+    if sw_version:
+        sw_version = "\n<b>Software Version: </b>{}".format(sw_version)
+
+    summary = summary.replace('Passed: ', '<b>Passed: </b>').replace('Failed: ', '<b>Failed: </b>'). \
+        replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
+
+    if re.search(COMPLIANCE_PATTERN, testcases_res):
+        summary_txt = os.path.join(log_path.split(':')[1].strip(), 'compliance', 'summary.txt')
+        try:
+            with open(summary_txt) as f:
+                summary = f.read()
+        except:
+            print("summary.txt not found in {}!".format(log_path))
+            pass
+
     # convert contents to html format
     testcases_res = testcases_res.replace('\t', '&#9;').\
         replace('PASS', "<font color='green'>PASS</font>").\
         replace('FAIL', "<font color='red'>FAIL</font>").\
         replace('SKIP', "<font color='#FFC200'>SKIP</font>")
 
-    summary = summary.replace('Passed: ', '<b>Passed: </b>').replace('Failed: ', '<b>Failed: </b>').\
-        replace('Skipped: ', '<b>Skipped: </b>').replace('Total Executed: ', '<b>Total Executed: </b>')
-
-    if patches:
-        patches = "\n<b>Patches: </b>{}".format(patches)
-    if sw_version:
-        sw_version = "\n<b>Software Version: </b>{}".format(sw_version)
+    log_path = re.sub(TEST_SERVER_FS_AUTOLOG, TEST_SERVER_HTTP_AUTOLOG, log_path, count=1)
     with open(TMP_FILE, mode='w') as f:
         f.write(REPORT_FORMAT.format(lab, build, build_server, sys_config, sw_version, patches,
                                      overall_status, log_path, summary, testcases_res).replace('\n', '<br>'))

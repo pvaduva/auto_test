@@ -28,9 +28,9 @@ def get_interface_(request):
 
     # (a) create providernet
     args = provider_ + ' --type=vxlan'
-    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.get('admin')))
     if not table_parser.get_values(table_, 'id', **{'name': provider_}):
-        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
+        cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), rtn_list=True)
 
     nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
@@ -42,7 +42,7 @@ def get_interface_(request):
     computer_host = ""
     for nova_host in nova_hosts:
         args = '{} {}'.format(nova_host , "-a --nowrap")
-        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.get('admin')))
         list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
                                                                      'used by i/f': '[]'})
 
@@ -66,7 +66,7 @@ def get_interface_(request):
     def fin():
         # clean up
         cli.system('host-if-delete', '{} {}'.format(computer_host, new_interface_))
-        cli.neutron('providernet-delete', provider_, auth_info=Tenant.ADMIN)
+        cli.neutron('providernet-delete', provider_, auth_info=Tenant.get('admin'))
     request.addfinalizer(fin)
 
     return computer_host, provider_, new_interface_
@@ -190,7 +190,7 @@ def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_
     Returns:
 
     """
-    auth_url = Tenant.ADMIN['auth_url']
+    auth_url = Tenant.get('admin')['auth_url']
     if not re.search(Networks.IPV4_IP, auth_url):
         skip("This test can only run on IPv4 system")
 

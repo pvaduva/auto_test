@@ -18,9 +18,9 @@ class SkipHyperthreading:
 
 
 class SkipHostIf:
-    PCI_IF_UNAVAIL = "SRIOV and PCI-passthrough interface override info not found in lab_setup.conf"
-    PCIPT_IF_UNAVAIL = "PCI-passthrough interface override info not found in lab_setup.conf"
-    SRIOV_IF_UNAVAIL = "SRIOV interface override info not found in lab_setup.conf"
+    PCI_IF_UNAVAIL = "SRIOV or PCI-passthrough interface unavailable"
+    PCIPT_IF_UNAVAIL = "PCI-passthrough interface unavailable"
+    SRIOV_IF_UNAVAIL = "SRIOV interface unavailable"
     MGMT_INFRA_UNAVAIL = 'traffic control class is not defined in this lab'
 
 

@@ -1,8 +1,8 @@
-import time
 from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
 from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.recover_hosts import HostsToRecover
@@ -30,7 +30,7 @@ def get_vlan_providernet():
     kwargs = {'uuid': '{}'.format(target_interface_id)}
     providernets = table_parser.get_values(table_, 'provider networks', **kwargs)[0].split(",")
 
-    cmd = cli.neutron("providernet-range-list --nowrap", auth_info=Tenant.ADMIN)
+    cmd = cli.neutron("providernet-range-list --nowrap", auth_info=Tenant.get('admin'))
     table_ = table_parser.table(cmd)
     kwargs = {'type': 'vlan'}
     vlan_entries_table = table_parser.filter_table(table_, **kwargs)
@@ -85,51 +85,18 @@ def get_vlan_providernet():
 @fixture(scope='module', autouse=True)
 def revert_vlan_provider_nets(request, get_vlan_providernet):
     providernet_id, range_id, providernet_name, providernet_min, providernet_max, popped_entry = get_vlan_providernet
-    table_ = table_parser.table(cli.neutron("providernet-show {}".format(providernet_name), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.neutron("providernet-show {}".format(providernet_name), auth_info=Tenant.get('admin')))
     mtu = table_parser.get_value_two_col_table(table_, 'mtu')
 
     def _revert():
         LOG.fixture_step("Revert providernet {} with min:{} max:{}".format(providernet_name, providernet_min,
                                                                            providernet_max))
         cli.neutron("providernet-range-update --range {}-{} {}".format(providernet_min, providernet_max,
-                                                                       range_id), auth_info=Tenant.ADMIN)
+                                                                       range_id), auth_info=Tenant.get('admin'))
         LOG.fixture_step("Revert providernet {} with mtu:{}".format(providernet_name, mtu))
-        cli.neutron("providernet-update {} --mtu {}".format(providernet_name, mtu), auth_info=Tenant.ADMIN)
+        cli.neutron("providernet-update {} --mtu {}".format(providernet_name, mtu), auth_info=Tenant.get('admin'))
 
     request.addfinalizer(_revert)
-
-
-@fixture(scope='module', autouse=True)
-def modify_neutron_config(request):
-    host = system_helper.get_active_controller_name()
-
-    def get_audit_interval():
-        with host_helper.ssh_to_host(host) as host_ssh:
-            cmd = 'cat /etc/neutron/neutron.conf | grep --color=never pnet_audit_interval'
-            code, output = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-            pnet_audit_interval = output.split('=', 1)[-1].replace(" ", "")
-            return int(pnet_audit_interval)
-
-    def modify_pnet_audit_interval(old_interval, new_interval):
-        with host_helper.ssh_to_host(host) as host_ssh:
-            LOG.fixture_step("Setting pnet_audit_interval to {} seconds".format(new_interval))
-            cmd = "sed -i 's/#pnet_audit_interval = {}/#pnet_audit_interval = {}/' /etc/neutron/neutron.conf".format(
-                old_interval, new_interval)
-            host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
-
-    old_interval = get_audit_interval()
-    new_interval = 30
-
-    def _modify():
-        modify_pnet_audit_interval(old_interval, new_interval)
-        assert get_audit_interval() == new_interval, "pnet_audit_interval was not changed to {}".format(new_interval)
-
-    def _revert():
-        modify_pnet_audit_interval(new_interval, old_interval)
-        assert get_audit_interval() == old_interval, "pnet_audit_interval was not changed to {}".format(old_interval)
-
-    request.addfinalizer(_revert)
-    _modify()
 
 
 def test_providernet_connectivity_no_connectivity(get_vlan_providernet):
@@ -160,7 +127,7 @@ def test_providernet_connectivity_no_connectivity(get_vlan_providernet):
         skip("Communication failure detected over provider network before test starts... cannot test.")
     LOG.tc_step("Update providernet {} with min:{} max:{}".format(providernet_name, min_range, max_range + 2))
     cli.neutron("providernet-range-update --range {}-{} {}".format(min_range, max_range + 2, range_id),
-                auth_info=Tenant.ADMIN)
+                auth_info=Tenant.get('admin'))
 
     LOG.tc_step("Wait for alarm to appear")
     system_helper.wait_for_alarm(alarm_id=EventLogID.PROVIDER_NETWORK_FAILURE, entity_id=providernet_id, timeout=90,
@@ -168,7 +135,7 @@ def test_providernet_connectivity_no_connectivity(get_vlan_providernet):
 
     LOG.tc_step("Revert providernet {} with min:{} max:{}".format(providernet_name, min_range, max_range))
     cli.neutron("providernet-range-update --range {}-{} {}".format(min_range, max_range, range_id),
-                auth_info=Tenant.ADMIN, fail_ok=True)
+                auth_info=Tenant.get('admin'), fail_ok=True)
 
     LOG.tc_step("Wait for alarm to disappear")
     system_helper.wait_for_alarm_gone(EventLogID.PROVIDER_NETWORK_FAILURE, entity_id=providernet_id, timeout=90,
@@ -206,7 +173,7 @@ def test_vlan_no_connectivity_two_providernets(get_vlan_providernet):
         skip("Communication failure detected over provider network before test starts... cannot test.")
     LOG.tc_step("Update providernet {} with min:{} max:{}".format(providernet_name, min_range, max_range + 2))
     cli.neutron("providernet-range-update --range {}-{} {}".format(min_range, max_range + 2, range_id),
-                auth_info=Tenant.ADMIN)
+                auth_info=Tenant.get('admin'))
 
     LOG.tc_step("Verify no alarms appear for the providernet under test")
     alarm = system_helper.wait_for_alarm(alarm_id=EventLogID.PROVIDER_NETWORK_FAILURE, entity_id=popped_entry,
@@ -216,7 +183,7 @@ def test_vlan_no_connectivity_two_providernets(get_vlan_providernet):
 
     LOG.tc_step("Revert providernet {} with min:{} max:{}".format(providernet_name, min_range, max_range))
     cli.neutron("providernet-range-update --range {}-{} {}".format(min_range, max_range, range_id),
-                auth_info=Tenant.ADMIN, fail_ok=True)
+                auth_info=Tenant.get('admin'), fail_ok=True)
 
     LOG.tc_step("Verify no alarms for the providernet under test")
     alarms = system_helper.get_alarms(alarm_id=EventLogID.PROVIDER_NETWORK_FAILURE, entity_id=popped_entry,
@@ -341,7 +308,7 @@ def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
 
         elif param_filter == '--providernet_id':
             header = 'providernet_id'
-            cmd = cli.neutron("providernet-list", auth_info=Tenant.ADMIN)
+            cmd = cli.neutron("providernet-list", auth_info=Tenant.get('admin'))
             table_ = table_parser.table(cmd)
             value = table_parser.get_values(table_, 'id')[0]
 
@@ -350,17 +317,17 @@ def test_vlan_providernet_connectivity_cli_filters(get_vlan_providernet):
             value = host_helper.get_up_hypervisors()[0]
         elif param_filter == '--segmentation_id':
             header = 'segmentation_ids'
-            cmd = cli.neutron("providernet-range-list", auth_info=Tenant.ADMIN)
+            cmd = cli.neutron("providernet-range-list", auth_info=Tenant.get('admin'))
             table_ = table_parser.table(cmd)
             filtered_table = table_parser.filter_table(table_, **{'type': 'vlan'})
             value = table_parser.get_values(filtered_table, 'minimum')[0]
         LOG.tc_step("Verify output of providernet-connectivity-test-list using the {} filter".format(param_filter))
         cmd = cli.neutron('providernet-connectivity-test-list {} {}'.format(param_filter, value),
-                          auth_info=Tenant.ADMIN)
+                          auth_info=Tenant.get('admin'))
         queried_table = table_parser.table(cmd)
         columns = ['status', 'message', 'segmentation_ids']
         queried_table = table_parser.remove_columns(queried_table, columns)
-        cmd = cli.neutron('providernet-connectivity-test-list', auth_info=Tenant.ADMIN)
+        cmd = cli.neutron('providernet-connectivity-test-list', auth_info=Tenant.get('admin'))
         kwargs = {header: value}
         table_ = table_parser.table(cmd, combine_multiline_entry=True)
 
@@ -426,15 +393,15 @@ def _test_vlan_providernet_connectivity_different_mtu(get_vlan_providernet):
             - Revert pnet_audit_interval to 1800 seconds from 30 seconds
             - Revert MTU size to original
     """
-    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
+    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.get('admin'))
     first_test = table_parser.table(cmd)
 
     providernet_name = get_vlan_providernet[2]
     LOG.tc_step("Update mtu=576 for providernet {}".format(providernet_name))
-    cli.neutron("providernet-update {} --mtu 576".format(providernet_name), auth_info=Tenant.ADMIN)
+    cli.neutron("providernet-update {} --mtu 576".format(providernet_name), auth_info=Tenant.get('admin'))
 
     LOG.tc_step("Verify the mtu change did not effect the providernet-connectivity-test-list")
-    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.ADMIN)
+    cmd = cli.neutron("providernet-connectivity-test-list", auth_info=Tenant.get('admin'))
     second_test = table_parser.table(cmd)
     assert first_test == second_test, "MTU change impacted providernet-connectivity-test-list"
 

@@ -242,15 +242,18 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
 
     for host in computes:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        LOG.info('compute node: {} is successfully installed'.format(host))
 
     for host in storages:
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        LOG.info('storage node: {} is successfully installed'.format(host))
 
     while len(controllers) > 1:
-        host = controllers.pop()
+        host = controllers.pop(0)
 
         if not host_helper.is_active_controller(host, con_ssh=con_ssh):
             patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+            LOG.info('controller node: {} is successfully installed'.format(host))
         else:
             controllers.append(host)
 
@@ -264,6 +267,7 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
             host_helper.swact_host(host)
 
         patching_helper.host_install(host, reboot_required=reboot_required, con_ssh=con_ssh)
+        LOG.info('the previous active controller node: {} is successfully installed'.format(host))
         
     if patch_ids:
 
@@ -468,7 +472,7 @@ def check_if_ready_for_patching():
         skip('Not all hosts are unlocked, skip patch testing')
         return
 
-    alarm_table = table_parser.table(cli.system('alarm-list'))
+    alarm_table = table_parser.table(cli.fm('alarm-list'))
     alarm_severity_list = table_parser.get_column(alarm_table, 'Severity')
     assert 'major' or 'critical' not in alarm_severity_list, \
         'There are active alarms:{}, skip patch testing'

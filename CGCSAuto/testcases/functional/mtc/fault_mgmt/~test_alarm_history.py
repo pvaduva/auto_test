@@ -18,20 +18,20 @@ from utils.tis_log import LOG
 # @mark.p1
 def _test_system_alarm_on_host_lock():
     """
-    Verify system event-list command in the system upon host-lock
+    Verify fm event-list command in the system upon host-lock
 
     Scenario:
-    1. Execute "system alarm-list" command in the system.
+    1. Execute "fm alarm-list" command in the system.
     2. Lock one compute and wait 30 seconds.
     3. Verify commands return list of active alarms in table with expected
     rows.
     """
 
-    LOG.info("Execute system alarm-list. Verify header of " +
+    LOG.info("Execute fm alarm-list. Verify header of " +
              "a table consist of correct items")
 
     # Get and save the list of existing alarms present in the system
-    res, out = cli.system('alarm-list', rtn_list=True)
+    res, out = cli.fm('alarm-list', rtn_list=True)
     alarm_list = table_parser.table(out)
 
     if len(alarm_list['values']) == 0:
@@ -76,7 +76,7 @@ def _test_system_alarm_on_host_lock():
 
     # Verify the new alarm is present in the historical alarm and active alarm lists
     LOG.info("Verify alarm-list command returns list of active alarms")
-    res, out = cli.system('alarm-list', rtn_list=True)
+    res, out = cli.fm('alarm-list', rtn_list=True)
     new_active_alarm_table = table_parser.table(out)
 
     if len(alarm_list['values']) == 0:
@@ -127,7 +127,7 @@ def _test_system_alarm_on_host_lock():
 
     #Verify the alarm disappears from the active alarm table
     LOG.info("Verify alarm-list command returns list of active alarms")
-    res, out = cli.system('alarm-list', rtn_list=True)
+    res, out = cli.fm('alarm-list', rtn_list=True)
     new_active_alarm_table = table_parser.table(out)
 
     active_alarms = []

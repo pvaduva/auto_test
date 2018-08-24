@@ -116,7 +116,6 @@ def pre_swift_check():
 
 
 def get_large_img_file():
-    client = get_cli_client()
     if not ProjVar.get_var('REMOTE_CLI'):
         cmd = "df -h ~ | awk ' {print $4}'"
         rc, output = client.exec_cmd(cmd)
@@ -131,7 +130,7 @@ def get_large_img_file():
 
     obj_dir = get_obj_dir()
     dest_dir = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
-    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300, con_ssh=client)
+    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300)
     large_filename = GuestImages.IMAGE_FILES['win_2012'][2]
     large_file_info = get_test_obj_file_names(pattern=large_filename)
     return large_file_info
@@ -152,6 +151,9 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
 
     if pool_size == 'default' and pre_swift_check[0]:
         skip("Swift is already provisioned")
+
+    if pool_size == 'fixed_size' and pre_swift_check[0]:
+        skip("Swift is already provisioned and set to non-default pool value")
 
     object_pool_gib = None
     cinder_pool_gib = ceph_backend_info['cinder_pool_gib']

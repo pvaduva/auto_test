@@ -11,6 +11,7 @@ from pytest import mark, skip
 
 from utils.tis_log import LOG
 
+from consts.cgcs import GuestImages
 from consts.auth import Tenant
 from keywords import common, host_helper, ceilometer_helper, network_helper, glance_helper, system_helper, \
     gnocchi_helper
@@ -43,12 +44,12 @@ from keywords import common, host_helper, ceilometer_helper, network_helper, gla
 #         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
-def _wait_for_measurements(meter, resource_type, extra_query, start_time, timeout=720, check_interval=60):
+def _wait_for_measurements(meter, resource_type, extra_query, start_time, overlap=None, timeout=720, check_interval=60):
     end_time = time.time() + timeout
 
     while time.time() < end_time:
         values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type=resource_type, start=start_time,
-                                                        extra_query=extra_query)
+                                                        overlap=overlap, extra_query=extra_query)[1]
         if values:
             return values
 
@@ -71,19 +72,27 @@ def test_measurements_for_metric(meter):
     now = datetime.utcnow()
     start = (now - timedelta(minutes=15))
     start = start.strftime("%Y-%m-%dT%H:%M:%S")
-    image_name = glance_helper.get_images(rtn_val='name')[0]
+    image_name = GuestImages.DEFAULT_GUEST
     resource_type = 'image'
     extra_query = "name='{}'".format(image_name)
+    overlap = None
 
-    values = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type=resource_type, start=start,
-                                                    extra_query=extra_query)
+    code, output = gnocchi_helper.get_aggregated_measures(metrics=meter, resource_type=resource_type, start=start,
+                                                          extra_query=extra_query, fail_ok=True)
+    if code > 0:
+        if "Metrics can't being aggregated" in output:
+            # there was another glance image that has the same string in its name
+            overlap = '0'
+        else:
+            assert False, output
 
-    if values:
+    values = output
+    if code == 0 and values:
         assert len(values) <= 4, "Incorrect count for {} {} metric via 'openstack metric measures aggregation'".\
             format(image_name, meter)
     else:
         values = _wait_for_measurements(meter=meter, resource_type=resource_type, extra_query=extra_query,
-                                        start_time=start)
+                                        start_time=start, overlap=overlap)
         assert values, "No measurements for image.size for 25+ minutes"
 
     LOG.tc_step('Check that values are larger than zero')
@@ -92,7 +101,7 @@ def test_measurements_for_metric(meter):
 
 
 def check_event_in_tenant_or_admin(resource_id, event_type):
-    for auth_ in (None, Tenant.ADMIN):
+    for auth_ in (None, Tenant.get('admin')):
         traits = ceilometer_helper.get_events(event_type=event_type, header='traits:value', auth_info=auth_)
         for trait in traits:
             if resource_id in trait:
@@ -226,7 +235,7 @@ def test_ceilometer_meters_exist(meters):
 #
 #     args = {'meter-name': 'fake_sample', 'meter-type': 'gauge', 'meter-unit': 'percent',
 #             'sample-volume': 10, 'timestamp': new_time}
-#     ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
+#     ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.get('admin'), **args)
 #
 #     pre_expirer_samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
 #     count = 0
@@ -241,7 +250,7 @@ def test_ceilometer_meters_exist(meters):
 #             args = {'meter-name': 'fake_sample', 'meter-type': 'gauge', 'meter-unit': 'percent',
 #                     'sample-volume': 10, 'timestamp': new_time}
 #             LOG.info("\nnow: {}\n59 min ago{}".format(curr_time, new_time))
-#             ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
+#             ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.get('admin'), **args)
 #             fake_sample = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
 #             if fake_sample:
 #                 break

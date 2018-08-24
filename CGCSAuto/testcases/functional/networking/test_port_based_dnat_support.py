@@ -1,6 +1,6 @@
 import time
 
-from pytest import fixture
+from pytest import fixture, skip
 
 from consts.cgcs import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, glance_helper, system_helper
@@ -12,6 +12,12 @@ from utils.tis_log import LOG
 
 GUEST_OS = 'ubuntu_14'
 VMS_COUNT = 4
+
+
+@fixture(scope='module', autouse=True)
+def skip_for_ovs():
+    if not system_helper.is_avs():
+        skip('DNAT unsupported by OVS')
 
 
 @fixture(scope='module')

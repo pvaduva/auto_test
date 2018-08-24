@@ -7,16 +7,18 @@ from consts.auth import Tenant
 from consts.cgcs import VMStatus
 from consts.reasons import SkipHypervisor
 from consts.kpi_vars import Evacuate
+from consts.proj_vars import ProjVar
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper, system_helper, network_helper, \
-    check_helper
+    check_helper, keystone_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
 def skip_test_if_less_than_two_hosts():
-    if len(host_helper.get_up_hypervisors()) < 2:
+    hypervisors = host_helper.get_up_hypervisors()
+    if len(hypervisors) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
@@ -24,6 +26,8 @@ def skip_test_if_less_than_two_hosts():
         nova_helper.update_quotas(instances=10, cores=20)
     if cinder_helper.get_quotas(quotas='volumes')[0] < 20:
         cinder_helper.update_quotas(volumes=20)
+
+    return len(hypervisors)
 
 
 class TestTisGuest:
@@ -135,23 +139,20 @@ class TestVariousGuests:
 
 
 class TestEvacKPI:
-
     @fixture()
     def check_alarms(self):
         pass
 
     @fixture(scope='class')
-    def get_hosts(self, add_admin_role_class, request):
-        # is_aio = system_helper.is_small_footprint()
-        # if is_aio:
-        #     skip("Evacuation KPI test unsuitable for AIO system")
-
+    def get_hosts(self, ixia_supported, skip_test_if_less_than_two_hosts):
         hosts = host_helper.get_hosts_in_storage_aggregate()
         if len(hosts) < 2 or len(hosts) > 4:
             skip("Lab not suitable for this test. Too many or too few hosts with local_image backing")
 
+        return hosts
+
         # router_id = network_helper.get_tenant_router()
-        # is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+        # is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
         #
         # def teardown():
         #     if is_dvr:
@@ -163,12 +164,113 @@ class TestEvacKPI:
         #     LOG.fixture_step("Update router to non-DVR")
         #     network_helper.update_router_distributed(router_id, distributed=False, post_admin_up_on_failure=False)
 
-        hosts_to_lock = hosts[2:]
-        for host in hosts_to_lock:
-            HostsToRecover.add(host, scope='class')
-            host_helper.lock_host(host=host)
+    @staticmethod
+    def _prepare_test(vm1, vm2, get_hosts, with_router):
+        """
+        VMs:
+            VM1: under test (primary tenant)
+            VM2: traffic observer
+        """
 
-        return hosts[:2]
+        vm1_host = nova_helper.get_vm_host(vm1)
+        vm2_host = nova_helper.get_vm_host(vm2)
+        vm1_router = network_helper.get_tenant_router(auth_info=Tenant.get_primary())
+        vm2_router = network_helper.get_tenant_router(auth_info=Tenant.get_secondary())
+        vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
+        vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+        targets = list(get_hosts)
+
+        if vm1_router_host == vm2_router_host:
+            def _chk_same_router_host():
+                vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
+                vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+                return vm1_router_host == vm2_router_host
+            succ, val = common.wait_for_val_from_func(False, 360, 10, _chk_same_router_host)
+            assert succ, \
+                "two routers are located on the same compute host, cannot run without_router test"
+
+        if not with_router:
+            """
+            Setup:
+                VM1 on COMPUTE-A
+                ROUTER1 not on COMPUTE-A
+                VM2, ROUTER2 not on COMPUTE-A
+            """
+            if len(get_hosts) < 3:
+                skip("Lab not suitable for without_router, requires at least three hypervisors")
+
+            LOG.tc_step("Ensure VM2, ROUTER2 not on COMPUTE-A, for simplicity, ensure they are on the same compute")
+            if vm2_host != vm2_router_host:
+                vm_helper.live_migrate_vm(vm_id=vm2, destination_host=vm2_router_host)
+                vm2_host = nova_helper.get_vm_host(vm2)
+                assert vm2_host == vm2_router_host, "live-migration failed"
+            host_observer = vm2_host
+
+            LOG.tc_step("Ensure VM1 and (ROUTER1, VM2, ROUTER2) are on different hosts")
+            if vm1_router_host in targets:
+                # ensure vm1_router_host is not selected for vm1
+                # vm1_router_host can be backed by any type of storage
+                targets.remove(vm1_router_host)
+            if vm2_host in targets:
+                targets.remove(vm2_host)
+
+            if vm1_host in targets:
+                host_src_evacuation = vm1_host
+            else:
+                assert targets, "no suitable compute for vm1, after excluding ROUTER1, VM2, ROUTER2 's hosts"
+                host_src_evacuation = targets[0]
+                vm_helper.live_migrate_vm(vm_id=vm1, destination_host=host_src_evacuation)
+                vm1_host = nova_helper.get_vm_host(vm1)
+                assert vm1_host == host_src_evacuation, "live-migration failed"
+
+            # verify setup
+            vm1_host = nova_helper.get_vm_host(vm1)
+            vm2_host = nova_helper.get_vm_host(vm2)
+            vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
+            vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+            assert vm1_router_host != vm1_host and vm2_host != vm1_host and vm2_router_host != vm1_host, \
+                "setup is incorrect"
+        else:
+            """
+            Setup:
+                VM1, ROUTER1 on COMPUTE-A
+                VM2, ROUTER2 not on COMPUTE-A
+            """
+            LOG.tc_step("Ensure VM1, ROUTER1 on COMPUTE-A")
+
+            # VM1 must be sitting on ROUTER1's host, thus vm1_router_host must be backed by local_image
+            assert vm1_router_host in targets, "vm1_router_host is not backed by local_image"
+
+            if vm1_host != vm1_router_host:
+                vm_helper.live_migrate_vm(vm_id=vm1, destination_host=vm1_router_host)
+                vm1_host = nova_helper.get_vm_host(vm1)
+                assert vm1_host == vm1_router_host, "live-migration failed"
+            host_src_evacuation = vm1_host
+
+            LOG.tc_step("Ensure VM2, ROUTER2 not on COMPUTE-A, for simplicity, ensure they are on the same compute")
+            targets.remove(host_src_evacuation)
+            if vm2_host in targets:
+                host_observer = vm2_host
+            else:
+                assert targets, "no suitable compute for vm2, after excluding COMPUTE-A"
+                host_observer = targets[0]
+                vm_helper.live_migrate_vm(vm_id=vm2, destination_host=host_observer)
+                vm2_host = nova_helper.get_vm_host(vm2)
+                assert vm2_host == host_observer, "live-migration failed"
+
+            # verify setup
+            vm1_host = nova_helper.get_vm_host(vm1)
+            vm2_host = nova_helper.get_vm_host(vm2)
+            vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
+            vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+            assert vm1_host == vm1_router_host and vm2_host != vm1_host and vm2_router_host != vm1_host, \
+                "setup is incorrect"
+
+        assert vm1_host == host_src_evacuation and vm2_host == host_observer, "setup is incorrect"
+        LOG.info("Evacuate: VM {} on {}, ROUTER on {}".format(vm1, vm1_host, vm1_router_host))
+        LOG.info("Observer: VM {} on {}, ROUTER on {}".format(vm2, vm2_host, vm2_router_host))
+
+        return host_src_evacuation, host_observer
 
     @mark.kpi
     @mark.parametrize('vm_type', [
@@ -176,60 +278,33 @@ class TestEvacKPI:
         'avp',
         'dpdk'
     ])
-    def test_kpi_evacuate(self, get_hosts, vm_type, collect_kpi):
+    def test_kpi_evacuate(self, vm_type, get_hosts, collect_kpi):
         if not collect_kpi:
             skip("KPI only test. Skip due to kpi collection is not enabled.")
-
         if not system_helper.is_avs() and vm_type in ('dpdk', 'avp'):
             skip('avp vif unsupported by OVS')
 
-        router_host = network_helper.get_router_info(field='wrs-net:host')
-        target_host = get_hosts[0] if router_host == get_hosts[1] else get_hosts[1]
+        def operation(vm_id_, host_):
+            vm_helper.evacuate_vms(host=host_, vms_to_check=vm_id_, ping_vms=True)
 
-        active_con = system_helper.get_active_controller_name()
-        if target_host == active_con:
-            host_helper.swact_host(active_con)
-            assert router_host != network_helper.get_router_info(field='wrs-net:host'), \
-                "router host changed after swact"
+        vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type=vm_type, storage_backing='local_image')
 
-        LOG.tc_step("Launch a {} vm on host that is different than router host".format(vm_type))
-        vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, avail_zone='nova',
-                                         target_host=target_host)
-        vm_id = vms[0]
-        vm_host = nova_helper.get_vm_host(vm_id=vm_id)
-        router_host = network_helper.get_router_info(field='wrs-net:host')
-        assert target_host == vm_host, "VM is not launched on target host"
-        assert target_host != router_host, "Router is on same host with vm"
-        time.sleep(30)
-
-        def operation(vm_id_, host_, post_host_):
-            vm_helper.evacuate_vms(host=host_, vms_to_check=vm_id_, ping_vms=True, post_host=post_host_)
-
-        LOG.tc_step("Get {} vm ping loss duration on evacuation while router is not on failed host".format(vm_type))
-        no_router_kpi = vm_helper.get_ping_loss_duration_on_operation(vm_id, 600, 0.5, operation, vm_id, target_host,
-                                                                      router_host)
-        assert no_router_kpi > 0, "Ping loss duration is not properly detected"
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'no'),
-                                  kpi_val=no_router_kpi/1000, uptime=5)
-
-        host_helper.wait_for_hosts_ready(hosts=target_host)
+        host_src_evacuation, host_observer = self._prepare_test(
+            vm_test, vm_observer, get_hosts.copy(), with_router=True)
         time.sleep(60)
-
-        LOG.tc_step("Get {} vm ping loss duration on evacuation while router is on same host")
-        router_host = network_helper.get_router_info(field='wrs-net:host')
-        vm_host = nova_helper.get_vm_host(vm_id=vm_id)
-        if router_host == system_helper.get_active_controller_name():
-            host_helper.swact_host()
-            assert router_host == network_helper.get_router_info(field='wrs-net:host'), "Router moved after swact"
-            time.sleep(60)
-
-        if router_host != vm_host:
-            LOG.info("Move vm to the same host as router")
-            vm_helper.live_migrate_vm(vm_id=vm_id, destination_host=router_host)
-            time.sleep(30)
-
-        with_router_kpi = vm_helper.get_ping_loss_duration_on_operation(vm_id, 600, 0.5, operation, vm_id, router_host,
-                                                                        target_host)
-        assert with_router_kpi > 0, "Ping loss duration is not properly detected"
+        with_router_kpi = vm_helper.get_traffic_loss_duration_on_operation(
+            vm_test, vm_observer, operation, vm_test, host_src_evacuation)
+        assert with_router_kpi > 0, "Traffic loss duration is not properly detected"
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'with'),
                                   kpi_val=with_router_kpi/1000, uptime=5)
+
+        host_helper.wait_for_hosts_ready(hosts=host_src_evacuation)
+
+        host_src_evacuation, host_observer = self._prepare_test(
+            vm_test, vm_observer, get_hosts.copy(), with_router=False)
+        time.sleep(60)
+        without_router_kpi = vm_helper.get_traffic_loss_duration_on_operation(
+            vm_test, vm_observer, operation, vm_test, host_src_evacuation)
+        assert without_router_kpi > 0, "Traffic loss duration is not properly detected"
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'no'),
+                                  kpi_val=without_router_kpi/1000, uptime=5)

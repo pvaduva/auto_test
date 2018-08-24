@@ -50,63 +50,6 @@ def freespace_check():
         skip("Not enough free space to complete test.")
 
 
-@mark.usefixtures("aio_precheck")
-def _test_reclaim_sda():
-    """
-    On Simplex or Duplex systems that use a dedicated disk for nova-local,
-    recover reserved root disk space for use by the cgts-vg volume group to allow
-    for controller filesystem expansion.
-
-    Assumptions:
-    - System is AIO-SX or AIO-DX
-
-    Test Steps:
-    - Get host list
-    - Retrieve current value of cgts-vg
-    - Reclaim space on hosts
-    - Check for the config out-of-date alarm to raise and clear
-    - Retrieve current value of cgts-vg
-    - Check that the cgts-vg size is larger than before
-
-    CONFIRMED THAT WE NEED TO REWRITE
-    """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    hosts = host_helper.get_hosts()
-
-    cmd = "pvs -o vg_name,pv_size --noheadings | grep cgts-vg"
-    cgts_vg_regex = "([0-9.]*)g$"
-
-    rc, out = con_ssh.exec_sudo_cmd(cmd)
-    cgts_vg_val = re.search(cgts_vg_regex, out)
-
-    LOG.info("cgts-vg is currently: {}".format(cgts_vg_val.group(1)))
-
-    for host in hosts:
-        LOG.info("Reclaiming space for {}".format(host))
-        pos_args = "{} cgts-vg /dev/sda".format(host)
-        table_ = table_parser.table(cli.system('host-pv-add', positional_args=pos_args))
-        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                     entity_id="host={}".format(host))
-
-    LOG.info("Wait for config out-of-date alarms to clear")
-    for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host))
-
-    time.sleep(10)
-
-    cmd = "pvs -o vg_name,pv_size --noheadings | grep cgts-vg"
-    cgts_vg_regex = "([0-9.]*)g$"
-
-    rc, out = con_ssh.exec_sudo_cmd(cmd)
-    new_cgts_vg_val = re.search(cgts_vg_regex, out)
-
-    LOG.info("cgts-vg is now: {}".format(new_cgts_vg_val.group(1)))
-    assert float(new_cgts_vg_val.group(1)) > float(cgts_vg_val.group(1)), "cgts-vg size did not increase"
-
-
 @mark.usefixtures("freespace_check")
 def test_increase_controllerfs():
     """ 

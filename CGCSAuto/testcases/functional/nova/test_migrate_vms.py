@@ -502,7 +502,7 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     'avp',
     'dpdk',
 ])
-def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
+def test_kpi_live_migrate(ixia_supported, check_system, vm_type, collect_kpi):
     """
     Collect live migration ping loss duration KPI
     Args:
@@ -514,42 +514,18 @@ def test_kpi_live_migrate(check_system, vm_type, collect_kpi):
     """
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
-    if 'ixia_ports' not in ProjVar.get_var("LAB"):
-        skip("this lab is not configured with ixia_ports.")
-    if not system_helper.is_avs() and vm_type in ('avp', 'dkdp'):
+    if not system_helper.is_avs() and vm_type in ('avp', 'dpdk'):
         skip('avp vif unsupported by OVS')
+
+    vm_id, vm_observer = vm_helper.launch_vm_pair(vm_type=vm_type)
 
     def operation(vm_id_):
         code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
         assert 0 == code, "Live migration is not supported. {}".format(msg)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
 
-    LOG.tc_step("Launch two {} VMs".format(vm_type))
-    vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.TENANT1)
-    vm_t1 = vms[0]
-    vms, nics = vm_helper.launch_vms(vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.TENANT2)
-    vm_t2 = vms[0]
+    duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation, vm_id)
+    assert duration > 0, "No traffic loss detected during live migration for {} vm".format(vm_type)
 
-    LOG.tc_step("Enable routing")
-    if vm_type == 'virtio' or vm_type == 'avp':
-        vm_helper.setup_kernel_routing(vm_t1)
-        vm_helper.setup_kernel_routing(vm_t2)
-    elif vm_type == 'dpdk':
-        vm_helper.setup_avr_routing(vm_t1)
-        vm_helper.setup_avr_routing(vm_t2)
-
-    LOG.tc_step("Route VMs")
-    vm_helper.route_vm_pair(vm_t1, vm_t2)
-
-    LOG.tc_step("Setup traffic between VMs")
-    with vm_helper.traffic_between_vms([(vm_t1, vm_t2)]) as session:
-        ping_duration = vm_helper.get_ping_loss_duration_on_operation(vm_t1, 300, 0.01, operation, vm_t1)
-
-        LOG.tc_step("Collect traffic statistics")
-        duration = int(session.get_statistics('traffic item statistics')[0]['Frames Delta'])
-        assert duration > 0 and ping_duration > 0, \
-            "No ping loss detected during live migration for {} vm".format(vm_type)
-
-        LOG.info("ping loss: {}ms; traffic loss: {}ms".format(ping_duration, duration))
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
-                                  kpi_val=duration, uptime=5, unit='Time(ms)')
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(vm_type),
+                              kpi_val=duration, uptime=5, unit='Time(ms)')

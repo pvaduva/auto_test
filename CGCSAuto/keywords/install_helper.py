@@ -3,7 +3,6 @@ import os
 import re
 import threading
 import time
-from contextlib import contextmanager
 
 import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant, CliAuth
@@ -782,6 +781,7 @@ def get_usb_device_name(con_ssh=None):
     if rc != 0:
         msg = "No USB found in lab node. Please plug in usb ."
         LOG.info(msg)
+        return ''
     else:
         usb_ls = output.strip().splitlines()[0].split("->").pop()
 
@@ -792,7 +792,7 @@ def get_usb_device_name(con_ssh=None):
         LOG.info("USB device is: {}".format(usb_device))
 
     LOG.info("USB device is: {}".format(usb_device))
-    if 'sd' not in usb_device or len(usb_device) != 3:
+    if usb_device and 'sd' not in usb_device or len(usb_device) != 3:
         return None
     return usb_device
 
@@ -1228,7 +1228,7 @@ def delete_backup_files_from_usb(usb_device, con_ssh=None):
     """
     Deletes backup files from the usb to make it ready for next backup.
     Args:
-        usb_info:
+        usb_device:
         con_ssh:
 
     Returns (bool):
@@ -1323,7 +1323,6 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         raise ValueError(msg)
 
     lab = InstallVars.get_install_var("LAB")
-    output_dir = ProjVar.get_var('LOG_DIR')
     controller0_node = lab['controller-0']
 
     if controller0_node.telnet_conn is None:
@@ -1584,9 +1583,9 @@ def get_titanium_backup_filenames_usb(pattern=None, usb_device=None, con_ssh=Non
     backup_files = get_backup_files_from_usb(pattern=pattern, usb_device=usb_device, con_ssh=con_ssh)
 
     lab = InstallVars.get_install_var("LAB")
-    system_name = lab['name']
+    system_name = lab['name'].strip()
     for file in backup_files:
-        if system_name.strip() in file:
+        if system_name in file:
             LOG.info("Found matching backup file: {}".format(file))
             found_backup_files.append(file)
 
@@ -1702,7 +1701,7 @@ def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
                 if cinder_helper.delete_volume_snapshots(id, con_ssh=con_ssh, force=True)[0] == 0:
                     LOG.info(" Deleted snapshot id {} ... ".format(id))
 
-        restored_cinder_volumes = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
+        restored_cinder_volumes, volumes_in_db = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
 
         LOG.info("Restored volumes: {}".format(restored_cinder_volumes))
         restored = len(restored_cinder_volumes)
@@ -1745,7 +1744,7 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
             volume_backup = os.path.basename(volume_backup_path)
             vol_id = volume_backup[7:-20]
             if vol_id not in volumes:
-                LOG.warning("The volume {} does not exist; cannot be imported".format(vol_id))
+                LOG.warning("The volume {} does not exist; cannot be imported, volume_backup:{}".format(vol_id, volume_backup_path))
                 continue
 
             LOG.info("Importing Volume id={} ...".format(vol_id))
@@ -1761,7 +1760,7 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
             imported_volumes.append(vol_id)
             LOG.info("Volume id={} imported successfully\n".format(vol_id))
 
-    return imported_volumes
+    return imported_volumes, volumes
 
 
 def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None, copy_to_usb=None,
@@ -1921,7 +1920,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
                  .format(copy_to_usb, get_usb_mount_point(usb_device=copy_to_usb)))
     date = time.strftime(BACKUP_FILE_DATE_STR)
     build_id = ProjVar.get_var('BUILD_ID')
-    backup_file_name = "{}{}_{}_{}".format(PREFIX_BACKUP_FILE, date, build_id, lab_system_name)
+    backup_file_name = "{}{}_{}_{}".format(backup_file_prefix, date, build_id, lab_system_name)
     cmd = 'config_controller --backup {}'.format(backup_file_name)
 
     # max wait 1800 seconds for config controller backup to finish
@@ -2880,7 +2879,7 @@ def update_system_info_for_cloned_system( system_mode='duplex', fail_ok=False):
         'name': lab['name'],
     }
 
-    system_helper.set_system_info(**system_info)
+    system_helper.modify_system(**system_info)
 
 
 def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,  clone_image_iso_path=None,
@@ -3327,7 +3326,7 @@ def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, f
         boot_device_regex = boot_device_pattern
     elif usb:
         LOG.info("Looking for USB device")
-        boot_device_regex = "USB|Kingston|JetFlash|SanDisk"
+        boot_device_regex = "USB|Kingston|JetFlash|SanDisk|Verbatim"
     else:
         boot_device_regex = next((value for key, value in boot_device_dict.items()
                                   if key == node_obj.name or key == node_obj.personality), None)

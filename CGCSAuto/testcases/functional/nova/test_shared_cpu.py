@@ -17,30 +17,6 @@ def target_hosts():
     return hosts
 
 
-@fixture(scope='module')
-def host_info(target_hosts):
-    LOG.fixture_step("Get VMs cores for each host")
-
-    max_vcpus_proc0 = 0
-    max_vcpus_proc1 = 0
-    host_max_proc0 = None
-    host_max_proc1 = None
-
-    for host in target_hosts:
-        vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, function='VMs', thread=None)
-        if len(vm_cores_per_proc[0]) > max_vcpus_proc0:
-            max_vcpus_proc0 = len(vm_cores_per_proc[0])
-            host_max_proc0 = host
-        if len(vm_cores_per_proc.get(1, [])) > max_vcpus_proc1:
-            max_vcpus_proc1 = len(vm_cores_per_proc.get(1, []))
-            host_max_proc1 = host
-
-    LOG.fixture_step("Increase quota of allotted cores")
-    vm_helper.ensure_vms_quotas(cores_num=(max(max_vcpus_proc0, max_vcpus_proc1) + 1))
-
-    return (max_vcpus_proc0, host_max_proc0), (max_vcpus_proc1, host_max_proc1)
-
-
 @fixture()
 def origin_total_vcpus(target_hosts):
     return host_helper.get_vcpus_for_computes(hosts=target_hosts, rtn_val='vcpus_used')
@@ -54,7 +30,7 @@ def get_failed_live_migrate_action_id(vm_id):
 
 
 def check_shared_vcpu(vm, numa_node0, numa_nodes, vcpus, prev_total_vcpus, shared_vcpu=None,
-                      expt_increase=None):
+                      expt_increase=None, min_vcpus=None):
 
     host = nova_helper.get_vm_host(vm_id=vm)
     if shared_vcpu is not None:
@@ -70,8 +46,11 @@ def check_shared_vcpu(vm, numa_node0, numa_nodes, vcpus, prev_total_vcpus, share
         vm_shared_pcpu = vm_helper.get_instance_topology(vm)[0]['shared_pcpu'][0]
         assert vm_shared_pcpu in host_shared_vcpu
 
+    if min_vcpus is None:
+        min_vcpus = vcpus
+
     check_helper.check_topology_of_vm(vm, vcpus, prev_total_cpus=prev_total_vcpus[host], shared_vcpu=shared_vcpu,
-                                      cpu_pol='dedicated', expt_increase=expt_increase, numa_num=numa_nodes)
+                                      cpu_pol='dedicated', expt_increase=expt_increase, numa_num=numa_nodes, min_vcpus=min_vcpus)
 
 
 def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='dedicated',
@@ -354,7 +333,25 @@ class TestSharedCpuEnabled:
                 if len(shared_cpu_hosts) >= 2:
                     break
 
-        return storage_backing, shared_cpu_hosts
+        max_vcpus_proc0 = 0
+        max_vcpus_proc1 = 0
+        host_max_proc0 = None
+        host_max_proc1 = None
+
+        LOG.fixture_step("Get VMs cores for each host")
+        for host in shared_cpu_hosts:
+            vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, function='VMs', thread=None)
+            if len(vm_cores_per_proc[0]) > max_vcpus_proc0:
+                max_vcpus_proc0 = len(vm_cores_per_proc[0])
+                host_max_proc0 = host
+            if len(vm_cores_per_proc.get(1, [])) > max_vcpus_proc1:
+                max_vcpus_proc1 = len(vm_cores_per_proc.get(1, []))
+                host_max_proc1 = host
+
+        LOG.fixture_step("Increase quota of allotted cores")
+        vm_helper.ensure_vms_quotas(cores_num=(max(max_vcpus_proc0, max_vcpus_proc1) + 1))
+
+        return storage_backing, shared_cpu_hosts, [(max_vcpus_proc0, host_max_proc0), (max_vcpus_proc1, host_max_proc1)]
 
     # TC2920, TC2921
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'error'), [
@@ -396,7 +393,7 @@ class TestSharedCpuEnabled:
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
 
         """
-        storage_backing, shared_cpu_hosts = add_shared_cpu
+        storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
         LOG.tc_step("Create a flavor with given number of vcpus")
 
         flavor = create_shared_flavor(vcpus, storage_backing=storage_backing, numa_nodes=numa_nodes, node0=numa_node0,
@@ -468,7 +465,7 @@ class TestSharedCpuEnabled:
             - Delete created volume if any (module)
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
         """
-        storage_backing, shared_cpu_hosts = add_shared_cpu
+        storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
 
         LOG.tc_step("Create a flavor with given number of vcpus")
         f1_vcpus = 2
@@ -542,7 +539,7 @@ class TestSharedCpuEnabled:
             - Set shared cpus to 0 (default setting) on the compute node under test (module)
 
         """
-        storage_backing, shared_cpu_hosts = add_shared_cpu
+        storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
         vm_helper.delete_vms()
         prev_total_vcpus = host_helper.get_vcpus_for_computes()
 
@@ -599,10 +596,10 @@ class TestSharedCpuEnabled:
                               numa_nodes=flv_arg_.get('numa_nodes', None), expt_increase=post_evac_expt_increase,
                               prev_total_vcpus=prev_total_vcpus, shared_vcpu=shared_vcpu, vcpus=vcpus)
 
-    @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
-            (3, 1, 1, 0)
+    @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'min_vcpus'), [
+            (3, 1, 1, 0, 1)
     ])
-    def _test_shared_vcpu_scaling(self, vcpus, numa_nodes, numa_node0, shared_vcpu, add_shared_cpu, host_info):
+    def test_shared_vcpu_scaling(self, vcpus, numa_nodes, numa_node0, shared_vcpu, min_vcpus, add_shared_cpu):
         """
             Tests the following:
             - That the scaling of instance with shared vCPU behaves appropiately (TC5097)
@@ -625,33 +622,35 @@ class TestSharedCpuEnabled:
                 - Delete created vms and flavors
         """
 
-        max_vcpus_per_proc = host_info
+        storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
+        prev_total_vcpus = host_helper.get_vcpus_for_computes()
         if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
             skip("Less than {} VMs cores on numa node0 of any hypervisor".format(vcpus/numa_nodes))
-
         # make vm (4 vcpus)
         LOG.tc_step("Make a flavor with {} vcpus and scaling enabled".format(vcpus))
         flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu)
         ResourceCleanup.add('flavor', flavor_1)
-        first_specs = {FlavorSpec.MIN_VCPUS: 1}
+        first_specs = {FlavorSpec.MIN_VCPUS: min_vcpus}
         nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
         LOG.tc_step("Boot a vm with above flavor")
         vm_1 = vm_helper.boot_vm(flavor=flavor_1, cleanup='function', fail_ok=False)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
         GuestLogs.add(vm_1)
-
         LOG.tc_step("Validate Shared CPU")
-        check_shared_vcpu(vm_1, numa_node0, numa_nodes, shared_vcpu)
+        check_shared_vcpu(vm_1, numa_node0, numa_nodes, vcpus=vcpus, prev_total_vcpus=prev_total_vcpus,
+                          min_vcpus=min_vcpus, shared_vcpu=shared_vcpu)
 
         # scale down once
         LOG.tc_step("Scale down the vm once")
         vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
-        check_helper.check_vm_vcpus_via_nova_show(vm_1, 1, (vcpus-1), vcpus)
+        check_helper.check_vm_vcpus_via_nova_show(vm_1, min_vcpus, (vcpus-1), vcpus)
 
         LOG.tc_step("Confirm offline vCPUs pin to shared CPU")
-        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=vcpus-1, shared_vcpu=shared_vcpu,
-                                          min_vcpus=1, current_vcpus=vcpus-1, expt_increase=-1, cpu_pol='dedicated')
+        host = nova_helper.get_vm_host(vm_1)
+        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
+                                          shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=vcpus-1,
+                                          expt_increase=vcpus-2, cpu_pol='dedicated')
 
         # scale down to 1 (minimum)
         LOG.tc_step("Scale down to minimum vCPUs")
@@ -660,23 +659,27 @@ class TestSharedCpuEnabled:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
 
         LOG.tc_step("Confirm offline vCPUs pin to shared CPU")
-        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=vcpus-2, shared_vcpu=shared_vcpu,
-                                          min_vcpus=1, current_vcpus=1, expt_increase=2-vcpus, cpu_pol='dedicated')
+        host = nova_helper.get_vm_host(vm_1)
+        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
+                                          shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=min_vcpus,
+                                          expt_increase=min_vcpus-1, cpu_pol='dedicated')
 
         # scale up from 1 to vcpus (maximum)
         LOG.tc_step("Scale up to maximum vCPUs")
         for i in range(vcpus - 1):
             vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
-        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=0, shared_vcpu=shared_vcpu,
-                                          min_vcpus=1, current_vcpus=vcpus, expt_increase=(vcpus-1), cpu_pol='dedicated')
+        host = nova_helper.get_vm_host(vm_1)
+        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
+                                          shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=vcpus,
+                                          expt_increase=vcpus-1, cpu_pol='dedicated')
         GuestLogs.remove(vm_1)
 
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
             (3, 1, 1, 0)
     ])
-    def _test_shared_vcpu_pinning_constraints(self, vcpus, numa_nodes, numa_node0, shared_vcpu,
-                                             add_shared_cpu, add_admin_role_func, host_info):
+    def test_shared_vcpu_pinning_constraints(self, vcpus, numa_nodes, numa_node0, shared_vcpu,
+                                             add_shared_cpu, add_admin_role_func):
         """
         Tests the following:
         - That pinning constraints do not count on shared vCPU (TC5098)
@@ -700,9 +703,9 @@ class TestSharedCpuEnabled:
             - Delete created vms and flavors
         """
 
-        max_vcpus_per_proc = host_info
+        storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
         if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
-            skip("Less than {} VMs cores on numa node0 of any hypervisor".format(vcpus/numa_nodes))
+            skip("Less than {} VMs cores on numa node0 of any hypervisor with shared cpu".format(vcpus/numa_nodes))
 
         # make vm
         LOG.tc_step("Make a flavor with {} shared vcpus".format(vcpus))
@@ -736,15 +739,15 @@ class TestSharedCpuEnabled:
                                                                  numa_node=numa_node0)[vm_host])
         assert available_vcpus == vcpus-1
 
+        prev_total_vcpus = host_helper.get_vcpus_for_computes()
+
         LOG.tc_step("Boot a VM with the shared VCPU Flavor")
         vm_share = vm_helper.boot_vm(flavor=flavor_1, cleanup='function', fail_ok=False, vm_host=vm_host)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_share)
         GuestLogs.add(vm_share)
 
-        total_cpus = int(host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='vcpus_used',
-                                                            numa_node=numa_node0)[vm_host])
-        check_helper.check_topology_of_vm(vm_share, vcpus, total_cpus, shared_vcpu=shared_vcpu,
-                                          expt_increase=0, cpu_pol='dedicated')
+        check_shared_vcpu(vm=vm_share, vcpus=vcpus, prev_total_vcpus=prev_total_vcpus, shared_vcpu=shared_vcpu,
+                          numa_nodes=numa_nodes, numa_node0=numa_node0)
 
 
 class TestMixSharedCpu:

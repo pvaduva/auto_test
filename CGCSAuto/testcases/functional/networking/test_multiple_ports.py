@@ -216,37 +216,13 @@ class TestMutiPortsPCI:
 
     @fixture(scope='class')
     def base_setup_pci(self):
-        LOG.fixture_step("(class) Check pci-passthrough and pci-sriov support")
-        sriov_info = network_helper.get_pci_interface_info(interface='sriov')
-        pcipt_info = network_helper.get_pci_interface_info(interface='pthru')
-        if not sriov_info:
-            skip(SkipHostIf.SRIOV_IF_UNAVAIL)
-        if not pcipt_info:
-            skip(SkipHostIf.PCIPT_IF_UNAVAIL)
+        LOG.fixture_step("(class) Get an internal network that supports both pci-sriov and pcipt vif to boot vm")
+        avail_nets, CX_for_pcipt = network_helper.get_pci_vm_network(pci_type='pci-passthrough',
+                                                                     net_name='internal0-net')
+        if not avail_nets:
+            skip(SkipHostIf.PCI_IF_UNAVAIL)
 
-        LOG.fixture_step("(class) Get a PCI network to boot vm from pci providernet info from lab_setup.conf")
-        pci_sriov_nets = network_helper.get_pci_nets(vif='sriov', rtn_val='name')
-        pci_pthru_nets = network_helper.get_pci_nets(vif='pthru', rtn_val='name')
-        avail_nets = list(set(pci_pthru_nets) & set(pci_sriov_nets))
-
-        # Exclude network on first segment
-        # The switch is setup with untagged frames for the first segment within the range.
-        # This is suitable for PCI passthrough, but would not work for SRIOV
-        pnet_name = network_helper.get_net_info(net_id=avail_nets[0], field='provider:physical_network')
-        first_seg = network_helper.get_first_segment_of_providernet(pnet_name, pnet_val='name')
-        untagged_net = network_helper.get_net_on_segment(pnet_name, seg_id=first_seg, rtn_val='name')
-        if untagged_net in avail_nets:
-            avail_nets.remove(untagged_net)
-
-        LOG.info("Networks available for pcipt and sriov: {}".format(avail_nets))
-
-        internal_net_name = None
-        for net_ in avail_nets:
-            if 'internal' in net_:
-                internal_net_name = net_
-                break
-        else:
-            skip('No internal network found that has both pcipt and sriov interfaces')
+        LOG.info("Internal network(s) available for pcipt and sriov: {}".format(avail_nets))
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
@@ -255,22 +231,17 @@ class TestMutiPortsPCI:
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
+        internal_net_name = avail_nets[0]
         mgmt_net_id = network_helper.get_mgmt_net_id()
         tenant_net_id = network_helper.get_tenant_net_id()
         internal_net_id = network_helper.get_internal_net_id(net_name=internal_net_name, strict=True)
 
         extra_pcipt_net = None
         extra_pcipt_net_name = None
-        pcipt_nets = network_helper.get_pci_vm_network(pci_type='pci-passthrough', net_name='internal0-net')
 
-        if isinstance(pcipt_nets, list):
-            LOG.info("internal_net_name: {}; pript nets: {}".format(internal_net_name, pcipt_nets))
-            try:
-                pcipt_nets.remove(internal_net_name)
-            except ValueError:
-                # it's not one of the pcipt_nets returned (func only returns first 2 nets)
-                pass
-            extra_pcipt_net_name = pcipt_nets[0]
+        if CX_for_pcipt:
+            LOG.info("internal_net_name: {}; pript nets: {}".format(internal_net_name, avail_nets))
+            extra_pcipt_net_name = avail_nets[1]
             extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
 
         vif_type = 'avp' if system_helper.is_avs() else 'e1000'
@@ -296,18 +267,18 @@ class TestMutiPortsPCI:
         LOG.fixture_step("(class) Get seg_id for internal0-net1 to prepare for vlan tagging on pci-passthough "
                          "device later.")
         seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.ADMIN)
+                                             auto_info=Tenant.get('admin'))
         assert seg_id, 'Segmentation id of internal0-net1 is not found'
 
         if extra_pcipt_net:
             extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id',
-                                                             strict=False, auto_info=Tenant.ADMIN)
+                                                             strict=False, auto_info=Tenant.get('admin'))
             assert extra_pcipt_seg_id, 'Segmentation id of {} is not found'.format(extra_pcipt_net_name)
 
             seg_id = {internal_net_name: seg_id,
                       extra_pcipt_net_name: extra_pcipt_seg_id}
 
-        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, \
+        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, \
             extra_pcipt_net, extra_pcipt_net_name
 
     @mark.parametrize('vifs', [
@@ -351,7 +322,7 @@ class TestMutiPortsPCI:
             - Delete created vms and flavor
         """
 
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, extra_pcipt_net, \
             extra_pcipt_net_name = base_setup_pci
 
         pcipt_included = False
@@ -361,9 +332,6 @@ class TestMutiPortsPCI:
             if 'pci-passthrough' in vif:
                 pcipt_included = True
                 break
-
-        if pcipt_included and not pcipt_info:
-            skip(SkipHostIf.PCIPT_IF_UNAVAIL)
 
         vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
@@ -452,7 +420,7 @@ class TestMutiPortsPCI:
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, pcipt_info, extra_pcipt_net, \
+        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, extra_pcipt_net, \
             extra_pcipt_net_name = base_setup_pci
 
         vif_type = 'avp' if system_helper.is_avs() else 'e1000'

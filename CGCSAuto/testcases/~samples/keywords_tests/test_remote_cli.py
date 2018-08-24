@@ -13,7 +13,7 @@ def test_remote_cli():
     horizon_dir = os.path.join(ProjVar.get_var('LOG_DIR'), 'horizon')
     tenant1 = Tenant.TENANT1['tenant']
     tenant2 = Tenant.TENANT2['tenant']
-    admin_openrc = '{}-openrc.sh'.format(Tenant.ADMIN['tenant'])
+    admin_openrc = '{}-openrc.sh'.format(Tenant.get('admin')['tenant'])
     tenant1_openrc = '{}-openrc.sh'.format(tenant1)
     tenant2_openrc = '{}-openrc.sh'.format(tenant2)
 

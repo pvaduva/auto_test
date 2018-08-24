@@ -22,10 +22,10 @@ from testfixtures.recover_hosts import HostsToRecover
 # @mark.sanity
 def _test_system_alarm_list_on_compute_reboot():
     """
-    Verify system alarm-list command in the system
+    Verify fm alarm-list command in the system
 
     Scenario:
-    1. Execute "system alarm-list" command in the system.
+    1. Execute "fm alarm-list" command in the system.
     2. Reboot one active computes and wait 30 seconds.
     3. Verify commands return list of active alarms in table with expected
     rows.
@@ -57,19 +57,19 @@ def _test_system_alarm_list_on_compute_reboot():
 
 
 @mark.sanity
-def test_system_alarms_and_events_on_lock_unlock_compute():
+def test_system_alarms_and_events_on_lock_unlock_compute(no_simplex):
     """
-    Verify system alarm-show command
+    Verify fm alarm-show command
 
     Test Steps:
     - Delete active alarms
     - Lock a host
     - Check active alarm generated for host lock
-    - Check relative values are the same in system alarm-list and system alarm-show <uuid>
-    - Check host lock 'set' event logged via system event-list
+    - Check relative values are the same in fm alarm-list and fm alarm-show <uuid>
+    - Check host lock 'set' event logged via fm event-list
     - Unlock host
-    - Check active alarms cleared via system alarm-list
-    - Check host lock 'clear' event logged via system event-list
+    - Check active alarms cleared via fm alarm-list
+    - Check host lock 'clear' event logged via fm event-list
     """
 
     # Remove following step because it's unnecessary and fails the test when alarm is re-generated
@@ -82,6 +82,8 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
     compute_host = host_helper.get_up_hypervisors()[0]
     if compute_host == system_helper.get_active_controller_name():
         compute_host = system_helper.get_standby_controller_name()
+        if not compute_host:
+            skip('Standby controller unavailable')
 
     LOG.tc_step("Lock a nova hypervisor host {}".format(compute_host))
     pre_lock_time = common.get_date_in_format()
@@ -92,7 +94,7 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
     post_lock_alarms = system_helper.wait_for_alarm(rtn_val='UUID', entity_id=compute_host, reason=compute_host,
                                                     alarm_id=EventLogID.HOST_LOCK, strict=False, fail_ok=False)[1]
 
-    LOG.tc_step("Check related fields in system alarm-list and system alarm-show are of the same values")
+    LOG.tc_step("Check related fields in fm alarm-list and fm alarm-show are of the same values")
     post_lock_alarms_tab = system_helper.get_alarms_table(uuid=True)
 
     alarms_l = ['Alarm ID', 'Entity ID', 'Severity', 'Reason Text']
@@ -102,7 +104,7 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
     for post_alarm in post_lock_alarms:
         LOG.tc_step("Verify {} for alarm {} in alarm-list are in sync with alarm-show".format(alarms_l, post_alarm))
 
-        alarm_show_tab = table_parser.table(cli.system('alarm-show', post_alarm))
+        alarm_show_tab = table_parser.table(cli.fm('alarm-show', post_alarm))
         alarm_list_tab = table_parser.filter_table(post_lock_alarms_tab, UUID=post_alarm)
 
         for i in range(len(alarms_l)):
@@ -112,7 +114,7 @@ def test_system_alarms_and_events_on_lock_unlock_compute():
             assert alarm_l_val == alarm_s_val, "{} value in alarm-list: {} is different than alarm-show: {}".format(
                 alarms_l[i], alarm_l_val, alarm_s_val)
 
-    LOG.tc_step("Check host lock is logged via system event-list")
+    LOG.tc_step("Check host lock is logged via fm event-list")
     system_helper.wait_for_events(entity_instance_id=compute_host, start=pre_lock_time, timeout=60,
                                   event_log_id=EventLogID.HOST_LOCK, fail_ok=False, **{'state': 'set'})
 

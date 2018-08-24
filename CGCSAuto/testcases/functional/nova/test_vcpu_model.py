@@ -430,7 +430,7 @@ def test_vcpu_model_evacuation(add_admin_role_func, cpu_models_supported):
     vm_dict[vm] = 'Passthrough'
 
     LOG.tc_step("Reboot target host {} to start evacuation".format(target_host))
-    vm_helper.evacuate_vms(target_host, list(vm_dict.keys()))
+    vm_helper.evacuate_vms(target_host, list(vm_dict.keys()), ping_vms=True)
 
     LOG.tc_step("Check vcpu models unchanged after evacuation")
     for vm_, cpu_ in vm_dict.items():

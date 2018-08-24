@@ -4,10 +4,11 @@
 import time
 
 from pytest import fixture
-from consts.cgcs import EventLogID, Prompt
+from consts.cgcs import EventLogID, MULTI_REGION_MAP
 from consts.filepaths import TestServerPath
 from consts.proj_vars import ProjVar
-from keywords import host_helper, system_helper, common, html_helper, keystone_helper
+from consts.auth import CliAuth
+from keywords import host_helper, system_helper, common, keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
 from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
@@ -65,11 +66,12 @@ def test_firewall_rules_default():
     default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8041, 8774, 8776, 8778, 9292, 9696, 15491]
 
     from consts.proj_vars import ProjVar
-    if ProjVar.get_var('REGION') != 'RegionOne':
+    region = ProjVar.get_var('REGION')
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
         default_ports.remove(5000)
         default_ports.remove(9292)
 
-    default_ports.append(443) if keystone_helper.is_https_lab() else default_ports.append(80)
+    default_ports.append(443) if CliAuth.get_var('HTTPS') else default_ports.append(80)
 
     active_controller = system_helper.get_active_controller_name()
     con_ssh = ControllerClient.get_active_controller()
@@ -287,7 +289,7 @@ def _verify_port_from_natbox(con_ssh, port, port_expected_open):
     :param port_expected_open: (boolean)
     """
     lab_ip = ProjVar.get_var('lab')['floating ip']
-    cli.system('show', source_openrc=True)
+    cli.system('show', source_openrc=True, force_source=True)
 
     LOG.info("Verify port {} is listed in iptables".format(port))
     cmd = 'iptables -nvL | grep --color=never -w {}'.format(port)

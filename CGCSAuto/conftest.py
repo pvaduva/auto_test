@@ -9,11 +9,12 @@ import pytest   # Don't remove. Used in eval
 import setup_consts
 import setups
 from consts.filepaths import BuildServerPath
-from consts.proj_vars import ProjVar, InstallVars
+from consts.proj_vars import ProjVar, InstallVars, ComplianceVar
 from consts import build_server as build_server_consts
 from consts import cgcs
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
+from utils.cgcs_reporter import parse_log
 from testfixtures.pre_checks_and_configs import collect_kpi   # Kpi fixture. Do not remove!
 
 
@@ -93,11 +94,12 @@ def _write_results(res_in_tests, test_name):
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
             global tracebacks
+            search_forward = True if ComplianceVar.get_var('REFSTACK_SUITE') else False
             try:
-                from utils.cgcs_reporter import upload_results, parse_log
+                from utils.cgcs_reporter import upload_results
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
-                                                  traceback=tracebacks, parse_name=True)
+                                                  traceback=tracebacks, parse_name=True, search_forward=search_forward)
             except Exception:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
 
@@ -170,10 +172,16 @@ def pytest_runtest_makereport(item, call, __multicall__):
             if val[0] == 'Failed':
                 global tc_end_time
                 tc_end_time = strftime("%Y%m%d %H:%M:%S", gmtime())
-                _write_results(res_in_tests='Failed', test_name=test_name)
+                _write_results(res_in_tests='FAIL', test_name=test_name)
                 TestRes.FAILNUM += 1
                 if ProjVar.get_var('PING_FAILURE'):
                     setups.add_ping_failure(test_name=test_name)
+
+                try:
+                    parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
+                except Exception as e:
+                    LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
+
                 pytest.exit("Skip rest of the iterations upon stress test failure")
 
     if no_teardown and report.when == 'call':
@@ -340,6 +348,12 @@ def pytest_configure(config):
     if telnet_log:
         ProjVar.set_var(COLLECT_TELNET=True)
 
+    # Compliance configs:
+    refstack_suite = config.getoption('refstack_suite')
+    if refstack_suite:
+        from consts.proj_vars import ComplianceVar
+        ComplianceVar.set_var(REFSTACK_SUITE=refstack_suite)
+
     if session_log_dir:
         log_dir = session_log_dir
     else:
@@ -347,9 +361,14 @@ def pytest_configure(config):
         resultlog = resultlog if resultlog else os.path.expanduser("~")
         if '/AUTOMATION_LOGS' in resultlog:
             resultlog = resultlog.split(sep='/AUTOMATION_LOGS')[0]
-        if not resultlog.endswith('/'):
-            resultlog += '/'
-        log_dir = resultlog + "AUTOMATION_LOGS/" + lab['short_name'] + '/' + strftime('%Y%m%d%H%M')
+        resultlog = os.path.join(resultlog, 'AUTOMATION_LOGS')
+        lab_name = lab['short_name']
+        time_stamp = strftime('%Y%m%d%H%M')
+        if refstack_suite:
+            suite_name = os.path.basename(refstack_suite).split('.txt')[0]
+            log_dir = '{}/refstack/{}/{}_{}'.format(resultlog, lab_name, time_stamp, suite_name)
+        else:
+            log_dir = '{}/{}/{}'.format(resultlog, lab_name, time_stamp)
     os.makedirs(log_dir, exist_ok=True)
 
     if report_all:
@@ -359,6 +378,11 @@ def pytest_configure(config):
     ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
                      report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
                      always_collect=always_collect, horizon_visible=horizon_visible)
+
+    if lab.get('central_region'):
+        ProjVar.set_var(IS_DC=True)
+        ProjVar.set_var(PRIMARY_SUBCLOUD=config.getoption('subcloud'))
+
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
@@ -440,6 +464,7 @@ def pytest_addoption(parser):
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
+    subcloud_help = "Default subcloud used for automated test when boot vm, etc. 'subcloud-1' if unspecified."
     telnetlog_help = "Collect telnet logs throughout the session"
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
@@ -474,6 +499,7 @@ def pytest_addoption(parser):
     parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
                      help="Collect kpi for applicable test cases")
     parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
+    parser.addoption('--subcloud', action='store', metavar='subcloud', default='subcloud-1', help=subcloud_help)
     parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
     parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
                      help="Collect system networking info if scp keyfile fails")
@@ -687,6 +713,12 @@ def pytest_addoption(parser):
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
                                            "file is transferred to. Eg WCP_68,67  or SM_1,SM2.")
+    ####################
+    #  Compliance Test #
+    ####################
+    refstack_help = "RefStack test suite path. Need to be accessible from test server (128.224.150.21)." \
+                    "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'"
+    parser.addoption('--refstack_suite', '--refstack-suite', dest='refstack_suite', help=refstack_help)
 
 
 def config_logger(log_dir, console=True):
@@ -736,9 +768,18 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.debug(e)
         pass
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if not log_dir:
+        try:
+            from utils.clients.ssh import ControllerClient
+            ssh_list = ControllerClient.get_active_controllers(fail_ok=True)
+            for con_ssh_ in ssh_list:
+                con_ssh_.close()
+        except:
+            pass
+        return
 
     try:
-        log_dir = ProjVar.get_var('LOG_DIR')
         tc_res_path = log_dir + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
         build_server = ProjVar.get_var('BUILD_SERVER')
@@ -789,7 +830,6 @@ def pytest_unconfigure(config):
             LOG.warning("Unable to upload KPIs. {}".format(e.__str__()))
 
     try:
-        from utils.cgcs_reporter import parse_log
         parse_log.parse_test_steps(ProjVar.get_var('LOG_DIR'))
     except Exception as e:
         LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
@@ -799,13 +839,6 @@ def pytest_unconfigure(config):
     except:
         LOG.warning("Failed to run nova migration-list")
 
-    vswitch_info_hosts = list(set(ProjVar.get_var('VSWITCH_INFO_HOSTS')))
-    if vswitch_info_hosts:
-        try:
-            setups.scp_vswitch_log(hosts=vswitch_info_hosts, con_ssh=con_ssh)
-        except Exception as e:
-            LOG.warning("unable to scp vswitch log - {}".format(e.__str__()))
-
     if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
@@ -814,10 +847,12 @@ def pytest_unconfigure(config):
         except:
             LOG.warning("'collect all' failed.")
 
-    try:
-        con_ssh.close()
-    except:
-        pass
+    ssh_list = ControllerClient.get_active_controllers(fail_ok=True, current_thread_only=True)
+    for con_ssh_ in ssh_list:
+        try:
+            con_ssh_.close()
+        except:
+            pass
 
 
 def pytest_collection_modifyitems(items):
@@ -894,6 +929,10 @@ def pytest_generate_tests(metafunc):
     if ProjVar.get_var('REMOTE_CLI'):
         metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
 
+    elif ComplianceVar.get_var('REFSTACK_SUITE'):
+        suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
+        metafunc.parametrize('compliance_suite', [suite])
+
 
 ##############################################################
 # Manipulating fixture orders based on following pytest rules
@@ -939,6 +978,11 @@ def c2_fixture(config_host_class):
 
 @pytest.fixture(scope='session', autouse=True)
 def prefix_remote_cli():
+    return
+
+
+@pytest.fixture(scope='session', autouse=True)
+def compliance_suite():
     return
 
 

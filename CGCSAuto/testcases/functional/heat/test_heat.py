@@ -122,7 +122,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
     return rtn_code, msg
 
 
-def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
         Update heat stack and verify stack is updated as expected
         Args:
@@ -204,7 +204,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     heat_user = getattr(Heat, t_name)['heat_user']
     to_verify = getattr(Heat, t_name)['verify']
     if heat_user is 'admin':
-        auth_info = Tenant.ADMIN
+        auth_info = Tenant.get('admin')
 
     table_ = table_parser.table(cli.heat('stack-list', auth_info=auth_info))
     names = table_parser.get_values(table_, 'stack_name')
@@ -253,16 +253,18 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 @fixture(scope='module', autouse=True)
 def revert_quota(request):
     tenants_quotas = {}
-    quota_tab = table_parser.table(cli.neutron('quota-list', auth_info=Tenant.ADMIN))
+    quota_tab = table_parser.table(cli.neutron('quota-list', auth_info=Tenant.get('admin')))
     tenants = table_parser.get_column(quota_tab, 'tenant_id')
     for tenant_id in set(tenants):
         network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
-        tenants_quotas[tenant_id] = network_quota
+        subnet_quota = network_helper.get_quota('subnet', tenant_id=tenant_id)
+        tenants_quotas[tenant_id] = (network_quota, subnet_quota)
 
     def revert():
         LOG.fixture_step("Revert network quotas to original values.")
-        for tenant_id_, network_quota_ in tenants_quotas.items():
-            network_helper.update_quotas(tenant_id=tenant_id_, network=network_quota_)
+        for tenant_id_, quotas in tenants_quotas.items():
+            network_quota_, subnet_quota_ = quotas
+            network_helper.update_quotas(tenant_id=tenant_id_, network=network_quota_, subnet=subnet_quota_)
     request.addfinalizer(revert)
 
     return tenants_quotas
@@ -321,9 +323,9 @@ def test_heat_template(template_name, revert_quota):
     elif template_name == 'OS_Neutron_RouterInterface.yaml':
         LOG.tc_step("Increase network quota by 2 for every tenant")
         tenants_quotas = revert_quota
-        for tenant_id, network_quota in tenants_quotas.items():
-            network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
-            network_helper.update_quotas(tenant_id=tenant_id, network=network_quota + 2)
+        for tenant_id, quotas in tenants_quotas.items():
+            network_quota, subnet_quota = quotas
+            network_helper.update_quotas(tenant_id=tenant_id, network=network_quota+10, subnet=subnet_quota+10)
 
     elif template_name == 'OS_Nova_Server.yaml':
         # create new image to do update later

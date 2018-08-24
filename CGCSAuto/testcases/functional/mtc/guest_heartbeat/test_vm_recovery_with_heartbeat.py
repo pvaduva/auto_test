@@ -20,7 +20,7 @@ def test_vm_with_health_check_failure():
 
     Test Steps:
         - Boot a vm with with guest heartbeat enabled
-        - Verify guest heartbeat is established via system event-logs
+        - Verify guest heartbeat is established via fm event-logs
         - Set vm to unhealthy state via touch /tmp/unhealthy
         - Verify vm failed and then auto recovered on the same host
         - Kill kvm process on vm host

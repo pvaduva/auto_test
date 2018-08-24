@@ -440,7 +440,7 @@ def get_timedelta_for_isotimes(time1, time2):
         time1 (str): such as "2016-08-16T12:59:45.440697+00:00"
         time2 (str):
 
-    Returns:
+    Returns ()
 
     """
     def _parse_time(time_):

@@ -81,7 +81,7 @@ def wait_for_con_drbd_sync_complete():
 @fixture(scope='session')
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     more_than_one_controllers = wait_for_con_drbd_sync_complete
-    prev_pswd = Tenant.ADMIN['password']
+    prev_pswd = Tenant.get('admin')['password']
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
@@ -128,6 +128,12 @@ def collect_kpi(request):
     collect_kpi_ = ProjVar.get_var('COLLECT_KPI') and bool(request.node.get_marker('kpi'))
     log_path = ProjVar.get_var('KPI_PATH') if collect_kpi_ else None
     return log_path
+
+
+@fixture(scope='session')
+def ixia_supported():
+    if 'ixia_ports' not in ProjVar.get_var("LAB"):
+        skip("this lab is not configured with ixia_ports.")
 
 
 @fixture(scope='session')

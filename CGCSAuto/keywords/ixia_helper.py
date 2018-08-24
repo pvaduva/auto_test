@@ -11,8 +11,8 @@ from utils.exceptions import IxiaError
 try:
     import IxNetwork
 except ImportError as err:
-    LOG.warn(str(err))
-    LOG.warn("keywords/ixia_helper is not available")
+    LOG.warning(str(err))
+    LOG.warning("keywords/ixia_helper is not available")
 
     class ImportFailedModule(object):
         def __init__(self, imp_err):
@@ -205,8 +205,30 @@ class IxiaSession(object):
                 IxiaResource.release(res)
             except:
                 # this would usually require manual cleanup
-                LOG.warn("(IxiaResource) {} release failed".format(res))
+                LOG.warning("(IxiaResource) {} release failed".format(res))
         self._ixia_resources.clear()
+
+    def set_default_chassis(self, chassis=None):
+        """
+        Set the default chassis
+        if no chassis available, raises IxiaError
+
+        Args:
+            chassis (str|None):
+                identifier, or None to use the 1st existing one
+
+        Returns (str):
+            the chassis identifier
+        """
+        if chassis is None:
+            existing = self.getList(self.getRoot()+'/availableHardware', 'chassis')
+            if not existing:
+                raise IxiaError("Cannot set default chassis if no chassis exists")
+            chassis = existing[0]
+
+        LOG.info("Setting default chassis to {}".format(chassis))
+        self._chassis = chassis
+        return chassis
 
     def add_chassis(self, chassis_ip=None, timeout=60, default=True, clear=False):
         """
@@ -248,7 +270,7 @@ class IxiaSession(object):
         chassis = self._ixnet.remapIds(chassis)[0]
 
         if (default):
-            self._chassis = chassis
+            chassis = self.set_default_chassis(chassis)
 
         # verify the chassis is ready
         succ, val = common.wait_for_val_from_func('ready', timeout, 1,
@@ -264,39 +286,45 @@ class IxiaSession(object):
         Clear a port's ownership.
 
         Args:
-            port (tuple):
+            port (tuple|str):
                 [0] card # on the chassis
                 [1] port # on the card
+                or str as the full port_id
             chassis (str):
                 the chassis identifier, or None to use the default
 
         """
         if chassis is None:
             chassis = self._chassis
-        assert chassis is not None, "no default chassis connected"
+        if chassis is None:
+            chassis = self.set_default_chassis()
 
-        card, port = port
+        if isinstance(port, str):
+            port_id = port
+        else:
+            card, port = port
+            port_id = self.__craft_port_id(card, port, chassis)
 
-        # LOG.info(f"Clearing port: {chassis}/card:{card}/port:{port}")
-        LOG.info("Clearing port: " + self.__craft_port_id(card, port, chassis))
+        LOG.info("Clearing port: " + port_id)
         try:
-            # self._ixnet.execute('clearOwnership', f"{chassis}/card:{card}/port:{port}")
-            self._ixnet.execute('clearOwnership', self.__craft_port_id(card, port, chassis))
+            self._ixnet.execute('clearOwnership', port_id)
         except Exception as err:
             # Unable to release ownership is ok when the configuration is blanked already
             pass
 
-    def connect_ports(self, ports, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
+    def connect_ports(self, ports=None, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
         """
         Connect physical ports on the chassis to virtual ports.
         In order to use the existing setups from ixncfgs, mark existing=True.
 
         Args:
-            ports (list):
+            ports (list|None):
                 list of 'port'
-                port (tuple):
+                port (tuple|str):
                     [0] card # on the chassis
                     [1] port # on the card
+                    or str as the full port_id
+                if None, get all ports from existing connected vports
             chassis (str):
                 the chassis identifier, or None to use the default
             clear_ownership (bool):
@@ -314,7 +342,16 @@ class IxiaSession(object):
         """
         if chassis is None:
             chassis = self._chassis
-        assert chassis is not None, "no default chassis connected"
+        if chassis is None:
+            chassis = self.set_default_chassis()
+
+        if ports is None:
+            if not existing:
+                LOG.warning("existing shall be True when reconnecting all vports")
+            existing = True
+            ports = list()
+            for vport in self.getList(self.getRoot(), 'vport'):
+                ports.append(self.getAttribute(vport, 'assignedTo'))
 
         if clear_ownership:
             for port in ports:
@@ -331,9 +368,13 @@ class IxiaSession(object):
             vports = self.getList(self.getRoot(), 'vport')
 
         vport_map = dict()
-        for vport, (card, port) in zip(vports, ports):
-            vport_map[(card, port)] = vport
-            port_id = self.__craft_port_id(card, port, chassis)
+        for vport, port in zip(vports, ports):
+            if isinstance(port, str):
+                port_id = port
+            else:
+                card, port = port
+                port_id = self.__craft_port_id(card, port, chassis)
+            vport_map[port_id] = vport
             self._port_map[port_id] = vport
             LOG.info("Connecting port: {}, vport = {}".format(port_id, vport))
             self._ixnet.setAttribute(vport, '-connectedTo', port_id)
@@ -347,10 +388,10 @@ class IxiaSession(object):
             return vports
 
     def configure_protocol_interface(self, port, ipv4=None, ipv6=None,
-                                     vlan_id=None, mac_address=None,
+                                     vlan_id=None, mac_address=None, mtu=1500,
                                      description=None, chassis=None,
                                      interface=None, create_if_nonexistent=False,
-                                     validate=True, validate_timeout=10):
+                                     validate=True, validate_timeout=300):
         """
         Configure a Protocol Interface.
         In order to re-configure for an existing interface, specify 'interface='.
@@ -359,6 +400,7 @@ class IxiaSession(object):
             port (tuple):
                 [0] card # on the chassis
                 [1] port # on the card
+                or str as the full port_id
             ipv4 (tuple|None):
                 [0] interface address
                 [1] interface gateway
@@ -369,6 +411,8 @@ class IxiaSession(object):
                 interface VLAN ID, or None to skip vlan configurations
             mac_address (str|None):
                 interface mac address, or None to use default
+            mtu (int):
+                interface mtu
             description (str|None):
                 interface description in the configuration, or None to use default
             chassis (str|None):
@@ -395,13 +439,17 @@ class IxiaSession(object):
 
         if chassis is None:
             chassis = self._chassis
-        assert chassis is not None, "no default chassis connected"
+        if chassis is None:
+            chassis = self.set_default_chassis()
 
-        card, port = port
-        port_id = self.__craft_port_id(card, port, chassis)
+        if isinstance(port, str):
+            port_id = port
+        else:
+            card, port = port
+            port_id = self.__craft_port_id(card, port, chassis)
 
-        if description is None:
-            description = "{}/{}".format(card, port)
+            if description is None:
+                description = "{}/{}".format(card, port)
 
         if interface is None:
             interface = self._ixnet.add(self._port_map[port_id], "interface")
@@ -413,11 +461,11 @@ class IxiaSession(object):
             self._ixnet.execute('sendArpAndNS', interface)
         except IxNetwork.IxNetError as err:
             if create_if_nonexistent:
-                LOG.warn("the specified interface does not exist, creating instead")
+                LOG.warning("the specified interface does not exist, creating instead")
                 interface = self._ixnet.add(self._port_map[port_id], "interface")
                 self._ixnet.commit()
                 interface = self.__remapIds(interface)
-                LOG.warn("interface created: {}".format(interface))
+                LOG.warning("interface created: {}".format(interface))
             else:
                 raise IxiaError("specified interface does not exist")
         self.configure(interface, enabled='true', description=description)
@@ -441,18 +489,33 @@ class IxiaSession(object):
         if mac_address is not None:
             self.configure(interface + '/ethernet', macAddress=mac_address)
 
+        self.configure(interface, mtu=mtu)
+
         LOG.info("Protocol Interface Configuration Complete: {}".format(interface))
 
         if validate:
             vport = '/'.join(interface.split('/')[:-1])
-            self._ixnet.execute("clearNeighborTable", vport)
-            self._ixnet.execute('sendArpAndNS', interface)
 
-            for neighbor in self.getList(vport, 'discoveredNeighbor'):
-                r, val = common.wait_for_val_from_func(False, validate_timeout, 1,
-                                                       self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
-                if not r:
-                    raise IxiaError("Protocol Interface Validation Failed, ARP not resolved")
+            def _validate(vport, interface):
+                self._ixnet.execute("clearNeighborTable", vport)
+                self._ixnet.execute('sendArpAndNS', interface)
+                time.sleep(5)
+                neighbors = self.getList(vport, 'discoveredNeighbor')
+                if not neighbors:
+                    return False
+
+                for neighbor in neighbors:
+                    r, val = common.wait_for_val_from_func(
+                        False, 5, 1, self.testAttributes, neighbor, neighborMac="00:00:00:00:00:00")
+                    if not r:
+                        return False
+                    else:
+                        LOG.info("{} resolved. MAC: {}".format(vport, self.getAttribute(neighbor, 'neighborMac')))
+                return True
+
+            r, val = common.wait_for_val_from_func(True, validate_timeout, 10, _validate, vport, interface)
+            if not r:
+                raise IxiaError("Protocol Interface Validation Failed, ARP not resolved")
             LOG.info("Protocol Interface Validation Complete: {}".format(interface))
         return interface    # used for configuring traffic item
 
@@ -466,7 +529,7 @@ class IxiaSession(object):
             commit (bool):
                 whether or not this change is commited immediately
                 (also implicitly commits all previously uncommited configs)
-            **kwargs (dict):
+            **kwargs:
                 Attribute values to set.
                 i.e., attributeName='true'
 
@@ -475,6 +538,27 @@ class IxiaSession(object):
         self._ixnet.setMultiAttribute(obj_ref, *self.__compound_ixargs({}, kwargs))
         if commit:
             self._ixnet.commit()
+
+    def duplicate_traffic_item(self, trafficItem, times=1):
+        """
+        Duplicate a traffic item.
+
+        Args:
+            trafficItem (str):
+                the identifier of the trafficItem to be duplicated
+            times (int):
+                number of times to duplicate
+
+        Returns (list):
+            newly created trafficItems from duplication
+
+        """
+        old_items = self.getList(self.getRoot()+'/traffic', 'trafficItem')
+        self._ixnet.execute("duplicate", trafficItem, times)
+        new_items = self.getList(self.getRoot()+'/traffic', 'trafficItem')
+        for item in old_items:
+            new_items.remove(item)
+        return new_items
 
     def create_traffic_item(self, trafficItem, trackBy, endpointSets, configElements):
         """
@@ -487,7 +571,7 @@ class IxiaSession(object):
                 see ._show(traffic_obj) for available attributes
             trackBy (list):
                 tracking options list,
-                see ._help(traffic_obj + '/tracking', '-trackBy') for available options
+                see ._show(traffic_obj + '/tracking') for available options
             endpointSets (list):
                 list of dict
                     attributes to configure in the newly created endpoint set,
@@ -527,12 +611,7 @@ class IxiaSession(object):
 
         endp_pairs = list()
         for endp, ce in zip(endpointSets, configElements):
-            endp_obj = self._ixnet.add(traffic_obj, 'endpointSet', *self.__compound_ixargs({}, endp))
-            self._ixnet.commit()
-
-            endp_obj = self.__remapIds(endp_obj)
-            ce_obj = traffic_obj + '/configElement:' + endp_obj[endp_obj.rindex(':')+1:]
-
+            endp_obj, ce_obj = self.create_endpoint_set(traffic_obj, endp)
             endp_pairs.append((endp_obj, ce_obj))
 
             for k, v in ce.items():
@@ -548,6 +627,27 @@ class IxiaSession(object):
 
         LOG.info("Traffic Item Creation Complete: {}".format(traffic_obj))
         return traffic_obj, endp_pairs
+
+    def create_endpoint_set(self, trafficItem, endp={}):
+        """
+        Create an endpointSet according to 'endp' under a trafficItem
+
+        Args:
+            trafficItem (str):
+                the traffic item to attach to
+            endp (dict):
+                attributes to configure in the newly created endpoint set,
+                see ._show(endp_obj) for available attributes
+
+        Returns (tuple):
+            endpointSet, configElement
+
+        """
+        endp_obj = self._ixnet.add(trafficItem, 'endpointSet', *self.__compound_ixargs({}, endp))
+        self._ixnet.commit()
+        endp_obj = self.__remapIds(endp_obj)
+        ce_obj = trafficItem + '/configElement:' + endp_obj[endp_obj.rindex(':')+1:]
+        return endp_obj, ce_obj
 
     def configure_endpoint_set(self, endpointSet, sources=[], destinations=[], append=True):
         """
@@ -834,11 +934,12 @@ class IxiaSession(object):
             LOG.info("matched with view {}".format(view))
 
             self._ixnet.execute("refresh", view)
+            time.sleep(1)
             succ, val = common.wait_for_val_from_func('true', timeout, 1, self.getAttribute, view+"/page", 'isReady')
             if not succ:
                 msg = "timeout occurred when waiting for view {} to become ready. isReady={}".format(view, val)
                 if fail_ok:
-                    LOG.warn(msg)
+                    LOG.warning(msg)
                     continue
                 raise IxiaError(msg)
 
@@ -846,8 +947,63 @@ class IxiaSession(object):
             #         for row in self.getAttribute(view+'/page', 'rowValues')[0]]
 
             result = list()
-            for row in self.getAttribute(view+'/page', 'rowValues')[0]:
-                result.append(dict(zip(self.getAttribute(view+'/page', 'columnCaptions'), row)))
+            for row in self.getAttribute(view+'/page', 'rowValues'):
+                result.append(dict(zip(self.getAttribute(view+'/page', 'columnCaptions'), row[0])))
             return result
 
         return None
+
+    @staticmethod
+    def wait_for_stable_value_from_func(func, *args, timeout=300, interval=10, **kwargs):
+        val = func(*args, **kwargs)
+
+        prev_val = val
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            time.sleep(interval)
+            val = func(*args, **kwargs)
+            if val == prev_val:
+                return True, val
+            prev_val = val
+
+        return False, val
+
+    def get_frames_delta(self, name=None, stable=False, timeout=300, interval=10):
+        """
+        Equiv. to int(.get_statistics('traffic item statistics', fail_ok=False)[0]["Frames Delta"]) if stable=False
+        otherwise, this functions ensures the delta value is not changed before and after the interval
+        For tests with multiple traffic items, use wait_for_stable_value_from_func for stable=True
+
+        Args:
+            name (str|None):
+                traffic item name
+                if None, returns the 0th entry
+            stable (bool):
+                if True, ensures the delta values is not changed in between two fetches
+            timeout (int):
+                max. time to wait for the delta to become stable
+                used only if stable=True
+
+        Returns (int):
+            int(.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
+        """
+        def _get_delta():
+            if name is None:
+                delta = int(self.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
+            else:
+                items = self.get_statistics('traffic item statistics', fail_ok=False)
+                for item in items:
+                    item_name = item['Traffic Item']
+                    if name == item_name:
+                        delta = int(item['Frames Delta'])
+                        break
+                else:
+                    raise ValueError("{} is not found in traffic item statistics".format(name))
+            LOG.info("Frames Delta={}".format(delta))
+            return delta
+        if not stable:
+            return _get_delta()
+        succ, val = self.wait_for_stable_value_from_func(_get_delta, timeout=timeout, interval=interval)
+        if not succ:
+            raise IxiaError("frames delta did not become stable after timeout")
+        return val

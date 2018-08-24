@@ -124,7 +124,7 @@ def set_sensorgroup_action(sensorgroup_name, host, event_level='actions_critical
 
 def modify_sensorgroup(host, sensor_group, value='name', action_critical=None, action_major=None, action_minor=None,
                        suppress=None, audit_interval=None, datatype=None,
-                       fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+                       fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     args_dict = {
         'actions_critical_group': action_critical,
         'actions_major_group': action_major,

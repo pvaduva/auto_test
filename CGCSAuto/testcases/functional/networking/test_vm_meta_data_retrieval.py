@@ -44,7 +44,7 @@ def _router_info(request):
     LOG.info("Router {} subnet ids {}".format(router_name, router_subnets))
     ext_gateway_subnet = network_helper.get_router_ext_gateway_subnet(router_id)
     LOG.info("Router {} external subnet id {}".format(router_name, ext_gateway_subnet))
-    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
     LOG.info("Router {} dvr enabled {}".format(router_name, is_dvr))
 
     def recover():

@@ -27,14 +27,14 @@ def providernet_(request):
     provider = common.get_unique_name(pro_net_name, resource_type='other')
     args = provider + ' --type=vxlan'
 
-    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.get('admin')))
     if not table_parser.get_values(table_, 'id', **{'name': provider}):
-        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
+        cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), rtn_list=True)
 
     range_name = provider + '_range'
 
     def fin():
-        cli.neutron('providernet-delete', provider, auth_info=Tenant.ADMIN)
+        cli.neutron('providernet-delete', provider, auth_info=Tenant.get('admin'))
     request.addfinalizer(fin)
 
     return provider, range_name
@@ -229,7 +229,7 @@ def prepare_segmentation_range(request):
     max_rang = 7020
 
     args = provider + ' --type=vxlan'
-    code, output = cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
+    code, output = cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), fail_ok=True, rtn_list=True)
 
     if not code:
         table_ = table_parser.table(output)
@@ -243,7 +243,7 @@ def prepare_segmentation_range(request):
 
     def fin():
         network_helper.delete_providernet_range(range_name)
-        cli.neutron('providernet-delete', provider, auth_info=Tenant.ADMIN)
+        cli.neutron('providernet-delete', provider, auth_info=Tenant.get('admin'))
     request.addfinalizer(fin)
 
     return provider_id, range_name, min_rang, max_rang
@@ -315,7 +315,7 @@ def multiple_provider_net_range(request):
     provider_ids = []
     for provider in providernet_names:
         args = provider + ' --type=vxlan'
-        code, output = cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
+        code, output = cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), fail_ok=True, rtn_list=True)
 
         if not code:
             table_ = table_parser.table(output)
@@ -334,7 +334,7 @@ def multiple_provider_net_range(request):
     computer_host = ""
     for nova_host in nova_hosts:
         args = '{} {}'.format(nova_host , "-a --nowrap")
-        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.get('admin')))
         list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
                                                                      'used by i/f': '[]'})
 
@@ -356,7 +356,7 @@ def multiple_provider_net_range(request):
     #  args += r'"{},{}" '.format(provider_ids[0], provider_ids[1])   id is not working for if add
     args += r'"{},{}" '.format(providernet_names[0], providernet_names[1])
     args += if_name + ' -nt data --ipv4-mode=static -m {}'.format(1600)
-    cli.system('host-if-add', args, auth_info=Tenant.ADMIN, rtn_list=True)
+    cli.system('host-if-add', args, auth_info=Tenant.get('admin'), rtn_list=True)
 
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
@@ -368,7 +368,7 @@ def multiple_provider_net_range(request):
         network_helper.delete_providernet_range(range_name)
 
         for provider in providernet_names:
-            cli.neutron('providernet-delete', provider, auth_info=Tenant.ADMIN)
+            cli.neutron('providernet-delete', provider, auth_info=Tenant.get('admin'))
 
     request.addfinalizer(fin_teardown)
 
@@ -470,16 +470,16 @@ def test_vxlan_mtu_value_negative(multiple_provider_net_range, the_mtu):
     providernet_names, x, y, computer_host, if_name, new_interface = multiple_provider_net_range
 
     args = computer_host
-    table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.get('admin')))
     if table_parser.get_values(table_, 'name', **{'name': new_interface}):
         args = '{} {}'.format(computer_host, new_interface)
-        cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
+        cli.system('host-if-delete', args, auth_info=Tenant.get('admin'))
 
     LOG.tc_step("Create interface with MTU={} less then the one from provider MTU=1500+x".format(the_mtu))
     args = computer_host + ' ' + new_interface + ' ae ' + providernet_names[0] + ' ' + if_name
     args += ' -nt data -m {}'.format(the_mtu)
 
-    code, err_info = cli.system('host-if-add', args, auth_info=Tenant.ADMIN, fail_ok=True, rtn_list=True)
+    code, err_info = cli.system('host-if-add', args, auth_info=Tenant.get('admin'), fail_ok=True, rtn_list=True)
 
     LOG.tc_step("Verify the interface creation should be failed")
     if code > 0:
@@ -487,7 +487,7 @@ def test_vxlan_mtu_value_negative(multiple_provider_net_range, the_mtu):
         assert NetworkingErr.INVALID_MTU_VALUE in err_info
     else:
         args = '{} {}'.format(computer_host, new_interface)
-        cli.system('host-if-delete', args, auth_info=Tenant.ADMIN)
+        cli.system('host-if-delete', args, auth_info=Tenant.get('admin'))
         assert 1 == code, "Should not pass when the MTU less than the one in provider"
 
 
@@ -495,4 +495,4 @@ def create_vxlan_providernet_range(provider_id, range_name, range_min, range_max
 
     return network_helper.create_providernet_range(provider_id, range_name=range_name, range_min=range_min,
                                                    range_max=range_max, group=group, port=port, ttl=ttl,
-                                                   auth_info=Tenant.ADMIN, con_ssh=None, fail_ok=True)
+                                                   auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=True)

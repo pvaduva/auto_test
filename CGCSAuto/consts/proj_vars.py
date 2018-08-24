@@ -12,7 +12,6 @@ class ProjVar:
                   'BUILD_PATH': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
-                  'VSWITCH_INFO_HOSTS': [],
                   'SW_VERSION': [],
                   'PATCH': None,
                   'SESSION_ID': None,
@@ -35,6 +34,7 @@ class ProjVar:
                   'USER_FILE_DIR': WRSROOT_HOME,
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
+                  'IS_DC': False
                   }
 
     @classmethod
@@ -435,3 +435,25 @@ class BackupVars:
         for key, val in kwargs.items():
             print("Key: {} Value: {}".format(key, val))
             cls.__var_dict[key.upper()] = val
+
+
+class ComplianceVar:
+    __var_dict = {'REFSTACK_SUITE': None,
+                  }
+
+    @classmethod
+    def set_var(cls, append=False, **kwargs):
+        for key, val in kwargs.items():
+            if append:
+                cls.__var_dict[key.upper()].append(val)
+            else:
+                cls.__var_dict[key.upper()] = val
+
+    @classmethod
+    def get_var(cls, var_name):
+        var_name = var_name.upper()
+        valid_vars = cls.__var_dict.keys()
+        if var_name not in valid_vars:
+            raise ValueError("Invalid var_name: {}. Valid vars: {}".format(var_name, valid_vars))
+
+        return cls.__var_dict[var_name]

@@ -4,6 +4,7 @@ from pytest import fixture, mark
 from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
 from consts import horizon
+from keywords import host_helper
 
 
 @fixture(scope='function')
@@ -20,9 +21,8 @@ def hypervisors_pg(admin_home_pg, request):
     return hypervisors_pg
 
 
-@mark.parametrize('host_name', ['controller-0'])
-def test_compute_host_disable_service_negative(hypervisors_pg, host_name):
-
+def test_compute_host_disable_service_negative(hypervisors_pg):
+    host_name = host_helper.get_up_hypervisors()[0]
     hypervisors_pg.go_to_compute_host_tab()
 
     LOG.tc_step('Disable service of the host {}'.format(host_name))

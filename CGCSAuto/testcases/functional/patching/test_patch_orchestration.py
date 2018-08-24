@@ -16,7 +16,7 @@ from utils.clients.ssh import ControllerClient, SSHClient
 @pytest.fixture(scope='session')
 def pre_check_patch():
 
-    # ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    # ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
 
     # Check system health for patch orchestration;
@@ -56,12 +56,6 @@ def patch_orchestration_setup():
     bld_server = get_build_server_info(PatchingVars.get_patching_var('PATCH_BUILD_SERVER'))
     output_dir = ProjVar.get_var('LOG_DIR')
     patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
-    if not patch_dir:
-        patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
-        if build_id:
-            patch_dir = patch_base_dir + '/' + build_id
-        else:
-            patch_dir = patch_base_dir + '/latest_build'
 
     LOG.info("Using  patch directory path: {}".format(patch_dir))
     bld_server_attr = dict()
@@ -76,6 +70,16 @@ def patch_orchestration_setup():
     bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     bld_server_attr['ssh_conn'] = bld_server_conn
     bld_server_obj = Server(**bld_server_attr)
+
+    if not patch_dir:
+        patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
+        if build_id:
+            patch_dir = patch_base_dir + '/' + build_id
+            rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
+            if rc != 0 or bld_server_obj.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))[0] != 0:
+                patch_dir = patch_base_dir + '/latest_build'
+        else:
+            patch_dir = patch_base_dir + '/latest_build'
 
     # Download patch files from specified patch dir
     LOG.info("Downloading patch files from patch dir {}".format(patch_dir))
@@ -597,3 +601,105 @@ def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
     assert applied not in all_patches, "Unable to delete patch {} from repo".format(applied)
 
     LOG.info(" Testing apply/remove through patch orchestration with  alarm is completed......")
+
+
+@pytest.mark.parametrize('failure_patch_type', ['_RESTART_FAILURE', '_PREINSTALL_FAILURE', '_POSTINSTALL_FAILURE'])
+def test_failure_patches_patch_orchestration(patch_orchestration_setup, failure_patch_type):
+    """
+    This test verifies the patch orchestration operation with invalid or failure test patches. The patches are
+    expected to fail on applying the patch orchestration.
+
+    Args:
+        patch_orchestration_setup:
+        failure_patch_type:
+
+    Returns:
+
+    """
+    lab = patch_orchestration_setup['lab']
+    downloaded_patches = patch_orchestration_setup['patches']
+    reg_str = '^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
+    reg_str = reg_str + "_INSVC" + failure_patch_type + ')'
+    reg = re.compile(reg_str)
+
+    patchs = [k for k in downloaded_patches.keys() if reg.match(k)]
+    if len(patchs) == 0:
+        pytest.skip("No patches with pattern {} availabe in patch-dir {}"
+                    .format(failure_patch_type, patch_orchestration_setup['patch-dir']))
+
+    patch_files = [downloaded_patches[patch] for patch in patchs]
+    patches_to_upload = ' '.join(patch_files)
+
+    LOG.tc_step("Uploading patch file {} .....".format(patches_to_upload))
+    uploaded_ids = patching_helper.upload_patch_files(files=patch_files)[0]
+
+    LOG.info(" Patch {} uploaded .....".format(uploaded_ids))
+
+    LOG.tc_step("Applying patch {} .....".format(uploaded_ids))
+    applied = patching_helper.apply_patches(patch_ids=uploaded_ids, apply_all=True)
+    LOG.info(" Patch {} applied .....".format(applied))
+
+    LOG.tc_step("Attempting to install the invalid patch {} through orchestration .....".format(applied))
+    check_alarms_()
+
+    LOG.tc_step("Creating patch orchestration strategy .....")
+    rc, msg = orchestration_helper.create_strategy('patch', fail_ok=True)
+    assert rc == 0,  "Patch orchestration strategy create failed : {}".format(msg)
+
+    LOG.tc_step("Apply patch orchestration strategy with failure patches; expected to fail on applying.....")
+    rc, msg = orchestration_helper.apply_strategy('patch', fail_ok=True)
+    assert rc != 0,  "Patch orchestration strategy apply succeeded which expected to fail : {}".format(msg)
+
+    LOG.info("Deleting the failed patch orchestration strategy .....")
+    orchestration_helper.delete_strategy("patch")
+
+    LOG.tc_step("Removing test patch {} .....".format(applied))
+
+    patching_helper.remove_patches(patch_ids=' '.join(applied))
+    partial_remove_ids = patching_helper.get_partial_removed()
+
+    LOG.info('Install impacted hosts after removing patch IDs:{}'.format(partial_remove_ids))
+    states = patching_helper.get_system_patching_states()
+    impacts_hosts = states['host_states']
+    active = system_helper.get_active_controller_name()
+    standby = system_helper.get_standby_controller_name()
+
+    hosts_install = []
+    if standby in impacts_hosts.keys():
+        hosts_install.append(standby)
+    if active in impacts_hosts.keys():
+        hosts_install.append(active)
+    hosts_install.extend([h for h in impacts_hosts.keys() if h != active and h != standby])
+
+    for host in hosts_install:
+        host_patch_state = impacts_hosts[host]
+        if not host_patch_state['patch-current']:
+            if host_patch_state['rr']:
+                # lock host
+                LOG.info('Patch install failed; lock-unlock host {}'.format(host))
+                swact = True if host == active else False
+                host_helper.lock_host(host, force=True, swact=swact)
+            LOG.info('Install patch for  host {}'.format(host))
+            rc = patching_helper.run_patch_cmd("host-install", args=host, fail_ok=True)[0]
+            if rc != 0:
+                if not host_helper.is_host_locked(host):
+                    host_helper.lock_host(host)
+            if host_helper.is_host_locked(host):
+                host_helper.unlock_host(host)
+
+    new_states = patching_helper.get_system_patching_states()
+    new_host_states = new_states['host_states']
+    for host in impacts_hosts.keys():
+
+        host_patch_state = new_host_states[host]
+        LOG.info('Host patch install states = {}'.format( host_patch_state))
+        assert host_patch_state['patch-current'], "Unable to remove patches {}".format(applied)
+
+    LOG.tc_step("Deleting test patch {} from repo .....".format(applied))
+    patching_helper.delete_patches(patch_ids=applied)
+
+    all_patches = patching_helper.get_all_patch_ids()
+    assert applied not in all_patches, "Unable to delete patch {} from repo".format(applied)
+
+    LOG.info(" Testing apply/remove  invalid patches through patch orchestration is completed......")
+

@@ -47,7 +47,7 @@ def get(rest_client, resource):
     ('GET', '/v1/resource_type'),
     ('GET', '/')
 ])
-def test_good_authentication(gnocchi_rest, operation, resource):
+def test_rest_gnocchi(gnocchi_rest, operation, resource):
     if operation == "GET":
         LOG.info("getting... {}".format(resource))
         get(gnocchi_rest, resource)

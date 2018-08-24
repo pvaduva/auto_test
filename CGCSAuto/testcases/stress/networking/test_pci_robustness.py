@@ -271,13 +271,13 @@ class TestPcipt:
 
         LOG.fixture_step("Get seg_id for {} for vlan tagging on pci-passthough device later".format(pci_net_id))
         seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.ADMIN)
+                                             auto_info=Tenant.get('admin'))
         assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net_id)
 
         if other_pcipt_net_name:
             extra_pcipt_seg_id = network_helper.get_net_info(net_id=other_pcipt_net_name, field='segmentation_id',
                                                              strict=False,
-                                                             auto_info=Tenant.ADMIN)
+                                                             auto_info=Tenant.get('admin'))
             seg_id = {pci_net_name: seg_id,
                       other_pcipt_net_name: extra_pcipt_seg_id}
 

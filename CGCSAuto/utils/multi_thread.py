@@ -76,7 +76,7 @@ class MThread(threading.Thread):
     def get_error_info(self):
         return self._err
 
-    def start_thread(self, timeout=None, keep_alive=False):
+    def start_thread(self, timeout=3600):
         """
         Starts a thread.
         Test must wait for thread to terminate or it can continue running during other tests.
@@ -103,9 +103,30 @@ class MThread(threading.Thread):
         # run the function
         try:
             MThread.running_threads.append(self)
-            con_ssh = SSHClient(ProjVar.get_var('lab')['floating ip'])
+            LOG.info("Connecting to lab fip in new thread...")
+            lab = ProjVar.get_var('lab')
+            lab_fip = lab['floating ip']
+            con_ssh = SSHClient(lab_fip)
             con_ssh.connect(use_current=False)
             ControllerClient.set_active_controller(con_ssh)
+
+            if ProjVar.get_var('IS_DC'):
+                LOG.info("Connecting to subclouds fip in new thread...")
+                ControllerClient.set_active_controller(con_ssh, 'central_region')
+                con_ssh_dict = ControllerClient.get_active_controllers_map()
+                for name in con_ssh_dict:
+                    if name in lab:
+                        subcloud_fip = lab[name]['floating ip']
+                        subcloud_ssh = SSHClient(subcloud_fip)
+                        try:
+                            subcloud_ssh.connect(use_current=False)
+                            ControllerClient.set_active_controller(subcloud_ssh, name=name)
+                        except:
+                            if name == ProjVar.get_var('PRIMARY_SUBCLOUD'):
+                                raise
+                            LOG.warning('Cannot connect to {}'.format(name))
+
+            LOG.info("Connecting to NatBox in new thread...")
             NATBoxClient.set_natbox_client()
             if ProjVar.get_var('REMOTE_CLI'):
                 RemoteCLIClient.get_remote_cli_client()
@@ -121,14 +142,23 @@ class MThread(threading.Thread):
             raise
         finally:
             LOG.info("Terminating thread: {}".format(self.thread_id))
-            ControllerClient.get_active_controller().close()
-            NATBoxClient.get_natbox_client().close()
+            if ProjVar.get_var('IS_DC'):
+                ssh_clients = ControllerClient.get_active_controllers(current_thread_only=True)
+                for con_ssh in ssh_clients:
+                    con_ssh.close()
+            else:
+                ControllerClient.get_active_controller().close()
+
+            natbox_ssh = NATBoxClient.get_natbox_client()
+            if natbox_ssh:
+                natbox_ssh.close()
+
             if ProjVar.get_var('REMOTE_CLI'):
                 RemoteCLIClient.get_remote_cli_client().close()
             LOG.debug("{} has finished".format(self.name))
             MThread.running_threads.remove(self)
 
-    def wait_for_thread_end(self, timeout=None, fail_ok=False):
+    def wait_for_thread_end(self, timeout=3600, fail_ok=False):
         """
         Waits for thread (self) to finish executing.
         All tests should wait for threads to end before proceeding to teardown, unless it is expected to continue,
@@ -149,11 +179,8 @@ class MThread(threading.Thread):
                 LOG.error("Error found in thread call {}".format(self._err))
             return True, self._err
 
-        if self.timeout:
+        if not timeout:
             timeout = self.timeout
-        else:
-            if not timeout:
-                LOG.warning("No timeout was specified. This can lead to waiting infinitely")
 
         LOG.info("Wait for {} to finish".format(self.name))
         self.join(timeout)
@@ -209,7 +236,7 @@ class Events(threading.Event):
         threading.Event.clear(self)
         LOG.info("Event \"{}\" flag set to False".format(self.message))
 
-    def wait_for_event(self, timeout=None, fail_ok=False):
+    def wait_for_event(self, timeout=3600, fail_ok=False):
         """
         Waits for this Events object to have its flag set to True
         Args:

@@ -12,11 +12,11 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 
 def create_snapshot_from_instance(vm_id, name):
-    exit_code, output = cli.nova('image-create --poll {} {}'.format(vm_id, name), auth_info=Tenant.ADMIN,
+    exit_code, output = cli.nova('image-create --poll {} {}'.format(vm_id, name), auth_info=Tenant.get('admin'),
                                  fail_ok=True, timeout=400)
     image_names = glance_helper.get_images(rtn_val='name')
     if name in image_names:  # covers if image creation wasn't completely successful but somehow still produces an image
-        img_id = glance_helper.get_image_id_from_name(name=name, strict=True, auth_info=Tenant.ADMIN, fail_ok=False)
+        img_id = glance_helper.get_image_id_from_name(name=name, strict=True, auth_info=Tenant.get('admin'), fail_ok=False)
         ResourceCleanup.add('image', img_id)
         image_show_table = table_parser.table(cli.glance('image-show', img_id))
         snap_size = int(table_parser.get_value_two_col_table(image_show_table, 'size'))
@@ -56,7 +56,7 @@ def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
     # Check if glance-image storage backing is present in system and skip if it is
     backends = storage_helper.get_storage_backends()
     if 'ceph' in backends or 'external' in backends:
-        auth_info = dict(Tenant.ADMIN)
+        auth_info = dict(Tenant.get('admin'))
         if 'external' in backends:
             auth_info['region'] = 'RegionOne'
         glance_pool = storage_helper.get_storage_backend_show_vals(backend='ceph', fields=('glance_pool_gib', ),

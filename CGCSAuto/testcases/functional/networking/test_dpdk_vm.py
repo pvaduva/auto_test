@@ -43,20 +43,21 @@ def launch_vm(vm_type, num_vcpu, host=None):
     else:
         vif_model = 'avp'
 
-    LOG.tc_step("Create a flavor with 2 vcpus and extra-spec for dpdk")
+    LOG.tc_step("Boot a {} vm with {} vcpus on {}".format(vm_type, num_vcpu, host if host else "any host"))
     flavor_id = nova_helper.create_flavor(vcpus=num_vcpu, ram=1024, root_disk=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
     extra_specs = {FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.CPU_POLICY: 'dedicated',
                    FlavorSpec.MEM_PAGE_SIZE: '2048'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    LOG.tc_step("Boot a VM with mgmt net and tenant net")
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}, {'net-id': tenant_net_id, 'vif-model': vif_model}]
+    internal_net_id = network_helper.get_internal_net_id()
+    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+            {'net-id': tenant_net_id, 'vif-model': vif_model},
+            {'net-id': internal_net_id, 'vif-model': vif_model}]
     vol = cinder_helper.create_volume(image_id=img_id, cleanup='function')[1]
 
-    LOG.tc_step("Boot a vm with created ports")
     host_info = {'avail_zone': 'nova', 'vm_host': host} if host else {}
     vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=nics, flavor=flavor_id, user_data=_get_dpdk_user_data(),
                               source='volume', source_id=vol, cleanup='function', **host_info)[1]
@@ -89,8 +90,13 @@ def test_dpdk_vm_nova_actions(vm_type, num_vcpu):
         - Delete vms, ports, subnets, and networks created
 
     """
+    LOG.tc_step("Boot an observer VM")
+    vms, nics = vm_helper.launch_vms(vm_type="dpdk")
+    vm_observer = vms[0]
+    vm_helper.setup_avr_routing(vm_observer)
 
     vm_id = launch_vm(vm_type=vm_type, num_vcpu=num_vcpu)
+    vm_helper.setup_avr_routing(vm_id, vm_type=vm_type)
 
     for vm_actions in [['reboot'], ['pause', 'unpause'], ['suspend', 'resume'], ['live_migrate'], ['cold_migrate']]:
 
@@ -98,8 +104,9 @@ def test_dpdk_vm_nova_actions(vm_type, num_vcpu):
         for action in vm_actions:
             vm_helper.perform_action_on_vm(vm_id, action=action)
 
-        LOG.tc_step("Ping vm from natbox")
+        LOG.tc_step("Ping vm")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        vm_helper.ping_vms_from_vm(vm_id, vm_observer, net_types=['data', 'internal'], vshell=True)
 
 
 @mark.nics
@@ -125,12 +132,19 @@ def test_evacuate_dpdk_and_vhost_vms(add_admin_role_func):
     if len(hosts) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
+    LOG.tc_step("Boot an observer VM")
+    vm_observer = launch_vm(vm_type='dpdk', num_vcpu=2, host=hosts[1])
+    vm_helper.setup_avr_routing(vm_observer)
+
     LOG.tc_step("Launch dpdk and vhost vms")
     vms = []
     vm_host = hosts[0]
     for vm_info in (('dpdk', 3), ('vhost', 2), ('vhost', 3)):
         vm_type, num_vcpu = vm_info
-        vms.append(launch_vm(vm_type=vm_type, num_vcpu=num_vcpu, host=vm_host))
+        vm_id = launch_vm(vm_type=vm_type, num_vcpu=num_vcpu, host=vm_host)
+        vm_helper.setup_avr_routing(vm_id, vm_type=vm_type)
+        vms.append(vm_id)
 
     LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(vm_host))
     vm_helper.evacuate_vms(host=vm_host, vms_to_check=vms, ping_vms=True)
+    vm_helper.ping_vms_from_vm(vms, vm_observer, net_types=['data', 'internal'], vshell=True)

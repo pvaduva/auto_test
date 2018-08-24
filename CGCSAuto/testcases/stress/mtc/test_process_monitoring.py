@@ -7,6 +7,7 @@ import time
 
 from pytest import mark, fixture, skip
 
+from consts.cgcs import MULTI_REGION_MAP
 from consts.auth import HostLinuxCreds
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
@@ -1112,8 +1113,9 @@ def test_process_monitoring(process_name, con_ssh=None):
 
             ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
-    if ProjVar.get_var('REGION') != 'RegionOne' and re.search('keystone|glance', process_name):
-        skip("Keystone and Glance services are on primary region only")
+    region = ProjVar.get_var('REGION')
+    if region != 'RegionOne' and region in MULTI_REGION_MAP and re.search('keystone|glance', process_name):
+        skip("Keystone and Glance services are on primary region only for multi-region system")
 
     LOG.tc_step('Start testing SM/PM Process Monitoring')
 

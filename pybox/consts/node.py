@@ -3,7 +3,7 @@ class Nodes:
         'node_type': 'controller_ceph',
         'memory': 8192,
         'cpus': 2,
-        'disks': [80000],
+        'disks': [120000],
     }
 
     CONTROLLER_LVM = {
@@ -15,9 +15,9 @@ class Nodes:
 
     CONTROLLER_AIO = {
         'node_type': 'controller_aio',
-        'memory': 12288,
+        'memory': 20000,
         'cpus': 4,
-        'disks': [240000, 40000],
+        'disks': [240000, 10000],
     }
 
     COMPUTE = {

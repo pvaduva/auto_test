@@ -982,7 +982,7 @@ class Telnet:
                 for x in range(0, int(selection_menu_option)):
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
-                    time.sleep(1)
+                    time.sleep(2)
                 log.info("Pressing ENTER key")
                 self.write(str.encode("\n"))
                 return
@@ -992,7 +992,7 @@ class Telnet:
                 for x in range(0, int(selection_menu_option)):
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
-                    time.sleep(1)
+                    time.sleep(2)
                 log.info("Pressing ENTER key")
                 self.write(str.encode("\n"))
 
@@ -1012,6 +1012,7 @@ class Telnet:
                     self.write(str.encode("\n"))
                 else:
                     log.info("Selecting standard profile")
+                    time.sleep(2)
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\n"))
 
@@ -1070,7 +1071,7 @@ class Telnet:
                 # GENERIC USB
                 if usb and node.name == CONTROLLER0:
                     log.info("Looking for USB device")
-                    boot_device_regex = "USB|Kingston|JetFlash"
+                    boot_device_regex = "USB|Kingston|JetFlash|Verbatim"
 
                 log.info("Searching boot device menu for {}...".format(boot_device_regex))
                 # \x1b[13;22HIBA XE Slot 8300 v2140\x1b[14;22HIBA XE Slot
@@ -1245,7 +1246,7 @@ class Telnet:
                 self.get_read_until("PXE Boot", 120)
             else:
                 self.get_read_until("Network Boot", 120)
-                #self.get_read_until("Network Boot", 10)
+                self.get_read_until("Network Boot", 10)
             log.info("Enter BIOS key")
             self.write(str.encode(bios_key))
 

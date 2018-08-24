@@ -111,7 +111,7 @@ def get_hypervisor():
 
 
 def get_cpu_info(hypervisor):
-    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.ADMIN)
+    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.get('admin'))
     table = table_parser.table(output)
     cpu_info = table_parser.get_value_two_col_table(table, 'cpu_info')
 
@@ -130,7 +130,7 @@ def get_cpu_info(hypervisor):
             else:
                 non_vm_cores[assigned] = [int(core)]
 
-    LOG.info('TODO: non_vm_cores={}'.format(non_vm_cores))
+    LOG.info('non_vm_cores={}'.format(non_vm_cores))
     return eval(cpu_info), num_threads, non_vm_cores, len(core_function)
 
 
@@ -138,7 +138,7 @@ def get_suitable_hypervisors():
     """
     Get low latency hypervisors with HT-off
 
-    TODO: following settings should checked, but most cannot be easily done automatically
+    TODO: following settings should checked, but most of them cannot be easily done automatically
     # Processor Configuration
     # Hyper-Threading = Disabled
     # Power & Performance
@@ -295,6 +295,7 @@ def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
 
     result2 = {}
     totals = []
+    overflows = []
     with open(hist_file) as f:
         for line in f:
             m = re.match(pattern2, line)
@@ -307,23 +308,26 @@ def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
                 if m and len(m.groups()) == 2:
                     totals = [int(n) for n in m.group(1).split()]
                     totals = totals[:-1]
+                else:
+                    m = re.match('^# Histogram Overflows:\s+((\d+\s+)*\d+)\s*$', line)
+                    if m and len(m.groups()) == 2:
+                        overflows = [int(n) for n in m.group(1).split()]
+                        overflows = overflows[:-1]
 
     if not cores_to_ignore:
         cores_to_ignore = []
-    LOG.info('TODO: ignore cpu:{}'.format(cores_to_ignore))
+    LOG.info('ignore cpu:{}'.format(cores_to_ignore))
 
     accumulated = [[d for i, d in enumerate(result2[0]) if i not in cores_to_ignore]]
     total_count = sum([t for i, t in enumerate(totals) if i not in cores_to_ignore])
-    LOG.info('TODO: total={}'.format(total_count))
+    total_count += sum([t for i, t in enumerate(overflows) if i not in cores_to_ignore])
+    LOG.info('total={}'.format(total_count))
 
     time_slots = len(list(result2.keys()))
     LOG.info("Time slots: {}".format(time_slots))
     slot = 0
     for slot in range(1, time_slots):
-        LOG.info('\nTODO:us:{}'.format(slot))
         prev_counts = accumulated[slot-1]
-        LOG.info('TODO: prev_sums:{}'.format(prev_counts))
-        LOG.info('TODO: ignore cpu:{}'.format(cores_to_ignore))
 
         vm_cpu_counts = [hit for i, hit in enumerate(result2[slot]) if i not in cores_to_ignore]
         accumulated.append([hit + prev_counts[i] for i, hit in enumerate(vm_cpu_counts)])
@@ -335,7 +339,6 @@ def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
                 INCLUDING_RATIO*100, slot, sum(accumulated[slot]) * 1.0 / total_count))
             break
         else:
-            LOG.info('TODO: default to: sums[sec]={}'.format(accumulated[slot]))
             LOG.info('usec:{}, sum till this sec:{}'.format(slot, sum(accumulated[slot])))
             LOG.info('total:{}, {}%'.format(total_count, sum(accumulated[slot]) / total_count * 100))
         LOG.info('')

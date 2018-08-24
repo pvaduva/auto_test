@@ -30,10 +30,10 @@ def router_info(request):
 
     router_id = network_helper.get_tenant_router()
     network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
-    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
 
     def teardown():
-        if eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN)) != is_dvr:
+        if eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin'))) != is_dvr:
                 network_helper.update_router_distributed(router_id, distributed=is_dvr)
     request.addfinalizer(teardown)
 
@@ -136,7 +136,7 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     LOG.tc_step("Update router to distributed if not already done")
     router_id = router_info
-    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.ADMIN))
+    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
     if not is_dvr:
         network_helper.update_router_distributed(router_id, distributed=True)
 
@@ -163,6 +163,6 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
-    from_vm = random.choice(vms)
+    from_vm = vms[0]
     LOG.tc_step("Ping vms' over management and data networks from vm {}, and verify ping successful.".format(from_vm))
     vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt', 'internal'], fail_ok=False)

@@ -1,17 +1,23 @@
+from time import sleep
+
+from pytest import skip, fixture
+
+from consts import horizon
 from utils.horizon.regions import messages
 from utils.horizon.pages import loginpage
-from time import sleep
 from utils.horizon.pages.settings import usersettingspage
 from utils.horizon.pages.settings import changepasswordpage
-from pytest import fixture
 from testfixtures.horizon import admin_home_pg, driver
-from consts import horizon
+from keywords import system_helper
 
 
 class TestDashboardHelp:
 
     def test_dashboard_help_redirection(self, admin_home_pg):
         """Verifies Help link redirects to the right URL."""
+
+        if not system_helper.is_avs():
+            skip('No support page available for STX')
 
         admin_home_pg.go_to_help_page()
         admin_home_pg._wait_until(

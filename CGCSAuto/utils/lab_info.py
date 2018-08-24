@@ -109,7 +109,7 @@ def __get_lab_ssh(labname, log_dir=None):
         ProjVar.set_var(log_dir=log_dir)
 
     ProjVar.set_var(lab=lab)
-    ProjVar.set_var(source_admin=Tenant.ADMIN)
+    ProjVar.set_var(source_admin=Tenant.get('admin'))
     con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                         CONTROLLER_PROMPT)
     con_ssh.connect()
@@ -284,7 +284,7 @@ def get_build_info(labname=None, log_dir=None):
             build_by = build_by[0] if build_by else ''
 
             if build_id.strip():
-                build_path = '/localhost/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
+                build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
     finally:
         con_ssh.close()
 

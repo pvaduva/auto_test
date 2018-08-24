@@ -129,6 +129,10 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('cold-migration', 'transient'),
         ('stop_start', 'transient'),
         ('evacuate', 'transient'),
+        ('evacuate', 'persistent', 'vtpm'), # CGTS-9620
+        ('evacuate', 'persistent', 'autorc'), # CGTS-9620
+        ('evacuate', 'non_volatile', 'vtpm'), # CGTS-9620
+        ('evacuate', 'non_volatile', 'autorc'), # CGTS-9620
         ('resize_to_autorc', 'transient'),
         ('resize_to_non_autorc', 'transient'),
         ('resize_to_non_vtpm', 'non_volatile'),
@@ -139,6 +143,11 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('reboot_host', 'transient', 'vtpm'),
         ('reboot_host', 'transient', 'autorc'),
         ('reboot_host', 'transient', 'non_autorc'),
+        ('reboot_host', 'persistent', 'vtpm'), # CGTS-9620
+        ('reboot_host', 'persistent', 'autorc'), # CGTS-9620
+        ('reboot_host', 'non_volatile', 'vtpm'), # CGTS-9620
+        ('reboot_host', 'non_volatile', 'autorc'), # CGTS-9620
+
     }
 
     if (vm_op, mem_type, vm_feature) in to_be_lost:

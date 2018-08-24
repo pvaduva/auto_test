@@ -211,3 +211,7 @@ class HorizonError(TiSError):
 
 class IxiaError(TiSError):
     message = 'Ixia error.'
+
+
+class RefStackError(TiSError):
+    message = 'RefStack test(s) failed.'

@@ -131,13 +131,13 @@ def test_vm_voting_multiple_vms(vms_):
     LOG.tc_step("Verify that attempts to soft reboot the VM is not allowed")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
+        exitcode, output = cli.nova('reboot', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=True)
         assert ('action-rejected' in output)
 
     LOG.tc_step("Verify that attempts to hard reboot the VM is not allowed")
     time.sleep(10)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('reboot --hard', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
+        exitcode, output = cli.nova('reboot --hard', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=True)
         assert ('action-rejected' in output)
 
     vm_id = vm_ids[2]
@@ -157,7 +157,7 @@ def test_vm_voting_multiple_vms(vms_):
     LOG.tc_step("Verify that attempts to stop the VM is not allowed")
     time.sleep(20)
     with host_helper.ssh_to_host('controller-0') as cont_ssh:
-        exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.ADMIN, rtn_list=True, fail_ok=True)
+        exitcode, output = cli.nova('stop', vm_id, ssh_client=cont_ssh, auth_info=Tenant.get('admin'), rtn_list=True, fail_ok=True)
         assert ('Unable to stop the specified server' in output)
 
     vm_id = vm_ids[3]

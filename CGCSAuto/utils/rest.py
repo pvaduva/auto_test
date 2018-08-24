@@ -29,7 +29,7 @@ class Rest:
         """
         Initiate an object for handling REST calls.
         Args:
-            serviceName -
+            serviceName - 
 
         """
         self.token = ""
@@ -60,7 +60,7 @@ class Rest:
 
     def generate_token_request(self, **kwargs):
         """
-        TBD - should update this to allow for configurable
+        TBD - should update this to allow for configurable 
               json_string to be able to change any value
               for truly flexible testing.
         """
@@ -167,7 +167,7 @@ class Rest:
         if verify is None:
             verify = self.verify
         kpi = KPI()
-        r = requests.put(self.baseURL + resource,
+        r = requests.put(self.baseURL + resource, 
                          headers=headers, data=json_data,
                          verify=verify)
         kpi.stop()

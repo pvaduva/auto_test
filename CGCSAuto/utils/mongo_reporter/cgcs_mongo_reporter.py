@@ -119,14 +119,11 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
         if options['result'] == '' or options['result'] is None:
             result_parser = TestResultsParser(logfile)
             result = result_parser.parse()
-    
-    # convert to acceptable database format
-    if result == 'Passed' or result == 'passed':
-        result = 'PASS'
-    elif result == 'Failed' or result == 'failed':
-        result = 'FAIL'
-    elif result.lower() == 'skipped':
-        result = 'SKIP'
+
+    # Prepare to upload
+    # Covert result to uppercase, such as PASS, FAIL, SKIP
+    result = re.findall('(skip|pass|fail)', result.lower())
+    result = result[0].upper() if result else 'UNKNOWN'
 
     # create a data file containing test information
     os.system("rm -rf %s" % output)
