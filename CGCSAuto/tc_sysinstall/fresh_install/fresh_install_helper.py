@@ -421,7 +421,7 @@ def attempt_to_run_post_install_scripts():
 
 def get_resume_step(lab=None, install_progress_path=None):
     if lab is None:
-        lab = InstallVars.get_install_var("LAB")
+        lab = ProjVar.get_var("LAB")
     if install_progress_path is None:
         install_progress_path = "{}/../{}_install_progress.txt".format(ProjVar.get_var("LOG_DIR"), lab["short_name"])
 

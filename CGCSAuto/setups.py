@@ -717,7 +717,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         conf_resume_step = installer_steps["RESUME_POINT"]
         conf_final_step = installer_steps["STOP_POINT"]
         conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
-        resume = conf_resume_step
+        if conf_resume_step:
+            resume = conf_resume_step
         if conf_final_step:
             stop = conf_final_step
         if conf_skip_steps:
@@ -899,7 +900,8 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
                  "GUEST_IMAGE_PATH": guest_image, "HEAT_TEMPLATES": heat_templates, "OVS_CONFIG": str(ovs)}
     boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server, "SECURITY_PROFILE": security,
                  "LOW_LATENCY_INSTALL": low_latency}
-    control_dict = {"RESUME_POINT": resume if resume else '', "STEPS_TO_SKIP": skip, "STOP_POINT": stop}
+    control_dict = {"RESUME_POINT": resume if not isinstance(resume, bool) else None,
+                    "STEPS_TO_SKIP": skip, "STOP_POINT": stop}
     config["LAB"] = labconf_lab_dict
     config["NODES"] = node_dict
     config["BUILD"] = build_dict
