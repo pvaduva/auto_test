@@ -24,6 +24,50 @@ def get_all_vms():
     return vms
 
 
+def get_all_vms_status():
+    """
+
+    Gets the status of all vms
+
+    Returns: (dict): {vm_id1:vm_status, vm_id2:vm_status, ...}
+
+    """
+    vm_ids = nova_helper.get_vms()
+    vm_status_dict = nova_helper.get_vms_info(vm_ids)
+
+    return vm_status_dict
+
+
+def check_for_diffs_in_vm_status(first_dict, second_dict):
+    """
+
+    Args:
+        first_dict (dict):
+        second_dict (dict):
+
+    Returns:
+        (0, {}), if dictionaries are identical.
+        (1, {vm_id:info, vm_id:info, ...}), if vm status changed between the two dictionaries
+        (2, info), if the number of vm_ids change or the same vm_id is not found in both dictionaries
+
+    """
+    first_dict_keys = sorted(first_dict.keys())
+    second_dict_keys = sorted(second_dict.keys())
+    if first_dict_keys != second_dict_keys:
+        return 2, "Both arguments do not contain the same keys in the dictionaries. Details: First vm_ids:{}, " \
+                  "Second vm_ids:{}.".format(first_dict_keys, second_dict_keys)
+
+    unstable_vms = {}
+    for vm_id in first_dict_keys:
+        if first_dict[vm_id] != second_dict[vm_id]:
+            unstable_vms[vm_id] = "Previous VM status: {}. Current VM status: {}.".format(first_dict[vm_id],
+                                                                                          second_dict[vm_id])
+    if unstable_vms:
+        return 1, unstable_vms
+    else:
+        return 0, unstable_vms
+
+
 def _get_large_heat(con_ssh=None, heat_template='system'):
     """
     copy the heat templates to TiS server.
