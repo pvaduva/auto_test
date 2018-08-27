@@ -33,6 +33,7 @@ class ProjVar:
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
                   'IS_DC': False,
+                  'BUILD_INFO': None
                   }
 
     @classmethod

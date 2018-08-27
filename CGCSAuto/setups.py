@@ -277,15 +277,7 @@ def get_build_info(con_ssh):
     else:
         # get build_id
         build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
-        if build_id and build_id[0] != 'n/a':
-            build_id = build_id[0]
-        else:
-            build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
-            if build_date and build_date[0] != 'n/a':
-                build_id = build_date[0].rsplit(' ', 1)[0]
-                build_id = str(build_id).replace(' ', '_').replace(':', '_')
-            else:
-                build_id = ' '
+        build_id = build_id[0] if build_id else ''
 
         # get build_host
         build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
@@ -302,7 +294,8 @@ def get_build_info(con_ssh):
         if build_id.strip():
             build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
 
-    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path)
+    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path,
+                    BUILD_INFO=output)
 
     return build_id, build_host, job, build_by
 

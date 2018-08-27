@@ -342,8 +342,12 @@ def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=No
     # FIXME: temp workaround to maintain backward compatibility for non-STX build until TC branch is created.
     build = ProjVar.get_var('BUILD_ID')
     cmd_ = 'fm'
-    if build and build < '2018-08-19':
+    if build and build != 'n/a':
+        if build < '2018-08-19':
+            cmd_ = 'system'
+    elif 'CGCS_DEV_0034' in ProjVar.get_var('BUILD_INFO'):
         cmd_ = 'system'
+
     return exec_cli(cmd_, sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
                     fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
