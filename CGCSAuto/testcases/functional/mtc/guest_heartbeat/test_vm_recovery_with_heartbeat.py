@@ -74,8 +74,10 @@ def test_vm_with_health_check_failure():
     time.sleep(10)
     start_time = common.get_date_in_format()
     with host_helper.ssh_to_host(compute_name) as compute_ssh:
-        cmd = "ps -ef | grep 'kvm -c' | grep -v grep | awk '{print $2}'"
-        exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=90)
+        cmd = "ps -ef | grep -E 'kvm -c|kvm -name' | grep -v grep | awk '{print $2}'"
+        exitcode, output = compute_ssh.exec_cmd(cmd, expect_timeout=60, fail_ok=False)
+        assert output, "No kvm process running for vm {} on {}".format(vm_id, compute_name)
+
         cmd = "kill -9 %s" % output
         compute_ssh.exec_sudo_cmd(cmd, expect_timeout=90)
 
