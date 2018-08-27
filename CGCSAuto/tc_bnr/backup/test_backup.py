@@ -432,7 +432,7 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
         new_quotas['cores'] = 2 * vm_count
         new_quotas['ram'] = 2048 * vm_count
         LOG.info('TODO: update quotas with:{}'.format(new_quotas))
-        nova_helper.update_quotas(tenant=tenant, **new_quotas)
+        nova_helper.update_quotas(tenant=tenant['user'], **new_quotas)
 
 
 def pb_launch_vms(con_ssh, image_ids, backup_info=None):
