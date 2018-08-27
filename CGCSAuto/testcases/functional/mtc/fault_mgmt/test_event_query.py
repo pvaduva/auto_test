@@ -60,8 +60,7 @@ def test_event_list(event_option, severity):
                                                        query_type='string')
     if event_option == 'alarms':
         uuid_val = active_alarm_uuid['values'][0][0]
-        retcode, output = delete_alarm_log(uuid=uuid_val)
-        assert retcode == 0, output
+        system_helper.delete_alarms(alarms=uuid_val)
 
 
 def query_check(length, local_limit):
@@ -85,13 +84,3 @@ def generate_alarm_log(alarm_str, maxi=0):
             return False
     else:
         return True
-
-
-def delete_alarm_log(con_ssh=None, uuid=None):
-    if uuid is None:
-        return 1
-    cli.system(cmd="alarm-delete", positional_args=uuid, ssh_client=con_ssh)
-    query_active_alarm = system_helper.get_alarms_table(query_key='UUID', query_value=uuid, query_type='string')
-    if not bool(query_active_alarm):
-        return 1, "Alarm " + uuid + " was not deleted"
-    return 0, "Alarm ID " + uuid + " was deleted"

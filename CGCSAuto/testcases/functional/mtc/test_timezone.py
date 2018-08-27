@@ -1,9 +1,10 @@
 import time
 import random
 
-from keywords import host_helper, system_helper, mtc_helper, cinder_helper, glance_helper, vm_helper
+from keywords import host_helper, system_helper, cinder_helper, glance_helper, vm_helper
 from utils import table_parser, cli
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.fixture_resources import ResourceCleanup
@@ -153,7 +154,7 @@ def test_modify_timezone_log_timestamps(get_out_of_date_alarms):
     Test Teardown
         - N/A
     """
-    logs = ['auth.log', 'daemon.log', 'fm-event.log', 'fsmond.log', 'io-monitor.log', 'kern.log', 'openstack.log',
+    logs = ['auth.log', 'daemon.log', 'fm-event.log', 'fsmond.log', 'kern.log', 'openstack.log',
             'pmond.log', 'sm-scheduler.log', 'user.log']
     out_of_date_alarms = get_out_of_date_alarms
     active_controller = system_helper.get_active_controller_name()

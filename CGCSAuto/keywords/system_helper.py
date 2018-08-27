@@ -1406,7 +1406,7 @@ def __suppress_unsuppress_event(alarm_id, suppress=True, check_first=False, fail
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.system(cmd, '--alarm_id ' + alarm_id, ssh_client=con_ssh, rtn_list=True, fail_ok=fail_ok)
+    code, output = cli.fm(cmd, '--alarm_id ' + alarm_id, ssh_client=con_ssh, rtn_list=True, fail_ok=fail_ok)
 
     if code == 1:
         return 1, output
