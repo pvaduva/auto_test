@@ -12,7 +12,8 @@ from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
-from consts.kpi_vars import UpgradeActivate, UpgradeComplete, UpgradeStart, UpgradeOrchestration, UpgradeController1
+from consts.kpi_vars import UpgradeActivate, UpgradeComplete, UpgradeStart, UpgradeOrchestration, UpgradeController1, \
+    UpgradeController0
 
 
 def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
@@ -1015,6 +1016,34 @@ def collected_upgrade_controller1_kpi(lab, collect_kpi, init_time=None):
                               start_pattern=start_pattern, start_path=start_path,
                               end_pattern=end_pattern, init_time=init_time, sudo=True, topdown=True)
 
+
+def collected_upgrade_controller0_kpi(lab, collect_kpi, init_time=None):
+    """
+
+    Args:
+        lab:
+        collect_kpi:
+
+    Returns:
+
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test.  Skip due to kpi collection is not enabled")
+        return
+
+    lab_name = lab['short_name']
+    log_path = UpgradeController0.LOG_PATH
+    kpi_name = UpgradeController0.NAME
+    host = "controller-1"
+    start_pattern = UpgradeController0.START
+    start_path = UpgradeController0.START_PATH
+    end_pattern = UpgradeController0.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern, start_path=start_path,
+                              end_pattern=end_pattern, init_time=init_time, sudo=True, topdown=True)
 
 
 def collect_upgrade_orchestration_kpi(lab, collect_kpi):
