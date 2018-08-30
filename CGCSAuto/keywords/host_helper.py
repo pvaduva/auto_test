@@ -1681,12 +1681,58 @@ def _get_actual_mems(host):
     return actual_mems
 
 
+def wait_for_mempage_update(host, proc_id=None, expt_1g=None, timeout=300):
+    """
+    Wait for host memory to be updated after modifying and unlocking host.
+    Args:
+        host:
+        proc_id (int|list|None):
+        expt_1g (int|list|None):
+        timeout:
+
+    Returns:
+
+    """
+    proc_id_type = type(proc_id)
+    if not isinstance(expt_1g, proc_id_type):
+        raise ValueError("proc_id and expt_1g have to be the same type")
+
+    pending_2m = pending_1g = -1
+    headers = ['vm_hp_total_1G', 'vm_hp_pending_1G', 'vm_hp_pending_2M']
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        host_mems = system_helper.get_host_mem_values(host, headers, proc_id=proc_id)
+        for proc in host_mems:
+            current_1g, pending_1g, pending_2m = host_mems[proc]
+            if not (pending_2m is None and pending_1g is None):
+                break
+        else:
+            LOG.info("Pending memories are None")
+            break
+        time.sleep(15)
+    else:
+        err = "Pending memory after {}s. Pending 2M: {}; Pending 1G: {}".format(timeout, pending_2m, pending_1g)
+        assert 0, err
+
+    if expt_1g:
+        if isinstance(expt_1g, int):
+            expt_1g = [expt_1g]
+            proc_id = [proc_id]
+
+        for i in range(len(proc_id)):
+            actual_1g = host_mems[proc_id[i]][0]
+            expt = expt_1g[i]
+            assert expt == actual_1g, "{} proc{} 1G pages - actual: {}, expected: {}".\
+                format(host, proc_id[i], actual_1g, expt_1g)
+
+
 def modify_host_memory(host, proc, gib_1g=None, gib_4k_range=None, actual_mems=None,
                        con_ssh=None, auth_into=Tenant.get('admin')):
     """
 
     Args:
         host (str):
+        proc (int|str)
         gib_1g (None|int): 1g page to set
         gib_4k_range (None|tuple):
             None: no requirement on 4k page
@@ -1916,34 +1962,54 @@ def apply_cpu_profile(host, profile_uuid, timeout=CMDTimeout.CPU_PROFILE_APPLY, 
     return 0, success_msg
 
 
-def get_host_cpu_cores_for_function(hostname, function='vSwitch', core_type='log_core', thread=0, con_ssh=None,
-                                    auth_info=Tenant.get('admin')):
+def is_lowlatency_host(host):
+    subfuncs = get_hostshow_value(host=host, field='subfunctions')
+    return 'lowlatency' in subfuncs
+
+
+def get_host_cpu_cores_for_function(hostname, func='vSwitch', core_type='log_core', thread=0, con_ssh=None,
+                                    auth_info=Tenant.get('admin'), rtn_dict_per_proc=True):
     """
     Get processor/logical cpu cores/per processor on thread 0 for given function for host via system host-cpu-list
 
     Args:
         hostname (str): hostname to pass to system host-cpu-list
-        function (str): such as 'Platform', 'vSwitch', or 'VMs'
+        func (str|tuple|list): such as 'Platform', 'vSwitch', or 'VMs'
         core_type (str): 'phy_core' or 'log_core'
         thread (int|None): thread number. 0 or 1
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (dict): format: {<proc_id> (int): <log_cores> (list), ...}
+    Returns (dict|list): format: {<proc_id> (int): <log_cores> (list), ...}
         e.g., {0: [1, 2], 1: [21, 22]}
 
     """
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
-    procs = list(set(table_parser.get_values(table_, 'processor', thread=thread)))
-    res_dict = {}
-    print(table_parser.get_values(table_, core_type, assigned_function=function))
+    procs = list(set(table_parser.get_values(table_, 'processor', thread=thread))) if rtn_dict_per_proc else [None]
+    res = {}
+
+    convert = False
+    if isinstance(func, str):
+        func = [func]
+        convert = True
 
     for proc in procs:
-        cores = table_parser.get_values(table_, core_type, processor=proc, assigned_function=function, thread=thread)
-        res_dict[int(proc)] = sorted([int(item) for item in cores])
+        funcs_cores = []
+        for func_ in func:
+            cores = table_parser.get_values(table_, core_type, processor=proc, assigned_function=func_, thread=thread)
+            funcs_cores.append(sorted([int(item) for item in cores]))
 
-    LOG.info("{} {} {}s per processor on thread {}: {}".format(hostname, function, core_type, thread, res_dict))
-    return res_dict
+        if convert:
+            funcs_cores = funcs_cores[0]
+
+        if proc is not None:
+            res[int(proc)] = funcs_cores
+        else:
+            res = funcs_cores
+            break
+
+    LOG.info("{} {} {}s: {}".format(hostname, func, core_type, res))
+    return res
 
 
 def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_ssh=None):
@@ -2422,7 +2488,7 @@ def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.get(
         con_ssh:
         auth_info:
 
-    Returns (dict):
+    Returns (dict): {<host>(str): val(str|list), ...}
     """
     if isinstance(hosts, str):
         hosts = [hosts]

@@ -3,7 +3,6 @@
 ##########################################################################
 
 import re
-import time
 
 from pytest import fixture, mark, skip
 
@@ -99,9 +98,9 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
         config_host_module(host=hosts[0], modify_func=_modify)
         LOG.fixture_step("Check mem pages for {} are modified and updated successfully".format(hosts[0]))
         if host0_proc0_mod:
-            _wait_for_mempage_update(host=hosts[0], proc_id=0, expt_1g=0)
+            host_helper.wait_for_mempage_update(host=hosts[0], proc_id=0, expt_1g=0)
         if host0_proc1_mod:
-            _wait_for_mempage_update(host=hosts[0], proc_id=1, expt_1g=2)
+            host_helper.wait_for_mempage_update(host=hosts[0], proc_id=1, expt_1g=2)
 
     host1_config = config_needed[hosts[1]]
     host1_proc0_mod = host1_config.get(0)
@@ -111,9 +110,9 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
         config_host_module(host=hosts[1], modify_func=_modify)
         LOG.fixture_step("Check mem pages for {} are modified successfully".format(hosts[1]))
         if host1_proc0_mod:
-            _wait_for_mempage_update(host=hosts[1], proc_id=0, expt_1g=0)
+            host_helper.wait_for_mempage_update(host=hosts[1], proc_id=0, expt_1g=0)
         if host1_proc1_mod:
-            _wait_for_mempage_update(host=hosts[1], proc_id=1, expt_1g=0)
+            host_helper.wait_for_mempage_update(host=hosts[1], proc_id=1, expt_1g=0)
 
     if configured:
         LOG.fixture_step("Check host memories for {} after mem config completed".format(hosts))
@@ -124,40 +123,6 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
             "Failed to configure {}. Expt: proc0:1g<2,4k<2ib;proc1:1g<2,4k>=2gib".format(hosts[1])
 
     return hosts, storage_backing
-
-
-def _wait_for_mempage_update(host, proc_id=None, expt_1g=None, timeout=300):
-    proc_id_type = type(proc_id)
-    if not isinstance(expt_1g, proc_id_type):
-        raise ValueError("proc_id and expt_1g have to be the same type")
-
-    pending_2m = pending_1g = -1
-    headers = ['vm_hp_total_1G', 'vm_hp_pending_1G', 'vm_hp_pending_2M']
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        host_mems = system_helper.get_host_mem_values(host, headers, proc_id=proc_id)
-        for proc in host_mems:
-            current_1g, pending_1g, pending_2m = host_mems[proc]
-            if not (pending_2m is None and pending_1g is None):
-                break
-        else:
-            LOG.info("Pending memories are None")
-            break
-        time.sleep(15)
-    else:
-        err = "Pending memory after {}s. Pending 2M: {}; Pending 1G: {}".format(timeout, pending_2m, pending_1g)
-        assert 0, err
-
-    if expt_1g:
-        if isinstance(expt_1g, int):
-            expt_1g = [expt_1g]
-            proc_id = [proc_id]
-
-        for i in range(len(proc_id)):
-            actual_1g = host_mems[proc_id[i]][0]
-            expt = expt_1g[i]
-            assert expt == actual_1g, "{} proc{} 1G pages - actual: {}, expected: {}".\
-                format(host, proc_id[i], actual_1g, expt_1g)
 
 
 @fixture(scope='function')
@@ -385,11 +350,14 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
-def test_compute_mempage_configs(hosts=None):
+def test_compute_mempage_vars(hosts=None):
     """
     Steps:
         - Collect host mempage stats from system host-memory-list
-        - Ensure the stats collected are reflected in compute_extend.conf and compute_reserved.conf on compute host
+        - Ensure the stats collected are reflected in following places:
+            - nova hypervisor-show
+            - compute_extend.conf and compute_reserved.conf on compute host
+            - /sys/devices/system/node/node*/hugepages/ on compute host
 
     Args:
         hosts (str|None|list|tuple): this param is reserved if any test wants to call this as verification step
@@ -402,8 +370,9 @@ def test_compute_mempage_configs(hosts=None):
 
     LOG.info("---Collect host memory info via system host-memory-list cmd")
     for host in hosts:
-        headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G']
-        _wait_for_mempage_update(host)
+        headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G',
+                   'vm_hp_avail_2M', 'vm_hp_avail_1G']
+        host_helper.wait_for_mempage_update(host)
         expt_compute_extend = {
             'vswitch_2M_pages': [],
             'vswitch_1G_pages': [],
@@ -411,12 +380,33 @@ def test_compute_mempage_configs(hosts=None):
             'vm_2M_pages': [],
             'vm_1G_pages': []
         }
-        expt_vm_1g = {}
-        expt_vm_2m = {}
+
+        expt_sys_hp = {
+            '2048kB': {'nr': [], 'free': []},
+            '1048576kB': {'nr': [], 'free': []}
+        }
+
+        LOG.info("---Check {} memory info in nova hypervisor-show is the same as system host-memory-list".format(host))
+        vals = host_helper.get_hypervisor_info(hosts=host, rtn_val=('memory_mb_node', 'memory_mb_used_node'))[host]
+        hypervisor_total, hypervisor_used = vals
+
         host_mems = system_helper.get_host_mem_values(host, headers, rtn_dict=False)
-        for i in range(len(host_mems)):
-            proc_mems = host_mems[i]
-            vs_size, vs_page, vm_4k, vm_2m, vm_1g = proc_mems
+        for proc in range(len(host_mems)):
+            hypervisor_proc_total = hypervisor_total[str(proc)]
+            hypervisor_proc_used = hypervisor_used[str(proc)]
+            hypervisor_mems = []
+            for memsize in ('2M', '1G', '4K'):
+                mem_mib_total = hypervisor_proc_total[memsize]
+                mem_mib_avail = mem_mib_total - hypervisor_proc_used[memsize]
+                hypervisor_mems += [mem_mib_total, mem_mib_avail]
+            hypervisor_mems = hypervisor_mems[:-1]
+            LOG.info("{} memories in MiB via nova hypervisor-show: {}".format(host, hypervisor_mems))
+
+            proc_mems = host_mems[proc]
+            vs_size, vs_page, vm_4k, vm_2m, vm_1g, vm_avail_2m, vm_avail_1g = proc_mems
+            syinv_mems = [vm_2m*2, vm_avail_2m*2, vm_1g*1024, vm_avail_1g*1024, int(vm_4k*4/1024)]
+            assert hypervisor_mems == syinv_mems, "nova hypervisor show is different than system host memory list"
+
             if vs_size == 1024:
                 vs_1g = vs_page
                 vs_2m = 0
@@ -429,8 +419,11 @@ def test_compute_mempage_configs(hosts=None):
             expt_compute_extend['vm_4K_pages'].append(str(vm_4k))
             expt_compute_extend['vm_2M_pages'].append(str(vm_2m))
             expt_compute_extend['vm_1G_pages'].append(str(vm_1g))
-            expt_vm_1g[i] = vm_1g
-            expt_vm_2m[i] = vm_2m
+
+            expt_sys_hp['2048kB']['nr'].append(vm_2m+vs_2m)
+            expt_sys_hp['1048576kB']['nr'].append(vm_1g+vs_1g)
+            expt_sys_hp['2048kB']['free'].append(vm_avail_2m)
+            expt_sys_hp['1048576kB']['free'].append(vm_avail_1g)
 
         with host_helper.ssh_to_host(hostname=host) as host_ssh:
             comp_extend = CompConfPath.COMP_EXTEND
@@ -442,23 +435,12 @@ def test_compute_mempage_configs(hosts=None):
                 assert expt_val == actual_val, "{} in host-memory-list {}: {}; in {}: {}".\
                     format(key, host, expt_val, comp_extend, actual_val)
 
-            comp_reserved = CompConfPath.COMP_RESERVED
-            LOG.info("---Check compute hugepage values in {} on {}".format(comp_reserved, host))
-            expt_vm_pages = {
-                '2M': (2048, expt_vm_2m),
-                '1G': (1048576, expt_vm_1g)
-            }
-            for pagesize in expt_vm_pages:
-                size_kb, expt_page_dict = expt_vm_pages[pagesize]
-                output = host_ssh.exec_cmd('grep --color=never "COMPUTE_VM_MEMORY_{}=" {}'.
-                                           format(pagesize, comp_reserved), fail_ok=False)[1]
-                vals = re.findall('\"node(\d+):{}kB:(\d+)'.format(size_kb), output)
-                actual_dict = {0: 0, 1: 0}
-                for val in vals:
-                    node, page = val
-                    actual_dict[int(node)] = int(page)
-
-                for proc in expt_page_dict:
-                    assert expt_page_dict[proc] == actual_dict[proc], \
-                        "{} page shown in system host-memory-list {} is different than COMPUTE_VM_MEMORY_{} in {}".\
-                        format(pagesize, host, pagesize, comp_reserved)
+            LOG.info("---Check {} hugepages via /sys/devices/system/node/node*/hugepages/".format(host))
+            for pagesize in expt_sys_hp:
+                for mem_status in expt_sys_hp[pagesize]:
+                    file_path = '/sys/devices/system/node/node*/hugepages/hugepages-{}/{}_hugepages'.\
+                        format(pagesize, mem_status)
+                    output = host_ssh.exec_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+                    actual_res = [int(val) for val in output.splitlines()]
+                    assert expt_sys_hp[pagesize][mem_status] == actual_res, \
+                        "{}: system host-memory-list and {} mismatch".format(host, file_path)

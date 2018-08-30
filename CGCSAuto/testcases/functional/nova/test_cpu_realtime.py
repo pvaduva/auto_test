@@ -220,7 +220,7 @@ def check_hosts():
     hosts_with_shared_cpu = []
     ht_hosts = []
     for host in hosts:
-        shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared')
+        shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host, func='shared')
         if shared_cores_for_host[0] or shared_cores_for_host.get(1):
             hosts_with_shared_cpu.append(host)
         if system_helper.is_hyperthreading_enabled(host):
