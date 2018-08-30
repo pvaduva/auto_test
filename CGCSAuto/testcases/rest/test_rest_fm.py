@@ -13,7 +13,8 @@ def fm_rest():
 
 @mark.parametrize('resource', (
     '/alarms',
-    '/event_suppression'
+    '/event_suppression',
+    '/invalid_resource'
 ))
 def test_rest_fm_get(resource, fm_rest):
     LOG.tc_step("Get fm resource {}".format(resource))
