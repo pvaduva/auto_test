@@ -21,17 +21,18 @@ def pytest_configure(config):
     skip_setup_feed = config.getoption('skip_setup_feed')
     skip_reinstall = config.getoption('skip_reinstall')
     low_latency = config.getoption('low_latency')
-    cinder_backup = config.getoption('cinder_backup')
+    # cinder_backup = config.getoption('cinder_backup')
+    build_server = config.getoption('build_server')
 
     setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path,
-                                 backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)
+                                 backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir, build_server=build_server)
 
     RestoreVars.set_restore_var(skip_setup_feed=skip_setup_feed)
     RestoreVars.set_restore_var(skip_reinstall=skip_reinstall)
     RestoreVars.set_restore_var(low_latency=low_latency)
-    RestoreVars.set_restore_var(cinder_backup=cinder_backup)
+    # RestoreVars.set_restore_var(cinder_backup=cinder_backup)
 
     ProjVar.set_var(always_collect=True)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
@@ -64,4 +65,7 @@ def setup_build_vars(request):
         except:
             LOG.warning('Unable to set BUILD info')
             pass
+
+    set_build_vars()
     request.addfinalizer(set_build_vars)
+

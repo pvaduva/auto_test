@@ -1,5 +1,6 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.build_server import YOW_CGTS4_LX
 
 
 class ProjVar:
@@ -311,6 +312,7 @@ class RestoreVars:
 
     @classmethod
     def set_restore_vars(cls, backup_src=None,
+                         build_server=None,
                          backup_src_path=None,
                          backup_build_id=None,
                          backup_builds_dir=None):
@@ -336,6 +338,7 @@ class RestoreVars:
             'SKIP_REINSTALL': False,
             'LOW_LATENCY': False,
             'CINDER_BACKUP': False,
+            'BUILD_SERVER': build_server
         }
 
     @classmethod

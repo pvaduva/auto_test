@@ -214,7 +214,7 @@ def restore_setup(pre_restore_checkup):
                                                                   initial_prompt=extra_controller_prompt, fail_ok=True)
         bld_server_obj = None
     else:
-        bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
+        bld_server = get_build_server_info(RestoreVars.get_restore_var('BUILD_SERVER'))
 
         LOG.info("Connecting to Build Server {} ....".format(bld_server['name']))
         bld_server_attr = dict()
