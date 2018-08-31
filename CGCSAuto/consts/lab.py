@@ -245,7 +245,7 @@ class Labs:
         'controller_nodes': [23907],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (1, 3), 'range': (700, 733)}, {'port': (1, 4), 'range': (767, 799)}],
+        'ixia_ports': [{'port': (1, 3), 'range': (734, 766)}, {'port': (1, 4), 'range': (767, 799)}],
     }
 
     SM_3 = {
