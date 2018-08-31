@@ -608,7 +608,7 @@ class Labs:
         'controller_nodes': [62031, 29957],
         'system_type': 'CPE',
         'system_mode': 'duplex',
-        # 'ixia_ports': [{'port': (8, 7), 'range': (1700, 1849)}, {'port': (8, 8), 'range': (1700, 1849)}],
+        'ixia_ports': [{'port': (8, 7), 'range': (1700, 1799)}, {'port': (8, 8), 'range': (1800, 1849)}],
     }
 
     WP_03_07 = {
