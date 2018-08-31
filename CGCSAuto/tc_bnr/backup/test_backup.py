@@ -441,33 +441,35 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
     if not image_ids:
         LOG.warn('No images to backup')
     else:
-        LOG.info('-currently active images: {}'.format(image_ids))
-        properties = ['name', 'status', 'visibility']
-        for image_id in image_ids:
-            name, status, visibility = glance_helper.get_image_properties(image_id, properties)
-            if status == 'active' and name and 'centos-guest' in name:
-                LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
+        pass
+        #LOG.info('-currently active images: {}'.format(image_ids))
+        #properties = ['name', 'status', 'visibility']
+        #for image_id in image_ids:
+        #    name, status, visibility = glance_helper.get_image_properties(image_id, properties)
+        #    if status == 'active' and name and 'centos-guest' in name:
+        #        LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
 
-                LOG.info('-launch VMs from the image: {}'.format(image_id))
-                vms_added += vm_helper.launch_vms('vswitch',
-                                            image=image_id, 
-                                            boot_source='image', 
-                                            auth_info=Tenant.TENANT1, 
-                                            con_ssh=con_ssh)[0]
-                LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
-                break
-            else:
-                LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
+        #        LOG.info('-launch VMs from the image: {}'.format(image_id))
+        #        vms_added += vm_helper.launch_vms('vswitch',
+        #                                    image=image_id, 
+        #                                    boot_source='image', 
+        #                                    auth_info=Tenant.TENANT1, 
+        #                                    con_ssh=con_ssh)[0]
+        #        LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
+        #        break
+        #    else:
+        #        LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
 
-    vm_types = ['vswitch', 'dpdk', 'vhost']
-    LOG.info('-launch VMs for different types:{}'.format(vm_types))
+    # vm_types = ['vswitch', 'dpdk', 'vhost']
+    # LOG.info('-launch VMs for different types:{}'.format(vm_types))
 
-    LOG.info('-first make sure we have enough quota')
-    vm_count = len(vms_added) + len(vm_types)
-    adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
+    # LOG.info('-first make sure we have enough quota')
+    # vm_count = len(vms_added) + len(vm_types)
+    # adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
 
-    for vm_type in vm_types:
-        vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+    # for vm_type in vm_types:
+    #     vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+    vms_added.append(vm_helper.boot_vm(auth_info=Tenant.TENANT1, con_ssh=con_ssh)[1])
 
     return vms_added
 
