@@ -925,3 +925,55 @@ def test_host_disk_wipe_rootfs():
         cmd = 'host-disk-wipe --confirm {} {}'.format(host, uuid[0])
         rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
         assert rc != 0, "Expected wipe disk to fail but instead succeeded"
+
+
+def test_host_disk_wipe_unassigned_disk():
+    """
+    This test attempts to run system host-disk-wipe on a node using any
+    unassigned disk.
+
+    Command format is:
+
+    system host-disk-wipe [--confirm] <hostname or id> <disk uuid>
+
+    Note, host-disk-wipe is only applicable to controller and compute nodes. It
+    cannot be used on the rootfs disk.  It cannot be used for a disk that is
+    used by a PV or has partitions used by a PV.
+
+    Arguments:
+    - None
+
+    Test Steps:
+    1.  Determine which disks are unassigned by comparing size_gib to
+    available_gib in system host-disk-list
+    2.  Attempt to wipe the disk
+    3.  Expect it to pass
+
+    Assumptions:
+    - None
+    """
+    computes = system_helper.get_hostnames(personality="compute", availability="available")
+    controllers = system_helper.get_hostnames(personality="controller", availability="available")
+    hosts = controllers + computes
+
+    found_disk = False
+    for host in hosts:
+        LOG.info("Query disks on host {}".format(host))
+        disks = partition_helper.get_disks(host)
+        for disk_uuid in disks:
+            cmd = "host-disk-show {} {}".format(host, disk_uuid)
+            rc, out = cli.system(cmd, rtn_list=True)
+            size_gib = table_parser.get_value_two_col_table(table_parser.table(out), "size_gib")
+            available_gib = table_parser.get_value_two_col_table(table_parser.table(out), "available_gib")
+            if int(float(size_gib)) == int(float(available_gib)):
+                found_disk = True
+                LOG.tc_step("Attempting to wipe disk {} from host {}".format(disk_uuid, host))
+                cmd = 'host-disk-wipe --confirm {} {}'.format(host, disk_uuid)
+                rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
+                assert rc == 0, "Expected wipe disk to pass but instead failed"
+                break
+
+    if not found_disk:
+        skip("No unassigned disks to run test")
+
+
