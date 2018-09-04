@@ -684,7 +684,8 @@ class TestSharedCpuEnabled:
             skip("Less than {} VMs cores on numa node0 of any hypervisor".format(vcpus/numa_nodes))
         # make vm (4 vcpus)
         LOG.tc_step("Make a flavor with {} vcpus and scaling enabled".format(vcpus))
-        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu)
+        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu,
+                                        storage_backing=storage_backing)
         ResourceCleanup.add('flavor', flavor_1)
         first_specs = {FlavorSpec.MIN_VCPUS: min_vcpus}
         nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
@@ -767,7 +768,8 @@ class TestSharedCpuEnabled:
 
         # make vm
         LOG.tc_step("Make a flavor with {} shared vcpus".format(vcpus))
-        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu)
+        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu,
+                                        storage_backing=storage_backing)
         ResourceCleanup.add('flavor', flavor_1)
 
         # select a compute node to use
