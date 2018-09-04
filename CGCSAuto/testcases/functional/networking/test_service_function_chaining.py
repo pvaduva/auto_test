@@ -32,8 +32,8 @@ def check_system():
     ('icmp', 'nsh_aware', 'same_host', 'tcp', 'asymmetric'),
     ('tcp', 'nsh_unaware', 'diff_host', 'icmp', 'symmetric')
 ])
-def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, add_protocol, symmetric,
-                                              check_system, add_admin_role_module):
+def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, add_protocol, symmetric, check_system,
+                                              add_admin_role_module):
     """
         Test Service Function Chaining
 
@@ -384,10 +384,9 @@ def _setup_vm(vm_ids, hosts_to_boot):
 
     internal_net_id = network_helper.get_internal_net_id()
     mgmt_net_id = network_helper.get_mgmt_net_id()
-
     mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
-    nics = [mgmt_nic,
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    internal_nic = {'net-id': internal_net_id, 'vif-model': 'virtio'}
+    nics = [mgmt_nic, internal_nic]
 
     source_vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[0])[1]
     vm_ids.append(source_vm_id)
@@ -420,9 +419,10 @@ def _setup_sfc_vm(sfc_vm_ids, hosts_to_boot, mgmt_nic, internal_net_id):
     ResourceCleanup.add('port', egress_port_id)
     LOG.info("Created ingress {} and egress port {}".format(ingress_port_id, egress_port_id))
 
-    sfc_nics = [mgmt_nic,
-            {'port-id': ingress_port_id, 'vif-model': 'virtio'},
-            {'port-id': egress_port_id, 'vif-model': 'virtio'}]
+    internal_nic1 = {'port-id': ingress_port_id, 'vif-model': 'virtio'}
+    internal_nic2 = {'port-id': egress_port_id, 'vif-model': 'virtio'}
+    sfc_nics = [mgmt_nic, internal_nic1, internal_nic2]
+
     sfc_vm_under_test = vm_helper.boot_vm(name='sfc_vm_under_test', nics=sfc_nics, cleanup='function',
                                           vm_host=hosts_to_boot[2])[1]
     sfc_vm_ids.append(sfc_vm_under_test)
@@ -529,7 +529,7 @@ def _setup_port_chain(port_pair_group_id, flow_classifier, symmetric):
 
 
 def _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip,
-                                                protocol, nsh_aware, symmetric):
+                                              protocol, nsh_aware, symmetric):
     end_event = Events("Hello or ping sent to vm")
     start_event = Events("VM {} started listening".format(dest_vm_id))
     received_event = Events("Greeting received on vm {}".format(dest_vm_id))
