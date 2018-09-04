@@ -110,7 +110,7 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
     _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
-                                        nsh_aware, symmetric)
+                                              nsh_aware, symmetric)
 
     LOG.tc_step("Force lock {}".format(hosts_to_boot))
     if not same_host:
@@ -202,7 +202,7 @@ def test_multiple_chained_service_function(protocol, nsh_aware, same_host, symme
     LOG.tc_step("Boot the SFC VM")
     sfc_vm_ids = []
     sfc_vm_ids, sfc_vm_under_test, ingress_port_id, egress_port_id = _setup_sfc_vm(sfc_vm_ids, hosts_to_boot, mgmt_nic,
-                                                                               internal_net_id)
+                                                                                   internal_net_id)
     vm_helper.ping_vms_from_vm(to_vms=source_vm_id, from_vm=sfc_vm_under_test, net_types=['mgmt'], retry=10)
 
     # if protocol != 'icmp':
@@ -226,18 +226,19 @@ def test_multiple_chained_service_function(protocol, nsh_aware, same_host, symme
 
     LOG.tc_step("Create flow classifier")
     flow_classifier_name = 'sfc_flow_classifier'
-    flow_classifier, dest_vm_internal_net_ip = _setup_flow_classifier(flow_classifier_name, source_vm_id, dest_vm_id, protocol)
+    flow_classifier, dest_vm_internal_net_ip = _setup_flow_classifier(flow_classifier_name, source_vm_id, dest_vm_id,
+                                                                      protocol)
 
     LOG.tc_step("Create Port Chain")
     port_chain_id = _setup_port_chain(port_pair_group_id, flow_classifier, symmetric)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
     _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
-                                        nsh_aware, symmetric)
+                                              nsh_aware, symmetric)
 
     LOG.tc_step("Create second SFC VM")
-    sfc_vm_ids, sfc_vm_under_test2, ingress_port_id2, egress_port_id2 = _setup_sfc_vm(sfc_vm_ids, hosts_to_boot, mgmt_nic,
-                                                                           internal_net_id)
+    sfc_vm_ids, sfc_vm_under_test2, ingress_port_id2, egress_port_id2 = _setup_sfc_vm(sfc_vm_ids, hosts_to_boot,
+                                                                                      mgmt_nic, internal_net_id)
     vm_helper.ping_vms_from_vm(to_vms=source_vm_id, from_vm=sfc_vm_under_test2, net_types=['mgmt'], retry=10)
     LOG.tc_step("copy vxlan tool in sfc vm {}".format(sfc_vm_under_test2))
     vm_helper.scp_to_vm_from_natbox(vm_id=sfc_vm_under_test2, source_file='/home/cgcs/sfc/vxlan_tool.py',
@@ -292,7 +293,7 @@ def test_load_balancing_chained_service_function(protocol, nsh_aware, same_host,
     computes = check_system
 
     LOG.tc_step("Boot the VM in same host: {}".format(same_host))
-    hosts_to_boot = [computes[0]] * 3 if same_host == True else computes[0:3]
+    hosts_to_boot = [computes[0]] * 3 if same_host else computes[0:3]
     LOG.info("Boot the VM in following compute host 1:{}, 2:{}, 3:{}".format(hosts_to_boot[0], hosts_to_boot[1],
                                                                              hosts_to_boot[2]))
 
@@ -357,7 +358,7 @@ def test_load_balancing_chained_service_function(protocol, nsh_aware, same_host,
                                                                       protocol)
 
     LOG.tc_step("Create Port Chain")
-    port_chain_id = _setup_port_chain(port_pair_group_ids, flow_classifier, symmetric)
+    _setup_port_chain(port_pair_group_ids, flow_classifier, symmetric)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
     _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
@@ -392,7 +393,7 @@ def _setup_vm(vm_ids, hosts_to_boot):
     vm_ids.append(source_vm_id)
     dest_vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[1])[1]
     vm_ids.append(dest_vm_id)
-    LOG.info("Source VM {} and Destination VM {} booted".format(source_vm_id,dest_vm_id))
+    LOG.info("Source VM {} and Destination VM {} booted".format(source_vm_id, dest_vm_id))
 
     return vm_ids, source_vm_id, dest_vm_id, internal_net_id, mgmt_net_id, mgmt_nic
 
@@ -521,7 +522,7 @@ def _setup_port_chain(port_pair_group_id, flow_classifier, symmetric):
     chain_param = 'symmetric=true' if symmetric else ''
     LOG.info("Create port chain with symmetric: {}".format(symmetric))
     port_chain_id = network_helper.create_port_chain(name='sfc_port_chain', port_pair_groups=port_pair_group_id,
-                                     flow_classifiers=flow_classifier, chain_param=chain_param)[1]
+                                                     flow_classifiers=flow_classifier, chain_param=chain_param)[1]
     ResourceCleanup.add('port_chain', port_chain_id)
     LOG.info("Created port chain: {}".format(port_chain_id))
     return port_chain_id
@@ -566,10 +567,10 @@ def _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_i
             start_event_sfc, received_event_sfc = vms_events[sfc_vm]
             start_event_sfc.wait_for_event(timeout=120, fail_ok=False)
         if protocol == 'icmp':
-            LOG.tc_step("Ping from from vm {} to vm {}, and check it's not received".format(source_vm_id, dest_vm_id))
+            LOG.tc_step("Ping from from vm {} to vm {}, and check it's received".format(source_vm_id, dest_vm_id))
             _ping_from_source_to_dest_vm(source_vm_id, end_event, dest_vm_internal_net_ip)
         else:
-            LOG.tc_step("Send Hello msg from vm {} to vm {}, and check it's not received".format(source_vm_id, dest_vm_id))
+            LOG.tc_step("Send Hello msg from vm {} to vm {}, and check it's received".format(source_vm_id, dest_vm_id))
             _send_hello_message_from_vm(source_vm_id, greeting, end_event, dest_vm_internal_net_ip, port, protocol)
         if protocol != 'icmp':
             assert received_event.wait_for_event(timeout=30), "Received Event {} is not set".format(received_event)
@@ -587,8 +588,9 @@ def _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_i
             sfc_vm_thread.wait_for_thread_end(timeout=40, fail_ok=False)
 
 
-def _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip,
-                                                          protocol, nsh_aware, symmetric, load_balancing=False):
+def _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+                                                                dest_vm_internal_net_ip, protocol, nsh_aware, symmetric,
+                                                                load_balancing=False):
     end_event = Events("Hello or ping sent to vm")
     start_event = Events("VM {} started listening".format(dest_vm_id))
     received_event = Events("Greeting received on vm {}".format(dest_vm_id))
@@ -601,8 +603,9 @@ def _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, de
     greeting = "hello"
     port = 20010
     if protocol != 'icmp':
-        vm_thread = MThread(_ssh_to_dest_vm_and_wait_for_greetings_in_tcp_client, start_event, end_event, received_event,
-                            dest_vm_id, dest_vm_internal_net_ip, greeting, port, protocol, load_balancing)
+        vm_thread = MThread(_ssh_to_dest_vm_and_wait_for_greetings_in_tcp_client, start_event, end_event,
+                            received_event, dest_vm_id, dest_vm_internal_net_ip, greeting, port, protocol,
+                            load_balancing)
 
     sfc_vm_threads = []
     for sfc_vm in sfc_vm_ids:
@@ -626,15 +629,16 @@ def _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, de
             start_event_sfc, received_event_sfc = vms_events[sfc_vm]
             start_event_sfc.wait_for_event(timeout=120, fail_ok=False)
         if protocol == 'icmp':
-            LOG.tc_step("Ping from from vm {} to vm {}, and check it's not received".format(source_vm_id, dest_vm_id))
+            LOG.tc_step("Ping from from vm {} to vm {}, and check it's received".format(source_vm_id, dest_vm_id))
             _ping_from_source_to_dest_vm(source_vm_id, end_event, dest_vm_internal_net_ip)
         else:
             if load_balancing:
-                LOG.tc_step("Send Hello msg from vm using tcp_client.py {} to vm {}, and check it's not received"
+                LOG.tc_step("Send Hello msg from vm using tcp_client.py {} to vm {}, and check it's received"
                             .format(source_vm_id, dest_vm_id))
                 _send_hello_message_from_vm_using_tcp_client(source_vm_id, end_event, dest_vm_internal_net_ip)
             else:
-                LOG.tc_step("Send Hello msg from vm {} to vm {}, and check it's not received".format(source_vm_id, dest_vm_id))
+                LOG.tc_step("Send Hello msg from vm {} to vm {}, and check it's received"
+                            .format(source_vm_id, dest_vm_id))
                 _send_hello_message_from_vm(source_vm_id, greeting, end_event, dest_vm_internal_net_ip, port, protocol)
         if protocol != 'icmp':
             assert received_event.wait_for_event(timeout=30), "Received Event {} is not set".format(received_event)
@@ -652,7 +656,8 @@ def _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, de
             sfc_vm_thread.wait_for_thread_end(timeout=40, fail_ok=False)
 
 
-def _ssh_to_dest_vm_and_wait_for_greetings(start_event, end_event, received_event, vm_id, greeting, port, protocol, timeout=300):
+def _ssh_to_dest_vm_and_wait_for_greetings(start_event, end_event, received_event, vm_id, greeting, port, protocol,
+                                           timeout=300):
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as root_ssh:
         LOG.info("Start listening on port 80 on vm {}".format(vm_id))
@@ -696,7 +701,8 @@ def _ssh_to_dest_vm_and_wait_for_greetings_in_tcp_client(start_event, end_event,
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as root_ssh:
         if load_balancing:
             LOG.info("Load balancing Enabled, using tcp_server app")
-            LOG.info("Start listening on port 20010-20020 on vm {} internal IP {}".format(vm_id, dest_vm_internal_net_ip))
+            LOG.info("Start listening on port 20010-20020 on vm {} internal IP {}"
+                     .format(vm_id, dest_vm_internal_net_ip))
             cmd = "python ./tcp_server_multi.py {} 20010-20020".format(dest_vm_internal_net_ip)
             root_ssh.send(cmd)
             start_event.set()
@@ -746,7 +752,7 @@ def _ssh_to_sfc_vm_and_wait_for_packets(start_event, end_event, received_event, 
         nsh_type = 'eth'
         if nsh_aware:
             nsh_type = 'eth_nsh'
-        #nsh_type = 'eth_nsh' if nsh_aware == 'yes' else 'eth'
+        # nsh_type = 'eth_nsh' if nsh_aware == 'yes' else 'eth'
         LOG.info("nsh aware {} nsh type".format(nsh_aware, nsh_type))
         cmd = 'python ./vxlan_tool.py -i eth1 -o eth2 -d forward -t {}'.format(nsh_type)
         root_ssh.send(cmd)
@@ -827,7 +833,6 @@ def _send_hello_message_from_vm_using_tcp_client(vm_id, end_event, dest_vm_inter
     nc -lp 20010
     Args:
         vm_id (str):
-        greeting (str): hello
 
     """
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
