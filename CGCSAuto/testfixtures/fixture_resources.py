@@ -3,7 +3,8 @@ from copy import deepcopy
 VALID_SCOPES = ['function', 'class', 'module', 'session']
 _RESOURCE_TYPES = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
                    'router_interface', 'subnet', 'floating_ip', 'heat_stack', 'port', 'trunk', 'network',
-                   'security_group', 'network_qos', 'vol_snapshot', 'aggregate']
+                   'security_group', 'network_qos', 'vol_snapshot', 'aggregate',
+                   'vol_snapshot', 'aggregate', 'port_pair', 'port_pair_group', 'flow_classifier', 'port_chain']
 __special_types = ('vm', 'qos')
 __updated_types = ['vms_with_vols', 'vms_no_vols', 'qos_ids']
 __resource_keys = ['{}s'.format(item) for item in _RESOURCE_TYPES if item not in __special_types] + __updated_types

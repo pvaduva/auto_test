@@ -136,6 +136,11 @@ def _delete_resources(resources, scope):
     network_qoss = resources['network_qoss']
     vol_snapshots = resources['vol_snapshots']
     aggregates = resources['aggregates']
+    port_pairs = resources['port_pairs']
+    port_pair_groups = resources['port_pair_groups']
+    port_chains = resources['port_chains']
+    flow_classifiers = resources['flow_classifiers']
+
 
     err_msgs = []
     if heat_stacks:
@@ -217,6 +222,38 @@ def _delete_resources(resources, scope):
             code, msg = network_helper.delete_trunk(trunk, auth_info=Tenant.get('admin'), fail_ok=True)
             if code > 0:
                 err_msgs.append(msg)
+
+    if port_chains:
+        LOG.fixture_step("({}) Attempt to delete following port chains: {}".format(scope, port_chains))
+        for port_chain in port_chains:
+            code, msg = network_helper.delete_port_chain(port_chain, check_first=True, auth_info=Tenant.ADMIN,
+                                                         fail_ok=True)
+            if code > 0:
+                err_msgs.append('Failed to delete port chain(s): {}'.format(msg))
+
+    if flow_classifiers:
+        LOG.fixture_step("({}) Attempt to delete following port flow classifiers: {}".format(scope, flow_classifiers))
+        for flow_classifier in flow_classifiers:
+            code, msg = network_helper.delete_flow_classifier(flow_classifier, check_first=True, auth_info=Tenant.ADMIN,
+                                                              fail_ok=True)
+            if code > 0:
+                err_msgs.append('Failed to delete flow classifiers(s): {}'.format(msg))
+
+    if port_pair_groups:
+        LOG.fixture_step("({}) Attempt to delete following port pair groups: {}".format(scope, port_pair_groups))
+        for port_pair_group in port_pair_groups:
+            code, msg = network_helper.delete_port_pair_group(port_pair_group, check_first=True, auth_info=Tenant.ADMIN,
+                                                              fail_ok=True)
+            if code > 0:
+                err_msgs.append('Failed to delete port pair group(s): {}'.format(msg))
+
+    if port_pairs:
+        LOG.fixture_step("({}) Attempt to delete following port pairs: {}".format(scope, port_pairs))
+        code, succ_pairs, rej_pairs = network_helper.delete_port_pairs(port_pairs, check_first=True, fail_ok=True,
+                                                                       auth_info=Tenant.ADMIN)[:3]
+        if code > 0:
+            err_msgs.append('Failed to delete port pair(s): {}'.format(rej_pairs))
+
     if ports:
         LOG.fixture_step("({}) Attempt to delete following ports: {}".format(scope, ports))
         for port in ports:

@@ -4869,7 +4869,7 @@ def update_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, 
                 for val_ in val:
                     arg += ' --{} {}'.format(key, val_)
 
-                verify[verify_key] = port_pair_groups
+                verify[verify_key] = val
             else:
                 arg += ' --no-{}'.format(key)
                 verify[verify_key] = []
@@ -4884,11 +4884,14 @@ def update_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, 
         return 1, output
 
     LOG.info("Verify items in port chain {} are set correctly".format(port_chain))
-    table_ = table_parser.table(output)
+    table_ = table_parser.table(cli.openstack('sfc port chain show', positional_args=port_chain, auth_info=auth_info,
+                                ssh_client=con_ssh))
     for key, val in verify.items():
         actual_val = table_parser.get_value_two_col_table(table_, key)
         actual_val = eval(actual_val)
 
+        # if isinstance(actual_val, str):
+        #     actual_val = eval(actual_val)
         if val:
             assert set(val) <= set(actual_val), "Requested {}(s) to add to port chain: {}; Actual value: {}".\
                 format(key, val, actual_val)
@@ -4983,8 +4986,8 @@ def delete_port_chain(port_chain, check_first=True, fail_ok=False, auth_info=Non
 
     """
     if check_first:
-        chain_id = get_port_pair_group_value(group=port_chain, field='ID', auth_info=auth_info, con_ssh=con_ssh,
-                                             fail_ok=True)
+        chain_id = get_port_chain_value(port_chain=port_chain, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                        fail_ok=True)
         if chain_id is None:
             msg = 'Port chain {} does not exist. Skip deleting.'.format(port_chain)
             LOG.info(msg)
