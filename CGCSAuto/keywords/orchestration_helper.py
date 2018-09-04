@@ -579,4 +579,4 @@ def get_current_strategy_phase_duration(orchestration, phase, conn_ssh=None):
         start_date_time = strategy_details[phase]["start-date-time"]
         end_date_time = strategy_details[phase]["end-date-time"]
         duration = common.get_timedelta_for_isotimes(start_date_time, end_date_time)
-    return duration
+    return duration.seconds
