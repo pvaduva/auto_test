@@ -28,14 +28,14 @@ def less_than_two_controllers(con_ssh=None, auth_info=Tenant.get('admin')):
     return len(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) < 2
 
 
-def setup_tis_ssh(lab):
+def setup_tis_ssh(lab, prompt=''):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
         try:
             con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                 CONTROLLER_PROMPT)
-            con_ssh.connect(retry=True, retry_timeout=30)
+            con_ssh.connect(retry=True, retry_timeout=30, prompt=r'.*\:~\$')
             ControllerClient.set_active_controller(con_ssh)
         except:
             if ProjVar.get_var('COLLECT_SYS_NET_INFO'):

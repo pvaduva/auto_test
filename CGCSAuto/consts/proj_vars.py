@@ -315,7 +315,8 @@ class RestoreVars:
                          build_server=None,
                          backup_src_path=None,
                          backup_build_id=None,
-                         backup_builds_dir=None):
+                         backup_builds_dir=None,
+                         cinder_backup=False):
 
         if backup_src.lower() == 'usb':
             if backup_src_path is None or \
@@ -337,8 +338,8 @@ class RestoreVars:
             'SKIP_SETUP_FEED': False,
             'SKIP_REINSTALL': False,
             'LOW_LATENCY': False,
-            'CINDER_BACKUP': False,
-            'BUILD_SERVER': build_server
+            'BUILD_SERVER': build_server,
+            'CINDER_BACKUP': cinder_backup,
         }
 
     @classmethod
@@ -366,7 +367,7 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None):
+    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None, cinder_backup=False):
 
         if backup_dest.lower() == 'usb':
             if backup_dest_path is None or \
@@ -383,6 +384,7 @@ class BackupVars:
             'DELETE_BUCKUPS': delete_backups,
             'DEST_LABS': dest_labs.split(',') if dest_labs else None,
             'BACKUP_DEST_SERVER': None,
+            'CINDER_BACKUP': cinder_backup,
         }
 
     @classmethod

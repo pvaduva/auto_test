@@ -214,6 +214,7 @@ def restore_setup(pre_restore_checkup):
                                                                   initial_prompt=extra_controller_prompt, fail_ok=True)
         bld_server_obj = None
     else:
+        # bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
         bld_server = get_build_server_info(RestoreVars.get_restore_var('BUILD_SERVER'))
 
         LOG.info("Connecting to Build Server {} ....".format(bld_server['name']))
@@ -234,6 +235,7 @@ def restore_setup(pre_restore_checkup):
         # If controller is accessible, check if USB with backup files is avaialble
 
         load_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, RestoreVars.get_restore_var("BACKUP_BUILDS_DIR"),
+        # load_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, InstallVars.get_install_var("TIS_BUILD_DIR"),
                                  backup_build_id)
 
         InstallVars.set_install_var(tis_build_dir=load_path)
@@ -437,11 +439,14 @@ def restore_from_cinder_backups(volumes, con_ssh):
 
     LOG.info('TODO: restoring backup: {}'.format(backup_volumes))
     for volume_id in volumes:
-        backup_id = backup_volumes[volume_id]
-        LOG.info('TODO: RESTORING volume: ' + volume_id)
-        rc, output = restore_cinder_backup(backup_id, volume_id, con_ssh)
-        assert rc == 0, 'Failed to restore backup, rc={}, output={}'.format(rc, output)
-        LOG.info('TODO Volume is successfully restored from backup:{}, volume:{}'.format(backup_id, volume_id))
+        if volume_id in backup_volumes:
+            backup_id = backup_volumes[volume_id]
+            LOG.info('TODO: RESTORING volume: ' + volume_id)
+            rc, output = restore_cinder_backup(backup_id, volume_id, con_ssh)
+            assert rc == 0, 'Failed to restore backup, rc={}, output={}'.format(rc, output)
+            LOG.info('TODO Volume is successfully restored from backup:{}, volume:{}'.format(backup_id, volume_id))
+        else:
+            LOG.warning('No "cinder backup" for volume {}'.format(volume_id))
 
     return 0, volumes
 
@@ -592,41 +597,32 @@ def test_restore(restore_setup):
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
-        LOG.tc_step('Run restore-complete (CGTS-9756)')
-        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
-        controller_node.telnet_conn.login()
-        controller_node.telnet_conn.exec_cmd(cmd, extra_expects=[' will reboot on completion'])
-
-        LOG.info('- wait untill reboot completes, ')
-        time.sleep(120)
-        LOG.info('- confirm the active controller is actually back online')
-        controller_node.telnet_conn.login()
-
-        LOG.tc_step("reconnecting to the active controller after restore-complete")
-        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
-
         if not compute_configured:
             LOG.tc_step('Latest 18.07 EAR1 or Old-load on AIO/CPE lab: config its compute functionalities')
             # install_helper.run_cpe_compute_config_complete(controller_node, controller0)
+
+            LOG.info('closing current ssh connection')
+            con_ssh.close()
 
             LOG.tc_step('Run restore-complete (CGTS-9756)')
             controller_node.telnet_conn.login()
 
             cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
             controller_node.telnet_conn.exec_cmd(cmd, extra_expects=' will reboot ')
+            controller_node.telnet_conn.close()
+
+            LOG.info('Wait until "config_controller" reboot the active controller')
+            time.sleep(180)
 
             controller_node.telnet_conn = install_helper.open_telnet_session(controller_node,
                                                                              ProjVar.get_var('LOG_DIR'))
             controller_node.telnet_conn.login()
+            time.sleep(120)
 
-            # LOG.info('closing current ssh connection')
-            # con_ssh.close()
-
-            # LOG.info('rebuild ssh connection')
-            # con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
-            # controller_node.ssh_conn = con_ssh
-
+            con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+            controller_node.ssh_conn = con_ssh
             ControllerClient.set_active_controller(con_ssh)
+
             host_helper.wait_for_hosts_ready(controller0)
 
         LOG.tc_step('Install the standby controller: {}'.format(controller1))
