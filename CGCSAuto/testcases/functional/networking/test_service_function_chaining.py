@@ -109,11 +109,11 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
     port_chain_id = _setup_port_chain(port_pair_group_id, flow_classifier, symmetric)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
-    _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-                                                                dest_vm_internal_net_ip, protocol, nsh_aware,
-                                                                symmetric, load_balancing=True)
-    # _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
-    #                                           nsh_aware, symmetric)
+    # _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+    #                                                             dest_vm_internal_net_ip, protocol, nsh_aware,
+    #                                                             symmetric, load_balancing=False)
+    _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
+                                              nsh_aware, symmetric)
 
     LOG.tc_step("Force lock {}".format(hosts_to_boot))
     if not same_host:
@@ -131,11 +131,11 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
     vm_helper.wait_for_vms_values(vm_ids, fail_ok=False)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
-    _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-                                                                dest_vm_internal_net_ip, protocol, nsh_aware,
-                                                                symmetric, load_balancing=True)
-    # _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
-    #                                           nsh_aware, symmetric)
+    # _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+    #                                                             dest_vm_internal_net_ip, protocol, nsh_aware,
+    #                                                             symmetric, load_balancing=False)
+    _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
+                                              nsh_aware, symmetric)
 
     LOG.tc_step("Create new flow classifier with protocol {}".format(add_protocol))
     flow_classifier_name = 'new_sfc_flow_classifier'
@@ -148,11 +148,11 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
                                      flow_classifiers=new_flow_classifier)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(add_protocol))
-    _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-                                                                dest_vm_internal_net_ip, protocol, nsh_aware,
-                                                                symmetric, load_balancing=True)
-    # _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip,
-    #                                           add_protocol, nsh_aware, symmetric)
+    # _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+    #                                                             dest_vm_internal_net_ip, add_protocol, nsh_aware,
+    #                                                             symmetric, load_balancing=False)
+    _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip,
+                                              add_protocol, nsh_aware, symmetric)
 
     LOG.info("Get the host to reboot where the VMs launched")
     hosts_to_reboot = nova_helper.get_vms_host(vm_ids=vm_ids)
@@ -161,11 +161,11 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
     vm_helper.evacuate_vms(host=hosts_to_reboot, vms_to_check=vm_ids, ping_vms=True)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(add_protocol))
-    _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-                                                                dest_vm_internal_net_ip, protocol, nsh_aware,
-                                                                symmetric, load_balancing=True)
-    # _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip,
-    #                                           add_protocol, nsh_aware, symmetric)
+    # _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+    #                                                             dest_vm_internal_net_ip, add_protocol, nsh_aware,
+    #                                                             symmetric, load_balancing=False)
+    _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip,
+                                              add_protocol, nsh_aware, symmetric)
 
 
 @mark.parametrize(('protocol', 'nsh_aware', 'same_host', 'symmetric'), [
@@ -245,11 +245,11 @@ def test_multiple_chained_service_function(protocol, nsh_aware, same_host, symme
     port_chain_id = _setup_port_chain(port_pair_group_id, flow_classifier, symmetric)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
-    _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-                                                                dest_vm_internal_net_ip, protocol, nsh_aware,
-                                                                symmetric, load_balancing=True)
-    # _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
-    #                                           nsh_aware, symmetric)
+    # _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+    #                                                             dest_vm_internal_net_ip, protocol, nsh_aware,
+    #                                                             symmetric, load_balancing=False)
+    _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
+                                              nsh_aware, symmetric)
 
     LOG.tc_step("Create second SFC VM")
     sfc_vm_ids, sfc_vm_under_test2, ingress_port_id2, egress_port_id2 = _setup_sfc_vm(sfc_vm_ids, hosts_to_boot,
@@ -272,12 +272,12 @@ def test_multiple_chained_service_function(protocol, nsh_aware, same_host, symme
                                      flow_classifiers=flow_classifier)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
-    _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-                                                                dest_vm_internal_net_ip, protocol, nsh_aware,
-                                                                symmetric, load_balancing=True)
-    # _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
-    #                                           dest_vm_internal_net_ip, protocol,
-    #                                           nsh_aware, symmetric)
+    # _check_packets_forwarded_in_load_balancing_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+    #                                                             dest_vm_internal_net_ip, protocol, nsh_aware,
+    #                                                             symmetric, load_balancing=False)
+    _check_packets_forwarded_via_multi_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids,
+                                              dest_vm_internal_net_ip, protocol,
+                                              nsh_aware, symmetric)
 
 
 @mark.parametrize(('protocol', 'nsh_aware', 'same_host', 'symmetric'), [
