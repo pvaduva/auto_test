@@ -4428,7 +4428,7 @@ def delete_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok=Fal
 
         if check_first:
             existing_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
-            port_pairs = list(set(port_pairs) - set(existing_pairs))
+            port_pairs = list(set(port_pairs) & set(existing_pairs))
 
     if not port_pairs:
         msg = 'Port pair(s) do not exist. Do nothing.'
@@ -4450,7 +4450,7 @@ def delete_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok=Fal
             succ_pairs.append(port_pair)
 
     post_del_pairs = get_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
-    failed_pairs = list(set(succ_pairs) - set(post_del_pairs))
+    failed_pairs = list(set(succ_pairs) & set(post_del_pairs))
 
     assert not failed_pairs, "Some port-pair(s) still exist after deletion: {}".format(failed_pairs)
     if rejected_pairs:

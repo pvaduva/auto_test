@@ -247,20 +247,13 @@ def _delete_resources(resources, scope):
             if code > 0:
                 err_msgs.append('Failed to delete port pair group(s): {}'.format(msg))
 
-    # if port_pairs:
-    #     LOG.fixture_step("({}) Attempt to delete following port pairs: {}".format(scope, port_pairs))
-    #     code, succ_pairs, rej_pairs = network_helper.delete_port_pairs(port_pairs, check_first=True, fail_ok=True,
-    #                                                                    auth_info=Tenant.ADMIN)[:3]
-    #     if code > 0:
-    #         err_msgs.append('Failed to delete port pair(s): {}'.format(rej_pairs))
-
     if port_pairs:
         LOG.fixture_step("({}) Attempt to delete following port pairs: {}".format(scope, port_pairs))
-        for port_pair in port_pairs:
-            code, succ_pairs, rej_pairs = network_helper.delete_port_pairs(port_pair, check_first=True, fail_ok=True,
-                                                                           auth_info=Tenant.ADMIN)[:3]
-            if code > 0:
-                err_msgs.append('Failed to delete port pair(s): {}'.format(rej_pairs))
+        code, succ_pairs, rej_pairs = network_helper.delete_port_pairs(port_pairs, check_first=True, fail_ok=True,
+                                                                       auth_info=Tenant.ADMIN)[:3]
+        if code > 0:
+            err_msgs.append('Failed to delete port pair(s): {}'.format(rej_pairs))
+
 
     if ports:
         LOG.fixture_step("({}) Attempt to delete following ports: {}".format(scope, ports))
