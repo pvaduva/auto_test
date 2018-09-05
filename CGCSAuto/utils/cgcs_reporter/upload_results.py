@@ -272,7 +272,6 @@ def __get_testcases_info(testcases_res, ends_at=None):
 
         tests_res_list.insert(0, test_res_dict)
         end_time = start_time
-
     return tests_res_list
 
 
@@ -441,4 +440,4 @@ if __name__ == '__main__':
             with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
                 upload_test_results(cursor=cur, log_dir=logdir, tag=options.session_tag)
         except Exception as e:
-            "Unable to upload test results. Details: {}".format(e.__str__())
+            print("Unable to upload test results. Details: {}".format(e.__str__()))
