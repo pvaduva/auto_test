@@ -62,7 +62,7 @@ def setup_test_session(global_setup):
     ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
- 
+
     con_ssh = setups.setup_tis_ssh(InstallVars.get_install_var("LAB"))
     ControllerClient.set_active_controller(ssh_client=con_ssh)
 

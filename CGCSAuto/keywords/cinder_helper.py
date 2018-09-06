@@ -1301,17 +1301,17 @@ def delete_backups(backup_ids=None, con_ssh=None, fail_ok=False, auth_info=None)
         cli.cinder('backup-delete', backup_id, fail_ok=fail_ok, auth_info=auth_info)
 
 
-def export_free_volume_using_cinder_backup(vol_id=None, 
-                                           container='cinder', 
-                                           name='', 
-                                           con_ssh=None, 
-                                           fail_ok=False, 
+def export_free_volume_using_cinder_backup(vol_id=None,
+                                           container='cinder',
+                                           name='',
+                                           con_ssh=None,
+                                           fail_ok=False,
                                            auth_info=None,
                                            backup_file_path='/opt/backups'):
     LOG.info('Exporing free volume using cinder-backup, volume-id:{}'.format(vol_id))
     if not name:
         name = 'free_vol_backup_' + str(vol_id)[0:2] + '_' + str(vol_id)[-5:]
-    output = table_parser.table(cli.cinder('backup-create', 
+    output = table_parser.table(cli.cinder('backup-create',
         ' --container {} --name {} {}'.format(container, name, vol_id),
         fail_ok=fail_ok,
         auth_info=auth_info))
@@ -1335,7 +1335,7 @@ def export_free_volume_using_cinder_backup(vol_id=None,
 
     assert 0 == code and output, 'backup became "available", but files are not generated'
 
-    return backup_id 
+    return backup_id
 
 
 def wait_for_backup_ready(backup_id, timeout=900, interval=15, con_ssh=None, fail_ok=False, auth_info=None):
@@ -1379,11 +1379,11 @@ def create_snapshot_for_vol(vol_id, name, nowait=False, con_ssh=None, fail_ok=Fa
     return snap_shot_id
 
 
-def export_busy_volume_using_cinder_backup(vol_id=None, 
-                                           container='cinder', 
-                                           name='', 
-                                           con_ssh=None, 
-                                           fail_ok=False, 
+def export_busy_volume_using_cinder_backup(vol_id=None,
+                                           container='cinder',
+                                           name='',
+                                           con_ssh=None,
+                                           fail_ok=False,
                                            auth_info=None,
                                            backup_file_path='/opt/backups'
                                            ):
@@ -1421,9 +1421,9 @@ def export_busy_volume_using_cinder_backup(vol_id=None,
 
 def export_volumes_using_cinder_backup(vol_ids=None,
                                     delete_existing=True,
-                                    con_ssh=None, 
-                                    fail_ok=False, 
-                                    auth_info=None, 
+                                    con_ssh=None,
+                                    fail_ok=False,
+                                    auth_info=None,
                                     backup_file_path='/opt/backups'):
     if not vol_ids:
         LOG.warning('No volume IDs specified, skip the rest of test')
@@ -1440,11 +1440,11 @@ def export_volumes_using_cinder_backup(vol_ids=None,
         LOG.info('Backup volume: {}'.format(vol_id))
 
         if get_volume_states(vol_id, 'status', con_ssh=con_ssh)['status'] == 'available':
-            code = export_free_volume_using_cinder_backup(vol_id=vol_id, 
+            code = export_free_volume_using_cinder_backup(vol_id=vol_id,
                         con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info, backup_file_path=backup_file_path)
 
         elif get_volume_states(vol_id, 'status', con_ssh=con_ssh)['status'] == 'in-use':
-            code = export_busy_volume_using_cinder_backup(vol_id=vol_id, 
+            code = export_busy_volume_using_cinder_backup(vol_id=vol_id,
                         con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info, backup_file_path=backup_file_path)
 
         exported_volume_ids.append(vol_id)
@@ -1458,7 +1458,7 @@ def get_backup_ids(searching_status='available', con_ssh=None, fail_ok=False, au
         auth_info = Tenant.get('admin')
 
     states = table_parser.table(cli.cinder('backup-list', fail_ok=fail_ok, auth_info=auth_info))
-    
+
     if searching_status and searching_status.strip():
         status = table_parser.get_values(states, 'Status', regex=searching_status)
     else:
@@ -1480,9 +1480,9 @@ def get_cinder_backup_status(backup_id, con_ssh=None, fail_ok=False, auth_info=N
         auth_info = Tenant.get('admin')
 
     states = table_parser.table(
-                cli.cinder('backup-show', 
-                backup_id, 
-                auth_info=auth_info, 
+                cli.cinder('backup-show',
+                backup_id,
+                auth_info=auth_info,
                 fail_ok=fail_ok))
 
     return table_parser.get_value_two_col_table(states, 'status')

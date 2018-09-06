@@ -1754,7 +1754,7 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                 container = 'cinder'
                 is_dir = True
                 src_files = "/opt/backups/{}".format(container)
-            else: 
+            else:
                 is_dir = False
                 src_files = "/opt/backups/volume-*.tgz"
 

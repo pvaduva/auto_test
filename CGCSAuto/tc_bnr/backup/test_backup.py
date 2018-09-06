@@ -552,7 +552,7 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
         LOG.info('Skip migration test')
         return 0
     else:
-        LOG.info('There {} hyporvisors')
+        LOG.debug('There {} hyporvisors'.format(len(hyporvisors)))
 
     LOG.info('Randomly choose some VMs and do migrate:')
 
