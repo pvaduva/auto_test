@@ -1370,6 +1370,130 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     return rc, output, compute_configured
 
 
+def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=False):
+    """
+    Restores the controller system config for system restore.
+    Args:
+        system_backup(str): The system config backup file
+        tel_net_session:
+        fail_ok:
+
+    Returns (tuple): rc, text message
+        0 - Success
+        1 - Execution of upgrade command failed
+        2 - Patches not applied after system reboot
+        3 - Unexpected result after system resotre
+
+    """
+
+    if system_backup is None or not os.path.abspath(system_backup):
+        msg = "Full path of the system backup file must be provided: {}".format(system_backup)
+        LOG.info(msg)
+        raise ValueError(msg)
+
+    lab = InstallVars.get_install_var("LAB")
+    output_dir = ProjVar.get_var('LOG_DIR')
+    controller0_node = lab['controller-0']
+
+    if tel_net_session is None:
+       if controller0_node.telnet_conn is None:
+            controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+            controller0_node.telnet_conn.login()
+       tel_net_session = controller0_node.telnet_conn
+
+
+    cmd = 'echo "{}" | sudo -S upgrade_controller_simplex {}'.format(HostLinuxCreds.get_password(),
+                                                                             system_backup)
+    os.environ["TERM"] = "xterm"
+    outputs_conf = ("Data restore complete", "login:")
+    rc, output = tel_net_session.exec_cmd(cmd, extra_expects=outputs_conf, timeout=HostTimeout.SYSTEM_RESTORE,
+                                     will_reboot=True)
+    if rc == 0:
+        if output in 'System restore complete':
+            msg = "System restore completed successfully"
+            LOG.info(msg)
+            return 0, msg
+        else:
+            msg = 'This controller has been patched'
+            LOG.warn("Controller is patched")
+            LOG.info('re-login to re-excute the upgrade_controller_simplex')
+            tel_net_session.login()
+            rc, output = tel_net_session.exec_cmd(cmd, extra_expects=outputs_conf,
+                                             timeout=HostTimeout.SYSTEM_RESTORE,alt_prompt='login:', will_reboot=True)
+            if output in 'System restore complete':
+                msg = "System restore completed successfully"
+                LOG.info(msg)
+                return 0, msg
+            else:
+                LOG.debug('rc:{}, output:{}'.format(rc, output))
+
+    err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
+    LOG.error(err_msg)
+
+    if fail_ok:
+       return 1, err_msg
+    else:
+            raise exceptions.CLIRejected(err_msg)
+    return rc, output
+
+
+def restore_compute(tel_net_session=None, fail_ok=False):
+    """
+    Restores the controller system compute for system restore.
+    Args:
+       tel_net_session:
+        fail_ok:
+
+    Returns (tuple): rc, text message
+        0 - Success
+        1 - Execution of restore command failed
+        2 - System compute restore did not complete
+
+    """
+
+    lab = InstallVars.get_install_var("LAB")
+    output_dir = ProjVar.get_var('LOG_DIR')
+    controller0_node = lab['controller-0']
+    if tel_net_session is None:
+
+        if controller0_node.telnet_conn is None:
+            controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+            controller0_node.telnet_conn.login()
+
+        tel_net_session = controller0_node.telnet_conn
+
+
+    cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-compute"
+    os.environ["TERM"] = "xterm"
+    outputs_conf = ('controller-0','login:')
+    rc, output = tel_net_session.exec_cmd(cmd,extra_expects=outputs_conf, timeout=HostTimeout.SYSTEM_RESTORE,
+                                          will_reboot=True)
+    if rc != 0:
+        err_msg = "{} failed: {} {}".format(cmd, rc, output)
+        LOG.error(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+    LOG.info('re-login to re-excute the upgrade_controller_simplex')  ####/Commented due to promot issue need to be fixed in library
+    time.sleep(HostTimeout.REBOOT)
+    tel_net_session.login()
+    LOG.info('Waiting for the simplex to reconnect')
+    host_helper._wait_for_simplex_reconnect(timeout=HostTimeout.REBOOT)
+    if not host_helper.wait_for_host_states('controller-0', timeout=HostTimeout.CONTROLLER_UNLOCK,
+                                            check_interval=10,availability=[HostAvailState.AVAILABLE]):
+        err_msg = "Host did not become online  after downgrade"
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+    # compute restored
+    msg = "compute restore completed successfully"
+    LOG.info(msg)
+    return 0, msg
+
+
 def restore_controller_system_images(images_backup, tel_net_session=None, fail_ok=False):
     """
     Restores the controller system images for system restore.

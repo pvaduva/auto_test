@@ -66,8 +66,6 @@ def setup_test_session(global_setup):
     con_ssh = setups.setup_tis_ssh(InstallVars.get_install_var("LAB"))
     ControllerClient.set_active_controller(ssh_client=con_ssh)
 
-    setups.copy_test_files()
-
     # set build id to be used to upload/write test results
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
