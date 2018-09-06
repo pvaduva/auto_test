@@ -154,6 +154,22 @@ def _delete_resources(resources, scope):
             if code > 0:
                 err_msgs.append(msg)
 
+    if port_chains:
+        LOG.fixture_step("({}) Attempt to delete following port chains: {}".format(scope, port_chains))
+        for port_chain in port_chains:
+            code, msg = network_helper.delete_port_chain(port_chain, check_first=True, auth_info=Tenant.ADMIN,
+                                                         fail_ok=True)
+            if code > 0:
+                err_msgs.append('Failed to delete port chain(s): {}'.format(msg))
+
+    if flow_classifiers:
+        LOG.fixture_step("({}) Attempt to delete following port flow classifiers: {}".format(scope, flow_classifiers))
+        for flow_classifier in flow_classifiers:
+            code, msg = network_helper.delete_flow_classifier(flow_classifier, check_first=True, auth_info=Tenant.ADMIN,
+                                                              fail_ok=True)
+            if code > 0:
+                err_msgs.append('Failed to delete flow classifiers(s): {}'.format(msg))
+
     if vms_with_vols:
         LOG.fixture_step(
             "({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
@@ -222,22 +238,6 @@ def _delete_resources(resources, scope):
             code, msg = network_helper.delete_trunk(trunk, auth_info=Tenant.get('admin'), fail_ok=True)
             if code > 0:
                 err_msgs.append(msg)
-
-    if port_chains:
-        LOG.fixture_step("({}) Attempt to delete following port chains: {}".format(scope, port_chains))
-        for port_chain in port_chains:
-            code, msg = network_helper.delete_port_chain(port_chain, check_first=True, auth_info=Tenant.ADMIN,
-                                                         fail_ok=True)
-            if code > 0:
-                err_msgs.append('Failed to delete port chain(s): {}'.format(msg))
-
-    if flow_classifiers:
-        LOG.fixture_step("({}) Attempt to delete following port flow classifiers: {}".format(scope, flow_classifiers))
-        for flow_classifier in flow_classifiers:
-            code, msg = network_helper.delete_flow_classifier(flow_classifier, check_first=True, auth_info=Tenant.ADMIN,
-                                                              fail_ok=True)
-            if code > 0:
-                err_msgs.append('Failed to delete flow classifiers(s): {}'.format(msg))
 
     if port_pair_groups:
         LOG.fixture_step("({}) Attempt to delete following port pair groups: {}".format(scope, port_pair_groups))
