@@ -383,9 +383,9 @@ def _setup_vm(vm_ids, hosts_to_boot):
     internal_nic = {'net-id': internal_net_id, 'vif-model': 'virtio'}
     nics = [mgmt_nic, internal_nic]
 
-    source_vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[0])[1]
+    source_vm_id = vm_helper.boot_vm(name='source_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[0])[1]
     vm_ids.append(source_vm_id)
-    dest_vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[1])[1]
+    dest_vm_id = vm_helper.boot_vm(name='dest_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[1])[1]
     vm_ids.append(dest_vm_id)
     LOG.info("Source VM {} and Destination VM {} booted".format(source_vm_id, dest_vm_id))
 
