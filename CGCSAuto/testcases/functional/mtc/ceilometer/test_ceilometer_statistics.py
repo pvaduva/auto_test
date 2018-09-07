@@ -126,7 +126,7 @@ def test_ceilometer_meters_exist(meters):
     1. Check via 'openstack metric list' or 'ceilometer event-list'
     2. Check meters for router, subnet, image, and vswitch exists
     """
-
+    skip('CGTS-10102: Disable TC until US116020 completes')
     time_create = host_helper.get_hostshow_value('controller-1', 'created_at')
     current_isotime = datetime.utcnow().isoformat(sep='T')
 
