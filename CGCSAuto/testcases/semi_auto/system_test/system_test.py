@@ -47,8 +47,8 @@ def pre_check(request):
 
         stack_id = heat_helper.get_stacks(name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
 
-        if stack_id:
-            code, msg = heat_helper.delete_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
+        # if stack_id:
+        #     code, msg = heat_helper.delete_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
 
         nova_helper.get_migration_list_table()
     request.addfinalizer(list_status)
@@ -93,7 +93,7 @@ def check_vm_hosts(vms, policy='affinity', best_effort=False):
     return vm_hosts
 
 
-def _test_heat_stack_update():
+def test_heat_stack_update():
     """
     Update heat stack that was already launched.
     It checks if the heat stack is already launched if not it will launch  the heat stack.
@@ -177,7 +177,7 @@ def _test_parallel_migration():
     1,
     3,
 ])
-def test_sys_lock_unlock_hosts(number_of_hosts_to_lock):
+def _test_sys_lock_unlock_hosts(number_of_hosts_to_lock):
     """
         This is to test the evacuation of vms due to compute lock/unlock
     :return:

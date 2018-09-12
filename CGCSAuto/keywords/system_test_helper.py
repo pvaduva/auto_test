@@ -1,8 +1,11 @@
-import time
+import ipaddress, time, re
+from contextlib import ExitStack
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper
+from utils import cli, table_parser
+from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, \
+    network_helper
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
-from utils.clients.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient,NATBoxClient
 from consts.auth import HostLinuxCreds, Tenant
 from consts.cgcs import GuestImages
 from utils.multi_thread import MThread
@@ -154,7 +157,7 @@ def launch_heat_stack():
     env_file = heat_template_file + "/templates/rnc/" + "rnc_heat.env"
     large_heat_params = '-e {} -f {} {}'.format(env_file, large_heat_template, HeatTemplate.SYSTEM_TEST_HEAT_NAME)
     heat_helper.create_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME, params_string=large_heat_params,
-                             timeout=1000, cleanup=None)
+                             timeout=1800, cleanup=None)
 
 
 def sys_lock_unlock_hosts(number_of_hosts_to_lock):
@@ -262,7 +265,6 @@ def sys_reboot_storage():
     :return:
     """
     controllers, computes, storages = system_helper.get_hosts_by_personality()
-    #hosts_to_check = system_helper.get_hostnames(availability=['available', 'online'])
 
     LOG.info("Online or Available hosts before power-off: {}".format(storages))
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(storages))
@@ -277,9 +279,191 @@ def sys_reboot_storage():
         vlm_helper.power_on_hosts(storages, reserve=False, reconnect_timeout=HostTimeout.REBOOT + HostTimeout.REBOOT,
                                   hosts_to_check=storages)
 
-    LOG.tc_step("Check vms are recovered after dead office recovery")
+    LOG.tc_step("Check vms status after storage nodes reboot")
     vms = get_all_vms()
     vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
 
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+
+def launch_lab_setup_tenants_vms():
+    stack1 = "/home/wrsroot/lab_setup-tenant1-resources.yaml"
+    stack1_name = "lab_setup-tenant1-resources"
+    stack2 = "/home/wrsroot/lab_setup-tenant2-resources.yaml"
+    stack2_name = "lab_setup-tenant2-resources"
+    script_name = "/home/wrsroot/create_resource_stacks.sh"
+
+    con_ssh = ControllerClient.get_active_controller()
+    if con_ssh.file_exists(file_path=script_name):
+        cmd1 = 'chmod 755 ' + script_name
+        con_ssh.exec_cmd(cmd1)
+        con_ssh.exec_cmd(script_name, fail_ok=False)
+
+        stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
+    # may be better to delete all tenant stacks if any
+    if not stack_id_t1:
+        stack_params = '-f {} {}'.format(stack1, stack1_name)
+        heat_helper.create_stack(stack_name=stack1_name, params_string=stack_params, auth_info=Tenant.TENANT1,
+                                 timeout=1000, cleanup=None)
+    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.TENANT2)
+    if not stack_id_t2:
+        stack_params = '-f {} {}'.format(stack2, stack2_name)
+        heat_helper.create_stack(stack_name=stack2_name, params_string=stack_params, auth_info=Tenant.TENANT2,
+                                 timeout=1000, cleanup=None)
+
+    LOG.info("Checking all VMs are in active state")
+    vms = get_all_vms()
+    vm_helper.wait_for_vms_values(vms=vms, fail_ok=False)
+
+
+def delete_lab_setup_tenants_vms():
+    stack1_name = "lab_setup-tenant1-resources"
+    stack2_name = "lab_setup-tenant2-resources"
+
+    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
+    # may be better to delete all tenant stacks if any
+    if stack_id_t1:
+        heat_helper.delete_stack(stack_name=stack1_name, auth_info=Tenant.TENANT1)
+
+    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.TENANT2)
+    if stack_id_t2:
+        heat_helper.delete_stack(stack_name=stack2_name, auth_info=Tenant.TENANT2)
+
+    LOG.info("Checking all VMs are Deleted")
+    vms = get_all_vms()
+    assert len(vms) == 0, "Not all vms are deleted after heat stacks removal"
+
+
+def traffic_with_preset_configs(ixncfg, ixia_session=None):
+    with ExitStack() as stack:
+        if ixia_session is None:
+            LOG.info("ixia_session not supplied, creating")
+            from keywords import ixia_helper
+            ixia_session = ixia_helper.IxiaSession()
+            ixia_session.connect()
+            stack.callback(ixia_session.disconnect)
+
+        ixia_session.load_config(ixncfg)
+
+        subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.ADMIN))
+        cidrs = list(map(ipaddress.ip_network, table_parser.get_column(subnet_table, 'cidr')))
+        for vport in ixia_session.getList(ixia_session.getRoot(), 'vport'):
+            for interface in ixia_session.getList(vport, 'interface'):
+                if ixia_session.testAttributes(interface, enabled='true'):
+                    ipv4_interface = ixia_session.getList(interface, 'ipv4')[0]
+                    gw = ipaddress.ip_address(ixia_session.getAttribute(ipv4_interface, 'gateway'))
+                    vlan_interface = ixia_session.getList(interface, 'vlan')[0]
+                    for cidr in cidrs:
+                        if gw in cidr:
+                            subnet_id = table_parser.get_values(subnet_table, 'id', cidr=cidr)[0]
+                            table = table_parser.table(
+                                cli.neutron('subnet-show', subnet_id, auth_info=Tenant.ADMIN))
+                            seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
+                            ixia_session.configure(vlan_interface, vlanEnable=True, vlanId=str(seg_id))
+                            LOG.info("vport {} interface {} gw {} vlan updated to {}".format(vport, interface, gw,
+                                                                                             seg_id))
+
+
+def sys_reboot_standby(number_of_times=1):
+    """
+    This is to identify the storage nodes and turn them off and on via vlm
+    :return:
+    """
+    for i in range (0, number_of_times):
+        active, standby = system_helper.get_active_standby_controllers()
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("'sudo reboot -f' from {}".format(standby))
+        host_helper.reboot_hosts(hostname=standby)
+
+        LOG.tc_step("Check vms status after stanby controller reboot")
+        vms = get_all_vms()
+        vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
+
+        for vm in vms:
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+
+def sys_controlled_swact(number_of_times=1):
+    """
+    This is to identify the storage nodes and turn them off and on via vlm
+    :return:
+    """
+    for i in range (0, number_of_times):
+        active, standby = system_helper.get_active_standby_controllers()
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("'sudo reboot -f' from {}".format(standby))
+        host_helper.swact_host(hostname=active)
+
+        LOG.tc_step("Check vms status after controller swact")
+        vms = get_all_vms()
+        vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
+
+        for vm in vms:
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+
+def sys_uncontrolled_swact(number_of_times=1):
+    """
+    This is to identify the storage nodes and turn them off and on via vlm
+    :return:
+    """
+    for i in range (0, number_of_times):
+        active, standby = system_helper.get_active_standby_controllers()
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("'sudo reboot -f' from {}".format(standby))
+        host_helper.reboot_hosts(hostnames=active)
+
+        LOG.tc_step("Check vms status after controller swact")
+        vms = get_all_vms()
+        vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
+
+        for vm in vms:
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+
+def sys_lock_unlock_standby(number_of_times=1):
+    """
+    This is to identify the storage nodes and turn them off and on via vlm
+    :return:
+    """
+    for i in range (0, number_of_times):
+        active, standby = system_helper.get_active_standby_controllers()
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("'sudo reboot -f' from {}".format(standby))
+        host_helper.lock_host(host=standby)
+
+        LOG.tc_step("Check vms status after locking standby")
+        vms = get_all_vms()
+        vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
+
+        for vm in vms:
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+        host_helper.unlock_host(host=standby)
+        vms = get_all_vms()
+        vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
+
+        for vm in vms:
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+
+def ping_all_vms_from_nat_box():
+    """
+
+    :return:
+    """
+    natbox_client = NATBoxClient.get_natbox_client()
+    vms = get_all_vms()
+    ips_list = network_helper.get_mgmt_ips_for_vms(vms=vms)
+    param = ','.join(map(str, ips_list))
+    cmd1 = "cd /home/cgcs/bin"
+    cmd2 =  "python monitor.py --addresses " + param
+    code1, output1 = natbox_client.send(cmd=cmd1)
+    code, output = natbox_client.send(cmd=cmd2)
+    pattern = str(len(ips_list))+ "/" + str(len(ips_list))
+    pattern_to_look = re.compile(pattern=pattern)
+    if not pattern_to_look.findall(output):
+         return False
+
+    return True

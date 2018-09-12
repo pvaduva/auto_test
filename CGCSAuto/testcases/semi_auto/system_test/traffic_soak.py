@@ -1,4 +1,4 @@
-import ipaddress
+import ipaddress, time
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from consts.auth import HostLinuxCreds, Tenant
@@ -60,7 +60,26 @@ def test_launch_vms_for_traffic():
     vms= system_test_helper.get_all_vms()
     vm_helper.wait_for_vms_values(vms=vms, fail_ok=False)
 
-    ixia_session = ixia_helper.IxiaSession()
-    ixia_session.connect()
 
-    traffic_with_preset_configs(IxiaPath.WCP35_60_Traffic, ixia_session=ixia_session)
+def test_eight_hour_traffic_soak():
+    system_test_helper.launch_lab_setup_tenants_vms()
+    ixia_session = ixia_helper.IxiaSession()
+    LOG.info("Connecting to Ixia")
+    ixia_session.connect()
+    #
+    LOG.info("Loading ixia config file")
+    system_test_helper.traffic_with_preset_configs(IxiaPath.WCP35_60_Traffic, ixia_session=ixia_session)
+    LOG.info("Connecting to Ixia ports")
+    ixia_session.connect_ports()
+    ixia_session.traffic_regenerate()
+    ixia_session.traffic_apply()
+    LOG.info("Starting Ixia Traffic")
+    ixia_session.traffic_start()
+    #time.sleep(28200)
+    time.sleep(120)
+    LOG.info("Stopping Ixia Traffic")
+    ixia_session.traffic_stop()
+    frame_delta = ixia_session.get_frames_delta(stable=True)
+    assert frame_delta == 0, "There is a frame delta detected during traffic soak"
+    LOG.info("Frame delts is {}".format(frame_delta))
+    ixia_session.disconnect(traffic_stop=True)
