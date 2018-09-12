@@ -14,15 +14,22 @@ from consts.timeout import HostTimeout
 
 
 def get_all_vms():
+    """
+
+    :return:  list of all VMs in the system
+    """
+    # Getting the vms on each compute node
     vms_by_compute_dic = nova_helper.get_vms_by_hypervisors()
-    compute_to_lock = []
-    vms_to_check = []
+    vms_to_check = vms_by_compute_dic.values()
+    # compute_to_lock = []
+    # vms_to_check = []
+    #
+    # for k, v in vms_by_compute_dic.items():
+    #     if len(v) >= 5:
+    #         compute_to_lock.append(k)
+    #         vms_to_check.append(v)
 
-    for k, v in vms_by_compute_dic.items():
-        if len(v) >= 5:
-            compute_to_lock.append(k)
-            vms_to_check.append(v)
-
+    # Making a merged list from list of lists
     vms = [y for x in vms_to_check for y in x]
     return vms
 
@@ -35,8 +42,8 @@ def get_all_vms_status():
     Returns: (dict): {vm_id1:vm_status, vm_id2:vm_status, ...}
 
     """
-    vm_ids = nova_helper.get_vms()
-    vm_status_dict = nova_helper.get_vms_info(vm_ids)
+    #vm_ids = nova_helper.get_vms()
+    vm_status_dict = nova_helper.get_vms_info(get_all_vms())
 
     return vm_status_dict
 
@@ -456,14 +463,26 @@ def ping_all_vms_from_nat_box():
     natbox_client = NATBoxClient.get_natbox_client()
     vms = get_all_vms()
     ips_list = network_helper.get_mgmt_ips_for_vms(vms=vms)
-    param = ','.join(map(str, ips_list))
-    cmd1 = "cd /home/cgcs/bin"
-    cmd2 =  "python monitor.py --addresses " + param
-    code1, output1 = natbox_client.send(cmd=cmd1)
-    code, output = natbox_client.send(cmd=cmd2)
-    pattern = str(len(ips_list))+ "/" + str(len(ips_list))
-    pattern_to_look = re.compile(pattern=pattern)
-    if not pattern_to_look.findall(output):
-         return False
+    timeout = 1000
+    vm_threads = []
+    for vm in ips_list:
+        new_thread = MThread(network_helper.ping_server(vm,natbox_client))
+        new_thread.start_thread(timeout=timeout+30)
+        vm_threads.append(new_thread)
+        time.sleep(5)
+
+    for vm_thr in vm_threads:
+        vm_thr.wait_for_thread_end()
+
+    # param = ','.join(map(str, ips_list))
+    # cmd1 = "cd /home/cgcs/bin"
+    # cmd2 =  "python monitor.py --addresses " + param
+    # code1, output1 = natbox_client.send(cmd=cmd1)
+    # code, output = natbox_client.send(cmd=cmd2)
+    # output = natbox_client.cmd_output
+    # pattern = str(len(ips_list))+ "/" + str(len(ips_list))
+    # pattern_to_look = re.compile(pattern=pattern)
+    # if not pattern_to_look.findall(output):
+    #     return False
 
     return True
