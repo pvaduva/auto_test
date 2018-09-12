@@ -1087,6 +1087,24 @@ def get_vm_host(vm_id, con_ssh=None):
     return get_vm_nova_show_value(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.get('admin'))
 
 
+def get_vms_host(vm_ids, con_ssh=None):
+    """
+    Get host of given vm
+    Args:
+        vm_ids:
+        con_ssh:
+
+    Returns:
+
+    """
+    hosts = []
+    for vm_id in vm_ids:
+        host = get_vm_nova_show_value(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+        hosts.append(host)
+
+    return hosts
+
+
 def get_vms_on_hypervisor(hostname, con_ssh=None, rtn_val='ID'):
     """
 

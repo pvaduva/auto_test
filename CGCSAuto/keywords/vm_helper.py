@@ -1598,6 +1598,8 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
     """
     if isinstance(vm_ids, str):
         vm_ids = [vm_ids]
+
+    vm_ids = list(set(vm_ids))
     console_logs = {}
     args = '--length={} '.format(length) if length else ''
     content = ''
@@ -1720,8 +1722,10 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
 
     except:
         ProjVar.set_var(PING_FAILURE=True)
+        collect_to_vms = False if list(to_vms) == [from_vm] else True
         get_console_logs(vm_ids=from_vm, length=20, sep_file=f_path)
-        get_console_logs(vm_ids=to_vms, sep_file=f_path)
+        if collect_to_vms:
+            get_console_logs(vm_ids=to_vms, sep_file=f_path)
         network_helper.collect_networking_info(vms=to_vms, sep_file=f_path)
         try:
             LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to from_vm and collect vm networking info")
@@ -1730,10 +1734,11 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                                        use_fip=from_fip) as from_vm_ssh:
                 _collect_vm_networking_info(vm_ssh=from_vm_ssh, sep_file=f_path, vm_id=from_vm)
 
-            LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
-            for vm_ in to_vms:
-                with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
-                    _collect_vm_networking_info(to_ssh, sep_file=f_path, vm_id=vm_)
+            if collect_to_vms:
+                LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
+                for vm_ in to_vms:
+                    with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
+                        _collect_vm_networking_info(to_ssh, sep_file=f_path, vm_id=vm_)
         except:
             pass
 

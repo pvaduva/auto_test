@@ -245,7 +245,7 @@ class Labs:
         'controller_nodes': [23907],
         'system_type': 'CPE',
         'system_mode': 'simplex',
-        'ixia_ports': [{'port': (1, 3), 'range': (700, 733)}, {'port': (1, 4), 'range': (767, 799)}],
+        'ixia_ports': [{'port': (1, 3), 'range': (734, 766)}, {'port': (1, 4), 'range': (767, 799)}],
     }
 
     SM_3 = {
@@ -578,6 +578,17 @@ class Labs:
         'ixia_ports': [{'port': (6, 11), 'range': (3152, 3201)}, {'port': (6, 12), 'range': (3252, 3301)}],
     }
 
+    WCP_106 = {
+        'short_name': 'wcp_106',
+        'name': 'yow-cgcs-wildcat-106',
+        'floating ip': '128.224.150.95',
+        'controller-0 ip': '128.224.150.94',
+        'controller_nodes': [23601],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+        'ixia_ports': [{'port': (8, 13), 'range': (900, 999)}, {'port': (8, 14), 'range': (1000, 1049)}],
+    }
+
     WCP_113_121 = {
         'short_name': 'wcp_113_121',
         'name': 'yow-cgcs-wildcat-113_121',
@@ -608,7 +619,7 @@ class Labs:
         'controller_nodes': [62031, 29957],
         'system_type': 'CPE',
         'system_mode': 'duplex',
-        # 'ixia_ports': [{'port': (8, 7), 'range': (1700, 1849)}, {'port': (8, 8), 'range': (1700, 1849)}],
+        'ixia_ports': [{'port': (8, 7), 'range': (1700, 1799)}, {'port': (8, 8), 'range': (1800, 1849)}],
     }
 
     WP_03_07 = {

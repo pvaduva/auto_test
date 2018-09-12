@@ -160,7 +160,11 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
         upgrade_helper.orchestration_upgrade_hosts(upgraded_hosts=man_upgrade_nodes,
                                                    orchestration_nodes=orchestration_nodes)
     if collect_kpi:
-        upgrade_helper.collect_upgrade_orchestration_kpi(lab, collect_kpi)
+        if len(orchestration_nodes) > 0:
+            upgrade_helper.collect_upgrade_orchestration_kpi(lab, collect_kpi)
+        else:
+            if upgrade_setup['cpe']:
+                upgrade_helper.collected_upgrade_controller0_kpi(lab, collect_kpi)
 
     # Activate the upgrade
     LOG.tc_step("Activating upgrade....")

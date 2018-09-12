@@ -648,6 +648,8 @@ def pytest_addoption(parser):
                                                "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
                      action='store_true', help="Restore a low-latency lab")
+    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
+                     action='store_true', help="Using upstream cinder-backup CLIs")
 
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',

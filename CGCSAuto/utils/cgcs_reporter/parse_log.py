@@ -57,9 +57,9 @@ def get_tracebacks_from_pytestlog(log_dir, traceback_lines=10, search_forward=Fa
         for line in file:
             if current_failure is not None:
                 if re.match(new_test_pattern, line):
-                    traceback_for_test = parse_traceback(traceback_for_test, traceback_lines=traceback_lines,
+                    traceback = parse_traceback(traceback_for_test, traceback_lines=traceback_lines,
                                                          search_forward=search_forward)
-                    traceback_dict[current_failure] = traceback_for_test
+                    traceback_dict[current_failure] = traceback
                     current_failure = None
                     try:
                         next_failure = failed_tests.pop(0)
@@ -73,9 +73,9 @@ def get_tracebacks_from_pytestlog(log_dir, traceback_lines=10, search_forward=Fa
                 current_failure = next_failure
         else:
             # Meaning last test is a failed test
-            traceback_for_test = parse_traceback(traceback_for_test, traceback_lines=traceback_lines,
+            traceback = parse_traceback(traceback_for_test, traceback_lines=traceback_lines,
                                                  search_forward=search_forward)
-            traceback_dict[current_failure] = traceback_for_test
+            traceback_dict[current_failure] = traceback
 
     return traceback_dict
 

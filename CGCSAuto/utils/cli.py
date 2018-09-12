@@ -345,7 +345,7 @@ def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=No
     if build and build != 'n/a':
         if build < '2018-08-19':
             cmd_ = 'system'
-    elif 'CGCS_DEV_0034' in ProjVar.get_var('BUILD_INFO'):
+    elif 'CGCS_DEV_0034' in ProjVar.get_var('BUILD_INFO') or 'TC_DEV_0003' in ProjVar.get_var('BUILD_INFO'):
         cmd_ = 'system'
 
     return exec_cli(cmd_, sub_cmd=cmd, positional_args=positional_args, flags=flags,

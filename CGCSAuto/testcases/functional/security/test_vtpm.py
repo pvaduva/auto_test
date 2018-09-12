@@ -129,10 +129,10 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('cold-migration', 'transient'),
         ('stop_start', 'transient'),
         ('evacuate', 'transient'),
-        ('evacuate', 'persistent', 'vtpm'), # CGTS-9620
-        ('evacuate', 'persistent', 'autorc'), # CGTS-9620
-        ('evacuate', 'non_volatile', 'vtpm'), # CGTS-9620
-        ('evacuate', 'non_volatile', 'autorc'), # CGTS-9620
+        ('evacuate', 'persistent', 'vtpm'),  # CGTS-9620
+        ('evacuate', 'persistent', 'autorc'),  # CGTS-9620
+        ('evacuate', 'non_volatile', 'vtpm'),  # CGTS-9620
+        ('evacuate', 'non_volatile', 'autorc'),  # CGTS-9620
         ('resize_to_autorc', 'transient'),
         ('resize_to_non_autorc', 'transient'),
         ('resize_to_non_vtpm', 'non_volatile'),
@@ -143,10 +143,10 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('reboot_host', 'transient', 'vtpm'),
         ('reboot_host', 'transient', 'autorc'),
         ('reboot_host', 'transient', 'non_autorc'),
-        ('reboot_host', 'persistent', 'vtpm'), # CGTS-9620
-        ('reboot_host', 'persistent', 'autorc'), # CGTS-9620
-        ('reboot_host', 'non_volatile', 'vtpm'), # CGTS-9620
-        ('reboot_host', 'non_volatile', 'autorc'), # CGTS-9620
+        ('reboot_host', 'persistent', 'vtpm'),  # CGTS-9620
+        ('reboot_host', 'persistent', 'autorc'),  # CGTS-9620
+        ('reboot_host', 'non_volatile', 'vtpm'),  # CGTS-9620
+        ('reboot_host', 'non_volatile', 'autorc'),  # CGTS-9620
 
     }
 
@@ -497,11 +497,11 @@ def create_flavor(vm_type, flavor_type=None, name=core_flavor_name):
     else:
         extra_specs['sw:wrs:vtpm'] = 'true'
 
-    if 'non_autorc' in vm_type:
+    if 'non_autorc' in vm_type or (flavor_type and 'non_autorc' in flavor_type):
         name += '_nonrc'
         extra_specs['sw:wrs:auto_recovery'] = 'false'
 
-    elif 'autorc' in vm_type:
+    elif 'autorc' in vm_type or (flavor_type and 'autorc' in flavor_type):
         name += '_autorc'
         extra_specs['sw:wrs:auto_recovery'] = 'true'
 
@@ -826,22 +826,25 @@ def test_vtpm(vm_operation, extra_specs):
 
             passed = []
             if 'persistent' in values:
-                if check_persistent_values(ssh_to_vm, values['persistent'],
-                                           expecting=vm_op_policy(vm_type, vm_operation, 'persistent'),
-                                           fail_ok=fail_ok)[0]:
+                if check_persistent_values(
+                        ssh_to_vm, values['persistent'],
+                        expecting=vm_op_policy(vm_type, vm_operation, 'persistent'),
+                        fail_ok=fail_ok)[0]:
                     passed.append('persistent')
 
             if 'non_volatile' in values:
-                if check_nv_values(ssh_to_vm, values['non_volatile'],
-                                expecting=vm_op_policy(vm_type, vm_operation, 'non_volatile'),
-                                fail_ok=fail_ok)[0]:
+                if check_nv_values(
+                        ssh_to_vm, values['non_volatile'],
+                        expecting=vm_op_policy(vm_type, vm_operation, 'non_volatile'),
+                        fail_ok=fail_ok)[0]:
                     passed.append('non_volatile')
 
             if 'transient' in values:
-                if check_transient_values(ssh_to_vm,
-                                       handles=values['transient'],
-                                       expecting=vm_op_policy(vm_type, vm_operation, 'transient'),
-                                       fail_ok=fail_ok)[0]:
+                if check_transient_values(
+                        ssh_to_vm,
+                        handles=values['transient'],
+                        expecting=vm_op_policy(vm_type, vm_operation, 'transient'),
+                        fail_ok=fail_ok)[0]:
                     passed.append('transient')
 
             if len(passed) < 3:

@@ -168,9 +168,15 @@ class UpgradeController1:
     END = '200.022.*controller-1 reinstall completed successfully'
 
 
+class UpgradeController0:
+    NAME = 'upgrade_controller_0'
+    START_PATH = '/var/log/bash.log'
+    START = ' system  host-upgrade controller-0'
+    LOG_PATH = '/var/log/fm-event.log'
+    END = '200.022.*controller-0 reinstall completed successfully'
+
 class UpgradeOrchestration:
     NAME = 'upgrade_orchestration'
-
 
 
 class UpgradeActivate:

@@ -97,8 +97,10 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
         if not patch:
             patch = ProjVar.get_var('PATCH')
             if patch:
-                patch = '\n'.join(patch)
+                patch = ' '.join(patch)
                 kpi_dict.update({'patch': patch})
+        else:
+            kpi_dict.update({'patch': patch})
 
         load_average = get_load_average(ssh_client=con_ssh, uptime=uptime)
         kpi_dict.update({'load_average': load_average})

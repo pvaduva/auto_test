@@ -1614,7 +1614,7 @@ def get_cinder_volume_backup_filenames_usb(pattern=None, con_ssh=None):
     return get_backup_files_from_usb(pattern=pattern, con_ssh=con_ssh)
 
 
-def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
+def restore_cinder_volumes_from_backup(con_ssh=None, fail_ok=False):
     """
     Restores cinder volumes from backup files for system restore. If volume snaphot exist for a volume, it will be
     deleted before restoring the volume
@@ -1712,8 +1712,8 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
     return imported_volumes, volumes
 
 
-def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None, copy_to_usb=None,
-                          delete_backup_file=True, con_ssh=None, fail_ok=False):
+def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None,
+                          copy_to_usb=None, delete_backup_file=True, con_ssh=None, fail_ok=False, cinder_backup=False):
     """
     Exports all available and in-use cinder volumes for system backup.
     Args:
@@ -1742,7 +1742,7 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
 
     if len(current_volumes) > 0:
         LOG.info("Exporting Cinder volumes {}".format(current_volumes))
-        volumes_exported.extend(cinder_helper.export_volumes()[1])
+        volumes_exported.extend(cinder_helper.export_volumes(cinder_backup=cinder_backup, con_ssh=con_ssh)[1])
 
         if len(volumes_exported) > 0:
             LOG.info("Cinder volumes exported: {}".format(volumes_exported))
@@ -1750,7 +1750,13 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                 LOG.warn("Not all current cinder volumes are  exported; Unexported volumes: {}"
                          .format(set(current_volumes) - set(volumes_exported)))
 
-            src_files = "/opt/backups/volume-*.tgz"
+            if cinder_backup:
+                container = 'cinder'
+                is_dir = True
+                src_files = "/opt/backups/{}".format(container)
+            else:
+                is_dir = False
+                src_files = "/opt/backups/volume-*.tgz"
 
             if backup_dest == 'local':
                 if dest_server:
@@ -1760,7 +1766,10 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                     if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
                         local_host.exec_cmd(["mkdir -p {}".format(backup_dest_path)])
 
-                common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+                common.scp_from_active_controller_to_test_server(src_files,
+                                                                 backup_dest_path,
+                                                                 is_dir=is_dir,
+                                                                 multi_files=True)
 
                 LOG.info("Verifying if backup files are copied to destination")
                 if dest_server:
@@ -1769,7 +1778,8 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                     rc, output = local_host.exec_cmd(["ls {}".format(backup_dest_path)])
 
                 if rc != 0:
-                    err_msg = "Failed to scp cinder backup files {} to local destination: {}".format(backup_dest_path, output)
+                    err_msg = "Failed to scp cinder backup files {} to local destination: {}".format(backup_dest_path,
+                                                                                                     output)
                     LOG.info(err_msg)
                     if fail_ok:
                         return 2, err_msg
@@ -2367,11 +2377,11 @@ def get_lab_info(barcode):
 def run_cpe_compute_config_complete(controller0_node, controller0):
     output_dir = ProjVar.get_var('LOG_DIR')
 
-    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
-
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
+
+    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
 
     telnet_client = controller0_node.telnet_conn
 

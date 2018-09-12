@@ -4,7 +4,7 @@ from pytest import fixture, mark, skip
 
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
-from keywords import nova_helper, vm_helper, host_helper, keystone_helper, check_helper
+from keywords import nova_helper, vm_helper, host_helper, keystone_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
@@ -34,7 +34,7 @@ def check_shared_vcpu(vm, numa_node0, numa_nodes, vcpus, prev_total_vcpus, share
 
     host = nova_helper.get_vm_host(vm_id=vm)
     if shared_vcpu is not None:
-        host_shared_vcpu_dict = host_helper.get_host_cpu_cores_for_function(host, function='Shared', thread=None)
+        host_shared_vcpu_dict = host_helper.get_host_cpu_cores_for_function(host, func='Shared', thread=None)
         LOG.info("dict: {}".format(host_shared_vcpu_dict))
         if numa_nodes is None:
             numa_nodes = 1
@@ -50,7 +50,8 @@ def check_shared_vcpu(vm, numa_node0, numa_nodes, vcpus, prev_total_vcpus, share
         min_vcpus = vcpus
 
     check_helper.check_topology_of_vm(vm, vcpus, prev_total_cpus=prev_total_vcpus[host], shared_vcpu=shared_vcpu,
-                                      cpu_pol='dedicated', expt_increase=expt_increase, numa_num=numa_nodes, min_vcpus=min_vcpus)
+                                      cpu_pol='dedicated', expt_increase=expt_increase,
+                                      numa_num=numa_nodes, min_vcpus=min_vcpus)
 
 
 def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='dedicated',
@@ -141,7 +142,7 @@ class TestSharedCpuDisabled:
         avail_zone = None
         hosts_unconfigured = []
         for host in hosts:
-            shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared', thread=0)
+            shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, func='shared', thread=0)
             if shared_cores_host[0] or shared_cores_host.get(1, None):
                 hosts_unconfigured.append(host)
 
@@ -292,9 +293,44 @@ class TestSharedCpuDisabled:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
 
+def check_host_cpu_and_memory(host, expt_shared_cpu, expt_1g_page):
+    """
+    Check host cpu and memory configs via sysinv cli
+    Args:
+        host:
+        expt_shared_cpu (dict): {<proc>: <shared_core_count>, ...}
+        expt_1g_page (dict): {<proc>: <page_count>, ...}
+
+    Returns:
+
+    """
+    LOG.info("Check {} shared core config: {}".format(host, expt_shared_cpu))
+    shared_cores_ = host_helper.get_host_cpu_cores_for_function(hostname=host, func='shared')
+    for proc in expt_shared_cpu:
+        assert len(shared_cores_[proc]) == expt_shared_cpu[proc], "Actual shared cpu count is different than expected"
+
+    LOG.info("Check {} 1g page config: {}".format(host, expt_1g_page))
+    mempages_1g = system_helper.get_host_mem_values(host, headers=('vm_hp_total_1G',))
+    for proc in expt_1g_page:
+        assert mempages_1g[proc][0] == expt_1g_page[proc], "Actual 1g page is differnt than expected"
+
+
 class TestSharedCpuEnabled:
+
     @fixture(scope='class')
-    def add_shared_cpu(self, no_simplex, config_host_class):
+    def add_shared_cpu(self, no_simplex, config_host_class, request):
+        """
+        This fixture ensures at least two hypervisors are configured with shared cpu on proc0 and proc1
+        It also reverts the configs at the end.
+
+        Args:
+            no_simplex:
+            config_host_class:
+            request:
+
+        Returns:
+
+        """
         storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("Less than two hypervisors with same storage backend")
@@ -302,9 +338,10 @@ class TestSharedCpuEnabled:
         LOG.fixture_step("Ensure at least two hypervisors has shared cpu cores on both p0 and p1")
         shared_cpu_hosts = []
         shared_disabled_hosts = {}
+        modified_hosts = []
 
         for host_ in hosts:
-            shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host_, function='shared')
+            shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host_, func='shared')
             if 1 not in shared_cores_for_host:
                 LOG.info("{} has only 1 processor. Ignore.".format(host_))
                 continue
@@ -319,19 +356,37 @@ class TestSharedCpuEnabled:
             if len(shared_disabled_hosts) + len(shared_cpu_hosts) < 2:
                 skip("Less than two up hypervisors with 2 processors")
 
-            def _modify(host):
-                host_helper.modify_host_cpu(host, 'shared', p0=1, p1=1)
+            def _modify(host_to_modify):
+                host_helper.modify_host_cpu(host_to_modify, 'shared', p0=1, p1=1)
+                host_helper.modify_host_memory(host_to_modify, proc=0, gib_1g=4)
 
-            for host_to_config, shared_cores in shared_disabled_hosts.items():
-                def _revert(host):
-                    LOG.fixture_step("Revert {} shared cpu setting to original".format(host))
-                    host_helper.modify_host_cpu(host, 'shared', p0=len(shared_cores[0]), p1=len(shared_cores[1]))
-
-                config_host_class(host=host_to_config, modify_func=_modify, revert_func=_revert)
+            for host_to_config in shared_disabled_hosts:
+                config_host_class(host=host_to_config, modify_func=_modify)
                 host_helper.wait_for_hypervisors_up(host_to_config)
+                host_helper.wait_for_mempage_update(host_to_config)
+                check_host_cpu_and_memory(host_to_config, expt_shared_cpu={0: 1, 1: 1}, expt_1g_page={0: 4})
                 shared_cpu_hosts.append(host_to_config)
+                modified_hosts.append(host_to_config)
                 if len(shared_cpu_hosts) >= 2:
                     break
+
+            def revert():
+                for host_to_revert in modified_hosts:
+                    check_host_cpu_and_memory(host_to_revert, expt_shared_cpu={0: 1, 1: 1}, expt_1g_page={0: 4})
+                    p0_shared = len(shared_disabled_hosts[host_to_revert][0])
+                    p1_shared = len(shared_disabled_hosts[host_to_revert][1])
+                    try:
+                        LOG.fixture_step("Revert {} shared cpu and memory setting".format(host_to_revert))
+                        host_helper.lock_host(host_to_revert)
+                        host_helper.modify_host_cpu(host_to_revert, 'shared', p0=p0_shared, p1=p1_shared)
+                        host_helper.modify_host_memory(host_to_revert, proc=0, gib_1g=0)
+                    finally:
+                        host_helper.unlock_host(host_to_revert)
+                        host_helper.wait_for_mempage_update(host_to_revert)
+
+                    check_host_cpu_and_memory(host_to_revert,
+                                              expt_shared_cpu={0: p0_shared, 1: p1_shared}, expt_1g_page={0: 0})
+            request.addfinalizer(revert)
 
         max_vcpus_proc0 = 0
         max_vcpus_proc1 = 0
@@ -340,7 +395,7 @@ class TestSharedCpuEnabled:
 
         LOG.fixture_step("Get VMs cores for each host")
         for host in shared_cpu_hosts:
-            vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, function='VMs', thread=None)
+            vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, func='VMs', thread=None)
             if len(vm_cores_per_proc[0]) > max_vcpus_proc0:
                 max_vcpus_proc0 = len(vm_cores_per_proc[0])
                 host_max_proc0 = host
@@ -624,11 +679,13 @@ class TestSharedCpuEnabled:
 
         storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
         prev_total_vcpus = host_helper.get_vcpus_for_computes()
-        if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
+        if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes \
+                or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
             skip("Less than {} VMs cores on numa node0 of any hypervisor".format(vcpus/numa_nodes))
         # make vm (4 vcpus)
         LOG.tc_step("Make a flavor with {} vcpus and scaling enabled".format(vcpus))
-        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu)
+        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu,
+                                        storage_backing=storage_backing)
         ResourceCleanup.add('flavor', flavor_1)
         first_specs = {FlavorSpec.MIN_VCPUS: min_vcpus}
         nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
@@ -693,10 +750,11 @@ class TestSharedCpuEnabled:
             - create flavor with shared vCPU
             - determine how many pcpus are available on a compute host
             - create a flavor with no shared vCPUs
-                - has a number of vCPUs so that after booting it the number of available pcpus is: shared CPU flavor #vCPUs - 1
+                - has a number of vCPUs so that after booting it the number of available pcpus is:
+                shared CPU flavor #vCPUs-1
             - boot instances using flavor without shared CPU.
             - boot instance with shared CPU flavor
-            - confirm (via vm-topology as well as virsh vcpupin) that shared_vcpu of instance is pinned to the shared pcpu
+            - confirm (via vm-topology and virsh vcpupin) that shared_vcpu of instance is pinned to the shared pcpu
                 -and the remaining vcpus are pinned to the available physical cpus from the previous step.
 
         Teardown:
@@ -704,12 +762,14 @@ class TestSharedCpuEnabled:
         """
 
         storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
-        if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
+        if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes \
+                or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
             skip("Less than {} VMs cores on numa node0 of any hypervisor with shared cpu".format(vcpus/numa_nodes))
 
         # make vm
         LOG.tc_step("Make a flavor with {} shared vcpus".format(vcpus))
-        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu)
+        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu,
+                                        storage_backing=storage_backing)
         ResourceCleanup.add('flavor', flavor_1)
 
         # select a compute node to use
@@ -763,7 +823,7 @@ class TestMixSharedCpu:
         disabled_shared_cpu_hosts = []
         # Look through hosts to see if we already have the desired configuration with having to modify
         for host in hosts:
-            shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, function='shared', thread=0)
+            shared_cores_host = host_helper.get_host_cpu_cores_for_function(hostname=host, func='shared', thread=0)
             if shared_cores_host[0] or shared_cores_host[1]:
                 shared_cpu_hosts.append(host)
             else:

@@ -131,7 +131,7 @@ def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False,
     code, output = cli.openstack('metric list', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                  fail_ok=fail_ok)
     if code > 0:
-        return None
+        return []
 
     lines = output.splitlines()
     index = columns.index(rtn_val.lower())

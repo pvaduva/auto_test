@@ -132,6 +132,73 @@ def pre_system_backup():
     return _backup_info
 
 
+def backup_sysconfig_images(backup_info):
+    backup_dest = backup_info['backup_dest']
+    backup_dest_path = backup_info['backup_dest_full_path']
+    dest_server = backup_info['dest_server']
+    copy_to_usb = backup_info['copy_to_usb']
+
+    install_helper.backup_system(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
+                                 dest_server=dest_server, copy_to_usb=copy_to_usb)
+
+    # storage lab start backup image files separately if it's a storage lab
+    # if number of storage nodes is greater than 0
+    if len(system_helper.get_storage_nodes()) > 0:
+        LOG.tc_step("Storage lab detected. copying images to backup.")
+        image_ids = glance_helper.get_images()
+        for img_id in image_ids:
+            prop_key = 'store'
+            image_properties = glance_helper.get_image_properties(img_id, prop_key)
+            LOG.debug('image store backends:{}'.format(image_properties))
+
+            if image_properties and image_properties.get(prop_key, None) == 'rbd':
+                LOG.info('rbd based image, exporting it: {}, store:{}'.format(img_id, image_properties))
+
+                install_helper.export_image(img_id, backup_dest=backup_info['backup_dest'],
+                                            backup_dest_path=backup_info['backup_dest_full_path'],
+                                            dest_server=backup_info['dest_server'],
+                                            copy_to_usb=backup_info['copy_to_usb'])
+            else:
+                LOG.warn('No property found!!! for image {}, properties:{}'.format(img_id, image_properties))
+                prop_key = 'direct_url'
+                direct_url = glance_helper.get_image_properties(img_id, prop_key)
+                LOG.info(
+                    'found direct_url, still consider it as rbd based image, exporting it: {}, stores:{}'.format(
+                        img_id, image_properties))
+
+                if direct_url and direct_url.startswith('rbd://'):
+                    install_helper.export_image(img_id, backup_dest=backup_dest,
+                                                backup_dest_path=backup_dest_path,
+                                                dest_server=dest_server,
+                                                copy_to_usb=copy_to_usb)
+                else:
+                    LOG.warn('non-rbd based image, skip it:  {}, store:{}'.format(img_id, image_properties))
+
+
+def backup_cinder_volumes(backup_info):
+    LOG.tc_step("Cinder Volumes backup ...")
+    backup_dest = backup_info.get('backup_dest', None)
+    dest_server = backup_info.get('dest_server', None)
+    copy_to_usb = backup_info.get('copy_to_usb', None)
+    cinder_backup = backup_info.get('cinder_backup', False)
+
+    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='Available')
+    vol_ids += cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='in-use')
+    if len(vol_ids) > 0:
+        LOG.info("Exporting cinder volumes: {}".format(vol_ids))
+        exported = install_helper.export_cinder_volumes(backup_dest=backup_dest,
+                                                        backup_dest_path=backup_info['backup_dest_full_path'],
+                                                        dest_server=dest_server,
+                                                        copy_to_usb=copy_to_usb,
+                                                        con_ssh=backup_info['con_ssh'],
+                                                        cinder_backup=cinder_backup)
+
+        assert len(exported) > 0, "None volume was successfully exported"
+        assert len(exported) == len(vol_ids), "Some volumes failed export: {}".format(set(vol_ids)-set(exported))
+    else:
+        LOG.info("No cinder volumes are avaialbe or in-use states in the system; skipping cinder volume export...")
+
+
 def test_backup(pre_system_backup):
     """
     Test create backup on the system and it's avaliable and in-use volumes.
@@ -160,14 +227,13 @@ def test_backup(pre_system_backup):
     LOG.info('Before backup, perform configuration changes and launch VMs')
     con_ssh = ControllerClient.get_active_controller()
     pre_backup_test(backup_info, con_ssh)
+    backup_info['con_ssh'] = con_ssh
 
     lab = InstallVars.get_install_var('LAB')
     LOG.tc_step("System backup: lab={}; backup dest = {} backup destination path = {} ..."
                 .format(lab['name'], backup_info['backup_dest'], backup_info['backup_dest_full_path']))
-    dest_server = backup_info['dest_server']
     copy_to_usb = None
     usb_part2 = None
-    # usb_part1 = None
 
     backup_dest = backup_info['backup_dest']
     if backup_dest == 'usb':
@@ -178,49 +244,19 @@ def test_backup(pre_system_backup):
             elif k[-1:] == '2':
                 usb_part2 = k
         copy_to_usb = usb_part2
+    backup_info['copy_to_usb'] = copy_to_usb
+    backup_info['backup_file_prefix'] = get_backup_file_name_prefix(backup_info)
+    backup_info['cinder_backup'] = BackupVars.get_backup_var('cinder_backup')
 
-    backup_file_prefix = get_backup_file_name_prefix(backup_info)
-
-    install_helper.backup_system(backup_file_prefix, backup_dest=backup_dest,
-                                 backup_dest_path=backup_info['backup_dest_full_path'],
-                                 dest_server=dest_server, copy_to_usb=copy_to_usb)
-
-    # storage lab start backup image files separately if it's a storage lab
-    if backup_info.get('is_storage_lab', False):
-
-        LOG.tc_step("Storage lab detected. copying images to backup.")
-        image_ids = glance_helper.get_images()
-        for img_id in image_ids:
-            prop_key = 'store'
-            image_stores = glance_helper.get_image_properties(img_id, prop_key)
-            LOG.debug('image store backends:{}'.format(image_stores))
-
-            if image_stores and image_stores.get(prop_key, None) == 'rbd':
-                LOG.info('rbd based image, exporting it: {}, stores:{}'.format(img_id, image_stores))
-
-                install_helper.export_image(img_id, backup_dest=backup_dest,
-                                        backup_dest_path=backup_info['backup_dest_full_path'], dest_server=dest_server,
-                                        copy_to_usb=copy_to_usb)
-            else:
-                LOG.warn('non-rbd based image, skip it:  {}, store:{}'.format(img_id, image_stores))
-
-    # execute backup available volume command
-    LOG.tc_step("Cinder Volumes backup ...")
-
-    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='Available')
-    vol_ids += cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='in-use')
-    if len(vol_ids) > 0:
-        LOG.info("Exporting cinder volumes: {}".format(vol_ids))
-        exported = install_helper.export_cinder_volumes(backup_dest=backup_dest,
-                                                        backup_dest_path=backup_info['backup_dest_full_path'],
-                                                        dest_server=dest_server, copy_to_usb=copy_to_usb)
-
-        assert len(exported) > 0, "Fail to export all volumes"
-        assert len(exported) == len(vol_ids), "Some volumes failed export: {}".format(set(vol_ids)-set(exported))
+    if not backup_info['cinder_backup']:
+        backup_sysconfig_images(backup_info)
+        backup_cinder_volumes(backup_info)
     else:
-        LOG.info("No cinder volumes are avaialbe or in-use states in the system; skipping cinder volume export...")
+        backup_cinder_volumes(backup_info)
+        backup_sysconfig_images(backup_info)
 
     collect_logs('after_backup')
+
     # Copying system backup ISO file for future restore
     assert backup_load_iso_image(backup_info)
 
@@ -416,15 +452,18 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
     quota_keys = list(quotas.keys())
     LOG.info('TODO: quotas:{}, limit_usage:{}, tenant:{}'.format(quotas, limit_usage, tenant))
     for limit in limit_usage:
-        limit_values = nova_helper.get_quotas(quotas=quota_keys, detail=limit, auth_info=tenant)
+        limit_values = nova_helper.get_quotas(quotas=quota_keys, detail=limit, auth_info=tenant, con_ssh=con_ssh)
         for i in range(len(quota_keys)):
             key = quota_keys[i]
-            value = quotas.get(key, {})
-            value.update({limit: int(limit_values[i])})
+            value = quotas.get(key)
+            quotas[key][limit] = limit_values[i]
+
     LOG.info('TODO:{}'.format(quotas))
 
     new_quotas = {'instances': 0, 'cores': 0, 'ram': 0}
-    free_quota = quotas['instances']['limit'] - quotas['instances']['in_use'] - quotas['instances']['reserved']
+    free_quota = int(quotas['instances']['limit']) \
+                 - int(quotas['instances']['in_use']) \
+                 - int(quotas['instances']['reserved'])
     LOG.info('free_quota:{}'.format(free_quota))
     if vm_count > free_quota:
         LOG.info('Not enough quota for VM instances, increase {}'.format(vm_count - free_quota))
@@ -432,7 +471,7 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
         new_quotas['cores'] = 2 * vm_count
         new_quotas['ram'] = 2048 * vm_count
         LOG.info('TODO: update quotas with:{}'.format(new_quotas))
-        nova_helper.update_quotas(tenant=tenant['user'], **new_quotas)
+        nova_helper.update_quotas(tenant=tenant['user'], con_ssh=con_ssh, **new_quotas)
 
 
 def pb_launch_vms(con_ssh, image_ids, backup_info=None):
@@ -441,33 +480,35 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
     if not image_ids:
         LOG.warn('No images to backup')
     else:
-        LOG.info('-currently active images: {}'.format(image_ids))
-        properties = ['name', 'status', 'visibility']
-        for image_id in image_ids:
-            name, status, visibility = glance_helper.get_image_properties(image_id, properties)
-            if status == 'active' and name and 'centos-guest' in name:
-                LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
+        pass
+        #LOG.info('-currently active images: {}'.format(image_ids))
+        #properties = ['name', 'status', 'visibility']
+        #for image_id in image_ids:
+        #    name, status, visibility = glance_helper.get_image_properties(image_id, properties)
+        #    if status == 'active' and name and 'centos-guest' in name:
+        #        LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
 
-                LOG.info('-launch VMs from the image: {}'.format(image_id))
-                vms_added += vm_helper.launch_vms('vswitch',
-                                            image=image_id, 
-                                            boot_source='image', 
-                                            auth_info=Tenant.TENANT1, 
-                                            con_ssh=con_ssh)[0]
-                LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
-                break
-            else:
-                LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
+        #        LOG.info('-launch VMs from the image: {}'.format(image_id))
+        #        vms_added += vm_helper.launch_vms('vswitch',
+        #                                    image=image_id, 
+        #                                    boot_source='image', 
+        #                                    auth_info=Tenant.TENANT1, 
+        #                                    con_ssh=con_ssh)[0]
+        #        LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
+        #        break
+        #    else:
+        #        LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
 
-    vm_types = ['vswitch', 'dpdk', 'vhost']
-    LOG.info('-launch VMs for different types:{}'.format(vm_types))
+    # vm_types = ['vswitch', 'dpdk', 'vhost']
+    # LOG.info('-launch VMs for different types:{}'.format(vm_types))
 
-    LOG.info('-first make sure we have enough quota')
-    vm_count = len(vms_added) + len(vm_types)
-    adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
+    # LOG.info('-first make sure we have enough quota')
+    # vm_count = len(vms_added) + len(vm_types)
+    # adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
 
-    for vm_type in vm_types:
-        vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+    # for vm_type in vm_types:
+    #     vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+    vms_added.append(vm_helper.boot_vm(auth_info=Tenant.TENANT1, con_ssh=con_ssh)[1])
 
     return vms_added
 
@@ -483,10 +524,13 @@ def pre_backup_setup(backup_info, con_ssh):
     LOG.info('Deleting VMs for pre-backup system-wide test')
     vm_helper.delete_vms()
 
-    LOG.info('Deleting Volumes for pre-backup system-wide test')
+    LOG.info('Deleting Volumes snapshots if any')
+    cinder_helper.delete_volume_snapshots(snapshots=None, auth_info=Tenant.get('admin'), con_ssh=con_ssh)
+
+    LOG.info('Deleting Volumes')
     volumes = cinder_helper.get_volumes()
     LOG.info('-deleting volumes:{}'.format(volumes))
-    cinder_helper.delete_volumes(volumes)
+    cinder_helper.delete_volumes(volumes, timeout=180)
 
     LOG.info('Make sure we have glance images to backup')
     image_ids = glance_helper.get_images()
@@ -508,7 +552,7 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
         LOG.info('Skip migration test')
         return 0
     else:
-        LOG.info('There {} hyporvisors')
+        LOG.debug('There {} hyporvisors'.format(len(hyporvisors)))
 
     LOG.info('Randomly choose some VMs and do migrate:')
 
@@ -539,19 +583,31 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
 
 
 def lock_unlock_host(backup_info, con_ssh, vms):
+    active_controller_name = system_helper.get_active_controller_name()
 
     target_vm = random.choice(vms)
     LOG.info('lock and unlock the host of VM:{}'.format(target_vm))
 
-    target_host = nova_helper.get_vm_host(target_vm)
+    target_host = nova_helper.get_vm_host(target_vm, con_ssh=con_ssh)
+    if target_host == active_controller_name:
+        if not system_helper.is_simplex():
+            LOG.warning('Attempt to lock the active controller on a non-simplex system')
+            host_helper.swact_host()
+
+    active_controller_name = system_helper.get_active_controller_name()
+
     LOG.info('lock and unlock:{}'.format(target_host))
 
     host_helper.lock_host(target_host)
-    LOG.info('check if the VM is pingable')
-    vm_helper.ping_vms_from_natbox(target_vm)
+    if not system_helper.is_simplex():
+        LOG.info('check if the VM is pingable')
+        vm_helper.ping_vms_from_natbox(target_vm)
+    else:
+        LOG.info('skip pinging vm after locking the only node in a simlex system')
 
     LOG.info('unlock:{}'.format(target_host))
     host_helper.unlock_host(target_host)
+
     host_helper.wait_for_host_states(target_host,
                                      administrative='unlocked',
                                      availability='available',
@@ -566,7 +622,6 @@ def lock_unlock_host(backup_info, con_ssh, vms):
             LOG.info('Succeeded to ping VM:{}'.format(target_vm))
             break
     if backup_info.get('dest', 'local') == 'usb':
-        active_controller_name = system_helper.get_active_controller_name()
         if active_controller_name != 'controller-0':
             LOG.info('current active_controller: ' + active_controller_name + ', restore to controller-0 in case it was not after swact')
             host_helper.swact_host()
@@ -580,8 +635,8 @@ def pre_backup_test(backup_info, con_ssh):
 
     created = pre_backup_setup(backup_info, con_ssh)
     vms = created['vms']
-    volumes = created['volumes'];
-    images = created['images'];
+    volumes = created['volumes']
+    images = created['images']
     LOG.info('OK, createed VMs:{}, volumes:{}, images:{}'.format(vms, volumes, images))
 
     LOG.info('Do VM migration tests')
