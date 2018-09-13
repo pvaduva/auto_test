@@ -10,6 +10,7 @@ from consts.proj_vars import ComplianceVar, ProjVar
 from consts.compliance import RefStack, VM_ROUTE_VIA
 from keywords import keystone_helper, nova_helper, cinder_helper, network_helper, glance_helper, storage_helper, \
     system_helper, host_helper
+from testcases.compliance import compliance_helper
 
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -40,9 +41,8 @@ def refstack_pre_check():
 
 @fixture(scope='session', autouse=True)
 def refstack_setup(refstack_pre_check, request):
-### skipped for regular lab
-#    if not system_helper.get_storage_nodes():
-#        skip("Ceph system is required for refstack test")
+    #    if not system_helper.get_storage_nodes():
+    #        skip("Ceph system is required for refstack test")
 
     primary_tenant = keystone_helper.get_projects(auth_info=None)[0]
     append_str = re.findall('tenant\d+(.*)', primary_tenant)[0]
@@ -78,11 +78,10 @@ def refstack_setup(refstack_pre_check, request):
     images.append(image_id)
     ResourceCleanup.add('image', image_id, scope='session')
 
-### skipped for regular lab with swift already turn on
-#    LOG.fixture_step("Enable object gateway for Swift if not already done")
-#    obj_gateway = storage_helper.get_storage_backend_show_vals(backend='ceph-store', fields='object_gateway')[0]
-#    if not obj_gateway:
-#        storage_helper.modify_storage_backend('ceph-store', object_gateway=True, lock_unlock=True)
+    #    LOG.fixture_step("Enable object gateway for Swift if not already done")
+    #    obj_gateway = storage_helper.get_storage_backend_show_vals(backend='ceph-store', fields='object_gateway')[0]
+    #    if not obj_gateway:
+    #        storage_helper.modify_storage_backend('ceph-store', object_gateway=True, lock_unlock=True)
 
     LOG.fixture_step("Setup public router if not already done.")
     external_net_id = network_helper.get_ext_networks()[0]
@@ -96,7 +95,8 @@ def refstack_setup(refstack_pre_check, request):
         internal_subnet = 'internal0-subnet0-1'
         gateway = '10.1.1.1'
         network_helper.update_subnet(subnet=internal_subnet, gateway=gateway)
-        network_helper.add_router_interface(router_id=public_router_id, subnet=internal_subnet, auth_info=Tenant.get('admin'))
+        network_helper.add_router_interface(router_id=public_router_id, subnet=internal_subnet,
+                                            auth_info=Tenant.get('admin'))
 
     keystone_pub = keystone_helper.get_endpoints(rtn_val='URL', interface='public', service_name='keystone')[0]
     keystone_pub_url = keystone_pub.split('/v')[0] + '/'
@@ -119,13 +119,7 @@ def refstack_setup(refstack_pre_check, request):
                                 fail_ok=False)
             server_ssh.exec_cmd('grep {} {}'.format(val, RefStack.TEMPEST_CONF), fail_ok=False)
 
-        LOG.fixture_step("Add routes to access VM from compliance server if not already done")
-        cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True,
-                                           rtn_val='cidr')
-        cidrs_to_add = [r'{}.0/24'.format(re.findall('(.*).\d+/\d+', item)[0]) for item in cidrs]
-        for cidr in cidrs_to_add:
-            if server_ssh.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
-                server_ssh.exec_sudo_cmd('ip route add {} via {}'.format(cidr, VM_ROUTE_VIA))
+        compliance_helper.add_route_for_vm_access(server_ssh)
 
     def scp_logs():
         LOG.info("scp test results files from refstack test host to local automation dir")

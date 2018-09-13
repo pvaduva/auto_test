@@ -191,8 +191,8 @@ def get_computes(con_ssh=None, use_telnet=False, con_telnet=None):
     Returns (list): list of hostnames. Empty list [] returns when no compute nodes.
 
     """
-    nodes = _get_nodes(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
-    return nodes['computes']
+    return get_hostnames(personality='compute', con_ssh=con_ssh, use_telnet=use_telnet,
+                         con_telnet=con_telnet)
 
 
 def get_hostnames(personality=None, administrative=None, operational=None, availability=None, name=None,
@@ -201,7 +201,7 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     """
     Get hostnames with given criteria
     Args:
-        personality (str):
+        personality (str|list|tuple):
         administrative (str|list|tuple):
         operational (str|list|tuple):
         availability (str|list|tuple):
@@ -228,6 +228,28 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     LOG.debug("Filtered hostnames: {}".format(hostnames))
 
     return hostnames
+
+
+def get_hostnames_per_personality(availability=None, con_ssh=None):
+    """
+
+    Args:
+        availability
+        con_ssh:
+
+    Returns (dict):
+    e.g., {'controller': ['controller-0', 'controller-1'], 'compute': ['compute-0', 'compute-1], 'storage': []}
+
+    """
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+    personalities = ('controller', 'compute', 'storage')
+    res = {}
+    for personality in personalities:
+        hosts = table_parser.get_values(table_, 'hostname', personality=personality, availability=availability)
+        hosts = [host for host in hosts if host.lower() != 'none']
+        res[personality] = hosts
+
+    return res
 
 
 def _get_nodes(con_ssh=None, use_telnet=False, con_telnet=None):

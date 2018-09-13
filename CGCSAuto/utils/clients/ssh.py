@@ -1,6 +1,5 @@
 import os
 import re
-import copy
 import threading
 import time
 from contextlib import contextmanager
@@ -206,7 +205,6 @@ class SSHClient:
                         before_str = self._parse_output(self._session.before)
                         after_str = self._parse_output(self._session.after)
                         output = before_str + after_str
-                        print("output: {}".format(output))
                         if 'your password' in output:
                             LOG.warning("Login failed possibly due to password expire warning. "
                                         "Retry with small searchwindowsize")
@@ -332,12 +330,6 @@ class SSHClient:
         if not isinstance(blob_list, list):
             blob_list = [blob_list]
 
-        exit_cmd = (self.cmd_sent == EXIT_CODE_CMD)
-        # if not exit_cmd:
-        #     LOG.debug("Expecting: \'{}\'...".format('\', \''.join(str(blob) for blob in blob_list)))
-        # else:
-            # LOG.debug("Expecting exit code...")
-
         kwargs = {}
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
@@ -347,13 +339,12 @@ class SSHClient:
         try:
             index = self._session.expect(blob_list, timeout=timeout, **kwargs)
         except pexpect.EOF:
-            # LOG.warning("No match found for {}!\npexpect exception caught: {}".format(blob_list, e.__str__()))
             # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
             #                                         self._parse_output(self._session.after)))
             if fail_ok:
                 return -1
             else:
-                LOG.warning("No match found for {}!\nEOF caught.".format(blob_list))
+                LOG.warning("EOF caught.")
                 raise
         except pexpect.TIMEOUT:
             if fail_ok:
@@ -439,7 +430,7 @@ class SSHClient:
             self.send_control('c')
             self.flush(timeout=10)
             if fail_ok:
-                LOG.warning(e)
+                LOG.warning(e.__str__())
             else:
                 raise
 
@@ -453,7 +444,6 @@ class SSHClient:
         return code, output
 
     def _process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
-
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.info("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
@@ -489,12 +479,12 @@ class SSHClient:
 
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
-        self.expect(timeout=30)
+        self.expect(timeout=30, fail_ok=False)
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
         return int(matches[-1])
 
     def get_hostname(self):
-        return self.exec_cmd('hostname')[1].splitlines()[0]
+        return self.exec_cmd('hostname', get_exit_code=False)[1].splitlines()[0]
 
     def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None,
               pre_opts=None, timeout=60, fail_ok=False):
@@ -703,7 +693,11 @@ class SSHClient:
         try:
             yield self
         finally:
-            if self.get_current_user() == 'root':
+            try:
+                current_user = self.get_current_user(prompt=[ROOT_PROMPT, original_prompt])
+            except:
+                current_user = None
+            if current_user == 'root':
                 self.set_prompt(original_prompt)
                 self.send('exit')
                 self.expect()
@@ -758,9 +752,12 @@ class SSHClient:
         LOG.debug("Sending ctrl+{}".format(char))
         self._session.sendcontrol(char=char)
 
-    def get_current_user(self):
-        output = self.exec_cmd('whoami')[1]
-        return output.splitlines()[0]
+    def get_current_user(self, prompt=None):
+        output = self.exec_cmd('whoami', blob=prompt, expect_timeout=10, get_exit_code=False)[1]
+        if output:
+            output = output.splitlines()[0]
+
+        return output
 
     def close(self):
         self._session.close(True)
@@ -902,6 +899,62 @@ class SSHClient:
 
     def update_host(self, new_host):
         self.host = new_host
+
+
+class ContainerClient(SSHClient):
+    """
+        Base class for Starting Docker Container
+        """
+
+    def __init__(self, ssh_client, entry_cmd, user='root', host=None, password=None, initial_prompt=None,
+                 timeout=60):
+        """
+        Instantiate a container client
+        Args:
+            ssh_client: SSH Client object that's currently connected
+            entry_cmd: cmd to run to enter the container shell, e.g., docker run -it -e /bin/bash
+            host: host to connect to from the existing ssh session
+            user: default user in container shell
+            password: password for given user
+            initial_prompt: prompt for container shell
+
+        """
+        if not initial_prompt:
+            initial_prompt = '.*{}@.*# .*'.format(user)
+        if not host:
+            host = ssh_client.host
+        if not password:
+            password = ssh_client.password
+
+        super(ContainerClient, self).__init__(host=host, user=user, password=password, initial_prompt=initial_prompt,
+                                              timeout=timeout, session=ssh_client._session)
+        self.parent = ssh_client
+        self.docker_cmd = entry_cmd
+        self.timeout = timeout
+
+    def connect(self, retry=False, retry_interval=1, retry_timeout=60, prompt=None,
+                use_current=True, use_password=False, timeout=30):
+        docker_cmd = self.docker_cmd
+        if prompt:
+            self.prompt = prompt
+        self.exec_sudo_cmd(docker_cmd, expect_timeout=timeout, get_exit_code=False)
+
+        # Really don't know why, but following two lines are needed, otherwise exec_cmd will fail
+        self.send()
+        self.expect(timeout=5)
+
+        # Ensure exec_cmd works after above workaround
+        self.exec_cmd(cmd='', expect_timeout=5)
+
+    def close(self, force=False):
+        if force or self._is_connected():
+            self.send('exit')
+            self.parent.expect()
+            LOG.info("ssh session to {} is closed and returned to parent session {}".
+                     format(self.host, self.parent.host))
+        else:
+            LOG.info("ssh session to {} is not open. Flushing the buffer for parent session.".format(self.host))
+            self.parent.flush()
 
 
 class SSHFromSSH(SSHClient):

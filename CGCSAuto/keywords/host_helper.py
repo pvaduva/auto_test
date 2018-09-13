@@ -45,9 +45,8 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
         yield con_ssh
         return
 
-    default_user, default_password = LinuxUser.get_current_user_password(con_ssh=con_ssh)
-    user = username if username else default_user
-    password = password if password else default_password
+    user = username if username else HostLinuxCreds.get_user()
+    password = password if password else HostLinuxCreds.get_password()
     if not prompt:
         prompt = '.*' + hostname + '\:~\$'
     original_host = con_ssh.get_hostname()
@@ -3560,6 +3559,7 @@ def ssh_to_compliance_server(server=None, user=None, password=None, prompt=None)
         yield server_conn
     finally:
         server_conn.close()
+
 
 def get_host_co_processor_pci_list(hostname):
 
