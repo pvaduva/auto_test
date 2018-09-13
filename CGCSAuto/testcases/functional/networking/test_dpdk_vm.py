@@ -145,6 +145,9 @@ def test_evacuate_dpdk_and_vhost_vms(add_admin_role_func):
         vm_helper.setup_avr_routing(vm_id, vm_type=vm_type)
         vms.append(vm_id)
 
+    LOG.tc_step("Ensure dpdk and vhost vms interfaces are reachable before evacuate")
+    vm_helper.ping_vms_from_vm(vms, vm_observer, net_types=['data', 'internal'], vshell=True)
+
     LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(vm_host))
     vm_helper.evacuate_vms(host=vm_host, vms_to_check=vms, ping_vms=True)
     vm_helper.ping_vms_from_vm(vms, vm_observer, net_types=['data', 'internal'], vshell=True)
