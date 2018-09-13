@@ -1490,6 +1490,11 @@ def setupHeat(bld_server_conn):
     if rc != 0:
         log.info("{} not found.  Skipping heat setup.".format(heat_resources_path))
         return
+    cmd = "test -f /home/wrsroot/.this_didnt_work"
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc == 0:
+        log.info("Skipping heat setup")
+        return
 
     # Check if /home/wrsroot/create_resource_stacks.sh exists
     stack_create_script = WRSROOT_HOME_DIR + STACK_CREATE_SCRIPT
