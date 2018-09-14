@@ -339,15 +339,13 @@ def pytest_configure(config):
     # Compliance configs:
     file_or_dir = config.getoption('file_or_dir')
 
-    refstack_suite = config.getoption('refstack_suite')
-    if refstack_suite or 'refstack' in str(file_or_dir):
+    refstack_suite = dovetail_suite = config.getoption('compliance_suite')
+    if 'refstack' in str(file_or_dir):
         if not refstack_suite:
             refstack_suite = '/folk/cgts/compliance/RefStack/osPowered.2017.09/2017.09-platform-test-list.txt'
         from consts.proj_vars import ComplianceVar
         ComplianceVar.set_var(REFSTACK_SUITE=refstack_suite)
-
-    dovetail_suite = config.getoption('dovetail_suite')
-    if dovetail_suite or ('dovetail' in str(file_or_dir)):
+    elif 'dovetail' in str(file_or_dir):
         if not dovetail_suite:
             dovetail_suite = '--testarea mandatory'
         from consts.proj_vars import ComplianceVar
@@ -672,11 +670,13 @@ def pytest_addoption(parser):
     ####################
     #  Compliance Test #
     ####################
-    refstack_help = "RefStack test suite path. Need to be accessible from test server (128.224.150.21)." \
-                    "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'"
+    compliance_help = "Compliance suite parameter." \
+                      "\nRefStack: test list file path. Need to be accessible from test server (128.224.150.21)." \
+                      "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'" \
+                      "\nDovetail: dovetail run parameter. " \
+                      "e.g., '--testsuite ovp.1.0.0'. Default is '--testarea mandatory'"
     dovetail_help = "Dovetail run parameter. e.g., '--testsuite ovp.1.0.0'. Default is '--testarea mandatory'"
-    parser.addoption('--refstack_suite', '--refstack-suite', dest='refstack_suite', help=refstack_help)
-    parser.addoption('--dovetail_suite', '--dovetail-suite', dest='dovetail_suite', help=dovetail_help)
+    parser.addoption('--compliance_suite', '--compliance-suite', dest='compliance_suite', help=compliance_help)
 
 
 def config_logger(log_dir, console=True):
