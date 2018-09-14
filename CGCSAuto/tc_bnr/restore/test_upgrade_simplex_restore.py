@@ -3,13 +3,41 @@ import time
 from utils.tis_log import LOG
 from keywords import install_helper,upgrade_helper, system_helper, common
 from consts.proj_vars import RestoreVars
-from consts.cgcs import Prompt,BackupRestore
+from consts.cgcs import Prompt, BackupRestore
 from utils.clients.ssh import ControllerClient
 from consts.filepaths import TiSPath, WRSROOT_HOME
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from tc_bnr.restore.test_restore import restore_setup,pre_restore_checkup, restore_volumes      # Don't remove
+from tc_bnr.restore.test_restore import restore_setup, pre_restore_checkup, restore_volumes      # Don't remove
+
 
 def test_upgrade_restore(restore_setup):
+    """
+      This script is restore part of simplex upgrade which restore the backup file with n+1 load
+        test_upgrade_simplex_system.py will create backup files in n-1 load.
+    Args:
+        restore_setup: This function checks backup avialbility and the parameters for backup
+    Examples
+        To execute
+         py.test --lab=wcp_67 --backup-path=/sandbox/upgrade --backup-build-id='2018-03-16_11-04-06'
+          --backup-builds-dir=TC_18.03_Host --skip_setup_feed tc_bnr/restore/test_upgrade_simplex_restore.py
+         steps:
+         1. Set the feed in tuxlab
+         2. Boot from tuxlab
+         3.login and set password
+         4. Mova backup files to controllers
+         5. Execute  upgrade_controller_simplex <backup file>
+         6. Restore Volumes
+         7. Restore images
+         8. Restore computes
+         9. Activate upgrade
+        10. Upgrade complete
+        11. Load delete
+
+    teardown:
+           Unreserve VLM
+
+
+    """
 
     # This restore setup called from test_restore to setup the restore enviorment and files.
 
@@ -24,15 +52,13 @@ def test_upgrade_restore(restore_setup):
     con_ssh = ControllerClient.get_active_controller(name=lab['short_name'], fail_ok=True)
 
     if not con_ssh:
-        LOG.info ("Establish ssh connection with {}".format(controller0))
+        LOG.info("Establish ssh connection with {}".format(controller0))
         controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
         controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                                            initial_prompt=controller_prompt)
         controller_node.ssh_conn.deploy_ssh_key()
         con_ssh = controller_node.ssh_conn
-
-
-    LOG.info ("Restore system from backup....")
+    LOG.info("Restore system from backup....")
     system_backup_file = [file for file in tis_backup_files if "system.tgz" in file].pop()
     images_backup_file = [file for file in tis_backup_files if "images.tgz" in file].pop()
 
@@ -46,14 +72,13 @@ def test_upgrade_restore(restore_setup):
         system_backup_path = "{}{}".format(WRSROOT_HOME, system_backup_file)
 
     LOG.tc_step("Restoring the backup system files ")
-    rc1, output = install_helper.upgrade_controller_simplex(system_backup=system_backup_path,
-                                                    tel_net_session=controller_node.telnet_conn,fail_ok=True)
-
+    install_helper.upgrade_controller_simplex(system_backup=system_backup_path,
+                                              tel_net_session=controller_node.telnet_conn, fail_ok=True)
 
     LOG.info('re-connect to the active controller using ssh')
     con_ssh.close()
     time.sleep(60)
-    con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip,retry=True)
+    con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip, retry=True)
     controller_node.ssh_conn = con_ssh
     ControllerClient.set_active_controller(con_ssh)
 
@@ -121,5 +146,3 @@ def test_upgrade_restore(restore_setup):
     # Delete the previous load
     LOG.tc_step("Deleting  imported load... ")
     system_helper.delete_imported_load()
-
-

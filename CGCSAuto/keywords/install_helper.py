@@ -1042,7 +1042,6 @@ def usb_create_partition_for_backup(usb_device=None, con_ssh=None):
         LOG.info(msg)
         return False, msg
 
-
     con_ssh.send("\n")
     if index != prompts.index(FDISK_COMMAND_PROMPT):
         msg = "Unexpeced output from fdisk command; expecting: {}".format(FDISK_LAST_SECTOR_PROMPT)
@@ -1382,8 +1381,7 @@ def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=Fals
         0 - Success
         1 - Execution of upgrade command failed
         2 - Patches not applied after system reboot
-        3 - Unexpected result after system resotre
-
+        3 - Unexpected result after system restore
     """
 
     if system_backup is None or not os.path.abspath(system_backup):
@@ -1396,18 +1394,17 @@ def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=Fals
     controller0_node = lab['controller-0']
 
     if tel_net_session is None:
-       if controller0_node.telnet_conn is None:
+        if controller0_node.telnet_conn is None:
             controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
             controller0_node.telnet_conn.login()
-       tel_net_session = controller0_node.telnet_conn
-
+        tel_net_session = controller0_node.telnet_conn
 
     cmd = 'echo "{}" | sudo -S upgrade_controller_simplex {}'.format(HostLinuxCreds.get_password(),
-                                                                             system_backup)
+                                                                     system_backup)
     os.environ["TERM"] = "xterm"
     outputs_conf = ("Data restore complete", "login:")
     rc, output = tel_net_session.exec_cmd(cmd, extra_expects=outputs_conf, timeout=HostTimeout.SYSTEM_RESTORE,
-                                     will_reboot=True)
+                                          will_reboot=True)
     if rc == 0:
         if output in 'System restore complete':
             msg = "System restore completed successfully"
@@ -1419,7 +1416,8 @@ def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=Fals
             LOG.info('re-login to re-excute the upgrade_controller_simplex')
             tel_net_session.login()
             rc, output = tel_net_session.exec_cmd(cmd, extra_expects=outputs_conf,
-                                             timeout=HostTimeout.SYSTEM_RESTORE,alt_prompt='login:', will_reboot=True)
+                                                  timeout=HostTimeout.SYSTEM_RESTORE, alt_prompt='login:',
+                                                  will_reboot=True)
             if output in 'System restore complete':
                 msg = "System restore completed successfully"
                 LOG.info(msg)
@@ -1431,10 +1429,8 @@ def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=Fals
     LOG.error(err_msg)
 
     if fail_ok:
-       return 1, err_msg
-    else:
-            raise exceptions.CLIRejected(err_msg)
-    return rc, output
+        return 1, err_msg
+    raise exceptions.CLIRejected(err_msg)
 
 
 def restore_compute(tel_net_session=None, fail_ok=False):
