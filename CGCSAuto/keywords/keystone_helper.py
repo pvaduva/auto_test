@@ -261,7 +261,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
 
 
 def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
-                  region=None, url=None, strict=False, auth_info=Tenant.get('admin'), con_ssh=None):
+                  region=None, url=None, strict=False, auth_info=Tenant.get('admin'), con_ssh=None, cli_filter=True):
     """
     Get a list of endpoints with given arguments
     Args:
@@ -276,21 +276,24 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
         strict(bool):
         auth_info (dict):
         con_ssh (SSHClient):
+        cli_filter (bool): whether to filter out using cli. e.g., openstack endpoint list --service xxx
 
     Returns (list):
 
     """
-    pre_args_dict = {
-        '--service': service_name,
-        '--interface': interface,
-        '--region': region,
-        }
+    pre_args_str = ''
+    if cli_filter:
+        pre_args_dict = {
+            '--service': service_name,
+            '--interface': interface,
+            '--region': region,
+            }
 
-    pre_args = []
-    for key, val in pre_args_dict.items():
-        if val:
-            pre_args.append('{}={}'.format(key, val))
-    pre_args_str = ' '.join(pre_args)
+        pre_args = []
+        for key, val in pre_args_dict.items():
+            if val:
+                pre_args.append('{}={}'.format(key, val))
+        pre_args_str = ' '.join(pre_args)
 
     output = cli.openstack('endpoint list', positional_args=pre_args_str, ssh_client=con_ssh, auth_info=auth_info)
     if not output.strip():

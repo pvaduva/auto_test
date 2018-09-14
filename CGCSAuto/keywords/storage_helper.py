@@ -847,7 +847,7 @@ def modify_swift(enable=True, check_first=True, fail_ok=False, apply=True, con_s
         extra_str = 'disable'
 
     if check_first:
-        swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh)
+        swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh, cli_filter=False)
         if enable is not bool(swift_endpoints):
             msg = "swift service parameter is already {}d. Skip.".format(extra_str)
             LOG.info(msg)
@@ -860,7 +860,7 @@ def modify_swift(enable=True, check_first=True, fail_ok=False, apply=True, con_s
 
     if apply and code == 0:
         LOG.info("Check Swift endpoints after service {}d".format(extra_str))
-        swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh)
+        swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh, cli_filter=False)
         if enable is not bool(swift_endpoints):
             raise exceptions.SwiftError("Swift endpoints did not {} after modify".format(extra_str))
         msg = 'Swift is {}d successfully'.format(extra_str)

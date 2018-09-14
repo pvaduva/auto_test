@@ -675,7 +675,6 @@ def pytest_addoption(parser):
                       "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'" \
                       "\nDovetail: dovetail run parameter. " \
                       "e.g., '--testsuite ovp.1.0.0'. Default is '--testarea mandatory'"
-    dovetail_help = "Dovetail run parameter. e.g., '--testsuite ovp.1.0.0'. Default is '--testarea mandatory'"
     parser.addoption('--compliance_suite', '--compliance-suite', dest='compliance_suite', help=compliance_help)
 
 
