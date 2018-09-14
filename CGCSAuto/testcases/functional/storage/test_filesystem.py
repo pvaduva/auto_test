@@ -50,6 +50,26 @@ def freespace_check():
         skip("Not enough free space to complete test.")
 
 
+@fixture(scope='function', autouse=True)
+def post_check(request):
+    """
+    This is to remove the file that was created
+    return: code 0/1
+    """
+    con_ssh = ControllerClient.get_active_controller()
+    file_loc = "/opt/extension"
+    cmd = "cd " + file_loc
+    rm_cmd = "rm testFile"
+    file_path = file_loc + "/" + "testFile"
+
+    def rm_file():
+        LOG.fixture_step("Removing the file that was created to fill the space")
+        if con_ssh.file_exists(file_path=file_path):
+            rc, out = con_ssh.exec_cmd(cmd)
+            rc, out = con_ssh.exec_sudo_cmd(rm_cmd)
+    request.addfinalizer(rm_file())
+
+
 @mark.usefixtures("freespace_check")
 def test_increase_controllerfs():
     """ 
@@ -508,4 +528,86 @@ def test_increase_ceph_mon():
     table_ = table_parser.table(cli.system("ceph-mon-list"))
     ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
     assert ceph_mon_gib != new_ceph_mon_gib, "ceph-mon did not change"
+
+
+@mark.usefixtures("freespace_check")
+@mark.usefixtures("post_check")
+def test_increase_extensionfs_with_alarm():
+    """
+    This test increases the size of the extenteion controllerfs filesystems while there is an alarm condition for the
+    fs.
+
+    Arguments:
+    - None
+
+    Test Steps:
+    - Query the filesystem for their current size
+    - cause an alarm condition by filling the space on that fs
+    - verify controller-0 is degraded
+    - Increase the size of extension filesystem.
+    - Verify alarm is gone
+
+    Assumptions:
+    - There is sufficient free space to allow for an increase, otherwise skip
+      test.
+    """
+    file_loc = "/opt/extension"
+    cmd = "cd " + file_loc
+    rm_cmd = "rm testFile"
+    file_path = file_loc + "/" + "testFile"
+    drbdfs_val = {}
+    fs = "extension"
+
+    active_controller = system_helper.get_active_controller_name()
+
+    LOG.tc_step("Determine the space available for extension filesystem")
+    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
+
+    # get the 91% of the current size
+    LOG.info("Will attempt to fill up the space to 90% of fs {} of value of {}".format(fs, drbdfs_val[fs]))
+    file_size = int((drbdfs_val[fs] * 0.91)*1000)
+    file_size= str(file_size) + "M"
+    cmd1 = "fallocate -l {} testFile".format(file_size)
+    con_ssh = ControllerClient.get_active_controller()
+    rc, out = con_ssh.exec_cmd(cmd)
+    rc, out = con_ssh.exec_sudo_cmd(cmd1)
+    if not con_ssh.file_exists(file_path=file_path):
+        LOG.info("File {} is not created".format(file_path))
+        return 0
+
+    #fill_in_fs(size=file_size)
+    LOG.tc_step("Verifying that the alarm is created after filling the fs space in {}".format(fs))
+    system_helper.wait_for_alarm(alarm_id="100.104", entity_id=active_controller, timeout=600, strict=False)
+
+    # verify the controller is in degraded state
+    LOG.tc_step("Verifying controller is degraded after filling the fs space in {}".format(fs))
+    host_helper.wait_for_host_states(active_controller,availability='degraded')
+
+    drbdfs_val[fs] = drbdfs_val[fs] + 2
+
+    LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
+
+    LOG.tc_step("Increase the size of extension filesystem")
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in drbdfs_val.items()]
+    args_ = ' '.join(attr_values_)
+    filesystem_helper.modify_controllerfs(**drbdfs_val)
+
+    # Need to wait until the change takes effect before checking the
+    # filesystems
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                         entity_id="host={}".format(host),
+                                         timeout=600)
+        LOG.tc_step("Verifying that the alarm is cleared after increasing the fs space in {}".format(fs))
+        system_helper.wait_for_alarm_gone(alarm_id="100.104", entity_id="host={}".format(host), timeout=600,
+                                          strict=False)
+
+    LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
+    filesystem_helper.check_controllerfs(**drbdfs_val)
+
+    # verify the controller is in available state
+    LOG.tc_step("Verifying that the controller is in available state after increasing the fs space in {}".format(fs))
+    host_helper.wait_for_host_states(active_controller, availability='available')
 
