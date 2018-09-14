@@ -868,7 +868,7 @@ class MonitoredProcess:
 
                 LOG.info("After process:{} been killed {} times, wait for {} to reach: {}".format(name, retries,
                                                                                                   host, expected))
-                reached = host_helper.wait_for_host_states(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
+                reached = host_helper.wait_for_host_values(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
                                                            fail_ok=True, **expected)
 
             if not reached:
@@ -900,7 +900,7 @@ class MonitoredProcess:
                         wait_time += 60
 
                     expected = {'operational': 'enabled', 'availability': 'available'}
-                    reached = host_helper.wait_for_host_states(
+                    reached = host_helper.wait_for_host_values(
                         host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True, **expected)
                     if not reached:
                         LOG.error('host {} did not recoverd to enabled-available status from status:{} '

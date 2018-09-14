@@ -211,7 +211,7 @@ def test_infra_network_failure_recovery(host_function):
         LOG.tc_step('Verify host {} in failed state after infra put down '.format(host))
         expt_states = {'operational': HostOperState.DISABLED,
                        'availability': [HostAvailState.FAILED, HostAvailState.OFFLINE]}
-        host_helper.wait_for_host_states(host, timeout=60, fail_ok=False, **expt_states)
+        host_helper.wait_for_host_values(host, timeout=60, fail_ok=False, **expt_states)
         IF_DOWN_HOSTS.remove((host, infra_interface_dev_name))
 
     LOG.tc_step('Wait for host to be recovered')

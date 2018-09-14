@@ -329,7 +329,7 @@ def test_ceph_reboot_storage_node():
 
             assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
 
-            host_helper.wait_for_host_states(host, availability='available')
+            host_helper.wait_for_host_values(host, availability='available')
 
             LOG.tc_step('Check that OSDs are up')
             osd_list = storage_helper.get_osds(host, con_ssh)

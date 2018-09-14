@@ -505,7 +505,7 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
         run_patch_orchestration_strategy()
         LOG.info(" Install patch through orchestration completed for patch {} ....".format(applied))
         if host_locked and host:
-            host_helper.wait_for_host_states(host, check_interval=20, availability=HostAvailState.ONLINE)
+            host_helper.wait_for_host_values(host, check_interval=20, availability=HostAvailState.ONLINE)
             unlocked_hosts = [h for h in hosts if h not in host]
             host_helper.wait_for_hosts_states(unlocked_hosts, check_interval=20, availability=HostAvailState.AVAILABLE)
 
@@ -529,7 +529,7 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
 
         if host_locked and host:
             host_helper.unlock_host(host)
-            host_helper.wait_for_host_states(host, check_interval=20, availability=HostAvailState.AVAILABLE)
+            host_helper.wait_for_host_values(host, check_interval=20, availability=HostAvailState.AVAILABLE)
 
 
 def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):

@@ -360,7 +360,7 @@ def _test_modify_drdb():
                                           entity_id="host={}".format(host),
                                           timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
-    host_helper.wait_for_host_states(standby_cont, availability=HostAvailState.AVAILABLE)
+    host_helper.wait_for_host_values(standby_cont, availability=HostAvailState.AVAILABLE)
     host_helper.swact_host()
 
     act_cont = system_helper.get_active_controller_name()

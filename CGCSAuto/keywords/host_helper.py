@@ -204,7 +204,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             for host_unlocked in unlocked_hosts:
                 LOG.info("Waiting for task clear for {}".format(host_unlocked))
                 # TODO: check fail_ok?
-                wait_for_host_states(host_unlocked, timeout=HostTimeout.TASK_CLEAR, fail_ok=False, task='')
+                wait_for_host_values(host_unlocked, timeout=HostTimeout.TASK_CLEAR, fail_ok=False, task='')
 
             LOG.info("Get available hosts after task clear and wait for hypervsior/webservice up")
             hosts_tab = table_parser.table(cli.system('host-list --nowrap', ssh_client=con_ssh))
@@ -574,15 +574,15 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     if exitcode == 1:
         return 1, output
 
-    wait_for_host_states(host=host, timeout=30, check_interval=0, fail_ok=True, task='Locking', con_ssh=con_ssh,
+    wait_for_host_values(host=host, timeout=30, check_interval=0, fail_ok=True, task='Locking', con_ssh=con_ssh,
                          use_telnet=use_telnet, con_telnet=con_telnet)
 
     # Wait for task complete. If task stucks, fail the test regardless. Perhaps timeout needs to be increased.
-    wait_for_host_states(host=host, timeout=lock_timeout, task='', fail_ok=False, con_ssh=con_ssh,
+    wait_for_host_values(host=host, timeout=lock_timeout, task='', fail_ok=False, con_ssh=con_ssh,
                          use_telnet=use_telnet, con_telnet=con_telnet)
 
     #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
-    if wait_for_host_states(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
+    if wait_for_host_values(host=host, timeout=5, vim_progress_status='ock .* host .* rejected.*',
                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh,
                             use_telnet=use_telnet, con_telnet=con_telnet):
         msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
@@ -590,7 +590,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             return 4, msg
         raise exceptions.HostPostCheckFailed(msg)
 
-    if wait_for_host_states(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
+    if wait_for_host_values(host=host, timeout=5, vim_progress_status='Migrate of instance .* from host .* failed.*',
                             regex=True, strict=False, fail_ok=True, con_ssh=con_ssh,
                             use_telnet=use_telnet, con_telnet=con_telnet):
         msg = "Lock host {} failed due to migrate vm failed. Details in host-show vm_process_status.".format(host)
@@ -598,7 +598,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
             return 5, msg
         exceptions.HostPostCheckFailed(msg)
 
-    if not wait_for_host_states(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh,
+    if not wait_for_host_values(host, timeout=20, administrative=HostAdminState.LOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet):
         msg = "Host is not in locked state"
         if fail_ok:
@@ -607,13 +607,13 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
 
     LOG.info("{} is {}locked. Waiting for it to go Online...".format(host, extra_msg))
 
-    if wait_for_host_states(host, timeout=timeout, availability='online', con_ssh=con_ssh,
+    if wait_for_host_values(host, timeout=timeout, availability='online', con_ssh=con_ssh,
                             use_telnet=use_telnet, con_telnet=con_telnet):
         # ensure the online status lasts for more than 5 seconds. Sometimes host goes online then offline to reboot..
         time.sleep(5)
-        if wait_for_host_states(host, timeout=timeout, availability='online', con_ssh=con_ssh,
+        if wait_for_host_values(host, timeout=timeout, availability='online', con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet):
-            if wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, task='', con_ssh=con_ssh,
+            if wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, task='', con_ssh=con_ssh,
                                     use_telnet=use_telnet, con_telnet=con_telnet):
                 LOG.info("Host is successfully locked and in online state.")
                 return 0, "Host is locked and in online state."
@@ -711,7 +711,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
                               con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
             LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-            wait_for_host_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
+            wait_for_host_values(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
                                                      HostAvailState.DEGRADED], con_ssh=con_ssh,
                                  use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
 
@@ -733,16 +733,16 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                     timeout=HostTimeout.CONTROLLER_UNLOCK)
 
-    if not wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+    if not wait_for_host_values(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
-    if not wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+    if not wait_for_host_values(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet,
                                 availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
         return 3, "Host state did not change to available or degraded within timeout"
 
-    if not wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
+    if not wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
@@ -752,7 +752,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
             LOG.warning("Host is in degraded state after unlocked.")
             return 4, "Host is in degraded state after unlocked."
         else:
-            if not wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+            if not wait_for_host_values(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                         use_telnet=use_telnet, con_telnet=con_telnet,
                                         availability=HostAvailState.AVAILABLE):
                 err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
@@ -786,7 +786,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
         if check_subfunc and is_controller and is_compute:
             # wait for subfunction states to be operational enabled and available
-            if not wait_for_host_states(host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
+            if not wait_for_host_values(host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
                                         use_telnet=use_telnet, con_telnet=con_telnet,
                                         subfunction_oper=HostOperState.ENABLED,
                                         subfunction_avail=HostAvailState.AVAILABLE):
@@ -801,7 +801,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
             LOG.warning("Host is in degraded state after unlocked.")
             return 4, "Host is in degraded state after unlocked."
         else:
-            if not wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+            if not wait_for_host_values(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                         use_telnet=use_telnet, con_telnet=con_telnet,
                                         availability=HostAvailState.AVAILABLE):
                 err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
@@ -1033,17 +1033,37 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=10,
                                    reconnect=True, use_telnet=False,  con_telnet=None):
+    """
+    Wait for 'system show' cli to work on active controller. Also wait for host task to clear and subfunction ready.
+    Args:
+        con_ssh:
+        timeout:
+        fail_ok:
+        check_interval:
+        reconnect:
+        use_telnet:
+        con_telnet:
+
+    Returns (bool):
+
+    """
     cli_enable_end_time = time.time() + timeout
 
     def check_sysinv_cli(con_ssh_, use_telnet_, con_telnet_):
 
-        cli.system('show', ssh_client=con_ssh_, use_telnet=use_telnet_, con_telnet=con_telnet_,
-                   timeout=timeout)
+        cli.system('show', ssh_client=con_ssh_, use_telnet=use_telnet_, con_telnet=con_telnet_, timeout=timeout)
         time.sleep(10)
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
                                                               con_telnet=con_telnet_)
-        wait_for_task_clear_and_subfunction_ready(hosts=active_con, con_ssh=con_ssh_, use_telnet=use_telnet_,
-                                                  con_telnet=con_telnet_)
+
+        if (system_helper.is_simplex() and
+                get_hostshow_value(host=active_con, field='administrative') == HostAdminState.LOCKED):
+            LOG.info("Simplex system in locked state. Wait for task to clear only")
+            wait_for_host_values(host=active_con, timeout=HostTimeout.LOCK, task='', con_ssh=con_ssh_,
+                                 use_telnet=use_telnet_, con_telnet=con_telnet_)
+        else:
+            wait_for_task_clear_and_subfunction_ready(hosts=active_con, con_ssh=con_ssh_, use_telnet=use_telnet_,
+                                                      con_telnet=con_telnet_)
         LOG.info("'system cli enabled")
 
     if not use_telnet:
@@ -1077,21 +1097,38 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     raise TimeoutError(err_msg)
 
 
-def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
-                         con_ssh=None, use_telnet=False, con_telnet=None, **states):
-    if not states:
+def wait_for_host_values(host, timeout=HostTimeout.REBOOT, check_interval=3, strict=True, regex=False, fail_ok=True,
+                         con_ssh=None, use_telnet=False, con_telnet=None, **kwargs):
+    """
+    Wait for host values via system host-show
+    Args:
+        host:
+        timeout:
+        check_interval:
+        strict:
+        regex:
+        fail_ok:
+        con_ssh:
+        use_telnet:
+        con_telnet:
+        **kwargs: key/value pair to wait for.
+
+    Returns:
+
+    """
+    if not kwargs:
         raise ValueError("Expected host state(s) has to be specified via keyword argument states")
 
-    LOG.info("Waiting for {} to reach state(s) - {}".format(host, states))
+    LOG.info("Waiting for {} to reach state(s) - {}".format(host, kwargs))
     end_time = time.time() + timeout
     last_vals = {}
-    for field in states:
+    for field in kwargs:
         last_vals[field] = None
 
     while time.time() < end_time:
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh,
                                                use_telnet=use_telnet, con_telnet=con_telnet))
-        for field, expt_vals in states.items():
+        for field, expt_vals in kwargs.items():
             actual_val = table_parser.get_value_two_col_table(table_, field)
             # ['Lock of host compute-0 rejected because instance vm-from-vol-t1 is', 'suspended.']
             if isinstance(actual_val, list):
@@ -1126,11 +1163,11 @@ def wait_for_host_states(host, timeout=HostTimeout.REBOOT, check_interval=3, str
                     last_vals[field] = actual_val_lower
                 break
         else:
-            LOG.info("{} is in states: {}".format(host, states))
+            LOG.info("{} is in states: {}".format(host, kwargs))
             return True
         time.sleep(check_interval)
     else:
-        msg = "{} did not reach states - {}".format(host, states)
+        msg = "{} did not reach states - {}".format(host, kwargs)
         if fail_ok:
             LOG.warning(msg)
             return False
@@ -1170,7 +1207,7 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         return 1, msg
 
     if hostname != active_host:
-        wait_for_host_states(hostname, timeout=swact_start_timeout, fail_ok=False, con_ssh=con_ssh,
+        wait_for_host_values(hostname, timeout=swact_start_timeout, fail_ok=False, con_ssh=con_ssh,
                              use_telnet=use_telnet, con_telnet=con_telnet, task='')
         return 2, "{} is not active controller host, thus swact request failed as expected.".format(hostname)
 
@@ -3016,7 +3053,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     # sleep for 180 seconds to let host be re-installed with upgrade release
     time.sleep(180)
 
-    if not wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailState.ONLINE,
+    if not wait_for_host_values(host, timeout=timeout, check_interval=60, availability=HostAvailState.ONLINE,
                                 con_ssh=con_ssh, fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
         if fail_ok:
@@ -3276,7 +3313,7 @@ def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     # sleep for 180 seconds to let host be re-installed with previous release
     time.sleep(180)
 
-    if not wait_for_host_states(host, timeout=timeout, check_interval=60, availability=HostAvailState.ONLINE,
+    if not wait_for_host_values(host, timeout=timeout, check_interval=60, availability=HostAvailState.ONLINE,
                                 con_ssh=con_ssh, fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after downgrade".format(host)
         if fail_ok:
@@ -4069,8 +4106,8 @@ def power_on_host(host, fail_ok=False, timeout=HostTimeout.REBOOT, unlock=True, 
     if code != 0:
         return 1, output
 
-    wait_for_host_states(host=host, timeout=60, task=HostTask.POWERING_ON, con_ssh=con_ssh, fail_ok=True)
-    wait_for_host_states(host=host, timeout=timeout, availability=HostAvailState.ONLINE, fail_ok=False)
+    wait_for_host_values(host=host, timeout=60, task=HostTask.POWERING_ON, con_ssh=con_ssh, fail_ok=True)
+    wait_for_host_values(host=host, timeout=timeout, availability=HostAvailState.ONLINE, fail_ok=False)
 
     msg = '{} is successfully powered on'.format(host)
     LOG.info(msg)

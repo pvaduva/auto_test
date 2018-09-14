@@ -531,14 +531,14 @@ def _check_status_after_killing_process(service, host, target_status, expecting=
 
     total_wait = 120 if expecting else 30
 
-    found = host_helper.wait_for_host_states(host, timeout=total_wait/2, con_ssh=con_ssh, fail_ok=True, **expected)
+    found = host_helper.wait_for_host_values(host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True, **expected)
 
     if expecting and found:
         LOG.debug('OK, process:{} in status:{} as expected.'.format(service, target_status))
 
         LOG.debug('Next, wait and verify the sytstem recovers')
         expected = {'operational': 'enabled', 'availability': 'available'}
-        return host_helper.wait_for_host_states(
+        return host_helper.wait_for_host_values(
             host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True, **expected)
         # return True
 
@@ -619,7 +619,7 @@ def check_impact(impact, service_name, host='', last_events=None,
         operational, available = impact.split('-')
         expected = {'operational': operational, 'available': available}
 
-        reached = host_helper.wait_for_host_states(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
+        reached = host_helper.wait_for_host_values(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
         if reached and expecting_impact:
             LOG.info('host {} reached status {} as expected after killing process {}'.format(
                 host, expected, service_name))
@@ -636,7 +636,7 @@ def check_impact(impact, service_name, host='', last_events=None,
 
             # todo: it's better to do this in parallel with process-monitoring
             expected = {'operational': 'enabled', 'available': ['available', 'degraded']}
-            reached = host_helper.wait_for_host_states(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
+            reached = host_helper.wait_for_host_values(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
 
             if reached:
                 LOG.info('Host:{} did not recover into status:{} in {} seconds'.format(host, expected, timeout))

@@ -30,8 +30,8 @@ def test_is_active_con():
 def test_swact_host(hostname, timeout, fail_ok):
     LOG.tc_step("wait for previous swact complete")
     host_helper._wait_for_openstack_cli_enable()
-    host_helper.wait_for_host_states('controller-0', timeout=60, fail_ok=False, task='')
-    host_helper.wait_for_host_states('controller-1', timeout=60, fail_ok=False, task='')
+    host_helper.wait_for_host_values('controller-0', timeout=60, fail_ok=False, task='')
+    host_helper.wait_for_host_values('controller-1', timeout=60, fail_ok=False, task='')
 
     LOG.tc_step("swact host")
 

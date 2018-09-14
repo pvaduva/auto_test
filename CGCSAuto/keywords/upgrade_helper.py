@@ -70,7 +70,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     # sleep for 180 seconds to let host be re-installed with upgrade release
     time.sleep(180)
 
-    if not host_helper.wait_for_host_states(host, timeout=timeout, check_interval=60,
+    if not host_helper.wait_for_host_values(host, timeout=timeout, check_interval=60,
                                             availability=HostAvailState.ONLINE, con_ssh=con_ssh,
                                             fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
@@ -864,7 +864,7 @@ def upgrade_host_lock_unlock(host, con_ssh=None):
     if swact_back:
         time.sleep(60)
 
-        if not host_helper.wait_for_host_states(host, timeout=360, fail_ok=True,
+        if not host_helper.wait_for_host_values(host, timeout=360, fail_ok=True,
                                                 operational=HostOperState.ENABLED,
                                                 availability=HostAvailState.AVAILABLE):
             err_msg = " Swacting to standby is not possible because {} is not in available state " \

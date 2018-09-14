@@ -136,7 +136,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     # Swact to standby controller-1
     LOG.tc_step("Swacting to controller-1 .....")
     # Before Swacting ensure the controller-1 is in available state
-    if not host_helper.wait_for_host_states("controller-1", timeout=900, fail_ok=True,
+    if not host_helper.wait_for_host_values("controller-1", timeout=900, fail_ok=True,
                                             operational=HostOperState.ENABLED,
                                             availability=HostAvailState.AVAILABLE):
         err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \

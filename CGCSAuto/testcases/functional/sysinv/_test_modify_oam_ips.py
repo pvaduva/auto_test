@@ -189,7 +189,7 @@ def _test_modify_oam_ips(oam_ips):
         LOG.info('New SSH host IP: {}'.format(current_host_ip))
 
     # Before swacting ensure the controller is in available state
-    if not host_helper.wait_for_host_states(standby, timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_values(standby, timeout=360, fail_ok=True,
                                             operational=HostOperState.ENABLED,
                                             availability=HostAvailState.AVAILABLE):
         err_msg = " Swacting to standby controller is not possible because controller is not in available state " \
@@ -200,13 +200,13 @@ def _test_modify_oam_ips(oam_ips):
     exit_code, output = host_helper.swact_host(active, fail_ok=True, swact_complete_timeout=1800)
     assert 0 == exit_code, 'Failed to swact host: from {}'.format(active)
 
-    if not host_helper.wait_for_host_states(standby, timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_values(standby, timeout=360, fail_ok=True,
                                             operational=HostOperState.ENABLED,
                                             availability=HostAvailState.AVAILABLE):
         err_msg = " After Swacting, {} is not in available state within  360 sec".format(standby)
         assert False, err_msg
 
-    if not host_helper.wait_for_host_states(active, timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_values(active, timeout=360, fail_ok=True,
                                             operational=HostOperState.ENABLED,
                                             availability=HostAvailState.AVAILABLE):
         err_msg = " After Swacting, {} is not in available state within  360 sec".format(active)
@@ -227,13 +227,13 @@ def _test_modify_oam_ips(oam_ips):
     LOG.info('There is no 250.001 alarm in alarm list.')
 
     LOG.tc_step("Make sure controllers are in good status at the end of testing")
-    if not host_helper.wait_for_host_states(standby, timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_values(standby, timeout=360, fail_ok=True,
                                             operational=HostOperState.ENABLED,
                                             availability=HostAvailState.AVAILABLE):
         err_msg = "{} is not in available state within  360 sec".format(standby)
         assert False, err_msg
 
-    if not host_helper.wait_for_host_states(active, timeout=360, fail_ok=True,
+    if not host_helper.wait_for_host_values(active, timeout=360, fail_ok=True,
                                             operational=HostOperState.ENABLED,
                                             availability=HostAvailState.AVAILABLE):
         err_msg = "{} is not in available state within  360 sec".format(active)
@@ -312,7 +312,7 @@ def restore_oam_original_ip(request):
             LOG.info('New SSH host IP: {}'.format(current_host_ip))
 
         # Before swacting ensure the controller is in available state
-        if not host_helper.wait_for_host_states(standby, timeout=360, fail_ok=True,
+        if not host_helper.wait_for_host_values(standby, timeout=360, fail_ok=True,
                                                 operational=HostOperState.ENABLED,
                                                 availability=HostAvailState.AVAILABLE):
             err_msg = " Swacting to standby controller is not possible because controller is not in available state " \
@@ -337,13 +337,13 @@ def restore_oam_original_ip(request):
         LOG.info('There is no 250.001 alarm in alarm list.')
 
         LOG.fixture_step("Make sure controllers are in good status before test finish")
-        if not host_helper.wait_for_host_states(standby, timeout=360, fail_ok=True,
+        if not host_helper.wait_for_host_values(standby, timeout=360, fail_ok=True,
                                                 operational=HostOperState.ENABLED,
                                                 availability=HostAvailState.AVAILABLE):
             err_msg = "{} is not in available state within  360 sec".format(standby)
             assert False, err_msg
 
-        if not host_helper.wait_for_host_states(active, timeout=360, fail_ok=True,
+        if not host_helper.wait_for_host_values(active, timeout=360, fail_ok=True,
                                                 operational=HostOperState.ENABLED,
                                                 availability=HostAvailState.AVAILABLE):
             err_msg = "{} is not in available state within  360 sec".format(active)

@@ -608,7 +608,7 @@ def lock_unlock_host(backup_info, con_ssh, vms):
     LOG.info('unlock:{}'.format(target_host))
     host_helper.unlock_host(target_host)
 
-    host_helper.wait_for_host_states(target_host,
+    host_helper.wait_for_host_values(target_host,
                                      administrative='unlocked',
                                      availability='available',
                                      vim_progress_status='services-enabled')
