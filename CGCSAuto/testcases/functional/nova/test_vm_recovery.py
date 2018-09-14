@@ -365,7 +365,6 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
 
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get_secondary())
         tenant_net_id = network_helper.get_tenant_net_id(auth_info=Tenant.get_secondary())
-        internal_net_id = network_helper.get_internal_net_id(auth_info=Tenant.get_secondary())
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
                 {'net-id': tenant_net_id, 'vif-model': 'virtio'},
                 {'net-id': internal_net_id, 'vif-model': 'virtio'}]
