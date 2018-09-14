@@ -93,7 +93,8 @@ def _write_results(res_in_tests, test_name):
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
             global tracebacks
-            search_forward = True if ComplianceVar.get_var('REFSTACK_SUITE') else False
+            search_forward = True \
+                if (ComplianceVar.get_var('REFSTACK_SUITE') or ComplianceVar.get_var('DOVETAIL_SUITE')) else False
             try:
                 from utils.cgcs_reporter import upload_results
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
@@ -336,10 +337,21 @@ def pytest_configure(config):
         ProjVar.set_var(COLLECT_TELNET=True)
 
     # Compliance configs:
+    file_or_dir = config.getoption('file_or_dir')
+
     refstack_suite = config.getoption('refstack_suite')
-    if refstack_suite:
+    if refstack_suite or 'refstack' in str(file_or_dir):
+        if not refstack_suite:
+            refstack_suite = '/folk/cgts/compliance/RefStack/osPowered.2017.09/2017.09-platform-test-list.txt'
         from consts.proj_vars import ComplianceVar
         ComplianceVar.set_var(REFSTACK_SUITE=refstack_suite)
+
+    dovetail_suite = config.getoption('dovetail_suite')
+    if dovetail_suite or ('dovetail' in str(file_or_dir)):
+        if not dovetail_suite:
+            dovetail_suite = '--testarea mandatory'
+        from consts.proj_vars import ComplianceVar
+        ComplianceVar.set_var(DOVETAIL_SUITE=dovetail_suite)
 
     if session_log_dir:
         log_dir = session_log_dir
@@ -354,6 +366,9 @@ def pytest_configure(config):
         if refstack_suite:
             suite_name = os.path.basename(refstack_suite).split('.txt')[0]
             log_dir = '{}/refstack/{}/{}_{}'.format(resultlog, lab_name, time_stamp, suite_name)
+        elif dovetail_suite:
+            suite_name = dovetail_suite.split(sep='--')[-1].replace(' ', '-')
+            log_dir = '{}/dovetail/{}/{}_{}'.format(resultlog, lab_name, time_stamp, suite_name)
         else:
             log_dir = '{}/{}/{}'.format(resultlog, lab_name, time_stamp)
     os.makedirs(log_dir, exist_ok=True)
@@ -390,7 +405,6 @@ def pytest_configure(config):
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
     # Add 'iter' to stress test names
     # print("config_options: {}".format(config.option))
-    file_or_dir = config.getoption('file_or_dir')
     origin_file_dir = list(file_or_dir)
 
     if count > 1:
@@ -660,7 +674,9 @@ def pytest_addoption(parser):
     ####################
     refstack_help = "RefStack test suite path. Need to be accessible from test server (128.224.150.21)." \
                     "e.g., '/folk/cgts/compliance/RefStack/osPowered.2018.02/2018.02-platform-test-list.txt'"
+    dovetail_help = "Dovetail run parameter. e.g., '--testsuite ovp.1.0.0'. Default is '--testarea mandatory'"
     parser.addoption('--refstack_suite', '--refstack-suite', dest='refstack_suite', help=refstack_help)
+    parser.addoption('--dovetail_suite', '--dovetail-suite', dest='dovetail_suite', help=dovetail_help)
 
 
 def config_logger(log_dir, console=True):
@@ -874,6 +890,9 @@ def pytest_generate_tests(metafunc):
 
     elif ComplianceVar.get_var('REFSTACK_SUITE'):
         suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
+        metafunc.parametrize('compliance_suite', [suite])
+    elif ComplianceVar.get_var('DOVETAIL_SUITE'):
+        suite = ComplianceVar.get_var('DOVETAIL_SUITE').strip().split(sep='--')[-1].replace(' ', '-')
         metafunc.parametrize('compliance_suite', [suite])
 
 

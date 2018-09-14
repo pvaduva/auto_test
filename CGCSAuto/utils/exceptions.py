@@ -215,3 +215,7 @@ class IxiaError(TiSError):
 
 class RefStackError(TiSError):
     message = 'RefStack test(s) failed.'
+
+
+class DovetailError(TiSError):
+    message = 'Dovetail test(s) failed.'

@@ -33,7 +33,7 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 </html>
 """
 
-COMPLIANCE_PATTERN = 'refstack|compliance'
+COMPLIANCE_PATTERN = 'refstack|compliance|dovetail'
 
 
 def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None):

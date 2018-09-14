@@ -20,6 +20,7 @@ class Dovetail:
     TEMPEST_YAML = '{}/pre_config/tempest_conf.yaml'.format(HOME_DIR)
     ENV_SH = '{}/pre_config/env_config.sh'.format(HOME_DIR)
     POD_YAML = '{}/pre_config/pod.yaml'.format(HOME_DIR)
+    RESULTS_DIR = '{}/results'.format(HOME_DIR)
 
     @classmethod
     def set_auth_url(cls, auth_url):

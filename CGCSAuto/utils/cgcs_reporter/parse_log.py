@@ -74,7 +74,7 @@ def get_tracebacks_from_pytestlog(log_dir, traceback_lines=10, search_forward=Fa
         else:
             # Meaning last test is a failed test
             traceback = parse_traceback(traceback_for_test, traceback_lines=traceback_lines,
-                                                 search_forward=search_forward)
+                                        search_forward=search_forward)
             traceback_dict[current_failure] = traceback
 
     return traceback_dict

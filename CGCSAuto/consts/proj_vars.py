@@ -404,8 +404,10 @@ class BackupVars:
 
 
 class ComplianceVar:
-    __var_dict = {'REFSTACK_SUITE': None,
-                  }
+    __var_dict = {
+        'REFSTACK_SUITE': None,
+        'DOVETAIL_SUITE': None,
+    }
 
     @classmethod
     def set_var(cls, append=False, **kwargs):

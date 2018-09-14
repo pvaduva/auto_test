@@ -41,8 +41,9 @@ def refstack_pre_check():
 
 @fixture(scope='session', autouse=True)
 def refstack_setup(refstack_pre_check, request):
-    #    if not system_helper.get_storage_nodes():
-    #        skip("Ceph system is required for refstack test")
+
+    LOG.fixture_step("Enable Swift if not already done")
+    storage_helper.modify_swift(enable=True)
 
     primary_tenant = keystone_helper.get_projects(auth_info=None)[0]
     append_str = re.findall('tenant\d+(.*)', primary_tenant)[0]
@@ -78,11 +79,6 @@ def refstack_setup(refstack_pre_check, request):
     images.append(image_id)
     ResourceCleanup.add('image', image_id, scope='session')
 
-    #    LOG.fixture_step("Enable object gateway for Swift if not already done")
-    #    obj_gateway = storage_helper.get_storage_backend_show_vals(backend='ceph-store', fields='object_gateway')[0]
-    #    if not obj_gateway:
-    #        storage_helper.modify_storage_backend('ceph-store', object_gateway=True, lock_unlock=True)
-
     LOG.fixture_step("Setup public router if not already done.")
     external_net_id = network_helper.get_ext_networks()[0]
     public_router = 'public-router0'
@@ -110,6 +106,10 @@ def refstack_setup(refstack_pre_check, request):
         'public_network_id': external_net_id,
         'uri': keystone_pub_url + 'v2.0',
         'uri_v3': keystone_pub_url + 'v3',
+        'discoverable_apis': 'tempurl,container_quotas',
+        'container_sync': 'false',
+        'object_versioning': 'true',
+        'discoverability': 'false',
     }
 
     LOG.fixture_step("Update tempest.conf parameters on cumulus server: \n{}".format(params_dict))

@@ -614,14 +614,17 @@ class SSHClient:
             else:
                 raise exceptions.SSHException(msg)
 
-    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True):
+    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True,
+                    is_dir=False):
         source = source_path
         if source_ip:
             source = '{}:{}'.format(source_ip, source)
             if source_user:
                 source = '{}@{}'.format(source_user, source)
 
-        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source, dest_path)
+        option = '-r ' if is_dir else ''
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}'.format(option, source,
+                                                                                                   dest_path)
 
         try:
             self.send(scp_cmd)
@@ -639,7 +642,7 @@ class SSHClient:
             if not exit_code == 0:
                 raise exceptions.CommonError("scp unsuccessfully")
 
-            if not self.file_exists(file_path=dest_path):
+            if not is_dir and not self.file_exists(file_path=dest_path):
                 raise exceptions.CommonError("{} does not exist after download".format(dest_path))
         except:
             if cleanup:

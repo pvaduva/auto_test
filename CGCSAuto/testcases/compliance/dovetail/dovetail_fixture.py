@@ -5,7 +5,7 @@ from pytest import fixture, skip
 
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
-from consts.proj_vars import ProjVar
+from consts.proj_vars import ProjVar, ComplianceVar
 from consts.compliance import Dovetail
 from consts.cgcs import HostAvailState
 from consts.auth import HostLinuxCreds, ComplianceCreds, Tenant, CliAuth
@@ -27,6 +27,9 @@ def pre_configs(request):
     - update conf files on dovetail test node on cumulus
 
     """
+    if not ComplianceVar.get_var('DOVETAIL_SUITE'):
+        skip('--dovetail-suite unspecified.')
+
     try:
         import yaml
     except ImportError:

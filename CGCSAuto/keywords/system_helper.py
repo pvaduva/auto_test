@@ -2044,7 +2044,7 @@ def get_host_ethernet_port_table(host, con_ssh=None, use_telnet=False, con_telne
     return table_
 
 
-def get_service_parameter_values(rtn_value='value', service=None, section=None, name=None, con_ssh=None):
+def get_service_parameter_values(service=None, section=None, name=None, rtn_value='value', con_ssh=None):
     """
     Returns the list of values from system service-parameter-list
     service, section, name can be used to filter the table
