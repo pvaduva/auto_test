@@ -15,6 +15,7 @@ from utils.tis_log import LOG
 DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
+
 @fixture()
 def aio_precheck():
     if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():
@@ -50,7 +51,7 @@ def freespace_check():
         skip("Not enough free space to complete test.")
 
 
-@fixture(scope='function', autouse=True)
+@fixture(scope='function')
 def post_check(request):
     """
     This is to remove the file that was created
@@ -65,9 +66,9 @@ def post_check(request):
     def rm_file():
         LOG.fixture_step("Removing the file that was created to fill the space")
         if con_ssh.file_exists(file_path=file_path):
-            rc, out = con_ssh.exec_cmd(cmd)
-            rc, out = con_ssh.exec_sudo_cmd(rm_cmd)
-    request.addfinalizer(rm_file())
+            con_ssh.exec_cmd(cmd)
+            con_ssh.exec_sudo_cmd(rm_cmd)
+    request.addfinalizer(rm_file)
 
 
 @mark.usefixtures("freespace_check")
