@@ -110,12 +110,12 @@ def deprovision_internal_dns(hosts):
     """
 
     service = "network"
-    ml2driver = ("uuid", "network", "ml2", "extension_drivers")
-    neutron_domain = ("uuid", "network", "default", "dns_domain")
+    ml2driver = ("network", "ml2", "extension_drivers")
+    neutron_domain = ("network", "default", "dns_domain")
 
     LOG.tc_step("Deleting internal dns resolution service parameters")
-    ml2_uuid = system_helper.get_service_parameter_values(*ml2driver)
-    neutron_uuid = system_helper.get_service_parameter_values(*neutron_domain)
+    ml2_uuid = system_helper.get_service_parameter_values(*ml2driver, rtn_value='uuid')
+    neutron_uuid = system_helper.get_service_parameter_values(*neutron_domain, rtn_value='uuid')
     system_helper.delete_service_parameter(ml2_uuid)
     system_helper.delete_service_parameter(neutron_uuid)
 
