@@ -214,9 +214,10 @@ def __config_sshd(hosts, hosts_configured=None, revert=False):
 
                 LOG.info('---Restart sshd')
                 root_ssh.send('systemctl restart sshd')
+                time.sleep(15)
 
         try:
-            time.sleep(10)
+            con_ssh.flush()
             con_ssh.send()
             con_ssh.expect(timeout=5)
         except (pexpect.EOF, pexpect.TIMEOUT):
