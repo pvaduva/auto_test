@@ -1,6 +1,7 @@
 from pytest import mark, skip
 
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
 from consts.cgcs import FlavorSpec
 from consts.reasons import SkipStorageSpace
 
@@ -30,12 +31,15 @@ def locate_usb(host_type="controller"):
                 LOG.info("Found USB device {} on host {}".format(usb_device, host))
                 return host, usb_device
 
+    return (None, None)
 
-def umount_usb(host="controller-0", mount_point="/media/ntfs"):
+
+def umount_usb(host_ssh, host="controller-0", mount_point="/media/ntfs"):
     """
     Unmount a USB device.
 
     Arguments:
+    - host_ssh - ssh session to host with USB
     - host (string) - e.g. controller-0
     - mount_point (string) - e.g. /media/ntfs
 
@@ -44,21 +48,21 @@ def umount_usb(host="controller-0", mount_point="/media/ntfs"):
     """
 
     LOG.tc_step("Unmounting {}".format(mount_point))
-    with host_helper.ssh_to_host(host) as host_ssh:
-        cmd = "umount {}".format(mount_point)
-        rc, out = host_ssh.exec_sudo_cmd(cmd)
-        assert rc == 0 or rc == 32
-        if rc == 0:
-            LOG.info("Umount was successful")
-        if rc == 32:
-            LOG.info("Umount was unsuccessful.  Maybe device was already unmounted?")
+    cmd = "umount {}".format(mount_point)
+    rc, out = host_ssh.exec_sudo_cmd(cmd)
+    assert rc == 0 or rc == 32
+    if rc == 0:
+        LOG.info("Umount was successful")
+    if rc == 32:
+        LOG.info("Umount was unsuccessful.  Maybe device was already unmounted?")
 
 
-def wipe_usb(host="controller-0", usb_device=None):
+def wipe_usb(host_ssh, usb_device, host="controller-0"):
     """
     Wipe a USB device, including all existing partitions.
 
     Arguments:
+    - host_ssh - ssh session to host with USB
     - host
     - usb_device (string) - name of usb device
 
@@ -67,17 +71,16 @@ def wipe_usb(host="controller-0", usb_device=None):
     """
 
     LOG.tc_step("Wipe the USB completely")
-    with host_helper.ssh_to_host(host) as host_ssh:
-        cmd = "dd if=/dev/zero of={} bs=1k count=2048".format(usb_device)
-        rc, out = host_ssh.exec_sudo_cmd(cmd)
-        assert rc == 0, "Wipe of USB failed"
+    cmd = "dd if=/dev/zero of={} bs=1k count=2048".format(usb_device)
+    rc, out = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
 
 
-def create_usb_label(host="controller-0", usb_device=None, label="msdos"):
+def create_usb_label(host_ssh, host="controller-0", usb_device=None, label="msdos"):
     """
     Create a label on a USB device.
 
     Arguments:
+    - host_ssh - ssh session to host with USB
     - host (string) - e.g. "controller-0"
     - usb_device (string) - e.g. /dev/sdb
     - label (string) - e.g. "msdos"
@@ -86,18 +89,18 @@ def create_usb_label(host="controller-0", usb_device=None, label="msdos"):
     - Nothing
     """
 
-    with host_helper.ssh_to_host(host) as host_ssh:
-        LOG.tc_step("Create label and partition table on the USB")
-        cmd = "parted {} mklabel {}".format(usb_device, label)
-        rc, out = host_ssh.exec_sudo_cmd(cmd)
-        assert rc == 0, "Unable to create label"
+    LOG.tc_step("Create label and partition table on the USB")
+    cmd = "parted {} mklabel {} -s".format(usb_device, label)
+    print(cmd)
+    rc, out = host_ssh.exec_sudo_cmd(cmd, fail_ok=False)
 
 
-def create_usb_partition(host="controller-0", usb_device=None, startpt="0", endpt="0"):
+def create_usb_partition(host_ssh, host="controller-0", usb_device=None, startpt="0", endpt="0"):
     """
     Create a partition on a USB device.
 
     Arguments:
+    - host_ssh - ssh session to host with USB
     - host (string) - e.g. "controller-0"
     - usb_device (string) - e.g. /dev/sdb
     - startpt (string) - partition start point, e.g. "0"
@@ -107,17 +110,17 @@ def create_usb_partition(host="controller-0", usb_device=None, startpt="0", endp
     - Nothing
     """
 
-    with host_helper.ssh_to_host(host) as host_ssh:
-        cmd = "parted -a none {} mkpart primary ntfs {} {}".format(usb_device, startpt, endpt)
-        rc, out = host_ssh.exec_sudo_cmd(cmd)
-        assert rc == 0, "Primary partition creation failed"
+    cmd = "parted -a none {} mkpart primary ntfs {} {}".format(usb_device, startpt, endpt)
+    rc, out = host_ssh.exec_sudo_cmd(cmd)
+    assert rc == 0, "Primary partition creation failed"
 
 
-def format_usb(host="controller-0", usb_device=None, partition=None):
+def format_usb(host_ssh, host="controller-0", usb_device=None, partition=None):
     """
     This formats a particular partition on a usb device.
 
     Arguments:
+    - host_ssh - ssh session to host with USB
     - host (string) - e.g. "controller-0"
     - usb_device (string) - e.g. /dev/sdb
     - partition (string) - e.g. "2" for /dev/sdb2
@@ -126,18 +129,18 @@ def format_usb(host="controller-0", usb_device=None, partition=None):
     - Nothing
     """
 
-    with host_helper.ssh_to_host(host) as host_ssh:
-        LOG.tc_step("Format device {} as NTFS".format(usb_device + partition))
-        cmd = "mkfs.ntfs -f {}{}".format(usb_device, partition)
-        rc, out = host_ssh.exec_sudo_cmd(cmd)
-        assert rc == 0, "Failed to format device"
+    LOG.tc_step("Format device {} as NTFS".format(usb_device + partition))
+    cmd = "mkfs.ntfs -f {}{}".format(usb_device, partition)
+    rc, out = host_ssh.exec_sudo_cmd(cmd)
+    assert rc == 0, "Failed to format device"
 
 
-def mount_usb(host="controller-0", usb_device=None, partition="2", mount_type="ntfs", mount_point="/media/ntfs"):
+def mount_usb(host_ssh, host="controller-0", usb_device=None, partition="2", mount_type="ntfs", mount_point="/media/ntfs"):
     """
     This creates a mount point and then mounts the desired device.
 
     Arguments:
+    - host_ssh - ssh session to host with USB
     - host (string) - e.g. controller-0
     - usb_device (string) - e.g. /dev/sdb
     - mount_point (string) - where the usb should be mounted
@@ -146,20 +149,19 @@ def mount_usb(host="controller-0", usb_device=None, partition="2", mount_type="n
     - Nothing
     """
 
-    with host_helper.ssh_to_host(host) as host_ssh:
-        LOG.tc_step("Check if mount point exists")
-        cmd = "test -d {}".format(mount_point)
+    LOG.tc_step("Check if mount point exists")
+    cmd = "test -d {}".format(mount_point)
+    rc, out = host_ssh.exec_sudo_cmd(cmd)
+    if rc == 1:
+        LOG.tc_step("Create mount point")
+        cmd = "mkdir -p {}".format(mount_point)
         rc, out = host_ssh.exec_sudo_cmd(cmd)
-        if rc == 1:
-            LOG.tc_step("Create mount point")
-            cmd = "mkdir -p {}".format(mount_point)
-            rc, out = host_ssh.exec_sudo_cmd(cmd)
-            assert rc == 0, "Mount point creation failed"
+        assert rc == 0, "Mount point creation failed"
 
-        LOG.tc_step("Mount ntfs device")
-        cmd = "mount -t {} {} {}".format(mount_type, usb_device + partition, mount_point)
-        rc, out = host_ssh.exec_sudo_cmd(cmd)
-        assert rc == 0, "Unable to mount device"
+    LOG.tc_step("Mount ntfs device")
+    cmd = "mount -t {} {} {}".format(mount_type, usb_device + partition, mount_point)
+    rc, out = host_ssh.exec_sudo_cmd(cmd)
+    assert rc == 0, "Unable to mount device"
 
 
 # Wendy says just testing one node is enough.
@@ -196,18 +198,24 @@ def test_ntfs(host_type="controller"):
     if not host:
         skip("No USB hardware found on {} host type".format(host_type))
 
-    wipe_usb(host, usb_device)
-    umount_usb(host, mount_point=mount_point)
-    create_usb_label(host, usb_device, label="msdos")
-    create_usb_partition(host, usb_device, startpt="0", endpt="2048")
-    format_usb(host, usb_device, partition="1")
-    create_usb_partition(host, usb_device, startpt="2049", endpt="100%")
-    format_usb(host, usb_device, partition="2")
-    mount_usb(host, usb_device, partition="2", mount_type=mount_type, mount_point=mount_point)
+    hosts_with_image_backing = host_helper.get_hosts_in_aggregate('image')
+    if len(hosts_with_image_backing) == 0:
+        skip("No hosts with image backing present")
+
+    with host_helper.ssh_to_host(host) as host_ssh:
+        wipe_usb(host_ssh, host, usb_device)
+        umount_usb(host_ssh, host, mount_point=mount_point)
+        create_usb_label(host_ssh, host, usb_device, label="msdos")
+        create_usb_partition(host_ssh, host, usb_device, startpt="0", endpt="2048")
+        format_usb(host_ssh, host, usb_device, partition="1")
+        create_usb_partition(host_ssh, host, usb_device, startpt="2049", endpt="100%")
+        format_usb(host_ssh, host, usb_device, partition="2")
+        mount_usb(host_ssh, host, usb_device, partition="2", mount_type=mount_type, mount_point=mount_point)
 
     # Image would probably not be there but can we save time if we checked
     # first?
     LOG.tc_step("Copy the windows guest image to the mount point")
+    con_ssh = ControllerClient.get_active_controller()
     src_img = glance_helper._scp_guest_image(img_os=guest_os, dest_dir=mount_point)
 
     LOG.tc_step("Create flavor for windows guest image")
@@ -218,12 +226,10 @@ def test_ntfs(host_type="controller"):
 
     LOG.tc_step("Import image into glance")
     img_id = glance_helper.create_image(name=guest_os, source_image_file=src_img, disk_format="qcow2",
-                                        container_format="bare", fail_ok=False)
-    ResourceCleanup.add("image", img_id)
+                                        container_format="bare", con_ssh=con_ssh, cleanup="function")
 
     LOG.tc_step("Boot VM")
-    vm_id = vm_helper.boot_vm(name=guest_os, flavor=flv_id, guest_os=guest_os, source=boot_source)[1]
-    ResourceCleanup.add("vm", vm_id)
+    vm_id = vm_helper.boot_vm(name=guest_os, flavor=flv_id, guest_os=guest_os, source=boot_source, cleanup="function")[1]
 
     LOG.tc_step("Ping vm and ssh to it")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
