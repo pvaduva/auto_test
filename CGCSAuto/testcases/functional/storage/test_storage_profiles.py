@@ -63,7 +63,7 @@ from pytest import skip, mark, fixture
 from consts.cgcs import HostAvailState
 from consts.proj_vars import InstallVars, ProjVar
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, install_helper, vlm_helper, vm_helper, partition_helper
+from keywords import host_helper, system_helper, install_helper, vlm_helper, vm_helper, partition_helper, storage_helper
 from utils import cli, table_parser, lab_info
 from utils.tis_log import LOG
 from utils.node import create_node_boot_dict, create_node_dict
