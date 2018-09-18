@@ -63,14 +63,14 @@ from pytest import skip, mark, fixture
 from consts.cgcs import HostAvailState
 from consts.proj_vars import InstallVars, ProjVar
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, install_helper, vlm_helper, vm_helper
+from keywords import host_helper, system_helper, install_helper, vlm_helper, vm_helper, partition_helper
 from utils import cli, table_parser, lab_info
 from utils.tis_log import LOG
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.clients.ssh import ControllerClient
 
 profiles_to_delete = []
-
+DISK_DETECTION_TIMEOUT = 60
 
 @fixture()
 def delete_profiles_teardown(request):
@@ -334,7 +334,7 @@ def test_storage_profile(personality, from_backing, to_backing):
         cli.system("host-bulk-export")
         cli.system("host-delete {}".format(to_host), rtn_list=True)
         cli.system("host-bulk-add hosts.xml")
-        host_helper.wait_for_host_states(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+        host_helper.wait_for_hosts_states(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
         LOG.tc_step('Apply the storage-profile {} onto host:{}'.format(prof_name, to_host))
         cli.system('host-apply-storprofile {} {}'.format(to_host, prof_name))
@@ -352,6 +352,8 @@ def test_storage_profile(personality, from_backing, to_backing):
 
     if personality == "controller":
 
+        # Note, install helper doesn't work on all labs.  Some labs don't
+        # display BIOS type which causes install helper to fail
         lab = InstallVars.get_install_var("LAB")
         lab.update(create_node_dict(lab['controller_nodes'], 'controller'))
         lab['boot_device_dict'] = create_node_boot_dict(lab['name'])
@@ -363,24 +365,30 @@ def test_storage_profile(personality, from_backing, to_backing):
         assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
 
         cli.system("host-bulk-add hosts.xml")
-        host_helper.wait_for_host_states(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+        host_helper.wait_for_hosts_states(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
-        LOG.tc_step('Apply the storage-profile {} onto host:{}'.format(prof_name, to_host))
-        cli.system('host-apply-storprofile {} {}'.format(to_host, prof_name))
+        # Even though the host is online, doesn't mean disks are detected yet
+        # and we can't apply profiles if the disks aren't present.
+        end_time = time.time() + DISK_DETECTION_TIMEOUT
+        while time.time() < end_time:
+            out = partition_helper.get_disks(to_host)
+            if out:
+                LOG.info("Found disks {} on host {}".format(out, to_host))
+                break
+
+        LOG.tc_step("Apply the storage-profile {} onto host:{}".format(prof_name, to_host))
+        cli.system("host-apply-storprofile {} {}".format(to_host, prof_name))
 
         # Need to re-provision everything on node through lab_setup (except storage)
         LOG.tc_step("Reprovision the host as necessary")
         con_ssh = ControllerClient.get_active_controller()
-        reprovision = ['interfaces', 'cinder_device', 'vswitch_cpus', 'shared_cpus', 'extend_cgts_vg']
+        reprovision = ['interfaces', 'cinder_device', 'vswitch_cpus', 'shared_cpus', 'extend_cgts_vg', 'addresses']
         for item in reprovision:
             con_ssh.exec_cmd("rm .lab_setup.done.group0.{}.{}".format(to_host, item))
 
         rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
         if rc != 0:
             return rc, msg
-
-        # Test validated to here.  Issue with install_helper not finding BIOS
-        # type for some labs.
 
         LOG.tc_step("Unlock to host")
         host_helper.unlock_host(to_host)
