@@ -61,16 +61,17 @@ import time
 from pytest import skip, mark, fixture
 
 from consts.cgcs import HostAvailState
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import InstallVars
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, install_helper, vlm_helper, vm_helper, partition_helper, storage_helper
-from utils import cli, table_parser, lab_info
+from keywords import host_helper, system_helper, install_helper, vm_helper, storage_helper, partition_helper
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.clients.ssh import ControllerClient
 
 profiles_to_delete = []
 DISK_DETECTION_TIMEOUT = 60
+
 
 @fixture()
 def delete_profiles_teardown(request):
@@ -84,6 +85,7 @@ def delete_profiles_teardown(request):
         LOG.info("Deleting created profiles")
         for profile in profiles_to_delete:
             system_helper.delete_storage_profile(profile)
+    request.addfinalizer(teardown)
 
 
 def modify_storage_backing(host, backing):
@@ -156,11 +158,10 @@ def get_hw_compatible_hosts(hosts):
         hash_to_hosts.setdefault(value, []).append(key)
 
     LOG.info("These are the hardware compatible hosts: {}".format(hash_to_hosts))
+    return hash_to_hosts
 
-    return(hash_to_hosts)
 
-
-#@mark.parametrize(('personality', 'from_backing', 'to_backing'), [
+# @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
 #    mark.p1(('controller', 'lvm', 'image')),
 #    mark.p1(('controller', 'image', 'lvm')),
 #    mark.p1(('compute', 'lvm', 'image')),
@@ -170,7 +171,7 @@ def get_hw_compatible_hosts(hosts):
 #    mark.p1(('compute', 'remote', 'image')),
 #    mark.p1(('compute', 'image', 'lvm')),
 #    mark.p1(('storage', None, None)),
-#])
+# ])
 @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
     mark.p1(('compute', 'lvm', 'image')),
     mark.p1(('compute', 'image', 'remote')),
@@ -213,9 +214,8 @@ def test_storage_profile(personality, from_backing, to_backing):
     # Skip if test is not applicable to hardware under test
     if personality == 'controller' and not system_helper.is_small_footprint():
         skip("Test does not apply to controller hosts without subtype compute")
-    else:
-        hosts = host_helper.get_hosts(personality=personality)
 
+    hosts = host_helper.get_hosts(personality=personality)
     if len(hosts) == 0:
         skip("No hosts of type {} available".format(personality))
 
@@ -227,6 +227,7 @@ def test_storage_profile(personality, from_backing, to_backing):
 
     # Pick the hardware group that has the most compatible hosts
     current_size = 0
+    candidate_hosts = []
     for value in hash_to_hosts:
         candidate_size = len(hash_to_hosts[value])
         if candidate_size > current_size:
@@ -334,7 +335,7 @@ def test_storage_profile(personality, from_backing, to_backing):
         cli.system("host-bulk-export")
         cli.system("host-delete {}".format(to_host), rtn_list=True)
         cli.system("host-bulk-add hosts.xml")
-        host_helper.wait_for_hosts_states(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+        host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
         LOG.tc_step('Apply the storage-profile {} onto host:{}'.format(prof_name, to_host))
         cli.system('host-apply-storprofile {} {}'.format(to_host, prof_name))
@@ -365,7 +366,7 @@ def test_storage_profile(personality, from_backing, to_backing):
         assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
 
         cli.system("host-bulk-add hosts.xml")
-        host_helper.wait_for_hosts_states(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+        host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
         # Even though the host is online, doesn't mean disks are detected yet
         # and we can't apply profiles if the disks aren't present.

@@ -297,7 +297,7 @@ class TestLocalStorage:
             .format(prof_uuid, compute_unlocked)
 
         computes_list = system_helper.get_computes()
-        del computes_list[compute_src]
+        computes_list.remove(compute_src)
 
         found_match = False
         for compute_dest in computes_list:
