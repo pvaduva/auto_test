@@ -5,7 +5,7 @@ from pytest import fixture
 
 from consts.proj_vars import ProjVar
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, WRSROOT_HOME
-from keywords import vm_helper, nova_helper, common, heat_helper, network_helper
+from keywords import vm_helper, nova_helper, common, heat_helper, network_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import exceptions
 from utils.clients.ssh import ControllerClient
@@ -76,6 +76,9 @@ def _get_stress_ng_heat(con_ssh=None):
         con_ssh.exec_cmd("sed -i 's/tenant2-net/tenant2{}-net/g' {}".format(region_str, file_path))
         con_ssh.exec_cmd("sed -i 's/tenant2-mgmt-net/tenant2{}-mgmt-net/g' {}".format(region_str, file_path))
 
+    if not system_helper.is_avs():
+        con_ssh.exec_cmd("sed -i 's/avp/virtio/g' {}".format(file_path))
+        
     return file_path
 
 
@@ -91,7 +94,7 @@ def wait_for_stress_ng(ssh_client):
     proc_name = 'stress-ng'
     end_time = time.time() + 800
     while time.time() < end_time:
-        if proc_name in ssh_client.exec_cmd('ps -aef | grep stress-ng')[1]:
+        if proc_name in ssh_client.exec_cmd('ps -aef | grep -v grep | grep -v yum | grep stress-ng')[1]:
             output = ssh_client.exec_cmd('ps -aef | grep stress-ng')[1]
             if re.search('stress-ng', output):
                 return 0
