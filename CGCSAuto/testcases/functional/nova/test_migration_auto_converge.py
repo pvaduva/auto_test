@@ -60,7 +60,7 @@ def _get_stress_ng_heat(con_ssh=None):
     tenant_nets = network_helper.get_tenant_net_ids(rtn_val='name')
     net_count = len(tenant_nets)
     if net_count <= 3:
-        LOG.info("Less than tenant networks configured. Update heat template.")
+        LOG.info("Less than 3 tenant networks configured. Update heat template.")
         con_ssh.exec_cmd("sed -i 's/tenant2-net3/tenant2-net{}/g' {}".format(net_count-1, file_path))
         if net_count <= 2:
             con_ssh.exec_cmd("sed -i 's/tenant2-net2/tenant2-net{}/g' {}".format(net_count-1, file_path))

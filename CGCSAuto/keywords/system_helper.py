@@ -1862,9 +1862,9 @@ def get_host_interfaces_table(host, show_all=False, con_ssh=None, use_telnet=Fal
     return table_
 
 
-def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
-                             show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                             exclude=False, **kwargs):
+def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
+                        show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.get('admin'),
+                        exclude=False, **kwargs):
     """
     Get specified interfaces info for given host via system host-if-list
 
@@ -1888,8 +1888,22 @@ def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, 
     """
     table_ = get_host_interfaces_table(host=host, show_all=show_all, con_ssh=con_ssh, auth_info=auth_info)
 
+    if isinstance(net_type, str):
+        net_type = [net_type]
+    networks = []
+    if_classes = []
+    for net in net_type:
+        network = net
+        if_class = net
+        if net == 'None':
+            network = ''
+        elif net in ('mgmt', 'oam', 'infra'):
+            if_class = 'platform'
+        networks.append(network)
+        if_classes.append(if_class)
+
     args_tmp = {
-        'network type': net_type,
+        'class': if_classes,
         'type': if_type,
         'uses i/f': uses_ifs,
         'used by i/f': used_by_ifs
@@ -1899,11 +1913,22 @@ def get_host_interfaces_info(host, rtn_val='name', net_type=None, if_type=None, 
         if value is not None:
             kwargs[key] = value
 
-    info = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, exclude=exclude, **kwargs)
-    if rtn_val in ['ports', 'used by i/f', 'uses i/f']:
-        info = [eval(item) for item in info]
+    table_ = table_parser.filter_table(table_, strict=strict, regex=regex, exclude=exclude, **kwargs)
 
-    return info
+    # exclude the platform interface that does not have desired net_type
+    if 'platform' in if_classes:
+        platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+        for pform_if in platform_ifs:
+            if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks', con_ssh=con_ssh)[0]
+            if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
+            if not (set(if_nets) & set(networks)):
+                table_ = table_parser.filter_table(table_, strict=True, exclude=(not exclude), name=pform_if)
+
+    values = table_parser.get_column(table_, header=rtn_val)
+    if rtn_val in ['ports', 'used by i/f', 'uses i/f']:
+        values = [eval(item) for item in values]
+
+    return values
 
 
 def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -1920,7 +1945,24 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
 
     """
     table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
-    net_ifs_names = table_parser.get_values(table_, 'name', **{'network type': net_type})
+    network = if_class = net_type
+    if net_type == 'None':
+        network = ''
+    elif net_type in ('mgmt', 'oam', 'infra'):
+        if_class = 'platform'
+
+    table_ = table_parser.filter_table(table_, **{'class': if_class})
+    # exclude unmatched platform interfaces from the table.
+    if 'platform' == if_class:
+        platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+        for pform_if in platform_ifs:
+            if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks',
+                                                            con_ssh=con_ssh)[0]
+            if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
+            if network not in if_nets:
+                table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
+
+    net_ifs_names = table_parser.get_column(table_, 'name')
     total_ports = {}
     for if_name in net_ifs_names:
         ports = eval(table_parser.get_values(table_, 'ports', name=if_name)[0])
@@ -1968,7 +2010,8 @@ def get_host_port_pci_address(host, interface, con_ssh=None, auth_info=Tenant.ge
     return pci_address
 
 
-def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True, con_ssh=None,
+                                           auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -2005,13 +2048,14 @@ def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Ten
     return res
 
 
-def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.get('admin'), strict=True, **interface_filters):
+def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
+                              **interface_filters):
     if isinstance(hosts, str):
         hosts = [hosts]
 
     res = {}
     for host in hosts:
-        interfaces = get_host_interfaces_info(host, rtn_val='name', strict=strict, **interface_filters)
+        interfaces = get_host_interfaces(host, rtn_val='name', strict=strict, **interface_filters)
         host_res = {}
         for interface in interfaces:
             values = get_host_if_show_values(host, interface, fields=fields, con_ssh=con_ssh, auth_info=auth_info)
@@ -2098,7 +2142,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
             msg = "The service parameter {} {} {} already exists. value: {}".format(service, section, name, val)
             LOG.info(msg)
             if value != val and modify_existing:
-                return modify_service_parameter(service, section, name, value,
+                return modify_service_parameter(service, section, name, value, create=False, apply=apply,
                                                 con_ssh=con_ssh, fail_ok=fail_ok, check_first=False, verify=verify)
             return -1, msg
 
@@ -3577,3 +3621,18 @@ def get_controller_uptime(con_ssh):
         con_uptime = min(active_con_uptime, standby_con_uptime)
 
     return con_uptime
+
+
+def get_networks(rtn_val='type', con_ssh=None, **kwargs):
+    """
+    Get values from 'system network-list'
+    Args:
+        rtn_val:
+        con_ssh:
+        **kwargs:
+
+    Returns (list):
+    """
+    table_ = table_parser.table(cli.system('network-list', positional_args='--nowrap', ssh_client=con_ssh))
+    return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
+

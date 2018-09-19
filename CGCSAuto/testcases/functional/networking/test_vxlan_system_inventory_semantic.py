@@ -43,7 +43,7 @@ def get_interface_(request):
     for nova_host in nova_hosts:
         args = '{} {}'.format(nova_host , "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.get('admin')))
-        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'class': 'None',
                                                                      'used by i/f': '[]'})
 
         if list_interfaces:

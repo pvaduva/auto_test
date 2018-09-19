@@ -31,6 +31,7 @@ outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ", "compute
 
 lab_ini_info = {}
 
+
 def get_ssh_public_key():
     return local_host.get_ssh_key()
 
@@ -44,7 +45,7 @@ def check_system_health_for_upgrade():
     return system_helper.get_system_health_query_upgrade()
 
 
-def  download_upgrade_license(lab, server, license_path):
+def download_upgrade_license(lab, server, license_path):
 
     cmd = "test -h " + license_path
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
@@ -56,8 +57,8 @@ def  download_upgrade_license(lab, server, license_path):
             external_ip = lab['external_ip']
             external_port = lab['external_port']
             server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-                              pre_opts=pre_opts, ssh_port=external_port)
+                                  os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                                  pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
@@ -289,7 +290,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
                 node_obj = lab[hostname]
                 if node_obj:
 
-                    prompt = '.*{}\:~\$ ' + '|' +  Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
+                    prompt = '.*{}\:~\$ ' + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
                 else:
                     prompt = Prompt.TIS_NODE_PROMPT_BASE.format(hostname)
                 if hostname == controller0_node.name:
@@ -548,6 +549,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
     server.ssh_conn.rsync(config_path,
                           lab['floating ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
+
 
 def bulk_add_hosts(lab, hosts_xml_file):
     controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
@@ -1458,7 +1460,6 @@ def restore_compute(tel_net_session=None, fail_ok=False):
 
         tel_net_session = controller0_node.telnet_conn
 
-
     cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-compute"
     os.environ["TERM"] = "xterm"
     outputs_conf = ('controller-0','login:')
@@ -1476,8 +1477,8 @@ def restore_compute(tel_net_session=None, fail_ok=False):
     tel_net_session.login()
     LOG.info('Waiting for the simplex to reconnect')
     host_helper._wait_for_simplex_reconnect(timeout=HostTimeout.REBOOT)
-    if not host_helper.wait_for_host_states('controller-0', timeout=HostTimeout.CONTROLLER_UNLOCK,
-                                            check_interval=10,availability=[HostAvailState.AVAILABLE]):
+    if not host_helper.wait_for_host_values('controller-0', timeout=HostTimeout.CONTROLLER_UNLOCK,
+                                            check_interval=10, availability=[HostAvailState.AVAILABLE]):
         err_msg = "Host did not become online  after downgrade"
         if fail_ok:
             return 2, err_msg
@@ -2562,12 +2563,13 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
     """
     Creates system cloned image for AIO systems and copy the iso image to to USB.
     Args:
-        cloned_image_file_prefix(str): The prefix to the generated system cloned image iso file. The default is "titanium_backup_"
+        cloned_image_file_prefix(str): The prefix to the generated system cloned image iso file.
+            The default is "titanium_backup_"
         lab_system_name(str): is the lab system name
         timeout(inst): is the timeout value the system clone is expected to finish.
         dest_labs (str/list): list of labs the cloned image iso file is scped. Default is local.
-        usb_device(str): usb device name, if specified,the cloned image iso file is copied to.
-        delete_cloned_image_file(bool): if USB is available, the cloned image iso file is deleted from system to save disk space.
+        delete_cloned_image_file(bool): if USB is available, the cloned image iso file is deleted from system to
+            save disk space.
          Default is enabled
         con_ssh:
         fail_ok:
@@ -2668,7 +2670,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
          system show
          system host-show <host>
          system host-ethernet-port-list <host>
-         system host-if-list <host>
+         system host-if-show <host> <if>
          system host-disk-list <host>
 
     Args:
@@ -2730,14 +2732,20 @@ def check_cloned_hardware_status(host, fail_ok=False):
             "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
 
     LOG.info("Executing system host interface list on cloned system host {}".format(host))
+
     table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
-    assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
+    assert table_parser.get_values(table_, target_header='name', **{'class': 'data'}), \
         "No data interface type found in Host {} after system clone-install".format(host)
-    assert len(table_parser.filter_table(table_, **{'network type':'mgmt'})['values']) >= 1, \
-        "No mgmt interface type found in Host {} after system clone-install".format(host)
-    assert len(table_parser.filter_table(table_, **{'network type':'oam'})['values']) >= 1, \
-        "No oam interface type found in Host {} after system clone-install".format(host)
+    platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+    net_types = ['mgmt', 'oam']
+    for pif in platform_ifs:
+        host_if_show_tab = table_parser.table(cli.system('host-if-show', '{} {}'.format(host, pif), use_telnet=True,
+                                                         con_telnet=controller_0_node.telnet_conn))
+        net_type = table_parser.get_value_two_col_table(host_if_show_tab, 'networks')
+        if net_type in net_types:
+            net_types.remove(net_type)
+    assert not net_types, "No {} interface found in Host {} after system clone-install".format(net_types, host)
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
@@ -2880,11 +2888,12 @@ def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,
             if lab_dict['system_type'] == 'CPE' and lab_dict['system_mode'] == src_lab['system_mode']:
                 verified_dest_labs.append(lab_dict)
             else:
-                LOG.warn("Lab {} has not the same TiS system configuration as  source lab {}-{}"
-                         .format(lab_['short_name'], lab_info._get_sys_type(src_lab_name)))
+                LOG.warn("Lab {} has not the same TiS system configuration as source lab {}".
+                         format(lab_['short_name'], lab_info._get_sys_type(src_lab_name)))
 
     if len(verified_dest_labs) == 0:
-        err_msg = "None of the specified labs match the system type and mode of the source lab {} ".format(src_lab['name'])
+        err_msg = "None of the specified labs match the system type and mode of the source lab {} ".\
+            format(src_lab['name'])
         if fail_ok:
             return 2, err_msg
         else:
@@ -3015,7 +3024,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
                 err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
                 LOG.info(err_msg)
                 if fail_ok:
-                     return 3, err_msg
+                    return 3, err_msg
                 else:
                     raise exceptions.BackupSystem(err_msg)
 
@@ -3030,7 +3039,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
             err_msg = "No USB device found in destination lab {}".format(dest_lab_name)
             LOG.info(err_msg)
             if fail_ok:
-                 return 4, err_msg
+                return 4, err_msg
             else:
                 raise exceptions.BackupSystem(err_msg)
 

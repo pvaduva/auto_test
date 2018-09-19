@@ -115,18 +115,18 @@ def test_traffic_controls():
     infra_ae_traffic_class = {'20000': INFRA_AE_NIC_20G_TC}
 
     LOG.tc_step("Check the system if infra and mgmt avaialble")
-    mgmts = system_helper.get_host_interfaces_info(host='controller-0', rtn_val='name', net_type='mgmt')
-    infras = system_helper.get_host_interfaces_info(host='controller-0',rtn_val='name', net_type='infra')
+    mgmts = system_helper.get_host_interfaces(host='controller-0', rtn_val='name', net_type='mgmt')
+    infras = system_helper.get_host_interfaces(host='controller-0', rtn_val='name', net_type='infra')
 
     if mgmts:
         mgmt_port_name = mgmts[0]
         LOG.tc_step("Check mgmt interface net type")
-        mgmt_net_type = system_helper.get_host_interfaces_info(host='controller-0',rtn_val='type', net_type='mgmt')[0]
+        mgmt_net_type = system_helper.get_host_interfaces(host='controller-0', rtn_val='type', net_type='mgmt')[0]
         if infras:
             infra_port_name = infras[0]
             LOG.tc_step("Check infra interface net type")
-            infra_net_type = system_helper.get_host_interfaces_info(host='controller-0',rtn_val='type',
-                                                                    net_type='infra')[0]
+            infra_net_type = system_helper.get_host_interfaces(host='controller-0', rtn_val='type',
+                                                               net_type='infra')[0]
             if infra_net_type == 'vlan' and mgmt_net_type == 'vlan':
                 LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
                 result = _compare_traffic_control(infra_port_name, infra_pxe_traffic_class)

@@ -133,7 +133,7 @@ def ceph_post_install_info():
 
 def is_infra_network_configured():
 
-    infra = system_helper.get_host_interfaces_info("controller-0", net_type='infra')
+    infra = system_helper.get_host_interfaces("controller-0", net_type='infra')
     return len(infra) > 0
 
 

@@ -3,16 +3,16 @@ import random
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus
-from keywords import network_helper, nova_helper, vm_helper, system_helper
+from consts.cgcs import VMStatus, EventLogID
+from keywords import network_helper, nova_helper, vm_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
 def base_vm(setups):
-    port_security = None if system_helper.is_avs() else False
-    LOG.fixture_step("Create a network without subnet{}".format('' if port_security is None else
-                                                                ' with port security disabled'))
+    # port_security = None if system_helper.is_avs() else False
+    port_security = False
+    LOG.fixture_step("Create a network without subnet with port security disabled")
     tenant_net_id = network_helper.create_network(name='net_without_subnet', port_security=port_security)[1]
     ResourceCleanup.add('network', tenant_net_id)
 
@@ -31,10 +31,16 @@ def base_vm(setups):
 
 @fixture(scope='module')
 def setups(request):
-    if not system_helper.is_avs():
-        LOG.fixture_step("Add port_security service parameter")
-        system_helper.create_service_parameter(service='network', section='ml2', name='extension_drivers',
-                                               value='port_security')
+    LOG.fixture_step("Add port_security service parameter")
+    code = system_helper.create_service_parameter(service='network', section='ml2', name='extension_drivers',
+                                                  value='port_security', apply=False)[0]
+    if 0 == code:
+        system_helper.apply_service_parameters(service='network', wait_for_config=False)
+        computes = host_helper.get_up_hypervisors()
+        for host in computes:
+            system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=host, timeout=30)
+        host_helper.lock_unlock_hosts(computes)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=60)
 
     network_quota = network_helper.get_quota('network')
     instance_quota = nova_helper.get_quotas('instances')[0]

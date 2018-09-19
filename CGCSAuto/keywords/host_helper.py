@@ -2881,9 +2881,26 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
 
     res = {}
     rtn_code = 0
+
+    network = if_class = network_type
+    if network_type == 'None':
+        network = ''
+    elif network_type in ('mgmt', 'oam', 'infra'):
+        if_class = 'platform'
+
     for host in hosts:
         table_ = table_parser.table(cli.system('host-if-list', '{} --nowrap'.format(host), ssh_client=con_ssh))
-        table_ = table_parser.filter_table(table_, **{'network type': network_type})
+        table_ = table_parser.filter_table(table_, **{'class': if_class})
+        # exclude unmatched platform interfaces from the table.
+        if 'platform' == if_class:
+            platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+            for pform_if in platform_ifs:
+                if_nets = system_helper.get_host_if_show_values(host=host, interface=pform_if, fields='networks',
+                                                                con_ssh=con_ssh)[0]
+                if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
+                if network not in if_nets:
+                    table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
+
         uses_if_names = table_parser.get_values(table_, 'name', exclude=True, **{'uses i/f': '[]'})
         non_uses_if_names = table_parser.get_values(table_, 'name', exclude=False, **{'uses i/f': '[]'})
         uses_if_first = False
@@ -2965,8 +2982,8 @@ def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, 
         pnets_list_for_host = []
         for pci_type_ in pci_type:
             pnets_for_type = []
-            pnets_list = system_helper.get_host_interfaces_info(host_, rtn_val='provider networks', net_type=pci_type_,
-                                                            con_ssh=con_ssh, auth_info=auth_info)
+            pnets_list = system_helper.get_host_interfaces(host_, rtn_val='provider networks', net_type=pci_type_,
+                                                           con_ssh=con_ssh, auth_info=auth_info)
 
             for pnets_str in pnets_list:
                 if pnets_str != 'None':
@@ -3724,9 +3741,24 @@ def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclu
     """
     LOG.info("Getting expected eth names for {} network on {}".format(net_type, host))
     table_origin = system_helper.get_host_interfaces_table(host=host, con_ssh=con_ssh)
-    table_ = table_parser.filter_table(table_origin, **{'network type': net_type})
     if if_type:
-        table_ = table_parser.filter_table(table_, exclude=exclude_iftype, **{'type': if_type})
+        table_ = table_parser.filter_table(table_origin, exclude=exclude_iftype, **{'type': if_type})
+
+    network = if_class = net_type
+    if net_type == 'None':
+        network = ''
+    elif net_type in ('mgmt', 'oam', 'infra'):
+        if_class = 'platform'
+
+    table_ = table_parser.filter_table(table_, **{'class': if_class})
+    # exclude unmatched platform interfaces from the table.
+    if 'platform' == if_class:
+        platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+        for pform_if in platform_ifs:
+            if_nets = system_helper.get_host_if_show_values(host=host, interface=pform_if, fields='networks')[0]
+            if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
+            if network not in if_nets:
+                table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
 
     interfaces = []
     table_eth = table_parser.filter_table(table_, **{'type': 'ethernet'})

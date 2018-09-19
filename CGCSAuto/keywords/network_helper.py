@@ -2706,7 +2706,7 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
         final_nets = list(final_nets)
         if final_nets:
             if 'pci-passthrough' in pci_type:
-                port = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=pci_type)[0]
+                port = system_helper.get_host_interfaces(host, rtn_val='ports', net_type=pci_type)[0]
                 host_nic = system_helper.get_host_ports_values(host, header='device type', **{'name': port})[0]
                 if re.match(MELLANOX4, host_nic):
                     cx_for_pcipt = True
@@ -3623,7 +3623,7 @@ def get_pci_procs(hosts, net_type='pci-sriov'):
     """
     hosts_procs = {}
     for host in hosts:
-        ports_list = system_helper.get_host_interfaces_info(host, rtn_val='ports', net_type=net_type)
+        ports_list = system_helper.get_host_interfaces(host, rtn_val='ports', net_type=net_type)
 
         ports = []
         for port in ports_list:
@@ -4019,7 +4019,7 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
     vxlan_mode = dic_attr_1['mode']
 
     if mode == 'static' and vxlan_mode == mode:
-        data_if_name = system_helper.get_host_interfaces_info('compute-0', net_type='data', con_ssh=con_ssh)
+        data_if_name = system_helper.get_host_interfaces('compute-0', net_type='data', con_ssh=con_ssh)
         address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name, con_ssh=con_ssh)
         if ip_version == 4 and _is_v4_only(address):
             rtn_networks.append(networks[index])

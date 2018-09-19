@@ -583,7 +583,7 @@ def test_increase_extensionfs_with_alarm():
 
     # verify the controller is in degraded state
     LOG.tc_step("Verifying controller is degraded after filling the fs space in {}".format(fs))
-    host_helper.wait_for_host_states(active_controller,availability='degraded')
+    host_helper.wait_for_host_values(active_controller,availability='degraded')
 
     drbdfs_val[fs] = drbdfs_val[fs] + 2
 
@@ -610,5 +610,4 @@ def test_increase_extensionfs_with_alarm():
 
     # verify the controller is in available state
     LOG.tc_step("Verifying that the controller is in available state after increasing the fs space in {}".format(fs))
-    host_helper.wait_for_host_states(active_controller, availability='available')
-
+    host_helper.wait_for_host_values(active_controller, availability='available')

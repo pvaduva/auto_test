@@ -2,7 +2,6 @@ from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
 from utils import cli, table_parser
-from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.recover_hosts import HostsToRecover
@@ -10,6 +9,9 @@ from testfixtures.recover_hosts import HostsToRecover
 
 @fixture(scope='module')
 def get_vlan_providernet():
+    if not system_helper.is_avs():
+        skip('Providernet connectivity test unsupported by OVS')
+
     LOG.fixture_step("Get available hypervisors")
     hypervisors = host_helper.get_up_hypervisors()
 
@@ -19,7 +21,7 @@ def get_vlan_providernet():
 
     LOG.fixture_step("Get data interface with at least two provider networks on {}".format(hypervisor))
     table_ = system_helper.get_host_interfaces_table(hypervisor)
-    kwargs = {'type': 'ethernet', 'network type': 'data', 'provider networks': ','}
+    kwargs = {'type': 'ethernet', 'class': 'data', 'provider networks': ','}
     interface_ids = table_parser.get_values(table_, 'uuid', strict=False, **kwargs)
 
     if len(interface_ids) < 1:
