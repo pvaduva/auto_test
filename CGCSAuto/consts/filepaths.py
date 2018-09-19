@@ -126,3 +126,8 @@ class IxiaPath:
 class CompConfPath:
     COMP_EXTEND = '/etc/nova/compute_extend.conf'
     COMP_RESERVED = '/etc/nova/compute_reserved.conf'
+
+
+class MuranoPath:
+    APP_DEMO_PATH = '/folk/cgts/users/jsun3/com.wrs.titanium.murano.examples.demo.zip'
+    BASE_PACKAGES = ["/var/cache/murano/meta/io.murano.zip", "/var/cache/murano/meta/io.murano.applications.zip"]

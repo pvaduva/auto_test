@@ -219,3 +219,6 @@ class RefStackError(TiSError):
 
 class DovetailError(TiSError):
     message = 'Dovetail test(s) failed.'
+
+class MuranoError(TiSError):
+    message = 'Murano error'
