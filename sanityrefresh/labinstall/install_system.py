@@ -136,6 +136,10 @@ def parse_args():
     lab_grp.add_argument('--ovs', dest='ovs',
                          action='store_true',
                          help="Use ovs-dpdk versions of files")
+    
+    lab_grp.add_argument('--kubernetes', dest='kubernetes',
+                         action='store_true',
+                         help="Use kubernetes option in config_controller")
 
     lab_grp.add_argument('--lowlat', dest='lowlat',
                          action='store_true',
@@ -1545,7 +1549,8 @@ def setupHeat(bld_server_conn):
         wr_exit()._exit(1, msg)
 
 
-def configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region):
+def configureController(bld_server_conn, host_os, install_output_dir, banner,
+                        branding, config_region, kubernetes):
     # Configure the controller as required
     global controller0
     if not cumulus:
@@ -1579,10 +1584,14 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner, br
             else:
                 rc, output = controller0.ssh_conn.exec_cmd(cmd)
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-            if config_region is False:
-                cmd += " config_controller --config-file " + cfgfile
-            else:
+
+            if config_region:
                 cmd += " config_region " + cfgfile
+            elif kubernetes:
+                cmd += " config_controller --kubernetes --config-file " + cfgfile
+            else:
+                cmd += " config_controller --config-file " + cfgfile
+
             os.environ["TERM"] = "xterm"
             if host_os == "centos" and not cumulus:
                 rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
@@ -1918,6 +1927,7 @@ def main():
     wipedisk = args.wipedisk
     security = args.security
     ovs = args.ovs
+    kubernetes = args.kubernetes
 
     branding = args.branding
 
@@ -2037,6 +2047,7 @@ def main():
     logutils.print_name_value("Security", security)
     logutils.print_name_value("Low Lat", lowlat)
     logutils.print_name_value("OVS", ovs)
+    logutils.print_name_value("Kubernetes", kubernetes)
     logutils.print_name_value("Run Postinstall Scripts", postinstall)
     logutils.print_name_value("Run config_region instead of config_controller", config_region)
 
@@ -2389,7 +2400,7 @@ def main():
     lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe', 'simplex'])
 
     if do_next_install_step(lab_type, lab_install_step):
-        configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region)
+        configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region, kubernetes)
         # controller0.ssh_conn.disconnect()
         controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
         # Depends on when we poll whether controller0 is offline or online
