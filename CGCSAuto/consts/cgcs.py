@@ -92,6 +92,7 @@ class GuestImages:
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
         'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5),
         'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 1.5),
+        'trusty_uefi' : ('trusty-server-cloudimg-amd64-uefi1.img', 5, 'trusty-server-cloudimg-amd64-uefi1.img',0.3),
     }
 
 
@@ -284,6 +285,7 @@ class ImageMetadata:
     CPU_RT_MASK = 'hw_cpu_realtime_mask'
     CPU_RT = 'hw_cpu_realtime'
     CPU_MODEL = 'hw_cpu_model'
+    HW_FIRMWARE_TYPE = 'hw_firmware_type'
 
 
 class VMMetaData:
