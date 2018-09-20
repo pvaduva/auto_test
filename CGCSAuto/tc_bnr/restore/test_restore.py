@@ -20,6 +20,14 @@ from utils.tis_log import LOG
 
 
 def collect_logs(con_ssh=None, fail_ok=True):
+    """
+    Collect logs on the system by calling collect_tis_logs, backup logs under /scratch before head if any, so that there
+    are enough disk space.
+
+    :param con_ssh:
+    :param fail_ok:
+    :return:
+    """
 
     log_tarball = r'/scratch/ALL_NODES*'
     log_dir = r'~/collected-logs'
@@ -54,6 +62,14 @@ def collect_logs(con_ssh=None, fail_ok=True):
 
 @pytest.fixture(scope='session', autouse=True)
 def pre_restore_checkup():
+    """
+    Actions prior to run system restore, including:
+        - collect logs
+        - check if backup files exist on the backup media
+        - check if the build-ids match with each other
+         - wipe disks
+    :return:
+    """
 
     lab = InstallVars.get_install_var('LAB')
     LOG.info("Lab info; {}".format(lab))
@@ -130,8 +146,6 @@ def pre_restore_checkup():
             LOG.info(" SSH connection not available yet with controller-0;  "
                      "USB will be checked after controller boot ....")
     else:
-        # local_hostname = socket.gethostname()
-        # ssh to test server
         test_server_attr = dict()
         test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
         test_server_attr['server_ip'] = SvcCgcsAuto.SERVER

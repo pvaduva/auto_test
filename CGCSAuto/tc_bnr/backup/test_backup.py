@@ -27,8 +27,18 @@ from utils.clients.ssh import ControllerClient, NATBoxClient
 from utils.tis_log import LOG
 from setups import collect_tis_logs
 
+cinder_export_deprecated = '2018-09-12'
+
 
 def collect_logs(msg):
+    """
+    Collect logs on the current system
+
+    Args:
+
+    Returns:
+    """
+
     try:
         LOG.info('collecting logs: ' + msg)
         active_controller = ControllerClient.get_active_controller()
@@ -39,6 +49,16 @@ def collect_logs(msg):
 
 @fixture(scope='function')
 def pre_system_backup():
+    """
+    Actions before system backup, including:
+        - check the USB device is ready if it is the destination
+        - create folder for the backup files on destination server
+        - collect logs on the current system
+
+    Args:
+
+    Returns:
+    """
 
     LOG.tc_func_start("BACKUP_TEST")
     lab = InstallVars.get_install_var('LAB')
@@ -133,6 +153,16 @@ def pre_system_backup():
 
 
 def backup_sysconfig_images(backup_info):
+    """
+    Backup system images on storage lab
+
+    Args:
+        backup_info - settings for doing system backup
+
+    Returns:
+        None
+    """
+
     backup_dest = backup_info['backup_dest']
     backup_dest_path = backup_info['backup_dest_full_path']
     dest_server = backup_info['dest_server']
@@ -175,12 +205,40 @@ def backup_sysconfig_images(backup_info):
                     LOG.warn('non-rbd based image, skip it:  {}, store:{}'.format(img_id, image_properties))
 
 
+def is_cinder_export_supported(build_info):
+    """
+    Check if CLI 'cinder export' is no longer supported on the specified load
+
+    Args:
+        build_info - build information
+
+    Return:
+         True - CLI 'cinder export' is still supported
+         False - CLI 'cinder export' is not suppported anymore
+    """
+
+
 def backup_cinder_volumes(backup_info):
+    """
+    Backup cinder volumes
+
+    Args:
+        backup_info - settings for doing system backup
+
+    Returns:
+        None
+    """
+
     LOG.tc_step("Cinder Volumes backup ...")
+
     backup_dest = backup_info.get('backup_dest', None)
     dest_server = backup_info.get('dest_server', None)
     copy_to_usb = backup_info.get('copy_to_usb', None)
     cinder_backup = backup_info.get('cinder_backup', False)
+
+    if not is_cinder_export_supported(get_build_info()):
+        LOG.warning('cinder export is NOT supported on this load, forced to use "cinder backup-xxxx"')
+        cinder_backup = True
 
     vol_ids = cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='Available')
     vol_ids += cinder_helper.get_volumes(auth_info=Tenant.get('admin'), status='in-use')
@@ -240,7 +298,8 @@ def test_backup(pre_system_backup):
         usb_partition_info = backup_info['usb_parts_info']
         for k, v in usb_partition_info.items():
             if k[-1:] == "1":
-                usb_part1 = k
+                pass
+                # usb_part1 = k
             elif k[-1:] == '2':
                 usb_part2 = k
         copy_to_usb = usb_part2
@@ -263,6 +322,7 @@ def test_backup(pre_system_backup):
 
 def backup_load_iso_image(backup_info):
     """
+    Save a copy of the bootimage.iso for later restore.
 
     Args:
         backup_info
@@ -270,7 +330,7 @@ def backup_load_iso_image(backup_info):
     Returns:
 
     """
-    # lab = InstallVars.get_install_var('LAB')
+
     backup_dest = backup_info['backup_dest']
     backup_dest_path = backup_info['backup_dest_full_path']
 
@@ -330,6 +390,13 @@ def backup_load_iso_image(backup_info):
 
 
 def get_build_info():
+    """
+    Read in and parse the /etc/build.info and return a dictionary.
+
+    Return:
+        dictionary contains all information from /etc/buid.info
+    """
+
     build_info = {}
     try:
         LOG.info('Getting build information')
@@ -353,6 +420,31 @@ def get_build_info():
 
 
 def adjust_cinder_quota(con_ssh, increase, backup_info):
+    """
+    Increase the quota for number of volumes for the tenant as which System Backup will be done.
+    By default, it's 'tenant1'
+
+    Args:
+        con_ssh
+            - current ssh connection
+
+        increase
+            - number of volumes to bump up
+
+        backup_info
+            - options for backup
+
+    Return:
+        increase
+            - actual increased
+
+        free_space
+            - free space left for cinder volumes
+
+        max_per_volume_size
+            - max limit for an individual volume
+    """
+
     if backup_info.get('is_storage_lab', False):
         free_space, total_space, unit = -1, -1, 1
     else:
@@ -398,6 +490,26 @@ def adjust_cinder_quota(con_ssh, increase, backup_info):
 
 
 def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info=None):
+    """
+    Create volumes before doing System Backup.
+
+    Args:
+        con_ssh:
+            - current ssh connection
+
+        volume_names:
+            - names of volumes to create
+
+        volume_sizes:
+            - sizes of volumes to create
+
+        backup_info:
+            - options for doing system backup
+
+    Return:
+        a dictionary of information for created volumes, including id, name, and size of volumes
+    """
+
     LOG.info('Create VOLUMEs')
 
     if not volume_names:
@@ -433,7 +545,7 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
         LOG.info('-OK, attempt to create volume of size:{:05.3f}, free space left:{:05.3f}'.format(size, free_space))
         volme_id = cinder_helper.create_volume(name=name, size=size, auth_info=Tenant.TENANT1)
 
-        volumes.update({volme_id: {'name':name, 'size':size}})
+        volumes.update({volme_id: {'name': name, 'size': size}})
 
         count_volumes += 1
         if 0 < num_volumes < count_volumes:
@@ -445,6 +557,27 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
 
 
 def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
+    """
+    Increase the quotas for creating VM if needed for the tenant in testing.
+    The following quotas if any will be changed:
+        instances
+        cores       - make sure quota allows 2 cores for each VM
+        ram         - make sure 2M for each VM
+
+    Args:
+        vm_count:
+            - number of VMs
+
+        con_ssh:
+            - current ssh connection
+
+        backup_info:
+            - backup options for doing System Backup
+
+    Return:
+
+    """
+
     quotas = {'instances': {}, 'cores': {}, 'ram': {}}
     limit_usage = ['limit', 'reserved', 'in_use']
     tenant = backup_info['tenant']
@@ -455,15 +588,15 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
         limit_values = nova_helper.get_quotas(quotas=quota_keys, detail=limit, auth_info=tenant, con_ssh=con_ssh)
         for i in range(len(quota_keys)):
             key = quota_keys[i]
-            value = quotas.get(key)
+            # value = quotas.get(key)
             quotas[key][limit] = limit_values[i]
 
     LOG.info('TODO:{}'.format(quotas))
 
     new_quotas = {'instances': 0, 'cores': 0, 'ram': 0}
-    free_quota = int(quotas['instances']['limit']) \
-                 - int(quotas['instances']['in_use']) \
-                 - int(quotas['instances']['reserved'])
+    free_quota = int(quotas['instances']['limit'])
+    free_quota -= int(quotas['instances']['in_use'])
+    free_quota -= int(quotas['instances']['reserved'])
     LOG.info('free_quota:{}'.format(free_quota))
     if vm_count > free_quota:
         LOG.info('Not enough quota for VM instances, increase {}'.format(vm_count - free_quota))
@@ -475,57 +608,91 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
 
 
 def pb_launch_vms(con_ssh, image_ids, backup_info=None):
+    """
+    Launch VMs before doing System Backup
+
+    Args
+        con_ssh:
+            - current ssh connection
+
+        image_ids:
+            - IDs of images, for which boot-from-image VMs will be launched
+
+        backup_info:
+            - options for doing System Backup
+
+    Return:
+
+    """
+
     vms_added = []
 
     if not image_ids:
-        LOG.warn('No images to backup')
+        LOG.warn('No images to backup, backup_info:{}'.format(backup_info))
     else:
-        pass
-        #LOG.info('-currently active images: {}'.format(image_ids))
-        #properties = ['name', 'status', 'visibility']
-        #for image_id in image_ids:
-        #    name, status, visibility = glance_helper.get_image_properties(image_id, properties)
-        #    if status == 'active' and name and 'centos-guest' in name:
-        #        LOG.info('launch VM from image:{}, id:{}'.format(name, image_id))
+        LOG.info('-currently active images: {}'.format(image_ids))
+        properties = ['name', 'status', 'visibility']
+        for image_id in image_ids:
+            name, status, visibility = glance_helper.get_image_properties(image_id, properties)
+            if status == 'active' and name and 'centos-guest' in name:
+                vm_type = 'virtio'
+                LOG.info('launch VM of type:{} from image:{}, image-id:{}'.format(vm_type, name, image_id))
+                vms_added += vm_helper.launch_vms(
+                    vm_type,
+                    image=image_id,
+                    boot_source='image',
+                    auth_info=Tenant.TENANT1,
+                    con_ssh=con_ssh)[0]
+                LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
+                break
+            else:
+                LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
 
-        #        LOG.info('-launch VMs from the image: {}'.format(image_id))
-        #        vms_added += vm_helper.launch_vms('vswitch',
-        #                                    image=image_id, 
-        #                                    boot_source='image', 
-        #                                    auth_info=Tenant.TENANT1, 
-        #                                    con_ssh=con_ssh)[0]
-        #        LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
-        #        break
-        #    else:
-        #        LOG.info('skip booting VMs from image:{}, id:{}'.format(name, image_id))
+    vm_types = ['virtio']
+    if system_helper.is_avs(con_ssh=con_ssh):
+        vm_types += ['vswitch', 'dpdk', 'vhost']
 
-    # vm_types = ['vswitch', 'dpdk', 'vhost']
-    # LOG.info('-launch VMs for different types:{}'.format(vm_types))
+    LOG.info('-launch VMs for different types:{}'.format(vm_types))
 
-    # LOG.info('-first make sure we have enough quota')
-    # vm_count = len(vms_added) + len(vm_types)
-    # adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
+    LOG.info('-first make sure we have enough quota')
+    vm_count = len(vms_added) + len(vm_types)
+    adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
 
-    # for vm_type in vm_types:
-    #     vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+    for vm_type in vm_types:
+        vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+
     vms_added.append(vm_helper.boot_vm(auth_info=Tenant.TENANT1, con_ssh=con_ssh)[1])
 
     return vms_added
 
 
 def pre_backup_setup(backup_info, con_ssh):
+    """
+    Setup before doing System Backup, including clean up existing VMs, snapshots, volumes and create volumes and VMs
+    for B&R test purpose.
+
+    Args:
+        backup_info:
+            - options to do system backup
+
+        con_ssh:
+            - current ssh connection
+
+    Return:
+         None
+    """
 
     tenant = Tenant.TENANT1
     backup_info['tenant'] = tenant
 
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant['user'], con_ssh=con_ssh)[0]
-    LOG.info('Using tenant:{} thoughout the pre-backup test, details:{}'.format(tenant_id, tenant))
+    LOG.info('Using tenant:{} in the pre-backup test, details:{}'.format(tenant_id, tenant))
 
     LOG.info('Deleting VMs for pre-backup system-wide test')
     vm_helper.delete_vms()
 
     LOG.info('Deleting Volumes snapshots if any')
-    cinder_helper.delete_volume_snapshots(snapshots=None, auth_info=Tenant.get('admin'), con_ssh=con_ssh)
+    cinder_helper.delete_volume_snapshots(auth_info=Tenant.get('admin'), con_ssh=con_ssh)
 
     LOG.info('Deleting Volumes')
     volumes = cinder_helper.get_volumes()
@@ -623,7 +790,8 @@ def lock_unlock_host(backup_info, con_ssh, vms):
             break
     if backup_info.get('dest', 'local') == 'usb':
         if active_controller_name != 'controller-0':
-            LOG.info('current active_controller: ' + active_controller_name + ', restore to controller-0 in case it was not after swact')
+            LOG.info('current active_controller: ' + active_controller_name
+                     + ', restore to controller-0 in case it was not after swact')
             host_helper.swact_host()
             active_controller_name = system_helper.get_active_controller_name()
             LOG.info('current active_controller should be restored to controller-0, actual:' + active_controller_name)
