@@ -497,7 +497,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     Args:
         name (str):
         flavor (str):
-        source (str): 'image', 'volume', or 'snapshot'
+        source (str): 'image', 'volume', 'snapshot', or 'block_device'
         source_id (str): id of the specified source. such as volume_id, image_id, or snapshot_id
         min_count (int):
         max_count (int):
@@ -507,7 +507,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         user_data (str|list):
         vm_host (str): which host to place the vm
         avail_zone (str): availability zone for vm host, Possible values: 'nova', 'cgcsauto', etc
-        block_device:
+        block_device (dict|list|tuple): dist or list of dict, each dictionary is a block device.
+            e.g, {'source': 'volume', 'volume_id': xxxx, ...}
         block_device_mapping (str):  Block device mapping in the format '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-
                                 terminate>'.
         auth_info (dict):
@@ -605,37 +606,39 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
-    volume_id = image = snapshot_id = None
-    if source is None:
-        if min_count is None and max_count is None:
-            source = 'volume'
-        else:
-            source = 'image'
-
-    new_vol = ''
-    if source.lower() == 'volume':
-        if source_id:
-            volume_id = source_id
-        else:
-            vol_name = 'vol-' + name
-            if reuse_vol:
-                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info,
-                                                                 con_ssh=con_ssh)
-                if is_new:
-                    new_vol = volume_id
+    volume_id = image = snapshot_id = new_vol = None
+    if source != 'block_device':
+        if source is None:
+            if min_count is None and max_count is None:
+                source = 'volume'
             else:
-                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info, con_ssh=con_ssh,
-                                                                  guest_image=guest_os, rtn_exist=False)[1]
+                source = 'image'
 
-    elif source.lower() == 'image':
-        img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
-        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True, fail_ok=False)
+        if source.lower() == 'volume':
+            if source_id:
+                volume_id = source_id
+            else:
+                vol_name = 'vol-' + name
+                if reuse_vol:
+                    is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info,
+                                                                     con_ssh=con_ssh)
+                    if is_new:
+                        new_vol = volume_id
+                else:
+                    new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info,
+                                                                      con_ssh=con_ssh, guest_image=guest_os,
+                                                                      rtn_exist=False)[1]
 
-    elif source.lower() == 'snapshot':
-        if not snapshot_id:
-            snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
+        elif source.lower() == 'image':
+            img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
+            image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True,
+                                                                                     fail_ok=False)
+
+        elif source.lower() == 'snapshot':
             if not snapshot_id:
-                raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
+                snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
+                if not snapshot_id:
+                    raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
 
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
@@ -660,11 +663,11 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--swap': swap,
                           '--user-data': user_data,
                           '--ephemeral': ephemeral,
-                          '--block-device': block_device,
                           '--hint': hint,
                           '--availability-zone': host_zone,
                           '--file': file,
                           '--config-drive': str(config_drive) if config_drive else None,
+                          '--block-device-mapping': block_device_mapping,
                           }
 
     if sec_group_name is not None:
@@ -678,6 +681,13 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     if poll:
         args_ += ' --poll'
+
+    if block_device:
+        if isinstance(block_device, dict):
+            block_device = [block_device]
+        for dev in block_device:
+            dev_params = ['{}={}'.format(k, v) for k, v in dev.items()]
+            args_ += ' --block-device {}'.format(','.join(dev_params))
 
     pre_boot_vms = []
     if not (min_count is None and max_count is None):
@@ -748,7 +758,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
-                                                                              con_ssh=con_ssh, auth_info=Tenant.get('admin'))
+                                                                              con_ssh=con_ssh,
+                                                                              auth_info=Tenant.get('admin'))
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -3165,7 +3176,7 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
     Returns (list): such as [10, 30]
 
     """
-    cmd = '''ps-sched.sh | grep qemu | grep {} | grep -v grep | awk '{{print $2;}}' | xargs -i /bin/sh -c "taskset -pc {{}}"'''
+    cmd = '''ps-sched.sh|grep qemu|grep {}|grep -v grep|awk '{{print $2;}}'|xargs -i /bin/sh -c "taskset -pc {{}}"'''
 
     if host_ssh:
         if not vm_host or not instance_name:
@@ -3407,7 +3418,7 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
     Args:
         vm_id (str):
         end_event (Events): Event for kill the dd processes
-        new_dd_events (list): Event(s) for adding new dd process(es)
+        new_dd_events (list): list of Event(s) for adding new dd process(es)
         dd_event (Events): Event to set after sending first dd cmd.
         timeout: Max time to wait for the end_event to be set before killing dd.
         con_ssh
@@ -4646,7 +4657,7 @@ def _set_vm_route(vm_id, target_subnet, via_ip, dev_or_mac, persist=True):
             return True
 
 
-def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
+def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     """
     Route the pair of VMs' data interfaces through internal interfaces
     If multiple interfaces available on either of the VMs, the last one is used
@@ -4663,8 +4674,6 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
             if True, also routes from vm2 to vm1
         validate (bool):
             validate pings between the pair over the data network
-        persist (bool):
-            keep the route after possible VM reboots
 
     Returns (dict):
         the interfaces used for routing,
@@ -4786,14 +4795,14 @@ def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
     for (ip, netmask), ct in zip(items, range(len(items))):
         interfaces.append("""\"{},{},eth{},{}\"""".format(ip, netmask, ct, str(mtu)))
 
-    NIC_DEVICE = ""
+    nic_device = ""
     if vm_type == 'vhost':
-        NIC_DEVICE = "\"${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_VIRTIO}:${PCI_SUBDEVICE_NET}\""
+        nic_device = "\"${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_VIRTIO}:${PCI_SUBDEVICE_NET}\""
 
     scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
         TisInitServiceScript.configure(
-            ssh_client, NIC_DEVICE=NIC_DEVICE,
+            ssh_client, NIC_DEVICE=nic_device,
             NIC_COUNT=str(len(items)), FUNCTIONS="avr,",
             ROUTES="""(
     #ROUTING_STUB
@@ -5000,34 +5009,34 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             dest_ifs[ip] = iface
 
         # assuming the configuration only has one trafficItem in it
-        trafficItem = ixia_session.getList(ixia_session.getRoot() + '/traffic', 'trafficItem')[0]
+        traffic_item = ixia_session.getList(ixia_session.getRoot() + '/traffic', 'trafficItem')[0]
         if bidirectional:
             fps /= 2
-        ixia_session.configure(trafficItem, biDirectional=bidirectional)
+        ixia_session.configure(traffic_item, biDirectional=bidirectional)
 
         # set tracking options
         ixia_session.configure(
-            trafficItem + '/tracking',
+            traffic_item + '/tracking',
             trackBy=["trackingenabled0", "vlanVlanId0", "ipv4SourceIp0", "ipv4DestIp0"])
         ixia_session.configure(ixia_session.getRoot() + "/traffic/statistics/packetLossDuration", enabled=True)
 
         # disable old traffic item
-        ixia_session.configure(trafficItem, enabled=False)
+        ixia_session.configure(traffic_item, enabled=False)
 
-        trafficItems = ixia_session.duplicate_traffic_item(trafficItem, len(ip_pairs))
-        for trafficItem, (src_ip, dest_ip), ip_pair_index in zip(trafficItems, ip_pairs, range(len(ip_pairs))):
-            endpointSet = ixia_session.getList(trafficItem, 'endpointSet')[0]
-            ixia_session.configure_endpoint_set(endpointSet, [source_ifs[src_ip]], [dest_ifs[dest_ip]], append=False)
+        traffic_items = ixia_session.duplicate_traffic_item(traffic_item, len(ip_pairs))
+        for traffic_item, (src_ip, dest_ip), ip_pair_index in zip(traffic_items, ip_pairs, range(len(ip_pairs))):
+            endpoint_set = ixia_session.getList(traffic_item, 'endpointSet')[0]
+            ixia_session.configure_endpoint_set(endpoint_set, [source_ifs[src_ip]], [dest_ifs[dest_ip]], append=False)
 
             # traffic not started yet, use configElements to adjust settings
-            configElement = ixia_session.getList(trafficItem, 'configElement')[0]
-            ixia_session.configure(configElement + '/frameRate', rate=fps, type=fps_type)
+            config_element = ixia_session.getList(traffic_item, 'configElement')[0]
+            ixia_session.configure(config_element + '/frameRate', rate=fps, type=fps_type)
 
             # enable newly configured traffic item(s)
-            ixia_session.configure(trafficItem, enabled=True)
+            ixia_session.configure(traffic_item, enabled=True)
 
             # assign name with respect to the order in ip_pairs
-            ixia_session.configure(trafficItem, name="vm_pairs[{}]".format(ip_pair_index))
+            ixia_session.configure(traffic_item, name="vm_pairs[{}]".format(ip_pair_index))
 
         if start_traffic:
             ixia_session.traffic_start()
@@ -5062,7 +5071,7 @@ def get_traffic_loss_duration_on_operation(vm_id, vm_observer, oper_func, *func_
         return session.get_frames_delta(stable=True)
 
 
-def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **launch_vms_kwargs):
+def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None, **launch_vms_kwargs):
     """
     Launch a pair of routed VMs
     one on the primary tenant, and the other on the secondary tenant
@@ -5082,6 +5091,9 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs={}, secondary_kwargs={}, **l
     Returns (tuple):
         (vm_id_on_primary_tenant, vm_id_on_secondary_tenant)
     """
+    primary_kwargs = dict() if not primary_kwargs else primary_kwargs
+    secondary_kwargs = dict() if not secondary_kwargs else secondary_kwargs
+
     LOG.tc_step("Launch a {} test-observer pair of routed VMs".format(vm_type))
 
     assert 'count' not in launch_vms_kwargs and \
@@ -5145,7 +5157,7 @@ def launch_vm_with_both_providernets(vm_type,
     network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
                                  tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
 
-    if vm_type == 'virtio' or vm_type== 'vhost':
+    if vm_type in ('virtio', 'vhost'):
         vif_model = 'virtio'
     else:
         vif_model = 'avp'

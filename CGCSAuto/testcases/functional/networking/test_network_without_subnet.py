@@ -10,7 +10,6 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def base_vm(setups):
-    # port_security = None if system_helper.is_avs() else False
     port_security = False
     LOG.fixture_step("Create a network without subnet with port security disabled")
     tenant_net_id = network_helper.create_network(name='net_without_subnet', port_security=port_security)[1]

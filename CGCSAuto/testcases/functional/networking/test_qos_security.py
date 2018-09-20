@@ -1,8 +1,10 @@
 import time
 import ipaddress
 from collections import Counter
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager
+
 from pytest import fixture, mark, skip
+
 from consts.auth import Tenant
 from consts.filepaths import IxiaPath
 from consts.proj_vars import ProjVar
@@ -12,48 +14,60 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils.guest_scripts.scripts import DPDKPktgen
 from testfixtures.fixture_resources import ResourceCleanup
-from keywords import network_helper, vm_helper, common, nova_helper, host_helper, ixia_helper, system_helper
+from keywords import network_helper, vm_helper, common, nova_helper, host_helper, system_helper
 
 
-@fixture(scope='module')
-def update_network_quotas_primary(request):
-    tenant = Tenant.get_primary()['tenant']
-
-    LOG.fixture_step("Increasing network and subnet quotas by 10 for {}".format(tenant))
-    nw_quota = network_helper.get_quota('network', tenant_name=tenant)
-    sn_quota = network_helper.get_quota('subnet', tenant_name=tenant)
-    network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota+10, network=nw_quota+10)
-
-    def teardown():
-        LOG.fixture_step("Reverting network and subnet quotas for {}".format(tenant))
-        network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota, network=nw_quota)
-    request.addfinalizer(teardown)
-
-
-@fixture(scope='module')
-def update_network_quotas_secondary(request):
-    tenant = Tenant.get_secondary()['tenant']
-
-    LOG.fixture_step("Increasing network and subnet quotas by 10 for {}".format(tenant))
-    nw_quota = network_helper.get_quota('network', tenant_name=tenant)
-    sn_quota = network_helper.get_quota('subnet', tenant_name=tenant)
-    network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota+10, network=nw_quota+10)
-
-    def teardown():
-        LOG.fixture_step("Reverting network and subnet quotas for {}".format(tenant))
-        network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota, network=nw_quota)
-    request.addfinalizer(teardown)
-
-
-@fixture(scope='module')
-def update_network_quotas(request, update_network_quotas_primary, update_network_quotas_secondary):
+@fixture(scope='module', autouse=True)
+def ixia_required(ixia_supported):
     pass
 
 
-@fixture(scope='function')
-def skip_if_25G():
+@fixture(scope='module')
+def update_network_quotas(request):
+    for tenant in (Tenant.get_primary()['tenant'], Tenant.get_secondary()['tenant']):
+        LOG.fixture_step("Increasing network and subnet quotas by 10 for {}".format(tenant))
+        nw_quota = network_helper.get_quota('network', tenant_name=tenant)
+        sn_quota = network_helper.get_quota('subnet', tenant_name=tenant)
+        network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota+10, network=nw_quota+10)
+
+        def teardown():
+            LOG.fixture_step("Reverting network and subnet quotas for {}".format(tenant))
+            network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota, network=nw_quota)
+        request.addfinalizer(teardown)
+
+
+@fixture(scope='module')
+def skip_if_25g():
     if ProjVar.get_var("LAB")['name'] in ["yow-cgcs-wildcat-61_62", "yow-cgcs-wildcat-63_66"]:
         skip("25G labs are not supported for this testcase due to insufficient stress")
+
+
+@fixture(scope='module')
+def security_groups():
+
+    LOG.fixture_step("(module) Create two security groups")
+    sg_primary = network_helper.create_security_group(
+        "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_primary(), cleanup='class')
+    sg_secondary = network_helper.create_security_group(
+        "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_secondary(), cleanup='class')
+
+    # required by ping_vms
+    cli.openstack(
+        "security group rule create",
+        "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
+    cli.openstack(
+        "security group rule create",
+        "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
+
+    # required by routing and ssh (TCP), could be restricted to ranges over internal-network and mgmt-network
+    cli.openstack(
+        "security group rule create",
+        "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
+    cli.openstack(
+        "security group rule create",
+        "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
+
+    return sg_primary, sg_secondary
 
 
 @mark.parametrize('vm_type', [
@@ -61,35 +75,9 @@ def skip_if_25G():
     'avp',
     'dpdk'
 ])
-class TestPacketTypeSecurityRuleEnforcement(object):
-    @fixture(scope='class')
-    def security_groups(self):
-        LOG.fixture_step("(class) Create two security groups")
+class TestPacketTypeSecurityRuleEnforcement:
 
-        sg_primary = network_helper.create_security_group(
-            "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_primary(), cleanup='class')
-        sg_secondary = network_helper.create_security_group(
-            "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_secondary(), cleanup='class')
-
-        # required by ping_vms
-        cli.openstack(
-            "security group rule create",
-            "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
-        cli.openstack(
-            "security group rule create",
-            "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
-
-        # required by routing and ssh (TCP), could be restricted to ranges over internal-network and mgmt-network
-        cli.openstack(
-            "security group rule create",
-            "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
-        cli.openstack(
-            "security group rule create",
-            "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
-
-        yield sg_primary, sg_secondary
-
-    def test_apply_group_at_launch(self, vm_type, ixia_supported, security_groups):
+    def test_apply_group_at_launch(self, vm_type, security_groups):
         """
         Apply security group to VMs at launch time, verify the rules are enforced
 
@@ -114,7 +102,7 @@ class TestPacketTypeSecurityRuleEnforcement(object):
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
 
-    def test_apply_group_running_vm(self, vm_type, ixia_supported, security_groups):
+    def test_apply_group_running_vm(self, vm_type, security_groups):
         """
         Apply security group to VMs when the VMs are running, verify the rules are enforced
 
@@ -141,7 +129,7 @@ class TestPacketTypeSecurityRuleEnforcement(object):
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
 
-    def test_modify_running_vm(self, vm_type, ixia_supported, security_groups):
+    def test_modify_running_vm(self, vm_type, security_groups):
         """
         Verify security_group related modifications are functioning as expected
 
@@ -190,8 +178,10 @@ class TestPacketTypeSecurityRuleEnforcement(object):
             assert not succ, "udp traffic successfully passed through"
 
             LOG.tc_step("Disassociate the security group, verify UDP traffic is allowed")
-            cli.openstack("server remove security group {} {}".format(vm_test, sg_primary), auth_info=Tenant.get('admin'))
-            cli.openstack("server remove security group {} {}".format(vm_observer, sg_secondary), auth_info=Tenant.get('admin'))
+            cli.openstack("server remove security group {} {}".format(vm_test, sg_primary),
+                          auth_info=Tenant.get('admin'))
+            cli.openstack("server remove security group {} {}".format(vm_observer, sg_secondary),
+                          auth_info=Tenant.get('admin'))
             session.get_frames_delta(stable=True)
 
 
@@ -230,9 +220,11 @@ def test_max_reached_creation_fail(tenant):
     LOG.info("Tenant InUse Retrieved: secgroups={}".format(in_use_secgroups))
 
     LOG.tc_step("Create enough groups to reach the quota")
+    sec_group = None
     for i in range(max_secgroups - in_use_secgroups):
         # take the last security group for rules creation
         sec_group = network_helper.create_security_group('test_max_reached_creation_fail', auth_info=auth_info)
+    assert sec_group
 
     LOG.tc_step("Verify security group creation fail as quota is reached")
     code, msg = network_helper.create_security_group(
@@ -306,19 +298,15 @@ def ensure_vms_on_host(vms, host, *args, **kwargs):
     return results
 
 
-def ensure_vms_on_same_host(vms, *args, **kwargs):
+def ensure_vms_on_same_host(vms):
     """
     Ensure all VMs provided will sit on the same host
     selects the current host for most VMs in the list
     if multiple choices available, the target host is arbitrary
 
     Args:
-        vms (list):
+        vms (list|tuple):
             list of VMs to ensure
-        args (list):
-            additional arguments for live_migrate_vm
-        kwargs (dict):
-            additional keyword arguments for live_migrate_vm
 
     Returns (str|None):
         the target compute host
@@ -344,7 +332,7 @@ def ensure_vms_on_same_host(vms, *args, **kwargs):
     return most_common
 
 
-def test_qos_weight_enforced(request, skip_if_25G):
+def test_qos_weight_enforced(request, skip_if_25g):
     """
     Verify QoS weights are impacting networks
     DPDK-only test case (kpktgen does not supply enough Tx rate)
@@ -368,18 +356,21 @@ def test_qos_weight_enforced(request, skip_if_25G):
 
     vm_type = 'dpdk'
     vif_model = 'avp'
+    tenant_name = Tenant.get_primary()['tenant']
 
     tenant_nets = network_helper.get_tenant_net_ids()
     if len(tenant_nets) < 2:
         skip("less than two tenant-nets under the primary tenant")
     tenant_high = tenant_nets[0]
     tenant_low = tenant_nets[1]
-    mgmt_net = network_helper.get_mgmt_net_id(auth_info=Tenant.get_primary())
+    mgmt_net = network_helper.get_mgmt_net_id()
 
     LOG.tc_step("Create QoS policies with different weights")
     weight_high, weight_low = 100, 10
-    qos_high = network_helper.create_qos(scheduler={'weight': weight_high}, tenant_name=Tenant.get_primary()['tenant'])[1]
-    qos_low = network_helper.create_qos(scheduler={'weight': weight_low}, tenant_name=Tenant.get_primary()['tenant'])[1]
+    qos_high = network_helper.create_qos(scheduler={'weight': weight_high},
+                                         tenant_name=tenant_name)[1]
+    qos_low = network_helper.create_qos(scheduler={'weight': weight_low},
+                                        tenant_name=tenant_name)[1]
 
     LOG.tc_step("Assign network QoS policies")
     qos_apply(tenant_high, qos_high, request)
@@ -407,11 +398,11 @@ def test_qos_weight_enforced(request, skip_if_25G):
     pair2 = vm_pairs[1]
 
     LOG.tc_step("Ensure VM locations")
-    compute_A = ensure_vms_on_same_host(pair1)
+    compute_a = ensure_vms_on_same_host(pair1)
     for vm in pair2:
-        if nova_helper.get_vm_host(vm) == compute_A:
+        if nova_helper.get_vm_host(vm) == compute_a:
             vm_helper.live_migrate_vm(vm)
-    compute_B = ensure_vms_on_same_host(pair2)
+    compute_b = ensure_vms_on_same_host(pair2)
 
     LOG.tc_step("Start dpdk_pktgen")
     for vm in vms_high + vms_low:    # scp is rather slow
@@ -452,7 +443,7 @@ def test_qos_weight_enforced(request, skip_if_25G):
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step("Reset vswitch statistics")
     # synchornized reference point
-    for host in [compute_A, compute_B]:
+    for host in [compute_a, compute_b]:
         con_ssh.exec_cmd("vshell -H {} engine-stats-clear".format(host), fail_ok=False)
         con_ssh.exec_cmd("vshell -H {} port-stats-clear".format(host), fail_ok=False)
         con_ssh.exec_cmd("vshell -H {} interface-stats-clear".format(host), fail_ok=False)
@@ -466,21 +457,20 @@ def test_qos_weight_enforced(request, skip_if_25G):
     LOG.tc_step("Verify QoS weights are impacting drop rates of two tenant networks under stress-ed host")
 
     # for post mortem analysis
-    con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_A), fail_ok=False)
-    con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_A), fail_ok=False)
-    con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_A), fail_ok=False)
-    con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_A), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_a), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_a), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_a), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_a), fail_ok=False)
 
     # analyze Rx side stats
-    con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_B), fail_ok=False)
-    succ, ifaces = con_ssh.exec_cmd("vshell -H {} interface-list".format(compute_B), fail_ok=False)
-    succ, port_stats = con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_B), fail_ok=False)
-    succ, iface_stats = con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_B), fail_ok=False)
-    succ, nw_stats = con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_B), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_b), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} interface-list".format(compute_b), fail_ok=False)
+    con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_b), fail_ok=False)
+    iface_stats = con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_b), fail_ok=False)[1]
+    nw_stats = con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_b), fail_ok=False)[1]
 
     rx_high_id = network_helper.get_ports(ip_addr=network_helper.get_data_ips_for_vms(vms_high[1])[0])[0]
     rx_low_id = network_helper.get_ports(ip_addr=network_helper.get_data_ips_for_vms(vms_low[1])[0])[0]
-    port_stats_table = table_parser.table(port_stats)
     iface_stats_table = table_parser.table(iface_stats)
     nw_stats_table = table_parser.table(nw_stats)
 
@@ -515,11 +505,11 @@ def setup_busy_loop_net(host, vlan_a, vlan_b, request, mtu=1492, eth='eth0'):
 
     def teardown():
         LOG.fixture_step("removing busy_loop_net from {}".format(host))
-        with host_helper.ssh_to_host(host) as host_ssh:
-            with network_helper.vconsole(host_ssh) as v_exec:
-                v_exec("vlan delete {}.{}".format(eth, vlan_a), fail_ok=True)
-                v_exec("vlan delete {}.{}".format(eth, vlan_b), fail_ok=True)
-                v_exec("network delete busy_loop_net", fail_ok=True)
+        with host_helper.ssh_to_host(host) as host_ssh_:
+            with network_helper.vconsole(host_ssh_) as v_exec_:
+                v_exec_("vlan delete {}.{}".format(eth, vlan_a), fail_ok=True)
+                v_exec_("vlan delete {}.{}".format(eth, vlan_b), fail_ok=True)
+                v_exec_("network delete busy_loop_net", fail_ok=True)
     request.addfinalizer(teardown)
 
 
@@ -527,7 +517,7 @@ def setup_busy_loop_net(host, vlan_a, vlan_b, request, mtu=1492, eth='eth0'):
     'virtio',
     'avp',
 ])
-def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_network_quotas):
+def test_qos_phb_enforced(vm_type, skip_if_25g, update_network_quotas):
     """
     Verify QoS PHB policies are applied via traffic, driven by Ixia
     PHB precedence weights are hardcoded
@@ -556,7 +546,7 @@ def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_
         LOG.tc_step("Setup traffic items with PHBs and frameRates")
         for trafficItem in session.getList(session.getRoot()+'/traffic', 'trafficItem'):
             name = session.getAttribute(trafficItem, 'name')
-            configElement = session.getList(trafficItem, 'configElement')[0]
+            conf_element = session.getList(trafficItem, 'configElement')[0]
             if 'vm_pairs' in name:
                 index = int(name[name.index('[')+1: name.index(']')])
             else:
@@ -567,15 +557,16 @@ def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_
 
             mp = ['Precedence {}'.format(i) for i in range(8)]
             session.configure(
-                configElement+'/stack:"ipv4-3"/field:"ipv4.header.priority.ds.phb.classSelectorPHB.classSelectorPHB-12"',
+                conf_element+'/stack:"ipv4-3"/field:"ipv4.header.priority.ds.phb.classSelectorPHB.classSelectorPHB-12"',
                 activeFieldChoice=True, fieldValue=mp[index])
-            trackBy = session.getAttribute(trafficItem+'/tracking', 'trackBy') + ["ipv4ClassSelectorPhb0"]
-            session.configure(trafficItem+'/tracking', trackBy=trackBy)
+            track_by = session.getAttribute(trafficItem+'/tracking', 'trackBy') + ["ipv4ClassSelectorPhb0"]
+            session.configure(trafficItem+'/tracking', trackBy=track_by)
 
         LOG.tc_step("Start traffic and keep increasing frameRate until vNIC starts dropping")
         session.traffic_start()
 
         # at 13% for 8 flowgroups, >100% line rate will be reached --> invalid flowgroups
+        fail = None
         for frame_rate in range(1, 13):
             LOG.info("Adjusting frame rates to {}%".format(frame_rate))
             for trafficItem in session.getList(session.getRoot()+'/traffic', 'trafficItem'):
@@ -590,15 +581,12 @@ def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_
             time.sleep(10)
 
             stats = session.get_statistics('traffic item statistics', fail_ok=False)
-            results = [0 for i in range(8)]
+            results = [0.0] * 8
             for item in stats:
                 name = item['Traffic Item']
                 if 'vm_pairs' in name:
                     index = int(name[name.index('[')+1: name.index(']')])
-                else:
-                    continue
-
-                results[index] = float(item[r'Rx Frame Rate'])
+                    results[index] = float(item[r'Rx Frame Rate'])
 
             LOG.info("Verifying Rx rate distribution with 1% tolerance")
             fail = False
@@ -638,7 +626,7 @@ def test_qos_phb_enforced(vm_type, skip_if_25G, ixia_supported, request, update_
     'avp',
     'dpdk',
 ])
-def test_jumbo_frames(vm_type, ixia_supported, update_network_quotas):
+def test_jumbo_frames(vm_type, update_network_quotas):
     """
     Verify jumbo frames processed correctly
 
@@ -692,8 +680,8 @@ def test_jumbo_frames(vm_type, ixia_supported, update_network_quotas):
 
             LOG.tc_step("Configure traffic frameSize to {}".format(flow_mtu))
             for trafficItem in session.getList(session.getRoot()+'/traffic', 'trafficItem'):
-                configElement = session.getList(trafficItem, 'configElement')[0]
-                session.configure(configElement+'/frameSize', fixedSize=flow_mtu, type='fixed')
+                conf_element = session.getList(trafficItem, 'configElement')[0]
+                session.configure(conf_element+'/frameSize', fixedSize=flow_mtu, type='fixed')
 
             LOG.tc_step("Start traffic and verify loss")
             session.traffic_start()

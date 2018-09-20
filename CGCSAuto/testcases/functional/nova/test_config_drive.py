@@ -47,8 +47,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     volume_id = cinder_helper.create_volume(name='vol_inst1', guest_image=guest_os, image_id=img_id)[1]
     ResourceCleanup.add('volume', volume_id, scope='function')
 
-    block_device = 'source=volume,dest=volume,id={},device=vda'.format(volume_id)
-    block_device_mapping = 'vda={}:::0'.format(volume_id)
+    block_device = {'source': 'volume', 'dest': 'volume', 'id': volume_id, 'device': 'vda'}
     test_file, file_dir = get_test_file()
     file = "{}/ip.txt={}".format(file_dir, test_file)
 
