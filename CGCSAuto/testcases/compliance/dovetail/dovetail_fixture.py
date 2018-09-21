@@ -111,21 +111,32 @@ def configure_dovetail_server(hosts_per_personality):
     LOG.fixture_step("Collect hosts info, create pod.yaml file on localhost and scp to dovetail test node")
     import yaml
     yaml_nodes = []
-    hosts = list(hosts_per_personality['controller'])
-    hosts += hosts_per_personality['compute']
-    for i in range(len(hosts)):
-        node = 'node{}'.format(i+1)
-        hostname = hosts[i]
-        role = 'Controller' if 'controller' in hostname else 'Compute'
-        node_ip = con_ssh.exec_cmd(
-            'nslookup {} | grep -A 2 "Name:" | grep --color=never "Address:"'.format(hostname), fail_ok=False)[1]
-        node_ip = node_ip.split('Address:')[1].strip()
-        yaml_nodes.append({'name': node,
-                           'role': role,
+    controllers = hosts_per_personality['controller']
+    computes = hosts_per_personality['compute']
+
+    node_count = 1
+    for host in controllers:
+        node_ip = con_ssh.exec_cmd('nslookup {} | grep -A 2 "Name:" | grep --color=never "Address:"'.
+                                   format(host), fail_ok=False)[1].split('Address:')[1].strip()
+        yaml_nodes.append({'name': node_count,
+                           'role': 'Controller',
                            'ip': node_ip,
                            'user': 'root',
                            'password': HostLinuxCreds.get_password()
                            })
+        node_count += 1
+
+    for compute in computes:
+        node_ip = con_ssh.exec_cmd('nslookup {} | grep -A 2 "Name:" | grep --color=never "Address:"'.
+                                   format(compute), fail_ok=False)[1].split('Address:')[1].strip()
+        yaml_nodes.append({'name': node_count,
+                           'role': 'Compute',
+                           'ip': node_ip,
+                           'user': 'root',
+                           'password': HostLinuxCreds.get_password()
+                           })
+        node_count += 1
+
     pod_yaml_dict = {'nodes': yaml_nodes}
     local_path = '{}/pod.yaml'.format(ProjVar.get_var('TEMP_DIR'))
     with open(local_path, 'w') as f:
