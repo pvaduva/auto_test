@@ -304,7 +304,7 @@ def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=
             print("{} is successfully touched on {}".format(status_file, build_server))
 
             if status == 'GREEN':
-                green_path = '{}/latest_green_build'.format(builds_dir)
+                green_path = '{}/latest_green_build'.format(os.path.dirname(os.path.abspath(build_path)))
                 bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
                 bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
             break
