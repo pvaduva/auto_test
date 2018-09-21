@@ -278,29 +278,38 @@ def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=
     if status not in ['RED', 'YELLOW', 'GREEN']:
         raise ValueError("Invalid status {}".format(status))
 
-    if not build_path:
+    if build_path:
+        build_paths = [build_path]
+    else:
         if not build_id:
             raise ValueError("Either build_id or build_dir has to be provided")
-        if not builds_dir:
-            builds_dir = BuildServerPath.DEFAULT_HOST_BUILDS_DIR
+        if builds_dir:
+            builds_dirs = [builds_dir]
+        else:
+            builds_dirs = (BuildServerPath.TITANIUM_HOST_BUILDS_DIR, BuildServerPath.STX_HOST_BUILDS_DIR)
 
-        build_path = builds_dir + '/' + build_id
+        build_paths = ['{}/{}'.format(dir_, build_id) for dir_ in builds_dirs]
 
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
-        if not bld_srv_ssh.file_exists(file_path=build_path):
-            raise ValueError("Build path {} does not exist!".format(build_path))
+        for build_path in build_paths:
+            if not bld_srv_ssh.file_exists(file_path=build_path):
+                print("Build path {} does not exist".format(build_path))
+                continue
 
-        status_file = '{}/{}'.format(build_path, status)
-        bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
-        if not bld_srv_ssh.file_exists(file_path=status_file):
-            raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
+            status_file = '{}/{}'.format(build_path, status)
+            bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
+            if not bld_srv_ssh.file_exists(file_path=status_file):
+                raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
 
-        print("{} is successfully touched on {}".format(status_file, build_server))
+            print("{} is successfully touched on {}".format(status_file, build_server))
 
-        if status == 'GREEN':
-            green_path = '{}/latest_green_build'.format(builds_dir)
-            bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
-            bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
+            if status == 'GREEN':
+                green_path = '{}/latest_green_build'.format(builds_dir)
+                bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
+                bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
+            break
+        else:
+            raise ValueError('Build path not found on {}: {}'.format(build_server, build_paths))
 
 
 def send_report(subject, recipients, msg_file=TMP_FILE):
