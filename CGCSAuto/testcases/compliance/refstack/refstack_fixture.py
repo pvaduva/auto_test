@@ -7,10 +7,9 @@ from utils.clients.local import LocalHostClient
 from consts.cgcs import FlavorSpec
 from consts.auth import Tenant, SvcCgcsAuto, ComplianceCreds
 from consts.proj_vars import ComplianceVar, ProjVar
-from consts.compliance import RefStack, VM_ROUTE_VIA
+from consts.compliance import RefStack
 from keywords import keystone_helper, nova_helper, cinder_helper, network_helper, glance_helper, storage_helper, \
-    system_helper, host_helper
-from testcases.compliance import compliance_helper
+    compliance_helper
 
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -23,7 +22,7 @@ def refstack_pre_check():
         skip("RefStack test list path has to be specified via --refstack-suite")
 
     LOG.info("Check refstack-client and test host")
-    with host_helper.ssh_to_compliance_server() as refstack_host_ssh:
+    with compliance_helper.ssh_to_compliance_server() as refstack_host_ssh:
         if not refstack_host_ssh.file_exists(RefStack.TEMPEST_CONF):
             skip("RefStack conf file does not exist: {}".format(RefStack.TEMPEST_CONF))
 
@@ -113,7 +112,7 @@ def refstack_setup(refstack_pre_check, request):
     }
 
     LOG.fixture_step("Update tempest.conf parameters on cumulus server: \n{}".format(params_dict))
-    with host_helper.ssh_to_compliance_server() as server_ssh:
+    with compliance_helper.ssh_to_compliance_server() as server_ssh:
         for key, val in params_dict.items():
             server_ssh.exec_cmd('sed -i "s/^{} =.*/{} = {}/g" {}'.format(key, key, val, RefStack.TEMPEST_CONF),
                                 fail_ok=False)

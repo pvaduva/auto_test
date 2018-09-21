@@ -967,8 +967,12 @@ def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
     return get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)
 
 
-def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True):
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
+def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=True, auth_info=Tenant.get('admin')):
+    if not auth_info:
+        auth_info = Tenant.get_primary()
+    extra_param = '--all-tenants' if auth_info['tenant'] == 'admin' else ''
+
+    table_ = table_parser.table(cli.nova('list', extra_param, ssh_client=con_ssh, auth_info=auth_info))
     vm_ids = table_parser.get_values(table_, 'ID', strict=strict, regex=regex, Name=vm_name.strip())
     if not vm_ids:
         if fail_ok:
@@ -978,8 +982,12 @@ def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok
     return vm_ids[0]
 
 
-def get_vm_name_from_id(vm_id, con_ssh=None):
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
+def get_vm_name_from_id(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
+    if not auth_info:
+        auth_info = Tenant.get_primary()
+    extra_param = '--all-tenants' if auth_info['tenant'] == 'admin' else ''
+
+    table_ = table_parser.table(cli.nova('list', extra_param, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'Name', ID=vm_id)[0]
 
 

@@ -3,15 +3,11 @@ import os
 from utils.tis_log import LOG
 from utils.clients.local import LocalHostClient
 
-from keywords import host_helper
+from keywords import compliance_helper
 from consts.proj_vars import ProjVar, ComplianceVar
 from consts.compliance import Dovetail
 from consts.auth import ComplianceCreds
 from utils.exceptions import DovetailError
-
-from testcases.compliance import compliance_helper
-from testcases.compliance.dovetail.dovetail_fixture import pre_configs      # DO NOT remove
-
 
 MAX_TIMEOUT = 20000
 CUMULUS_PROMPT = '.*@.*:.* '
@@ -46,7 +42,7 @@ def test_dovetail(pre_configs):
     ComplianceCreds.set_host(Dovetail.TEST_NODE)
     ComplianceCreds.set_user(Dovetail.USERNAME)
     ComplianceCreds.set_password(Dovetail.PASSWORD)
-    with host_helper.ssh_to_compliance_server() as server_ssh:
+    with compliance_helper.ssh_to_compliance_server() as server_ssh:
         LOG.tc_step("Source to env_config.sh and start Docker Container")
         server_ssh.exec_cmd('source {}'.format(Dovetail.ENV_SH), get_exit_code=False)
         server_ssh.exec_cmd('export DOVETAIL_HOME={}'.format(Dovetail.HOME_DIR), get_exit_code=False)

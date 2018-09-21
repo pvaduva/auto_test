@@ -3759,7 +3759,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
 
     args += ' {}'.format(vm_id)
 
-    prev_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
+    prev_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
     code, output = cli.nova('interface-attach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                             auth_info=auth_info)
 
@@ -3767,7 +3767,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
         return code, output
 
     LOG.info("Post interface-attach checks started...")
-    post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
+    post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
     last_nic = post_nics[-1]
     last_port = last_nic['port_id']
 

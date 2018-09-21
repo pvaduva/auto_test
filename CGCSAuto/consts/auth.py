@@ -323,3 +323,18 @@ class ComplianceCreds:
     @classmethod
     def set_host(cls, host):
         cls.__HOST['host'] = host
+
+
+class CumulusCreds:
+    HOST = '128.224.151.50'
+    LINUX_USER = 'svc-cgcsauto'
+    LINUX_PASSWORD = ')OKM0okm'
+    AUTH_URL = 'http://{}:5000/v3'.format(HOST)
+
+    TENANT_TIS_LAB = {
+        'user': 'svc-cgcsauto',
+        'password': 'svc-cgcsauto',
+        'tenant': 'tis-lab',
+        'auth_url': AUTH_URL,
+        'region': 'RegionOne'
+    }

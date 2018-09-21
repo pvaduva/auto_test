@@ -9,9 +9,8 @@ from consts.proj_vars import ProjVar, ComplianceVar
 from consts.compliance import Dovetail
 from consts.cgcs import HostAvailState
 from consts.auth import HostLinuxCreds, ComplianceCreds, Tenant, CliAuth
-from keywords import host_helper, system_helper, nova_helper, network_helper, cinder_helper, keystone_helper, common
-from testcases.compliance import compliance_helper
-
+from keywords import host_helper, system_helper, nova_helper, network_helper, cinder_helper, keystone_helper, common, \
+    compliance_helper
 
 TEST_NODE_PROMPT = '.*@.*:.* '
 
@@ -40,14 +39,19 @@ def pre_configs(request):
         skip('No standby controller on system')
 
     hosts_dict = system_helper.get_hostnames_per_personality(HostAvailState.AVAILABLE)
+
+    controllers = hosts_dict['controller']
+    if system_helper.is_small_footprint():
+        hosts_dict['compute'] = host_helper.get_up_hypervisors()
     computes = hosts_dict['compute']
     if len(computes) < 2:
         skip('Less than 2 computes in available states')
 
-    controllers = hosts_dict['controller']
     storages = hosts_dict['storage']
-    all_hosts = controllers + computes + storages
+    all_hosts = list(set(controllers + computes + storages))
 
+    LOG.fixture_step("Ensure dovetail test node mgmt nic connects to lab under test")
+    compliance_helper.update_dovetail_mgmt_interface()
     configure_tis(all_hosts, request=request)
     configure_dovetail_server(hosts_per_personality=hosts_dict)
 
@@ -87,7 +91,7 @@ def configure_dovetail_server(hosts_per_personality):
     ComplianceCreds.set_host(Dovetail.TEST_NODE)
     ComplianceCreds.set_user(Dovetail.USERNAME)
     ComplianceCreds.set_password(Dovetail.PASSWORD)
-    with host_helper.ssh_to_compliance_server() as compliance_ssh:
+    with compliance_helper.ssh_to_compliance_server() as compliance_ssh:
         env_path = Dovetail.ENV_SH
         for var, value in env_conf_dict.items():
             compliance_ssh.exec_cmd('sed -i "s/^export {}=.*/export {}={}/g" {}'.format(var, var, value, env_path))

@@ -29,3 +29,13 @@ class Dovetail:
     @classmethod
     def get_auth_url(cls):
         return cls.__OS_AUTH_URL
+
+    DOVETAIL_LABS = [
+        # 'yow-cgcs-wildcat-71-75',
+        'yow-cgcs-ironpass-1-4',
+        'yow-cgcs-ironpass-14-17',
+        'yow-cgcs-ironpass-20-27',
+        'yow-cgcs-r720-1-2',
+        'yow-cgcs-r720-3-7',
+        # 'yow-cgcs-pv-1',      IPv6 lab, does not work with cumulus lab mgmt network setting (ipv4)
+    ]

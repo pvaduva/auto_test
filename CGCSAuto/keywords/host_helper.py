@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from xml.etree import ElementTree
 
 from consts import proj_vars
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds, ComplianceCreds
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.filepaths import WRSROOT_HOME
@@ -3577,42 +3577,6 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
         yield test_server_conn
     finally:
         test_server_conn.close()
-
-
-@contextmanager
-def ssh_to_compliance_server(server=None, user=None, password=None, prompt=None):
-    """
-    ssh to given compliance server
-
-    Args:
-        server:
-        user (str):
-        password (str):
-        prompt (str|None): expected prompt. such as: cumulus@tis-compliance-test-node:~$
-
-    Yields (SSHClient): ssh client for given compliance server and user
-
-    """
-    if server is None:
-        server = ComplianceCreds.get_host()
-    if user is None:
-        user = ComplianceCreds.get_user()
-    if password is None:
-        password = ComplianceCreds.get_password()
-
-    set_ps1 = False
-    if prompt is None:
-        prompt = '.*{}@.*:.*\$ '.format(user)
-        set_ps1 = True
-    server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
-    server_conn.connect()
-    if set_ps1:
-        server_conn.exec_cmd(r'export PS1="\u@\h:\w\$ "')
-
-    try:
-        yield server_conn
-    finally:
-        server_conn.close()
 
 
 def get_host_co_processor_pci_list(hostname):
