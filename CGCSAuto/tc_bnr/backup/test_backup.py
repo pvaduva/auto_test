@@ -217,6 +217,8 @@ def is_cinder_export_supported(build_info):
          False - CLI 'cinder export' is not suppported anymore
     """
 
+    return build_info.get('BUILD_ID', '9999') < cinder_export_deprecated:
+
 
 def backup_cinder_volumes(backup_info):
     """
@@ -328,7 +330,8 @@ def backup_load_iso_image(backup_info):
         backup_info
 
     Returns:
-
+        True - the ISO is successfully copied to backup server
+             - False otherwise
     """
 
     backup_dest = backup_info['backup_dest']
@@ -575,7 +578,7 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
             - backup options for doing System Backup
 
     Return:
-
+        None
     """
 
     quotas = {'instances': {}, 'cores': {}, 'ram': {}}
@@ -622,7 +625,7 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
             - options for doing System Backup
 
     Return:
-
+        VMs created
     """
 
     vms_added = []
@@ -679,7 +682,7 @@ def pre_backup_setup(backup_info, con_ssh):
             - current ssh connection
 
     Return:
-         None
+         information of created VMs, Volumes, and Images
     """
 
     tenant = Tenant.TENANT1
@@ -712,6 +715,18 @@ def pre_backup_setup(backup_info, con_ssh):
 
 
 def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
+    """
+    Run migration test before doing system backup.
+
+    Args:
+        backup_info: 
+            - options for doing backup
+
+        con_ssh:
+            - current ssh connection
+    Return:
+        None
+    """
 
     hyporvisors = host_helper.get_up_hypervisors(con_ssh=con_ssh)
     if len(hyporvisors) < 2:
@@ -750,6 +765,22 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
 
 
 def lock_unlock_host(backup_info, con_ssh, vms):
+    """
+    Do lock & unlock hosts test before system backup.
+
+    Args:
+        backup_info:
+            - options for system backup
+
+        con_ssh:
+            - current ssh connection to the target
+
+        vms:
+            - VMs on which their host to test
+    Return:
+        None
+    """
+
     active_controller_name = system_helper.get_active_controller_name()
 
     target_vm = random.choice(vms)
@@ -798,6 +829,19 @@ def lock_unlock_host(backup_info, con_ssh, vms):
 
 
 def pre_backup_test(backup_info, con_ssh):
+    """
+    Various (system) tests before doing system backup
+
+    Args:
+        backup_info:
+            - options for system backup
+
+        con_ssh:
+            - current ssh connection to the target
+    Return:
+        None
+    """
+
     LOG.tc_step('Pre-backup testing')
     LOG.info('Backup-info:{}'.format(backup_info))
 
@@ -815,6 +859,16 @@ def pre_backup_test(backup_info, con_ssh):
 
 
 def get_backup_file_name_prefix(backup_info):
+    """
+    Construct the file name prefix for backup files
+
+    Args:
+        backup_info:
+            - options for system backup
+
+    Return:
+        the core name of the backup files 
+    """
 
     core_name = PREFIX_BACKUP_FILE
     if backup_info.get('dest', 'local') == 'usb':
