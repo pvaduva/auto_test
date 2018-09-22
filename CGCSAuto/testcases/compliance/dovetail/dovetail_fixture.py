@@ -34,20 +34,21 @@ def pre_configs(request):
     except ImportError:
         skip('pyymal package is not installed.')
 
-    active, standby = system_helper.get_active_standby_controllers()
-    if not standby:
-        skip('No standby controller on system')
-
-    hosts_dict = system_helper.get_hostnames_per_personality(HostAvailState.AVAILABLE)
-
-    controllers = hosts_dict['controller']
-    if system_helper.is_small_footprint():
-        hosts_dict['compute'] = host_helper.get_up_hypervisors()
-    computes = hosts_dict['compute']
+    computes = host_helper.get_up_hypervisors()
     if len(computes) < 2:
         skip('Less than 2 computes in available states')
 
-    storages = hosts_dict['storage']
+    active, standby = system_helper.get_active_standby_controllers()
+    if not standby:
+        skip('No standby controller on system')
+    controllers = [active, standby]
+
+    storages = system_helper.get_hostnames(personality='storage', availability=HostAvailState.AVAILABLE)
+    hosts_dict = {'controller': controllers,
+                  'compute': computes,
+                  'storage': storages
+                  }
+
     all_hosts = list(set(controllers + computes + storages))
 
     LOG.fixture_step("Ensure dovetail test node mgmt nic connects to lab under test")
