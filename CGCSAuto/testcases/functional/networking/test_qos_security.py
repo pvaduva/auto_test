@@ -70,12 +70,20 @@ def security_groups():
     return sg_primary, sg_secondary
 
 
-@mark.parametrize('vm_type', [
-    'virtio',
-    'avp',
-    'dpdk'
-])
+# @mark.parametrize('vm_type', [
+#     'virtio',
+#     'avp',
+#     'dpdk'
+# ])
 class TestPacketTypeSecurityRuleEnforcement:
+
+    @fixture(scope='class', params=['virtio', 'avp', 'dpdk'])
+    def vm_type(self, request):
+        vm_type_ = request.param
+        if vm_type_ in ('avp', 'dpdk') and not system_helper.is_avs():
+            skip("avp and dpdk unsupported by OVS")
+
+        return vm_type_
 
     def test_apply_group_at_launch(self, vm_type, security_groups):
         """
@@ -626,7 +634,7 @@ def test_qos_phb_enforced(vm_type, skip_if_25g, update_network_quotas):
     'avp',
     'dpdk',
 ])
-def test_jumbo_frames(vm_type, update_network_quotas):
+def test_jumbo_frames(vm_type, skip_for_ovs, update_network_quotas):
     """
     Verify jumbo frames processed correctly
 
