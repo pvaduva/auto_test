@@ -288,7 +288,7 @@ def revert_quota(request):
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_SecurityGroup.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Nova_ServerGroup.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Nova_KeyPair.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),
+    # mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),    CGTS-10095
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_Stack.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_VolumeAttachment.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Nova_Server.yaml'),
