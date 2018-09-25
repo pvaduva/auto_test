@@ -1089,7 +1089,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
 
-def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os="centos", ovs=False):
+def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os="centos", fm_alarm=False):
     '''
     Function for waiting until an alarm clears
     '''
@@ -1106,7 +1106,7 @@ def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_i
             else:
                 cmd = "source /etc/nova/openrc; system alarm-list"
 
-            if ovs:
+            if fm_alarm:
                 cmd = "source /etc/nova/openrc; fm alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
 
@@ -1930,6 +1930,7 @@ def main():
     kubernetes = args.kubernetes
 
     branding = args.branding
+    fm_alarm = False
 
     if args.bld_server != "":
         bld_server = args.bld_server
@@ -2463,6 +2464,12 @@ def main():
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
 
+    cmd = "system alarm-list"
+    rc, out = controller0.ssh_conn.exec_cmd(cmd)
+    if rc == 2:
+        log.info("Use fm alarm-list instead of system alarm-list")
+        fm_alarm = True
+
     if stop == "3":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
 
@@ -2587,11 +2594,11 @@ def main():
     # drbd-sync (400.001)
     if lab_type is 'cpe':
         wait_until_alarm_clears(controller0, timeout=840, check_interval=60, alarm_id="400.002",
-                                host_os=host_os, ovs=ovs)
+                                host_os=host_os, fm_alarm=fm_alarm)
         wait_until_alarm_clears(controller0, timeout=720, check_interval=60, alarm_id="250.010",
-                                host_os=host_os, ovs=ovs)
+                                host_os=host_os, fm_alarm=fm_alarm)
         wait_until_alarm_clears(controller0, timeout=25200, check_interval=60, alarm_id="400.001",
-                                host_os=host_os, ovs=ovs)
+                                host_os=host_os, fm_alarm=fm_alarm)
 
     # For storage lab run lab setup
     executed = False
@@ -2620,7 +2627,7 @@ def main():
     if lab_type == 'storage':
         time.sleep(10)
         wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001",
-                                host_os=host_os, ovs=ovs)
+                                host_os=host_os, fm_alarm=fm_alarm)
 
     # Lab-install -  run_lab_setup - applicable storage labs
     lab_install_step = install_step("run_lab_setup", 15, ['storage'])
@@ -2667,16 +2674,16 @@ def main():
 
         if host_os == "centos" and len(controller_dict) > 1:
             cmd = "system alarm-list --nowrap"
-            if ovs:
+            if fm_alarm:
                 cmd = "fm alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
 
             # Wait for degrade sysinv set to raise
             time.sleep(10)
             wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="400.001",
-                                    host_os=host_os, ovs=ovs)
+                                    host_os=host_os, fm_alarm=fm_alarm)
             wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001",
-                                    host_os=host_os, ovs=ovs)
+                                    host_os=host_os, fm_alarm=fm_alarm)
 
             if find_error_msg(output, "250.001"):
                 log.info('Config out-of-date alarm is present')
@@ -2707,11 +2714,11 @@ def main():
 
                 # Wait until config out-of-date clears
                 wait_until_alarm_clears(controller1, timeout=1200, check_interval=60, alarm_id="250.001",
-                                        host_os=host_os, ovs=ovs)
+                                        host_os=host_os, fm_alarm=fm_alarm)
 
                 # Wait until sm-services are up
                 wait_until_alarm_clears(controller1, timeout=600, check_interval=60, alarm_id="400.002",
-                                        host_os=host_os, ovs=ovs)
+                                        host_os=host_os, fm_alarm=fm_alarm)
 
                 cmd = "system host-swact controller-1"
                 rc, output = controller1.ssh_conn.exec_cmd(cmd)
@@ -2728,13 +2735,13 @@ def main():
             log.info("Skipping this step since we only have one controller")
 
     wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="250.001",
-                            host_os=host_os, ovs=ovs)
+                            host_os=host_os, fm_alarm=fm_alarm)
 
     if postinstall and host_os == "centos":
         run_postinstall(controller0)
 
     cmd = "source /etc/nova/openrc; system alarm-list"
-    if ovs:
+    if fm_alarm:
         cmd = "source /etc/nova/openrc; fm alarm-list"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to get alarm list")
