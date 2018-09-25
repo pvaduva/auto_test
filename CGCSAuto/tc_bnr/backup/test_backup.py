@@ -217,7 +217,7 @@ def is_cinder_export_supported(build_info):
          False - CLI 'cinder export' is not suppported anymore
     """
 
-    return build_info.get('BUILD_ID', '9999') < cinder_export_deprecated:
+    return build_info.get('BUILD_ID', '9999') < cinder_export_deprecated
 
 
 def backup_cinder_volumes(backup_info):

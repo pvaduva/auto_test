@@ -24,9 +24,15 @@ def collect_logs(con_ssh=None, fail_ok=True):
     Collect logs on the system by calling collect_tis_logs, backup logs under /scratch before head if any, so that there
     are enough disk space.
 
-    :param con_ssh:
-    :param fail_ok:
-    :return:
+    Args:
+        con_ssh:
+            - ccurrent ssh connection to the target
+        fail_ok:
+            - True: do not break the whole test case if there's any error during collecting logs
+              False: abort the entire test case if there's any eorr. True by default.
+
+    Return:
+        None
     """
 
     log_tarball = r'/scratch/ALL_NODES*'
@@ -63,12 +69,21 @@ def collect_logs(con_ssh=None, fail_ok=True):
 @pytest.fixture(scope='session', autouse=True)
 def pre_restore_checkup():
     """
-    Actions prior to run system restore, including:
+    Fixture to check the system states before doing system restore, including:
         - collect logs
         - check if backup files exist on the backup media
         - check if the build-ids match with each other
          - wipe disks
-    :return:
+
+    Args:
+        scope
+            - If this ia per module/session/function fixture.
+        autouse
+            - Whether this fixture is automatically run for its scope
+
+    Return:
+        backup files:
+            - the backup files to restore with
     """
 
     lab = InstallVars.get_install_var('LAB')
@@ -209,6 +224,18 @@ def pre_restore_checkup():
 
 @pytest.fixture(scope='session')
 def restore_setup(pre_restore_checkup):
+    """
+    Fixture to do preparation before system restore.
+
+    Args:
+        pre_restore_checkup:
+            - actions done prior to this
+
+    Returen:
+        a dictionary
+            - containing infromation about target system, output directory,
+                build server and backup files.
+    """
 
     LOG.debug('Restore with settings:\n{}'.format(RestoreVars.get_restore_vars()))
     lab = InstallVars.get_install_var('LAB')
@@ -340,6 +367,21 @@ def restore_setup(pre_restore_checkup):
 
 
 def make_sure_all_hosts_locked(con_ssh, max_tries=5):
+    """
+    Make sure all the hosts are locked before doing system restore.
+
+    Args:
+        con_ssh:
+            - ssh connection to the target lab
+
+        max_tries:
+            - number of times to try before fail the entire test case when any hosts keep failing to lock.
+
+    Return:
+        None
+
+    """
+
     LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
 
     base_cmd = 'host-lock'
@@ -374,6 +416,17 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
 
 
 def install_non_active_node(node_name, lab):
+    """
+    Install the non-active controller node, usually it is controller-1, the second controller
+        on a non-AIO SX system.
+
+    Args:
+        node_name:
+            - the name of the host/node, usually 'controller-1'
+        lab:
+            - lab to test
+    """
+
     boot_interfaces = lab['boot_device_dict']
     LOG.tc_step("Restoring {}".format(node_name))
     install_helper.open_vlm_console_thread(node_name, boot_interface=boot_interfaces, vlm_power_on=True)
@@ -395,6 +448,18 @@ def install_non_active_node(node_name, lab):
 
 
 def get_backup_list(con_ssh):
+    """
+    Get a list of all the cinder-backups.
+
+    Args:
+        con_ssh:
+            - the current ssh connection to the target
+
+    Return:
+        list of ID and Volume ID for the current cinder-backups
+
+    """
+
     rc, output = con_ssh.exec_cmd('cinder backup-list')
     table_ = table_parser.table(output)
     LOG.info('cinder backups: {}'.format(table_))
@@ -411,6 +476,34 @@ def wait_for_backup_status(backup_id,
                        wait_between_check=30,
                        fail_ok=False,
                        con_ssh=None):
+    """
+    Wait the specified cinder-backup to reach certain status.
+
+    Args:
+        target_status:
+            - the expected status to wait, by default it's 'available'
+
+        timeout:
+            - how long to wait if the cinder-backup does not reach expected status,
+                1800 seconds by default
+
+        wait_between_check:
+            - interval between checking the status, 30 seconds by default
+
+        fail_ok:
+            - if the test case should be failed if any error occurs, False by default
+
+        con_ssh:
+            - current ssh connection the lab
+
+    Return:
+        error-code:
+            -   0   -- success
+            -   1   -- failed
+        error-msg:
+            -   message about the reason of failure
+    """
+
     cmd = 'cinder backup-show ' + backup_id
     end_time = time.time() + timeout
 
@@ -433,6 +526,27 @@ def wait_for_backup_status(backup_id,
 
 
 def restore_cinder_backup(backup_id, volume_id, con_ssh):
+    """
+    Restore a cinder volume with the specified backup id and volume id
+
+    Args:
+        backup_id:
+            - the cinder-backup id
+
+        volume_id:
+            - the cinder volume id
+
+        con_ssh:
+            - the ssh connection to the target host
+
+    Return:
+        error-code:
+            - 0 --  success
+
+        message:
+            - more detailed message about the final status of volume to restore
+    """
+
     LOG.info('new cinder backup CLI: backupid={}, volume_id={}'.format(backup_id, volume_id))
 
     cmd = 'cinder backup-restore --volume {} {}'.format(volume_id, backup_id)
@@ -448,6 +562,20 @@ def restore_cinder_backup(backup_id, volume_id, con_ssh):
 
 
 def restore_from_cinder_backups(volumes, con_ssh):
+    """
+    Restore specified cinder volumes using cinder-backup CLIs
+
+    Args:
+        volumes:
+            - ID of cinder volumes to restore
+
+        con_ssh:
+            - ssh connection to the target lab
+
+    Return:
+        code, volume IDs
+    """
+
     LOG.info('Restore volumes using new cinder backup CLI')
     backup_volumes = {volume_id: backup_id for backup_id, volume_id in get_backup_list(con_ssh)}
 
