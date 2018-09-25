@@ -70,8 +70,9 @@ def configure_dovetail_server(hosts_per_personality):
 
     """
     con_ssh = ControllerClient.get_active_controller()
-    nova_proc_count = int(con_ssh.exec_cmd('ps -fC nova-api | grep nova | wc -l')[1])
-    assert nova_proc_count > 0, "0 nova-api processes running on active controller"
+    # # Do not modify the tool
+    # nova_proc_count = int(con_ssh.exec_cmd('ps -fC nova-api | grep nova | wc -l')[1])
+    # assert nova_proc_count > 0, "0 nova-api processes running on active controller"
 
     LOG.fixture_step("Update {} on dovetail test node".format(Dovetail.ENV_SH))
     admin_dict = Tenant.get('admin')
@@ -102,10 +103,11 @@ def configure_dovetail_server(hosts_per_personality):
         compliance_ssh.exec_sudo_cmd('sed -i "s/^  min_compute_nodes:.*/  min_compute_nodes: {}/g" {}'.
                                      format(len(hosts_per_personality['compute']), Dovetail.TEMPEST_YAML))
 
-        LOG.fixture_step("Update nova-api process count in docker overlay monitor_process.py")
-        file_path = compliance_ssh.exec_sudo_cmd("find / -name monitor_process.py")[1]
-        LOG.fixture_step('Fixing monitor.py located at {}'.format(file_path))
-        compliance_ssh.exec_sudo_cmd("sed -ie 's/processes=.*/processes={}/g' {}".format(nova_proc_count, file_path))
+        # # Do not modify the tool
+        # LOG.fixture_step("Update nova-api process count in docker overlay monitor_process.py")
+        # file_path = compliance_ssh.exec_sudo_cmd("find / -name monitor_process.py")[1]
+        # LOG.fixture_step('Fixing monitor.py located at {}'.format(file_path))
+        # compliance_ssh.exec_sudo_cmd("sed -ie 's/processes=.*/processes={}/g' {}".format(nova_proc_count, file_path))
 
         compliance_helper.add_route_for_vm_access(compliance_ssh)
 
