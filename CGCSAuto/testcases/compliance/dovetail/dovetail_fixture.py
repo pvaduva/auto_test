@@ -121,7 +121,7 @@ def configure_dovetail_server(hosts_per_personality):
     for host in controllers:
         node_ip = con_ssh.exec_cmd('nslookup {} | grep -A 2 "Name:" | grep --color=never "Address:"'.
                                    format(host), fail_ok=False)[1].split('Address:')[1].strip()
-        yaml_nodes.append({'name': node_count,
+        yaml_nodes.append({'name': 'node{}'.format(node_count),
                            'role': 'Controller',
                            'ip': node_ip,
                            'user': 'root',
@@ -132,7 +132,7 @@ def configure_dovetail_server(hosts_per_personality):
     for compute in computes:
         node_ip = con_ssh.exec_cmd('nslookup {} | grep -A 2 "Name:" | grep --color=never "Address:"'.
                                    format(compute), fail_ok=False)[1].split('Address:')[1].strip()
-        yaml_nodes.append({'name': node_count,
+        yaml_nodes.append({'name': 'node{}'.format(node_count),
                            'role': 'Compute',
                            'ip': node_ip,
                            'user': 'root',
