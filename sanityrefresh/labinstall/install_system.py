@@ -2432,12 +2432,6 @@ def main():
                     msg = "Failed to override avs lab_setup.conf"
                     log.error(msg)
                     wr_exit()._exit(1, msg)
-                cmd = "touch .this_didnt_work"
-                rc, output = controller0.ssh_conn.exec_cmd(cmd)
-                if rc != 0:
-                    msg = "Failed to disable heat stacks"
-                    log.error(msg)
-                    wr_exit()._exit(1, msg)
 
             run_labsetup()
             # Test if the node is locked before attempting an unlock
@@ -2469,6 +2463,14 @@ def main():
     if rc == 2:
         log.info("Use fm alarm-list instead of system alarm-list")
         fm_alarm = True
+    
+    if fm_alarm:
+        cmd = "touch .this_didnt_work"
+        rc, output = controller0.ssh_conn.exec_cmd(cmd)
+        if rc != 0:
+            msg = "Failed to disable heat stacks"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     if stop == "3":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
