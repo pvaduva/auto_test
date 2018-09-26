@@ -4,7 +4,7 @@ import time
 from pytest import skip
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import UUID, Prompt, Networks, SysType
+from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID
 from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
@@ -3636,3 +3636,18 @@ def get_networks(rtn_val='type', con_ssh=None, **kwargs):
     table_ = table_parser.table(cli.system('network-list', positional_args='--nowrap', ssh_client=con_ssh))
     return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
 
+
+def enable_port_security_param():
+    code = create_service_parameter(service='network', section='ml2', name='extension_drivers',
+                                    value='port_security', apply=False)[0]
+    if 0 == code:
+        LOG.info("Apply network service parameter and lock/unlock computes")
+        from keywords.host_helper import get_up_hypervisors, lock_unlock_hosts
+        apply_service_parameters(service='network', wait_for_config=False)
+        computes = get_up_hypervisors()
+        for host in computes:
+            wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=host, timeout=30)
+
+        time.sleep(60)
+        lock_unlock_hosts(computes)
+        wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=60)

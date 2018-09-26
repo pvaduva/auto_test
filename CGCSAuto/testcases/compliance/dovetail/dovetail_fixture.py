@@ -51,6 +51,15 @@ def pre_configs(request):
 
     all_hosts = list(set(controllers + computes + storages))
 
+    LOG.fixture_step("Enable port_security for the system and update existing networks")
+    port_security = network_helper.get_net_show_values('external-net0', 'port_security_enabled')[0]
+    port_security = eval(port_security)
+    if not port_security:
+        system_helper.enable_port_security_param()
+        networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
+        for net in networks:
+            network_helper.set_network(net_id=net, enable_port_security=True)
+
     LOG.fixture_step("Ensure dovetail test node mgmt nic connects to lab under test")
     compliance_helper.update_dovetail_mgmt_interface()
     configure_tis(all_hosts, request=request)

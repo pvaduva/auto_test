@@ -31,15 +31,7 @@ def base_vm(setups):
 @fixture(scope='module')
 def setups(request):
     LOG.fixture_step("Add port_security service parameter")
-    code = system_helper.create_service_parameter(service='network', section='ml2', name='extension_drivers',
-                                                  value='port_security', apply=False)[0]
-    if 0 == code:
-        system_helper.apply_service_parameters(service='network', wait_for_config=False)
-        computes = host_helper.get_up_hypervisors()
-        for host in computes:
-            system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=host, timeout=30)
-        host_helper.lock_unlock_hosts(computes)
-        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=60)
+    system_helper.enable_port_security_param()
 
     network_quota = network_helper.get_quota('network')
     instance_quota = nova_helper.get_quotas('instances')[0]

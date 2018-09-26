@@ -371,10 +371,10 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.get('admi
     return value
 
 
-def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=None):
+def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=None, auth_info=None):
     if isinstance(fields, str):
         fields = [fields]
-    table_ = table_parser.table(cli.openstack('network show', net_id, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('network show', net_id, ssh_client=con_ssh, auth_info=auth_info))
     res = {}
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
@@ -419,18 +419,18 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
     """
     args_dict = {
         '--name': (name, {'name': name}),
-        '--enable': ('store_true' if enable is True else None, {'admin_state_up': 'UP'}),
-        '--disable': ('store_true' if enable is False else None, {'admin_state_up': 'DOWN'}),
-        '--share': ('store_true' if share is True else None, {'shared': 'True'}),
-        '--no-share': ('store_true' if share is False else None, {'shared': 'False'}),
-        '--enable-port-security': ('store_true' if enable_port_security is True else None, {}),
-        '--disable-port-security': ('store_true' if enable_port_security is False else None, {}),
-        '--external': ('store_true' if external is True else None, {'router:external': 'External'}),
-        '--internal': ('store_true' if external is False else None, {'router:external': 'Internal'}),
-        '--default': ('store_true' if default is True else None, {'is_default': 'True'}),
-        '--no-default': ('store_true' if default is False else None, {'is_default': 'False'}),
-        '--transparent-vlan': ('store_true' if transparent_vlan is True else None, {'vlan_transparent': 'True'}),
-        '--no-transparent-vlan': ('store_true' if transparent_vlan is False else None, {'vlan_transparent': 'False'}),
+        '--enable': (True if enable is True else None, {'admin_state_up': 'UP'}),
+        '--disable': (True if enable is False else None, {'admin_state_up': 'DOWN'}),
+        '--share': (True if share is True else None, {'shared': 'True'}),
+        '--no-share': (True if share is False else None, {'shared': 'False'}),
+        '--enable-port-security': (True if enable_port_security is True else None, {'port_security_enabled': 'True'}),
+        '--disable-port-security': (True if enable_port_security is False else None, {'port_security_enabled': 'False'}),
+        '--external': (True if external is True else None, {'router:external': 'External'}),
+        '--internal': (True if external is False else None, {'router:external': 'Internal'}),
+        '--default': (True if default is True else None, {'is_default': 'True'}),
+        '--no-default': (True if default is False else None, {'is_default': 'False'}),
+        '--transparent-vlan': (True if transparent_vlan is True else None, {'vlan_transparent': 'True'}),
+        '--no-transparent-vlan': (True if transparent_vlan is False else None, {'vlan_transparent': 'False'}),
         '--provider-network-type': (provider_net_type, {'provider:network_type': provider_net_type}),
         '--provider-physical-network': (provider_phy_net, {'provider:physical_network': provider_phy_net}),
         '--provider-segment': (provider_segment, {'provider:segmentation_id': provider_segment}),
@@ -440,7 +440,7 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
     for arg in args_dict:
         val, check = args_dict[arg]
         if val is not None:
-            set_val = '' if val == 'store_true' else ' {}'.format(val)
+            set_val = '' if val is True else ' {}'.format(val)
             args_str += ' {}{}'.format(arg, set_val)
             if check:
                 checks.update(**check)
@@ -468,7 +468,7 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
 
     if checks:
         LOG.info("Check the values are updated to following in network show: {}".format(checks))
-        actual_res = get_net_show_values(net_id, fields=list(checks.keys()), rtn_dict=True)
+        actual_res = get_net_show_values(net_id, fields=list(checks.keys()), rtn_dict=True, auth_info=auth_info)
         failed = {}
         for field in checks:
             expt_val = checks[field]
