@@ -3,8 +3,8 @@ import random
 from pytest import fixture, mark
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus, EventLogID
-from keywords import network_helper, nova_helper, vm_helper, system_helper, host_helper
+from consts.cgcs import VMStatus
+from keywords import network_helper, nova_helper, vm_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 

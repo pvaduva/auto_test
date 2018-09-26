@@ -1,13 +1,15 @@
-from pytest import fixture, mark, skip
 import random
+
+from pytest import fixture, mark, skip
+
 from utils import table_parser
 from utils.tis_log import LOG
 from utils import cli
-
 from consts.auth import Tenant
+from consts.cli_errs import NetworkingErr
 from keywords import host_helper, network_helper, common
 from testfixtures.recover_hosts import HostsToRecover
-from consts.cli_errs import NetworkingErr
+
 
 pro_net_name = 'provider_vxlan'
 
@@ -215,8 +217,8 @@ def test_vxlan_valid_ttl_negative(the_ttl, providernet_):
     if code > 0:
         LOG.info("Expect fail when TTL is not in range (1, 255)")
         assert NetworkingErr.VXLAN_TTL_RANGE_MISSING in err_info or \
-               NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info or \
-               NetworkingErr.VXLAN_TTL_RANGE_TOO_SMALL in err_info
+            NetworkingErr.VXLAN_TTL_RANGE_TOO_LARGE in err_info or \
+            NetworkingErr.VXLAN_TTL_RANGE_TOO_SMALL in err_info
     else:
         network_helper.delete_providernet_range(range_name)
         assert 1 == code, "Should not pass when TTL is our of range 1 to 255"
@@ -300,7 +302,7 @@ def test_vxlan_same_providernet_overlapping_segmentation_negative(r_min, r_max, 
         LOG.info("Expect fail when two ranges on the same provider network have overlapping segmentation ranges")
         assert NetworkingErr.OVERLAP_SEGMENTATION_RANGE in err_info
     else:
-        assert False, "Should not pass when the two ranges on the same provider-nt have overlapping seg ranges"
+        assert False, "Should not pass when the two ranges on the same providernet have overlapping seg ranges"
 
 
 @fixture(scope='module')
@@ -315,61 +317,52 @@ def multiple_provider_net_range(request):
     provider_ids = []
     for provider in providernet_names:
         args = provider + ' --type=vxlan'
-        code, output = cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), fail_ok=True, rtn_list=True)
-
-        if not code:
-            table_ = table_parser.table(output)
+        code, out = cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), fail_ok=True, rtn_list=True)
+        if code == 0:
+            table_ = table_parser.table(out)
             provider_ids.append(table_parser.get_value_two_col_table(table_, 'id'))
         else:
             provider_ids.append(network_helper.get_providernets(strict=True, type='vxlan', name=provider)[0])
 
     # Create interface to associate with the two provider-nets
-
     nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
-
     if not nova_hosts:
         skip("Can not continue without computer host node")
 
-        # find a free interface
-    computer_host = ""
+    # find a free interface
+    computer_host = if_name = None
     for nova_host in nova_hosts:
-        args = '{} {}'.format(nova_host , "-a --nowrap")
+        args = '{} {}'.format(nova_host, "-a --nowrap")
         table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.get('admin')))
         list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'class': 'None',
                                                                      'used by i/f': '[]'})
 
         if list_interfaces:
             computer_host = nova_host
+            if_name = random.choice(list_interfaces)
             break
     else:
         skip("Can not find a free data interface")
-
-    # Find a free port from host-if-list -a
-    if_name = random.choice(list_interfaces)
 
     host_helper.lock_host(computer_host, swact=True)
     HostsToRecover.add(computer_host, scope='module')
 
     # Create an interface associate with the two providers just create
     interface = 'test0if'
-    args = computer_host + ' ' + interface + ' ae '
-    #  args += r'"{},{}" '.format(provider_ids[0], provider_ids[1])   id is not working for if add
-    args += r'"{},{}" '.format(providernet_names[0], providernet_names[1])
-    args += if_name + ' -nt data --ipv4-mode=static -m {}'.format(1600)
-    cli.system('host-if-add', args, auth_info=Tenant.get('admin'), rtn_list=True)
+    host_helper.add_host_interface(computer_host, if_name=interface, if_type='ae', ports_or_ifs=if_name, mtu=1600,
+                                   pnet=','.join(providernet_names[:2]), if_class='data', ipv4_mode='static',
+                                   lock_unlock=False)
 
     # the name of the range is: providernet_names[0]_range
     range_name = providernet_names[0] + '_range'
-
     code, range_name = create_vxlan_providernet_range(provider_ids[0], range_name=range_name, range_min=r_min,
                                                       range_max=r_max)
+
     def fin_teardown():
         # Clean up: remove the ranges and providers just created
         network_helper.delete_providernet_range(range_name)
-
-        for provider in providernet_names:
-            cli.neutron('providernet-delete', provider, auth_info=Tenant.get('admin'))
-
+        for pnet in providernet_names:
+            cli.neutron('providernet-delete', pnet, auth_info=Tenant.get('admin'))
     request.addfinalizer(fin_teardown)
 
     if code > 0:
@@ -476,10 +469,9 @@ def test_vxlan_mtu_value_negative(multiple_provider_net_range, the_mtu):
         cli.system('host-if-delete', args, auth_info=Tenant.get('admin'))
 
     LOG.tc_step("Create interface with MTU={} less then the one from provider MTU=1500+x".format(the_mtu))
-    args = computer_host + ' ' + new_interface + ' ae ' + providernet_names[0] + ' ' + if_name
-    args += ' -nt data -m {}'.format(the_mtu)
-
-    code, err_info = cli.system('host-if-add', args, auth_info=Tenant.get('admin'), fail_ok=True, rtn_list=True)
+    code, err_info = host_helper.add_host_interface(computer_host, if_name=new_interface, if_type='ae',
+                                                    pnet=providernet_names[0], ports_or_ifs=if_name, mtu=the_mtu,
+                                                    if_class='data', lock_unlock=False, fail_ok=True)
 
     LOG.tc_step("Verify the interface creation should be failed")
     if code > 0:
