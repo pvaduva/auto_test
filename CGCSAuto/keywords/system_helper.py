@@ -131,6 +131,7 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
         controller (str): controller to check
         use_telnet
         con_telnet
+        auth_info
 
     Returns (bool): True if CPE or Simplex, else False
 
@@ -172,6 +173,7 @@ def get_controllers(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=T
         con_ssh (SSHClient):
         use_telnet
         con_telnet
+        auth_info
 
     Returns (list): list of hostnames
 
@@ -211,6 +213,7 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
         con_ssh (dict):
         use_telnet
         con_telnet
+        auth_info
 
     Returns (list): hostnames
 
@@ -570,6 +573,7 @@ def get_events(rtn_vals=('Event Log ID', 'Entity Instance ID'), limit=10, event_
         show_uuid (bool): Whether to show uuid in event table
         start (str): display events after this time stamp
         end (str): display events prior to this time stamp
+        state (str): filter with events state
         time_stamp (str): exact timestamp for the event, filter after events displayed
         uuid (str)
         strict (bool): whether to perform strict filter on reason text, or time_stamp
@@ -918,8 +922,8 @@ def _get_alarms(alarms_tab):
 
 
 def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=None, severity=None, timeout=60,
-                   check_interval=3, regex=False, strict=False, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                   use_telnet=False, con_telnet=None):
+                   check_interval=3, regex=False, strict=False, fail_ok=False, con_ssh=None,
+                   auth_info=Tenant.get('admin'), use_telnet=False, con_telnet=None):
     """
     Wait for given alarm to appear
     Args:
@@ -1269,7 +1273,8 @@ def get_dns_servers(con_ssh=None):
     return table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
 
 
-def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), nameservers=None, with_action_option=None):
+def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), nameservers=None,
+                    with_action_option=None):
     """
     Set the DNS servers
 
@@ -1547,6 +1552,7 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
         wait_for_update (bool): wait for vm_hp_pending_2M and vm_hp_pending_1G to be None (CGTS-7499)
         con_ssh (SSHClient):
         auth_info (dict):
+        rtn_dict
 
     Returns (dict|list):  {<proc>(int): <mems>(list), ... } or [<proc0_mems>(list), <proc1_mems>(list), ...]
         e.g., {0: [62018, 1]}
@@ -1871,7 +1877,7 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
     Args:
         host (str):
         rtn_val (str): header for return info
-        net_type (str|list|tuple): valid values: 'data', 'infra', 'mgmt', 'None' (string 'None' as opposed to None type)
+        net_type (str|list|tuple): valid values: 'oam', 'data', 'infra', 'mgmt', 'None'(string instead of None type)
         if_type (str): possible values: 'ethernet', 'ae', 'vlan'
         uses_ifs (str):
         used_by_ifs (str):
@@ -1890,17 +1896,18 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
 
     if isinstance(net_type, str):
         net_type = [net_type]
-    networks = []
-    if_classes = []
-    for net in net_type:
-        network = net
-        if_class = net
-        if net == 'None':
+    networks = if_classes = None
+    if net_type is not None:
+        networks = []
+        if_classes = []
+        for net in net_type:
             network = ''
-        elif net in ('mgmt', 'oam', 'infra'):
-            if_class = 'platform'
-        networks.append(network)
-        if_classes.append(if_class)
+            if_class = net
+            if net in ('mgmt', 'oam', 'infra'):
+                if_class = 'platform'
+                network = net
+            networks.append(network)
+            if_classes.append(if_class)
 
     args_tmp = {
         'class': if_classes,
@@ -1916,7 +1923,7 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
     table_ = table_parser.filter_table(table_, strict=strict, regex=regex, exclude=exclude, **kwargs)
 
     # exclude the platform interface that does not have desired net_type
-    if 'platform' in if_classes:
+    if if_classes is not None and 'platform' in if_classes:
         platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
         for pform_if in platform_ifs:
             if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks', con_ssh=con_ssh)[0]
@@ -1945,19 +1952,18 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
 
     """
     table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
-    network = if_class = net_type
-    if net_type == 'None':
-        network = ''
-    elif net_type in ('mgmt', 'oam', 'infra'):
+    if_class = net_type
+    network = ''
+    if net_type in ('mgmt', 'oam', 'infra'):
         if_class = 'platform'
+        network = net_type
 
     table_ = table_parser.filter_table(table_, **{'class': if_class})
     # exclude unmatched platform interfaces from the table.
     if 'platform' == if_class:
         platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
         for pform_if in platform_ifs:
-            if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks',
-                                                            con_ssh=con_ssh)[0]
+            if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks', con_ssh=con_ssh)[0]
             if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
             if network not in if_nets:
                 table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
@@ -3118,8 +3124,8 @@ def get_network_values(header='uuid', uuid=None, ntype=None, mtu=None, link_capa
     return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None, ntype=None, name=None, auth_info=Tenant.get('admin'),
-                       con_ssh=None, strict=True, regex=None, **kwargs):
+def get_cluster_values(header='uuid', uuid=None, cluster_uuid=None, ntype=None, name=None,
+                       auth_info=Tenant.get('admin'), con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get cluster values from system cluster-list
     Args:

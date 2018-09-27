@@ -9,8 +9,7 @@ from consts.proj_vars import ProjVar, ComplianceVar
 from consts.compliance import Dovetail
 from consts.cgcs import HostAvailState
 from consts.auth import HostLinuxCreds, ComplianceCreds, Tenant, CliAuth
-from keywords import host_helper, system_helper, nova_helper, network_helper, cinder_helper, keystone_helper, common, \
-    compliance_helper
+from keywords import host_helper, system_helper, network_helper, keystone_helper, common, compliance_helper
 
 TEST_NODE_PROMPT = '.*@.*:.* '
 
@@ -181,11 +180,8 @@ def configure_tis(hosts, request):
                 __config_sshd(hosts=hosts, revert=True)
             request.addfinalizer(_revert_sshd)
 
-    LOG.fixture_step("Update Quotas for admin tenant")
-    tenant = Tenant.get('admin')['tenant']
-    nova_helper.update_quotas(tenant=tenant, instances=20, cores=50)
-    cinder_helper.update_quotas(tenant=tenant, volumes=100, snapshots=100)
-    network_helper.update_quotas(tenant_name=tenant, port=500, floatingip=100, subnet=100, network=100)
+    LOG.fixture_step("Update quotas for admin project")
+    compliance_helper.create_tenants_and_update_quotas(new_tenants_index=None)
 
     return hosts_configured
 

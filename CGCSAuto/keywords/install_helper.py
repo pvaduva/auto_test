@@ -2998,7 +2998,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
         con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
                           dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
 
-    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
+    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, ssh_client=con_ssh) \
             as node_ssh:
 
         if node_ssh.exec_cmd("ls {}".format(clone_image_iso_dest_path))[0] != 0:

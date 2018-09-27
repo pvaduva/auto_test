@@ -5,11 +5,11 @@ from pytest import skip
 
 from utils.tis_log import LOG
 from utils.clients.ssh import ContainerClient, SSHClient
-from consts.compliance import VM_ROUTE_VIA, Dovetail
+from consts.compliance import VM_ROUTE_VIA, Dovetail, USER_PASSWORD
 from consts.auth import Tenant, ComplianceCreds, CumulusCreds
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar
-from keywords import network_helper, vm_helper, nova_helper
+from keywords import network_helper, vm_helper, nova_helper, keystone_helper, cinder_helper
 
 
 def add_route_for_vm_access(compliance_client):
@@ -154,3 +154,25 @@ def update_dovetail_mgmt_interface():
         dovetail_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name), expect_timeout=180)
         dovetail_ssh.exec_cmd('ip addr')
         network_helper.ping_server(server='192.168.204.3', ssh_client=dovetail_ssh, fail_ok=False)
+
+
+def create_tenants_and_update_quotas(new_tenants_index=(3, 6)):
+    """
+    Create tenant3-6 and update quotas for admin and the new tenants
+
+    """
+    projects = ['admin']
+    if new_tenants_index:
+        for i in range(new_tenants_index[0], new_tenants_index[1]+1):
+            name = 'tenant{}'.format(i)
+            keystone_helper.create_project(name=name, description=name, rtn_exist=True)
+            keystone_helper.create_user(name=name, rtn_exist=True, password=USER_PASSWORD)
+            for role in ('_member_', 'admin'):
+                user = 'admin' if role == 'admin' else name
+                keystone_helper.add_or_remove_role(role=role, project=name, user=user)
+            projects.append(name)
+
+    for project in projects:
+        nova_helper.update_quotas(tenant=project, instances=20, cores=50)
+        cinder_helper.update_quotas(tenant=project, volumes=30, snapshots=20)
+        network_helper.update_quotas(tenant_name=project, port=500, floatingip=50, subnet=100, network=100)

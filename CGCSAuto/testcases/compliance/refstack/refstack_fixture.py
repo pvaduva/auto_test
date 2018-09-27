@@ -7,7 +7,7 @@ from utils.clients.local import LocalHostClient
 from consts.cgcs import FlavorSpec
 from consts.auth import Tenant, SvcCgcsAuto, ComplianceCreds
 from consts.proj_vars import ComplianceVar, ProjVar
-from consts.compliance import RefStack
+from consts.compliance import RefStack, USER_PASSWORD
 from keywords import keystone_helper, nova_helper, cinder_helper, network_helper, glance_helper, storage_helper, \
     compliance_helper
 
@@ -44,24 +44,8 @@ def refstack_setup(refstack_pre_check, request):
     LOG.fixture_step("Enable Swift if not already done")
     storage_helper.modify_swift(enable=True)
 
-    primary_tenant = keystone_helper.get_projects(auth_info=None)[0]
-    append_str = re.findall('tenant\d+(.*)', primary_tenant)[0]
-
     LOG.fixture_step("Create tenants, users, and update quotas")
-    projects = ['admin']
-    for i in range(3, 7):
-        name = 'tenant{}{}'.format(i, append_str)
-        keystone_helper.create_project(name=name, description=name, rtn_exist=True)
-        keystone_helper.create_user(name=name, rtn_exist=True, password=RefStack.USER_PASSWORD)
-        for role in ('_member_', 'admin'):
-            user = 'admin' if role == 'admin' else name
-            keystone_helper.add_or_remove_role(role=role, project=name, user=user)
-        projects.append(name)
-
-    for project in projects:
-        nova_helper.update_quotas(tenant=project, instances=20, cores=50)
-        cinder_helper.update_quotas(tenant=project, volumes=30, snapshots=20)
-        network_helper.update_quotas(tenant_name=project, port=500, floatingip=50, subnet=100, network=100)
+    compliance_helper.create_tenants_and_update_quotas()
 
     LOG.fixture_step("Create test flavors")
     flavors = []

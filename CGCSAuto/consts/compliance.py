@@ -1,5 +1,6 @@
 
 VM_ROUTE_VIA = '10.10.10.50'
+USER_PASSWORD = 'Test1234@'
 
 
 class RefStack:

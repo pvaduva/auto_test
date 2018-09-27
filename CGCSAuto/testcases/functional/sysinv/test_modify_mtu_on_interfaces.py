@@ -363,10 +363,9 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
 def get_ifs_to_mod(host, network_type, mtu_val):
     table_ = table_parser.table(cli.system('host-if-list', '{} --nowrap'.format(host)))
 
-    network = if_class = network_type
-    if network_type == 'None':
-        network = ''
-    elif network_type in ('mgmt', 'oam', 'infra'):
+    if_class = network_type
+    network = ''
+    if network_type in ('mgmt', 'oam', 'infra'):
         if_class = 'platform'
 
     table_ = table_parser.filter_table(table_, **{'class': if_class})

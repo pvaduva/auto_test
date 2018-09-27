@@ -44,10 +44,8 @@ class IxiaResource(object):
         for res in cls.resources:
             r, msg = ssh_client.exec_cmd("test -f {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=True)
             if r:   # file does not exist
-                r, msg = ssh_client.exec_cmd(
-                    "mkdir -p {}".format(cls.nat_dest_path), fail_ok=False)
-                r, msg = ssh_client.exec_cmd(
-                    "touch {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=False)
+                ssh_client.exec_cmd("mkdir -p {}".format(cls.nat_dest_path), fail_ok=False)
+                ssh_client.exec_cmd("touch {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=False)
                 return res
 
     @classmethod
@@ -828,7 +826,7 @@ class IxiaSession(object):
         Args:
             obj_ref (str):
                 the identifier for the object
-            **kwargs (dict):
+            **kwargs:
                 attributeName==attributeValue
                 to be tested
 

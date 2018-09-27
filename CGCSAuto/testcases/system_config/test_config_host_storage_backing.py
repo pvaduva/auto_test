@@ -3,7 +3,7 @@ from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, nova_helper, vm_helper
+from keywords import host_helper, system_helper, vm_helper
 
 
 @fixture(autouse=True)
