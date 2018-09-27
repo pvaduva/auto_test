@@ -223,8 +223,7 @@ class TestMutiPortsPCI:
         if not avail_net:
             skip(SkipHostIf.PCI_IF_UNAVAIL)
 
-        LOG.info("Internal network(s) available for pcipt and sriov: {}".format(avail_net))
-
+        LOG.info("Internal network(s) selected for pcipt and sriov: {}".format(avail_net))
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='class')
