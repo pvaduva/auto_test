@@ -18,7 +18,7 @@ from utils.tis_log import LOG
 
 def id_gen(val):
     if isinstance(val, (list, tuple)):
-        val = '_'.join([str(val_) for val_ in val])
+        val = '_'.join([str(val_).replace('::', ':_') for val_ in val])
 
     return val
 

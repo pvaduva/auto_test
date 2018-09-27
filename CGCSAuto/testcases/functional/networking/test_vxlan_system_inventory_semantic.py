@@ -599,7 +599,7 @@ def test_route_gateway_ip_validation(set_interface_ip_):
 
 @mark.p3
 @mark.parametrize(('gateway', 'nt', 'prefix'), [
-    ('192.168.102.0', 'FE80::', 64),    # fail expected
+    ('192.168.102.0', 'FE80:_', 64),    # fail expected
     ('FE80:0000:0000:0000:0202:B3FF:FE1E:0000', '192.168.102.0', 24),    # fail expected
 ])
 def test_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, nt, prefix):
@@ -624,7 +624,7 @@ def test_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, n
     Returns:
 
     """
-
+    nt = nt.replace(':_', '::')
     compute, provider, new_interface_ = set_interface_ip_
 
     metric = 16
