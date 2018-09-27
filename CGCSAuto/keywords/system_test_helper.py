@@ -1,16 +1,19 @@
-import ipaddress, time, re
+import time
+import ipaddress
 from contextlib import ExitStack
-from utils.tis_log import LOG
+
+from pytest import skip
+
 from utils import cli, table_parser
-from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, \
-    network_helper
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
-from utils.clients.ssh import ControllerClient,NATBoxClient
+from utils.tis_log import LOG
+from utils.multi_thread import MThread
+from utils.clients.ssh import ControllerClient, NATBoxClient
 from consts.auth import HostLinuxCreds, Tenant
 from consts.cgcs import GuestImages
-from utils.multi_thread import MThread
-from pytest import skip
+from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from consts.timeout import HostTimeout
+from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, \
+    network_helper
 
 
 def get_all_vms():
@@ -42,7 +45,6 @@ def get_all_vms_status():
     Returns: (dict): {vm_id1:vm_status, vm_id2:vm_status, ...}
 
     """
-    #vm_ids = nova_helper.get_vms()
     vm_status_dict = nova_helper.get_vms_info(get_all_vms())
 
     return vm_status_dict
@@ -147,7 +149,7 @@ def launch_heat_stack():
         pre_req_params = '-f {} -P LOCATION={} {}'.format(pre_req_template_path, image_file_path, pre_req_stack_name)
         LOG.info("Creating heat stack for pre-req, images and flavors")
         heat_helper.create_stack(stack_name=pre_req_stack_name, params_string=pre_req_params,
-                             auth_info=Tenant.get('admin'), cleanup=None)
+                                 auth_info=Tenant.get('admin'), cleanup=None)
 
     keypair_stack_name = 'Tenant1_Keypair'
     stack_id_key_pair = heat_helper.get_stacks(name=keypair_stack_name)
@@ -205,7 +207,7 @@ def sys_lock_unlock_hosts(number_of_hosts_to_lock):
     for vm_list in vms_to_check:
         vm_helper.wait_for_vms_values(vms=vm_list, fail_ok=False)
 
-    for host,vms in zip(compute_to_lock , vms_to_check):
+    for host, vms in zip(compute_to_lock, vms_to_check):
         for vm in vms:
             vm_host = nova_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
@@ -248,7 +250,7 @@ def sys_evacuate_from_hosts(number_of_hosts_to_evac):
         LOG.warning("There are only {} computes available with more than 5 vms ".format(len(computes_to_reboot)))
 
     for host, vms in zip(computes_to_reboot, vms_to_check):
-        new_thread = MThread(vm_helper.evacuate_vms,host, vms, vlm=False)
+        new_thread = MThread(vm_helper.evacuate_vms, host, vms, vlm=False)
         new_thread.start_thread(timeout=timeout+30)
         hosts_threads.append(new_thread)
 
@@ -259,7 +261,7 @@ def sys_evacuate_from_hosts(number_of_hosts_to_evac):
     for vm_list in vms_to_check:
         vm_helper.wait_for_vms_values(vms=vm_list, fail_ok=False)
 
-    for host,vms in zip(computes_to_reboot , vms_to_check):
+    for host, vms in zip(computes_to_reboot, vms_to_check):
         for vm in vms:
             vm_host = nova_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
@@ -277,8 +279,6 @@ def sys_reboot_storage():
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(storages))
     try:
         vlm_helper.power_off_hosts_simultaneously(storages)
-    except:
-        raise
     finally:
         LOG.tc_step("Wait for 60 seconds and power on hosts: {}".format(storages))
         time.sleep(60)
@@ -307,7 +307,7 @@ def launch_lab_setup_tenants_vms():
         con_ssh.exec_cmd(cmd1)
         con_ssh.exec_cmd(script_name, fail_ok=False)
 
-        stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
+    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
     # may be better to delete all tenant stacks if any
     if not stack_id_t1:
         stack_params = '-f {} {}'.format(stack1, stack1_name)
@@ -377,11 +377,11 @@ def sys_reboot_standby(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    for i in range (0, number_of_times):
+    for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
-        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
         LOG.tc_step("'sudo reboot -f' from {}".format(standby))
-        host_helper.reboot_hosts(hostname=standby)
+        host_helper.reboot_hosts(hostnames=standby)
 
         LOG.tc_step("Check vms status after stanby controller reboot")
         vms = get_all_vms()
@@ -396,9 +396,9 @@ def sys_controlled_swact(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    for i in range (0, number_of_times):
+    for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
-        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
         LOG.tc_step("'sudo reboot -f' from {}".format(standby))
         host_helper.swact_host(hostname=active)
 
@@ -415,9 +415,9 @@ def sys_uncontrolled_swact(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    for i in range (0, number_of_times):
+    for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
-        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
         LOG.tc_step("'sudo reboot -f' from {}".format(standby))
         host_helper.reboot_hosts(hostnames=active)
 
@@ -434,9 +434,9 @@ def sys_lock_unlock_standby(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    for i in range (0, number_of_times):
+    for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
-        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i,number_of_times))
+        LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
         LOG.tc_step("'sudo reboot -f' from {}".format(standby))
         host_helper.lock_host(host=standby)
 
@@ -466,7 +466,7 @@ def ping_all_vms_from_nat_box():
     timeout = 1000
     vm_threads = []
     for vm in ips_list:
-        new_thread = MThread(network_helper.ping_server(vm,natbox_client))
+        new_thread = MThread(network_helper.ping_server(vm, natbox_client))
         new_thread.start_thread(timeout=timeout+30)
         vm_threads.append(new_thread)
         time.sleep(5)
