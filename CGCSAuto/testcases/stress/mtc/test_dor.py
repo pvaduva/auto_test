@@ -4,6 +4,7 @@ from pytest import mark
 from utils.tis_log import LOG
 from utils import local_host
 from consts.timeout import HostTimeout
+from consts.cgcs import EventLogID
 from consts.vlm import VlmAction
 from keywords import system_helper, vlm_helper, host_helper, vm_helper, network_helper
 from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
@@ -61,3 +62,8 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+    computes = host_helper.get_hypervisors()
+    if len(computes) >= 4:
+        system_helper.wait_for_alarm(alarm_id=EventLogID.MULTI_NODE_RECOVERY, timeout=120)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.MULTI_NODE_RECOVERY, check_interval=60, timeout=1200)
