@@ -218,12 +218,12 @@ class TestMutiPortsPCI:
     @fixture(scope='class')
     def base_setup_pci(self):
         LOG.fixture_step("(class) Get an internal network that supports both pci-sriov and pcipt vif to boot vm")
-        avail_nets, CX_for_pcipt = network_helper.get_pci_vm_network(pci_type='pci-passthrough',
-                                                                     net_name='internal0-net')
-        if not avail_nets:
+        avail_net = network_helper.get_pci_vm_network(pci_type=('pci-passthrough', 'pci-sriov'),
+                                                      net_name='internal0-net')
+        if not avail_net:
             skip(SkipHostIf.PCI_IF_UNAVAIL)
 
-        LOG.info("Internal network(s) available for pcipt and sriov: {}".format(avail_nets))
+        LOG.info("Internal network(s) available for pcipt and sriov: {}".format(avail_net))
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
@@ -232,18 +232,17 @@ class TestMutiPortsPCI:
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-        internal_net_name = avail_nets[0]
+        extra_pcipt_net = None
+        extra_pcipt_net_name = None
+        if isinstance(avail_net, list):
+            LOG.info("cx4 pcipt internal net(s): {}".format(avail_net))
+            avail_net, extra_pcipt_net_name = avail_net
+            extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
+
+        internal_net_name = avail_net
         mgmt_net_id = network_helper.get_mgmt_net_id()
         tenant_net_id = network_helper.get_tenant_net_id()
         internal_net_id = network_helper.get_internal_net_id(net_name=internal_net_name, strict=True)
-
-        extra_pcipt_net = None
-        extra_pcipt_net_name = None
-
-        if CX_for_pcipt:
-            LOG.info("internal_net_name: {}; pript nets: {}".format(internal_net_name, avail_nets))
-            extra_pcipt_net_name = avail_nets[1]
-            extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
 
         vif_type = 'avp' if system_helper.is_avs() else 'e1000'
         nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
