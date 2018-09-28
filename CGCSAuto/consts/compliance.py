@@ -36,6 +36,7 @@ class Dovetail:
         'yow-cgcs-ironpass-1-4',
         'yow-cgcs-ironpass-14-17',
         'yow-cgcs-ironpass-20-27',
+        'yow-cgcs-ironpass-31-32',
         'yow-cgcs-r720-1-2',
         'yow-cgcs-r720-3-7',
         # 'yow-cgcs-pv-1',      IPv6 lab, does not work with cumulus lab mgmt network setting (ipv4)
