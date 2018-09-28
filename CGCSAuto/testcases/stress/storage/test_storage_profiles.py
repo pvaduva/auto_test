@@ -69,7 +69,7 @@ from utils.tis_log import LOG
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.clients.ssh import ControllerClient
 
-profiles_to_delete = []
+PROFILES_TO_DELETE = []
 DISK_DETECTION_TIMEOUT = 60
 
 
@@ -80,45 +80,12 @@ def delete_profiles_teardown(request):
         Delete any profiles that were created as part of the tests.
         """
 
-        global profiles_to_delete
+        global PROFILES_TO_DELETE
 
         LOG.info("Deleting created profiles")
-        for profile in profiles_to_delete:
+        for profile in PROFILES_TO_DELETE:
             system_helper.delete_storage_profile(profile)
     request.addfinalizer(teardown)
-
-
-def modify_storage_backing(host, backing):
-    """
-    Give a hostname, apply a new storage backing.
-
-    Arguments:
-    - Host (string) - hostname, e.g. compute-3
-    - backing(string) - lvm, image or remote
-
-    Returns:
-    - the new storage backing (string) - lvm, image or remote
-    """
-
-    orig_backing = host_helper.get_host_instance_backing(host)
-
-    if orig_backing == backing:
-        LOG.info("Host {} is already using backing {}".format(host, backing))
-        return
-
-    LOG.info("Lock host before changing backing")
-    host_helper.lock_host(host, swact=True)
-
-    LOG.info("Modify {} to backing {}".format(host, backing))
-    cli.system("host-lvg-modify -b {} {} nova-local".format(backing, host))
-
-    LOG.info("Unlock host")
-    host_helper.unlock_host(host)
-
-    new_backing = host_helper.get_host_instance_backing(host)
-    assert new_backing == backing, "Backing was not changed"
-
-    return new_backing
 
 
 def get_hw_compatible_hosts(hosts):
@@ -134,7 +101,7 @@ def get_hw_compatible_hosts(hosts):
 
     hardware = {}
     for host in hosts:
-        rc, out = cli.system("host-disk-list {}".format(host), rtn_list=True)
+        rc, out = cli.system("host-disk-list {} --nowrap".format(host), rtn_list=True)
         # It would be better to extract specific named columns instead of using get_all_rows
         hardware[host] = table_parser.get_all_rows(table_parser.table(out))
 
@@ -161,7 +128,7 @@ def get_hw_compatible_hosts(hosts):
     return hash_to_hosts
 
 
-# @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
+#@mark.parametrize(('personality', 'from_backing', 'to_backing'), [
 #    mark.p1(('controller', 'lvm', 'image')),
 #    mark.p1(('controller', 'image', 'lvm')),
 #    mark.p1(('compute', 'lvm', 'image')),
@@ -171,14 +138,8 @@ def get_hw_compatible_hosts(hosts):
 #    mark.p1(('compute', 'remote', 'image')),
 #    mark.p1(('compute', 'image', 'lvm')),
 #    mark.p1(('storage', None, None)),
-# ])
+#])
 @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
-    mark.p1(('compute', 'lvm', 'image')),
-    mark.p1(('compute', 'image', 'remote')),
-    mark.p1(('compute', 'remote', 'lvm')),
-    mark.p1(('compute', 'lvm', 'remote')),
-    mark.p1(('compute', 'remote', 'image')),
-    mark.p1(('compute', 'image', 'lvm')),
     mark.p1(('storage', None, None)),
 ])
 @mark.usefixtures('delete_profiles_teardown')
@@ -208,8 +169,8 @@ def test_storage_profile(personality, from_backing, to_backing):
     - Nothing
     """
 
-    global profiles_to_delete
-    profiles_to_delete = []
+    global PROFILES_TO_DELETE
+    PROFILES_TO_DELETE = []
 
     # Skip if test is not applicable to hardware under test
     if personality == 'controller' and not system_helper.is_small_footprint():
@@ -276,16 +237,27 @@ def test_storage_profile(personality, from_backing, to_backing):
 
         LOG.tc_step("Check from host backing and convert to {} if necessary".format(from_backing))
         orig_from_host_backing = host_helper.get_host_instance_backing(from_host)
-        new_from_backing = modify_storage_backing(from_host, from_backing)
+        new_from_backing = host_helper.set_host_storage_backing(from_host, from_backing)
 
         LOG.tc_step("Check to host backing and convert to {} if necessary".format(to_backing))
         orig_to_host_backing = host_helper.get_host_instance_backing(to_host)
-        new_to_backing = modify_storage_backing(to_host, to_backing)
+        new_to_backing = host_helper.set_host_storage_backing(to_host, to_backing)
     elif personality == "controller":
         # For now, we don't want to host reinstall controller-0 since it will default to
         # pxeboot, but this could be examined as a possible enhancement.
         from_host = "controller-0"
         to_host = "controller-1"
+
+        LOG.info("From host is: {}".format(from_host))
+        LOG.info("To host is: {}".format(to_host))
+
+        LOG.tc_step("Check from host backing and convert to {} if necessary".format(from_backing))
+        orig_from_host_backing = host_helper.get_host_instance_backing(from_host)
+        new_from_backing = host_helper.set_host_storage_backing(from_host, from_backing)
+
+        LOG.tc_step("Check to host backing and convert to {} if necessary".format(to_backing))
+        orig_to_host_backing = host_helper.get_host_instance_backing(to_host)
+        new_to_backing = host_helper.set_host_storage_backing(to_host, to_backing)
     else:
         # Backing doesn't apply to storage nodes so just pick from compatible hardware
         from_host = random.choice(candidate_hosts)
@@ -295,7 +267,7 @@ def test_storage_profile(personality, from_backing, to_backing):
     LOG.tc_step("Create storage and interface profiles on the from host {}".format(from_host))
     prof_name = 'storprof_{}_{}'.format(from_host, time.strftime('%Y%m%d_%H%M%S', time.localtime()))
     prof_uuid = system_helper.create_storage_profile(from_host, profile_name=prof_name)
-    profiles_to_delete.append(prof_name)
+    PROFILES_TO_DELETE.append(prof_name)
 
     # Deleting VMs in case the remaining host(s) cannot handle all VMs
     # migrating on lock, particularly important in the case of AIO-DX systems.
@@ -337,6 +309,15 @@ def test_storage_profile(personality, from_backing, to_backing):
         cli.system("host-bulk-add hosts.xml")
         host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
+        # Even though the host is online, doesn't mean disks are detected yet
+        # and we can't apply profiles if the disks aren't present.
+        end_time = time.time() + DISK_DETECTION_TIMEOUT
+        while time.time() < end_time:
+            out = partition_helper.get_disks(to_host)
+            if out:
+                LOG.info("Found disks {} on host {}".format(out, to_host))
+                break
+
         LOG.tc_step('Apply the storage-profile {} onto host:{}'.format(prof_name, to_host))
         cli.system('host-apply-storprofile {} {}'.format(to_host, prof_name))
 
@@ -345,8 +326,7 @@ def test_storage_profile(personality, from_backing, to_backing):
         con_ssh = ControllerClient.get_active_controller()
         con_ssh.exec_cmd("rm .lab_setup.done.group0.{}.interfaces".format(to_host))
         rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
-        if rc != 0:
-            return rc, msg
+        assert rc == 0, "lab_setup execution failed"
 
         LOG.tc_step("Unlock to host")
         host_helper.unlock_host(to_host)
@@ -388,8 +368,7 @@ def test_storage_profile(personality, from_backing, to_backing):
             con_ssh.exec_cmd("rm .lab_setup.done.group0.{}.{}".format(to_host, item))
 
         rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
-        if rc != 0:
-            return rc, msg
+        assert rc == 0, "lab_setup.sh execution failed"
 
         LOG.tc_step("Unlock to host")
         host_helper.unlock_host(to_host)
