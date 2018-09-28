@@ -1,3 +1,5 @@
+import time
+
 from consts.auth import Tenant
 from utils.tis_log import LOG
 from keywords import system_helper, host_helper, network_helper, common
@@ -126,8 +128,13 @@ def import_package(pkg, con_ssh=None, auth_info=None, fail_ok=False):
     code, output = cli.murano('package-import --exists-action u', pkg, ssh_client=con_ssh, auth_info=auth_info,
                               fail_ok=fail_ok, rtn_list=True)
 
-    if code == 1:
-        return 1, output
+    if code != 0:
+        msg = "Fail to import package {}:{}".format(pkg, output)
+        if fail_ok:
+            LOG.warn(msg)
+            return 1, output
+        else:
+            raise exceptions.MuranoError(msg)
 
     table_ = table_parser.table(output)
     pkg_id = table_parser.get_values(table_, 'ID')
@@ -162,6 +169,49 @@ def import_bundle(bundle, is_public=False, con_ssh=None, auth_info=None, fail_ok
     table_ = table_parser.table(output)
     pkg_id = table_parser.get_value_two_col_table(table_, 'id')
     return 0, pkg_id
+
+
+def get_package_list(header='ID', pkgid=None, name=None, fqn=None, author=None, active=None, is_public=None,
+                           type=None, version=None, auth_info=Tenant.get('admin'), con_ssh=None, strict=True,
+                           regex=None, **kwargs):
+    """
+
+    Args:
+        header:
+        name:
+        fqn:
+        author:
+        active:
+        is_public:
+        type:
+        version:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns: list
+
+    """
+
+    table_ = table_parser.table(cli.murano('package-list',
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'ID': pkgid,
+        'Name': name,
+        'FQN': fqn,
+        'Author': author,
+        'Active': active,
+        'Is Public': is_public,
+        'Type': type,
+        'Version': version
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
 def delete_bundle(bundle_id, con_ssh=None, auth_info=None, fail_ok=False):
@@ -214,19 +264,24 @@ def delete_package(package_id, con_ssh=None, auth_info=None, fail_ok=False):
     code, output = cli.murano('package-delete', package_id, ssh_client=con_ssh, auth_info=auth_info,
                               fail_ok=fail_ok, rtn_list=True)
 
-    if code == 1:
-        return 1, output
+    if code != 0:
+        msg = "Fail to delete murano package {}:{}".format(package_id, output)
+        if fail_ok:
+            LOG.warn(msg)
+            return 1, output
+        else:
+            raise exceptions.MuranoError(msg)
 
-    msg = "package deleted successfully"
-    return 0, msg
+    return 0, "package {} deleted successfully".format(package_id)
 
 
-def create_env(name, mgmt_id, con_ssh=None, auth_info=None, fail_ok=False):
+def create_env(name, mgmt_net_id=None, mgmt_subnet_id=None, con_ssh=None, auth_info=None, fail_ok=False):
     """
     Create Murano Environment
     Args:
         name: Name of the env to create
-        mgmt_id (str): The ID of tenant1 management subnet
+        mgmt_subnet_id (str): The ID of tenant1 management subnet
+        mgmt_net_id (str): The ID of tenant1 management net
         con_ssh (SSHClient):
         auth_info (dict)
         fail_ok (bool): whether return False or raise exception when some services fail to reach enabled-active state
@@ -240,7 +295,14 @@ def create_env(name, mgmt_id, con_ssh=None, auth_info=None, fail_ok=False):
         raise ValueError("Murano environment name has to be specified.")
 
     LOG.info("Creating Murano Environment {}".format(name))
-    code, output = cli.murano('environment-create --join-subnet-id {}'.format(mgmt_id), name, ssh_client=con_ssh, auth_info=auth_info,
+    cmd = "environment-create"
+
+    if mgmt_subnet_id:
+        cmd = cmd + " --join-subnet-id {}".format(mgmt_subnet_id)
+    elif mgmt_net_id:
+        cmd = cmd + " --join-net-id {}".format(mgmt_net_id)
+
+    code, output = cli.murano(cmd, name, ssh_client=con_ssh, auth_info=auth_info,
                               fail_ok=fail_ok, rtn_list=True)
     if code == 1:
         return 1, output
@@ -336,11 +398,15 @@ def delete_env(env_id, con_ssh=None, auth_info=None, fail_ok=False):
     code, output = cli.murano('environment-delete', env_id, ssh_client=con_ssh, auth_info=auth_info,
                               fail_ok=fail_ok, rtn_list=True)
 
-    if code == 1:
-        return 1, output
+    if code != 0:
+        msg = "Failure to delete environment id {}: {}".format(env_id, output)
+        if fail_ok:
+            LOG.warn(msg)
+            return 1, output
+        else:
+            raise exceptions.MuranoError(msg)
 
-    msg = "Env Deleted Successfully"
-    return 0, msg
+    return 0, "Env {} Deleted Successfully".format(env_id)
 
 
 def import_package_from_repo(pkg, repo, con_ssh=None, auth_info=None, fail_ok=False):
@@ -376,6 +442,99 @@ def import_package_from_repo(pkg, repo, con_ssh=None, auth_info=None, fail_ok=Fa
     table_ = table_parser.table(output)
     pkg_id = table_parser.get_values(table_, 'ID')
     return 0, pkg_id
+
+
+def get_environment_status(env_id,  con_ssh=None ):
+    """
+
+    Args:
+        env_id:
+        con_ssh:
+
+    Returns:
+
+    """
+    return (get_environment_list_table(header="Status", env_id=env_id)).pop()
+
+
+def wait_for_environment_status(env_id, status, timeout=180, check_interval=6, fail_ok=False):
+    """
+     Waits for the  Murano environment deployment status
+
+     Args:
+         env_id:
+         status:
+         timeout:
+         check_interval
+         fail_ok:
+
+     Returns:
+
+     """
+    end_time = time.time() + timeout
+    if not status:
+        raise ValueError("Expected deployment state(s) has to be specified via keyword argument states")
+    if isinstance(status, str):
+        status = [status]
+
+    status_match = False
+    act_status, prev_status = None, None
+    while time.time() < end_time:
+        act_status = get_environment_status(env_id)
+        if act_status != prev_status:
+            LOG.info("Current Murano environment deploy status = {}".format(act_status))
+            prev_status = act_status
+
+        if act_status in status:
+            status_match = True
+            break
+        time.sleep(check_interval)
+    msg = "Environment id {} did not reach {} status  within specified time ".format(env_id,status)
+    if status_match:
+        return True, act_status
+    else:
+        LOG.warning(msg)
+        if fail_ok:
+            return False, act_status
+        else:
+            raise exceptions.MuranoError(msg)
+
+
+def wait_for_environment_delete(env_id, timeout=300, check_interval=6, fail_ok=False):
+    """
+     Waits for the  Murano environment delete completes
+
+     Args:
+         env_id:
+         timeout:
+         check_interval
+         fail_ok
+
+     Returns:
+
+     """
+    end_time = time.time() + timeout
+    if not env_id:
+        raise ValueError("Environment id  has to be specified ")
+
+    status_match = False
+    act_status, prev_status = None, None
+    while time.time() < end_time:
+        ids = get_environment_list_table()
+        if env_id not in ids:
+            status_match = True
+            break
+        time.sleep(check_interval)
+    msg = "Fail to delete environment {}  within the specified time ".format(env_id)
+    if status_match:
+        return True, None
+    else:
+        if fail_ok:
+            LOG.warning(msg)
+            return False, msg
+        else:
+            raise exceptions.MuranoError(msg)
+
 
 
 def get_environment_list_table(header='ID', env_id=None, Name=None, Status=None, Created=None, Updated=None,
@@ -414,7 +573,7 @@ def get_environment_list_table(header='ID', env_id=None, Name=None, Status=None,
     return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def edit_environment_object_mode(env_id, session_id=None, object_model_file=None, delete_file_after=True, con_ssh=None,
+def edit_environment_object_mode(env_id, session_id=None, object_model_file=None, delete_file_after=False, con_ssh=None,
                                  auth_info=None, fail_ok=False):
     """
     Edits environment's object model. The object_model_file must be in format:
@@ -425,6 +584,7 @@ def edit_environment_object_mode(env_id, session_id=None, object_model_file=None
         env_id:
         session_id:
         object_model_file (str):
+        delete_file_after:
         con_ssh:
         auth_info:
         fail_ok:

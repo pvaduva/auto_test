@@ -590,3 +590,13 @@ class MigStatus:
 class IxiaServerIP:
     tcl_server_ip = '128.224.151.42'
     chassis_ip = '128.224.151.109'
+
+
+class MuranoEnvStatus:
+    READY_TO_CONFIGURE = 'ready to configure'
+    READY_TO_DEPLOY = 'ready to deploy'
+    READY = 'ready'
+    DEPLOYING = 'deploying'
+    DEPLOY_FAILURE = 'deploy failure'
+    DELETING = 'deleting'
+    DELETE_FAILURE = 'delete failure'

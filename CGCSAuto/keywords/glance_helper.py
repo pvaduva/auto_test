@@ -312,7 +312,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
     source_str = file_path
 
     known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros', 'opensuse', 'rhel', 'centos', 'win', 'ge_edge',
-                  'vxworks']
+                  'vxworks', 'debian-8-m-agent']
     name = name if name else 'auto'
     for img_str in known_imgs:
         if img_str in name:
@@ -863,6 +863,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
 
     if properties:
         for key, val in properties.items():
+
             args.append('--property {}="{}"'.format(key, val))
             post_checks['properties'] = properties
 
@@ -933,6 +934,7 @@ def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info
         actual_val = table_parser.get_value_two_col_table(post_tab, field=field, merge_lines=True)
         if field == 'properties':
             actual_vals = actual_val.split(', ')
+            #actual_vals = re.compile("\,\s(?!\'|\")").split(actual_val)
             actual_vals = ((val.split('=')) for val in actual_vals)
             actual_dict = {k.strip(): v.strip() for k, v in actual_vals}
             if unset:
@@ -941,6 +943,11 @@ def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info
             else:
                 for key, val in expt_val.items():
                     actual = actual_dict[key]
+                    # if '{' in actual and '}' in actual and ( actual[0] == "'" or actual[0] == '"'):
+                    #     if actual[0] == "'":
+                    #         actual = re.sub(r'^\'|\'$', '', actual)
+                    #     else:
+                    #         actual = re.sub(r'^\"|\"$', '', actual)
                     try:
                         actual = eval(actual)
                     except NameError:
