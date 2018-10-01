@@ -92,8 +92,9 @@ class GuestImages:
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
         'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5),
         'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 1.5),
-        'trusty_uefi' : ('trusty-server-cloudimg-amd64-uefi1.img', 5, 'trusty-server-cloudimg-amd64-uefi1.img',0.3),
-        'debian-8-m-agent': ('debian-8-m-agent.qcow2', 1.8, 'debian-8-m-agent.qcow2', 0.5)
+        'debian-8-m-agent': ('debian-8-m-agent.qcow2', 1.8, 'debian-8-m-agent.qcow2', 0.5),
+        'trusty_uefi' : ('trusty-server-cloudimg-amd64-uefi1.img', 0.3, 'trusty-server-cloudimg-amd64-uefi1.img', 0.3),
+        'uefi_shell': ('uefi_shell.iso', 0.1, 'uefi_shell.iso', 0.1),
     }
 
 
