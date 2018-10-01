@@ -23,7 +23,10 @@ hardware to run the tests.
 
 Please note that profile application on controller+compute nodes and storage
 nodes involves deleting the node and then reprovisioning.  As such,
-lab_setup.sh will need to be re-run to reprovision the node properly.
+lab_setup.sh will need to be re-run to reprovision the node properly.  In
+addition, compute nodes with in-use partitions will need to be deleted and
+reprovisioned.  Compute nodes wiht ready paritions will require partition
+deletion before profile application.
 
 Due to the node deletions, it is suggested that these tests be executed last to
 avoid impacting subsequent tests.  Also, execution time is long for this suite
@@ -100,21 +103,14 @@ def get_hw_compatible_hosts(hosts):
     """
 
     hardware = {}
-    for host in hosts:
-        rc, out = cli.system("host-disk-list {} --nowrap".format(host), rtn_list=True)
-        # It would be better to extract specific named columns instead of using get_all_rows
-        hardware[host] = table_parser.get_all_rows(table_parser.table(out))
-
-    # Remove anything value would prevent hardware matching and then hash the contents
     hardware_hash = {}
     for host in hosts:
-        for item in hardware[host]:
-            del item[0]
-            del item[4]
-            del item[4]
-            del item[4]
-            del item[4]
-
+        rc, out = cli.system("host-disk-list {} --nowrap".format(host), rtn_list=True)
+        table_ = table_parser.table(out)
+        device_nodes = table_parser.get_column(table_, "device_node")
+        device_type = table_parser.get_column(table_, "device_type")
+        size_gib = table_parser.get_column(table_, "size_gib")
+        hardware[host] = list(zip(device_nodes, device_type, size_gib))
         LOG.info("Hardware present on host {}: {}".format(host, hardware[host]))
         hardware_hash[host] = hash(str(hardware[host]))
         LOG.info("Host {} has hash {}".format(host, hardware_hash[host]))
@@ -127,19 +123,58 @@ def get_hw_compatible_hosts(hosts):
     LOG.info("These are the hardware compatible hosts: {}".format(hash_to_hosts))
     return hash_to_hosts
 
+def wait_for_disks(host, timeout=DISK_DETECTION_TIMEOUT, wait_time=10):
+    """
+    Check for presence of disks
 
-#@mark.parametrize(('personality', 'from_backing', 'to_backing'), [
-#    mark.p1(('controller', 'lvm', 'image')),
-#    mark.p1(('controller', 'image', 'lvm')),
-#    mark.p1(('compute', 'lvm', 'image')),
-#    mark.p1(('compute', 'image', 'remote')),
-#    mark.p1(('compute', 'remote', 'lvm')),
-#    mark.p1(('compute', 'lvm', 'remote')),
-#    mark.p1(('compute', 'remote', 'image')),
-#    mark.p1(('compute', 'image', 'lvm')),
-#    mark.p1(('storage', None, None)),
-#])
+    Arguments:
+    - Host (str) - e.g. controller-0
+    - timeout (int/seconds) - e.g. 60
+
+    Returns:
+    - (bool) True if found, False if not Found
+
+    """
+
+    # Even though the host is online, doesn't mean disks are detected yet
+    # and we can't apply profiles if the disks aren't present.
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        out = partition_helper.get_disks(host)
+        if out:
+            LOG.info("Found disks {} on host {}".format(out, host))
+            return True
+        time.sleep(wait_time)
+
+    return False
+
+
+def delete_lab_setup_files(con_ssh, host, files):
+    """
+    This will delete specified lab_setup files.
+
+    Arguments:
+    - con_ssh
+    - host (str) - e.g. controller-0
+    - files (list) - e.g. interfaces
+
+    Returns:
+    - Nothing
+    """
+
+    for filename in files:
+        con_ssh.exec_cmd("rm .lab_setup.done.group0.{}.{}".format(host, filename))
+
+
 @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
+    mark.p1(('controller', 'lvm', 'image')),
+    mark.p1(('controller', 'image', 'lvm')),
+    mark.p1(('compute', 'lvm', 'image')),
+    mark.p1(('compute', 'image', 'remote')),
+    mark.p1(('compute', 'remote', 'lvm')),
+    mark.p1(('compute', 'lvm', 'remote')),
+    mark.p1(('compute', 'remote', 'image')),
+    mark.p1(('compute', 'image', 'lvm')),
     mark.p1(('storage', None, None)),
 ])
 @mark.usefixtures('delete_profiles_teardown')
@@ -276,13 +311,45 @@ def test_storage_profile(personality, from_backing, to_backing):
     HostsToRecover.add(to_host, scope='function')
     host_helper.lock_host(to_host, swact=True)
 
-    # Might be better to combine into one function and move to helper functions
+    # 3 conditions to watch for: no partitions, ready partitions and in-use
+    # partitions on the compute.  If in-use, delete and freshly install host.
+    # If ready, delete all ready partitions to make room for potentially new
+    # partitions.  If no partitions, just delete nova-local lvg.
     if personality == "compute":
 
         # If we were simply switching backing (without applying a storage
         # profile), the nova-local lvg deletion can be omitted according to design
         LOG.tc_step("Delete nova-local lvg on to host {}".format(to_host))
         cli.system("host-lvg-delete {} nova-local".format(to_host))
+
+        in_use = partition_helper.get_partitions([to_host], "In-Use")
+
+        if len(in_use[to_host]) != 0:
+            LOG.tc_step("In-use partitions found.  Must delete the host and freshly install before proceeding.")
+            LOG.info("Host {} has in-use partitions {}".format(to_host, in_use))
+            lab = InstallVars.get_install_var("LAB")
+            lab.update(create_node_dict(lab['compute_nodes'], 'compute'))
+            lab['boot_device_dict'] = create_node_boot_dict(lab['name'])
+            install_helper.open_vlm_console_thread(to_host)
+
+            LOG.tc_step("Delete the host {}".format(to_host))
+            cli.system("host-bulk-export")
+            cli.system("host-delete {}".format(to_host), rtn_list=True)
+            assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
+
+            cli.system("host-bulk-add hosts.xml")
+            host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+
+            wait_for_disks(to_host)
+
+        ready = partition_helper.get_partitions([to_host], "Ready")
+        if len(ready[to_host]) != 0:
+            LOG.tc_step("Ready partitions have been found.  Must delete them before profile application")
+            LOG.info("Host {} has Ready partitions {}".format(to_host, ready))
+            for uuid in reversed(ready[to_host]):
+                rc, out = partition_helper.delete_partition(to_host, uuid)
+            # Don't bother restoring in this case since the system should be
+            # functional after profile is applied.
 
         LOG.tc_step('Apply the storage-profile {} onto host:{}'.format(prof_name, to_host))
         cli.system('host-apply-storprofile {} {}'.format(to_host, prof_name))
@@ -309,24 +376,20 @@ def test_storage_profile(personality, from_backing, to_backing):
         cli.system("host-bulk-add hosts.xml")
         host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
-        # Even though the host is online, doesn't mean disks are detected yet
-        # and we can't apply profiles if the disks aren't present.
-        end_time = time.time() + DISK_DETECTION_TIMEOUT
-        while time.time() < end_time:
-            out = partition_helper.get_disks(to_host)
-            if out:
-                LOG.info("Found disks {} on host {}".format(out, to_host))
-                break
+        wait_for_disks(to_host)
 
         LOG.tc_step('Apply the storage-profile {} onto host:{}'.format(prof_name, to_host))
         cli.system('host-apply-storprofile {} {}'.format(to_host, prof_name))
 
         # Re-provision interfaces through lab_setup.sh
         LOG.tc_step("Reprovision the host as necessary")
+        files = ['interfaces']
         con_ssh = ControllerClient.get_active_controller()
-        con_ssh.exec_cmd("rm .lab_setup.done.group0.{}.interfaces".format(to_host))
-        rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
-        assert rc == 0, "lab_setup execution failed"
+        delete_lab_setup_files(con_ssh, to_host, files)
+
+        #rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
+        rc, msg = install_helper.run_lab_setup()
+        assert rc == 0, msg
 
         LOG.tc_step("Unlock to host")
         host_helper.unlock_host(to_host)
@@ -348,27 +411,20 @@ def test_storage_profile(personality, from_backing, to_backing):
         cli.system("host-bulk-add hosts.xml")
         host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
-        # Even though the host is online, doesn't mean disks are detected yet
-        # and we can't apply profiles if the disks aren't present.
-        end_time = time.time() + DISK_DETECTION_TIMEOUT
-        while time.time() < end_time:
-            out = partition_helper.get_disks(to_host)
-            if out:
-                LOG.info("Found disks {} on host {}".format(out, to_host))
-                break
+        wait_for_disks(to_host)
 
         LOG.tc_step("Apply the storage-profile {} onto host:{}".format(prof_name, to_host))
         cli.system("host-apply-storprofile {} {}".format(to_host, prof_name))
 
         # Need to re-provision everything on node through lab_setup (except storage)
         LOG.tc_step("Reprovision the host as necessary")
+        files = ['interfaces', 'cinder_device', 'vswitch_cpus', 'shared_cpus', 'extend_cgts_vg', 'addresses']
         con_ssh = ControllerClient.get_active_controller()
-        reprovision = ['interfaces', 'cinder_device', 'vswitch_cpus', 'shared_cpus', 'extend_cgts_vg', 'addresses']
-        for item in reprovision:
-            con_ssh.exec_cmd("rm .lab_setup.done.group0.{}.{}".format(to_host, item))
+        delete_lab_setup_files(con_ssh, to_host, files)
 
-        rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
-        assert rc == 0, "lab_setup.sh execution failed"
+        #rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
+        rc, msg = install_helper.run_lab_setup()
+        assert rc == 0, msg
 
         LOG.tc_step("Unlock to host")
         host_helper.unlock_host(to_host)
