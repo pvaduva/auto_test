@@ -180,7 +180,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         object_pool_gib = str(unallocated_gib)
         LOG.tc_step("Enabling SWIFT object store and setting object pool size to {}.....".format(object_pool_gib))
 
-    rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=True,
+    rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=False,
                                                                      cinder=cinder_pool_gib,
                                                                      object_gib=object_pool_gib,
                                                                      services='cinder,glance,nova,swift')
