@@ -126,6 +126,14 @@ class Labs:
         'compute_nodes': [21723, 22487]
     }
 
+    ML350_1 = {
+        'short_name': 'ml350_1',
+        'name': 'yow-cgcs-ml350-g10-1',
+        'floating ip': '128.224.151.181',
+        'controller-0 ip': '128.224.151.181',
+        'controller_nodes': [55836],
+    }
+
     PV0 = {
         'short_name': 'pv0',
         'name': 'yow-cgcs-pv-0',
