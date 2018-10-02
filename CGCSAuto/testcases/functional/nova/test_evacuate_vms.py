@@ -1,16 +1,13 @@
-import re
-
 from pytest import fixture, skip, mark
 
-from utils import table_parser
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, VMStatus, InstanceTopology
+from consts.timeout import VMTimeout
+from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipStorageBacking, SkipHypervisor
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper, system_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
-from testfixtures.pre_checks_and_configs import check_numa_num
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -366,4 +363,4 @@ class TestOneHostAvail:
         assert not inactive_vms, "VMs did not reach Active state after evacuated to other host: {}".format(inactive_vms)
 
         LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
-        vm_helper.wait_for_vm_pingable_from_natbox(vms)
+        vm_helper.wait_for_vm_pingable_from_natbox(vms, timeout=VMTimeout.DHCP_RETRY)

@@ -3,7 +3,7 @@ from pytest import mark
 
 from utils.tis_log import LOG
 from utils import local_host
-from consts.timeout import HostTimeout
+from consts.timeout import HostTimeout, VMTimeout
 from consts.cgcs import EventLogID
 from consts.vlm import VlmAction
 from keywords import system_helper, vlm_helper, host_helper, vm_helper, network_helper
@@ -61,7 +61,7 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     LOG.tc_step("Check vms are recovered after dead office recovery")
     vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
     for vm in vms:
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
 
     computes = host_helper.get_hypervisors()
     if len(computes) >= 4:

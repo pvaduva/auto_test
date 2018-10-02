@@ -1,6 +1,7 @@
+import time
 from pytest import fixture
 
-from utils import table_parser, cli, exceptions
+from utils import table_parser, cli
 from utils.tis_log import LOG
 from consts.timeout import HostTimeout
 from keywords import host_helper, system_helper

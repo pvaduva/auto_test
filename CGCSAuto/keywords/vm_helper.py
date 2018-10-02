@@ -3940,7 +3940,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         if ping_vms:
             LOG.tc_step("Ping vms after evacuated")
             for vm_ in vms_to_check:
-                wait_for_vm_pingable_from_natbox(vm_id=vm_)
+                wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=VMTimeout.DHCP_RETRY)
 
         LOG.info("All vms are successfully evacuated to other host")
         return 0, []

@@ -816,7 +816,8 @@ def test_vtpm(vm_operation, extra_specs):
         # fail_ok = (vm_operation == 'resize_to_non_vtpm')
         fail_ok = True
         perform_vm_operation(vm_type, vm_id, op=vm_operation, extra_specs=extra_specs)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        ping_timeout = VMTimeout.DHCP_RETRY if vm_operation in ('reboot_host', 'evacuate') else VMTimeout.PING_VM
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=ping_timeout)
 
         with vm_helper.ssh_to_vm_from_natbox(vm_id, timeout=(int(VMTimeout.SSH_LOGIN * 1.3))) as ssh_to_vm:
             LOG.info('After VM operation:{}, check all types of contents'.format(vm_operation))
