@@ -5,30 +5,6 @@ from consts.cli_errs import LiveMigErr      # Don't remove this import, used by 
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import exceptions
-from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    SSHFromSSH
-
-
-def check_vm_via_virsh(vm_id):
-    """
-
-    :param vm_id:
-    :return:
-    """
-    instance_name = nova_helper.get_vm_instance_name(vm_id)
-    vm_host, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-    user = 'ubuntu'
-    password = 'ubuntu'
-    with host_helper.ssh_to_host(vm_host) as host_ssh:
-        prompt = r'.*{}\@.*\~.*[$#]'.format(user)
-        host_ssh.send_sudo(cmd='virsh console {}'.format(instance_name))
-        index = host_ssh.expect(prompt, timeout=800, searchwindowsize=100, fail_ok=True)
-        host_ssh.send(cmd='ubuntu')
-        index = host_ssh.expect([PASSWORD_PROMPT])
-        host_ssh.send(cmd='ubuntu')
-        index = host_ssh.expect(prompt, timeout=800, searchwindowsize=100, fail_ok=True)
-        code, output = host_ssh.exec_cmd('mokutil --sb-state', fail_ok=False)
-        assert "SecureBoot enabled" in output, "Vm did not boot in secure mode: {}".format(output)
 
 
 def _check_secure_boot_on_vm(vm_id):
