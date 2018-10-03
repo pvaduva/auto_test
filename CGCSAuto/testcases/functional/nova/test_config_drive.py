@@ -1,6 +1,7 @@
 from pytest import fixture, skip, mark
 
 from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -84,7 +85,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     assert code == 0, "Unable to lock vm host {}: {}".format(compute_host, msg)
 
     LOG.tc_step("Confirming the config drive can be accessed after locking VM host...")
-    config_drive_data = check_vm_config_drive_data(vm_id)
+    config_drive_data = check_vm_config_drive_data(vm_id, ping_timeout=VMTimeout.DHCP_RETRY)
     assert TEST_STRING in config_drive_data, "The config drive data incorrect after lock vm host. Output is : {}".\
         format(config_drive_data)
 
@@ -128,16 +129,17 @@ def get_test_file():
     return test_file, file_dir
 
 
-def check_vm_config_drive_data(vm_id):
+def check_vm_config_drive_data(vm_id, ping_timeout=VMTimeout.PING_VM):
     """
 
     Args:
         vm_id:
+        ping_timeout
 
     Returns:
 
     """
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=ping_timeout)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
         mount = get_mount(vm_ssh)

@@ -3,6 +3,7 @@ from pytest import mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus
+from consts.timeout import VMTimeout
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -57,7 +58,7 @@ def test_system_persist_over_host_reboot(host_type):
 
     LOG.tc_step("Check vm is still active and pingable after {} reboot".format(host))
     vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, fail_ok=False)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=VMTimeout.DHCP_RETRY)
 
     LOG.tc_step("Check neutron agents and system services are in good state after {} reboot".format(host))
     network_helper.wait_for_agents_alive(up_hypervisors)

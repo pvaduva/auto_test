@@ -1953,21 +1953,22 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
 
     """
     table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
-    if_class = net_type
-    network = ''
-    if net_type in ('mgmt', 'oam', 'infra'):
-        if_class = 'platform'
-        network = net_type
+    if net_type:
+        if_class = net_type
+        network = ''
+        if net_type in ('mgmt', 'oam', 'infra'):
+            if_class = 'platform'
+            network = net_type
 
-    table_ = table_parser.filter_table(table_, **{'class': if_class})
-    # exclude unmatched platform interfaces from the table.
-    if 'platform' == if_class:
-        platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
-        for pform_if in platform_ifs:
-            if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks', con_ssh=con_ssh)[0]
-            if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
-            if network not in if_nets:
-                table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
+        table_ = table_parser.filter_table(table_, **{'class': if_class})
+        # exclude unmatched platform interfaces from the table.
+        if 'platform' == if_class:
+            platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+            for pform_if in platform_ifs:
+                if_nets = get_host_if_show_values(host=host, interface=pform_if, fields='networks', con_ssh=con_ssh)[0]
+                if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
+                if network not in if_nets:
+                    table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
 
     net_ifs_names = table_parser.get_column(table_, 'name')
     total_ports = {}

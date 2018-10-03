@@ -4,7 +4,7 @@ from pytest import fixture, mark, skip
 
 from consts.cgcs import EventLogID, FlavorSpec
 from consts.reasons import SkipSysType
-from consts.timeout import EventLogTimeout
+from consts.timeout import EventLogTimeout, VMTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from testfixtures.recover_hosts import HostsToRecover
@@ -148,7 +148,8 @@ def test_hb_vm_with_action(hb_enabled, action, heartbeat_flavors):
 
     _perform_action_on_hb_vm(vm_id, action)
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    ping_timeout = VMTimeout.DHCP_RETRY if action in ('reboot', 'lock') else VMTimeout.PING_VM
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=ping_timeout)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
 
         LOG.tc_step("check heartbeat after {}".format(action))

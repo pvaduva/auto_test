@@ -3291,7 +3291,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     eth_path = VMPath.ETH_PATH_CENTOS
     new_user = None
 
-    if 'ubuntu' in guest_os:
+    if 'ubuntu' in guest_os or 'trusty_uefi' in guest_os:
         guest_os = 'ubuntu'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
@@ -3941,7 +3941,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         if ping_vms:
             LOG.tc_step("Ping vms after evacuated")
             for vm_ in vms_to_check:
-                wait_for_vm_pingable_from_natbox(vm_id=vm_)
+                wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=VMTimeout.DHCP_RETRY)
 
         LOG.info("All vms are successfully evacuated to other host")
         return 0, []

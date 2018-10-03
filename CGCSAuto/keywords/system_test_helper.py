@@ -11,7 +11,7 @@ from utils.clients.ssh import ControllerClient, NATBoxClient
 from consts.auth import HostLinuxCreds, Tenant
 from consts.cgcs import GuestImages
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
-from consts.timeout import HostTimeout
+from consts.timeout import HostTimeout, VMTimeout
 from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, \
     network_helper
 
@@ -211,7 +211,7 @@ def sys_lock_unlock_hosts(number_of_hosts_to_lock):
         for vm in vms:
             vm_host = nova_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
 
     hosts_threads = []
     for host in compute_to_lock:
@@ -265,7 +265,7 @@ def sys_evacuate_from_hosts(number_of_hosts_to_evac):
         for vm in vms:
             vm_host = nova_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
 
 
 def sys_reboot_storage():
@@ -377,6 +377,7 @@ def sys_reboot_standby(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
+    timeout = VMTimeout.DHCP_RETRY if system_helper.is_small_footprint() else VMTimeout.PING_VM
     for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
         LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
@@ -388,7 +389,7 @@ def sys_reboot_standby(number_of_times=1):
         vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
 
         for vm in vms:
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=timeout)
 
 
 def sys_controlled_swact(number_of_times=1):
@@ -434,6 +435,7 @@ def sys_lock_unlock_standby(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
+    timeout = VMTimeout.DHCP_RETRY if system_helper.is_small_footprint() else VMTimeout.PING_VM
     for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
         LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
@@ -445,7 +447,7 @@ def sys_lock_unlock_standby(number_of_times=1):
         vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
 
         for vm in vms:
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=timeout)
 
         host_helper.unlock_host(host=standby)
         vms = get_all_vms()

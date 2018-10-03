@@ -9,6 +9,7 @@ from pytest import mark, fixture, skip
 from consts.auth import HostLinuxCreds
 from consts.cgcs import GuestImages, BackendState, BackendTask, EventLogID
 from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout
 from keywords import glance_helper, vm_helper, host_helper, system_helper, storage_helper, keystone_helper, swift_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils.clients.ssh import ControllerClient, get_cli_client
@@ -180,7 +181,7 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         object_pool_gib = str(unallocated_gib)
         LOG.tc_step("Enabling SWIFT object store and setting object pool size to {}.....".format(object_pool_gib))
 
-    rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=True,
+    rc, updated_backend_info = storage_helper.modify_storage_backend('ceph', object_gateway=False,
                                                                      cinder=cinder_pool_gib,
                                                                      object_gib=object_pool_gib,
                                                                      services='cinder,glance,nova,swift')
@@ -224,21 +225,22 @@ def test_basic_swift_provisioning(pool_size, pre_swift_check):
         vm_name = 'vm_swift_api_{}'.format(i)
         LOG.tc_step("Boot vm {} and perform nova actions on it".format(vm_name))
         vm_id = vm_helper.boot_vm(name=vm_name, cleanup='function')[1]
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=VMTimeout.DHCP_RETRY)
 
         LOG.info("Cold migrate VM {} ....".format(vm_name))
         rc = vm_helper.cold_migrate_vm(vm_id=vm_id)[0]
         assert rc == 0, "VM {} failed to cold migrate".format(vm_name)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         LOG.info("Live migrate VM {} ....".format(vm_name))
         rc = vm_helper.live_migrate_vm(vm_id=vm_id)[0]
         assert rc == 0, "VM {} failed to live migrate".format(vm_name)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-        LOG.info("Suspend VM {} ....".format(vm_name))
+        LOG.info("Suspend/Resume VM {} ....".format(vm_name))
         vm_helper.suspend_vm(vm_id)
-
-        LOG.info("Resume VM {} ....".format(vm_name))
         vm_helper.resume_vm(vm_id)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     LOG.info("Checking overall system health...")
     assert system_helper.get_system_health_query(), "System health not OK after VMs"

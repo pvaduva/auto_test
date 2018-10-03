@@ -1,12 +1,14 @@
+import time
 import random
 
 from pytest import fixture, mark, skip
-import time
+
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, KPI_DATE_FORMAT
 from consts.reasons import SkipStorageBacking
 from consts.cgcs import VMStatus, SysType
+from consts.timeout import VMTimeout
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, host_helper, system_helper, common
 
@@ -138,7 +140,7 @@ class TestLockWithVMs:
             vm_host = nova_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
 
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
 
         if collect_kpi:
             LOG.info("Collect kpi for lock host with vms")
@@ -170,7 +172,7 @@ class TestLockWithVMs:
         LOG.tc_step("Ensure vms are Active and Pingable from NatBox")
         vm_helper.wait_for_vms_values(vms, values=VMStatus.ACTIVE, fail_ok=False, timeout=600)
         for vm in vms:
-            vm_helper.wait_for_vm_pingable_from_natbox(vm)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm, timeout=VMTimeout.DHCP_RETRY)
 
 
 @mark.p2

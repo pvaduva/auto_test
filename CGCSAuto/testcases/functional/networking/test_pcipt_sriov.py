@@ -155,6 +155,11 @@ def test_evacuate_pci_vm(vif_model_check):
     LOG.tc_step("Check vm still pingable over mgmt, and {} nets after evacuation".format(net_type))
     vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
 
+    LOG.tc_step("Wait for rebooted host {} to recover and ensure vm are still reachable".format(host))
+    host_helper.wait_for_hosts_ready(hosts=host)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
+    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
+
 
 @mark.p3
 def test_pci_resource_usage(vif_model_check):

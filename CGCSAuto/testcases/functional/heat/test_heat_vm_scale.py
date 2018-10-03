@@ -5,6 +5,7 @@ from pytest import mark, fixture
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages, VMStatus
 from consts.proj_vars import ProjVar
+from consts.timeout import VMTimeout
 from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.clients.ssh import ControllerClient
@@ -211,7 +212,7 @@ def test_heat_vm_scale_after_actions(vm_scaling_stack, actions):
         if system_helper.is_simplex():
             host_helper.reboot_hosts('controller-0')
             vm_helper.wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=600, check_interval=10, fail_ok=False)
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+            vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=VMTimeout.DHCP_RETRY)
         else:
             LOG.tc_step("evacuate vm before scale in/out")
             vm_host = nova_helper.get_vm_host(vm_id=vm_id)
