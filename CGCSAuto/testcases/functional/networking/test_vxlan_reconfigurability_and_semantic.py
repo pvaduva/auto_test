@@ -361,6 +361,7 @@ def multiple_provider_net_range(request):
     def fin_teardown():
         # Clean up: remove the ranges and providers just created
         network_helper.delete_providernet_range(range_name)
+
         for pnet in providernet_names:
             cli.neutron('providernet-delete', pnet, auth_info=Tenant.get('admin'))
     request.addfinalizer(fin_teardown)

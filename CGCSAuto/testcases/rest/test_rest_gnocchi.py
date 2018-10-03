@@ -21,3 +21,4 @@ def test_rest_gnocchi(gnocchi_rest, operation, resource):
     if operation == "GET":
         LOG.info("getting... {}".format(resource))
         rest_test_helper.get(gnocchi_rest, resource=resource)
+

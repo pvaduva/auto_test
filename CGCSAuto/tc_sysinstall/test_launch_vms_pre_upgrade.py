@@ -17,5 +17,3 @@ def test_launch_vms_using_scripts_pre_upgrade():
     #
     vms = install_helper.launch_vms_post_install()
     assert len(vms) > 0, "Failed to launch VMs: {}".format(vms)
-
-

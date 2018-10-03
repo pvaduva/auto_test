@@ -6,7 +6,7 @@ from telnetlib import Telnet
 import pexpect
 
 from consts.auth import HostLinuxCreds
-from consts.cgcs import DATE_OUTPUT
+from consts.cgcs import DATE_OUTPUT, Prompt
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.clients.ssh import PASSWORD_PROMPT, EXIT_CODE_CMD
@@ -27,8 +27,9 @@ def telnet_logger(host):
     return logger
 
 
-TELNET_REGEX = '(.*-\d+)( login:|:~\$)'
-TELNET_LOGIN_PROMPT = '(controller|compute|storage)-\d+ login:'
+TELNET_REGEX = '([\w]+-[\d]+)[ login:|:~\$]'
+TELNET_LOGIN_PROMPT = Prompt.LOGIN_PROMPT
+NEWPASSWORD_PROMPT = ''
 
 
 class TelnetClient(Telnet):
@@ -47,13 +48,12 @@ class TelnetClient(Telnet):
                 hostname = re.search(TELNET_REGEX, self.cmd_output).group(1)
                 prompt = '{}:~\$ '.format(hostname)
 
-            self.flush()
         elif not prompt:
             prompt = '{}:~\$ '.format(hostname)
         elif not hostname:
             hostname = re.search(TELNET_REGEX, prompt).group(0)
-
-        self.logger = telnet_logger(hostname) if hostname else telnet_logger(host)
+        self.flush()
+        self.logger = telnet_logger(hostname) if hostname else telnet_logger(host + ":" + str(port))
         self.hostname = hostname
         self.prompt = prompt
         self.cmd_output = ''
@@ -73,26 +73,26 @@ class TelnetClient(Telnet):
 
         return self.sock
 
-    def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
-        super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
-        try:
-            self.send('\r\n\r\n')
-            index = self.expect(['Login:', TELNET_REGEX])
-            self.flush()
-            if index == 0:
-                self.send('\r\n\r\n')
-                self.expect(TELNET_REGEX)
-                self.flush()
-            msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
-            self.logger.info(msg)
+    #def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
+    #    super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
+    #    try:
+    #        self.send('\r\n\r\n')
+    #        index = self.expect(['Login:', TELNET_REGEX])
+    #        self.flush()
+    #        if index == 0:
+    #            self.send('\r\n\r\n')
+    #            self.expect(TELNET_REGEX)
+    #            self.flush()
+    #        msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
+    #        self.logger.info(msg)
 
-        except Exception as e:
-            err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'.\
-                format(host, port, e.__str__())
-            self.logger.warning(err_msg)
+    #    except Exception as e:
+    #        err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'. \
+    #            format(host, port, e.__str__())
+    #        self.logger.warning(err_msg)
 
     def login(self, expect_prompt_timeout=3, fail_ok=False):
-        self.send('\r\n\r\n')
+        self.send()
         index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
         self.flush()
         code = 0
@@ -150,15 +150,21 @@ class TelnetClient(Telnet):
         if not cmd.endswith('\n'):
             cmd = '{}\n'.format(cmd)
         # self.set_debuglevel(2)
-        cmd.replace('\r\n', '\n')
-        cmd.replace('\n', '\r\n')
+
+        # cmd.replace('\r\n', '\n')
+        # cmd.replace('\n', '\r\n')
+
         self.write(cmd.encode())
 
     def send_control(self, char='c'):
-        if char != 'c':
-            raise NotImplemented("Only ctrl+c is supported")
+        valid_chars = ["[", "\\", "]", "^", "_"]
+        if char.isalpha() or char in valid_chars:
+            code = chr(ord(char.upper()) - 64)
+        else:
+            raise NotImplemented("ctrl+{} is not supported".format(char))
         self.logger.info("Send: ctrl+{}".format(char))
-        self.write(b'\x03')
+        self.write(code.encode())
+
 
     def _process_output(self, output, rm_date=False):
         if isinstance(output, bytes):
@@ -213,6 +219,9 @@ class TelnetClient(Telnet):
             err_msg = 'EOF encountered and before receiving anything. '
             index = -1
 
+        except exceptions.TelnetTimeout:
+            err_msg = 'Timed out looking for {}'
+
         if fail_ok:
             self.logger.warning(err_msg)
             return index
@@ -241,7 +250,7 @@ class TelnetClient(Telnet):
         self.send(cmd, reconnect, reconnect_timeout)
         try:
             self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
-        except pexpect.TIMEOUT as e:
+        except exceptions.TelnetTimeout as e:
             self.send_control()
             self.flush()
             if fail_ok:
@@ -258,8 +267,57 @@ class TelnetClient(Telnet):
 
         return code, output
 
+
+    def exec_sudo_cmd(self, cmd, expect_timeout=60, rm_date=True, fail_ok=True, get_exit_code=True,
+                      searchwindowsize=None, strict_passwd_prompt=False, extra_prompt=None, prefix_space=False):
+        """
+        Execute a command with sudo.
+
+        Args:
+            cmd (str): command to execute. such as 'ifconfig'
+            expect_timeout (int): timeout waiting for command to return
+            rm_date (bool): whether to remove date info at the end of the output
+            fail_ok (bool): whether to raise exception when non-zero exit code is returned
+            get_exit_code
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
+            strict_passwd_prompt (bool): whether to search output with strict password prompt (Not recommended. Use
+                searchwindowsize instead)
+            extra_prompt (str|None)
+            prefix_space (bool): prefix ' ' to cmd, so that it will not go into bash history if HISTCONTROL=ignorespace
+
+        Returns (tuple): (exit code (int), command output (str))
+
+        """
+        cmd = 'sudo ' + cmd
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
+        LOG.debug("Executing sudo command...")
+        self.send(cmd)
+        pw_prompt = Prompt.PASSWORD_PROMPT if not strict_passwd_prompt else Prompt.SUDO_PASSWORD_PROMPT
+        prompts = [self.prompt]
+        if extra_prompt is not None:
+            prompts.append(extra_prompt)
+        prompts.append(pw_prompt)
+
+        index = self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
+        if index == prompts.index(pw_prompt):
+            self.send(self.password)
+            prompts.remove(pw_prompt)
+            self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
+
+        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        if code != 0 and not fail_ok:
+            raise exceptions.TelnetException("Non-zero return code for sudo cmd: {}. Output: {}".
+                                                  format(cmd, output))
+
+        return code, output
+
+
     def msg(self, msg, *args):
         return
+
 
     def _process_exec_result(self, cmd, rm_date=False, get_exit_code=True):
 
@@ -276,10 +334,11 @@ class TelnetClient(Telnet):
         if get_exit_code:
             exit_code = self.get_exit_code()
             # if exit_code != 0:
-            #     self.logger.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
-            #                         format(cmd, exit_code, cmd_output))
+            #    self.logger.warning('Issue occurred when executing \'{}\'. Exit_code: {}. Output: {}'.
+            #                        format(cmd, exit_code, cmd_output))
         else:
             exit_code = -1
+            self.logger.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
 
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output
@@ -288,7 +347,9 @@ class TelnetClient(Telnet):
         self.flush()
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=10)
+        LOG.debug("echo output: {}".format(self.cmd_output))
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
+        LOG.debug("matches: {}".format(matches))
         return int(matches[-1])
 
     def __force_end(self, force):

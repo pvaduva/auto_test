@@ -26,7 +26,7 @@ def hosts_per_backing(add_admin_role_module):
     'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
@@ -77,6 +77,7 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
             {'net-id': tenant_net_id, 'vif-model': 'virtio'},
             {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+
     vm_id = vm_helper.boot_vm(boot_from, flavor=flavor, source=boot_source, nics=nics, cleanup='function')[1]
 
     code_boot, out_boot = \

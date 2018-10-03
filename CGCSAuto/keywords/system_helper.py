@@ -1138,7 +1138,6 @@ def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), **k
 
     if code == 1:
         return 1, output
-
     return 0, ''
 
 
@@ -1562,6 +1561,7 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
     cmd = 'host-memory-list --nowrap'
     table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
 
+
     if isinstance(proc_id, (str, int)):
         proc_id = [int(proc_id)]
     elif proc_id is None:
@@ -1868,6 +1868,7 @@ def get_host_interfaces_table(host, show_all=False, con_ssh=None, use_telnet=Fal
     return table_
 
 
+
 def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
                         show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.get('admin'),
                         exclude=False, **kwargs):
@@ -2016,6 +2017,7 @@ def get_host_port_pci_address(host, interface, con_ssh=None, auth_info=Tenant.ge
     return pci_address
 
 
+
 def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True, con_ssh=None,
                                            auth_info=Tenant.get('admin')):
     """
@@ -2056,6 +2058,7 @@ def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Ten
 
 def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
                               **interface_filters):
+
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -3657,3 +3660,4 @@ def enable_port_security_param():
         time.sleep(60)
         lock_unlock_hosts(computes)
         wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=60)
+

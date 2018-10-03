@@ -44,7 +44,6 @@ def setup_test_session():
     """
     print("Syspatch test session ...")
     ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.copy_test_files()
 
@@ -55,7 +54,13 @@ def setup_test_session():
     else:
         natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), natbox, con_ssh=con_ssh)
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    # set build id to be used to upload/write test results
+    build_id, build_server, job = setups.get_build_info(con_ssh)
+    ProjVar.set_var(BUILD_ID=build_id)
+    ProjVar.set_var(BUILD_SERVER=build_server)
+    ProjVar.set_var(JOB=job)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
+
     setups.set_session(con_ssh=con_ssh)
 
 

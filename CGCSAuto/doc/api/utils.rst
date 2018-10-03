@@ -18,7 +18,7 @@ ssh module
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 SSH connection and send/receive commands
 
-.. automodule:: utils.ssh
+.. automodule:: utils.clients.ssh
     :members:
     :undoc-members:
     :show-inheritance:

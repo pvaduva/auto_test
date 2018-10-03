@@ -214,7 +214,7 @@ class Labs:
         'tpm_installed': True,
         'ixia_ports': [{'port': (2, 7), 'range': (3002, 3151)}],
     }
-    
+
     R430_3_4 = {
         'short_name': 'r430_3_4',
         'name': 'yow-cgcs-r430-3_4',
@@ -550,9 +550,9 @@ class Labs:
         'controller-0 ip': '128.224.151.111',
         'controller-1 ip': '128.224.151.205',
         'controller_nodes': [23299, 23300],
-        'compute_nodes': [23303, 23304, 23305],
-        'storage_nodes': [23301, 23302],
-        'ixia_ports': [{'port': (6, 5), 'range': (3302, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
+        'compute_nodes': [23303, 23301, 23302],
+        'storage_nodes': [23304, 23305],
+        'ixia_ports': [{'port': (6, 5), 'range': (3301, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
     }
 
     WCP_99_103 = {
@@ -589,6 +589,16 @@ class Labs:
         'ixia_ports': [{'port': (8, 13), 'range': (900, 999)}, {'port': (8, 14), 'range': (1000, 1049)}],
     }
 
+    WCP_112 = {
+        'short_name': 'wcp_112',
+        'name': 'yow-cgcs-wildcat-112',
+        'floating ip': '128.224.150.148',
+        'controller-0 ip': '128.224.150.148',
+        'controller_nodes': [95980],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     WCP_113_121 = {
         'short_name': 'wcp_113_121',
         'name': 'yow-cgcs-wildcat-113_121',
@@ -602,10 +612,20 @@ class Labs:
 
     WCP_122 = {
         'short_name': 'wcp_122',
-        'name': 'cgcs-wildcat-122',
+        'name': 'yow-cgcs-wildcat-122',
         'floating ip': '128.224.151.170',
         'controller-0 ip': '128.224.151.170',
         'controller_nodes': [64873],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    ML350_G10 = {
+        'short_name': 'ml350_g10',
+        'name': 'yow-cgcs-ml350-g10-1',
+        'floating ip': '128.224.151.181',
+        'controller-0 ip': '128.224.151.181',
+        'controller_nodes': [55836],
         'system_type': 'CPE',
         'system_mode': 'simplex',
     }
@@ -633,6 +653,7 @@ class Labs:
     }
 
     WP_08_12 = {
+
         'short_name': 'wp_8_12',
         'name': 'yow-cgcs-wolfpass-08_12',
         'floating ip': '128.224.150.149',
@@ -768,7 +789,8 @@ def update_lab(lab_dict_name=None, lab_name=None, floating_ip=None, **kwargs):
     Returns (dict): updated lab dict
 
     """
-    if not lab_dict_name or not lab_name:
+
+    if not lab_name and not lab_dict_name:
         from consts.proj_vars import ProjVar
         lab_name = ProjVar.get_var('LAB').get('short_name', None)
         if not lab_name:

@@ -70,6 +70,20 @@ def unreserve_hosts(hosts):
     _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_UNRESERVE, reserve=False)
 
 
+def force_unreserve_hosts(hosts, val='hostname'):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    barcodes = get_barcodes_from_hostnames(hosts) if val == 'hostname' else hosts
+
+    LOG.info("forecefully unreserving hosts {}: {}".format(hosts, barcodes))
+    for barcode in barcodes:
+        rc, output = local_host.force_unreserve_vlm_console(barcode)
+        if rc != 0:
+            err_msg = "Failed to unreserve barcode {} in vlm: {}".format(barcode, output)
+            raise exceptions.VLMError(err_msg)
+
+
 def get_hostnames_from_consts(lab=None):
     return list(get_barcodes_dict(lab=lab).keys())
 
@@ -175,7 +189,7 @@ def reboot_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect
         host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
-def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=True):
+def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=True,):
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -246,3 +260,26 @@ def power_off_hosts_simultaneously(hosts=None):
     for node, res in results.items():
         if res[0] != 0:
             raise exceptions.VLMError(res[1])
+
+
+def get_attributes_dict(hosts, attr="all", val='hostname'):
+    if isinstance(hosts, str):
+        hosts = [hosts]
+
+    attributes = []
+
+    barcodes = get_barcodes_from_hostnames(hosts) if val == 'hostname' else hosts
+
+    for barcode in barcodes:
+        attribute_dict = {}
+        output = local_host.vlm_getattr(barcode, attr)[1]
+        for line in output.splitlines():
+            if line:
+                if attr == "all":
+                    key = line[:line.find(":")].strip()
+                else:
+                    key = attr
+                val = line[line.find(":") + 1:].strip()
+                attribute_dict[key] = val
+        attributes.append(attribute_dict)
+    return attributes

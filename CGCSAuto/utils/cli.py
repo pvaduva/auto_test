@@ -109,7 +109,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         complete_cmd = complete_cmd.replace('--os-project-name', '--os-tenant-name')
 
     if use_telnet:
-        exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, timeout=timeout)
+        exit_code, cmd_output = con_telnet.exec_cmd(complete_cmd, expect_timeout=timeout)
     else:
         exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
                                                     searchwindowsize=100)
@@ -342,6 +342,7 @@ def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=No
     # FIXME: temp workaround to maintain backward compatibility for non-STX build until TC branch is created.
     build = ProjVar.get_var('BUILD_ID')
     cmd_ = 'fm'
+
     if build and build != 'n/a':
         if build < '2018-08-19':
             cmd_ = 'system'

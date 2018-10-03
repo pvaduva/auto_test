@@ -1151,8 +1151,8 @@ class Telnet:
                         LOG.info("Installing cloned image; Requires multiple reboots. May take up to 80 minutes...")
                         install_timeout = 4800
 
-                # If we are performing a UEFI install then we need to use
-                # different logic to select the install option
+                # If we are performing a UEFI fresh_install then we need to use
+                # different logic to select the fresh_install option
                 elif "UEFI" in boot_device_regex:
                     LOG.info("wildcat boot_device_regex, selecting UEFI boot option 2: {}".format(boot_device_regex))
                     self.get_read_until("UEFI CentOS Serial Controller Install", BOOT_MENU_TIMEOUT)
@@ -1420,7 +1420,7 @@ class Telnet:
             if node.name == CONTROLLER0:
                 # self.get_read_until("Kickstart Boot Menu", 300)
                 self.get_read_until(boot_menu, 300)
-                LOG.info("Enter install type")
+                LOG.info("Enter fresh_install type")
                 # New pxeboot cfg menu
                 # 0) Boot from hard drive
                 # 1) WRL Serial Controller Install

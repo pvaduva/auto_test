@@ -4,11 +4,12 @@ import re
 import time
 from datetime import datetime
 
-from keywords import host_helper, system_helper, orchestration_helper
-from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from testfixtures.recover_hosts import HostsToRecover
+from keywords import host_helper, system_helper, orchestration_helper
+
 
 PATCH_CMDS = {
     'apply': {
@@ -254,7 +255,6 @@ def repeat(times=5, wait_per_iter=10, expected_code=0, expected_hits=2, stop_cod
 
 def run_cmd(cmd, con_ssh=None, **kwargs):
     LOG.debug('run patch cmd:' + cmd)
-
     ssh_client = con_ssh or ControllerClient.get_active_controller()
     if isinstance(ssh_client, list):
         LOG.info('ssh_client is a LIST:{}'.format(ssh_client))

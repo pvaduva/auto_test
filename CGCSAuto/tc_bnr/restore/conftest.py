@@ -27,8 +27,12 @@ def pytest_configure(config):
     build_server = config.getoption('build_server')
     tis_build_dir = config.getoption('tis_build_dir')
 
-    setups.set_install_params(lab=lab, skip_labsetup=None, resume=None, installconf_path=None,
-                              controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
+
+    setups.set_install_params(lab=lab, skip='feed' if skip_setup_feed else None, resume=None, installconf_path=None,
+                              drop=None, boot='usb' if use_usb else 'pxe', controller0_ceph_mon_device=None, iso_path=None,
+                              controller1_ceph_mon_device=None, ceph_mon_gib=None,low_latency=low_latency, security='standard',
+                              stop=99, wipedisk=False, ovs=False, patch_dir=None, boot_server=None)
+
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path,
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir, build_server=build_server)
 
@@ -79,7 +83,6 @@ def setup_build_vars(request):
     Setup primary tenant  before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-
     def set_build_vars():
         try:
             con_ssh = ControllerClient.get_active_controller()

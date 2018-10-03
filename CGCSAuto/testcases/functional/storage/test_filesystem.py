@@ -16,6 +16,9 @@ DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extensi
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
 
+DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
+DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
+
 @fixture()
 def aio_precheck():
     if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():

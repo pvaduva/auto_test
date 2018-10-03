@@ -6,7 +6,7 @@ from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.proj_vars import InstallVars, UpgradeVars, BackupVars
+from consts.proj_vars import ProjVar, InstallVars, UpgradeVars, BackupVars
 from keywords import install_helper,  patching_helper, upgrade_helper, common
 from testfixtures.pre_checks_and_configs import *
 from utils import table_parser, cli

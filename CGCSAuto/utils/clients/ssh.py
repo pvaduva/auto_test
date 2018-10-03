@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 import threading
 import time
 from contextlib import contextmanager
@@ -330,6 +331,12 @@ class SSHClient:
         if not isinstance(blob_list, list):
             blob_list = [blob_list]
 
+        exit_cmd = (self.cmd_sent == EXIT_CODE_CMD)
+        # if not exit_cmd:
+        #     LOG.debug("Expecting: \'{}\'...".format('\', \''.join(str(blob) for blob in blob_list)))
+        # else:
+            # LOG.debug("Expecting exit code...")
+
         kwargs = {}
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
@@ -506,6 +513,7 @@ class SSHClient:
         cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
 
+        LOG.info("Rsyncing file(s) from {} to {}: {}".format(self.host, dest_server, cmd))
         self.send(cmd)
         index = self.expect(blob_list=[self.prompt, PASSWORD_PROMPT], timeout=timeout)
 
@@ -642,7 +650,7 @@ class SSHClient:
             if not exit_code == 0:
                 raise exceptions.CommonError("scp unsuccessfully")
 
-            if not is_dir and not self.file_exists(file_path=dest_path):
+            if not self.file_exists(file_path=dest_path):
                 raise exceptions.CommonError("{} does not exist after download".format(dest_path))
         except:
             if cleanup:
@@ -1213,7 +1221,7 @@ class NATBoxClient:
                 raise exceptions.NatBoxClientUnsetException
 
         if len(cls.__natbox_ssh_map[natbox_ip]) > idx:
-            return cls.__natbox_ssh_map[natbox_ip][idx]   # KeyError will be thrown if not exist
+            return cls.__natbox_ssh_map[natbox_ip][idx]  # KeyError will be thrown if not exist
 
         LOG.warning('No NatBox client set for Thread-{}'.format(idx))
         return None

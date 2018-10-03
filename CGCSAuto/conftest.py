@@ -8,6 +8,8 @@ import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
+
+from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars, ComplianceVar
 from consts import build_server as build_server_consts
 from consts import cgcs
@@ -301,6 +303,13 @@ def pytest_configure(config):
     elif stress_count > 0:
         count = stress_count
 
+    # neccesary install params if --lab is not given
+    controller_arg = config.getoption('controller')
+    compute_arg = config.getoption('compute')
+    storage_arg = config.getoption('storage')
+    lab_file_dir = config.getoption('file_dir')
+    build_server = config.getoption('build_server')
+
     global no_teardown
     no_teardown = config.getoption('noteardown')
     if repeat_count > 0 or no_teardown:
@@ -313,7 +322,13 @@ def pytest_configure(config):
     collect_netinfo = config.getoption('netinfo')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
-    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
+    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg,
+                                      installconf_path=install_conf,
+                                      controller_arg=controller_arg,
+                                      compute_arg=compute_arg,
+                                      storage_arg=storage_arg,
+                                      lab_files_dir=lab_file_dir,
+                                      build_server=build_server,)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
@@ -337,6 +352,7 @@ def pytest_configure(config):
         ProjVar.set_var(COLLECT_TELNET=True)
 
     # Compliance configs:
+
     file_or_dir = config.getoption('file_or_dir')
 
     refstack_suite = dovetail_suite = config.getoption('compliance_suite')
@@ -445,10 +461,21 @@ def pytest_addoption(parser):
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skiplabsetup_help = "Do not run lab_setup post lab install"
-    installconf_help = "Full path of lab install configuration file. Template location: " \
+    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,pxeboot,feed \n" \
+                "labsetup: Do not run lab_setup post lab install \n" \
+                "pxeboot: Don't modify pxeboot.cfg \n" \
+                "feed: skip setup of network feed"
+    installconf_help = "Full path of lab fresh_install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
-    resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
+    resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed or from a given step'
+    wipedisk_help = 'Wipe the disk(s) on the hosts'
+    boot_help = 'Select how to boot the lab. Default is pxe. Options are: \n' \
+                'pxe: boot from the network using pxeboot \n' \
+                'burn: burn the USB using iso-path and boot from it \n' \
+                'usb: Boot from load existing on USB \n' \
+                'iso: iso install flag'
+    iso_path_help = 'Full path to ISO file. Default is <build-dir'
+    ovs_help = 'Run using lab_setup_ovs.conf rather than lab_setup.conf (for StarlingX install)'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -499,15 +526,21 @@ def pytest_addoption(parser):
                      '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
 
     ##################################
-    # Lab install or upgrade options #
+    # Lab fresh_install or upgrade options #
     ##################################
+    LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
+
     # Install
-    parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
-                     help=resumeinstall_help)
-    parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
-                     help=skiplabsetup_help)
+    parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
+                     help=resumeinstall_help, const=True, nargs='?', default=False)
+    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default='99')
+    parser.addoption('--skip', dest='skiplist', action='store', nargs='*', help=skip_help)
+    parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
+    parser.addoption('--boot', dest='boot_list', action='store', default='pxe', help=boot_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+    parser.addoption('--security', dest='security', action='store', default='standard')
+    parser.addoption('--drop', dest='drop_num', action='store', help='an integer representing which drop to install')
     # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
@@ -519,7 +552,37 @@ def pytest_addoption(parser):
                      action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
-    # Note --lab is also a lab install option, when config file is not provided.
+    parser.addoption('--boot-server', '--boot_server', dest='boot_server',
+                     help='server to boot from. Default is yow-tuxlab2')
+
+    # install help
+    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
+                    "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
+                    "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
+    controller_help = "space-separated list of VLM barcodes for controllers"
+    compute_help = "space-separated list of VLM barcodes for computes"
+    storage_help = "space-separated list of VLM barcodes for storage nodes"
+    guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
+                       "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+    heat_help = "The full path to the python heat templates" \
+                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
+
+    # Custom install options
+    parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
+                     help=file_dir_help)
+    parser.addoption('--controller', dest='controller', action='store', nargs='*', help=controller_help)
+    parser.addoption('--compute', dest='compute', action='store', nargs='*', help=compute_help)
+    parser.addoption('--storage', dest='storage', action='store', nargs='*', help=storage_help)
+    parser.addoption('--guest_image', '--guest-image', '--guest_image_path', '--guest-image-path',
+                     dest='guest_image_path', action='store', metavar='guest image full path',
+                     default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
+    parser.addoption('--heat_templates', '--heat-templates', '--heat_templates_path', '--heat-templates-path',
+                     dest='heat_templates', action='store', metavar='heat templates full path',
+                     default=BuildServerPath.HEAT_TEMPLATES, help=heat_help)
+    parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
+                     help=iso_path_help)
+    parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
+    # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
     #  Upgrade options #
@@ -658,10 +721,10 @@ def pytest_addoption(parser):
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
-    parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
-                     action='store_true', help="Restore a low-latency lab")
     parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
                      action='store_true', help="Using upstream cinder-backup CLIs")
+    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
+                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
 
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
@@ -725,6 +788,16 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.debug(e)
         pass
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if not log_dir:
+        try:
+            from utils.clients.ssh import ControllerClient
+            ssh_list = ControllerClient.get_active_controllers(fail_ok=True)
+            for con_ssh_ in ssh_list:
+                con_ssh_.close()
+        except:
+            pass
+        return
 
     log_dir = ProjVar.get_var('LOG_DIR')
     if not log_dir:

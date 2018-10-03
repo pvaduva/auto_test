@@ -682,6 +682,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if poll:
         args_ += ' --poll'
 
+
     if block_device:
         if isinstance(block_device, dict):
             block_device = [block_device]
@@ -5091,6 +5092,7 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None,
     Returns (tuple):
         (vm_id_on_primary_tenant, vm_id_on_secondary_tenant)
     """
+
     primary_kwargs = dict() if not primary_kwargs else primary_kwargs
     secondary_kwargs = dict() if not secondary_kwargs else secondary_kwargs
 
@@ -5156,6 +5158,7 @@ def launch_vm_with_both_providernets(vm_type,
                                  tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
     network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
                                  tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
+
 
     if vm_type in ('virtio', 'vhost'):
         vif_model = 'virtio'

@@ -10,7 +10,7 @@ from utils.clients.ssh import ControllerClient
 from consts.cgcs import OrchestStrategyPhase, OrchStrategyKey, OrchStrategyState
 from consts.timeout import OrchestrationPhaseTimeout, HostTimeout
 from keywords import common
-from consts.auth import Tenant
+
 
 
 PHASE_COMPLETION_CHECK_INTERVAL = 20

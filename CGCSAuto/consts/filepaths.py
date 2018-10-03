@@ -59,6 +59,7 @@ class BuildServerPath:
     HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
     CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
     
+
     LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
                                '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
                                '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
@@ -66,6 +67,7 @@ class BuildServerPath:
                                '18.03': '/localdisk/loadbuild/jenkins/TC_18.03_Host/latest_build/',
                                '18.04': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_build/',
                                '18.07': '/localdisk/loadbuild/jenkins/TC_18.07_Host/latest_build/',
+                               '18.08': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_build/',
                                }
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
@@ -74,7 +76,11 @@ class BuildServerPath:
                          '18.01': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic',
                                    '/folk/cgts/lab/R5-AIO-SX-full.lic'],
                          '18.03': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic',
-                                   '/folk/cgts/lab/R5-AIO-SX-full.lic']
+                                   '/folk/cgts/lab/R5-AIO-SX-full.lic'],
+                         '18.07': ['/folk/cgts/lab/R6-EAR1-eval.lic', '/folk/cgts/lab/R6-EAR1-AIO-DX-eval.lic',
+                                   '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
+                         '18.08': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
+                                   '/folk/cgts/lab/R6-AIO-SX-full.lic'],
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
@@ -94,7 +100,6 @@ class BuildServerPath:
         '18.04': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE.patch'
     }
 
-
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
                          '17.06':
@@ -102,7 +107,11 @@ class BuildServerPath:
                          '18.01':
                              '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img',
                          '18.03':
-                             '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img'
+                             '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img',
+                         '18.07':
+                             '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img',
+                         '18.08':
+                             '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
                          }
 
 
@@ -115,7 +124,6 @@ class SecurityPath:
     DEFAULT_CERT_PATH = '/home/wrsroot/server-with-key.pem'
     ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'
     CA_CERT_PATH = '/home/wrsroot/ca-cert.pem'
-
 
 class IxiaPath:
     CFG_500FPS = "D:/CGCS/IxNetwork/cgcsauto/pair_at_500fps.ixncfg"
@@ -131,3 +139,14 @@ class CompConfPath:
 class MuranoPath:
     APP_DEMO_PATH = '/folk/cgts/users/jsun3/com.wrs.titanium.murano.examples.demo.zip'
     BASE_PACKAGES = ["/var/cache/murano/meta/io.murano.zip", "/var/cache/murano/meta/io.murano.applications.zip"]
+
+
+class TuxlabServerPath:
+    DEFAULT_TUXLAB_SERVER = 'yow-tuxlab2'
+    DEFAULT_BARCODES_DIR = '/export/pxeboot/vlm-boards'
+
+
+class LogPath:
+    LAB_SETUP_PATH = '/home/wrsroot/lab_setup.group0.log'
+    HEAT_SETUP_PATH = '/home/wrsroot/launch_heat_stacks.log'
+    CONFIG_CONTROLLER_PATH = '/var/log/puppet/latest/puppet.log'

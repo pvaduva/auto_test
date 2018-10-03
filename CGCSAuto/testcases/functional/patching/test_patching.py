@@ -1,3 +1,4 @@
+import datetime
 import os
 
 from pytest import fixture, skip, mark
@@ -5,6 +6,7 @@ from pytest import fixture, skip, mark
 from consts.auth import HostLinuxCreds
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import PatchingVars
+
 from keywords import host_helper, patching_helper, system_helper, html_helper
 from utils import lab_info
 from utils import table_parser, cli
@@ -65,7 +67,7 @@ def install_impacted_hosts(patch_ids, current_states=None, con_ssh=None, remove=
 
     if controllers:
         patching_helper.install_patches(controllers, con_ssh=con_ssh)
-
+        
     if patch_ids:
         expected_patch_states = ['Applied'] if not remove else ['Removed', 'Available']
 

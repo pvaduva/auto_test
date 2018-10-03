@@ -2709,6 +2709,7 @@ def get_pci_vm_network(pci_type='pci-sriov', vlan_id=None, net_name=None, strict
         final_nets = list(final_nets)
         if final_nets:
             if 'pci-passthrough' in pci_type:
+
                 port = system_helper.get_host_interfaces(host, rtn_val='ports', net_type=pci_type)[0]
                 host_nic = system_helper.get_host_ports_values(host, header='device type', **{'name': port})[0]
                 if re.match(MELLANOX4, host_nic):
@@ -4893,8 +4894,10 @@ def update_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, 
         actual_val = table_parser.get_value_two_col_table(table_, key)
         actual_val = eval(actual_val)
 
+
         # if isinstance(actual_val, str):
         #     actual_val = eval(actual_val)
+
         if val:
             assert set(val) <= set(actual_val), "Requested {}(s) to add to port chain: {}; Actual value: {}".\
                 format(key, val, actual_val)
@@ -5218,3 +5221,12 @@ def vconsole(ssh_client):
     LOG.info("Exiting vconsole")
     ssh_client.set_prompt(original_prompt)
     ssh_client.exec_cmd("quit")
+
+
+def reset_telnet_port(telnet_conn):
+    telnet_conn.send_control("\\")
+    telnet_conn.expect(["anonymous:.+:PortCommand> "], timeout=5)
+    telnet_conn.send("resetport")
+    #telnet_conn.send("\r\n")
+    telnet_conn.login()
+

@@ -48,6 +48,7 @@ SUBCLOUD_PATTERN = 'subcloud'
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
+DROPS = {1: '18.07'}
 
 class NtpPool:
     NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
@@ -600,3 +601,4 @@ class MuranoEnvStatus:
     DEPLOY_FAILURE = 'deploy failure'
     DELETING = 'deleting'
     DELETE_FAILURE = 'delete failure'
+

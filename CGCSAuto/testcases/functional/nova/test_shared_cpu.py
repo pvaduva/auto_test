@@ -356,6 +356,7 @@ class TestSharedCpuEnabled:
             if len(shared_disabled_hosts) + len(shared_cpu_hosts) < 2:
                 skip("Less than two up hypervisors with 2 processors")
 
+
             def _modify(host_to_modify):
                 host_helper.modify_host_cpu(host_to_modify, 'shared', p0=1, p1=1)
                 host_helper.modify_host_memory(host_to_modify, proc=0, gib_1g=4)

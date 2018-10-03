@@ -10,7 +10,7 @@ from utils.clients.ssh import ControllerClient
 
 
 def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_ok=False,
-                          con_ssh=None, auth_info=Tenant.ADMIN):
+                          con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Enable/Disable Murano service and murano agent on the system
     Args:
@@ -66,7 +66,7 @@ def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_o
     return 0, msg
 
 
-def enable_disable_murano_agent(enable=True, con_ssh=None, auth_info=Tenant.ADMIN, fail_ok=False):
+def enable_disable_murano_agent(enable=True, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
     Enable/Disable Murano service and murano agent on the system
     Args:

@@ -34,7 +34,6 @@ def collect_logs(con_ssh=None, fail_ok=True):
     Return:
         None
     """
-
     log_tarball = r'/scratch/ALL_NODES*'
     log_dir = r'~/collected-logs'
     old_log_dir = r'~/collected-logs/old-files'
@@ -739,12 +738,25 @@ def test_restore(restore_setup):
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
+        LOG.tc_step('Run restore-complete (CGTS-9756)')
+        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+        controller_node.telnet_conn.login()
+        controller_node.telnet_conn.exec_cmd(cmd, extra_expects=[' will reboot on completion'])
+
+        LOG.info('- wait untill reboot completes, ')
+        time.sleep(120)
+        LOG.info('- confirm the active controller is actually back online')
+        controller_node.telnet_conn.login()
+
+        LOG.tc_step("reconnecting to the active controller after restore-complete")
+        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+
         if not compute_configured:
             LOG.tc_step('Latest 18.07 EAR1 or Old-load on AIO/CPE lab: config its compute functionalities')
             # install_helper.run_cpe_compute_config_complete(controller_node, controller0)
 
-            LOG.info('closing current ssh connection')
-            con_ssh.close()
+            # LOG.info('closing current ssh connection')
+            # con_ssh.close()
 
             LOG.tc_step('Run restore-complete (CGTS-9756)')
             controller_node.telnet_conn.login()
@@ -756,13 +768,13 @@ def test_restore(restore_setup):
             LOG.info('Wait until "config_controller" reboot the active controller')
             time.sleep(180)
 
-            controller_node.telnet_conn = install_helper.open_telnet_session(controller_node,
-                                                                             ProjVar.get_var('LOG_DIR'))
+            controller_node.telnet_conn = install_helper.open_telnet_session(controller_node)
             controller_node.telnet_conn.login()
             time.sleep(120)
 
             con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
             controller_node.ssh_conn = con_ssh
+
             ControllerClient.set_active_controller(con_ssh)
 
             host_helper.wait_for_hosts_ready(controller0)

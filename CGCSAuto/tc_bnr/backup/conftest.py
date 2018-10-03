@@ -22,8 +22,10 @@ def pytest_configure(config):
     cinder_backup = config.getoption('cinder_backup')
 
     backup_dest = 'USB' if use_usb else 'local'
-    setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
-                              controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
+    setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None,
+                              drop=None, boot='usb' if use_usb else 'pxe', controller0_ceph_mon_device=None, iso_path=None,
+                              controller1_ceph_mon_device=None, ceph_mon_gib=None,low_latency=False, security='standard',
+                              stop=99, wipedisk=False, ovs=False, patch_dir=None, boot_server=None)
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
                                delete_backups=delete_backups, dest_labs=dest_labs, cinder_backup=cinder_backup)
 

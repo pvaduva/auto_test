@@ -1,6 +1,9 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.build_server import YOW_CGTS4_LX
+from consts.cgcs import DROPS
+import keywords
+from keywords import install_helper
 
 
 class ProjVar:
@@ -90,42 +93,89 @@ class InstallVars:
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume, skip_labsetup,
+    def set_install_vars(cls, lab,
+                         resume=False,
+                         wipedisk=False,
+                         skips=None,
                          build_server=None,
                          host_build_dir=None,
+                         drop_num=None,
                          guest_image=None,
                          files_server=None,
+                         files_dir=None,
                          hosts_bulk_add=None,
                          boot_if_settings=None,
                          tis_config=None,
                          lab_setup=None,
                          heat_templates=None,
                          license_path=None,
-                         out_put_dir=None,
                          boot_server=None,
+                         boot_type='pxe',
+                         iso_path=None,
                          controller0_ceph_mon_device=None,
                          controller1_ceph_mon_device=None,
-                         ceph_mon_gib=None):
+                         ceph_mon_gib=None,
+                         low_latency=False,
+                         security="standard",
+                         stop=99,
+                         patch_dir=None,
+                         multi_region=False,
+                         dist_cloud=False,
+                         ovs=False):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+        __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.LATEST_HOST_BUILD_PATHS.get(
+            DROPS.get(drop_num), BuildServerPath.DEFAULT_HOST_BUILD_PATH)
+        __files_server = files_server if files_server else __build_server
+        __files_dir = files_dir if files_dir else \
+            "{}/{}/{}".format(__host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
+                              keywords.install_helper.get_git_name(lab['name']))
+        __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
+        iso_server = __build_server
+        if __iso_path.find(":/") != -1:
+            iso_server = __iso_path[:__iso_path.find(":")]
+            __iso_path = __iso_path[__iso_path.find("/"):]
+        patch_server = __build_server
+        if patch_dir and patch_dir.find(":/") != -1:
+            patch_server = patch_dir[:iso_path.find(":")]
+            patch_dir = patch_dir[iso_path.find("/"):]
+        guest_server = __build_server
+        if guest_image:
+            if guest_image.find(":/") != -1:
+                guest_server = guest_image[:guest_image.find(":")]
+                guest_image_path = guest_image[guest_image.find("/"):]
+            else:
+                guest_image_path = guest_image
+        else:
+            guest_image_path = BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop_num), BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+
 
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
-            'SKIP_LABSETUP': skip_labsetup,
-
+            'STOP': stop,
+            'SKIP': skips if skips is not None else [],
+            'WIPEDISK': wipedisk,
+            'MULTI_REGION': multi_region,
+            'DISTRIBUTED_CLOUD': dist_cloud,
+            'OVS': ovs,
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
             'TIS_BUILD_DIR': host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
 
             # Files paths
-            'FILES_SERVER': files_server if files_server else __build_server,
-            'DEFAULT_LAB_FILES_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(
-                    host_build_dir, lab['name']),
+            'FILES_SERVER': __files_server,
+            'LAB_FILES_DIR': __files_dir,
+            'ISO_PATH': __iso_path,
+            'ISO_HOST': iso_server,
+            'PATCH_DIR': patch_dir,
+            'PATCH_SERVER': patch_server,
             # Default tuxlab for boot
             'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
-
+            'BOOT_TYPE': boot_type.lower().strip(),
+            'LOW_LATENCY': low_latency,
+            'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
             # Lab specific
@@ -136,9 +186,9 @@ class InstallVars:
 
             # Generic
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
-            'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.DEFAULT_GUEST_IMAGE_PATH,
+            'GUEST_IMAGE': guest_image_path,
+            'GUEST_SERVER': guest_server,
             'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
-            'OUT_PUT_DIR': out_put_dir,
             'BUILD_ID': None,
             'CONTROLLER0_CEPH_MON_DEVICE': controller0_ceph_mon_device,
             'CONTROLLER1_CEPH_MON_DEVICE': controller1_ceph_mon_device,

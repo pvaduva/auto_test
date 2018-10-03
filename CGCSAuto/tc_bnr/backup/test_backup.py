@@ -318,6 +318,7 @@ def test_backup(pre_system_backup):
 
     collect_logs('after_backup')
 
+    collect_logs('after_backup')
     # Copying system backup ISO file for future restore
     assert backup_load_iso_image(backup_info)
 
@@ -512,7 +513,6 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
     Return:
         a dictionary of information for created volumes, including id, name, and size of volumes
     """
-
     LOG.info('Create VOLUMEs')
 
     if not volume_names:
@@ -684,13 +684,11 @@ def pre_backup_setup(backup_info, con_ssh):
     Return:
          information of created VMs, Volumes, and Images
     """
-
     tenant = Tenant.TENANT1
     backup_info['tenant'] = tenant
 
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant['user'], con_ssh=con_ssh)[0]
     LOG.info('Using tenant:{} in the pre-backup test, details:{}'.format(tenant_id, tenant))
-
     LOG.info('Deleting VMs for pre-backup system-wide test')
     vm_helper.delete_vms()
 
@@ -810,7 +808,6 @@ def lock_unlock_host(backup_info, con_ssh, vms):
                                      administrative='unlocked',
                                      availability='available',
                                      vim_progress_status='services-enabled')
-
     for tried in range(5):
         pingable, message = vm_helper.ping_vms_from_natbox(target_vm, fail_ok=(tried < 4))
         if pingable:

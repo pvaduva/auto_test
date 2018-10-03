@@ -826,7 +826,7 @@ class IxiaSession(object):
         Args:
             obj_ref (str):
                 the identifier for the object
-            **kwargs:
+            **kwargs (dict):
                 attributeName==attributeValue
                 to be tested
 

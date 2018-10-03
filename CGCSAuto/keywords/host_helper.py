@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from xml.etree import ElementTree
 
 from consts import proj_vars
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds, ComplianceCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.filepaths import WRSROOT_HOME
@@ -303,7 +303,7 @@ def recover_simplex(con_ssh=None, fail_ok=False):
 
 def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None):
     """
-    Wait for hosts to be in online state is locked, and available and hypervisor/webservice up if unlocked
+    Wait for hosts to be in online state if locked, and available and hypervisor/webservice up if unlocked
     Args:
         hosts:
         fail_ok: whether to raise exception when fail
@@ -322,16 +322,17 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
     res_lock = res_unlock = True
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        res_lock = wait_for_hosts_states(hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
+        res_lock = wait_for_hosts_states(expt_online_hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
                                          con_ssh=con_ssh)
 
     if expt_avail_hosts:
-        hypervisors = list(set(get_hypervisors()) & set(hosts))
-        controllers = list(set(system_helper.get_controllers()) & set(hosts))
+        hypervisors = list(set(get_hypervisors(con_ssh=con_ssh)) & set(hosts))
+        controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh)) & set(hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        res_unlock = wait_for_hosts_states(hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
-                                           con_ssh=con_ssh)
+        timeout = HostTimeout.CONTROLLER_UNLOCK if "controller-0" in hosts or "controller-1" in hosts else HostTimeout.COMPUTE_UNLOCK
+        res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
+                                           con_ssh=con_ssh, timeout=timeout)
 
         if res_unlock:
             res_1 = wait_for_task_clear_and_subfunction_ready(hosts, fail_ok=fail_ok, con_ssh=con_ssh)
@@ -350,7 +351,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
 
             if check_task_affinity:
                 for host in hypervisors:
-                    res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok)
+                    res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok, con_ssh=con_ssh)
                     res_unlock = res_unlock and res_4
 
     return res_lock and res_unlock
@@ -664,7 +665,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         con_telnet.login()
         con_telnet.exec_cmd("xterm")
 
-    # Give it sometime before openstack cmds enables on after host
+    # Give it sometime before openstack cmds enables on after host unlock
     _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                    fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
     time.sleep(10)
@@ -779,7 +780,8 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                            timeout=HostTimeout.HYPERVISOR_UP)[0]:
                 return 6, "Host is not up in nova hypervisor-list"
 
-            wait_for_tasks_affined(host)
+            if not is_simplex:
+                wait_for_tasks_affined(host, con_ssh=con_ssh)
 
         if check_webservice_up and is_controller:
             if not wait_for_webservice_up(host, fail_ok=fail_ok, con_ssh=con_ssh,
@@ -815,7 +817,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
 
 
 def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
-    if system_helper.is_simplex():
+    if system_helper.is_simplex(con_ssh=con_ssh):
         return True
 
     LOG.info("Check {} non-existent on {}".format(PLATFORM_AFFINE_INCOMPLETE, host))
@@ -837,6 +839,7 @@ def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None):
 def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None,
                  auth_info=Tenant.get('admin'), check_hypervisor_up=False, check_webservice_up=False,
                  use_telnet=False, con_telnet=None):
+
     """
     Unlock given hosts. Please use unlock_host() keyword if only one host needs to be unlocked.
     Args:
@@ -888,7 +891,6 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
-    con_ssh = ControllerClient.get_active_controller()
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     hosts_to_check = []
     for host in hosts_to_unlock:
@@ -959,7 +961,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
         hosts_affine_incomplete = []
         for host in list(set(computes) & set(hosts_avail)):
-            if not wait_for_tasks_affined(host, fail_ok=True):
+            if not wait_for_tasks_affined(host, fail_ok=True, con_ssh=con_ssh):
                 hosts_affine_incomplete.append(host)
                 res[host] = 7, "Host platform tasks affining incomplete"
         hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
@@ -1082,8 +1084,8 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
             if not use_telnet:
                 if not con_ssh._is_connected():
                     if reconnect:
-                        LOG.info("con_ssh connection lost while waitng for system to recover. Attempt to reconnect...")
-                        con_ssh.connect(retry_timeout=timeout)
+                        LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
+                        con_ssh.connect(retry_timeout=timeout, retry=True)
                     else:
                         LOG.error("system disconnected")
                         if fail_ok:
@@ -3125,6 +3127,7 @@ def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, 
         pnets_list_for_host = []
         for pci_type_ in pci_type:
             pnets_for_type = []
+
             pnets_list = system_helper.get_host_interfaces(host_, rtn_val='provider networks', net_type=pci_type_,
                                                            con_ssh=con_ssh, auth_info=auth_info)
 
@@ -3720,6 +3723,42 @@ def ssh_to_test_server(test_srv=SvcCgcsAuto.SERVER, user=SvcCgcsAuto.USER, passw
         yield test_server_conn
     finally:
         test_server_conn.close()
+
+
+@contextmanager
+def ssh_to_compliance_server(server=None, user=None, password=None, prompt=None):
+    """
+    ssh to given compliance server
+
+    Args:
+        server:
+        user (str):
+        password (str):
+        prompt (str|None): expected prompt. such as: cumulus@tis-compliance-test-node:~$
+
+    Yields (SSHClient): ssh client for given compliance server and user
+
+    """
+    if server is None:
+        server = ComplianceCreds.get_host()
+    if user is None:
+        user = ComplianceCreds.get_user()
+    if password is None:
+        password = ComplianceCreds.get_password()
+
+    set_ps1 = False
+    if prompt is None:
+        prompt = '.*{}@.*:.*\$ '.format(user)
+        set_ps1 = True
+    server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
+    server_conn.connect()
+    if set_ps1:
+        server_conn.exec_cmd(r'export PS1="\u@\h:\w\$ "')
+
+    try:
+        yield server_conn
+    finally:
+        server_conn.close()
 
 
 def get_host_co_processor_pci_list(hostname):
@@ -4334,7 +4373,7 @@ def get_host_device_values(host, device, fields, con_ssh=None, auth_info=Tenant.
 
 
 def modify_host_device(host, device, new_name=None, new_state=None, check_first=True, lock_unlock=False, fail_ok=False,
-                       con_ssh=None):
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Modify host device to given name or state.
     Args:
@@ -4346,6 +4385,7 @@ def modify_host_device(host, device, new_name=None, new_state=None, check_first=
         con_ssh (SSHClient):
         fail_ok (bool):
         check_first (bool):
+        auth_info (dict):
 
     Returns (tuple):
 
@@ -4455,13 +4495,14 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
 
     Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
                   remote_ssh.exec_cmd(cmd)
-    """
+\    """
 
     if not host:
         raise exceptions.SSHException("Remote node hostname or ip address must be provided")
 
     if use_telnet and not telnet_session:
         raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+
 
     if not ssh_client and not use_telnet:
         ssh_client = ControllerClient.get_active_controller()

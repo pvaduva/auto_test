@@ -1,18 +1,19 @@
-import json
-import re
+import json, re
+from pytest import skip
 import time
 
-from pytest import skip
-
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.cgcs import GuestImages
-from consts.proj_vars import ProjVar
-from consts.timeout import ImageTimeout
-from keywords import common, system_helper, host_helper, dc_helper
-from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
 from utils.tis_log import LOG
+
+from consts.cgcs import GuestImages
+from consts.auth import Tenant
+from consts.proj_vars import ProjVar
+from consts.auth import SvcCgcsAuto
+from consts.timeout import ImageTimeout
+from keywords import common, system_helper, host_helper, dc_helper
+from testfixtures.fixture_resources import ResourceCleanup
+
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True, exclude=False, **kwargs):
@@ -270,7 +271,6 @@ def create_image(name=None, image_id=None, source_image_file=None,
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
-        ensure_sufficient_space (bool): Ensure glance image storage is sufficient to create new image
         sys_con_for_dc (bool): create image on system controller if it's distributed cloud
         wait_for_subcloud_sync (bool):
         cleanup (str|None): add to teardown list. 'function', 'class', 'module', 'session', or None

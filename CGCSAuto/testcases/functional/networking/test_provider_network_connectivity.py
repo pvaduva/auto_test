@@ -2,6 +2,7 @@ from pytest import fixture, skip, mark
 from keywords import host_helper, system_helper, network_helper
 from utils.tis_log import LOG
 from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.recover_hosts import HostsToRecover

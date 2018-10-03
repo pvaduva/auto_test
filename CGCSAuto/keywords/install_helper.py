@@ -8,16 +8,17 @@ import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.auth import Tenant, CliAuth
 # from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
+from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN,\
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE
-from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
+from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar
-from consts.timeout import HostTimeout
+from consts.timeout import HostTimeout, ImageTimeout
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common
-from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper
+from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
+from utils.clients.telnet import TelnetClient, TELNET_LOGIN_PROMPT
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.tis_log import LOG
 
@@ -85,6 +86,47 @@ def download_upgrade_license(lab, server, license_path):
                             pre_opts=pre_opts)
 
 
+# TODO: to replace download_upgrade_license
+def download_license(lab, server, license_path, dest_name="upgrade_license"):
+
+    cmd = "test -h " + license_path
+    assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  '{} file not found in {}:{}'.format(dest_name.capitalize(),
+                                                                                       server.name, license_path)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+    dest_path = os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name))
+
+    if 'vbox' in lab['name']:
+        if 'external_ip' in lab.keys():
+            external_ip = lab['external_ip']
+            external_port = lab['external_port']
+            server.ssh_conn.rsync("-L " + license_path, external_ip, dest_path,
+                              pre_opts=pre_opts, ssh_port=external_port)
+        else:
+            temp_path = '/tmp'
+            local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
+            local_ip = lab['local_ip']
+            dest_path = os.path.join(temp_path, "{}.lic".format(dest_name))
+
+            server.ssh_conn.rsync("-L " + license_path, local_ip, dest_path,
+                                  dest_user=lab['local_user'], dest_password=lab['local_password'],
+                                  pre_opts=local_pre_opts)
+
+            common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "{}.lic".format(dest_name)),
+                                            dest_path=os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name)))
+
+            # server.ssh_conn.rsync("-L " + license_path, external_ip,
+            #                       os.path.join(temp_path, "upgrade_license.lic"),
+            #                       dest_user=lab['local_user'], dest_password=lab['local_password'],
+            #                       pre_opts=local_pre_opts)
+            #
+            # common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
+            #                                 dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+    else:
+        server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
+
+    return dest_path
+
+
 def download_upgrade_load(lab, server, load_path, upgrade_ver):
 
     # Download licens efile
@@ -122,6 +164,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
                                lab['controller-0 ip'],
                                os.path.join(WRSROOT_HOME, "bootimage.sig"), pre_opts=pre_opts)
 
+
 def get_mgmt_boot_device(node):
     boot_device = {}
     boot_interfaces = system_helper.get_host_port_pci_address_for_net_type(node.name)
@@ -136,7 +179,7 @@ def get_mgmt_boot_device(node):
 
 
 def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_power_on=False, close_telnet_conn=True,
-                            small_footprint=False, wait_for_thread=False):
+                            small_footprint=None, wait_for_thread=False, security=None, low_latency=None, boot_usb=None):
 
     lab = InstallVars.get_install_var("LAB")
     node = lab[hostname]
@@ -162,9 +205,10 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
 
     node_thread = threading.Thread(target=bring_node_console_up,
                                    name=node.name,
-                                   args=(node, boot_device, output_dir),
+                                   args=(node, boot_device),
                                    kwargs={'upgrade': upgrade, 'vlm_power_on': vlm_power_on,
-                                           'close_telnet_conn': close_telnet_conn,'small_footprint':small_footprint})
+                                           'close_telnet_conn': close_telnet_conn, 'small_footprint': small_footprint,
+                                           'security': security, 'low_latency': low_latency, 'boot_usb': boot_usb})
 
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
@@ -175,16 +219,17 @@ def open_vlm_console_thread(hostname, boot_interface=None, upgrade=False, vlm_po
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
+    return node_thread
 
-def bring_node_console_up(node, boot_device, install_output_dir,
-                          boot_usb=False,
-                          low_latency=False,
+
+def bring_node_console_up(node, boot_device,
+                          boot_usb=None,
+                          low_latency=None,
                           upgrade=False,
                           vlm_power_on=False,
                           close_telnet_conn=True,
-                          small_footprint=False,
-                          clone_install=False,
-                          log_file_prefix=''):
+                          small_footprint=None,
+                          security=None,):
     """
     Initiate the boot and installation operation.
     Args:
@@ -200,26 +245,18 @@ def bring_node_console_up(node, boot_device, install_output_dir,
         LOG.error("Cannot bring vlm console for {} without valid mgmt boot device: {}".format(node.name, boot_device))
         return 1
 
-    log_path = "{}/{}{}.telnet.log".format(install_output_dir, log_file_prefix, node.name)
-
     if node.telnet_conn is None:
-        node.telnet_conn = telnetlib.connect(node.telnet_ip,
-                                             int(node.telnet_port),
-                                             negotiate=node.telnet_negotiate,
-                                             port_login=True if node.telnet_login_prompt else False,
-                                             vt100query=node.telnet_vt100query,
-                                             log_path=log_path)
+        node.telnet_conn = open_telnet_session(node)
 
     if vlm_power_on:
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, wait_for_hosts_state_=False)
 
-    node.telnet_conn.install(node, boot_device,
-                             usb=boot_usb,
-                             upgrade=upgrade,
-                             small_footprint=small_footprint,
-                             low_latency=low_latency,
-                             clone_install=clone_install)
+    install_node(node, boot_device,
+            low_latency=low_latency,
+            small_footprint=small_footprint,
+            security=security,
+            usb=boot_usb)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -233,15 +270,19 @@ def get_non_controller_system_hosts():
     return storages + computes
 
 
-def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
+def open_telnet_session(node_obj):
 
-    _telnet_conn = telnetlib.connect(node_obj.telnet_ip,
-                                      int(node_obj.telnet_port),
-                                      negotiate=node_obj.telnet_negotiate,
-                                      port_login=True if node_obj.telnet_login_prompt else False,
-                                      vt100query=node_obj.telnet_vt100query,
-                                      log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
-                                      ".telnet.log", debug=False)
+    # _telnet_conn = telnetlib.connect(node_obj.telnet_ip,
+    #                                   int(node_obj.telnet_port),
+    #                                   negotiate=node_obj.telnet_negotiate,
+    #                                   port_login=True if node_obj.telnet_login_prompt else False,
+    #                                   vt100query=node_obj.telnet_vt100query,
+    #                                   log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
+    #                                   ".telnet.log", debug=False)
+
+    _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
+    if node_obj.telnet_login_prompt:
+        _telnet_conn.send("\r\n")
 
     return _telnet_conn
 
@@ -249,7 +290,6 @@ def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
 def wipe_disk_hosts(hosts, close_telnet_conn=True):
 
     lab = InstallVars.get_install_var("LAB")
-    install_output_dir = ProjVar.get_var('LOG_DIR')
 
     LOG.info("LAB info:  {}".format(lab))
     if len(hosts) < 1:
@@ -267,22 +307,28 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
         return
 
     if controller0_node.telnet_conn is None:
-        try:
-            controller0_node.telnet_conn = open_telnet_session(controller0_node, install_output_dir)
-            controller0_node.telnet_conn.login()
-        except:
-            LOG.info("Telnet Login failed. skipping wipedisk")
-            return
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
+    # Check if controller is online
+    if not local_host.ping_to_host(controller0_node.host_ip):
+        LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
+        return
+    #try:
+    #    controller0_node.telnet_conn.send()
+    #    controller0_node.telnet_conn.expect(timeout=3)
+    #except exceptions.TelnetTimeout:
+    #    LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
+    #    return
 
     if controller0_node.telnet_conn:
         # Run the wipedisk_via_helper utility if the nodes are accessible
         cmd = "test -f " + "/home/wrsroot/wipedisk_helper "
-        if controller0_node.telnet_conn.exec_cmd(cmd)[0] == 0:
+        if controller0_node.telnet_conn.exec_cmd(cmd, blob=controller0_node.telnet_conn.prompt, fail_ok=True)[0] == 0:
             cmd = "chmod 755 wipedisk_helper"
             controller0_node.telnet_conn.exec_cmd(cmd)
             for hostname in hosts:
                 cmd = "./wipedisk_helper {}".format(hostname)
-                if controller0_node.telnet_conn.exec_cmd(cmd)[0] == 0:
+                if controller0_node.telnet_conn.exec_cmd(cmd, fail_ok=True)[0] == 0:
                     LOG.info("All disks wiped for host {}".format(hostname))
         else:
             LOG.info("wipedisk_via_helper files are not on the load, will use  wipedisk command directly")
@@ -297,7 +343,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
                     hostname = node_obj.host_ip
 
                 cmd = "ping -w {} -c 4 {}".format(HostTimeout.PING_TIMEOUT, hostname)
-                if (controller0_node.telnet_conn.exec_cmd(cmd, timeout=HostTimeout.PING_TIMEOUT +
+                if (controller0_node.telnet_conn.exec_cmd(cmd, expect_timeout=HostTimeout.PING_TIMEOUT +
                                               HostTimeout.TIMEOUT_BUFFER)[0] != 0):
                     LOG.info("Node {} not responding. Skipping wipedisk process".format(hostname))
 
@@ -400,11 +446,12 @@ def power_off_host(hosts):
         rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
 
         if rc != 0:
-            err_msg = "Failed to power off nod {}  barcode {}: {}"\
+            err_msg = "Failed to power off node {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
         LOG.info("Node {} is turned off".format(node.name))
+
 
 # TODO: To be replaced by function in vlm_helper
 def power_on_host(hosts, wait_for_hosts_state_=True):
@@ -472,19 +519,23 @@ def download_image(lab, server, guest_path):
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
             server.ssh_conn.rsync(guest_path, local_ip, os.path.join(temp_path, image_file),
                               dest_user=lab['local_user'],
-                              dest_password=lab['local_password'], pre_opts=local_pre_opts)
+                              dest_password=lab['local_password'], pre_opts=local_pre_opts, timeout=ImageTimeout.CREATE)
 
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, image_file),
                                                            dest_path=TiSPath.IMAGES)
     else:
         server.ssh_conn.rsync(guest_path,
                               lab['controller-0 ip'],
-                              TiSPath.IMAGES, pre_opts=pre_opts)
+                              TiSPath.IMAGES, pre_opts=pre_opts, timeout=ImageTimeout.CREATE)
 
 
-def download_heat_templates(lab, server, load_path):
+def download_heat_templates(lab, server, load_path, heat_path=None):
 
-    heat_path = load_path  + BuildServerPath.HEAT_TEMPLATES
+    if not heat_path:
+        heat_path = load_path + BuildServerPath.HEAT_TEMPLATES
+    else:
+        heat_path = heat_path
+
 
     cmd = "test -e " + heat_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
@@ -500,31 +551,26 @@ def download_heat_templates(lab, server, load_path):
                               TiSPath.HEAT, pre_opts=pre_opts)
 
 
-def download_lab_config_files(lab, server, load_path):
-
-    lab_name = lab['name']
-    if 'vbox' in lab_name:
+def download_lab_config_files(lab, server, load_path, conf_server=None):
+    if 'vbox' in lab["name"]:
         return
+    if not conf_server:
+        conf_server = server
 
-    if "yow" in lab_name:
-        lab_name = lab_name[4:]
-    config_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/yow/" + lab_name
+    config_path = InstallVars.get_install_var("LAB_FILES_DIR")
     script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     cmd = "test -e " + config_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             server.name, config_path)
+    conf_server.ssh_conn.rsync(config_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
 
     cmd = "test -e " + script_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
             server.name, script_path)
-
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-
-    server.ssh_conn.rsync(config_path + "/*",
-                          lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
-
     server.ssh_conn.rsync(script_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
@@ -551,22 +597,24 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
                           WRSROOT_HOME, pre_opts=pre_opts)
 
 
-def bulk_add_hosts(lab, hosts_xml_file):
-    controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
+def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
+    if con_ssh is None:
+        controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
+    else:
+        controller_ssh=con_ssh
+
     cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
     if controller_ssh.exec_cmd(cmd)[0] == 0:
-        rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True)
-        if rc != 0 or  "Configuration failed" in output:
+        rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True, ssh_client=con_ssh)
+        if rc != 0 or "Configuration failed" in output:
             msg = "system host-bulk-add failed"
             return rc, None, msg
-        hosts = system_helper.get_hosts_by_personality()
+        hosts = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
         return 0, hosts, ''
 
 
-def add_storages(lab, server, load_path, ):
-    lab_name = lab['name']
-    if "yow" in lab_name:
-        lab_name = lab_name[4:]
+def add_storages(lab, server, load_path):
+    lab_name = get_git_name(lab['name'])
 
     if 'storage_nodes' not in lab:
         return 1, "Lab {} does not have storage nodes.".format(lab_name)
@@ -635,26 +683,26 @@ def add_storages(lab, server, load_path, ):
 
 
 def run_lab_setup(con_ssh=None, timeout=3600):
-    return run_setup_script(script="lab_setup", config=True)
+    return run_setup_script(script="lab_setup", config=True, con_ssh=con_ssh, timeout=timeout)
 
 
 def run_infra_post_install_setup():
     return run_setup_script(script="lab_infra_post_install_setup", config=True)
 
 
-def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=3600):
+def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=3600, fail_ok=True):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
     if config:
         cmd = "test -e {}/{}.conf".format(WRSROOT_HOME, script)
-        rc = con_ssh.exec_cmd(cmd)[0]
+        rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
         if rc != 0:
             msg = "The {}.conf file missing from active controller".format(script)
             return rc, msg
 
     cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
-    rc = con_ssh.exec_cmd(cmd, )[0]
+    rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
@@ -662,13 +710,29 @@ def run_setup_script(script="lab_setup", config=False, con_ssh=None, timeout=360
 
     cmd = "cd; source /etc/nova/openrc; ./{}.sh".format(script)
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
-    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
+    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
+        scp_logs_to_log_dir([LogPath.LAB_SETUP_PATH, LogPath.HEAT_SETUP_PATH], con_ssh=con_ssh)
         return rc, msg
-    con_ssh.set_prompt()
+    # con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
+
+
+def scp_logs_to_log_dir(log_paths, con_ssh=None, log_dir=None):
+    if isinstance(log_paths, str):
+        log_paths = [log_paths]
+    if not log_dir:
+        log_dir = ProjVar.get_var('LOG_DIR')
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    for log in log_paths:
+        log_exists = con_ssh.exec_cmd('test -f {}'.format(log))[0] == 0
+        if log_exists:
+            LOG.info("Copying {} to {}".format(log, log_dir))
+            common.scp_to_local(source_path=log, source_ip=con_ssh.host, dest_path=log_dir)
 
 
 def launch_vms_post_install():
@@ -731,7 +795,6 @@ def get_usb_device_name(con_ssh=None):
         msg = "No USB found in lab node. Please plug in usb ."
         LOG.info(msg)
         return ''
-
     else:
         usb_ls = output.strip().splitlines()[0].split("->").pop()
 
@@ -1272,19 +1335,19 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         raise ValueError(msg)
 
     lab = InstallVars.get_install_var("LAB")
-    output_dir = ProjVar.get_var('LOG_DIR')
     controller0_node = lab['controller-0']
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
+
 
     connection = controller0_node.telnet_conn
     cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
                                                                              system_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = connection.exec_cmd(cmd, extra_expects=outputs_restore_system_conf, timeout=HostTimeout.SYSTEM_RESTORE)
+    rc, output = connection.exec_cmd(cmd, blob=[outputs_restore_system_conf, connection.prompt], expect_timeout=HostTimeout.SYSTEM_RESTORE)
     compute_configured = False
     if rc == 0:
         if 'compute-config in progress' in output:
@@ -1294,7 +1357,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
                 LOG.info('No need to do compute-config-complete, which is a new behavior after 2017-11-27.')
                 LOG.info('Instead, we will have to wait the node self-boot and boot up to ready states.')
 
-            connection.find_prompt(prompt='controller\-[01] login:', timeout=HostTimeout.REBOOT)
+            connection.expect(['controller\-[01] login:'], timeout=HostTimeout.REBOOT)
 
             LOG.info('Find login prompt, try to login')
             connection.login()
@@ -1330,7 +1393,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
             reboot_cmd = 'echo "{}" | sudo -S reboot'.format(HostLinuxCreds.get_password())
 
-            rc, output = connection.exec_cmd(reboot_cmd, alt_prompt=' login: ', timeout=HostTimeout.REBOOT)
+            rc, output = connection.exec_cmd(reboot_cmd, blob=[' login: '], expect_timeout=HostTimeout.REBOOT)
             if rc != 0:
                 msg = '{} failed, rc:{}\noutput:\n{}'.format(reboot_cmd, rc, output)
                 LOG.error(msg)
@@ -1343,8 +1406,8 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
             LOG.info('re-run cli:{}'.format(cmd))
 
-            rc, output = connection.exec_cmd(cmd, alt_prompt=' login: ',
-                                             timeout=HostTimeout.SYSTEM_RESTORE, will_reboot=True)
+            rc, output = connection.exec_cmd(cmd, blob=[' login: '],
+                                             expect_timeout=HostTimeout.SYSTEM_RESTORE)
             LOG.debug('rc:{}, output:{}'.format(rc, output))
 
         if "System restore complete" in output:
@@ -1517,7 +1580,7 @@ def restore_controller_system_images(images_backup, tel_net_session=None, fail_o
     if tel_net_session is None:
 
         if controller0_node.telnet_conn is None:
-            controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+            controller0_node.telnet_conn = open_telnet_session(controller0_node)
             controller0_node.telnet_conn.login()
 
         tel_net_session = controller0_node.telnet_conn
@@ -1525,7 +1588,7 @@ def restore_controller_system_images(images_backup, tel_net_session=None, fail_o
     cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-images {}".format(images_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = tel_net_session.exec_cmd(cmd, timeout=HostTimeout.SYSTEM_RESTORE)
+    rc, output = tel_net_session.exec_cmd(cmd, expect_timeout=HostTimeout.SYSTEM_RESTORE)
     if rc != 0:
         err_msg = "{} failed: {} {}".format(cmd, rc, output)
         LOG.error(err_msg)
@@ -2204,7 +2267,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     return 0, None
 
 
-def set_network_boot_feed(bld_server_conn, load_path):
+def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     """
     Sets the network feed for controller-0 in default taxlab
     Args:
@@ -2214,8 +2277,6 @@ def set_network_boot_feed(bld_server_conn, load_path):
     Returns:
 
     """
-
-
     if load_path is None:
         load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
 
@@ -2256,20 +2317,27 @@ def set_network_boot_feed(bld_server_conn, load_path):
         LOG.error(msg)
         return False
 
-    LOG.info("Copy load into feed directory")
     feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    LOG.info("Copy load into {}".format(feed_path))
     tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
     tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
 
-    LOG.info("Installing Centos load to feed path: {}".format(feed_path))
-    bld_server_conn.exec_cmd("cd " + load_path)
+    cfg_link = tuxlab_conn.exec_cmd("readlink pxeboot.cfg")[1]
+    if cfg_link != "pxeboot.cfg.gpt" and not skip_cfg:
+        LOG.info("Changing pxeboot.cfg symlink to pxeboot.cfg.gpt")
+        tuxlab_conn.exec_cmd("ln -s pxeboot.cfg.gpt pxeboot.cfg")
+
+    # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
+    # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
-    bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--delete", "--force"], pre_opts=pre_opts)
-    bld_server_conn.rsync("export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, pre_opts=pre_opts )
-    #extra_opts=["--delete", "--force"]
-    LOG.info("Create new symlink to feed directory")
+    bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path,
+                                       dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
+                                       extra_opts=["--delete", "--force", "-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                                       timeout=HostTimeout.INSTALL_LOAD)
+    bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          timeout=HostTimeout.INSTALL_LOAD)
+    LOG.info("Create new symlink to {}".format(feed_path))
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
         msg = "Failed to remove feed"
         LOG.error(msg)
@@ -2285,8 +2353,8 @@ def set_network_boot_feed(bld_server_conn, load_path):
     return True
 
 
-def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=False,
-                    small_footprint=False,  clone_install=False, system_restore=False):
+def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=None,
+                    small_footprint=None, security=None, clone_install=False, system_restore=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2295,6 +2363,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         boot_usb:
         small_footprint:
         low_latency:
+        security:
         clone_install:
         system_restore:
 
@@ -2306,16 +2375,11 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         lab = InstallVars.get_install_var("LAB")
 
     controller0 = lab["controller-0"]
-    install_output_dir = ProjVar.get_var("LOG_DIR")
-    log_file_prefix = ''
-    if lab['short_name'] not in install_output_dir:
-        log_file_prefix += "{}_".format(lab['short_name'])
-
     if controller0.telnet_conn is None:
-        controller0.telnet_conn = open_telnet_session(controller0, install_output_dir, log_file_prefix=log_file_prefix)
+        controller0.telnet_conn = open_telnet_session(controller0)
+        controller0.telnet_conn.set_prompt(".*\$ ")
 
     boot_interfaces = lab['boot_device_dict']
-
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))
     rc, output = local_host.reserve_vlm_console(controller0.barcode)
     if rc != 0:
@@ -2324,37 +2388,120 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    bring_node_console_up(controller0, boot_interfaces, install_output_dir,
+    bring_node_console_up(controller0, boot_interfaces,
                           boot_usb=boot_usb,
                           small_footprint=small_footprint,
                           low_latency=low_latency,
+                          security=security,
                           vlm_power_on=True,
-                          close_telnet_conn=False,
-                          clone_install=clone_install)
+                          close_telnet_conn=False,)
 
     LOG.info("Initial login and password set for " + controller0.name)
     reset = True
     if clone_install:
         reset = False
 
-    controller0.telnet_conn.login(reset=reset)
-
-    time.sleep(20)
+    if reset:
+        controller0.telnet_conn.send('\r\n\r\n')
+        controller0.telnet_conn.expect(["ogin:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_user())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_user())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_user())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_password())
+        controller0.telnet_conn.expect(["assword:"])
+        controller0.telnet_conn.send(HostLinuxCreds.get_password())
+        host_name_split = controller0.host_name.split("-")
+        host_name_split[-1] = "\d+"
+        host_name = '-'.join(host_name_split)
+        host_name_regex = "(" + host_name + "|localhost" + ")"
+        controller0.telnet_conn.hostname = host_name_regex
+        controller0.telnet_conn.set_prompt('{}:~\$ '.format(host_name_regex))
+        controller0.telnet_conn.expect()
+    else:
+        controller0.telnet_conn.login()
+    # controller0.telnet_conn.set_prompt(controller0.host_name + ':~\$ ')
+    if boot_usb:
+        setup_networking(controller0)
 
     if not system_restore and (patch_dir_paths and bld_server_conn):
-        time.sleep(20)
+        time.sleep(40)
         apply_patches(lab, bld_server_conn, patch_dir_paths)
-        controller0.telnet_conn.write_line("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
+        controller0.telnet_conn.send("echo " + HostLinuxCreds.get_password() + " | sudo -S reboot")
         LOG.info("Patch application requires a reboot.")
         LOG.info("Controller0 reboot has started")
 
-        controller0.telnet_conn.get_read_until(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
+        controller0.telnet_conn.expect(Prompt.LOGIN_PROMPT, HostTimeout.REBOOT)
         # Reconnect telnet session
         LOG.info("Found login prompt. Controller0 reboot has completed")
         controller0.telnet_conn.login()
+        LOG.info("Removing patches")
+        remove_patches(lab)
+        if boot_usb:
+            setup_networking(controller0)
 
         # controller0.ssh_conn.disconnect()
         # controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+
+
+def setup_networking(controller0, conf_server=None, conf_dir=None):
+    if not controller0.host_nic:
+        controller0.host_nic = get_nic_from_config()
+    nic_interface = controller0.host_nic
+    if not controller0.telnet_conn:
+        controller0.telnet_conn = open_telnet_session(controller0)
+
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip addr add {}/23 dev {}".format(controller0.telnet_conn.password,
+                                                                                             controller0.host_ip,
+                                                                                             nic_interface))
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S ip link set dev {} up".format(controller0.telnet_conn.password,
+                                                                                          nic_interface))
+    controller0.telnet_conn.exec_cmd("echo {} | sudo -S route add default gw 128.224.150.1".format(
+                                     controller0.telnet_conn.password))
+    ping = network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=True)
+    if not ping:
+        time.sleep(120)
+        network_helper.ping_server(server="8.8.8.8", ssh_client=controller0.telnet_conn, num_pings=4, fail_ok=False)
+
+    return 0
+
+
+def get_nic_from_config(conf_server=None, conf_dir=None, delete_server=False):
+    if not conf_server:
+        conf_server = setups.initialize_server(InstallVars.get_install_var("FILES_SERVER"))
+        delete_server = True
+    conf_dir = conf_dir if conf_dir else InstallVars.get_install_var("LAB_FILES_DIR")
+    oam_interface = None
+    nic = None
+    count = 0
+    conf_file = conf_dir + "/TiS_config.ini_centos"
+
+    rc, output = conf_server.ssh_conn.exec_cmd("cat {}".format(conf_file))
+    sections = output.split("\n\n")
+    while nic is None:
+        count += 1
+        for section in sections:
+            if not oam_interface and "[OAM_NETWORK]" in section:
+                lines = section.split("\n")
+                for line in lines:
+                    if "LOGICAL_INTERFACE" in line:
+                        oam_interface = "[" + line[line.find("=") + 1:].strip() + "]"
+            if oam_interface and oam_interface in section:
+                lines = section.split("\n")
+                for line in lines:
+                    if "INTERFACE_PORTS" in line:
+                        nic_ports = line[line.find("=") + 1:].strip()
+                        nic = nic_ports[:nic_ports.find(",")]
+            if count > 2:
+                raise ValueError("could not parse nic from {}".format(conf_file))
+
+    if delete_server:
+        conf_server.ssh_conn.close()
+        del conf_server
+
+    return nic
 
 
 def apply_patches(lab, build_server, patch_dir):
@@ -2369,6 +2516,13 @@ def apply_patches(lab, build_server, patch_dir):
 
     """
     patch_names = []
+    controller0_node = lab["controller-0"]
+    if controller0_node.ssh_conn:
+        con_ssh = controller0_node.ssh_conn
+    elif controller0_node.telnet_conn:
+        con_ssh = controller0_node.telnet_conn
+    else:
+        con_ssh = None
     # rc = build_server.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
     rc = build_server.exec_cmd("test -d " + patch_dir)[0]
     assert rc == 0, "Patch directory path {} not found".format(patch_dir)
@@ -2386,28 +2540,56 @@ def apply_patches(lab, build_server, patch_dir):
             LOG.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
+        patch_dest_dir = WRSROOT_HOME + "patches/"
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
-        build_server.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
+        build_server.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts,
+                           timeout=HostTimeout.INSTALL_LOAD)
 
         avail_patches = " ".join(patch_names)
         LOG.info("List of patches:\n {}".format(avail_patches))
 
         LOG.info("Uploading  patches ... ")
-        assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir)[0] == 0, \
+        assert patching_helper.run_patch_cmd("upload-dir", args=patch_dest_dir, con_ssh=con_ssh)[0] == 0, \
             "Failed to upload  patches : {}".format(avail_patches)
 
         LOG.info("Querying patches ... ")
-        assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+        assert patching_helper.run_patch_cmd("query", con_ssh=con_ssh)[0] == 0, "Failed to query patches"
 
         LOG.info("Applying patches ... ")
-        rc = patching_helper.run_patch_cmd("apply", args='--all')[0]
+        rc = patching_helper.run_patch_cmd("apply", args='--all', con_ssh=con_ssh)[0]
         assert rc == 0, "Failed to apply patches"
 
+        LOG.info("Installing Patches ... ")
+        assert patching_helper.run_patch_cmd("install-local", con_ssh=con_ssh)[0] == 0, "Failed to install patches"
+
         LOG.info("Querying patches ... ")
-        assert patching_helper.run_patch_cmd("query")[0] == 0, "Failed to query patches"
+        assert patching_helper.run_patch_cmd("query", con_ssh=con_ssh)[0] == 0, "Failed to query patches"
+
+
+def remove_patches(lab):
+    patch_dir = WRSROOT_HOME + "patches/"
+    controller0_node = lab["controller-0"]
+    if controller0_node.ssh_conn:
+        con_ssh = controller0_node.ssh_conn
+    elif controller0_node.telnet_conn:
+        con_ssh = controller0_node.telnet_conn
+    else:
+        con_ssh = None
+    rc, output = con_ssh.exec_cmd("ls -1 --color=none {}".format(patch_dir))
+    if rc != 0:
+        msg = 'No patch directory'
+        LOG.debug(msg)
+        return 1, msg
+
+    if output is not None:
+        for patch in output.splitlines():
+            rc, output = con_ssh.exec_cmd("rm {}".format(patch_dir + patch))
+            if rc != 0:
+                LOG.debug("Failed to remove {}".format(patch))
+
+    return 0, ''
 
 
 def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=HostLinuxCreds.get_password(),
@@ -2499,7 +2681,7 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
     output_dir = ProjVar.get_var('LOG_DIR')
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
 
     controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
@@ -2623,9 +2805,9 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
     return 0, cloned_image_file_name
 
 
-def check_clone_status( tel_net_session=None, con_ssh=None, fail_ok=False):
+def check_clone_status(tel_net_session=None, con_ssh=None, fail_ok=False):
     """
-    Checks the install-clone status after system is booted from cloned image.
+    Checks the fresh_install-clone status after system is booted from cloned image.
     Args:
         tel_net_session:
         con_ssh:
@@ -2642,7 +2824,7 @@ def check_clone_status( tel_net_session=None, con_ssh=None, fail_ok=False):
 
     if controller0_node.telnet_conn is None:
         LOG.info("Setting up telnet connection ...")
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
         controller0_node.telnet_conn.exec_cmd("xterm")
 
@@ -2692,7 +2874,8 @@ def check_cloned_hardware_status(host, fail_ok=False):
 
 
     if controller_0_node.telnet_conn is None:
-        controller_0_node.telnet_conn = open_telnet_session(controller_0_node, log_dir)
+        controller_0_node.telnet_conn = open_telnet_session(controller_0_node)
+        controller_0_node.telnet_conn.login()
 
     LOG.info("Executing system show on cloned system")
     table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
@@ -2760,7 +2943,7 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
     controller0_node = lab['controller-0']
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
 
     host = 'controller-1' if system_mode == 'duplex' else 'controller-0'
@@ -2957,11 +3140,12 @@ def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,
 def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_path=None, con_ssh=None,
                              fail_ok=False):
     if lab_dict is None or not isinstance(lab_dict, dict):
-        raise ValueError("The Lab atribute value dictinary must be provided")
+        raise ValueError("The Lab atribute value dictionary must be provided")
     if 'controller-0' not in lab_dict.keys():
         raise ValueError("The Lab controller-0 node object must be provided")
 
-    con_ssh = ControllerClient.get_active_controller()
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
     clone_image_iso_dest_path = clone_image_iso_full_path
     src_lab = ProjVar.get_var("LAB")
     dest_lab_name = lab_dict['short_name']
@@ -2997,6 +3181,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
 
         con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
                           dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
+
 
     with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, ssh_client=con_ssh) \
             as node_ssh:
@@ -3044,3 +3229,556 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
                 raise exceptions.BackupSystem(err_msg)
 
     return 0, None
+
+
+def get_git_name(lab_name):
+    """
+    Args:
+        lab_name: Str name of the lab
+
+    Returns: the name of the lab as it is stored in the git repo
+
+    """
+    lab_name = lab_name.replace('\n', '')
+    lab_name = lab_name.replace('yow-', '')
+    try:
+        lab_name.index('cgcs-')
+    except ValueError:
+        lab_name = 'cgcs-{}'.format(lab_name)
+    # Workaround for pv0 lab name
+    if len(lab_name.split('-')) < 3:
+        last_letter = -1
+        while lab_name[last_letter].isdigit():
+            last_letter -= 1
+        lab_name = '{}-{}'.format(lab_name[:last_letter+1], lab_name[last_letter+1:])
+
+    return lab_name
+
+
+def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
+                             banner=True, branding=True):
+    """
+    Runs the config_controller command on the active_controller host
+    Args:
+        telnet_conn: The telnet connection to the active controller
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    wrsroot_etc_profile = "/etc/profile.d/custom.sh"
+    controller0 = lab["controller-0"]
+    if con_telnet is None:
+        con_telnet = open_telnet_session(controller0)
+        con_telnet.login()
+        close_telnet = True
+
+    if banner:
+        apply_banner(telnet_conn=con_telnet, fail_ok=True)
+    if branding:
+        apply_branding(telnet_conn=con_telnet, fail_ok=True)
+    con_telnet.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
+                        wrsroot_etc_profile)
+    con_telnet.exec_cmd("unset TMOUT")
+    con_telnet.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
+    con_telnet.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
+    con_telnet.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
+    con_telnet.exec_cmd("export USER=wrsroot")
+
+    rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
+    if rc == 0:
+        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") else "config_controller --config-file"
+        cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
+        os.environ["TERM"] = "xterm"
+        rc, output = con_telnet.exec_cmd(cmd, expect_timeout=HostTimeout.CONFIG_CONTROLLER_TIMEOUT)
+        #con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
+        if "failed" in output:
+            err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
+            LOG.error(err_msg)
+            scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_PATH], con_ssh=con_telnet)
+            raise exceptions.CLIRejected(err_msg)
+        else:
+            LOG.info("Controller configured")
+            if con_telnet.hostname:
+                admin_prompt = "\[wrsroot@{} ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
+            else:
+                admin_prompt = "\[wrsroot@.* ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
+            con_telnet.set_prompt(admin_prompt)
+            host_helper.wait_for_hosts_states(controller0.name,
+                                              availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
+                                              use_telnet=True, con_telnet=con_telnet)
+    else:
+        err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, controller0.name)
+        LOG.error(err_msg)
+        raise exceptions.CLIRejected(err_msg)
+
+    if close_telnet:
+        con_telnet.close()
+
+    return rc, output
+
+
+def apply_banner(telnet_conn, fail_ok=True):
+    LOG.info("Applying banner files")
+    banner_dir = "{}/banner/".format(WRSROOT_HOME)
+    rc = telnet_conn.exec_cmd("test -d {}".format(banner_dir), fail_ok=fail_ok)[0]
+
+    if rc != 0:
+        err_msg = "Banner files not found"
+        LOG.info(err_msg)
+        return 1, err_msg
+    else:
+        rc = telnet_conn.exec_cmd("echo {} | sudo -S mv {} /opt/".format(HostLinuxCreds.get_password(), banner_dir),
+                              fail_ok=fail_ok)[0]
+        if rc != 0:
+            err_msg = 'Banner application failed'
+            LOG.info(err_msg)
+            return 2, err_msg
+
+    return 0, ''
+
+
+def apply_branding(telnet_conn, fail_ok=True):
+    LOG.info("Applying branding files")
+    branding_dir = "{}/branding".format(WRSROOT_HOME)
+    branding_dest = "/opt/branding"
+    rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir), fail_ok=fail_ok)[0]
+
+    if rc != 0:
+        err_msg = "Branding directory does not exist"
+        LOG.info(err_msg)
+        return 1, err_msg
+    else:
+        cmd = "echo {} | sudo -S cp -r {}/* {}".format(HostLinuxCreds.get_password(), branding_dir, branding_dest)
+        rc = telnet_conn.exec_cmd(cmd)[0]
+        if rc != 0:
+            err_msg = "failed to copy branding files from {} to {}".format(branding_dir, branding_dest)
+            LOG.info(err_msg)
+            return 2, err_msg
+
+    return 0, ''
+
+
+def post_install(controller0_node=None):
+    """
+    runs post install scripts if there are any
+    Args:
+        controller0_node: a Node object representing the active controller of the lab.
+
+    Returns tuple of a return code a message
+    -1: Unable to execute one of the scripts
+    0: succesfully ran post install scripts
+    1: there was no directory containing any post install scripts to run
+    2: The post install directory was empty
+
+
+    """
+    lab = InstallVars.get_install_var("LAB")
+    if controller0_node is None:
+        controller0_node = lab["controller-0"]
+    if controller0_node.ssh_conn is not None:
+        connection = controller0_node.ssh_conn
+    else:
+        connection = ControllerClient.get_active_controller()
+
+    rc, msg = connection.exec_cmd("test -d /home/wrsroot/postinstall/")
+    if rc == 0:
+        scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
+        if len(scripts) > 0:
+            for script in scripts:
+                LOG.info("Attempting to run {}".format(script))
+                connection.exec_cmd("chmod 755 /home/wrsroot/postinstall/{}".format(script))
+                rc = connection.exec_cmd("/home/wrsroot/postinstall/{} {}".format(script, controller0_node.host_name),
+                                         expect_timeout=HostTimeout.POST_INSTALL_SCRIPTS)[0]
+                if rc != 0:
+                    rc, msg = -1, 'Unable to execute {}'.format(script)
+                    break
+        else:
+            rc, msg = 2, "No post install scripts in the directory"
+    else:
+        rc, msg = 1, "No post install directory"
+
+    return rc, msg
+
+
+def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False, con_ssh=None,
+                use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_first=True):
+    if check_first:
+        if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
+                              con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
+            LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
+            host_helper.wait_for_host_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
+                                                     HostAvailState.DEGRADED], con_ssh=con_ssh,
+                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
+
+        if host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet=use_telnet,
+                              con_telnet=con_telnet) == HostAdminState.UNLOCKED:
+            message = "Host already unlocked. Do nothing"
+            LOG.info(message)
+            return -1, message
+
+    exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet,
+                                  con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,
+                                  timeout=60)
+    if exitcode == 1:
+        return 1, output
+
+    host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+
+    if not host_helper.wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+                                use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
+        return 2, "Host is not in unlocked state"
+
+    if not host_helper.wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                use_telnet=use_telnet, con_telnet=con_telnet,
+                                availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
+        return 3, "Host state did not change to available or degraded within timeout"
+
+    if not host_helper.wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
+                                use_telnet=use_telnet, con_telnet=con_telnet, task=''):
+        return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
+
+    if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
+                          con_telnet=con_telnet) == HostAvailState.DEGRADED:
+        if not available_only:
+            LOG.warning("Host is in degraded state after unlocked.")
+            return 4, "Host is in degraded state after unlocked."
+        else:
+            if not host_helper.wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                        use_telnet=use_telnet, con_telnet=con_telnet,
+                                        availability=HostAvailState.AVAILABLE):
+                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
+                LOG.warning(err_msg)
+                return 8, err_msg
+
+    LOG.info("Host {} is successfully unlocked and in available state".format(host))
+    return 0, "Host is unlocked and in available state."
+
+
+def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
+    if node_obj.telnet_conn is None and not expect_prompt:
+        node_obj.telnet_conn = open_telnet_session(node_obj)
+    if reboot:
+        vlm_helper.power_off_hosts(node_obj.name)
+        power_on_host(node_obj.name, wait_for_hosts_state_=False)
+    if expect_prompt:
+        node_obj.telnet_conn.expect([re.compile(bios_option.name, re.IGNORECASE)], 360)
+    for i in range(0, 5):
+        bios_option.enter(node_obj.telnet_conn)
+        time.sleep(1)
+
+
+def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, fail_ok=False, boot_device_pattern=None,
+                       expect_prompt=True):
+    if usb is None:
+        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
+    if boot_device_pattern:
+        boot_device_regex = boot_device_pattern
+    elif usb:
+        LOG.info("Looking for USB device")
+        boot_device_regex = "USB|Kingston|JetFlash|SanDisk|Verbatim"
+    else:
+        boot_device_regex = next((value for key, value in boot_device_dict.items()
+                                  if key == node_obj.name or key == node_obj.personality), None)
+    if boot_device_regex is None:
+        msg = "Failed to determine boot device for: " + node_obj.name
+        LOG.error(msg)
+        if fail_ok:
+            return False
+        else:
+            raise exceptions.TelnetException(msg)
+    LOG.info("Boot device is: " + str(boot_device_regex))
+
+    if expect_prompt:
+        node_obj.telnet_conn.expect([boot_device_menu.get_prompt()], 60)
+    boot_device_menu.select(node_obj.telnet_conn, pattern=re.compile(boot_device_regex))
+
+
+def select_install_option(node_obj, boot_menu, index=None, low_latency=False, security="standard", usb=None,
+                          small_footprint=False, expect_prompt=True):
+    type = "cpe" if small_footprint else "standard"
+    if low_latency:
+        type = "lowlat"
+    tag = {"os": "centos", "security": security, "type": type, "console": "serial"}
+    if index:
+        index = index if isinstance(index, list) else [index]
+
+    if expect_prompt:
+        node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
+    boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None, tag=tag if not index else None)
+    if boot_menu.sub_menus:
+        sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
+        try:
+            sub_menus_navigated = 0
+            while len(sub_menu_prompts) > 0:
+                prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
+                if sub_menu.name == "Controller Configuration":
+                    sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                    pattern="erial" if not index else None)
+                elif sub_menu.name == "Serial Console":
+                    sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                    pattern=security.upper() if not index else None)
+                else:
+                    boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                     tag=tag if not index else None)
+                sub_menu_prompts.pop(prompt_index)
+                sub_menus_navigated += 1
+        except exceptions.TelnetTimeout:
+            pass
+        except IndexError:
+            LOG.error("Not enough indexes were given for the menu. {} indexes was given for {} amount of menus".format(
+                str(len(index)), str(len(boot_menu.sub_menus + 1))))
+            raise
+
+    return 0
+
+
+def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None):
+    bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
+    bios_option = bios_menu.get_boot_option()
+    boot_device_menu = menu.BootDeviceMenu()
+    boot_device_regex = next((value for key, value in boot_device_dict.items()
+                              if key == node_obj.name or key == node_obj.personality), None)
+    if boot_device_regex:
+        uefi = "UEFI" in boot_device_regex or re.search("r\d+", node_obj.host_name)
+    else:
+        uefi = re.search("r\d+", node_obj.host_name) or "ml350" in node_obj.host_name
+
+    if small_footprint is None:
+        sys_type = ProjVar.get_var("SYS_TYPE")
+        LOG.debug("SYS_TYPE: {}".format(sys_type))
+        small_footprint = "AIO" in sys_type
+    if low_latency is None:
+        low_latency = InstallVars.get_install_var('LOW_LATENCY')
+    if security is None:
+        security = InstallVars.get_install_var("SECURITY")
+    if usb is None:
+        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
+    if usb:
+        LOG.debug("creating USB boot menu")
+        kickstart_menu = menu.USBBootMenu()
+    else:
+        LOG.debug("creating {} boot menu".format("UEFI" if uefi else "PXE"))
+        kickstart_menu = menu.KickstartMenu(uefi=uefi)
+    if node_obj.telnet_conn is None:
+        node_obj.telnet_conn = open_telnet_session(node_obj)
+
+    bios_option_pattern = re.compile(bios_option.name.encode(), re.IGNORECASE)
+    menu_prompts = [bios_option_pattern, boot_device_menu.prompt, kickstart_menu.prompt]
+    while len(menu_prompts) > 0:
+        index = node_obj.telnet_conn.expect(menu_prompts, 360, fail_ok=True)
+        if index < 0:
+            break
+        elif menu_prompts[index] == bios_option_pattern:
+            enter_bios_option(node_obj, bios_option, expect_prompt=False)
+        elif menu_prompts[index] == boot_device_menu.prompt:
+            select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
+            if node_obj.name != "controller-0":
+                break
+        elif menu_prompts[index] == kickstart_menu.prompt:
+            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                                  security=security, usb=usb, expect_prompt=False)
+            break
+        menu_prompts.pop(index)
+
+    LOG.info("Waiting for {} to boot".format(node_obj.name))
+    node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
+    LOG.info("Found login prompt. {} installation has completed".format(node_obj.name))
+
+
+def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True, fail_ok=False, close_conn=False):
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    if 'controller-0' not in lab_dict.keys():
+        raise ValueError("The Lab controller-0 node object must be provided")
+    if iso_full_path is None:
+        iso_full_path = InstallVars.get_install_var("ISO_PATH")
+
+    iso_dest_path = WRSROOT_HOME + os.path.basename(iso_full_path)
+    dest_lab_name = lab_dict['short_name']
+    controller0_node = lab_dict['controller-0']
+
+    LOG.info("Transferring boot image iso file to lab: {}".format(dest_lab_name))
+    if not local_host.ping_to_host(controller0_node.host_ip):
+        msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
+        if boot_lab:
+            LOG.info("{} ; Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
+            boot_controller(lab=lab_dict)
+            if not local_host.ping_to_host(controller0_node.host_ip):
+
+                err_msg = "Cannot ping destination lab {} controller-0".format(dest_lab_name)
+                LOG.warn(err_msg)
+                if fail_ok:
+                    return 1, err_msg
+                else:
+                    raise exceptions.BackupSystem(err_msg)
+            LOG.info("Lab {}: controller-0  booted successfully".format(dest_lab_name))
+        else:
+            LOG.warn(msg)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.BackupSystem(msg)
+
+    cmd = "test -f " + iso_full_path
+    assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
+    node_ssh = controller0_node.ssh_conn
+    if node_ssh is None:
+        node_ssh = SSHClient(lab_dict['controller-0 ip'], initial_prompt=".*\$ ")
+        node_ssh.connect(retry=True, retry_timeout=30)
+        close_conn = True
+
+    node_ssh.exec_cmd("ls")
+    # Burn the iso image file to USB
+    usb_device = get_usb_device_name(con_ssh=node_ssh)
+
+    if usb_device:
+        LOG.info("Burning the system cloned image iso file to usb flash drive {}".format(usb_device))
+
+        iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
+                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
+
+        # Write the ISO to USB
+        cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
+            .format(HostLinuxCreds.get_password(), iso_dest_path, usb_device)
+
+        rc,  output = node_ssh.exec_cmd(cmd, expect_timeout=900)
+        if rc != 0:
+            err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
+            LOG.info(err_msg)
+            if fail_ok:
+                return 3, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
+
+        LOG.info(" The cloned image iso file copied to USB: {}".format(output))
+
+        LOG.info("Deleting system cloned image iso file from the dest lab folder ")
+        node_ssh.exec_sudo_cmd("rm -f {}".format(iso_dest_path))
+
+        LOG.info("Cloned image iso file transfer to dest lab {} completed successfully".format(lab_dict['short_name']))
+
+    else:
+        err_msg = "No USB device found in destination lab {}".format(dest_lab_name)
+        LOG.info(err_msg)
+        if fail_ok:
+            return 4, err_msg
+        else:
+            raise exceptions.BackupSystem(err_msg)
+
+    if close_conn:
+        node_ssh.close()
+
+    return 0, None
+
+
+def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail_ok=False):
+    if iso_full_path is None:
+        iso_full_path = InstallVars.get_install_var("ISO_PATH")
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    barcode = lab_dict["controller_nodes"][0]
+    iso_dest_path = "/tmp/iso/{}/bootimage.iso".format(barcode)
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    LOG.info("Transferring boot image iso file to boot server: {}".format(tuxlab_server))
+    if not local_host.ping_to_host(tuxlab_server):
+        msg = "{} is not reachable.".format(tuxlab_server)
+        LOG.warn(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.BackupSystem(msg)
+
+    cmd = "rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(barcode, barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd)
+
+    cmd = "test -f " + iso_full_path
+    assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(iso_host.name, iso_full_path)
+    iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path, timeout=HostTimeout.INSTALL_LOAD,
+                            dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD)
+    tuxlab_conn.close()
+    return 0, None
+
+
+def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    barcode = lab_dict["controller_nodes"][0]
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    if not tuxlab_conn:
+        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                               initial_prompt=tuxlab_prompt)
+        tuxlab_conn.deploy_ssh_key()
+
+    cmd = "chmod -R 777 /tmp/iso/{}".format(barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "umount /media/iso/{}; echo if we fail we ignore it".format(barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "rm -rf /media/iso/{}".format(barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "mkdir -p /media/iso/{}".format(barcode)
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
+    cmd = "mount -o loop /tmp/iso/{}/bootimage.iso /media/iso/{}".format(barcode, barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "mount -o remount,exec,dev /media/iso/{}".format(barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "rm -rf /export/pxeboot/pxelinux.cfg/{}".format(barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{} -t /export/pxeboot/pxelinux.cfg/{}".format(
+        barcode, barcode, barcode)
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
+    cmd = "umount /media/iso/{}".format(barcode)
+    tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+
+    tuxlab_conn.close()
+
+    return 0, None
+
+
+def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
+    if con_ssh:
+        connection = con_ssh
+    elif telnet_conn:
+        connection = telnet_conn
+    else:
+        connection = ControllerClient.get_active_controller()
+    if yaml_files is None:
+        yaml_files = [WRSROOT_HOME + "lab_setup-admin-resources.yaml",
+                      WRSROOT_HOME + "lab_setup-tenant1-resources.yaml",
+                      WRSROOT_HOME + "lab_setup-tenant2-resources.yaml",]
+    expected_files = [WRSROOT_HOME + ".heat_resources", WRSROOT_HOME + "launch_stacks.sh"] + yaml_files
+
+    for file in expected_files:
+        if not connection.file_exists(file):
+            err_msg = "{} not found".format(file)
+            LOG.warning(err_msg)
+            assert fail_ok, err_msg
+            return 1, err_msg
+
+    cmd = WRSROOT_HOME + "./create_resource_stacks.sh"
+    rc, output = connection.exec_cmd(cmd, fail_ok=fail_ok)
+    if rc != 0:
+        err_msg = "Failure when creating resource stacks skipping heat setup"
+        LOG.warning(err_msg)
+        return 2, err_msg
+
+    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh", fail_ok=fail_ok)
+    connection.exec_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
+    rc, output = connection.exec_cmd(cmd)
+    if rc != 0:
+        err_msg = "Heat stack launch failed"
+        LOG.warning(err_msg)
+        return 2, err_msg
+
+    return 0, output
+
