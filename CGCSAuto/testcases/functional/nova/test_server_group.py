@@ -55,11 +55,12 @@ def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=
 
 
 # TC2915 + TC2915 + TC_6566 + TC2917
+# server group messaging is removed since STX
 @mark.parametrize(('srv_grp_msging', 'policy', 'group_size', 'best_effort', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((None, 'affinity', 4, None, 2)),
-    mark.domain_sanity((None, 'anti_affinity', 3, True, 3)),
-    mark.nightly(('srv_grp_msg_true', 'anti_affinity', 3, None, 2)),    # For system with 2+ hypervisors
-    ('srv_grp_msg_true', 'affinity', 4, True, 3),
+    (None, 'anti_affinity', 3, True, 3),
+    mark.priorities('nightly', 'domain_sanity')((None, 'anti_affinity', 3, None, 2)),   # For system with 2+ hypervisors
+    (None, 'affinity', 4, True, 3),
 ])
 def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, vms_num, check_system):
     """
