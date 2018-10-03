@@ -3290,7 +3290,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     eth_path = VMPath.ETH_PATH_CENTOS
     new_user = None
 
-    if 'ubuntu' in guest_os:
+    if 'ubuntu' in guest_os or 'trusty_uefi' in guest_os:
         guest_os = 'ubuntu'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
