@@ -144,19 +144,19 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     for vm in members:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
 
-    if srv_grp_msging:
-        for vm in members:
-            GuestLogs.add(vm)
+    # if srv_grp_msging:
+    #     for vm in members:
+    #         GuestLogs.add(vm)
 
-    if srv_grp_msg_flv:
-        LOG.tc_step("Check server group message can be sent/received among group members")
-        check_server_group_messaging_enabled(vms=members, action='message')
-
-        LOG.tc_step("Check server group message received when a member is paused")
-        check_server_group_messaging_enabled(vms=members, action='pause')
-    else:
-        LOG.tc_step("Check server group message is not enabled")
-        check_server_group_messaging_disabled(vms=members)
+    # if srv_grp_msg_flv:
+    #     LOG.tc_step("Check server group message can be sent/received among group members")
+    #     check_server_group_messaging_enabled(vms=members, action='message')
+    #
+    #     LOG.tc_step("Check server group message received when a member is paused")
+    #     check_server_group_messaging_enabled(vms=members, action='pause')
+    # else:
+    #     LOG.tc_step("Check server group message is not enabled")
+    #     check_server_group_messaging_disabled(vms=members)
 
     if host_count > 1:
         # TC6566 verified here
@@ -182,13 +182,13 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
                     assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some VMs are on same host with " \
                                                                           "strict anti-affinity polity"
 
-        if srv_grp_msg_flv:
-            LOG.tc_step("Check server group message after attempted migrations")
-            check_server_group_messaging_enabled(vms=members, action='message')
-
-    if srv_grp_msging:
-        for vm in members:
-            GuestLogs.remove(vm)
+    #     if srv_grp_msg_flv:
+    #         LOG.tc_step("Check server group message after attempted migrations")
+    #         check_server_group_messaging_enabled(vms=members, action='message')
+    #
+    # if srv_grp_msging:
+    #     for vm in members:
+    #         GuestLogs.remove(vm)
 
 
 def _wait_for_srv_grp_msg(vm_id, msg, timeout, res_events, listener_event, sent_event):
