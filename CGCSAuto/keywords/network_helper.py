@@ -1392,8 +1392,8 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), 
                                 con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
 
 
-def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False,
-                         use_fip=False, exclude_nets=None):
+def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.get('admin'),
+                         rtn_dict=False, use_fip=False, exclude_nets=None):
 
     table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
     if vms:
@@ -2544,10 +2544,10 @@ def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
         auth_info (dict):
 
     Returns (list): list of dictionaries. Such as:
-        [{"vif_model": "virtio", "network": "external-net0", "port_id": "ba23cd33-b0c5-4e37-b331-013dfc12560b",
-            "mtu": 1500, "mac_address": "fa:16:3e:72:d4:24", "vif_pci_address": ""},
-        {"vif_model": "virtio", "network": "internal0-net0", "port_id": "2ccec5e9-bbd5-4007-9c28-9116da15d925",
-            "mtu": 9000, "mac_address": "fa:16:3e:0d:5a:5e", "vif_pci_address": ""}]
+        [{'nic1': {"vif_model": "virtio", "network": "external-net0", "port_id": "ba23cd33-b0c5-4e37-b331-013dfc12560b",
+            "mtu": 1500, "mac_address": "fa:16:3e:72:d4:24", "vif_pci_address": ""}},
+        {'nic2': {"vif_model": "virtio", "network": "internal0-net0", "port_id": "2ccec5e9-bbd5-4007-9c28-9116da15d925",
+            "mtu": 9000, "mac_address": "fa:16:3e:0d:5a:5e", "vif_pci_address": ""}}]
 
     """
     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))

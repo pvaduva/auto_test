@@ -2092,7 +2092,8 @@ class VMInfo:
 
     def get_storage_type(self):
         flavor_id = self.get_flavor_id()
-        table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh, auth_info=Tenant.get('admin')))
+        table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh,
+                                             auth_info=Tenant.get('admin')))
         extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
         return extra_specs['aggregate_instance_extra_specs:storage']
 
@@ -2339,7 +2340,8 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     raise exceptions.VMPostCheckFailed(fail_msg)
 
 
-def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
+def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.get('admin'),
+                 con_ssh=None):
     """
     Set vm state to error or active via nova reset-state.
 
@@ -3419,7 +3421,7 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
     Args:
         vm_id (str):
         end_event (Events): Event for kill the dd processes
-        new_dd_events (list): list of Event(s) for adding new dd process(es)
+        new_dd_events (list|Events): list of Event(s) for adding new dd process(es)
         dd_event (Events): Event to set after sending first dd cmd.
         timeout: Max time to wait for the end_event to be set before killing dd.
         con_ssh
@@ -4706,6 +4708,7 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
         vm1,
         interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
 
+    vshell_vm2 = None
     if bidirectional:
         vshell_vm2 = _set_vm_route(
             vm2,
@@ -4775,7 +4778,7 @@ def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
     data_dict = dict()
     try:
         internals = network_helper.get_internal_ips_for_vms(vm_id)
-    except:
+    except ValueError:
         internals = list()
     internal_dict = dict()
     for vm, info in get_vms_ports_info([vm_id]).items():
@@ -5084,41 +5087,58 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None,
             launch_vms_kwargs for the VM launched under the primary tenant
         secondary_kwargs (dict):
             launch_vms_kwargs for the VM launched under the secondary tenant
-        **launch_vms_kwargs (dict):
+        **launch_vms_kwargs:
             additional keyword arguments for launch_vms for both tenants
-            overlapping keys will be overriden by primary_kwargs and secondary_kwargs
+            overlapping keys will be overridden by primary_kwargs and secondary_kwargs
             shall not specify count, ping_vms, auth_info
 
     Returns (tuple):
         (vm_id_on_primary_tenant, vm_id_on_secondary_tenant)
     """
+    LOG.info("Launch a {} test-observer pair of VMs".format(vm_type))
+    for invalid_key in ('count', 'ping_vms'):
+        if invalid_key in launch_vms_kwargs:
+            launch_vms_kwargs.pop(invalid_key)
 
     primary_kwargs = dict() if not primary_kwargs else primary_kwargs
     secondary_kwargs = dict() if not secondary_kwargs else secondary_kwargs
+    if 'auth_info' not in primary_kwargs:
+        primary_kwargs['auth_info'] = Tenant.get_primary()
+    if 'auth_info' not in secondary_kwargs:
+        secondary_kwargs['auth_info'] = Tenant.get_secondary()
 
-    LOG.tc_step("Launch a {} test-observer pair of routed VMs".format(vm_type))
+    if 'nics' not in primary_kwargs or 'nics' not in secondary_kwargs:
+        if vm_type in ['pci-sriov', 'pci-passthrough']:
+            raise NotImplemented("nics has to be provided for pci-sriov and pci-passthrough")
 
-    assert 'count' not in launch_vms_kwargs and \
-        'ping_vms' not in launch_vms_kwargs and \
-        'auth_info' not in launch_vms_kwargs, \
-        "shall not specify count, ping_vms, auth_info"
+        if vm_type in ['vswitch', 'dpdk', 'vhost']:
+            vif_model = 'avp'
+        else:
+            vif_model = vm_type
 
-    vms, nics = launch_vms(
-        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary(),
-        **__merge_dict(launch_vms_kwargs, primary_kwargs))
-    vm_test = vms[0]
+        internal_net_id = network_helper.get_internal_net_id()
+        for tenant_info in (primary_kwargs, secondary_kwargs):
+            auth_info_ = tenant_info['auth_info']
+            mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info_)
+            tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info_)
+            nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                    {'net-id': tenant_net_id, 'vif-model': vif_model},
+                    {'net-id': internal_net_id, 'vif-model': vif_model}]
+            tenant_info['nics'] = nics
 
-    vms, nics = launch_vms(
-        vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary(),
-        **__merge_dict(launch_vms_kwargs, secondary_kwargs))
-    vm_observer = vms[0]
+    vm_test = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
+                         **__merge_dict(launch_vms_kwargs, primary_kwargs))[0][0]
+    vm_observer = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
+                             **__merge_dict(launch_vms_kwargs, secondary_kwargs))[0][0]
 
-    if vm_type == 'virtio' or vm_type == 'avp':
-        setup_kernel_routing(vm_test)
-        setup_kernel_routing(vm_observer)
-    elif vm_type == 'dpdk' or vm_type == 'vhost' or vm_type == 'vswitch':
+    LOG.info("Route the {} test-observer VM pair".format(vm_type))
+    if vm_type in ('dpdk', 'vhost', 'vswitch'):
         setup_avr_routing(vm_test, vm_type=vm_type)
         setup_avr_routing(vm_observer, vm_type=vm_type)
+    else:
+        # vm_type in ('virtio', 'avp'):
+        setup_kernel_routing(vm_test)
+        setup_kernel_routing(vm_observer)
 
     route_vm_pair(vm_test, vm_observer)
 
