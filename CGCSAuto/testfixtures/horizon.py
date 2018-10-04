@@ -1,7 +1,6 @@
 import os
 import datetime
 from pytest import fixture
-from pyvirtualdisplay import Display
 
 from utils.horizon.pages import loginpage
 from utils.horizon import video_recorder
@@ -14,13 +13,10 @@ from consts.proj_vars import ProjVar
 
 @fixture(scope="session")
 def driver(request):
-    display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
-    display.start()
     driver_ = HorizonDriver.get_driver()
 
     def teardown():
         HorizonDriver.quit_driver()
-        display.stop()
     request.addfinalizer(teardown)
     return driver_
 

@@ -53,6 +53,7 @@ class VideoRecorder(object):
             while time.time() < limit:
                 time.sleep(0.1)
                 if self._popen.poll() is not None:
+                    LOG.debug("Video stopped")
                     return
 
             LOG.info("Killing video recorder process")
