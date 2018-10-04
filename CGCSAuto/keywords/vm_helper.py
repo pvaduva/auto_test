@@ -489,8 +489,8 @@ def auto_mount_vm_disks(vm_id, disks=None, guest_os=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            block_device_mapping=None, sec_group_name=None,
-            vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
+            block_device_mapping=None, sec_group_name=None, vm_host=None, avail_zone=None, file=None,
+            config_drive=False, meta=None,
             fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True, cleanup=None):
     """
     Boot a vm with given parameters
@@ -738,6 +738,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 raise exceptions.VMPostCheckFailed(message)
 
         LOG.info("VM {} is booted successfully.".format(vm_id))
+
         return 0, vm_id, 'VM is booted successfully', new_vol
 
     else:
@@ -1548,6 +1549,107 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
             common.write_to_file(sep_file, content="{}\nLogged into vm via {}. Result: {}".format(msg, ssh_client.host,
                                                                                                   res_dict))
         raise exceptions.VMNetworkError(err_msg)
+
+
+def configure_vm_vifs_on_same_net(vm_id, vm_ips=None):
+    """
+    Configure vm routes if the vm has multiple vifs on same network.
+    Args:
+        vm_id (str):
+        vm_ips (str|list): ips for specific vifs
+
+    Returns:
+
+    """
+    with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+        if isinstance(vm_ips, str):
+            vm_ips = [vm_ips]
+
+        extra_grep = '| grep --color=never -E "{}"'.format('|'.join(vm_ips)) if vm_ips else ''
+        kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
+        cidr_dict = {}
+        for line in kernel_routes.splitlines():
+            found = re.findall('^(.*/\d+)\sdev\s(.*)\sproto kernel.*\ssrc\s(.*)$', line)
+            cidr, dev_name, dev_ip = found[0]
+            if cidr not in cidr_dict:
+                cidr_dict[cidr] = []
+            cidr_dict[cidr].append((dev_name, dev_ip))
+
+        vifs_to_conf = {}
+        for cidr_, val in cidr_dict.items():
+            if not vm_ips:
+                val = val[1:]
+            for eth_info in val:
+                dev_name, dev_ip = eth_info
+                vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
+
+        if not vifs_to_conf:
+            LOG.info("Did not find multiple vifs on same subnet. Do nothing.")
+
+        used_tables = vm_ssh.exec_cmd('grep --color=never -E "^[0-9]" {}'.format(VMPath.RT_TABLES))[1]
+        used_tables = [int(re.split('[\s\t]', line_)[0].strip()) for line_ in used_tables.splitlines()]
+
+        start_range = 110
+        for eth_name, eth_info in vifs_to_conf.items():
+            cidr_, eth_ip, table_name = eth_info
+            exiting_tab = vm_ssh.exec_cmd('grep --color=never {} {}'.format(table_name, VMPath.RT_TABLES))[1]
+            if not exiting_tab:
+                for i in range(start_range, 250):
+                    if i not in used_tables:
+                        LOG.info("Append new routing table {} to rt_tables".format(table_name))
+                        vm_ssh.exec_sudo_cmd('echo "{} {}" >> {}'.format(i, table_name, VMPath.RT_TABLES))
+                        start_range = i + 1
+                        break
+                else:
+                    raise ValueError("Unable to get a valid table number to create route for {}".format(eth_name))
+
+            LOG.info("Update arp_filter, arp_announce, route and rule scripts for vm {} {}".format(vm_id, eth_name))
+            vm_ssh.exec_sudo_cmd('echo 2 > {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
+            vm_ssh.exec_sudo_cmd('echo 1 > {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
+            route = '{} dev {} proto kernel scope link src {} table {}'.format(cidr_, eth_name, eth_ip, table_name)
+            vm_ssh.exec_sudo_cmd('echo {} > {}'.format(route, VMPath.ETH_RT_SCRIPT.format(eth_name)))
+            rule = 'table {} from {}'.format(table_name, eth_ip)
+            vm_ssh.exec_sudo_cmd('echo {} > {}'.format(rule, VMPath.ETH_RULE_SCRIPT.format(eth_name)))
+
+        LOG.info("Restart network service")
+        vm_ssh.exec_sudo_cmd('systemctl restart network')
+
+
+def cleanup_routes_for_vifs(vm_id, vm_ips):
+    """
+    Cleanup the configured routes for specified vif(s). This is needed when a vif is detached from a vm.
+
+    Args:
+        vm_id:
+        vm_ips:
+
+    Returns:
+
+    """
+    with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+
+        if isinstance(vm_ips, str):
+            vm_ips = [vm_ips]
+
+        for vm_ip in vm_ips:
+            LOG.info("Clean up route for dev with ip {}".format(vm_ip))
+            route = vm_ssh.exec_sudo_cmd('grep --color=never {} {}'.format(vm_ip, VMPath.ETH_RT_SCRIPT.format('*')))[1]
+            if not route:
+                continue
+
+            pattern = '(.*) dev (.*) proto kernel .* src {} table (.*)'.format(vm_ip)
+            found = re.findall(pattern, route)
+            if found:
+                cidr, eth_name, table_name = found[0]
+                LOG.info("Update arp_filter, arp_announce, route and rule scripts for vm {} {}".format(vm_id, eth_name))
+                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
+                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
+                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RULE_SCRIPT.format(eth_name)))
+                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RT_SCRIPT.format(eth_name)))
+                vm_ssh.exec_sudo_cmd("sed -n -i '/{}/!p' {}".format(table_name, VMPath.RT_TABLES))
+
+        LOG.info("Restart network service")
+        vm_ssh.exec_sudo_cmd('systemctl restart network')
 
 
 def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=30, fail_ok=False,
@@ -3815,7 +3917,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
     return 0, last_port
 
 
-def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None):
+def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_info=None, con_ssh=None):
     """
     Detach a port from vm
     Args:
@@ -3831,6 +3933,13 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
         (2, "Port <port_id> is not detached from VM <vm_id>")   - detached port is still shown in nova show
 
     """
+    target_ips = None
+    if cleanup_route:
+        fixed_ips = network_helper.get_ports(rtn_val='fixed_ips', port_id=port_id, merge_lines=False,
+                                             con_ssh=con_ssh, auth_info=auth_info)
+        if isinstance(fixed_ips, str):
+            fixed_ips = [fixed_ips]
+        target_ips = [eval(fixed_ip)['ip_address'] for fixed_ip in fixed_ips]
 
     LOG.info("Detaching port {} from vm {}".format(port_id, vm_id))
     args = '{} {}'.format(vm_id, port_id)
@@ -3849,6 +3958,10 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
 
     succ_msg = "Port {} is successfully detached from VM {}".format(port_id, vm_id)
     LOG.info(succ_msg)
+
+    if cleanup_route and target_ips:
+        cleanup_routes_for_vifs(vm_id=vm_id, vm_ips=target_ips)
+
     return 0, succ_msg
 
 

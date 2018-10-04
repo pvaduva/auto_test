@@ -19,6 +19,13 @@ class VMPath:
     VM_IF_PATH_CENTOS = '/etc/sysconfig/network-scripts/'
     ETH_PATH_CENTOS = '/etc/sysconfig/network-scripts/ifcfg-{}'
 
+    # Centos paths for ipv4:
+    RT_TABLES = '/etc/iproute2/rt_tables'
+    ETH_RT_SCRIPT = '/etc/sysconfig/network-scripts/route-{}'
+    ETH_RULE_SCRIPT = '/etc/sysconfig/network-scripts/rule-{}'
+    ETH_ARP_ANNOUNCE = '/proc/sys/net/ipv4/conf/{}/arp_announce'
+    ETH_ARP_FILTER = '/proc/sys/net/ipv4/conf/{}/arp_filter'
+
 
 class UserData:
     ADDUSER_WRSROOT = 'cloud_config_adduser_wrsroot.txt'

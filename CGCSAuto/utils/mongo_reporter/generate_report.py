@@ -40,6 +40,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
     """
 
     Args:
+        sys_config (str)
         source (str): 'mongo' or <local test results path>
         tags (str|list):
         start_date (str):
@@ -98,7 +99,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         try:
             with open(summary_txt) as f:
                 summary = f.read()
-        except:
+        except FileNotFoundError:
             print("summary.txt not found in {}!".format(log_path))
             pass
 
@@ -354,13 +355,11 @@ def generate_report(recipients, subject='', source='mongo', tags=None, start_dat
     try:
         if mark_status in [True, 'true', 'True', 'TRUE']:
             mark_status_on_build_server(status=raw_status, build_server=build_server, build_id=build)
-    except:
-        raise
     finally:
         subject = subject.strip()
         subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
         recipients = recipients.strip()
-        if ' ' in recipients and not ';' in recipients:
+        if ' ' in recipients and ';' not in recipients:
             recipients = ';'.join(recipients.split())
         send_report(subject=subject, recipients=recipients)
 
