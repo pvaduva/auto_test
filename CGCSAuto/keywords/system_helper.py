@@ -2,7 +2,7 @@ import math
 import re
 import time
 from pytest import skip
-
+from consts.cgcs import Ptp, TP
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID
 from consts.proj_vars import ProjVar
@@ -10,6 +10,7 @@ from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from keywords import host_helper
 
 
 class System:
@@ -3658,3 +3659,235 @@ def enable_port_security_param():
         time.sleep(60)
         lock_unlock_hosts(computes)
         wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=60)
+
+
+
+def tp_modify(con_ssh=None, tp_str=None, enabled='False', fail_ok=False):
+    """
+
+    Args:
+        con_ssh:
+        tp_str: tp or ntp
+        enabled: str True or False
+
+    Returns: modified success failure
+
+    """
+    if tp_str is None:
+        msg = tp_str.upper() + " modify failed there was no parameter given"
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.CLIRejected(msg)
+    LOG.info('Modifying ' + tp_str.upper() + ' to ' + enabled)
+    res, err_msg = cli.system(tp_str + '-modify', ' --enabled=' + enabled, ssh_client=con_ssh, fail_ok=fail_ok,
+                              rtn_list=True)
+
+    if res != 0:
+        msg = tp_str.upper() + "modify failed " + err_msg
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.CLIRejected(err_msg)
+    return res, tp_str + ' was modified '
+
+
+def tp_enabled(con_ssh=None, tp_str='ntp', enabled='False', pre_check=False, fail_ok=False, clear_alarm=True):
+    """
+        tp_enabled is to enabled/disabled  the ntp or ptp also checks and clear alarm if clear alarm True
+
+    Args:
+        con_ssh:     Controller connection
+        tp_str:      ntp or ptp  which one need to be modified.
+        enabled:     set to TRUE or FALSE based on tp_str if NTP need to be enabled PTP has to be disabled if PTP
+                      has to be enabled NTP has to be disabled.
+        pre_check:    Checks before change fails if it cannot be changed.If is it false it updated PTP or NTP
+                      and it wont fail.
+        clear_alarm   Clears the config out of date alarm 250.001 after NTP or PTP is updated.
+        fail_ok:      Warning without failure
+
+    Returns:
+
+    """
+
+    arg = ''
+    res = 0
+    if tp_str == 'ntp':
+       tp_strx = 'ptp'
+    else:
+       tp_strx = 'ntp'
+    LOG.info('Check  '+tp_strx.upper()+' enable')
+
+    if get_tp(value_show=tp_strx)['enabled'] == 'True' and enabled == 'True':
+        if pre_check:
+                msg = tp_strx.upper() + " modify failed cannot enabled both Ptp and ntp"
+                if fail_ok:
+                    LOG.warning(msg)
+                    return 1, msg
+                raise exceptions.CLIRejected(msg)
+        tp_modify(con_ssh=con_ssh,tp_str=tp_strx,enabled='False',fail_ok=fail_ok)
+
+    LOG.info('Check parameters before change')
+    if enabled in TP.enabled and enabled == get_tp(value_show=tp_str)['enabled']:
+        msg = "There is no change in  " + tp_str.upper() + " argument to modify"
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.CLIRejected(msg)
+
+    ret_val, msg = tp_modify(con_ssh=con_ssh, tp_str=tp_str, enabled=enabled, fail_ok=fail_ok)
+    if ret_val != 0:
+        LOG.warning(msg)
+        return 1, msg
+    if get_tp(value_show=tp_strx)['enabled'] == 'False' and enabled == 'False':
+        tp_modify(con_ssh=con_ssh, tp_str=tp_strx, enabled='True', fail_ok=fail_ok)
+
+    if clear_alarm:
+        ret_val, err_msg = clear_config_out_of_date_alarm(fail_ok)
+        if ret_val != 0:
+            if fail_ok:
+                LOG.warning(err_msg)
+                return 1, err_msg
+            raise exceptions.CLIRejected(err_msg)
+
+    return 0, tp_str.upper() + ' parameter modified'
+
+
+def ptp_modify(con_ssh=None, mode='hardware', transport='l2', mechanism='e2e', fail_ok=False):
+
+    """
+         Modifies the ptp parameters and clears alarm 250.001 by lock and unlock on all the hosts.
+    Args:
+        con_ssh:
+        mode:
+        transport
+        mechanism:
+        fail_ok:
+    Returns: return_code message
+
+    """
+    values_current = get_tp(value_show='ptp')
+    arg = ''
+    res = 0
+    LOG.info('Check parameters before change')
+    if mode in Ptp.mode and mode != values_current['mode']:
+        arg = arg + ' --mode=' + mode
+    if transport in Ptp.transport and transport != values_current['transport']:
+        arg = arg + ' --transport=' + transport
+    if mechanism in Ptp.mechanism and mechanism != values_current['mechanism']:
+        arg = arg + ' --mechanism=' + mechanism
+    if arg is '':
+        err_msg = 'No new parameters were given to set'
+        res=1
+    else:
+        res, err_msg = cli.system(cmd='ptp-modify', positional_args=arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                  rtn_list=True)
+    if res != 0:
+        msg = "PTP modify failed " + err_msg
+        if fail_ok:
+            LOG.warning(msg)
+            return 3, msg
+        raise exceptions.CLIRejected(err_msg)
+    ret_val, err_msg = clear_config_out_of_date_alarm(fail_ok)
+    if ret_val != 0:
+        if fail_ok:
+            LOG.warning(err_msg)
+            return 3, err_msg
+        raise exceptions.CLIRejected(err_msg)
+
+    return 0, 'PTP parameter modified'
+
+
+def clear_config_out_of_date_alarm(fail_ok=False):
+    """
+       Lock and unlock on all the hosts to clears the config out alarm 250.001
+       Notes: This function could be improved by locking computes together
+    Returns: 0 or 1
+
+    """
+    standby = get_standby_controller_name()
+    all_computes = get_hostnames()
+    all_computes.insert(0, standby)
+
+# There could be check for all the hosts are in avialble state.
+    ret = 1
+    for host in all_computes:
+        if host and wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=5, entity_id=host,
+                                   fail_ok=True)[0]:
+            host_helper.lock_host(host, swact=True)
+            time.sleep(10)
+            host_helper.unlock_host(host)
+            wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=host, fail_ok=False)
+        ret = 0
+    if ret != 0:
+        err_msg = 'Fail to clear alarm' + EventLogID.CONFIG_OUT_OF_DATE
+        if fail_ok:
+            return 2, err_msg
+        raise exceptions
+    return ret, 'Alarm ' + EventLogID.CONFIG_OUT_OF_DATE + ' Cleared Clear'
+
+
+def get_tp(con_ssh=None, value_show='ptp'):
+    """
+      This function is to show the ptp or ntp .By default ptp show.
+    Args:
+        con_ssh:
+        value_show
+    Returns: all_dict ptp or ntp values in dictionary based on request
+
+    """
+    if value_show == 'ntp':
+        LOG.info('NTP show')
+        cmd='ntp-show'
+    else:
+        cmd = 'ptp-show'
+        LOG.info('PTP show')
+    table_ = table_parser.table(cli.system(cmd=cmd , ssh_client=con_ssh))
+    properties = table_parser.get_column(table_, 'Property')
+    values = table_parser.get_column(table_, 'Value')
+
+    all_dict = {}
+    for i in range(len(properties)-2):
+        value = properties[i]
+        if value == "enabled":
+            all_dict['enabled'] = values[i]
+        if value == "mode":
+            all_dict['mode'] = values[i]
+        if value == "transport":
+            all_dict['transport'] = values[i]
+        if value == "mechanism":
+            all_dict['mechanism'] = values[i]
+        if value == "ntpservers":
+            all_dict['ntpservers'] = values[i]
+
+    return all_dict
+
+
+def ntpserver_modify(con_ssh=None, ntpservers=None, fail_ok=False, check_modify=True):
+    """
+
+    Args:
+        con_ssh:
+        ntpservers:
+        fail_ok:
+
+    Returns:
+
+    """
+    if ntpservers is None :
+        msg = "NTP servers modify failed. No parameters given to modify "
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.CLIRejected(msg)
+    res, err_msg = cli.system('ntp-modify', 'ntpservers=' + ntpservers, ssh_client=con_ssh, fail_ok=fail_ok,
+                              rtn_list=True)
+    if res!=0:
+        msg = "NTP servers modify failed. " + err_msg
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        raise exceptions.CLIRejected(msg)
+    return 0, "NTP server modify success"
+
+
