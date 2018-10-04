@@ -50,6 +50,7 @@ class BuildServerPath:
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
     TITANIUM_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/Titanium_R6_build'
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
+    STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
     DEFAULT_HOST_BUILDS_DIR = TITANIUM_HOST_BUILDS_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)

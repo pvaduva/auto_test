@@ -286,7 +286,8 @@ def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=
         if builds_dir:
             builds_dirs = [builds_dir]
         else:
-            builds_dirs = (BuildServerPath.TITANIUM_HOST_BUILDS_DIR, BuildServerPath.STX_HOST_BUILDS_DIR)
+            builds_dirs = (BuildServerPath.TITANIUM_HOST_BUILDS_DIR, BuildServerPath.STX_HOST_BUILDS_DIR,
+                           BuildServerPath.STX_RELEASE_DIR)
 
         build_paths = ['{}/{}'.format(dir_, build_id) for dir_ in builds_dirs]
 
