@@ -63,6 +63,8 @@ def _boot_multiports_vm(flavor, mgmt_net_id, vifs, net_id, net_type, base_vm, pc
     LOG.tc_step("Ping test_vm's own {} network ips".format(net_type))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=net_type)
 
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
+
     LOG.tc_step("Ping test_vm from base_vm to verify management and data networks connection")
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', net_type])
 
@@ -261,6 +263,7 @@ class TestMutiPortsPCI:
         LOG.fixture_step("(class) Ping base PCI vm from itself over data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'],
                                    vlan_zero_only=True)
+        vm_helper.configure_vm_vifs_on_same_net(vm_id=base_vm_pci)
 
         LOG.fixture_step("(class) Get seg_id for internal0-net1 to prepare for vlan tagging on pci-passthough "
                          "device later.")
@@ -440,6 +443,8 @@ class TestMutiPortsPCI:
 
         LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
+
+        vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
