@@ -311,9 +311,13 @@ def test_backup(pre_system_backup):
 
     if not backup_info['cinder_backup']:
         backup_sysconfig_images(backup_info)
-        backup_cinder_volumes(backup_info)
+
+        if backup_info.get('is_storage_lab', False):
+            backup_cinder_volumes(backup_info)
     else:
-        backup_cinder_volumes(backup_info)
+        if backup_info.get('is_storage_lab', False):
+            backup_cinder_volumes(backup_info)
+
         backup_sysconfig_images(backup_info)
 
     collect_logs('after_backup')
