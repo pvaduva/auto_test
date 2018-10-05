@@ -121,7 +121,6 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
     Returns tenant_port_id (str):
 
     """
-    _assign_ip_to_nic(vm_under_test)
     ip_addr = _find_ip_to_ping(vm_under_test)
     LOG.info("ip address to ping {}".format(ip_addr))
 
@@ -136,9 +135,7 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
     tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
 
     LOG.tc_step("Assign IP to attached interface to {} VM {}".format(tenant_port_id, vm_under_test))
-    _assign_ip_to_nic(vm_under_test)
-    LOG.tc_step("Find IP to ping {} VM".format(vm_under_test))
-    ip_addr = _find_ip_to_ping(vm_under_test)
+    ip_addr = _assign_ip_to_nic(vm_under_test)
     LOG.info("ip address to ping {}".format(ip_addr))
 
     LOG.tc_step("Verify ping from base_vm to vm_under_test over attached data networks still works "
@@ -162,7 +159,6 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
 
     """
 
-    _assign_ip_to_nic(vm_under_test)
     ip_addr = _find_ip_to_ping(vm_under_test)
     LOG.info("ip address to ping {}".format(ip_addr))
 
@@ -173,11 +169,11 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
         network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
     LOG.tc_step("Detach the {} interface {}".format(vif_model, tenant_port_id))
-    vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
+    vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id, cleanup_route=True)
 
     LOG.tc_step("Verify ping from base_vm to vm_under_test over management & data networks still works "
                 "after {}".format(vm_actions))
-    _assign_ip_to_nic(vm_under_test)
+    # _assign_ip_to_nic(vm_under_test)
     ip_addr = _find_ip_to_ping(vm_under_test)
     LOG.info("ip address to ping {}".format(ip_addr))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
@@ -192,6 +188,9 @@ def _remove_dhclient_cache(vm_id):
             vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
 
 
+ASSIGNED_IPS = []
+
+
 def _assign_ip_to_nic(vm_id):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
@@ -199,17 +198,24 @@ def _assign_ip_to_nic(vm_id):
         vm_id (str):
     """
     vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
-    dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        if vm_ssh.file_exists(dhclient_leases_cache):
-            vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
-        values = random.sample(range(2, 255), 5)
-        vnic = vm_nics[-1]
-        mac_addr = vnic['mac_address']
-        eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-        assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-        vm_ssh.exec_sudo_cmd('ifconfig {} 172.16.0.{}/24 up'.format(eth_name, random.choice(values)))
-        vm_ssh.exec_cmd('ip addr')
+    vnic = vm_nics[-1]
+    global ASSIGNED_IPS
+    static_ip = '172.16.0.{}'.format(random.choice(list(set(range(2-255))-set(ASSIGNED_IPS))))
+    ASSIGNED_IPS.append(static_ip)
+    vm_helper.add_ifcfg_scripts(vm_id=vm_id, vnics=[vnic], reboot=False, static_ips=[static_ip])
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, vnics=[vnic], reboot=True)
+
+    # dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
+    # with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+    #     if vm_ssh.file_exists(dhclient_leases_cache):
+    #         vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
+    #     vnic = vm_nics[-1]
+    #     mac_addr = vnic['mac_address']
+    #     eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+    #     assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
+    #     vm_ssh.exec_sudo_cmd('ifconfig {} 172.16.0.{}/24 up'.format(eth_name, ))
+    #     vm_ssh.exec_cmd('ip addr')
+    return static_ip
 
 
 def _find_ip_to_ping(vm_id):
