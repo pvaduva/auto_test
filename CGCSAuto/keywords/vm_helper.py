@@ -11,7 +11,7 @@ import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
+    VMNetwork, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
@@ -1551,40 +1551,83 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         raise exceptions.VMNetworkError(err_msg)
 
 
-def configure_vm_vifs_on_same_net(vm_id, vm_ips=None):
+def get_vm_interfaces(vm_id, rtn_val='IP addresses', **filters):
     """
-    Configure vm routes if the vm has multiple vifs on same network.
+    Get vm interfaces values via nova interface-list <vm_id>
     Args:
-        vm_id (str):
-        vm_ips (str|list): ips for specific vifs
+        vm_id:
+        rtn_val:
+        **filters:
 
     Returns:
 
     """
-    with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
-        if isinstance(vm_ips, str):
-            vm_ips = [vm_ips]
+    table_ = table_parser.table(cli.nova('interface-list', vm_id))
+    return table_parser.get_values(table_, target_header=rtn_val, **filters)
 
-        extra_grep = '| grep --color=never -E "{}"'.format('|'.join(vm_ips)) if vm_ips else ''
-        kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
-        cidr_dict = {}
-        for line in kernel_routes.splitlines():
-            found = re.findall('^(.*/\d+)\sdev\s(.*)\sproto kernel.*\ssrc\s(.*)$', line)
-            cidr, dev_name, dev_ip = found[0]
-            if cidr not in cidr_dict:
-                cidr_dict[cidr] = []
-            cidr_dict[cidr].append((dev_name, dev_ip))
 
+def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None, restart_service=True, reboot=False):
+    """
+    Configure vm routes if the vm has multiple vifs on same network.
+    Args:
+        vm_id (str):
+        vm_ips (str|list): ips for specific vifs. Only works if vifs are up with ips assigned
+        vnics (list of dict): vnics to configure.
+        vm_prompt (None|str)
+
+    Returns:
+
+    """
+    if not vm_ips and not vnics:
+        if not vnics:
+            raise ValueError("vm_ips or vnics has to be provided")
+
+    vnics_info = {}
+    if vnics and not vm_ips:
+        LOG.info("Get vm interfaces' mac and ip addressess")
+        if isinstance(vnics, dict):
+            vnics = [vnics]
+        vm_interfaces_table = table_parser.table(cli.nova('interface-list', vm_id))
+        vm_interfaces_dict = table_parser.row_dict_table(table_=vm_interfaces_table, key_header='Port ID')
+        for vnic in vnics:
+            port_id = vnic['port_id']
+            vm_if_info = vm_interfaces_dict[port_id]
+            eth_ip = vm_if_info['ip addresses']
+            cidr = eth_ip.rsplit('.', maxsplit=1)[0] + '.0/24'
+            mac_address = vm_if_info['mac addr']
+            vnics_info[mac_address] = (cidr, eth_ip)
+
+    with ssh_to_vm_from_natbox(vm_id=vm_id, prompt=vm_prompt) as vm_ssh:
         vifs_to_conf = {}
-        for cidr_, val in cidr_dict.items():
-            if not vm_ips:
-                val = val[1:]
-            for eth_info in val:
-                dev_name, dev_ip = eth_info
-                vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
+        if vm_ips:
+            if isinstance(vm_ips, str):
+                vm_ips = [vm_ips]
 
-        if not vifs_to_conf:
-            LOG.info("Did not find multiple vifs on same subnet. Do nothing.")
+            extra_grep = '| grep --color=never -E "{}"'.format('|'.join(vm_ips)) if vm_ips else ''
+            kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
+            cidr_dict = {}
+            for line in kernel_routes.splitlines():
+                found = re.findall('^(.*/\d+)\sdev\s(.*)\sproto kernel.*\ssrc\s(.*)$', line)
+                cidr, dev_name, dev_ip = found[0]
+                if cidr not in cidr_dict:
+                    cidr_dict[cidr] = []
+                cidr_dict[cidr].append((dev_name, dev_ip))
+
+            for cidr_, val in cidr_dict.items():
+                if not vm_ips:
+                    val = val[1:]
+                for eth_info in val:
+                    dev_name, dev_ip = eth_info
+                    vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
+
+            if not vifs_to_conf:
+                LOG.info("Did not find multiple vifs on same subnet. Do nothing.")
+
+        else:
+            for mac_addr in vnics_info:
+                dev_name = network_helper.get_eth_for_mac(vm_ssh, mac_addr=mac_addr)
+                cidr_, dev_ip = vnics_info[mac_addr]
+                vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
 
         used_tables = vm_ssh.exec_cmd('grep --color=never -E "^[0-9]" {}'.format(VMPath.RT_TABLES))[1]
         used_tables = [int(re.split('[\s\t]', line_)[0].strip()) for line_ in used_tables.splitlines()]
@@ -1607,21 +1650,26 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None):
             vm_ssh.exec_sudo_cmd('echo 2 > {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
             vm_ssh.exec_sudo_cmd('echo 1 > {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
             route = '{} dev {} proto kernel scope link src {} table {}'.format(cidr_, eth_name, eth_ip, table_name)
-            vm_ssh.exec_sudo_cmd('echo {} > {}'.format(route, VMPath.ETH_RT_SCRIPT.format(eth_name)))
+            vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(route, VMPath.ETH_RT_SCRIPT.format(eth_name)))
             rule = 'table {} from {}'.format(table_name, eth_ip)
-            vm_ssh.exec_sudo_cmd('echo {} > {}'.format(rule, VMPath.ETH_RULE_SCRIPT.format(eth_name)))
+            vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(rule, VMPath.ETH_RULE_SCRIPT.format(eth_name)))
 
-        LOG.info("Restart network service")
-        vm_ssh.exec_sudo_cmd('systemctl restart network')
+        if restart_service and not reboot:
+            LOG.info("Restart network service")
+            vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=120)
+
+    if reboot:
+        reboot_vm(vm_id=vm_id)
 
 
-def cleanup_routes_for_vifs(vm_id, vm_ips):
+def cleanup_routes_for_vifs(vm_id, vm_ips, rm_ifcfg=True, restart_service=True, reboot=False):
     """
     Cleanup the configured routes for specified vif(s). This is needed when a vif is detached from a vm.
 
     Args:
         vm_id:
         vm_ips:
+        rm_ifcfg
 
     Returns:
 
@@ -1648,8 +1696,15 @@ def cleanup_routes_for_vifs(vm_id, vm_ips):
                 vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RT_SCRIPT.format(eth_name)))
                 vm_ssh.exec_sudo_cmd("sed -n -i '/{}/!p' {}".format(table_name, VMPath.RT_TABLES))
 
-        LOG.info("Restart network service")
-        vm_ssh.exec_sudo_cmd('systemctl restart network')
+                if rm_ifcfg:
+                    vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_PATH_CENTOS.format(eth_name)))
+
+        if restart_service and not reboot:
+            LOG.info("Restart network service")
+            vm_ssh.exec_sudo_cmd('systemctl restart network')
+
+    if reboot:
+        reboot_vm(vm_id=vm_id)
 
 
 def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=30, fail_ok=False,
@@ -3140,7 +3195,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                         if vlan_name not in output_pre:
                             if eth_name not in output_pre:
                                 LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
-                                if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                                if_to_add = VMNetwork.NET_IF.format(eth_name, eth_name)
                                 vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                                 format(if_to_add), fail_ok=False)
 
@@ -3150,7 +3205,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                                                 format(net_seg_id, eth_name), fail_ok=False)
                             else:
                                 LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
-                                if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
+                                if_to_add = VMNetwork.NET_IF.format(vlan_name, vlan_name)
                                 vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                                 format(if_to_add), fail_ok=False)
 
@@ -3917,6 +3972,63 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
     return 0, last_port
 
 
+def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no', reboot=True, vm_prompt=None,
+                      **extra_configs):
+    """
+
+    Args:
+        vm_id:
+        vm_eths (str|list):
+        vnics (list of dict):
+        static_ips (None|str|list):
+        ipv6:
+        reboot:
+        **extra_configs:
+
+    Returns:
+
+    """
+
+    with ssh_to_vm_from_natbox(vm_id, prompt=vm_prompt) as vm_ssh:
+        if not vm_eths:
+            vm_eths = []
+            if not vnics:
+                raise ValueError("vm_eths or vnics has to be provided")
+
+            for vnic in vnics:
+                mac_addr = vnic['mac_address']
+                eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+                assert eth_name, "vif not found for expected mac_address {} in vm {}".format(mac_addr, vm_id)
+                vm_eths.append(eth_name)
+        elif isinstance(vm_eths, str):
+            vm_eths = [vm_eths]
+
+        if static_ips:
+            if isinstance(static_ips, str):
+                static_ips = [static_ips]
+            if len(static_ips) != len(vm_eths):
+                raise ValueError("static_ips count has to be the same as vm devs to be configured")
+
+        for i in range(len(vm_eths)):
+            eth = vm_eths[i]
+            if static_ips:
+                static_ip = static_ips[i]
+                script_content = VMNetwork.IFCFG_STATIC.format(eth, ipv6, static_ip)
+            else:
+                script_content = VMNetwork.IFCFG_DHCP.format(eth, ipv6)
+
+            if extra_configs:
+                extra_str = '\n'.join(['{}={}'.format(k, v) for k, v in extra_configs.items()])
+                script_content += '\n{}'.format(extra_str)
+
+            script_path = VMPath.ETH_PATH_CENTOS.format(eth)
+            vm_ssh.exec_sudo_cmd('touch {}'.format(script_path))
+            vm_ssh.exec_sudo_cmd("cat > {} << 'EOT'\n{}\nEOT".format(script_path, script_content), fail_ok = False)
+
+    if reboot:
+        reboot_vm(vm_id=vm_id)
+
+
 def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_info=None, con_ssh=None):
     """
     Detach a port from vm
@@ -3936,7 +4048,7 @@ def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_in
     target_ips = None
     if cleanup_route:
         fixed_ips = network_helper.get_ports(rtn_val='fixed_ips', port_id=port_id, merge_lines=False,
-                                             con_ssh=con_ssh, auth_info=auth_info)
+                                             con_ssh=con_ssh, auth_info=auth_info)[0]
         if isinstance(fixed_ips, str):
             fixed_ips = [fixed_ips]
         target_ips = [eval(fixed_ip)['ip_address'] for fixed_ip in fixed_ips]

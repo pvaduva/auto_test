@@ -41,7 +41,7 @@ class VMTimeout:
     IF_ADD = 30
     REBUILD = 300
     DHCP_IP_ASSIGN = 30
-    DHCP_RETRY = 420
+    DHCP_RETRY = 500
     PING_VM = 200
 
 

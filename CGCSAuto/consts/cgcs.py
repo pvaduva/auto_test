@@ -382,8 +382,32 @@ class LocalStorage:
     TYPE_STORAGE_PROFILE = ['storageProfile', 'localstorageProfile']
 
 
-class VMNetworkStr:
+class VMNetwork:
     NET_IF = r"auto {}\niface {} inet dhcp\n"
+    IFCFG_DHCP = \
+"""
+DEVICE={}
+BOOTPROTO=dhcp
+ONBOOT=yes
+TYPE=Ethernet
+USERCTL=yes
+PEERDNS=yes
+IPV6INIT={}
+PERSISTENT_DHCLIENT=1
+"""
+
+    IFCFG_STATIC = \
+"""
+DEVICE={}
+BOOTPROTO=static
+ONBOOT=yes
+TYPE=Ethernet
+USERCTL=yes
+PEERDNS=yes
+IPV6INIT={}
+PERSISTENT_DHCLIENT=1
+IPADDR={}
+"""
 
 
 class HTTPPort:
