@@ -4151,7 +4151,7 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, recover_scope='func
     storages = list(set(storages) & set(hosts))
 
     hosts_to_lock = list(computes_to_lock)
-    if not force_lock and len(computes) == len(computes_to_lock) and nova_helper.get_vms():
+    if computes and not force_lock and len(computes) == len(computes_to_lock) and nova_helper.get_vms():
         # leave a compute if there are vms on system and force lock=False
         last_compute = hosts_to_lock.pop()
 
