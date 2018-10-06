@@ -89,6 +89,7 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model
     LOG.tc_step("Boot a vm with network without subnet")
     vm_under_test = vm_helper.boot_vm(name='vm-net-without-subnet', nics=[mgmt_nic, tenant_net_nic],
                                       cleanup='function')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
 
     for vm_actions in [['cold_migrate'], ['live_migrate'], ['suspend', 'resume'], ['stop', 'start']]:
         tenant_port_id = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model,
@@ -121,16 +122,6 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
     Returns tenant_port_id (str):
 
     """
-    ip_addr = _find_ip_to_ping(vm_under_test)
-    LOG.info("ip address to ping {}".format(ip_addr))
-
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over management & data networks still works "
-                "before {}".format(vm_actions))
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        LOG.info("ip address to ping {}".format(ip_addr))
-        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
-
     LOG.tc_step("Attach the interface to {} of {} vif_model".format(vm_under_test, vif_model))
     tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
 
@@ -169,7 +160,8 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
         network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
     LOG.tc_step("Detach the {} interface {}".format(vif_model, tenant_port_id))
-    vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id, cleanup_route=True)
+    vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id, cleanup_route=False)
+    vm_helper.cleanup_routes_for_vifs(vm_id=vm_under_test, vm_ips=ip_addr)
 
     LOG.tc_step("Verify ping from base_vm to vm_under_test over management & data networks still works "
                 "after {}".format(vm_actions))
@@ -179,13 +171,6 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
         network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
-
-
-def _remove_dhclient_cache(vm_id):
-    dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        if vm_ssh.file_exists(dhclient_leases_cache):
-            vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
 
 
 ASSIGNED_IPS = []
@@ -200,10 +185,10 @@ def _assign_ip_to_nic(vm_id):
     vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
     vnic = vm_nics[-1]
     global ASSIGNED_IPS
-    static_ip = '172.16.0.{}'.format(random.choice(list(set(range(2-255))-set(ASSIGNED_IPS))))
+    static_ip = '172.16.0.{}'.format(random.choice(list(set(range(2, 255))-set(ASSIGNED_IPS))))
     ASSIGNED_IPS.append(static_ip)
     vm_helper.add_ifcfg_scripts(vm_id=vm_id, vnics=[vnic], reboot=False, static_ips=[static_ip])
-    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, vnics=[vnic], reboot=True)
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, vnics=[vnic], vm_ips=[static_ip], reboot=True)
 
     # dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
     # with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
