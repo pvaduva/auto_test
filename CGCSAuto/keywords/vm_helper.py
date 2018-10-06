@@ -1582,24 +1582,30 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
         if not vnics:
             raise ValueError("vm_ips or vnics has to be provided")
 
+    if isinstance(vm_ips, str):
+        vm_ips = [vm_ips]
+
     vnics_info = {}
-    if vnics and not vm_ips:
+    if vnics:
         LOG.info("Get vm interfaces' mac and ip addressess")
         if isinstance(vnics, dict):
             vnics = [vnics]
         vm_interfaces_table = table_parser.table(cli.nova('interface-list', vm_id))
         vm_interfaces_dict = table_parser.row_dict_table(table_=vm_interfaces_table, key_header='Port ID')
-        for vnic in vnics:
+        for i in range(len(vnics)):
+            vnic = vnics[i]
             port_id = vnic['port_id']
             vm_if_info = vm_interfaces_dict[port_id]
             eth_ip = vm_if_info['ip addresses']
+            if not eth_ip:
+                eth_ip = vm_ips[i]
             cidr = eth_ip.rsplit('.', maxsplit=1)[0] + '.0/24'
             mac_address = vm_if_info['mac addr']
             vnics_info[mac_address] = (cidr, eth_ip)
 
     with ssh_to_vm_from_natbox(vm_id=vm_id, prompt=vm_prompt) as vm_ssh:
         vifs_to_conf = {}
-        if vm_ips:
+        if vm_ips and not vnics:
             if isinstance(vm_ips, str):
                 vm_ips = [vm_ips]
 
