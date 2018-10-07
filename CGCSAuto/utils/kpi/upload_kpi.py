@@ -89,13 +89,13 @@ def upload_kpi(kpi_file, host=KPI_DB, port=8086, user=KPI_USER,
     client = InfluxDBClient(host, port, user, password, DB_NAME)
     client.write_points(upload_list)
 
-    print("\nQuery uploaded results")
-    for kpi_dict in kpi_list:
-        # client.delete_series(measurement=kpi_dict.get('name'))
-        query = 'SELECT * FROM "{}"'.format(kpi_dict.get('name'))
-        print("{}".format(query))
-        result = client.query(query)
-        print("{}\n".format(result))
+    # print("\nQuery uploaded results")
+    # for kpi_dict in kpi_list:
+    #     # client.delete_series(measurement=kpi_dict.get('name'))
+    #     query = 'SELECT * FROM "{}"'.format(kpi_dict.get('name'))
+    #     print("{}".format(query))
+    #     result = client.query(query)
+    #     print("{}\n".format(result))
 
     return
 
