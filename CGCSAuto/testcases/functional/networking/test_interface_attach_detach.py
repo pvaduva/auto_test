@@ -156,11 +156,9 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
             for tenant_port_id in tenant_port_ids:
                 vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id, cleanup_route=True)
 
-            LOG.tc_step("Remove the dhclient leases cache after detach")
-            _remove_dhclient_cache(vm_id=vm_under_test)
             res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
                                              net_types=['data'])[0]
-            assert not res, "Ping from base_vm to vm via detached interface still works"
+            assert not res, "Detached interface still works"
 
 
 @mark.parametrize(('guest_os', 'if_attach_arg', 'boot_source', 'vifs', 'live_migrations'), [
