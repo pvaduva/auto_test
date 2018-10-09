@@ -1,12 +1,14 @@
-import json
+import os
 import re
 import time
+import json
 
 from pytest import skip
 
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import GuestImages
 from consts.proj_vars import ProjVar
+from consts.filepaths import WRSROOT_HOME
 from consts.timeout import ImageTimeout
 from keywords import common, system_helper, host_helper, dc_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -73,17 +75,18 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
     return image_id
 
 
-def get_avail_image_space(con_ssh):
+def get_avail_image_space(con_ssh, path='/opt/cgcs'):
     """
-    Get available disk space in GiB on /opt/cgcs which is where glance images are saved at
+    Get available disk space in GiB on given path which is where glance images are saved at
     Args:
         con_ssh:
+        path (str)
 
     Returns (float): e.g., 9.2
 
     """
-    size = con_ssh.exec_cmd("df | grep '/opt/cgcs' | awk '{{print $4}}'", fail_ok=False)[1]
-    size = float(size.strip()) / (1024 * 1024)
+    size = con_ssh.exec_cmd("df {} | awk '{{print $4}}'".format(path), fail_ok=False)[1]
+    size = float(size.splitlines()[-1].strip()) / (1024 * 1024)
     return size
 
 
@@ -115,7 +118,7 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
     file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
     avail_size = get_avail_image_space(con_ssh=con_ssh)
 
-    return avail_size - file_size >= min_diff
+    return avail_size - file_size >= min_diff, file_size, avail_size
 
 
 def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
@@ -229,20 +232,22 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
 
     """
     with host_helper.ssh_to_test_server() as img_ssh:
-        if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
+        is_sufficient, image_file_size, avail_size = \
+            is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh)
+        if not is_sufficient:
             images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
             if images_to_del:
                 LOG.info("Delete non-default images due to insufficient image storage media to create required image")
                 delete_images(images_to_del, check_first=False, con_ssh=con_ssh)
-                if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh):
+                if not is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh)[0]:
                     LOG.info("Insufficient image storage media to create {} image even after deleting non-default "
                              "glance images".format(guest_os))
-                    return False
+                    return False, image_file_size
             else:
                 LOG.info("Insufficient image storage media to create {} image".format(guest_os))
-                return False
+                return False, image_file_size
 
-        return True
+        return True, image_file_size
 
 
 def create_image(name=None, image_id=None, source_image_file=None,
@@ -306,7 +311,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         create_auth = auth_info
 
     if ensure_sufficient_space:
-        if not is_image_storage_sufficient(img_file_path=file_path, con_ssh=con_ssh, image_host_ssh=image_host_ssh):
+        if not is_image_storage_sufficient(img_file_path=file_path, con_ssh=con_ssh, image_host_ssh=image_host_ssh)[0]:
             skip('Insufficient image storage for creating glance image from {}'.format(file_path))
 
     source_str = file_path
@@ -683,8 +688,11 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
     img_id = get_image_id_from_name(guest_os, strict=True)
 
     if not img_id:
+        con_ssh = None
+        img_file_size = 0
         if check_disk:
-            if not ensure_image_storage_sufficient(guest_os=guest_os):
+            is_sufficient, img_file_size = ensure_image_storage_sufficient(guest_os=guest_os)
+            if not is_sufficient:
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
         disk_format = 'qcow2'
@@ -701,7 +709,17 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
             disk_format = 'raw'
 
         # copy non-default img from test server
-        image_path = _scp_guest_image(img_os=guest_os)
+        dest_dir = ProjVar.get_var('USER_FILE_DIR')
+
+        if check_disk and os.path.abspath(dest_dir) == os.path.abspath(WRSROOT_HOME):
+            # Assume image file should not be present on system since large image file should get removed
+            if not con_ssh:
+                con_ssh = ControllerClient.get_active_controller()
+                avail_wrsroot_home = get_avail_image_space(con_ssh=con_ssh, path=WRSROOT_HOME)
+                if avail_wrsroot_home < img_file_size:
+                    skip("Insufficient space in {} for {} image to be copied to".format(WRSROOT_HOME, guest_os))
+
+        image_path = _scp_guest_image(img_os=guest_os, dest_dir='{}/images'.format(dest_dir))
 
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
