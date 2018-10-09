@@ -1661,6 +1661,7 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
         if restart_service and not reboot:
             LOG.info("Restart network service")
             vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=120)
+            vm_ssh.exec_cmd('ip addr')
 
     if reboot:
         reboot_vm(vm_id=vm_id)
@@ -1694,8 +1695,8 @@ def cleanup_routes_for_vifs(vm_id, vm_ips, rm_ifcfg=True, restart_service=True, 
             if found:
                 cidr, eth_name, table_name = found[0]
                 LOG.info("Update arp_filter, arp_announce, route and rule scripts for vm {} {}".format(vm_id, eth_name))
-                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
-                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
+                # vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
+                # vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
                 vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RULE_SCRIPT.format(eth_name)))
                 vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RT_SCRIPT.format(eth_name)))
                 vm_ssh.exec_sudo_cmd("sed -n -i '/{}/!p' {}".format(table_name, VMPath.RT_TABLES))
@@ -4033,7 +4034,8 @@ def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no
         reboot_vm(vm_id=vm_id)
 
 
-def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_info=None, con_ssh=None):
+def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_info=None, con_ssh=None,
+                     verify_virsh=True):
     """
     Detach a port from vm
     Args:
@@ -4042,6 +4044,8 @@ def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_in
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
+        cleanup_route (bool)
+        verify_virsh (bool): Whether to verify in virsh xmldump for detached port
 
     Returns (tuple): (<return_code>, <msg>)
         (0, Port <port_id> is successfully detached from VM <vm_id>)
@@ -4056,6 +4060,13 @@ def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_in
         if isinstance(fixed_ips, str):
             fixed_ips = [fixed_ips]
         target_ips = [eval(fixed_ip)['ip_address'] for fixed_ip in fixed_ips]
+
+    mac_to_check = None
+    if verify_virsh:
+        prev_nics = nova_helper.get_vm_interfaces_info(vm_id, auth_info=auth_info, con_ssh=con_ssh)
+        for prev_nic in prev_nics:
+            if port_id == prev_nic['port_id']:
+                mac_to_check = prev_nic['mac_address']
 
     LOG.info("Detaching port {} from vm {}".format(port_id, vm_id))
     args = '{} {}'.format(vm_id, port_id)
@@ -4076,10 +4087,38 @@ def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_in
     LOG.info(succ_msg)
 
     if cleanup_route and target_ips:
-        cleanup_routes_for_vifs(vm_id=vm_id, vm_ips=target_ips)
+        cleanup_routes_for_vifs(vm_id=vm_id, vm_ips=target_ips, reboot=True)
+
+    if verify_virsh and mac_to_check:
+        if not (cleanup_route and target_ips):
+            reboot_vm(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
+
+        check_devs_detached(vm_id=vm_id, mac_addrs=mac_to_check, con_ssh=con_ssh)
 
     return 0, succ_msg
 
+
+def check_devs_detached(vm_id, mac_addrs, con_ssh=None):
+    if isinstance(mac_addrs, str):
+        mac_addrs = [mac_addrs]
+
+    LOG.info("Check virsh xmldump on compute host")
+    inst_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
+    host_err = ''
+    with host_helper.ssh_to_host(vm_host, con_ssh=con_ssh) as host_ssh:
+        for mac_addr in mac_addrs:
+            if host_ssh.exec_sudo_cmd('virsh dumpxml {} | grep -B 1 -A 1 "{}"'.format(inst_name, mac_addr))[0] == 0:
+                host_err += 'VM interface with mac address {} still exists in virsh\n'.format(mac_addr)
+    assert not host_err, host_err
+
+    LOG.info("Check dev detached from vm")
+    vm_err = ''
+    with ssh_to_vm_from_natbox(vm_id=vm_id, con_ssh=con_ssh) as vm_ssh:
+        for mac_addr in mac_addrs:
+            if vm_ssh.exec_cmd('ip addr | grep -B 1 "{}"'.format(mac_addr))[0] == 0:
+                vm_err += 'Interface with mac address {} still exists in vm\n'.format(mac_addr)
+
+    assert not vm_err, vm_err
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
                  vlm=False, force=True, ping_vms=False):
