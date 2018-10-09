@@ -2246,7 +2246,7 @@ def get_host_procs(hostname, con_ssh=None):
     table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh,
                                            auth_info=Tenant.get('admin')))
     procs = table_parser.get_column(table_, 'processor')
-    return sorted(set(procs))
+    return sorted(list(set(procs)))
 
 
 def get_vswitch_port_engine_map(host_ssh):

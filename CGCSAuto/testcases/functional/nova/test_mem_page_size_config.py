@@ -61,7 +61,7 @@ def check_host_mem_configs(hosts):
 
 
 @fixture(scope='module')
-def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
+def add_1g_and_4k_pages(add_hosts_to_zone, config_host_module):
     storage_backing, hosts = add_hosts_to_zone
 
     LOG.fixture_step("Configure system if needed so that only {} proc1 has 2+ 1G pages, "
@@ -134,7 +134,7 @@ def print_hosts_memories(add_1g_and_4k_pages):
 
 
 @fixture(scope='module')
-def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
+def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_role_module):
     storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
 
     if len(target_hosts) < 2:
