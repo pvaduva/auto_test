@@ -273,6 +273,7 @@ def test_storage_profile(personality, from_backing, to_backing):
         LOG.tc_step("Check from host backing and convert to {} if necessary".format(from_backing))
         orig_from_host_backing = host_helper.get_host_instance_backing(from_host)
         new_from_backing = host_helper.set_host_storage_backing(from_host, from_backing)
+        host_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
 
         LOG.tc_step("Check to host backing and convert to {} if necessary".format(to_backing))
         orig_to_host_backing = host_helper.get_host_instance_backing(to_host)
@@ -309,6 +310,8 @@ def test_storage_profile(personality, from_backing, to_backing):
     LOG.tc_step("Delete all VMs and lock the host before applying the storage profile")
     vm_helper.delete_vms()
     HostsToRecover.add(to_host, scope='function')
+    host_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
+    host_helper.wait_for_host_values(to_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
     host_helper.lock_host(to_host, swact=True)
 
     # 3 conditions to watch for: no partitions, ready partitions and in-use
