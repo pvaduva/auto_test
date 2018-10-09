@@ -197,7 +197,7 @@ class TestSharedCpuDisabled:
         # mark.p3((64, 'dedicated', 1, 1, 63)),   # No host supports this many vcpus atm
     ])
     def test_launch_vm_shared_cpu_setting_negative(self, vcpus, cpu_policy, numa_nodes, numa_node0, shared_vcpu,
-                                                   remove_shared_cpu):
+                                                   check_numa_num, remove_shared_cpu):
         """
         Test boot vm cli returns error when system does not meet the shared cpu requirement(s) in given flavor
 
@@ -220,6 +220,10 @@ class TestSharedCpuDisabled:
             - Delete created volume if any (module)
 
         """
+
+        if (numa_node0 == 1 or numa_nodes == 2) and check_numa_num < 2:
+            skip('At least 2 processors are required on compute host to launch vm with numa_nodes=2 or numa_node.0=1')
+
         storage_backing, avail_zone = remove_shared_cpu
         LOG.tc_step("Create flavor with given numa configs")
         flavor = create_shared_flavor(vcpus=vcpus, cpu_policy=cpu_policy, storage_backing=storage_backing,

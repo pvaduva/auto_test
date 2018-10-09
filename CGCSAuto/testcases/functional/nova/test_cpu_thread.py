@@ -572,7 +572,10 @@ class TestHTEnabled:
         mark.p2((5, 'isolate', 2, None)),
         mark.p2((5, 'prefer', 1, None)),
     ])
-    def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_):
+    def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_, check_numa_num):
+        if numa_0 == 1 and check_numa_num < 2:
+            skip('Require at least 2 processors on compute host for numa_0=1')
+
         ht_hosts, non_ht_hosts = ht_hosts_
         LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
         flavor_id = nova_helper.create_flavor(name='cpu_thread_scale', vcpus=vcpus)[1]
