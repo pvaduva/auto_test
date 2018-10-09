@@ -1578,9 +1578,6 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
     Returns:
 
     """
-    if not vm_ips and not vnics:
-        if not vnics:
-            raise ValueError("vm_ips or vnics has to be provided")
 
     if isinstance(vm_ips, str):
         vm_ips = [vm_ips]
@@ -1595,20 +1592,20 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
         for i in range(len(vnics)):
             vnic = vnics[i]
             port_id = vnic['port_id']
-            vm_if_info = vm_interfaces_dict[port_id]
-            eth_ip = vm_if_info['ip addresses']
-            if not eth_ip:
-                eth_ip = vm_ips[i]
-            cidr = eth_ip.rsplit('.', maxsplit=1)[0] + '.0/24'
-            mac_address = vm_if_info['mac addr']
-            vnics_info[mac_address] = (cidr, eth_ip)
+            vif_info = vm_interfaces_dict[port_id]
+            vif_ip = vif_info['ip addresses']
+            if not vif_ip:
+                if not vm_ips:
+                    raise ValueError("vm_ips for matching vnics has to be provided for ports without ip address "
+                                     "listed in neutron port-list")
+                vif_ip = vm_ips[i]
+            cidr = vif_ip.rsplit('.', maxsplit=1)[0] + '.0/24'
+            vif_mac = vif_info['mac addr']
+            vnics_info[vif_mac] = (cidr, vif_ip)
 
     with ssh_to_vm_from_natbox(vm_id=vm_id, prompt=vm_prompt) as vm_ssh:
         vifs_to_conf = {}
-        if vm_ips and not vnics:
-            if isinstance(vm_ips, str):
-                vm_ips = [vm_ips]
-
+        if not vnics:
             extra_grep = '| grep --color=never -E "{}"'.format('|'.join(vm_ips)) if vm_ips else ''
             kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
             cidr_dict = {}
@@ -1640,7 +1637,7 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
 
         start_range = 110
         for eth_name, eth_info in vifs_to_conf.items():
-            cidr_, eth_ip, table_name = eth_info
+            cidr_, vif_ip, table_name = eth_info
             exiting_tab = vm_ssh.exec_cmd('grep --color=never {} {}'.format(table_name, VMPath.RT_TABLES))[1]
             if not exiting_tab:
                 for i in range(start_range, 250):
@@ -1655,9 +1652,9 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
             LOG.info("Update arp_filter, arp_announce, route and rule scripts for vm {} {}".format(vm_id, eth_name))
             vm_ssh.exec_sudo_cmd('echo 2 > {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
             vm_ssh.exec_sudo_cmd('echo 1 > {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
-            route = '{} dev {} proto kernel scope link src {} table {}'.format(cidr_, eth_name, eth_ip, table_name)
+            route = '{} dev {} proto kernel scope link src {} table {}'.format(cidr_, eth_name, vif_ip, table_name)
             vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(route, VMPath.ETH_RT_SCRIPT.format(eth_name)))
-            rule = 'table {} from {}'.format(table_name, eth_ip)
+            rule = 'table {} from {}'.format(table_name, vif_ip)
             vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(rule, VMPath.ETH_RULE_SCRIPT.format(eth_name)))
 
         if restart_service and not reboot:
