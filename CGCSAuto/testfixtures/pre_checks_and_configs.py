@@ -13,6 +13,16 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
+@fixture(scope='session')
+def skip_for_one_proc():
+    hypervisor = host_helper.get_up_hypervisors()
+    if not hypervisor:
+        skip("No up hypervisor on system.")
+
+    if len(host_helper.get_host_procs(hostname=hypervisor[0])) < 2:
+        skip('At least two processor per compute host is required for this test.')
+
+
 @fixture(scope='function')
 def skip_for_ovs():
     """
@@ -38,14 +48,13 @@ def simplex_only():
         skip(SkipSysType.SIMPLEX_ONLY)
 
 
-@fixture(scope='module')
+@fixture(scope='session')
 def check_numa_num():
-    proc_num = 2
-    if system_helper.is_simplex():
-        procs = host_helper.get_host_procs('controller-0')
-        proc_num = len(procs)
+    hypervisor = host_helper.get_up_hypervisors()
+    if not hypervisor:
+        skip("No up hypervisor on system.")
 
-    return proc_num
+    return len(host_helper.get_host_procs(hostname=hypervisor[0]))
 
 
 @fixture(scope='session')
