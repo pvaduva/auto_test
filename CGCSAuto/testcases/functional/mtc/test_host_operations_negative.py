@@ -37,7 +37,8 @@ def lock_(request):
     hosts = host_helper.get_hypervisors()
     host = hosts[0]
     if hosts[0] == system_helper.get_active_controller_name():
-        host = hosts[1]
+        if not system_helper.is_simplex():
+            host = hosts[1]
     host_helper.lock_host(host)
 
     def unlock_():
