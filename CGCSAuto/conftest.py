@@ -756,7 +756,7 @@ def pytest_unconfigure(config):
                 # Append general info to result log
                 f.write('\n\nLab: {}\n'
                         'Build ID: {}\n'
-                        'JOB: {}\n'
+                        'Job: {}\n'
                         'Build Server: {}\n'
                         'System Type: {}\n'
                         'Automation LOGs DIR: {}\n'
