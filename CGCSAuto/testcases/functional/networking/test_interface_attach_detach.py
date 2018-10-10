@@ -225,6 +225,8 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
                                       nics=nics, source=boot_source, source_id=source_id, guest_os=guest_os,
                                       cleanup='function')[1]
 
+    _ping_vm_data(vm_under_test=vm_under_test, base_vm_id=base_vm_id, action='boot')
+
     LOG.tc_step("Pause vm {} before attaching interfaces".format(vm_under_test))
     vm_helper.perform_action_on_vm(vm_under_test, action='pause')
 
@@ -253,15 +255,14 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
         res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
         assert res == 1, "vnics attach exceed maximum limit"
 
-    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1, base_vm=base_vm_id)
-
     LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live_migrate and unpause'))
     vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
     vm_helper.perform_action_on_vm(vm_under_test, action='unpause')
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
-    LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
-    _ping_vm_data(vm_under_test, base_vm_id, action='unpause')
+    LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm and ping them".
+                format(new_vnics, vif_model))
+    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1, base_vm=base_vm_id,
+                                 action='pause, attach interfaces, live migrate and unpause')
 
     for i in range(live_migrations):
         LOG.tc_step("Perform following action(s) on vm {}: {} {} time".format(vm_under_test, 'live migrate --force', i))
@@ -276,8 +277,6 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
         vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
         new_vnics -= 1
 
-    LOG.tc_step("Remove the dhclient leases cache after detach")
-    _remove_dhclient_cache(vm_id=vm_under_test)
     res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
                                      net_types=['data'])[0]
     assert not res, "Ping from base_vm to vm via detached interface still works"
@@ -303,7 +302,7 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg
         - Boot a base vm with mgmt net and tenant_port_id (module)
 
     Test Steps:
-        - Boot a vm with mgmt and 15 avp/virtio Interfaces
+        - Boot a vm with 1 mgmt and 15 avp/virtio Interfaces
         - Perform nova action (live migrate --force, live migrate, rebuild, reboot hard/soft, resize revert, resize)
         - ping between base_vm and vm_under_test over mgmt & tenant network
 
@@ -346,20 +345,19 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg
     for i in range(14):
         nics.append({'net-id': tenant_net_id, 'vif-model': vif_type})
 
-    LOG.tc_step("Boot a {} vm and flavor from {} with a mgmt and a data interface".format(guest_os, boot_source))
-    vm_under_test = vm_helper.boot_vm('if_attach-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
+    LOG.tc_step("Boot a {} vm and flavor from {} with 1 mgmt and 15 data interfaces".format(guest_os, boot_source))
+    vm_under_test = vm_helper.boot_vm('max_vifs-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
                                       nics=nics, source=boot_source, source_id=source_id, guest_os=guest_os,
                                       cleanup='function')[1]
 
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
     vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
     expt_vnics = 16
     LOG.info("vnics attached to VM: {}".format(vnics_attached))
     assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
 
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'rebuild'))
-    vm_helper.rebuild_vm(vm_id=vm_under_test)
-    _ping_vm_data(vm_under_test, base_vm_id, action='rebuild')
+    _ping_vm_data(vm_under_test, vm_under_test, action='boot')
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
+    _ping_vm_data(vm_under_test, base_vm_id, action='configure routes')
 
     LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate --force'))
     destination_host = vm_helper.get_dest_host_for_live_migrate(vm_id=vm_under_test)
@@ -389,18 +387,25 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg
     vm_helper.resize_vm(vm_under_test, dest_flavor_id, fail_ok=False)
     _ping_vm_data(vm_under_test, base_vm_id, action='resize')
 
+    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'rebuild'))
+    vm_helper.rebuild_vm(vm_id=vm_under_test)
+    _ping_vm_data(vm_under_test, vm_under_test, action='rebuild')
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
+    _ping_vm_data(vm_under_test, base_vm_id, action='rebuild')
+
 
 def _ping_vm_data(vm_under_test, base_vm_id, action):
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over mgmt & data networks works after {}".format(action))
+    LOG.tc_step("Verify ping vm_under_test {} from vm {} over mgmt & data networks works after {}".
+                format(vm_under_test, base_vm_id, action))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['data'], retry=10)
 
 
-def _remove_dhclient_cache(vm_id):
-    dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        if vm_ssh.file_exists(dhclient_leases_cache):
-            vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
+# def _remove_dhclient_cache(vm_id):
+#     dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
+#     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+#         if vm_ssh.file_exists(dhclient_leases_cache):
+#             vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
 
 
 def _bring_up_attached_interface(vm_id, guest_os, base_vm, num=1, action='attach interfaces'):

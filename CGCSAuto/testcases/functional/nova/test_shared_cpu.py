@@ -174,6 +174,10 @@ class TestSharedCpuDisabled:
 
         if hosts_unconfigured:
             avail_zone = 'cgcsauto'
+            LOG.fixture_step("({}) Add admin role to user under primary tenant and add configured hosts {} to "
+                             "cgcsauto aggregate".format('class', hosts_configured))
+            nova_helper.create_aggregate(name='cgcsauto', avail_zone='cgcsauto', check_first=True)
+            code = keystone_helper.add_or_remove_role(add_=True, role='admin')[0]
 
             def remove_admin():
                 nova_helper.delete_aggregate(avail_zone, remove_hosts=True)
@@ -182,9 +186,6 @@ class TestSharedCpuDisabled:
                     keystone_helper.add_or_remove_role(add_=False, role='admin')
             request.addfinalizer(remove_admin)
 
-            LOG.fixture_step("({}) Add admin role to user under primary tenant and add configured hosts {} to "
-                             "cgcsauto aggregate".format('class', hosts_configured))
-            code = keystone_helper.add_or_remove_role(add_=True, role='admin')[0]
             nova_helper.add_hosts_to_aggregate(aggregate=avail_zone, hosts=hosts_configured)
 
         return storage_backing, avail_zone
@@ -207,6 +208,7 @@ class TestSharedCpuDisabled:
             numa_nodes (int): number of numa nodes to set in flavor extra specs
             numa_node0 (int): value for numa_node.0
             shared_vcpu (int):
+            check_numa_num (int)
             remove_shared_cpu (tuple)
 
         Test Steps:
