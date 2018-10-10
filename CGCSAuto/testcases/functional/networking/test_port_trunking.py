@@ -219,9 +219,13 @@ def test_port_trunking():
         LOG.tc_step("Ping on vlan interface from guest after evacuation")
         network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
-    # Delete a trunk port used by the VM:
-    code = network_helper.delete_trunk(trunk_id=trunk1_id)[0]
-    assert code == 0, "Failed to delete port trunk"
+    LOG.tc_step("Attempt to delete trunk when in use, expect pass for AVS only")
+    code = network_helper.delete_trunk(trunk_id=trunk1_id, fail_ok=True)[0]
+
+    if system_helper.is_avs():
+        assert 0 == code, "Failed to delete port trunk when it's used by a running VM wiht AVS"
+    else:
+        assert 1 == code, "Trunk is deleted when it's used by a running VM with OVS"
 
 
 def test_port_trunking_basic():
