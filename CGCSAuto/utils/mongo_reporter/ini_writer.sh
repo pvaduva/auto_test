@@ -50,6 +50,7 @@ logfile=""
 userstory=""
 release_name=""
 build_server=""
+build_job=""
 system_label=""
 #tag=""
 
@@ -57,7 +58,7 @@ system_label=""
 #./ini_writer.sh -D -o a -n b -t c -r pass -a junk -d init -j " " -l LLL -u US 
 
 #note have to put in all options, otherwise getopts will choke
-while getopts "hDo:x:n:t:a:r:l:b:d:j:u:s:R:L:" options; do
+while getopts "hDo:x:n:t:a:r:l:b:d:j:u:s:R:L:J:" options; do
   case $options in
     o ) outfile="$OPTARG"
         let numopts+=2;;

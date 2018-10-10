@@ -16,6 +16,7 @@ TMP_FILE = '/tmp/cgcs_emailmessage.html'
 REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 <b>Lab: </b>{}
 <b>Load: </b>{}
+<b>Job: </b>{}
 <b>Build Server: </b>{}
 <b>Node Config: </b>{}{}{}
 
@@ -62,7 +63,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
             start_date = start_date.strftime("%Y-%m-%d")
             end_date = now.strftime("%Y-%m-%d")
 
-        lab, build, build_server, overall_status, log_path, summary, testcases_res = \
+        lab, build, build_server, overall_status, log_path, summary, testcases_res, build_job = \
             _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, logs_dir=logs_dir)
 
         if logs_dir:
@@ -76,7 +77,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
 
         source = source if res_file in source else os.path.join(logs_dir, res_file)
         source = os.path.expanduser(source)
-        lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches = \
+        lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches, build_job = \
             _get_local_results(source)
 
     lab = lab.upper()
@@ -111,7 +112,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
 
     log_path = re.sub(TEST_SERVER_FS_AUTOLOG, TEST_SERVER_HTTP_AUTOLOG, log_path, count=1)
     with open(TMP_FILE, mode='w') as f:
-        f.write(REPORT_FORMAT.format(lab, build, build_server, sys_config, sw_version, patches,
+        f.write(REPORT_FORMAT.format(lab, build, build_job, build_server, sys_config, sw_version, patches,
                                      overall_status, log_path, summary, testcases_res).replace('\n', '<br>'))
     if 'RED' in overall_status:
         raw_status = 'RED'
@@ -135,6 +136,8 @@ def _get_local_results(res_path):
 
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
+    build_job = re.findall('Job: (.*)\n', other_info)
+    build_job = build_job[0].strip() if build_job else 'Unknown'
     build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
     sw_version, patches = _get_version_and_patch(raw_res=raw_res)
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
@@ -144,7 +147,7 @@ def _get_local_results(res_path):
     summary = other_info.split(sep='\nSummary:')[-1].strip()
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches, build_job
 
 
 def _get_version_and_patch(res_path=None, raw_res=None):
@@ -221,7 +224,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
     # example "attributes" : [ [ "board_name", "WCP_76_77" ], [ "build", "2017-01-05_22-02-35" ],
     # [ "domain", "COMMON" ], [ "kernel", "3.10.71-ovp-rt74-r1_preempt-rt" ], [ "lab", "WCP_76_77" ],
     # [ "project", "CGCS 2.0" ] ]
-    lab = build = build_server = ''
+    lab = build = build_server = build_job = ''
     first_rec = last_records[0]
     for attr in first_rec['attributes']:
         if attr[0] in ('system', 'board_name'):
@@ -230,6 +233,8 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
             build = attr[1]
         elif attr[0] == 'build_server':
             build_server = attr[1]
+        elif attr[0] == 'build_job':
+            build_job = attr[1]
 
     if not logs_dir or lab.lower().replace('-', '-') not in str(logs_dir):
         panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
@@ -248,7 +253,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
 
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, build_server, overall_status, log_path, summary, testcases_res
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res, build_job
 
 
 def _get_overall_status(pass_rate):
