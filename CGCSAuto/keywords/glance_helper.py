@@ -103,19 +103,17 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
     Returns (bool):
 
     """
+    if image_host_ssh is None:
+        image_host_ssh = get_cli_client(central_region=True)
+    file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
 
     if con_ssh is None:
         name = 'central_region' if ProjVar.get_var('IS_DC') else None
         con_ssh = ControllerClient.get_active_controller(name=name)
-
     if 0 == con_ssh.exec_cmd('ceph df')[0]:
         # assume image storage for ceph is sufficient
-        return True
+        return True, file_size, None
 
-    if image_host_ssh is None:
-        image_host_ssh = get_cli_client(central_region=True)
-
-    file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
     avail_size = get_avail_image_space(con_ssh=con_ssh)
 
     return avail_size - file_size >= min_diff, file_size, avail_size
