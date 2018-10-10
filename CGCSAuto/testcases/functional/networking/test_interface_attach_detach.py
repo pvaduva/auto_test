@@ -1,5 +1,5 @@
 import re
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus, GuestImages, Prompt
@@ -65,6 +65,9 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
         - Delete base vm, volume    (module)
 
     """
+    if guest_os == 'vxworks' and not system_helper.is_avs():
+        skip('e1000 vif unsupported by OVS')
+
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
 
     if if_attach_arg == 'port_id':
