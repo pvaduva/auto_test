@@ -1120,13 +1120,12 @@ def test_compute_cpu_kernel_boot_args(hosts=None):
 
         LOG.info('---Check grub and cmdline args for cpu configs on {}'.format(host))
         with host_helper.ssh_to_host(hostname=host) as host_ssh:
-            files = ('/etc/default/grub', '/proc/cmdline')
-            for file in files:
-                output = host_ssh.exec_cmd('cat {}'.format(file), fail_ok=False)[1]
-                for k, expt_v in expt_dict.items():
-                    actual_v = re.findall('{}=([\d\-,]+)(\s|$)'.format(k), output)
-                    assert actual_v, "{} match not found in {} on {}".format(k, file, host)
-                    actual_v = common.parse_cpus_list(cpus=actual_v[0][0])
-                    assert sorted(expt_v) == actual_v, \
-                        "{}: {} in {} is different than expected. Items missing in grub: {}; extra items in grub: {}".\
-                        format(host, k, file, list(set(expt_v)-set(actual_v)), list(set(actual_v)-set(expt_v)))
+            file = '/proc/cmdline'     # do not check /etc/default/grub since it's only the default
+            output = host_ssh.exec_cmd('cat {}'.format(file), fail_ok=False)[1]
+            for k, expt_v in expt_dict.items():
+                actual_v = re.findall('{}=([\d\-,]+)(\s|$)'.format(k), output)
+                assert actual_v, "{} match not found in {} on {}".format(k, file, host)
+                actual_v = common.parse_cpus_list(cpus=actual_v[0][0])
+                assert sorted(expt_v) == actual_v, \
+                    "{}: {} in {} is different than expected. Items missing in grub: {}; extra items in grub: {}".\
+                    format(host, k, file, list(set(expt_v)-set(actual_v)), list(set(actual_v)-set(expt_v)))
