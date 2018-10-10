@@ -1,11 +1,14 @@
+from time import sleep
+
 from selenium.webdriver.common.by import By
 
 from utils.horizon.pages import basepage
-from utils.horizon.pages.project.compute \
-    import instancespage
-from utils.horizon.regions import forms
-from utils.horizon.regions import tables
-from time import sleep
+from utils.horizon.pages.project.compute import instancespage
+from utils.horizon.regions import forms, tables, messages
+from utils import exceptions
+from utils.tis_log import LOG
+
+from consts.timeout import VolumeTimeout
 
 
 class VolumesTable(tables.TableRegion):
@@ -110,7 +113,8 @@ class VolumesPage(basepage.BasePage):
 
     def create_volume(self, volume_name, description=None,
                       volume_source_type=None, source_name=None,
-                      type=None, volume_size=None, availability_zone=None):
+                      type=None, volume_size=None, availability_zone=None,
+                      fail_ok=False):
         volume_form = self.volumes_table.create_volume()
         volume_form.name.text = volume_name
         if description is not None:
@@ -128,12 +132,34 @@ class VolumesPage(basepage.BasePage):
         if availability_zone is not None:
             volume_form.availability_zone.text = availability_zone
         volume_form.submit()
+        if not self.find_message_and_dismiss(messages.INFO):
+            found_err = self.find_message_and_dismiss(messages.ERROR)
+            if fail_ok and found_err:
+                err_msg = "Failed to create volume {}".format(volume_name)
+                LOG.info(err_msg)
+                return 1, err_msg
+            else:
+                raise exceptions.HorizonError("No info message found after creating volume {}".format(volume_name))
+        succ_msg = "Volume {} is successfully created.".format(volume_name)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
-    def delete_volume(self, name):
+    def delete_volume(self, name, fail_ok=False):
         row = self._get_row_with_volume_name(name)
         row.mark()
         confirm_delete_volumes_form = self.volumes_table.delete_volume()
         confirm_delete_volumes_form.submit()
+        if not self.find_message_and_dismiss(messages.SUCCESS):
+            found_err = self.find_message_and_dismiss(messages.ERROR)
+            if fail_ok and found_err:
+                err_msg = "Failed to delete volume {}".format(name)
+                LOG.info(err_msg)
+                return 1, err_msg
+            else:
+                raise exceptions.HorizonError("No success message found after deleting volume {}".format(name))
+        succ_msg = "Volume {} is successfully deleted.".format(name)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
     def delete_volume_by_row(self, name):
         row = self._get_row_with_volume_name(name)
@@ -146,7 +172,7 @@ class VolumesPage(basepage.BasePage):
         confirm_delete_volumes_form = self.volumes_table.delete_volume()
         confirm_delete_volumes_form.submit()
 
-    def edit_volume(self, name, new_name=None, description=None, bootable=None):
+    def edit_volume(self, name, new_name=None, description=None, bootable=None, fail_ok=False):
         row = self._get_row_with_volume_name(name)
         volume_edit_form = self.volumes_table.edit_volume(row)
         if new_name is not None:
@@ -158,16 +184,26 @@ class VolumesPage(basepage.BasePage):
         if bootable is False:
             volume_edit_form.bootable.unmark()
         volume_edit_form.submit()
+        if not self.find_message_and_dismiss(messages.INFO):
+            found_err = self.find_message_and_dismiss(messages.ERROR)
+            if fail_ok and found_err:
+                err_msg = "Failed to edit volume {}".format(name)
+                LOG.info(err_msg)
+                return 1, err_msg
+            else:
+                raise exceptions.HorizonError("No info message found after editing volume {}".format(name))
+        succ_msg = "Volume {} is successfully edited.".format(name)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
     def is_volume_present(self, name):
         return bool(self._get_row_with_volume_name(name))
 
-    def is_volume_status(self, name, status):
+    def is_volume_status(self, name, status, timeout=VolumeTimeout.STATUS_CHANGE):
         def cell_getter():
             row = self._get_row_with_volume_name(name)
             return row and row.cells[self.VOLUMES_TABLE_STATUS_COLUMN]
-
-        return bool(self.volumes_table.wait_cell_status(cell_getter, status))
+        return bool(self.volumes_table.wait_cell_status(cell_getter, status, timeout=timeout))
 
     def is_volume_deleted(self, name):
         return self.volumes_table.is_row_deleted(
@@ -187,11 +223,22 @@ class VolumesPage(basepage.BasePage):
         snapshot_form.submit()
         return VolumesnapshotsPage(self.driver)
 
-    def extend_volume(self, name, new_size):
+    def extend_volume(self, name, new_size, fail_ok=False):
         row = self._get_row_with_volume_name(name)
         extend_volume_form = self.volumes_table.extend_volume(row)
         extend_volume_form.new_size.value = new_size
         extend_volume_form.submit()
+        if not self.find_message_and_dismiss(messages.INFO):
+            found_err = self.find_message_and_dismiss(messages.ERROR)
+            if fail_ok and found_err:
+                err_msg = "Failed to extend volume {}".format(name)
+                LOG.info(err_msg)
+                return 1, err_msg
+            else:
+                raise exceptions.HorizonError("No info message found after extending volume {}".format(name))
+        succ_msg = "Volume {} is successfully extended.".format(name)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
     def upload_to_image(self, volume_name, image_name, disk_format=None):
         row = self._get_row_with_volume_name(volume_name)
@@ -224,7 +271,6 @@ class VolumesPage(basepage.BasePage):
         instance_form.switch_to(1)
         if boot_source_type is not None:
             instance_form.fields['boot-source-type'].text = boot_source_type
-        sleep(1)
         instance_form._init_tab_fields(1)
         if create_new_volume is True:
             instance_form.fields['Create New Volume'].click_yes()
@@ -244,16 +290,38 @@ class VolumesPage(basepage.BasePage):
         instance_form.addelements('Network', network_names)
         instance_form.submit()
 
-    def attach_volume_to_instance(self, volume, instance):
+    def attach_volume_to_instance(self, volume, instance, fail_ok=False):
         row = self._get_row_with_volume_name(volume)
         attach_form = self.volumes_table.manage_attachments(row)
         attach_form.attach_instance(instance)
+        if not self.find_message_and_dismiss(messages.INFO):
+            found_err = self.find_message_and_dismiss(messages.ERROR)
+            if fail_ok and found_err:
+                err_msg = "Failed to attach volume {}".format(volume)
+                LOG.info(err_msg)
+                return 1, err_msg
+            else:
+                raise exceptions.HorizonError("No info message found after attaching volume {}".format(volume))
+        succ_msg = "Volume {} is successfully attached.".format(volume)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
-    def detach_volume_from_instance(self, volume, instance):
+    def detach_volume_from_instance(self, volume, instance, fail_ok=False):
         row = self._get_row_with_volume_name(volume)
         attachment_form = self.volumes_table.manage_attachments(row)
         detach_form = attachment_form.detach(volume, instance)
         detach_form.submit()
+        if not self.find_message_and_dismiss(messages.SUCCESS):
+            found_err = self.find_message_and_dismiss(messages.ERROR)
+            if fail_ok and found_err:
+                err_msg = "Failed to detach volume {}".format(volume)
+                LOG.info(err_msg)
+                return 1, err_msg
+            else:
+                raise exceptions.HorizonError("No info message found after detaching volume {}".format(volume))
+        succ_msg = "Volume {} is successfully detached.".format(volume)
+        LOG.info(succ_msg)
+        return 0, succ_msg
 
     def get_volume_info(self, volume_name, header):
         row = self._get_row_with_volume_name(volume_name)

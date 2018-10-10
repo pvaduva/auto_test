@@ -184,12 +184,12 @@ class TableRegion(baseregion.BaseRegion):
             lambda: all([not self._is_element_displayed(row) for row
                          in rows_getter()]))
 
-    def wait_cell_status(self, cell_getter, statuses):
+    def wait_cell_status(self, cell_getter, statuses, timeout=None):
         if not isinstance(statuses, (list, tuple)):
             statuses = (statuses,)
         try:
             return self._wait_till_text_present_in_element(cell_getter,
-                                                           statuses)
+                                                           statuses, timeout=timeout)
         except: # exceptions.TimeoutException:
             return False
 
