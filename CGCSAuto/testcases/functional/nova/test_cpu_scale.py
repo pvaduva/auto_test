@@ -155,7 +155,7 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     if expt_current_cpu > expt_min_cpu:
         LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
         for i in range(expt_current_cpu - expt_min_cpu):
-            LOG.infor("Scale down once and check vm vcpus change in nova show")
+            LOG.info("Scale down once and check vm vcpus change in nova show")
             vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
             expt_current_cpu -= 1
             expt_total_increase -= expt_vcpu_num_change
