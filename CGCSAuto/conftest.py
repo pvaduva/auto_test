@@ -91,6 +91,7 @@ def _write_results(res_in_tests, test_name):
     # reset tc_start and end time for next test case
     build_id = ProjVar.get_var('BUILD_ID')
     build_server = ProjVar.get_var('BUILD_SERVER')
+    build_job = ProjVar.get_var('JOB')
 
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
@@ -111,7 +112,7 @@ def _write_results(res_in_tests, test_name):
 
         try:
             upload_res = collect_and_upload_results(test_name, res_in_tests, ProjVar.get_var('LOG_DIR'), build=build_id,
-                                                    build_server=build_server)
+                                                    build_server=build_server, build_job=build_job)
             if not upload_res:
                 with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                     f.write('\tUPLOAD_UNSUCC')
@@ -813,6 +814,7 @@ def pytest_unconfigure(config):
     try:
         tc_res_path = log_dir + '/test_results.log'
         build_id = ProjVar.get_var('BUILD_ID')
+        build_job = ProjVar.get_var('JOB')
         build_server = ProjVar.get_var('BUILD_SERVER')
         session_id = ProjVar.get_var('SESSION_ID')
         session_tag = ProjVar.get_var('REPORT_TAG')
@@ -827,12 +829,13 @@ def pytest_unconfigure(config):
                 # Append general info to result log
                 f.write('\n\nLab: {}\n'
                         'Build ID: {}\n'
+                        'JOB: {}\n'
                         'Build Server: {}\n'
                         'System Type: {}\n'
                         'Automation LOGs DIR: {}\n'
                         'Ends at: {}\n'
                         '{}'    # test session id and tag
-                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_server, system_config,
+                        '{}'.format(ProjVar.get_var('LAB_NAME'), build_id, build_job, build_server, system_config,
                                     ProjVar.get_var('LOG_DIR'), tc_end_time, session_str, version_and_patch))
                 # Add result summary to beginning of the file
                 f.write('\nSummary:\nPassed: {} ({})\nFailed: {} ({})\nTotal Executed: {}\n'.

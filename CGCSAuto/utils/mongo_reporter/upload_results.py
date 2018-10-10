@@ -1,5 +1,4 @@
 import os
-import sys
 import re
 import pexpect
 import glob
@@ -25,7 +24,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             raise ValueError("test_results.log file path or lab name has to be provided.")
         logs_dir = logs_dir if logs_dir else os.path.expanduser("~")
         logs_dir = logs_dir.split(sep='/AUTOMATION_LOGS')[0]
-        if not logs_dir.endswith('/'):
+        if not str(logs_dir).endswith('/'):
             logs_dir += '/'
 
         lab_dir = "{}AUTOMATION_LOGS/{}".format(logs_dir, lab.lower().replace('-', '_'))
@@ -45,7 +44,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     jira = ''
 
     # Parse common test info from test_results.log
-    lab, build, build_server, testcases_list, log_dir, system_type = __parse_common_info(file_path)
+    lab, build, build_server, testcases_list, log_dir, system_type, build_job = __parse_common_info(file_path)
 
     # logfile = ','.join([os.path.join(log_dir, 'TIS_AUTOMATION.log'), os.path.join(log_dir, 'pytestlog.log')])
     logfile = 'none'        # Do not upload log to mongoDB since it will have major impact on performance
@@ -75,19 +74,20 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
         if not __upload_result(result_ini=result_ini, tag=tag, tester_name=tester_name, test_name=test_name,
                                result=result, lab=lab, build=build, userstory=userstory, domain=domain, jira=jira,
                                logfile=logfile, release_name=release_name, upload_log=upload_log,
-                               build_server=build_server, system_type=system_type):
+                               build_server=build_server, system_type=system_type, build_job=build_job):
             exit(1)
 
     print('All results uploaded successfully from: {}\nTag: {}'.format(file_path, tag))
 
 
 def __upload_result(result_ini, tag, tester_name, test_name, result, lab, build, userstory, domain, jira, logfile,
-                    release_name, upload_log, build_server, system_type):
+                    release_name, upload_log, build_server, system_type, build_job):
 
     upload_cmd = "{} {} -f {} 2>&1".format(WASSP_PYTHON, WASSP_REPORTER, result_ini)
     env_params = "-o '{}' -x '{}'  -n '{}' -t '{}' -r '{}' -l '{}' -b '{}' -u '{}' -d '{}' -j '{}' -a '{}' -R '{}' " \
-                 "-s '{}' -L '{}'".format(result_ini, tag, tester_name, test_name, result, lab, build, userstory,
-                                          domain, jira, logfile, release_name, build_server, system_type)
+                 "-s '{}' -L '{}' -J '{}'".\
+        format(result_ini, tag, tester_name, test_name, result, lab, build, userstory, domain, jira, logfile,
+               release_name, build_server, system_type, build_job)
 
     print("\nComposing result ini file for {}: {}".format(test_name, result_ini))
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
@@ -177,6 +177,8 @@ def __parse_common_info(test_results_file):
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip().upper().replace('-', '_')    # short_name in this format
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
     build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
+    build_job = re.findall('Job: (.*)\n', other_info)
+    build_job = build_job[0].strip() if build_job else 'Unknown'
     sys_type = re.findall('System Type: (.*)\n', other_info)
     if sys_type:
         sys_type = sys_type[0].strip()
@@ -205,4 +207,4 @@ def __parse_common_info(test_results_file):
 
     log_dir = test_results_file.replace('test_results.log', '')
 
-    return lab, build, build_server, testcases_list, log_dir, sys_type
+    return lab, build, build_server, testcases_list, log_dir, sys_type, build_job

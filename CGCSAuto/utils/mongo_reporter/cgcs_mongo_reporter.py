@@ -37,7 +37,8 @@ WASSP_PATH = os.path.join(LOCAL_PATH, "..", "..", "..", "..", "..")
 # sys.path.append(WASSP_LIB)
 
 
-def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None, build_server=None):
+def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=None, build_server=None,
+                               build_job=None):
     """
     collect the test environment variables 
     """
@@ -50,6 +51,7 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
     lab_name = lab['short_name'].upper().replace('-', '_')
     build = options['build'] if options.get('build') else build
     build_server = options.get('build_server') if options.get('build_server') else build_server
+    build_job = options.get('build_job') if options.get('build_job') else build_job
     userstory = options.get('userstory') if options.get('userstory') else setup_consts.USERSTORY.upper()
     
     if ProjVar.get_var('REPORT_TAG'):
@@ -127,10 +129,10 @@ def collect_and_upload_results(test_name=None, result=None, log_dir=None, build=
 
     # create a data file containing test information
     os.system("rm -rf %s" % output)
-    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -s '%s' -L '%s'"\
+    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -s '%s' -L '%s' -J '%s'"\
                  % (output, tag, tester_name, test_name, result, 
                     lab_name, build, userstory, domain,
-                    jira, logfile, release_name, build_server, system_type)
+                    jira, logfile, release_name, build_server, system_type, build_job)
 
     ini_writer = os.path.join(LOCAL_PATH, 'ini_writer.sh')
     cmd = "%s %s" % (ini_writer, env_params)
@@ -181,6 +183,8 @@ def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=N
     
     # get the environment variables
     build = options.build
+    build_server = options.build_server
+    build_job = options.build_job
     lab = options.lab.upper().replace('-', '_')
     userstory = options.userstory
     domain = options.domain
@@ -220,10 +224,10 @@ def collect_user_input_and_upload_results(test_name=None, result=None, log_dir=N
     
     # create a data file containing test information
     os.system("rm -rf %s" % output)
-    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -L '%s'"\
+    env_params = "-o '%s' -x '%s'  -n '%s' -t '%s' -r '%s' -l '%s' -b '%s' -u '%s' -d '%s' -j '%s' -a '%s' -R '%s' -s '%s' -L '%s' -J '%s'"\
                  % (output, tag, tester_name, test_name, result, 
                     lab, build, userstory, domain,
-                    jira, logfile, release_name, system_type)
+                    jira, logfile, release_name, build_server, system_type, build_job)
     
     LOG.info("Saving results for test case: %s" % test_name)
     LOG.info('Query parameters: %s' % env_params)
@@ -264,6 +268,7 @@ def parse_user_args():
     parser.add_argument('-x', '--tag', dest='tag', default=defaults['tag'])
     parser.add_argument('-j', '--jira', dest='jira', default=defaults['jira'])
     parser.add_argument('-s', '--build_server', dest='build_server', default=defaults['build_server'])
+    parser.add_argument('-J', '--build_job', dest='build_job', default=defaults['build_job'])
     parser.add_argument('-a', '--logfile', dest='logfile', default=defaults['logfile'])
 
     return parser.parse_args()
