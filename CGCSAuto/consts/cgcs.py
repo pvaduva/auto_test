@@ -50,15 +50,13 @@ SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01']
 
 
 class NtpPool:
-    NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
-    NTP_POOL_2 = '"1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org"'
-    NTP_POOL_3 = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org"'
-    NTP_POOL_TOO_LONG = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,\
-    1.com,2.com,3.com"'
-    NTP_NAME_TOO_LONG = '"garbage_garbage_garbage_garbage_garbage\
-    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
-    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
-    _garbage_garbage"'
+    NTP_POOL_1 = '2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org'
+    NTP_POOL_2 = '1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org'
+    NTP_POOL_3 = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org'
+    NTP_POOL_TOO_LONG = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,1.com,2.com,3.com'
+    NTP_NAME_TOO_LONG = 'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_' \
+                        'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_' \
+                        'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage'
 
 
 class GuestImages:

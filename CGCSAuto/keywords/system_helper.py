@@ -929,7 +929,7 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
     Args:
         rtn_val:
         alarm_id (str): such as 200.009
-        entity_id (str): entity instance id for the alarm (strict as defined in param)
+        entity_id (str|list|tuple): entity instance id for the alarm (strict as defined in param)
         reason (str): reason text for the alarm (strict as defined in param)
         severity (str): severity of the alarm to wait for
         timeout (int): max seconds to wait for alarm to appear
@@ -949,25 +949,42 @@ def wait_for_alarm(rtn_val='Alarm ID', alarm_id=None, entity_id=None, reason=Non
     kwargs = {}
     if alarm_id:
         kwargs['Alarm ID'] = alarm_id
-    if entity_id:
-        kwargs['Entity ID'] = entity_id
     if reason:
         kwargs['Reason Text'] = reason
     if severity:
         kwargs['Severity'] = severity
 
+    if entity_id and isinstance(entity_id, str):
+        entity_id = [entity_id]
+
     end_time = time.time() + timeout
     while time.time() < end_time:
         current_alarms_tab = get_alarms_table(con_ssh=con_ssh, auth_info=auth_info,
                                               use_telnet=use_telnet, con_telnet=con_telnet)
-        val = table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **kwargs)
+        if kwargs:
+            current_alarms_tab = table_parser.filter_table(table_=current_alarms_tab, strict=strict, regex=regex,
+                                                           **kwargs)
+        if entity_id:
+            val = []
+            for entity in entity_id:
+                entity_filter = {'Entity ID': entity}
+                val_ = table_parser.get_values(current_alarms_tab, rtn_val, strict=strict, regex=regex, **entity_filter)
+                if not val_:
+                    LOG.info("Alarm for entity {} has not appeared".format(entity))
+                    time.sleep(check_interval)
+                    continue
+                val += val_
+        else:
+            val = table_parser.get_values(current_alarms_tab, rtn_val)
+
         if val:
             LOG.info('Expected alarm appeared. Filters: {}'.format(kwargs))
             return True, val
 
         time.sleep(check_interval)
 
-    err_msg = "Alarm {} did not appear in fm alarm-list within {} seconds".format(kwargs, timeout)
+    entity_str = ' for entity {}'.format(entity_id) if entity_id else ''
+    err_msg = "Alarm {}{} did not appear in fm alarm-list within {} seconds".format(kwargs, entity_str, timeout)
     if fail_ok:
         LOG.warning(err_msg)
         return False, None
@@ -3645,16 +3662,232 @@ def get_networks(rtn_val='type', con_ssh=None, **kwargs):
 
 
 def enable_port_security_param():
+    """
+    Enable port security param
+    Returns:
+
+    """
     code = create_service_parameter(service='network', section='ml2', name='extension_drivers',
                                     value='port_security', apply=False)[0]
     if 0 == code:
         LOG.info("Apply network service parameter and lock/unlock computes")
-        from keywords.host_helper import get_up_hypervisors, lock_unlock_hosts
         apply_service_parameters(service='network', wait_for_config=False)
-        computes = get_up_hypervisors()
-        for host in computes:
-            wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=host, timeout=30)
+        wait_and_clear_config_out_of_date_alarms(host_type='compute')
 
-        time.sleep(60)
-        lock_unlock_hosts(computes)
-        wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=60)
+
+def get_ptp_vals(rtn_val='mode', rtn_dict=False, con_ssh=None):
+    """
+    Get values from system ptp-show table.
+    Args:
+        rtn_val (str|tuple|list):
+        rtn_dict (bool): whether to return dict or list
+        con_ssh:
+
+    Returns (list|dict):
+
+    """
+    table_ = table_parser.table(cli.system('ptp-show', ssh_client=con_ssh))
+
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+
+    vals = {} if rtn_dict else []
+    for field in rtn_val:
+        val = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+        if rtn_dict:
+            vals[field] = val
+        else:
+            vals.append(val)
+
+    return vals
+
+
+def modify_ptp(enabled=None, mode=None, transport=None, mechanism=None, fail_ok=False, con_ssh=None, clear_alarm=True,
+               wait_with_best_effort=False, auth_info=Tenant.get('admin')):
+    """
+    Modify ptp with given parameters
+    Args:
+        enabled (bool|None):
+        mode (str|None):
+        transport (str|None):
+        mechanism (str|None):
+        fail_ok (bool):
+        clear_alarm (bool):
+        wait_with_best_effort (bool):
+        auth_info (dict):
+        con_ssh:
+
+    Returns:
+
+    """
+    args_map = {
+        'enabled': enabled,
+        'mode': mode,
+        'transport': transport,
+        'mechanism': mechanism,
+    }
+
+    args_dict = {}
+    for key, val in args_map.items():
+        if val is not None:
+            args_dict[key] = str(val)
+
+    if not args_dict:
+        raise ValueError("At least one parameter has to be specified.")
+
+    arg_str = ' '.join(['--{} {}'.format(k, v) for k, v in args_dict.items()])
+    code, output = cli.system('ptp-modify', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                              rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    if clear_alarm:
+        wait_and_clear_config_out_of_date_alarms(host_type='controller', wait_with_best_effort=wait_with_best_effort,
+                                                 con_ssh=con_ssh)
+
+    post_args = get_ptp_vals(rtn_val=list(args_dict.keys()), con_ssh=con_ssh, rtn_dict=True)
+    for field in args_dict:
+        expt_val = args_dict[field]
+        actual_val = post_args[field]
+        if actual_val != expt_val:
+            raise exceptions.SysinvError("{} in ptp-show is not as expected after modify. Expt: {}; actual: {}".
+                                         format(field, expt_val, actual_val))
+
+    msg = 'ptp modified successfully. {}'.format('Alarm not cleared yet.' if not clear_alarm else '')
+    return 0, msg
+
+
+def get_ntp_vals(rtn_val='ntpservers', rtn_dict=False, con_ssh=None):
+    """
+    Get values from system ntp-show table.
+    Args:
+        rtn_val (str|tuple|list):
+        rtn_dict (bool)
+        con_ssh:
+
+    Returns (list|dict):
+
+    """
+    table_ = table_parser.table(cli.system('ntp-show', ssh_client=con_ssh))
+
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+
+    vals = {} if rtn_dict else []
+    for field in rtn_val:
+        val = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
+        if rtn_dict:
+            vals[field] = val
+        else:
+            vals.append(val)
+
+    return vals
+
+
+def modify_ntp(enable=None, ntp_servers=None, fail_ok=False, clear_alarm=True, wait_with_best_effort=False,
+               con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
+    """
+
+    Args:
+        enable (bool|None):
+        ntp_servers (str|None):
+        fail_ok (bool)
+        clear_alarm (bool): Whether to wait and lock/unlock hosts to clear alarm
+        wait_with_best_effort (bool): whether to wait for alarm with best effort only
+        con_ssh:
+        auth_info:
+        **kwargs
+
+    Returns (tuple):
+        (0, <success_msg>)
+        (1, <std_err>)      # cli rejected
+
+    """
+
+    arg = ''
+    verify_args = {}
+    if enable is not None:
+        arg += '--enabled {}'.format(enable).lower()
+        verify_args['enabled'] = str(enable)
+
+    if ntp_servers:
+        arg += ' ntpservers="{}"'.format(ntp_servers)
+        verify_args['ntpservers'] = ntp_servers
+
+    if kwargs:
+        for k, v in kwargs.items():
+            arg += ' {}={}'.format(k, v)
+            verify_args[k] = v
+
+    if not arg:
+        raise ValueError("Nothing to modify. enable, ntp_servers or kwwargs has to be provided")
+
+    code, out = cli.system('ntp-modify', arg.strip(), fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
+                           rtn_list=True)
+    if code > 0:
+        return 1, out
+
+    if clear_alarm:
+        wait_and_clear_config_out_of_date_alarms(host_type='controller', con_ssh=con_ssh,
+                                                 wait_with_best_effort=wait_with_best_effort)
+
+    post_args = get_ntp_vals(rtn_val=list(verify_args.keys()), con_ssh=con_ssh, rtn_dict=True)
+    for field in verify_args:
+        expt_val = verify_args[field]
+        actual_val = post_args[field]
+        if actual_val != expt_val:
+            raise exceptions.SysinvError("{} in ntp-show is not as expected after modify. Expt: {}; actual: {}".
+                                         format(field, expt_val, actual_val))
+
+    msg = 'ntp modified successfully. {}'.format('Alarm not cleared yet.' if not clear_alarm else '')
+    return 0, msg
+
+
+def wait_and_clear_config_out_of_date_alarms(hosts=None, host_type=None, lock_unlock=True, wait_with_best_effort=False,
+                                             clear_timeout=60, con_ssh=None):
+    """
+    Wait for config out-of-date alarms on given hosts and (lock/unlock and) wait for clear
+    Args:
+        hosts:
+        host_type (str|list|tuple): valid types: controller, compute, storage
+        lock_unlock (bool)
+        wait_with_best_effort (bool):
+        clear_timeout (int)
+        con_ssh:
+
+    Returns:
+
+    """
+    from keywords.host_helper import get_up_hypervisors, lock_unlock_hosts
+
+    if not hosts:
+        if not host_type:
+            raise ValueError('hosts or host_type has to be provided')
+
+        if isinstance(host_type, str):
+            host_type = [host_type]
+
+        host_type_map = {
+            'controller': get_controllers,
+            'compute': get_up_hypervisors,
+            'storage': get_storage_nodes
+        }
+        hosts = []
+        for host_type_ in host_type:
+            hosts += host_type_map[host_type_](con_ssh=con_ssh)
+
+        if not hosts:
+            raise exceptions.HostError("No valid hosts found for host_type: {}".format(host_type))
+        hosts = list(set(hosts))
+
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    if wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id=hosts, timeout=60, con_ssh=con_ssh,
+                      fail_ok=wait_with_best_effort)[0]:
+
+        if lock_unlock:
+            time.sleep(60)
+            lock_unlock_hosts(hosts, con_ssh=con_ssh)
+
+        wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=clear_timeout)
