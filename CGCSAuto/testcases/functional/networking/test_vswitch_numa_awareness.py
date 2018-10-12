@@ -1094,7 +1094,7 @@ class TestSpanNumaNodes:
 
 def test_compute_cpu_kernel_boot_args(hosts=None):
     """
-    Check cpu config values in /etc/default/grub and /proc/cmdline are inline with what's shown in system host-cpu-list
+    Check cpu config values in /proc/cmdline are inline with what's shown in system host-cpu-list
     Args:
         hosts (str|list|None):
 
