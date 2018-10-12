@@ -79,13 +79,14 @@ def test_firewall_rules_default():
     _verify_iptables_status(con_ssh, active_controller)
     _check_ports_with_netstat(con_ssh, active_controller, default_ports)
 
-    LOG.tc_step("Swact {}".format(active_controller))
-    host_helper.swact_host(active_controller)
-    active_controller = system_helper.get_active_controller_name()
-    con_ssh = ControllerClient.get_active_controller()
+    active_controller, new_active = system_helper.get_active_standby_controllers()
+    if new_active:
+        LOG.tc_step("Swact {} and verify firewall rules".format(active_controller))
+        host_helper.swact_host(active_controller)
+        con_ssh = ControllerClient.get_active_controller()
 
-    _verify_iptables_status(con_ssh, active_controller)
-    _check_ports_with_netstat(con_ssh, active_controller, default_ports)
+        _verify_iptables_status(con_ssh, new_active)
+        _check_ports_with_netstat(con_ssh, new_active, default_ports)
 
 
 def _verify_iptables_status(con_ssh, active_controller):
@@ -265,19 +266,16 @@ def _modify_firewall_rules(firewall_rules_path):
     start_time = common.get_date_in_format()
     time.sleep(1)
     cli.system('firewall-rules-install', firewall_rules_path)
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
-                                  **{'Entity Instance ID': 'host=controller-0',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
-                                  **{'Entity Instance ID': 'host=controller-1',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=120,
-                                  **{'Entity Instance ID': 'host=controller-0',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
-    # Extend timeout for controller-1 config-out-date clear to 5min due to CGTS-8497
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=300,
-                                  **{'Entity Instance ID': 'host=controller-1',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
+
+    controllers = system_helper.get_controllers()
+    for controller in controllers:
+        system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
+                                      **{'Entity Instance ID': 'host={}'.format(controller),
+                                         'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
+        # Extend timeout for controller-1 config-out-date clear to 5min due to CGTS-8497
+        system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=300,
+                                      **{'Entity Instance ID': 'host={}'.format(controller),
+                                         'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
     # Ensures iptables has enough time to populate the list with new ports
     time.sleep(10)
 
