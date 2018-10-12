@@ -6,6 +6,7 @@ import time
 from io import StringIO
 
 import pexpect
+
 from consts.timeout import MTCTimeout
 from keywords import system_helper, host_helper
 from utils.clients.ssh import ControllerClient
@@ -913,4 +914,3 @@ def wait_for_sm_dump_services_active(timeout=60, fail_ok=False, con_ssh=None):
     """
     active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh)
     return host_helper.wait_for_sm_dump_desired_states(controller=active_controller, timeout=timeout, fail_ok=fail_ok)
-

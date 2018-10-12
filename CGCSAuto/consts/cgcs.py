@@ -61,17 +61,6 @@ class NtpPool:
     _garbage_garbage"'
 
 
-class TP:
-     enabled = ['True', 'False']
-
-
-class Ptp:
-    enabled = ['True', 'False']
-    mode = ['hardware', 'software', 'legacy']
-    transport = ['l2', 'udp']
-    mechanism = ['e2e', 'p2p']
-
-
 class GuestImages:
     IMAGE_DIR = '/home/wrsroot/images'
     IMAGE_DIR_REMOTE = '/sandbox/images'
