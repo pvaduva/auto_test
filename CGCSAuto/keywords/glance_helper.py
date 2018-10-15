@@ -1,6 +1,6 @@
-import json, re
 from pytest import skip
 import os
+import re
 import time
 import json
 

@@ -850,7 +850,7 @@ def modify_swift(enable=True, check_first=True, fail_ok=False, apply=True, con_s
 
     if check_first:
         swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh, cli_filter=False)
-        if enable is not bool(swift_endpoints):
+        if enable is bool(swift_endpoints):
             msg = "swift service parameter is already {}d. Do nothing.".format(extra_str)
             LOG.info(msg)
             return -1, msg

@@ -70,12 +70,9 @@ def security_groups():
     return sg_primary, sg_secondary
 
 
-# @mark.parametrize('vm_type', [
-#     'virtio',
-#     'avp',
-#     'dpdk'
-# ])
-class TestPacketTypeSecurityRuleEnforcement:
+# US118544 in complete
+@mark.skip()
+class TestPacketTypeSecurity:
 
     @fixture(scope='class', params=['virtio', 'avp', 'dpdk'])
     def vm_type(self, request):
@@ -85,7 +82,7 @@ class TestPacketTypeSecurityRuleEnforcement:
 
         return vm_type_
 
-    def test_apply_group_at_launch(self, vm_type, security_groups):
+    def test_packet_type_security_apply_group_at_launch(self, vm_type, security_groups):
         """
         Apply security group to VMs at launch time, verify the rules are enforced
 
@@ -110,7 +107,7 @@ class TestPacketTypeSecurityRuleEnforcement:
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
 
-    def test_apply_group_running_vm(self, vm_type, security_groups):
+    def test_packet_type_security_apply_group_running_vm(self, vm_type, security_groups):
         """
         Apply security group to VMs when the VMs are running, verify the rules are enforced
 
@@ -137,7 +134,7 @@ class TestPacketTypeSecurityRuleEnforcement:
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
 
-    def test_modify_running_vm(self, vm_type, security_groups):
+    def test_packet_type_security_modify_running_vm(self, vm_type, security_groups):
         """
         Verify security_group related modifications are functioning as expected
 
@@ -193,11 +190,7 @@ class TestPacketTypeSecurityRuleEnforcement:
             session.get_frames_delta(stable=True)
 
 
-@mark.parametrize('tenant', [
-    'tenant1',
-    'tenant2',
-])
-def test_max_reached_creation_fail(tenant):
+def test_security_group_and_rule_create_reject_when_max_reached():
     """
     Verify security group and security group rule quotas are respected
 
@@ -213,7 +206,7 @@ def test_max_reached_creation_fail(tenant):
     Test Teardown:
         - Delete security groups created
     """
-    auth_info = Tenant.get(tenant)
+    auth_info = Tenant.get_primary()
 
     # nova_helper.get_quotas uses nova quota-show, which does not include secgroup* fields
     LOG.tc_step("Retrive quota and usage information")

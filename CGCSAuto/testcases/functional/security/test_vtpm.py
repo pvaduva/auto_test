@@ -21,6 +21,10 @@ g_vms = defaultdict(dict)
 
 @fixture(scope='module', autouse=True)
 def prepare_vms(request):
+
+    if not system_helper.is_avs():
+        skip('CGTS-9999')
+
     global g_flavors, g_vms
 
     LOG.info('Prepare VMs for vTPM test')

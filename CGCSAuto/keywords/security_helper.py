@@ -568,6 +568,7 @@ class LdapUserManager(object, metaclass=Singleton):
         Args:
             user_name (str):        user name
             password (str):         password
+            shell (int)
             host (str):             host to login to
             pre_store (bool):
                     True    -       pre-store keystone user credentials for session
@@ -582,40 +583,42 @@ class LdapUserManager(object, metaclass=Singleton):
             password (str)      -   the password used to login
             ssh_con (object)    -   the ssh session logged in
         """
-
-        hostname_ip = 'controller-1' if host is None else host
+        if not host:
+            host = 'controller-1'
+            if system_helper.is_simplex():
+                host = 'controller-0'
 
         prompt_keystone_user_name = 'Enter Keystone username \[{}\]: '.format(user_name)
-        if shell==1:
+        if shell == 1:
             cmd_expected = (
                 (
-                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
+                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, host),
                     ('Are you sure you want to continue connecting \(yes/no\)\?',),
-                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(hostname_ip),),
+                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(host),),
                 ),
                 (
                     'yes',
-                    ('{}@{}\'s password: '.format(user_name, hostname_ip),),
+                    ('{}@{}\'s password: '.format(user_name, host),),
                     (),
                 ),
                 (
                     '{}'.format(password),
-                    ( prompt_keystone_user_name, Prompt.CONTROLLER_PROMPT,),
+                    (prompt_keystone_user_name, Prompt.CONTROLLER_PROMPT,),
                     ('Permission denied, please try again\.',),
                 ),
             )
 
-        elif shell ==2:
+        elif shell == 2:
 
             cmd_expected = (
                 (
-                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
+                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, host),
                     ('Are you sure you want to continue connecting \(yes/no\)\?',),
-                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(hostname_ip),),
+                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(host),),
                 ),
                 (
                     'yes',
-                    ('{}@{}\'s password: '.format(user_name, hostname_ip),),
+                    ('{}@{}\'s password: '.format(user_name, host),),
                     (),
                 ),
                 (
@@ -654,10 +657,12 @@ class LdapUserManager(object, metaclass=Singleton):
                 (
                     '{}'.format(password),
                     ('Keystone credentials preloaded\!.*\[{}@{} \({}\)\]\$'.format(
-                        user_name, hostname_ip, self.KEYSTONE_USER_NAME),),
+                        user_name, host, self.KEYSTONE_USER_NAME),),
                     (),
                 ),
             )
+        else:
+            raise ValueError('Invalid shell. Please choose 1 or 2.')
 
         logged_in = False
         self.ssh_con.flush()
@@ -700,6 +705,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
             new_password (str):
                 -   new password to change to
+            change_own_password (bool):
 
             check_if_existing (bool):
                 -   True:   check if the user already existing first
@@ -1053,19 +1059,14 @@ def set_ldap_user_password(user_name, new_password, check_if_existing=True, fail
             -   True:   check if the user already existing first
                 False:  change the password without checking the existence of the user
 
-        host (str):
-            -   The host to log into
-
-        disconnect_after (bool)
-            -   True:   disconnect the ssh connection after changing the password
-            -   False:  keep the ssh connection
+        fail_ok (bool)
 
     Returns (bool):
             True if successful, False otherwise
     """
 
     if check_if_existing:
-        found, user_info = LdapUserManager.find_ldap_user(user_name)
+        found, user_info = LdapUserManager().find_ldap_user(user_name=user_name)
         if not found:
             return False
 
@@ -1094,7 +1095,7 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
 
     """
     valid_certs = ('ca-cert', 'server-with-key')
-    if not cert in valid_certs:
+    if cert not in valid_certs:
         raise ValueError("Please set cert to one of the following: {}".format(valid_certs))
 
     cert_name = '{}.pem'.format(cert)
@@ -1127,7 +1128,7 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
             from_server = bs_ssh.host
             search_cmd = "find {} -type f -name '{}'".format(search_path, cert_name)
             code, output = bs_ssh.exec_cmd(search_cmd, fail_ok=True)
-            if code !=0 or not output:
+            if code != 0 or not output:
                 msg = 'failed to fetch cert-file from build server, tried path:{}, server:{}'.format(
                         search_path, from_server)
                 LOG.warn(msg)

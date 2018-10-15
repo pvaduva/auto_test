@@ -74,7 +74,7 @@ def test_create_backup(con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    dest_dir = SvcCgcsAuto.HOME + '/backup_restore/'
+    dest_dir = SvcCgcsAuto.HOME + '/~backup_restore/'
 
     # execute backup command
     LOG.tc_step("Create backup system and image tgz file under /opt/backups")
@@ -84,7 +84,7 @@ def test_create_backup(con_ssh=None):
     con_ssh.exec_cmd(cmd, expect_timeout=1800, fail_ok=False)
 
     # scp backup files to test server
-    LOG.tc_step("SCP system and image tgz file into testserver /home/svc-cgcsauto/backup_restore")
+    LOG.tc_step("SCP system and image tgz file into testserver /home/svc-cgcsauto/~backup_restore")
     source_file = '/opt/backups/titanium_backup_'+date+'_system.tgz /opt/backups/titanium_backup_'+date+'_images.tgz '
 
     common.scp_from_active_controller_to_test_server(source_file, dest_dir, is_dir=False, multi_files=True)
@@ -151,7 +151,7 @@ def test_create_backup(con_ssh=None):
             vol_files = vol_files + '/opt/backups/volume-' + vol_id + '* '
             # TODO: delete created snapshot after the are in /opt/backups folder
 
-    # copy vol file if vol_files not empty dest_dir = SvcCgcsAuto.HOME + '/backup_restore'
+    # copy vol file if vol_files not empty dest_dir = SvcCgcsAuto.HOME + '/~backup_restore'
     if vol_files:
         common.scp_from_active_controller_to_test_server(vol_files, dest_dir, is_dir=False, multi_files=True)
 
