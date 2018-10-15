@@ -190,7 +190,7 @@ class TestPacketTypeSecurity:
             session.get_frames_delta(stable=True)
 
 
-def test_security_group_and_rule_create_reject_when_max_reached(tenant):
+def test_security_group_and_rule_create_reject_when_max_reached():
     """
     Verify security group and security group rule quotas are respected
 
