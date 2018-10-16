@@ -102,7 +102,8 @@ def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val
     return table_parser.get_value_two_col_table(table_, rtn_val)
 
 
-def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
+def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=True, auth_info=Tenant.get('admin'),
+                con_ssh=None):
     """
     Get metrics values via 'openstack metric list'
     Args:
@@ -120,11 +121,11 @@ def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False,
     arg = '-f value '
     arg += ' '.join(['-c {}'.format(column) for column in columns])
 
-    greps = [metric_name, resource_id]
-    greps = [item for item in greps if item is not None]
-    grep_str = '|'.join(greps)
-    if grep_str:
-        grep_str = ' | grep --color=never -E -i {}'.format(grep_str)
+    grep_str = ''
+    if resource_id:
+        grep_str += ' | grep --color=never -E -i {}'.format(resource_id)
+    if metric_name:
+        grep_str += ' | grep --color=never -E -i {}'.format(metric_name)
 
     arg += grep_str
 

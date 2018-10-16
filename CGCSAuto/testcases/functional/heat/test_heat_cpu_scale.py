@@ -5,7 +5,7 @@ from pytest import mark
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.proj_vars import ProjVar
-from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, gnocchi_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.tis_log import LOG
 
@@ -98,6 +98,17 @@ def test_heat_cpu_scale(vcpus, min_vcpus, live_mig, swact):
     LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
     expt_current_cpu = expt_max_cpu
     vm_helper.wait_for_vcpu_count(vm_id, current_cpu=expt_current_cpu, min_cpu=expt_min_cpu, max_cpu=expt_max_cpu)
+
+    LOG.tc_step("Wait for vcpu_util metrics to be created")
+    vcpu_utils = None
+    for i in range(10):
+        vcpu_utils = gnocchi_helper.get_metrics(metric_name='vcpu_util', resource_id=vm_id)
+        if vcpu_utils:
+            LOG.info("vcpu_util metrics exist")
+            break
+        time.sleep(5)
+    else:
+        assert vcpu_utils, "vcpu_util metric does not exist"
 
     LOG.tc_step("Nova scale vm cpu down to {}".format(expt_min_cpu))
     for i in range(expt_current_cpu - expt_min_cpu):
