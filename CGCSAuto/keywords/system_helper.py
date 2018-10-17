@@ -1583,6 +1583,8 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
         proc_id = [int(proc_id)]
     elif proc_id is None:
         proc_id = [int(proc) for proc in table_parser.get_column(table_, 'processor')]
+    else:
+        proc_id = [int(proc) for proc in proc_id]
 
     if wait_for_update:
         end_time = time.time() + 300
@@ -1605,7 +1607,7 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
 
     res = {}
     res_list = []
-    for proc in proc_id:
+    for proc in sorted(proc_id):
         vals = []
         for header in headers:
             value = table_parser.get_values(table_, header, strict=False, **{'processor': str(proc)})[0]
