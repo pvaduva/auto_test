@@ -545,6 +545,7 @@ def create_vm_values_for_type(vm_type, flavor=None):
 
     vm_values = {'id': vm_id}
     g_vms[vm_type] = vm_values
+
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_values['id']) as ssh_to_vm:
         vm_values['values'] = create_values(ssh_to_vm, vm_type)
@@ -560,8 +561,6 @@ def create_values(ssh_con, vm_type):
     values = {}
     for value_type in all_types:
         values[value_type] = create_value(ssh_con, value_type)
-
-    g_vms[vm_type] = {'values': values}
 
     return values
 
@@ -801,7 +800,7 @@ def test_vtpm(vm_operation, extra_specs):
 
     for vm_type in vm_types:
         reuse = reuse_existing_vms(vm_operation, extra_specs)
-        g_reusable = False
+        # g_reusable = False
 
         vm_id = get_vm_id(vm_type, reuse=reuse)
         LOG.info('-check vTPM supports on hosting node for VM:' + vm_id + ', vm-type:' + vm_type)
@@ -812,7 +811,7 @@ def test_vtpm(vm_operation, extra_specs):
         if vm_operation == 'create':
             with vm_helper.ssh_to_vm_from_natbox(vm_id) as ssh_to_vm:
                 LOG.info('Create all types of contents: volatile, non_volatile and persistent')
-                create_values(ssh_to_vm, vm_type)
+                # create_values(ssh_to_vm, vm_type)
 
         values = g_vms[vm_type]['values']
         LOG.info('Running test on VM:{}, type:{}, values:{}'.format(vm_id, vm_type, values))
