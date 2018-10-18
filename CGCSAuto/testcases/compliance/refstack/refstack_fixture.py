@@ -45,7 +45,7 @@ def refstack_setup(refstack_pre_check, request):
     storage_helper.modify_swift(enable=True)
 
     LOG.fixture_step("Create tenants, users, and update quotas")
-    compliance_helper.create_tenants_and_update_quotas()
+    compliance_helper.create_tenants_and_update_quotas(add_swift_role=True)
 
     LOG.fixture_step("Create test flavors")
     flavors = []

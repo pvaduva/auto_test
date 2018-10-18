@@ -156,18 +156,24 @@ def update_dovetail_mgmt_interface():
         network_helper.ping_server(server='192.168.204.3', ssh_client=dovetail_ssh, fail_ok=False)
 
 
-def create_tenants_and_update_quotas(new_tenants_index=(3, 6)):
+def create_tenants_and_update_quotas(new_tenants_index=(3, 6), add_swift_role=False):
     """
     Create tenant3-6 and update quotas for admin and the new tenants
 
     """
     projects = ['admin']
+    roles = ['_member_', 'admin']
+    if add_swift_role:
+        roles.append('SwiftOperator')
+
     if new_tenants_index:
         for i in range(new_tenants_index[0], new_tenants_index[1]+1):
             name = 'tenant{}'.format(i)
             keystone_helper.create_project(name=name, description=name, rtn_exist=True)
             keystone_helper.create_user(name=name, rtn_exist=True, password=USER_PASSWORD)
-            for role in ('_member_', 'admin'):
+            for role in roles:
+                if role == 'SwiftOperator' and name == 'admin':
+                    continue
                 user = 'admin' if role == 'admin' else name
                 keystone_helper.add_or_remove_role(role=role, project=name, user=user)
             projects.append(name)
