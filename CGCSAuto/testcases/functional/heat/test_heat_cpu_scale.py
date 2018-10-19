@@ -101,12 +101,13 @@ def test_heat_cpu_scale(vcpus, min_vcpus, live_mig, swact):
 
     LOG.tc_step("Wait for vcpu_util metrics to be created")
     vcpu_utils = None
-    for i in range(10):
+    end_time = time.time() + 360
+    while time.time() < end_time:
         vcpu_utils = gnocchi_helper.get_metrics(metric_name='vcpu_util', resource_id=vm_id)
         if vcpu_utils:
             LOG.info("vcpu_util metrics exist")
             break
-        time.sleep(5)
+        time.sleep(20)
     else:
         assert vcpu_utils, "vcpu_util metric does not exist"
 
