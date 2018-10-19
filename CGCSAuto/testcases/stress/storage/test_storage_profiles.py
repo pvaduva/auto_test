@@ -48,7 +48,6 @@ Additional coverage that should be added
   1. Try to apply a storage profile on a new host where the disk is too small
   2. Try to apply a storage profile on a partition configuration that is
   duplicate to the one stored in the profile
-  3. Try to apply a storage profile without deleting nova-local
 
 * Check that cinder/cgts-vg information is not stored in storage profile
 
@@ -314,8 +313,7 @@ def test_storage_profile(personality, from_backing, to_backing):
     host_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
     host_helper.wait_for_host_values(to_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
 
-    # Negative test - attempt to apply profile on unlocked host (should be
-    # rejected)
+    # Negative test #1 - attempt to apply profile on unlocked host (should be rejected)
     LOG.tc_step('Apply the storage-profile {} onto unlocked host:{}'.format(prof_name, to_host))
     cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
     rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
@@ -328,6 +326,13 @@ def test_storage_profile(personality, from_backing, to_backing):
     # partitions.  If no partitions, just delete nova-local lvg.
     if personality == "compute":
 
+        # Negative test #2 - attempt to apply profile onto host with existing
+        # nova-local (should be rejected)
+        LOG.tc_step('Apply the storage-profile {} onto host with existing nova-local:{}'.format(prof_name, to_host))
+        cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
+        rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
+        assert rc != 0, msg
+
         # If we were simply switching backing (without applying a storage
         # profile), the nova-local lvg deletion can be omitted according to design
         LOG.tc_step("Delete nova-local lvg on to host {}".format(to_host))
@@ -336,6 +341,15 @@ def test_storage_profile(personality, from_backing, to_backing):
         in_use = partition_helper.get_partitions([to_host], "In-Use")
 
         if len(in_use[to_host]) != 0:
+
+            # Negative test #3 - attempt to apply profile onto host with existing
+            # in-use partitions (should be rejected)
+            LOG.tc_step('Apply the storage-profile {} onto host with existing \
+                         in-use partitions:{}'.format(prof_name, to_host))
+            cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
+            rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
+            assert rc != 0, msg
+
             LOG.tc_step("In-use partitions found.  Must delete the host and freshly install before proceeding.")
             LOG.info("Host {} has in-use partitions {}".format(to_host, in_use))
             lab = InstallVars.get_install_var("LAB")
