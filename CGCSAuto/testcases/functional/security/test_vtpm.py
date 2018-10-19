@@ -800,7 +800,7 @@ def test_vtpm(vm_operation, extra_specs):
 
     for vm_type in vm_types:
         reuse = reuse_existing_vms(vm_operation, extra_specs)
-        # g_reusable = False
+        g_reusable = False
 
         vm_id = get_vm_id(vm_type, reuse=reuse)
         LOG.info('-check vTPM supports on hosting node for VM:' + vm_id + ', vm-type:' + vm_type)
