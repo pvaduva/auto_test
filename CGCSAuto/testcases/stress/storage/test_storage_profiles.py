@@ -123,6 +123,7 @@ def get_hw_compatible_hosts(hosts):
     LOG.info("These are the hardware compatible hosts: {}".format(hash_to_hosts))
     return hash_to_hosts
 
+
 def wait_for_disks(host, timeout=DISK_DETECTION_TIMEOUT, wait_time=10):
     """
     Check for presence of disks
@@ -312,6 +313,13 @@ def test_storage_profile(personality, from_backing, to_backing):
     HostsToRecover.add(to_host, scope='function')
     host_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
     host_helper.wait_for_host_values(to_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
+
+    # Negative test - attempt to apply profile on unlocked host (should be
+    # rejected)
+    LOG.tc_step('Apply the storage-profile {} onto unlocked host:{}'.format(prof_name, to_host))
+    cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
+    rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
+    assert rc != 0, msg
     host_helper.lock_host(to_host, swact=True)
 
     # 3 conditions to watch for: no partitions, ready partitions and in-use
@@ -390,7 +398,6 @@ def test_storage_profile(personality, from_backing, to_backing):
         con_ssh = ControllerClient.get_active_controller()
         delete_lab_setup_files(con_ssh, to_host, files)
 
-        #rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
         rc, msg = install_helper.run_lab_setup()
         assert rc == 0, msg
 
@@ -425,7 +432,6 @@ def test_storage_profile(personality, from_backing, to_backing):
         con_ssh = ControllerClient.get_active_controller()
         delete_lab_setup_files(con_ssh, to_host, files)
 
-        #rc, msg = install_helper.run_lab_setup(con_ssh=con_ssh)
         rc, msg = install_helper.run_lab_setup()
         assert rc == 0, msg
 
