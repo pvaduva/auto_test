@@ -285,9 +285,16 @@ def test_backup(pre_system_backup):
 
     backup_info = pre_system_backup
     LOG.info('Before backup, perform configuration changes and launch VMs')
+
     con_ssh = ControllerClient.get_active_controller()
-    pre_backup_test(backup_info, con_ssh)
     backup_info['con_ssh'] = con_ssh
+
+
+    is_ceph = backup_info.get('is_storage_lab', False)
+
+    if is_ceph:
+        # con_ssh.exec_sudo_cmd('touch /etc/ceph/ceph.client.None.keyring')
+        pre_backup_test(backup_info, con_ssh)
 
     lab = InstallVars.get_install_var('LAB')
     LOG.tc_step("System backup: lab={}; backup dest = {} backup destination path = {} ..."
@@ -305,6 +312,7 @@ def test_backup(pre_system_backup):
             elif k[-1:] == '2':
                 usb_part2 = k
         copy_to_usb = usb_part2
+
     backup_info['copy_to_usb'] = copy_to_usb
     backup_info['backup_file_prefix'] = get_backup_file_name_prefix(backup_info)
     backup_info['cinder_backup'] = BackupVars.get_backup_var('cinder_backup')
@@ -312,10 +320,10 @@ def test_backup(pre_system_backup):
     if not backup_info['cinder_backup']:
         backup_sysconfig_images(backup_info)
 
-        if backup_info.get('is_storage_lab', False):
+        if is_ceph:
             backup_cinder_volumes(backup_info)
     else:
-        if backup_info.get('is_storage_lab', False):
+        if is_ceph:
             backup_cinder_volumes(backup_info)
 
         backup_sysconfig_images(backup_info)
