@@ -63,6 +63,18 @@ class NTPTable(tables.TableRegion):
         return forms.FormRegion(self.driver, field_mappings=self.EDIT_NTP_FORM_FIELDS)
 
 
+class PTPTable(tables.TableRegion):
+    name = "cptp_table"
+
+    EDIT_PTP_FORM_FIELDS = ("NTP_SERVER_1", "NTP_SERVER_2", "NTP_SERVER_3")
+
+    @tables.bind_table_action('update_cntm')
+    def edit_ptp(self, edit_button):
+        edit_button.click()
+        self.wait_till_spinner_disappears()
+        return forms.FormRegion(self.driver, field_mappings=self.EDIT_NTP_FORM_FIELDS)
+
+
 class OAMTable(tables.TableRegion):
     name = "coam_table"
 
@@ -110,9 +122,10 @@ class SystemConfigurationPage(basepage.BasePage):
     ADDRESS_POOLS_TAB_INDEX = 1
     DNS_TAB_INDEX = 2
     NTP_TAB_INDEX = 3
-    OAM_IP_TAB_INDEX = 4
-    CONTROLLER_FILESYSTEM_TAB_INDEX = 5
-    PIPELINES_TAB_INDEX = 6
+    PTP_TAB_INDEX = 4
+    OAM_IP_TAB_INDEX = 5
+    CONTROLLER_FILESYSTEM_TAB_INDEX =6
+#   PIPELINES_TAB_INDEX = ?                      #This tag is removed in release 18.10
     SYSTEMS_TABLE_NAME_COLUMN = 'Name'
     ADDRESS_POOLS_TABLE_NAME_COLUMN = 'Name'
     PIPELINES_TABLE_NAME_CLOUMN = 'Name'
@@ -153,7 +166,7 @@ class SystemConfigurationPage(basepage.BasePage):
         return row.cells[header].text
 
     def _get_row_with_address_pool_name(self, name):
-        return self.systems_table.get_row(self.ADDRESS_POOLS_TABLE_NAME_COLUMN, name)
+        return self.address_pools_table.get_row(self.ADDRESS_POOLS_TABLE_NAME_COLUMN, name)
 
     def get_address_pool_info(self, name, header):
         row = self._get_row_with_address_pool_name(name)
@@ -185,7 +198,7 @@ class SystemConfigurationPage(basepage.BasePage):
         self.go_to_tab(self.CONTROLLER_FILESYSTEM_TAB_INDEX)
 
     def go_to_pipelines_tab(self):
-        self.go_to_tab(self.PIPELINES_TAB_INDEX)
+       self.go_to_tab(self.PIPELINES_TAB_INDEX)
 
     def edit_system(self, name, new_name=None, new_description=None):
         row = self._get_row_with_system_name(name)
@@ -195,6 +208,9 @@ class SystemConfigurationPage(basepage.BasePage):
         if new_description is not None:
             edit_form.description.text = new_description
         edit_form.submit()
+
+    def is_systems_present(self,name):
+        return bool(self._get_row_with_system_name(name))
 
     def create_address_pool(self, name, network, order=None, ranges=None):
         create_form = self.address_pools_table.create_address_pool()
