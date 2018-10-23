@@ -3528,8 +3528,8 @@ def collect_networking_info(routers=None, vms=None, sep_file=None):
         content = "#### Ping router interfaces {} ####\n{}\n".format(res_str, res_dict)
         common.write_to_file(sep_file, content=content)
 
-    if ProjVar.get_var('ALWAYS_COLLECT'):
-        common.collect_software_logs()
+    # if ProjVar.get_var('ALWAYS_COLLECT'):
+    #     common.collect_software_logs()
 
     hosts = host_helper.get_up_hypervisors()
     for router in routers:

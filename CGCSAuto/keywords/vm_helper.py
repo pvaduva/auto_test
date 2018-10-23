@@ -1812,8 +1812,8 @@ def wait_for_cloud_init_finish(vm_id, timeout=300, con_ssh=None):
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=60, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None,
+                     num_pings=5, timeout=120, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
+                     net_types='mgmt', retry=3, retry_interval=5, vlan_zero_only=True, exclude_nets=None,
                      vshell=False, source_net_types=None):
     """
 
@@ -1832,7 +1832,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
-        net_types (list|str): 'mgmt', 'data', or 'internal'
+        net_types (list|str|tuple): 'mgmt', 'data', or 'internal'
         retry (int): number of times to retry
         retry_interval (int): seconds to wait between each retries
         vlan_zero_only (bool): used if 'internal' is included in net_types. Ping vm over internal net with vlan id 0 if
@@ -3780,10 +3780,8 @@ def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=120
 
         events = new_dd_events + [end_event]
         while time.time() < scale_up_end_time:
-            time.sleep(10)
             current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus',
                                                                   con_ssh=con_ssh))[1]
-
             if current_now > current_:
                 for x in range(current_now - current_):
                     event_ = events.pop(0)
@@ -4971,23 +4969,39 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
         raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
 
-    vshell_vm1 = _set_vm_route(
+    vshell_ = _set_vm_route(
         vm1,
         interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
 
-    vshell_vm2 = None
     if bidirectional:
-        vshell_vm2 = _set_vm_route(
-            vm2,
-            interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm2]['internal']['mac'])
+        _set_vm_route(vm2, interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'],
+                      interfaces[vm2]['internal']['mac'])
 
     if validate:
         LOG.info("Validating route(s) across data")
-        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1, source_net_types='internal')
-        if bidirectional:
-            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2, source_net_types='internal')
+        ping_between_routed_vms(to_vm=vm2, from_vm=vm1, vshell=vshell_, bidirectional=bidirectional)
 
     return interfaces
+
+
+def ping_between_routed_vms(to_vm, from_vm, vshell=True, bidirectional=True, timeout=120):
+    """
+    Ping between routed vm pair
+    Args:
+        to_vm:
+        from_vm:
+        vshell:
+        bidirectional:
+        timeout:
+
+    Returns:
+
+    """
+    ping_vms_from_vm(to_vms=to_vm, from_vm=from_vm, net_types='data', vshell=vshell, source_net_types='internal',
+                     timeout=timeout)
+    if bidirectional:
+        ping_vms_from_vm(to_vms=from_vm, from_vm=to_vm, net_types='data', vshell=vshell, source_net_types='internal',
+                         timeout=timeout)
 
 
 def setup_kernel_routing(vm_id, **kwargs):
@@ -5395,9 +5409,10 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None,
 
     vm_test = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
                          **__merge_dict(launch_vms_kwargs, primary_kwargs))[0][0]
+    ping_vms_from_vm(vm_test, vm_test, net_types=('data', 'internal'))
     vm_observer = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
                              **__merge_dict(launch_vms_kwargs, secondary_kwargs))[0][0]
-
+    ping_vms_from_vm(vm_observer, vm_observer, net_types=('data', 'internal'))
     LOG.info("Route the {} test-observer VM pair".format(vm_type))
     if vm_type in ('dpdk', 'vhost', 'vswitch'):
         setup_avr_routing(vm_test, vm_type=vm_type)

@@ -5,7 +5,7 @@ from pytest import mark
 
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages
 from consts.proj_vars import ProjVar
-from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, gnocchi_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.tis_log import LOG
 
@@ -99,10 +99,28 @@ def test_heat_cpu_scale(vcpus, min_vcpus, live_mig, swact):
     expt_current_cpu = expt_max_cpu
     vm_helper.wait_for_vcpu_count(vm_id, current_cpu=expt_current_cpu, min_cpu=expt_min_cpu, max_cpu=expt_max_cpu)
 
+    LOG.tc_step("Wait for vcpu_util metrics to be created")
+    vcpu_utils = None
+    end_time = time.time() + 360
+    while time.time() < end_time:
+        vcpu_utils = gnocchi_helper.get_metrics(metric_name='vcpu_util', resource_id=vm_id)
+        if vcpu_utils:
+            LOG.info("vcpu_util metrics exist")
+            break
+        time.sleep(20)
+    else:
+        assert vcpu_utils, "vcpu_util metric does not exist"
+
     LOG.tc_step("Nova scale vm cpu down to {}".format(expt_min_cpu))
     for i in range(expt_current_cpu - expt_min_cpu):
-        vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+        code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
         time.sleep(10)
+        if code > 0:
+            assert 'cannot scale beyond limits' in output, 'nova scale rejected unexpectedly'
+            break
+    # ensure vm current vcpu count drop to min vcpu count.
+    vm_helper.wait_for_vcpu_count(vm_id, current_cpu=expt_min_cpu, min_cpu=expt_min_cpu,
+                                  max_cpu=expt_max_cpu, time_out=10)
 
     LOG.tc_step("Check vm cpu auto scale up/down by running/killing dd processes in vm")
     vm_helper.wait_for_auto_cpu_scale(vm_id=vm_id, expt_max=expt_max_cpu, expt_min=expt_min_cpu)

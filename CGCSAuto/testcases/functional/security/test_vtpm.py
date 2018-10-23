@@ -19,16 +19,21 @@ g_flavors = defaultdict(str)
 g_vms = defaultdict(dict)
 
 
+def reset_vms():
+    g_vms.clear()
+    g_vms.update(vtpm=None, autorc=None, non_autorc=None)
+    
+
 @fixture(scope='module', autouse=True)
 def prepare_vms(request):
 
-    if not system_helper.is_avs():
-        skip('CGTS-9999')
+    # if not system_helper.is_avs():
+    #     skip('CGTS-9999')
 
     global g_flavors, g_vms
 
     LOG.info('Prepare VMs for vTPM test')
-    g_vms.update(vtpm=None, autorc=None, non_autorc=None)
+    reset_vms()
 
     def clean_up():
         LOG.info('Clean up: delete VMs, volumes, flavors and etc.')
@@ -545,6 +550,7 @@ def create_vm_values_for_type(vm_type, flavor=None):
 
     vm_values = {'id': vm_id}
     g_vms[vm_type] = vm_values
+
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_values['id']) as ssh_to_vm:
         vm_values['values'] = create_values(ssh_to_vm, vm_type)
@@ -560,8 +566,6 @@ def create_values(ssh_con, vm_type):
     values = {}
     for value_type in all_types:
         values[value_type] = create_value(ssh_con, value_type)
-
-    g_vms[vm_type] = {'values': values}
 
     return values
 
@@ -706,15 +710,16 @@ def get_vm_id(vm_type, reuse=True):
 
     LOG.info('Make sure the VM for the specified type exists, create if it does not')
 
-    if g_vms[vm_type] and 'id' in g_vms[vm_type]:
+    if reuse and g_vms[vm_type] and 'id' in g_vms[vm_type]:
         vm_id = g_vms[vm_type]['id']
         LOG.info('VM exists for type:{}, vm_id:{}'.format(vm_type, vm_id))
 
         if reuse and nova_helper.get_vm_status(vm_id=vm_id) == VMStatus.ACTIVE:
             return vm_id
-        else:
-            vm_helper.delete_vms(vm_id)
-            g_vms.pop(vm_type)
+
+    LOG.info('not reusing...')
+    vm_helper.delete_vms()
+    reset_vms()
 
     if not g_flavors[vm_type]:
         create_flavor(vm_type)
@@ -730,7 +735,7 @@ def reuse_existing_vms(vm_operation, extra_specs):
     if not g_reusable:
         return False
 
-    if 'reboot_host' == vm_operation or 'non_autorc' in extra_specs or 'non_vtpm' in extra_specs:
+    if 'reboot_host' == vm_operation or 'evacuate' in vm_operation or 'non_autorc' in extra_specs or 'non_vtpm' in extra_specs:
         return False
 
     return True
@@ -801,7 +806,6 @@ def test_vtpm(vm_operation, extra_specs):
 
     for vm_type in vm_types:
         reuse = reuse_existing_vms(vm_operation, extra_specs)
-        g_reusable = False
 
         vm_id = get_vm_id(vm_type, reuse=reuse)
         LOG.info('-check vTPM supports on hosting node for VM:' + vm_id + ', vm-type:' + vm_type)
@@ -812,7 +816,7 @@ def test_vtpm(vm_operation, extra_specs):
         if vm_operation == 'create':
             with vm_helper.ssh_to_vm_from_natbox(vm_id) as ssh_to_vm:
                 LOG.info('Create all types of contents: volatile, non_volatile and persistent')
-                create_values(ssh_to_vm, vm_type)
+                # create_values(ssh_to_vm, vm_type)
 
         values = g_vms[vm_type]['values']
         LOG.info('Running test on VM:{}, type:{}, values:{}'.format(vm_id, vm_type, values))
@@ -855,6 +859,7 @@ def test_vtpm(vm_operation, extra_specs):
                 assert False, message
 
             if 'reboot_host' == vm_operation \
+                    or 'evacuate' in vm_operation\
                     or 'resize_to_non_vtpm' in vm_operation\
                     or 'non_autorc' in extra_specs \
                     or 'non_vtpm' in extra_specs:

@@ -85,6 +85,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
                                   log_path=VmStartup.LOG_PATH, end_pattern=VmStartup.END.format(vm_id),
                                   start_pattern=VmStartup.START.format(vm_id), uptime=1)
 
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     # Migration KPI
     if ('ixia_ports' in ProjVar.get_var("LAB")) and (len(hosts_per_backing.get(storage_backing)) >= 2):
 
@@ -99,9 +100,9 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
         vm_observer = vm_helper.boot_vm('observer', flavor=flavor, source=boot_source,
                                         nics=nics_observer, cleanup='function', auth_info=Tenant.get_secondary())[1]
 
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_observer)
         vm_helper.setup_kernel_routing(vm_observer)
         vm_helper.setup_kernel_routing(vm_id)
-
         vm_helper.route_vm_pair(vm_observer, vm_id)
 
         if 'local_lvm' != boot_from:
@@ -112,10 +113,9 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
                 code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
                 assert 0 == code, msg
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+                vm_helper.ping_between_routed_vms(vm_id, vm_observer)
 
-            vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
             time.sleep(30)
-
             duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation_live, vm_id)
             assert duration > 0, "No traffic loss detected during live migration for {} vm".format(boot_from)
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NAME.format(boot_from),
@@ -125,16 +125,15 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=LiveMigrate.NOVA_NAME.format(boot_from),
                                       kpi_val=vim_duration, uptime=1, unit='Time(s)')
 
-            LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
+        LOG.tc_step("Collect cold migrate KPI for vm booted from {}".format(boot_from))
 
         def operation_cold(vm_id_):
             code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
             assert 0 == code, msg
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+            vm_helper.ping_between_routed_vms(vm_id, vm_observer)
 
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
         time.sleep(30)
-
         duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation_cold, vm_id)
         assert duration > 0, "No traffic loss detected during cold migration for {} vm".format(boot_from)
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ColdMigrate.NAME.format(boot_from),
@@ -152,6 +151,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
             code, msg = vm_helper.rebuild_vm(vm_id=vm_id_)
             assert 0 == code, msg
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
+            vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=('data', 'internal'))
 
         LOG.tc_step("Collect vm rebuild KPI for vm booted from {}".format(boot_from))
         time.sleep(30)
