@@ -26,8 +26,8 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         expt_vswitch_map = host_helper.get_expected_vswitch_port_engine_map(host_ssh)
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
-    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
-    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, rtn_list=True)
+    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', ports_only=True)
+    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, ports_only=True)
 
     ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
 

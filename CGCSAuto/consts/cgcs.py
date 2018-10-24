@@ -48,6 +48,8 @@ SUBCLOUD_PATTERN = 'subcloud'
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
+PLATFORM_NET_TYPES = ('mgmt', 'oam', 'infra', 'pxeboot')
+
 
 class NtpPool:
     NTP_POOL_1 = '2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org'
@@ -91,7 +93,7 @@ class GuestImages:
         'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5),
         'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 1.5),
         'debian-8-m-agent': ('debian-8-m-agent.qcow2', 1.8, 'debian-8-m-agent.qcow2', 0.5),
-        'trusty_uefi' : ('trusty-server-cloudimg-amd64-uefi1.img', 0.3, 'trusty-server-cloudimg-amd64-uefi1.img', 0.3),
+        'trusty_uefi': ('trusty-server-cloudimg-amd64-uefi1.img', 0.3, 'trusty-server-cloudimg-amd64-uefi1.img', 0.3),
         'uefi_shell': ('uefi_shell.iso', 0.1, 'uefi_shell.iso', 0.1),
     }
 
@@ -122,7 +124,6 @@ class Networks:
 
     @classmethod
     def mgmt_net_name_pattern(cls):
-        region = ''
         from consts.proj_vars import ProjVar
         region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
         return 'tenant\d{}-mgmt-net'.format(region)
@@ -623,3 +624,76 @@ class MuranoEnvStatus:
     DEPLOY_FAILURE = 'deploy failure'
     DELETING = 'deleting'
     DELETE_FAILURE = 'delete failure'
+
+
+class TrafficControl:
+    CLASSES = {'1:40': 'default', '1:1': 'root', '1:10': 'hiprio', '1:20': 'storage', '1:30': 'migration',
+               '1:50': 'drbd'}
+
+    RATE_PATTERN_ROOT = 'class htb 1:1 root rate (\d+)([GMK])bit ceil (\d+)([GMK])bit burst \d+b cburst \d+b'
+    RATE_PATTERN = 'class htb (1:\d+) parent 1:1 leaf \d+: prio \d+ rate (\d+)([GMK])bit ceil (\d+)([GMK])bit ' \
+                   'burst \d+b cburst \d+b'
+
+    # no infra
+    MGMT_NO_INFRA = {
+        'config': 'no infra',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2),
+        'storage': (0.5, 1),
+        'migration': (0.3, 1),
+        'drbd': (0.8, 1)}
+
+    # infra must be sep
+    MGMT_SEP = {
+        'config': 'separate mgmt',
+        'root': (1, 1),
+        'default': (0.1, 1),
+        'hiprio': (0.1, 1)}
+
+    # infra could be sep or over pxe
+    MGMT_USES_PXE = {
+        'config': 'mgmt consolidated over pxeboot',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2)}
+
+    # infra over mgmt
+    MGMT_USED_BY_INFRA = {
+        'config': 'infra consolidated over mgmt',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2),
+        'storage': (0.5, 1),
+        'migration': (0.3, 1),
+        'drbd': (0.8, 1)}
+
+    # infra over mgmt
+    INFRA_USES_MGMT = {
+        'config': 'infra consolidated over mgmt',
+        'root': (0.99, 0.99),
+        'default': (0.99*0.1, 0.99*0.2),
+        'hiprio': (0.99*0.1, 0.99*0.2),
+        'storage': (0.99*0.5, 0.99*1),
+        'migration': (0.99*0.3, 0.99*1),
+        'drbd': (0.99*0.8, 0.99*1)}
+
+    # mgmt could be sep or over pxe
+    INFRA_SEP = {
+        'config': 'separate infra',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2),
+        'storage': (0.5, 1),
+        'migration': (0.3, 1),
+        'drbd': (0.8, 1)}
+
+    # mgmt must be over pxe
+    INFRA_USES_PXE = {
+        'config': 'infra and mgmt consolidated over pxeboot',
+        'root': (1, 1),
+        'default': (0.99*0.1, 0.99*0.2),    # 0.1, 0.2 is the ratio for mgmt
+        'hiprio': (0.99*0.1, 0.99*0.2),     # 0.1, 0.2 is the ratio for mgmt
+        'storage': (0.99*0.5, 0.99),
+        'migration': (0.99*0.3, 0.99),
+        'drbd': (0.99*0.8, 0.99)}

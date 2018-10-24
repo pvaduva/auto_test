@@ -1,10 +1,12 @@
 import math
 import re
 import time
+import copy
+
 from pytest import skip
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID
+from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID, PLATFORM_NET_TYPES
 from consts.proj_vars import ProjVar
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
@@ -166,10 +168,14 @@ def get_storage_nodes(con_ssh=None, use_telnet=False, con_telnet=None):
     return get_hostnames(personality='storage', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
 
-def get_controllers(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin')):
+def get_controllers(administrative=None, operational=None, availability=None, con_ssh=None, use_telnet=False,
+                    con_telnet=None, auth_info=Tenant.get('admin')):
     """
     Get hostnames with 'controller' personality from system host-list
     Args:
+        administrative
+        operational
+        availability
         con_ssh (SSHClient):
         use_telnet
         con_telnet
@@ -179,13 +185,18 @@ def get_controllers(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=T
 
     """
     return get_hostnames(personality='controller', con_ssh=con_ssh, use_telnet=use_telnet,
+                         administrative=administrative, operational=operational, availability=availability,
                          con_telnet=con_telnet, auth_info=auth_info)
 
 
-def get_computes(con_ssh=None, use_telnet=False, con_telnet=None):
+def get_computes(administrative=None, operational=None, availability=None, con_ssh=None,
+                 use_telnet=False, con_telnet=None):
     """
     Get hostnames with 'compute' personality from system host-list
     Args:
+        administrative
+        operational
+        availability
         con_ssh (SSHClient):
         use_telnet
         con_telnet
@@ -194,6 +205,7 @@ def get_computes(con_ssh=None, use_telnet=False, con_telnet=None):
 
     """
     return get_hostnames(personality='compute', con_ssh=con_ssh, use_telnet=use_telnet,
+                         administrative=administrative, operational=operational, availability=availability,
                          con_telnet=con_telnet)
 
 
@@ -1895,7 +1907,7 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
 
     Args:
         host (str):
-        rtn_val (str): header for return info
+        rtn_val (str|tuple): header for return info
         net_type (str|list|tuple): valid values: 'oam', 'data', 'infra', 'mgmt', 'None'(string instead of None type)
         if_type (str): possible values: 'ethernet', 'ae', 'vlan'
         uses_ifs (str):
@@ -1922,7 +1934,7 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
         for net in net_type:
             network = ''
             if_class = net
-            if net in ('mgmt', 'oam', 'infra'):
+            if net in PLATFORM_NET_TYPES:
                 if_class = 'platform'
                 network = net
             networks.append(network)
@@ -1950,31 +1962,45 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
             if not (set(if_nets) & set(networks)):
                 table_ = table_parser.filter_table(table_, strict=True, exclude=(not exclude), name=pform_if)
 
-    values = table_parser.get_column(table_, header=rtn_val)
-    if rtn_val in ['ports', 'used by i/f', 'uses i/f']:
-        values = [eval(item) for item in values]
+    convert = False
+    if isinstance(rtn_val, str):
+        rtn_val = [rtn_val]
+        convert = True
 
-    return values
+    vals = []
+    for header in rtn_val:
+        values = table_parser.get_column(table_, header=header)
+        if header in ['ports', 'used by i/f', 'uses i/f']:
+            values = [eval(item) for item in values]
+        vals.append(values)
+
+    if convert:
+        vals = vals[0]
+    elif len(vals) > 1:
+        vals = list(zip(*vals))
+
+    return vals
 
 
-def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_host_ports_for_net_type(host, net_type='data', ports_only=True, con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
         host:
         net_type:
-        rtn_list:
+        ports_only: whether to include dev_name as well
         con_ssh:
         auth_info:
 
-    Returns (dict):
+    Returns (list):
 
     """
     table_ = get_host_interfaces_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
+    table_origin = copy.deepcopy(table_)
     if net_type:
         if_class = net_type
         network = ''
-        if net_type in ('mgmt', 'oam', 'infra'):
+        if net_type in PLATFORM_NET_TYPES:
             if_class = 'platform'
             network = net_type
 
@@ -1989,27 +2015,39 @@ def get_host_ports_for_net_type(host, net_type='data', rtn_list=True, con_ssh=No
                     table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
 
     net_ifs_names = table_parser.get_column(table_, 'name')
-    total_ports = {}
+    total_ports = []
     for if_name in net_ifs_names:
-        ports = eval(table_parser.get_values(table_, 'ports', name=if_name)[0])
-
-        if not ports:
+        if_type = table_parser.get_values(table_, 'type', name=if_name)[0]
+        if if_type == 'ethernet':
+            ports = eval(table_parser.get_values(table_, 'ports', name=if_name)[0])
+            dev_name = ports[0] if len(ports) == 1 else if_name
+        else:
+            dev_name = if_name
+            ports = []
             uses_ifs = eval(table_parser.get_values(table_, 'uses i/f', name=if_name)[0])
             for use_if in uses_ifs:
-                useif_ports = eval(table_parser.get_values(table_, 'ports', name=use_if)[0])
+                use_if_type = table_parser.get_values(table_origin, 'type', name=use_if)[0]
+                if use_if_type == 'ethernet':
+                    useif_ports = eval(table_parser.get_values(table_origin, 'ports', name=use_if)[0])
+                else:
+                    # uses if is ae
+                    useif_ports = eval(table_parser.get_values(table_origin, 'uses i/f', name=use_if)[0])
                 ports += useif_ports
 
-        total_ports[if_name] = ports
+            if if_type == 'vlan':
+                vlan_id = table_parser.get_values(table_, 'vlan id', name=if_name)[0]
+                if ports:
+                    dev_name = ports[0] if len(ports) == 1 else uses_ifs[0]
+                dev_name = '{}.{}'.format(dev_name, vlan_id)
 
-    LOG.info("{} network ports for host are: {}".format(net_type, total_ports))
+        if ports_only:
+            total_ports += ports
+        else:
+            total_ports.append((dev_name, sorted(ports)))
 
-    if rtn_list:
-        total_ports_list = []
-        for ports in list(total_ports.values()):
-            total_ports_list += ports
-
-        total_ports_list = list(set(total_ports_list))
-        return total_ports_list
+    LOG.info("{} {} network ports are: {}".format(host, net_type, total_ports))
+    if ports_only:
+        total_ports = list(set(total_ports))
 
     return total_ports
 
@@ -2050,7 +2088,7 @@ def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True,
     Returns (list):
 
     """
-    ports = get_host_ports_for_net_type(host, net_type=net_type, rtn_list=rtn_list, con_ssh=con_ssh,
+    ports = get_host_ports_for_net_type(host, net_type=net_type, ports_only=rtn_list, con_ssh=con_ssh,
                                         auth_info=auth_info)
     pci_addresses = []
     for port in ports:

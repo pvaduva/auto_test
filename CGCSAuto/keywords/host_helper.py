@@ -11,7 +11,7 @@ from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
-    Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE
+    Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE, TrafficControl, PLATFORM_NET_TYPES
 
 from keywords import system_helper, common
 from keywords.security_helper import LinuxUser
@@ -3027,7 +3027,7 @@ def modify_mtu_on_interfaces(hosts, mtu_val, network_type, lock_unlock=True, fai
 
     if_class = network_type
     network = ''
-    if network_type in ('mgmt', 'oam', 'infra'):
+    if network_type in PLATFORM_NET_TYPES:
         if_class = 'platform'
         network = network_type
 
@@ -3791,7 +3791,7 @@ def get_mellanox_ports(host):
     Returns (list):
 
     """
-    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
+    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', ports_only=True)
     mt_ports = system_helper.get_host_ports_values(host, 'uuid', if_name=data_ports, strict=False, regex=True,
                                                    **{'device type': MELLANOX_DEVICE})
     LOG.info("Mellanox ports: {}".format(mt_ports))
@@ -3843,7 +3843,11 @@ def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclu
         exclude_iftype(bool): whether or not to exclude the if type specified.
         con_ssh (SSHClient):
 
-    Returns (list):
+    Returns (dict): {
+        'ethernet': [<dev1>, <dev2>, etc],
+        'vlan': [<dev1.vlan1>, <dev2.vlan2>, etc],
+        'ae': [(<if1_name>, [<dev1_names>]), (<if2_name>, [<dev2_names>]), ...]
+        }
 
     """
     LOG.info("Getting expected eth names for {} network on {}".format(net_type, host))
@@ -3856,7 +3860,7 @@ def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclu
 
     network = ''
     if_class = net_type
-    if net_type in ('mgmt', 'oam', 'infra'):
+    if net_type in PLATFORM_NET_TYPES:
         if_class = 'platform'
         network = net_type
 
@@ -3870,27 +3874,32 @@ def get_host_interfaces_for_net_type(host, net_type='infra', if_type=None, exclu
             if network not in if_nets:
                 table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
 
-    interfaces = []
+    interfaces = {}
     table_eth = table_parser.filter_table(table_, **{'type': 'ethernet'})
     eth_ifs = table_parser.get_values(table_eth, 'ports')
+    interfaces['ethernet'] = eth_ifs
     # such as ["[u'enp134s0f1']", "[u'enp131s0f1']"]
 
     table_ae = table_parser.filter_table(table_, **{'type': 'ae'})
+    ae_names = table_parser.get_values(table_ae, 'name')
     ae_ifs = table_parser.get_values(table_ae, 'uses i/f')
 
-    for ifs in eth_ifs + ae_ifs:
-        interfaces += eval(ifs)
+    ae_list = []
+    for i in range(len(ae_names)):
+        ae_list.append((ae_names[i], ae_ifs[i]))
+    interfaces['ae'] = ae_list
 
     table_vlan = table_parser.filter_table(table_, **{'type': ['vlan', 'vxlan']})
     vlan_ifs_ = table_parser.get_values(table_vlan, 'uses i/f')
     vlan_ids = table_parser.get_values(table_vlan, 'vlan id')
+    vlan_list = []
     for i in range(len(vlan_ifs_)):
         # assuming only 1 item in 'uses i/f' list
         vlan_useif = eval(vlan_ifs_[i])[0]
         vlan_useif_ports = eval(table_parser.get_values(table_origin, 'ports', name=vlan_useif)[0])
         if vlan_useif_ports:
             vlan_useif = vlan_useif_ports[0]
-        interfaces.append("{}.{}".format(vlan_useif, vlan_ids[i]))
+        vlan_list.append("{}.{}".format(vlan_useif, vlan_ids[i]))
 
     LOG.info("Expected eth names for {} network on {}: {}".format(net_type, host, interfaces))
     return interfaces
@@ -4171,30 +4180,72 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, recover_scope='func
     LOG.info("Hosts lock/unlock completed: {}".format(hosts))
 
 
-def get_traffic_control_info(con_ssh=None, port=None):
+def get_traffic_control_rates(dev, con_ssh=None):
     """
-    Check the traffic control profile on given port name
+    Check the traffic control profile on given device name
 
-    Returns (list): return traffic control string
+    Returns (dict): return traffic control rates in Mbit.
+        e.g., {'root': [10000, 10000], 'drbd': [8000, 10000], ... }
 
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-    traffic_control = con_ssh.exec_cmd('tc class show dev {}'.format(port), expect_timeout=10)[1]
-    return traffic_control
+    output = con_ssh.exec_cmd('tc class show dev {}'.format(dev), expect_timeout=10)[1]
+
+    traffic_classes = {}
+    for line in output.splitlines():
+        match = re.findall(TrafficControl.RATE_PATTERN, line)
+        if match:
+            ratio, rate, rate_unit, ceil_rate, ceil_rate_unit = match[0]
+            class_name = TrafficControl.CLASSES[ratio]
+        else:
+            root_match = re.findall(TrafficControl.RATE_PATTERN_ROOT, line)
+            if not root_match:
+                raise NotImplementedError('Unrecognized traffic class line: {}'.format(line))
+            rate, rate_unit, ceil_rate, ceil_rate_unit = root_match[0]
+            class_name = 'root'
+
+        rate = int(rate)
+        ceil_rate = int(ceil_rate)
+
+        rates = []
+        for rate_info in ((rate, rate_unit), (ceil_rate, ceil_rate_unit)):
+            rate_, unit_ = rate_info
+            rate_ = int(rate_)
+            if unit_ == 'G':
+                rate_ = int(rate_*1000)
+            elif unit_ == 'K':
+                rate_ = int(rate_/1000)
+
+            rates.append(rate_)
+
+        traffic_classes[class_name] = rates
+
+    LOG.info("Traffic classes for {}: ".format(dev, traffic_classes))
+    return traffic_classes
 
 
-def get_nic_speed(con_ssh=None, port=None):
+def get_nic_speed(interface, con_ssh=None):
     """
-    Check the speed on given port name
+    Check the speed on given interface name
+    Args:
+        interface (str|list)
 
     Returns (list): return speed
 
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
-    traffic_control = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(port), expect_timeout=10)[1]
-    return traffic_control
+
+    if isinstance(interface, str):
+        interface = [interface]
+
+    speeds = []
+    for if_ in interface:
+        if_speed = con_ssh.exec_cmd('cat /sys/class/net/{}/speed' .format(if_), expect_timeout=10, fail_ok=False)[1]
+        speeds.append(int(if_speed))
+
+    return speeds
 
 
 def get_host_telnet_session(host, login=True, lab=None):

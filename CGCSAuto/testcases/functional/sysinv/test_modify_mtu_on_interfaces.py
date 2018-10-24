@@ -12,6 +12,7 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
+from consts.cgcs import PLATFORM_NET_TYPES
 from keywords import vm_helper, host_helper, system_helper, network_helper
 
 HOSTS_IF_MODIFY_ARGS = []
@@ -365,7 +366,7 @@ def get_ifs_to_mod(host, network_type, mtu_val):
 
     if_class = network_type
     network = ''
-    if network_type in ('mgmt', 'oam', 'infra'):
+    if network_type in PLATFORM_NET_TYPES:
         if_class = 'platform'
 
     table_ = table_parser.filter_table(table_, **{'class': if_class})

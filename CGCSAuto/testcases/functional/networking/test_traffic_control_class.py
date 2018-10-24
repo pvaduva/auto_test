@@ -1,209 +1,103 @@
-import re
-from pytest import fixture, skip, mark
+import copy
+from pytest import skip
 
-import keywords.host_helper
 from keywords import system_helper, host_helper
 from utils.tis_log import LOG
-from consts.reasons import SkipHostIf
+from consts.cgcs import HostAvailState, TrafficControl
 
-def test_traffic_controls():
+
+def test_traffic_control_classes():
     """
-        CGTS - 6884 - Traffic Controls Changes Required
+    References: CGTS-6884
+    Test Steps:
+        - get interface(s)/dev(s) used by mgmt and infra networks via system host-if-list <controller>
+        - get the link capacity via /sys/class/net/<dev>
+        - calculate the expected rates for each class based on how system mgmt/infra are configured and the underlying
+        link capacity.
+        - check the rates set for different traffic control classes for mgmt and infra devs via tc dev show dev <dev>
+        - Ensure if follows the expectations in CGTS-6884
 
-        Test Steps:
-            - Check the interface type
-            - Check the speed of the interface
-            - Check if traffic profile enabled as per expected value
-
-        Teardown:
-            -
     """
 
-    NIC_1G_TC = """class htb 1:1 root rate 1000Mbit ceil 1000Mbit burst 15125b cburst 1375b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 100000Kbit ceil 200000Kbit burst 15337b cburst 1600b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 500000Kbit ceil 1000Mbit burst 15250b cburst 1375b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 300000Kbit ceil 1000Mbit burst 15300b cburst 1375b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 100000Kbit ceil 200000Kbit burst 15337b cburst 1600b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 800000Kbit ceil 1000Mbit burst 15200b cburst 1375b"""
+    controllers = system_helper.get_controllers(availability=HostAvailState.AVAILABLE)
 
-    NIC_10G_TC = """class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 5000Mbit ceil 10000Mbit burst 15000b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 3000Mbit ceil 10000Mbit burst 15000b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 8000Mbit ceil 10000Mbit burst 14000b cburst 0b"""
+    for controller in controllers:
+        LOG.info("Collect traffic control info for {}".format(controller))
+        mgmt = system_helper.get_host_interfaces(host=controller, net_type='mgmt',
+                                                 rtn_val=('name', 'type', 'vlan id', 'ports', 'uses i/f'))[0]
+        mgmt_if_name, mgmt_type, mgmt_vlan, mgmt_ports, mgmt_uses_ifs = mgmt
+        if mgmt_type == 'virtual':
+            skip("mgmt is virtual")
 
-    NIC_20G_TC = """class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 5000Mbit ceil 10000Mbit burst 15000b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 3000Mbit ceil 10000Mbit burst 15000b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 8000Mbit ceil 10000Mbit burst 14000b cburst 0b"""
-
-    NIC_25G_TC = """class htb 1:1 root rate 25000Mbit ceil 25000Mbit burst 9375b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 2500Mbit ceil 5000Mbit burst 15000b cburst 625b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 12500Mbit ceil 25000Mbit burst 12500b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 7500Mbit ceil 25000Mbit burst 15000b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 2500Mbit ceil 5000Mbit burst 15000b cburst 625b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 20000Mbit ceil 25000Mbit burst 12500b cburst 0b"""
-
-    MGMT_ETH_NIC_1G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 100000Kbit ceil 1000Mbit burst 15337b cburst 1375b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 100000Kbit ceil 1000Mbit burst 15337b cburst 1375b
-    class htb 1:1 root rate 1000Mbit ceil 1000Mbit burst 15125b cburst 1375b"""
-
-    MGMT_ETH_NIC_10G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 10000Mbit burst 15125b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 10000Mbit burst 15125b cburst 0b
-    class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b"""
-
-    MGMT_INFRA_VLAN_NIC_1G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 100000Kbit ceil 200000Kbit burst 15337b cburst 1600b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 100000Kbit ceil 200000Kbit burst 15337b cburst 1600b
-    class htb 1:1 root rate 1000Mbit ceil 1000Mbit burst 15125b cburst 1375b """
-
-    MGMT_INFRA_VLAN_NIC_10G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b"""
-
-    INFRA_VLAN_NIC_10G_TC = """class htb 1:1 root rate 9900Mbit ceil 9900Mbit burst 13612b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 990000Kbit ceil 1980Mbit burst 15221b cburst 1237b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 4950Mbit ceil 9900Mbit burst 14850b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 2970Mbit ceil 9900Mbit burst 14850b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 990000Kbit ceil 1980Mbit burst 15221b cburst 1237b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 7920Mbit ceil 9900Mbit burst 13860b cburst 0b"""
-
-    INFRA_VLAN_NIC_20G_TC = """class htb 1:1 root rate 19800Mbit ceil 19800Mbit burst 12375b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1980Mbit ceil 3960Mbit burst 15097b cburst 990b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 9900Mbit ceil 19800Mbit burst 13612b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 5940Mbit ceil 19800Mbit burst 14107b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1980Mbit ceil 3960Mbit burst 15097b cburst 990b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 15840Mbit ceil 19800Mbit burst 11880b cburst 0b """
-
-    INFRA_PXE_NIC_10G_TC = """class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 990000Kbit ceil 1980Mbit burst 15221b cburst 1237b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 4950Mbit ceil 9900Mbit burst 14850b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 2970Mbit ceil 9900Mbit burst 14850b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 990000Kbit ceil 1980Mbit burst 15221b cburst 1237b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 7920Mbit ceil 9900Mbit burst 13860b cburst 0b """
-
-    INFRA_PXE_NIC_20G_TC = """class htb 1:1 root rate 20000Mbit ceil 20000Mbit burst 12500b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1980Mbit ceil 3960Mbit burst 15097b cburst 990b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 9900Mbit ceil 19800Mbit burst 13612b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 5940Mbit ceil 19800Mbit burst 14107b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1980Mbit ceil 3960Mbit burst 15097b cburst 990b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 15840Mbit ceil 19800Mbit burst 11880b cburst 0b"""
-
-    MGMT_PXE_NIC_10G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b """
-
-    MGMT_PXE_NIC_20G_TC = """class htb 1:40 parent 1:1 leaf 40: prio 4 rate 2000Mbit ceil 4000Mbit burst 15000b cburst 1000b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 2000Mbit ceil 4000Mbit burst 15000b cburst 1000b
-    class htb 1:1 root rate 20000Mbit ceil 20000Mbit burst 12500b cburst 0b """
-
-    INFRA_AE_NIC_20G_TC = """class htb 1:1 root rate 10000Mbit ceil 10000Mbit burst 13750b cburst 0b
-    class htb 1:10 parent 1:1 leaf 10: prio 3 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:20 parent 1:1 leaf 20: prio 1 rate 5000Mbit ceil 10000Mbit burst 15000b cburst 0b
-    class htb 1:30 parent 1:1 leaf 30: prio 2 rate 3000Mbit ceil 10000Mbit burst 15000b cburst 0b
-    class htb 1:40 parent 1:1 leaf 40: prio 4 rate 1000Mbit ceil 2000Mbit burst 15125b cburst 1250b
-    class htb 1:50 parent 1:1 leaf 50: prio 0 rate 8000Mbit ceil 10000Mbit burst 14000b cburst 0b """
-
-    basic_traffic_class = {'1000': NIC_1G_TC,'10000': NIC_10G_TC,  '20000': NIC_20G_TC, '25000': NIC_25G_TC}
-    mgmt_eth_traffic_class = {'1000': MGMT_ETH_NIC_1G_TC, '10000': MGMT_ETH_NIC_10G_TC}
-    mgmt_vlan_traffic_class = {'1000': MGMT_INFRA_VLAN_NIC_1G_TC, '10000': MGMT_INFRA_VLAN_NIC_10G_TC}
-    infra_vlan_traffic_class = {'10000': INFRA_VLAN_NIC_10G_TC, '20000': INFRA_VLAN_NIC_20G_TC}
-    infra_pxe_traffic_class = {'10000': INFRA_PXE_NIC_10G_TC, '20000': INFRA_PXE_NIC_20G_TC}
-    mgmt_pxe_traffic_class = {'10000': MGMT_PXE_NIC_10G_TC, '20000': MGMT_PXE_NIC_20G_TC}
-    infra_ae_traffic_class = {'20000': INFRA_AE_NIC_20G_TC}
-
-    LOG.tc_step("Check the system if infra and mgmt avaialble")
-    mgmts = system_helper.get_host_interfaces(host='controller-0', rtn_val='name', net_type='mgmt')
-    infras = system_helper.get_host_interfaces(host='controller-0', rtn_val='name', net_type='infra')
-
-    if mgmts:
-        mgmt_port_name = mgmts[0]
-        LOG.tc_step("Check mgmt interface net type")
-        mgmt_net_type = system_helper.get_host_interfaces(host='controller-0', rtn_val='type', net_type='mgmt')[0]
-        if infras:
-            infra_port_name = infras[0]
-            LOG.tc_step("Check infra interface net type")
-            infra_net_type = system_helper.get_host_interfaces(host='controller-0', rtn_val='type',
-                                                               net_type='infra')[0]
-            if infra_net_type == 'vlan' and mgmt_net_type == 'vlan':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, infra_pxe_traffic_class)
-                assert result, "Infra traffic class is not set as expected"
-                result = _compare_traffic_control(mgmt_port_name, mgmt_pxe_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            elif infra_net_type == 'vlan' and mgmt_net_type == 'ethernet':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, infra_vlan_traffic_class)
-                assert result, "Infra traffic class is not set as expected"
-                result = _compare_traffic_control(mgmt_port_name, basic_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            elif infra_net_type == 'ae' and mgmt_net_type == 'vlan':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, infra_ae_traffic_class)
-                assert result, "Infra traffic class is not set as expected "
-                result = _compare_traffic_control(mgmt_port_name, mgmt_vlan_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            elif infra_net_type == 'ae' and mgmt_net_type == 'ethernet':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, infra_ae_traffic_class)
-                assert result, "Infra traffic class is not set as expected"
-                LOG.info("mgmt traffic class {}".format(mgmt_eth_traffic_class['1000']))
-                result = _compare_traffic_control(mgmt_port_name, mgmt_eth_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            elif infra_net_type == 'vlan' and mgmt_net_type == 'ae':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, infra_vlan_traffic_class)
-                assert result, "Infra traffic class is not set as expected"
-                result = _compare_traffic_control(mgmt_port_name, basic_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            elif infra_net_type == 'ethernet' and mgmt_net_type == 'ae':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, basic_traffic_class)
-                assert result, "Infra traffic class is not set as expected"
-                result = _compare_traffic_control(mgmt_port_name, mgmt_eth_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            elif infra_net_type == 'ethernet' and mgmt_net_type == 'ethernet':
-                LOG.info("Infra type is {} and mgmt type is {}" .format(infra_net_type, mgmt_net_type))
-                result = _compare_traffic_control(infra_port_name, basic_traffic_class)
-                assert result, "Infra traffic class is not set as expected"
-                result = _compare_traffic_control(mgmt_port_name, mgmt_eth_traffic_class)
-                assert result, "mgmt traffic class is not set as expected"
-            else:
-                assert 0, "This case is not handled contact domain owner to include this configuration"
-        elif mgmt_net_type == 'ethernet' or 'ae' or 'vlan':
-            LOG.info("No infra and mgmt type is {}".format(mgmt_net_type))
-            result = _compare_traffic_control(mgmt_port_name, basic_traffic_class)
-            assert result, "mgmt traffic class is not set as expected"
-        elif mgmt_net_type == 'virtual':
-            LOG.info("mgmt type is {}".format(mgmt_net_type))
-            with host_helper.ssh_to_host('controller-0') as con0_ssh:
-                LOG.tc_step("Check interface {} traffic control".format(mgmt_port_name))
-                traffic_control_info = keywords.host_helper.get_traffic_control_info(con_ssh=con0_ssh, port=mgmt_port_name)
-                assert not traffic_control_info, "traffic control should not be set in mgmt interface type virtual"
+        mgmt_dev, mgmt_ports = system_helper.get_host_ports_for_net_type(host=controller, net_type='mgmt',
+                                                                         ports_only=False)[0]
+        infra = system_helper.get_host_interfaces(host=controller, net_type='infra',
+                                                  rtn_val=('name', 'type', 'vlan id', 'ports', 'uses i/f'))
+        if not infra:
+            mgmt_expt = TrafficControl.MGMT_NO_INFRA
+            if_info = {'mgmt': (mgmt_dev, mgmt_ports, mgmt_expt)}
         else:
-            assert 0, "This case is not handled contact domain owner to include this configuration"
+            pxe_if = system_helper.get_host_interfaces(host=controller, net_type='pxeboot', rtn_val='name')
+            pxe_if_name = pxe_if[0] if pxe_if else None
 
-    else:
-        LOG.info("Skip the test")
-        skip(SkipHostIf.MGMT_INFRA_UNAVAIL)
+            infra_if_name, infra_type, infra_vlan, infra_ports, infra_uses_ifs = infra[0]
+            infra_dev, infra_ports = system_helper.get_host_ports_for_net_type(host=controller, net_type='infra',
+                                                                               ports_only=False)[0]
+            if infra_type == 'vlan':
+                if infra_uses_ifs[0] == mgmt_if_name:
+                    LOG.info("Infra is consolidated over mgmt")
+                    infra_expt = TrafficControl.INFRA_USES_MGMT
+                    mgmt_expt = TrafficControl.MGMT_USED_BY_INFRA
+                elif pxe_if and infra_uses_ifs[0] == pxe_if_name:
+                    infra_expt = TrafficControl.INFRA_USES_PXE
+                    assert mgmt_uses_ifs[0] == pxe_if_name, \
+                        "Unknown configuration. infra is consolidated over pxe but mgmt is not."
+                    mgmt_expt = TrafficControl.MGMT_USES_PXE
+                else:
+                    assert 0, "Unknown infra vlan config. uses_if: {}".format(infra_uses_ifs)
+            else:
+                infra_expt = TrafficControl.INFRA_SEP
+                if mgmt_type == 'vlan':
+                    assert mgmt_uses_ifs[0] == pxe_if_name, "mgmt net is vlan over non-pxe interface"
+                    mgmt_expt = TrafficControl.MGMT_USES_PXE
+                else:
+                    mgmt_expt = TrafficControl.MGMT_SEP
 
-def _compare_traffic_control(port_name, expected_traffic_control):
-    """
-    Check the traffic control based on speed then compare it with expected traffic control string
-    Args:
-        portname (str): portname of interface type
-        expected_traffic_control(str): Each configuration have pre determined traffic control profile
-    """
-    with host_helper.ssh_to_host('controller-0') as con0_ssh:
-        LOG.tc_step("Check interface {} traffic control" .format(port_name))
-        traffic_control_info = keywords.host_helper.get_traffic_control_info(con_ssh=con0_ssh, port=port_name)
-        LOG.tc_step("Check interface {} speed" .format(port_name))
-        nic_speed = keywords.host_helper.get_nic_speed(con_ssh=con0_ssh, port=port_name)
-    key = '{}'.format(nic_speed)
-    result = re.sub("\s*", "", traffic_control_info) == re.sub("\s*", "", expected_traffic_control[key])
-    LOG.info("Actual Traffic control for port {} == {}".format(port_name, traffic_control_info))
-    LOG.info("Expected Traffic control for port {} == {}".format(port_name, expected_traffic_control[key]))
-    LOG.info("result {}".format(result))
-    return result
+            if_info = {'mgmt': (mgmt_dev, mgmt_ports, mgmt_expt), 'infra': (infra_dev, infra_ports, infra_expt)}
+
+        with host_helper.ssh_to_host(controller) as controller_ssh:
+
+            for if_net in if_info:
+                if_class_dev, if_speed_dev, if_expt = if_info[if_net]
+                if_expt = copy.deepcopy(if_expt)
+                config = if_expt.pop('config')
+
+                LOG.tc_step("Check {} traffic control classes for {} network {} as as expected: {}. Config: {}".
+                            format(controller, if_net, if_class_dev, if_expt, config))
+                if_speeds = host_helper.get_nic_speed(con_ssh=controller_ssh, interface=if_speed_dev)
+                LOG.info('{} {} underlying link capacity: {}'.format(controller, if_net, if_speeds))
+
+                if_actual = host_helper.get_traffic_control_rates(con_ssh=controller_ssh, dev=if_class_dev)
+
+                if_root, if_root_ceil = if_actual['root']
+                expt_ceil_ratio = if_expt['root'][1]
+                underlying_speed = int(if_root_ceil/expt_ceil_ratio)
+
+                assert min(if_speeds) <= underlying_speed <= max(if_speeds), \
+                    "{} {} root ceil rate unexpected with {} configured. " \
+                    "root ceil: {}M, underlying link capacity in Mbit: {}".\
+                    format(controller, if_net, config, if_root_ceil, if_speeds)
+                assert len(if_expt) == len(if_actual), "{} traffic classes expected: {}; actual: {}. Config: {}".\
+                    format(if_net, list(if_expt.keys()), list(if_actual.keys()), config)
+
+                for traffic_class in if_expt:
+                    expt_rate, expt_ceil = [int(underlying_speed*ratio) for ratio in if_expt[traffic_class]]
+                    actual_rate, actual_ceil = if_actual[traffic_class]
+                    LOG.info("{} {} {} class actual rate: {}, ceil: {}".format(controller, if_net, traffic_class,
+                                                                               actual_rate, actual_ceil))
+                    assert expt_rate == actual_rate, \
+                        "{} traffic control class {} expected rate: {}M; actual: {}M. Config: {}".\
+                        format(config, if_net, traffic_class, expt_rate, actual_rate)
+                    assert expt_ceil == actual_ceil, \
+                        "{} traffic control class {} expected ceiling rate: {}M; actual: {}M. Config: {}".\
+                        format(if_net, traffic_class, expt_ceil, actual_ceil, config)
