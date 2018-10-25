@@ -1599,7 +1599,7 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
         proc_id = [int(proc) for proc in proc_id]
 
     if wait_for_update:
-        end_time = time.time() + 300
+        end_time = time.time() + 330
         while time.time() < end_time:
             pending_2m = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_2M')]
             pending_1g = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_1G')]
@@ -1615,7 +1615,7 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
             time.sleep(30)
             table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
         else:
-            raise exceptions.SysinvError("mem_total is smaller than mem_avail in 5 minutes")
+            raise exceptions.SysinvError("Pending 2M or 1G pages after 5 minutes")
 
     res = {}
     res_list = []

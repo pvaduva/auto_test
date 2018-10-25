@@ -1741,7 +1741,7 @@ def wait_for_mempage_update(host, proc_id=None, expt_1g=None, timeout=300):
     headers = ['vm_hp_total_1G', 'vm_hp_pending_1G', 'vm_hp_pending_2M']
     end_time = time.time() + timeout
     while time.time() < end_time:
-        host_mems = system_helper.get_host_mem_values(host, headers, proc_id=proc_id)
+        host_mems = system_helper.get_host_mem_values(host, headers, proc_id=proc_id, wait_for_update=False)
         for proc in host_mems:
             current_1g, pending_1g, pending_2m = host_mems[proc]
             if not (pending_2m is None and pending_1g is None):
