@@ -992,7 +992,7 @@ class Telnet:
                 for x in range(0, int(selection_menu_option)):
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
-                    time.sleep(2)
+                    time.sleep(3)
                 log.info("Pressing ENTER key")
                 self.write(str.encode("\n"))
 
@@ -1000,19 +1000,19 @@ class Telnet:
                 log.info("Selecting serial console")
                 log.info("Pressing ENTER key")
                 self.write(str.encode("\n"))
-                time.sleep(2)
+                time.sleep(3)
 
                 # Pick extended or standard profile
                 if security.lower() == 'extended':
                     log.info("Selecting extended profile")
                     log.info("Pressing down key")
                     self.write(str.encode(DOWN))
-                    time.sleep(2)
+                    time.sleep(3)
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\n"))
                 else:
                     log.info("Selecting standard profile")
-                    time.sleep(2)
+                    time.sleep(3)
                     log.info("Pressing ENTER key")
                     self.write(str.encode("\n"))
 
