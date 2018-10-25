@@ -19,12 +19,13 @@ def pytest_configure(config):
     backup_dest_path = config.getoption('backup_path')
     delete_backups = not config.getoption('keep_backups')
     dest_labs = config.getoption('dest_labs')
+    cinder_backup = config.getoption('cinder_backup')
 
     backup_dest = 'USB' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip_labsetup=None, resume=None, installconf_path=None,
                               controller0_ceph_mon_device=None, controller1_ceph_mon_device=None, ceph_mon_gib=None)
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
-                               delete_backups=delete_backups, dest_labs=dest_labs)
+                               delete_backups=delete_backups, dest_labs=dest_labs, cinder_backup=cinder_backup)
 
     ProjVar.set_var(always_collect=True)
 
@@ -36,15 +37,14 @@ def setup_test_session(global_setup):
     TIS ssh was already set up at collecting phase.
     """
 
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    setups.set_env_vars(con_ssh)
     setups.copy_test_files()
 
     # set build id to be used to upload/write test results
     setups.get_build_info(con_ssh)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
     setups.set_session(con_ssh=con_ssh)
 

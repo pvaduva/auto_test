@@ -63,7 +63,7 @@ def test_launch_vms_pre_upgrade():
             ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT1)
             vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, auth_info=Tenant.TENANT1, cleanup='function',
                                     reuse_vol=True)[1]
-            ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+            ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
             vm_helper.wait_for_vm_pingable_from_natbox(vm1)
             vms.append(vm1)
             if len(vms) == count:
@@ -74,7 +74,7 @@ def test_launch_vms_pre_upgrade():
             ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT1)
             vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, auth_info=Tenant.TENANT1, cleanup='function',
                                     reuse_vol=True)[1]
-            ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+            ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
             vm_helper.wait_for_vm_pingable_from_natbox(vm2)
             vms.append(vm2)
             if len(vms) == count:

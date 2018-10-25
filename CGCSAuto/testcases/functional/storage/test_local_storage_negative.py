@@ -7,7 +7,7 @@
 from pytest import fixture, skip, mark
 
 from consts.auth import Tenant
-from keywords import host_helper, system_helper, local_storage_helper
+from keywords import host_helper, system_helper, local_storage_helper, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
 
@@ -64,6 +64,12 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
     else:
         host_name = host_helper.get_up_hypervisors()[0]
 
+    # For storage systems, skip test if ceph isn't healthy
+    if len(system_helper.get_storage_nodes()) > 0:
+        ceph_healthy, msg = storage_helper.is_ceph_healthy()
+        if not ceph_healthy:
+            skip('Skipping due to ceph not being healthy')
+
     profile_name = create_storage_profile['profile_name']
     origin_disk_num = create_storage_profile['disk_num']
     disks_num = len(local_storage_helper.get_host_disks_values(host_name, 'device_node'))
@@ -81,7 +87,7 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
     HostsToRecover.add(host_name)
     host_helper.lock_host(host_name, swact=True)
     exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
-                                  auth_info=Tenant.ADMIN, rtn_list=True)
+                                  auth_info=Tenant.get('admin'), rtn_list=True)
     host_helper.unlock_host(host_name)
 
     assert exitcode == 1 and any(expt in output for expt in expt_err_list)

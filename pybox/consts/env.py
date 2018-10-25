@@ -33,6 +33,7 @@ class BuildServers:
         'ip': '128.224.145.117'
     }
 
+
     CGTS1 = {
         'short_name': 'cgts1',
         'name': 'yow-cgts1-lx.wrs.com',
@@ -41,10 +42,16 @@ class BuildServers:
 
 
 class Builds:
+    R6 = {
+        'release': 'R6',
+        'iso': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/export/bootimage.iso',
+        'guest': '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_tis-centos-guest.img'
+    }
+
     R5 = {
         'release': 'R5',
-        'iso': '/localdisk/loadbuild/jenkins/TC_18.02_Host/latest_bootimage.iso',
-        'guest': '/localdisk/loadbuild/jenkins/TC_18.02_Guest/latest_tis-centos-guest.img'
+        'iso': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_bootimage.iso',
+        'guest': '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_tis-centos-guest.img'
     }
 
     R4 = {
@@ -92,6 +99,12 @@ class Licenses:
         'Standard': '/folk/cgts/lab/licenses/wrslicense-18.03-full-dec2018.lic'
     }
 
+    R6 = {
+        'AIO-SX': '/folk/cgts/lab/licenses/wrslicense-AIO-SX-R6-full-nov2018.lic',
+        'AIO-DX': '/folk/cgts/lab/licenses/wrslicense-AIO-DX-R6-full-nov2018.lic',
+        'Standard': '/folk/cgts/lab/licenses/wrslicense-R6-full-nov2018.lic'
+    }
+
 
 class Lab:
     VBOX = {
@@ -106,18 +119,36 @@ class Lab:
 
 
 class Files:
+    R6 = {
+        'setup': [
+            # TODO Need to find a way to update based on build or use generic CGCS_DEV
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
+            '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
+        ],
+        'config': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_green_build/lab/yow/cgcs-vbox/TiS_config.ini_centos'
+
+    }
     R5={
         'setup': [
             # TODO Need to find a way to update based on build or use generic CGCS_DEV
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
-            '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml'
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_cleanup.sh',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/scripts/lab_setup.sh',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup.conf',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/iptables.rules',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant2-resources.yaml',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-tenant1-resources.yaml',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup-admin-resources.yaml',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup_aio_1_disk.conf',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup_aio_2_disks.conf',
+            '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/lab_setup_aio_3_disks.conf'
+
         ],
-        'config': '/localdisk/designer/jenkins/CGCS_5.0_Pull_CGCS_DEV_0034/cgcs-root/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
+        'config': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/cgcs-vbox/TiS_config.ini_centos'
     }
     R4 = {
         'setup': [

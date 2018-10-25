@@ -8,7 +8,6 @@ from consts.cgcs import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr     # Do not remove
 from keywords import nova_helper, vm_helper, system_helper, host_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.pre_checks_and_configs import check_numa_num      # Do not remove
 
 
 ########################################
@@ -299,7 +298,7 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     mark.nightly((2, 2, 1, 0)),
     mark.p2((1, 1, 1, None)),
 ])
-def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, check_numa_num, no_simplex):
+def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, no_simplex, check_numa_num):
     """
     Test NUMA nodes settings in flavor extra specs are successfully applied to a vm
 

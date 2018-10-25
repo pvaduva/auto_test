@@ -57,7 +57,7 @@ def get_user_token(rtn_value='id', con_ssh=None):
     Returns (list): a list containing at most one authentication token
 
     """
-    table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     token = table_parser.get_value_two_col_table(table_, rtn_value)
     return token
 

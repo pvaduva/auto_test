@@ -20,7 +20,7 @@ def download_openrc_files(quit_driver=True):
     login_pg = loginpage.LoginPage()
     login_pg.go_to_target_page()
     try:
-        for auth_info in (Tenant.ADMIN, Tenant.TENANT1, Tenant.TENANT2):
+        for auth_info in (Tenant.get('admin'), Tenant.TENANT1, Tenant.TENANT2):
             user = auth_info['user']
             password = auth_info['password']
             openrc_file = '{}-openrc.sh'.format(user)

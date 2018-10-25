@@ -84,6 +84,10 @@ def _test_ceph_osd_process_kill():
     assert osd_pid, msg
     LOG.info(msg)
 
+    LOG.tc_step("Set ceph to no out")
+    cmd = 'ceph osd set noout'
+    con_ssh.exec_cmd(cmd, fail_ok=False)
+
     LOG.tc_step('Kill the OSD process')
     proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid)
     assert proc_killed, msg
@@ -111,6 +115,10 @@ def _test_ceph_osd_process_kill():
     LOG.tc_step('Check for OSD failure alarm')
     entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
     system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
+
+    LOG.tc_step("Set ceph to unset no out")
+    cmd = 'ceph osd unset noout'
+    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Put the OSD {} back in service'.format(osd_id))
     cmd = 'ceph osd create 5'.format(osd_id)
@@ -321,7 +329,7 @@ def test_ceph_reboot_storage_node():
 
             assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
 
-            host_helper.wait_for_host_states(host, availability='available')
+            host_helper.wait_for_host_values(host, availability='available')
 
             LOG.tc_step('Check that OSDs are up')
             osd_list = storage_helper.get_osds(host, con_ssh)
@@ -644,6 +652,7 @@ def test_storgroup_semantic_checks():
     capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
     replication = ast.literal_eval(capabilities)
     replication_factor = replication['replication']
+    storage_nodes = host_helper.get_hosts(personality='storage')
     LOG.info("The replication factor is: {}".format(replication_factor))
 
     # We want to test storage-0 since it is a ceph monitor
@@ -652,7 +661,8 @@ def test_storgroup_semantic_checks():
     storage_nodes = ["storage-0"]
     if replication_factor == "3":
         storage_nodes.append("storage-3")
-    else:
+
+    if replication_factor == "2" and len(storage_nodes) > 2:
         storage_nodes.append("storage-2")
 
     LOG.info("Storage hosts under test are: {}".format(storage_nodes))

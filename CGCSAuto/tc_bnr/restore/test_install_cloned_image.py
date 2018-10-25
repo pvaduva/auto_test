@@ -177,8 +177,7 @@ def test_install_cloned_image(install_clone_setup):
     time.sleep(30)
     LOG.tc_step ("Checking config status of controller-0 and perform lock/unlock if necessary...")
     if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
-        rc, output = host_helper.lock_unlock_controllers()
-        assert rc == 0, "Failed to lock/unlock controller: {}".format(output)
+        host_helper.lock_unlock_controllers()
 
     LOG.tc_step("Verifying system health after restore ...")
     system_helper.wait_for_all_alarms_gone(timeout=300)

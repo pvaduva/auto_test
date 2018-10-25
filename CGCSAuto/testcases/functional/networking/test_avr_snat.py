@@ -4,6 +4,7 @@ from pytest import fixture, mark, skip
 
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec
+from consts.timeout import VMTimeout
 from keywords import vm_helper, nova_helper, host_helper, network_helper, common, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
@@ -221,13 +222,13 @@ def test_snat_evacuate_vm(snat_setups, snat):
     vm_helper.evacuate_vms(host=host, vms_to_check=vm_)
 
     LOG.tc_step("Verify vm can still ping outside")
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat, timeout=VMTimeout.DHCP_RETRY)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     host_helper.wait_for_hosts_ready(hosts=host)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=False)
     if snat:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=False)
 
 
 @mark.slow
@@ -292,8 +293,8 @@ def test_snat_computes_lock_reboot(snat_setups):
     LOG.tc_step("Verify vm is recovered and can still ping outside")
     host_helper.wait_for_hosts_ready(hosts=vm_host)
     vm_helper.wait_for_vm_status(vm_id=vm_)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, use_fip=True)
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=60)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_, use_fip=True, timeout=60)
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
 

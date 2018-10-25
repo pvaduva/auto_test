@@ -13,13 +13,23 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
+@fixture(scope='session')
+def skip_for_one_proc():
+    hypervisor = host_helper.get_up_hypervisors()
+    if not hypervisor:
+        skip("No up hypervisor on system.")
+
+    if len(host_helper.get_host_procs(hostname=hypervisor[0])) < 2:
+        skip('At least two processor per compute host is required for this test.')
+
+
 @fixture(scope='function')
 def skip_for_ovs():
     """
     Skip test for OVS system, if test name contains avs_pattern
     """
     test_name = ProjVar.get_var('TEST_NAME')
-    avs_pattern = 'avp|avr|avs'
+    avs_pattern = 'avp|avr|avs|dpdk'
     if re.search(avs_pattern, test_name) and not system_helper.is_avs():
         skip("Test unsupported by OVS")
 
@@ -38,14 +48,13 @@ def simplex_only():
         skip(SkipSysType.SIMPLEX_ONLY)
 
 
-@fixture(scope='module')
+@fixture(scope='session')
 def check_numa_num():
-    proc_num = 2
-    if system_helper.is_simplex():
-        procs = host_helper.get_host_procs('controller-0')
-        proc_num = len(procs)
+    hypervisor = host_helper.get_up_hypervisors()
+    if not hypervisor:
+        skip("No up hypervisor on system.")
 
-    return proc_num
+    return len(host_helper.get_host_procs(hostname=hypervisor[0]))
 
 
 @fixture(scope='session')
@@ -70,7 +79,7 @@ def wait_for_con_drbd_sync_complete():
         assert False, "drbd sync alarm {} is not cleared within timeout".format(EventLogID.CON_DRBD_SYNC)
 
     LOG.fixture_step("Wait for {} becomes available in system host-list".format(host))
-    host_helper.wait_for_host_states(host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False,
+    host_helper.wait_for_host_values(host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False,
                                      check_interval=10)
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
@@ -81,7 +90,7 @@ def wait_for_con_drbd_sync_complete():
 @fixture(scope='session')
 def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     more_than_one_controllers = wait_for_con_drbd_sync_complete
-    prev_pswd = Tenant.ADMIN['password']
+    prev_pswd = Tenant.get('admin')['password']
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
@@ -128,6 +137,12 @@ def collect_kpi(request):
     collect_kpi_ = ProjVar.get_var('COLLECT_KPI') and bool(request.node.get_marker('kpi'))
     log_path = ProjVar.get_var('KPI_PATH') if collect_kpi_ else None
     return log_path
+
+
+@fixture(scope='session')
+def ixia_supported():
+    if 'ixia_ports' not in ProjVar.get_var("LAB"):
+        skip("this lab is not configured with ixia_ports.")
 
 
 @fixture(scope='session')

@@ -28,9 +28,9 @@ def get_interface_(request):
 
     # (a) create providernet
     args = provider_ + ' --type=vxlan'
-    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.get('admin')))
     if not table_parser.get_values(table_, 'id', **{'name': provider_}):
-        cli.neutron('providernet-create', args, auth_info=Tenant.ADMIN, rtn_list=True)
+        cli.neutron('providernet-create', args, auth_info=Tenant.get('admin'), rtn_list=True)
 
     nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')
 
@@ -38,17 +38,15 @@ def get_interface_(request):
         skip("Can not continue without computer host node")
 
     # find a free interface
-    find = False
-    computer_host = ""
+    computer_host = interface = None
     for nova_host in nova_hosts:
-        args = '{} {}'.format(nova_host , "-a --nowrap")
-        table_ = table_parser.table(cli.system('host-if-list', args, auth_info=Tenant.ADMIN))
-        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'network type': 'None',
+        table_ = table_parser.table(cli.system('host-if-list', positional_args='{} -a --nowrap'.format(nova_host),
+                                               auth_info=Tenant.get('admin')))
+        list_interfaces = table_parser.get_values(table_, 'name', **{'type': 'ethernet', 'class': 'None',
                                                                      'used by i/f': '[]'})
-
         if list_interfaces:
-            find = True
             computer_host = nova_host
+            interface = random.choice(list_interfaces)
             break
     else:
         skip("Can not find a free data interface")
@@ -57,16 +55,13 @@ def get_interface_(request):
     host_helper.lock_host(computer_host, swact=True)
     HostsToRecover.add(computer_host, scope='module')
 
-    interface = random.choice(list_interfaces)
-
-    the_mtu = 1600
-    args = computer_host + ' ' + new_interface_ + ' ae ' + provider_ + ' ' + interface + ' -nt data -m {}'.format(the_mtu)
-    cli.system('host-if-add', args, rtn_list=True)
+    host_helper.add_host_interface(computer_host, new_interface_, if_type='ae', pnet=provider_, ports_or_ifs=interface,
+                                   if_class='data', mtu=1600, lock_unlock=False)
 
     def fin():
         # clean up
         cli.system('host-if-delete', '{} {}'.format(computer_host, new_interface_))
-        cli.neutron('providernet-delete', provider_, auth_info=Tenant.ADMIN)
+        cli.neutron('providernet-delete', provider_, auth_info=Tenant.get('admin'))
     request.addfinalizer(fin)
 
     return computer_host, provider_, new_interface_
@@ -75,21 +70,19 @@ def get_interface_(request):
 @fixture(scope='module')
 def set_interface_ip_(get_interface_):
     compute, provider, new_interface_ = get_interface_
-
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static --ipv6-mode=static'.format(provider, compute, new_interface_)
-    cli.system('host-if-modify', args_mode, rtn_list=True)
-
-    ip = "192.168.3.3"
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, ipv4_mode='static',
+                                      ipv6_mode='static', if_class='data', lock_unlock=False)
+    ip_v4 = "192.168.3.3"
 
     # check if the ip address already exist
     table_ = table_parser.table(cli.system('host-addr-list', compute))
-    if not table_parser.get_values(table_, 'uuid', **{'address': ip}):
-        args_ip = '{} {} {} 24'.format(compute, new_interface_, ip)
+    if not table_parser.get_values(table_, 'uuid', **{'address': ip_v4}):
+        args_ip = '{} {} {} 24'.format(compute, new_interface_, ip_v4)
         cli.system('host-addr-add', args_ip, rtn_list=True)
 
-    ip="2001:470:27:37e::2"
-    if not table_parser.get_values(table_, 'uuid', **{'address': ip}):
-        args_ip = '{} {} {} 64'.format(compute, new_interface_, ip)
+    ip_v6 = "2001:470:27:37e::2"
+    if not table_parser.get_values(table_, 'uuid', **{'address': ip_v6}):
+        args_ip = '{} {} {} 64'.format(compute, new_interface_, ip_v6)
         cli.system('host-addr-add', args_ip, rtn_list=True)
 
     return compute, provider, new_interface_
@@ -190,23 +183,25 @@ def test_set_data_if_ip_address_mode_to_none_static_when_ip_exist(get_interface_
     Returns:
 
     """
-    auth_url = Tenant.ADMIN['auth_url']
+    auth_url = Tenant.get('admin')['auth_url']
     if not re.search(Networks.IPV4_IP, auth_url):
         skip("This test can only run on IPv4 system")
 
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("TC4: set the mode to 'static' ")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    cli.system('host-if-modify', args_mode, fail_ok=False)
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data',
+                                      ipv4_mode='static', lock_unlock=False)
 
     LOG.tc_step("create the ip again after mode set to static")
     args = '{} {} 111.11.11.11 24'.format(compute, new_interface_)
     cli.system('host-addr-add', args)
 
     LOG.tc_step("TC4: set the mode to 'pool' when the ip still exist")
-    args = '-nt data -p {} {} {} --ipv4-mode="pool" --ipv4-pool=management'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args, fail_ok=True, rtn_list=True)
+    code, err_info = host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data',
+                                                       ipv4_mode='pool', ipv4_pool='management',
+                                                       lock_unlock=False, fail_ok=True)
+
     if code > 0:
         LOG.info("modify interface failed")
         assert NetworkingErr.SET_IF_ADDR_MODE_WHEN_IP_EXIST in err_info
@@ -242,10 +237,8 @@ def test_create_null_ip_addr(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("TC5: set the mode to 'static' ")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-    if code > 0:
-        LOG.info("modify interface failed")
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data',
+                                      ipv4_mode='static', lock_unlock=False)
 
     LOG.tc_step("TC5: create ip addr with all zero")
     args_ip = '{} {} 0.0.0.0 24'.format(compute, new_interface_)
@@ -281,10 +274,8 @@ def test_null_ip_network_partion(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("TC6: set the mode to 'static' ")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-    if code > 0:
-        LOG.info("modify interface failed")
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data', ipv4_mode='static',
+                                      lock_unlock=False)
 
     LOG.tc_step("TC6: create ip addr with network partion zero")
     args_ip = '{} {} 0.0.0.33 24'.format(compute, new_interface_)
@@ -321,10 +312,8 @@ def test_null_ip_host_portion(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("TC7: set the mode to 'static' ")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-    if code > 0:
-        LOG.info("modify interface failed")
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data', ipv4_mode='static',
+                                      lock_unlock=False)
 
     LOG.tc_step("TC7: create ip addr with host partion zero")
     args_ip = '{} {} 192.168.0.0 16'.format(compute, new_interface_)
@@ -360,10 +349,8 @@ def test_ip_should_be_unicast_address(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("TC8: set the mode to 'static' ")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-    if code > 0:
-        LOG.info("modify interface failed")
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data', ipv4_mode='static',
+                                      lock_unlock=False)
 
     LOG.tc_step("TC8: set multicast ip addr: 224.0.0.0 to 239.225.225.225")
     args_ip = '{} {} 225.168.2.2 16'.format(compute, new_interface_)
@@ -410,10 +397,8 @@ def test_ip_unique_across_all_compute_nodes(get_interface_):
     compute, provider, new_interface_ = get_interface_
 
     LOG.tc_step("Change the ip addressing mode to static")
-    args_mode = '-nt data -p {} {} {} --ipv4-mode=static --ipv6-mode=static'.format(provider, compute, new_interface_)
-    code, err_info = cli.system('host-if-modify', args_mode, fail_ok=False, rtn_list=True)
-    if code > 0:
-        LOG.info("modify interface failed")
+    host_helper.modify_host_interface(compute, new_interface_, pnet=provider, if_class='data', ipv4_mode='static',
+                                      ipv6_mode='static', lock_unlock=False)
 
     LOG.tc_step("random get a ip from any compute node")
     # randomly get a compute
@@ -614,7 +599,7 @@ def test_route_gateway_ip_validation(set_interface_ip_):
 
 @mark.p3
 @mark.parametrize(('gateway', 'nt', 'prefix'), [
-    ('192.168.102.0', 'FE80::', 64),    # fail expected
+    ('192.168.102.0', 'FE80:_', 64),    # fail expected
     ('FE80:0000:0000:0000:0202:B3FF:FE1E:0000', '192.168.102.0', 24),    # fail expected
 ])
 def test_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, nt, prefix):
@@ -639,7 +624,7 @@ def test_route_network_gateway_ip_in_same_families(set_interface_ip_, gateway, n
     Returns:
 
     """
-
+    nt = nt.replace(':_', '::')
     compute, provider, new_interface_ = set_interface_ip_
 
     metric = 16

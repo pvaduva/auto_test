@@ -93,6 +93,6 @@ def test_ping_vms_from_vm_various_images(vm_image):
 
 
 def test_ping_vms_from_vm_2():
-    to_vms = vm_helper.get_any_vms(auth_info=Tenant.ADMIN, all_tenants=True)
+    to_vms = vm_helper.get_any_vms(auth_info=Tenant.get('admin'), all_tenants=True)
     for vm in vm_helper.get_any_vms():
         vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=to_vms)

@@ -1,43 +1,13 @@
 import pytest
 from utils.tis_log import LOG
 from utils.rest import Rest
+from testcases.rest import rest_test_helper
 
 
 @pytest.fixture(scope='module')
 def sysinv_rest():
     r = Rest('sysinv')
     return r
-
-
-def get(sysinv_rest, resource):
-    """
-    Test GET of <resource> with valid authentication.
-
-    Args:
-        n/a
-
-    Prerequisites: system is running
-    Test Setups:
-        n/a
-    Test Steps:
-        - Using requests GET <resource> with proper authentication
-        - Determine if expected status_code of 200 is received
-    Test Teardown:
-        n/a
-    """
-    message = "Using requests GET {} with proper authentication"
-    LOG.tc_step(message.format(resource))
-
-    status_code, text = sysinv_rest.get(resource=resource, auth=True)
-    message = "Retrieved: status_code: {} message: {}"
-    LOG.debug(message.format(status_code, text))
-
-    if status_code == 404:
-        pytest.skip("Unsupported resource in this configuration.")
-    else:
-        LOG.tc_step("Determine if expected status_code of 200 is received")
-        message = "Expected status_code of 200 - received {} and message {}"
-        assert status_code == 200, message.format(status_code, text)
 
 
 @pytest.mark.parametrize(
@@ -86,4 +56,4 @@ def get(sysinv_rest, resource):
 def test_good_authentication(sysinv_rest, operation, resource):
     if operation == "GET":
         LOG.info("getting... {}".format(resource))
-        get(sysinv_rest, resource)
+        rest_test_helper.get(sysinv_rest, resource=resource)

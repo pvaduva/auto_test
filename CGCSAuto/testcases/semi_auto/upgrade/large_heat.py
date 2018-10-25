@@ -37,9 +37,9 @@ def pre_check(request):
 
     def list_status():
         LOG.fixture_step("Listing heat resources and nova migrations")
-        stacks = heat_helper.get_stacks(auth_info=Tenant.ADMIN)
+        stacks = heat_helper.get_stacks(auth_info=Tenant.get('admin'))
         for stack in stacks:
-            heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.ADMIN)
+            heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.get('admin'))
 
         nova_helper.get_migration_list_table()
     request.addfinalizer(list_status)
@@ -108,7 +108,7 @@ def launch_heat_stack():
     pre_req_params = '-f {} -P LOCATION={} {}'.format(pre_req_template_path, image_file_path, pre_req_stack_name)
     LOG.info("Creating heat stack for pre-req, images and flavors")
     heat_helper.create_stack(stack_name=pre_req_stack_name, params_string=pre_req_params,
-                             auth_info=Tenant.ADMIN, cleanup=None)
+                             auth_info=Tenant.get('admin'), cleanup=None)
 
     LOG.tc_step("Creating Tenant key via heat stack")
     keypair_template = 'Tenant1_Keypair.yaml'

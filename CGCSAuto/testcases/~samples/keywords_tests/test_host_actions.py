@@ -30,8 +30,8 @@ def test_is_active_con():
 def test_swact_host(hostname, timeout, fail_ok):
     LOG.tc_step("wait for previous swact complete")
     host_helper._wait_for_openstack_cli_enable()
-    host_helper.wait_for_host_states('controller-0', timeout=60, fail_ok=False, task='')
-    host_helper.wait_for_host_states('controller-1', timeout=60, fail_ok=False, task='')
+    host_helper.wait_for_host_values('controller-0', timeout=60, fail_ok=False, task='')
+    host_helper.wait_for_host_values('controller-1', timeout=60, fail_ok=False, task='')
 
     LOG.tc_step("swact host")
 
@@ -149,8 +149,8 @@ def test_unlock_hosts():
 
 
 def test_host_cpus():
-    print (host_helper.get_host_cpu_cores_for_function('controller-0', function='shared'))
-    print (host_helper.get_host_cpu_cores_for_function('controller-0', function='test'))
+    print (host_helper.get_host_cpu_cores_for_function('controller-0', func='shared'))
+    print (host_helper.get_host_cpu_cores_for_function('controller-0', func='test'))
 
 
 def test_get_hosts():

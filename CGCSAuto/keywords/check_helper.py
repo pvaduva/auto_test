@@ -26,8 +26,8 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         expt_vswitch_map = host_helper.get_expected_vswitch_port_engine_map(host_ssh)
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
-    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
-    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, rtn_list=True)
+    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', ports_only=True)
+    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, ports_only=True)
 
     ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
 
@@ -523,7 +523,7 @@ def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=N
 
 def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
     vm_host, vm_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-    vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(vm_host, function='vSwitch')
+    vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(vm_host, func='vSwitch')
     vswitch_procs = [proc for proc in vswitch_cores_dict if vswitch_cores_dict[proc]]
 
     if on_vswitch_nodes:

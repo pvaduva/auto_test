@@ -79,8 +79,6 @@ def __config_host_base(scope, request):
                 try:
                     LOG.fixture_step("({}) Execute revert function: {}".format(scope, revert_func))
                     revert_func(host)
-                except:
-                    raise
                 finally:
                     LOG.fixture_step("({}) Unlock host: {}".format(scope, host))
                     # Put it in finally block in case revert_func fails - host will still be unlocked for other tests.

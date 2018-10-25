@@ -101,7 +101,7 @@ def test_measurements_for_metric(meter):
 
 
 def check_event_in_tenant_or_admin(resource_id, event_type):
-    for auth_ in (None, Tenant.ADMIN):
+    for auth_ in (None, Tenant.get('admin')):
         traits = ceilometer_helper.get_events(event_type=event_type, header='traits:value', auth_info=auth_)
         for trait in traits:
             if resource_id in trait:
@@ -126,7 +126,7 @@ def test_ceilometer_meters_exist(meters):
     1. Check via 'openstack metric list' or 'ceilometer event-list'
     2. Check meters for router, subnet, image, and vswitch exists
     """
-
+    skip('CGTS-10102: Disable TC until US116020 completes')
     time_create = host_helper.get_hostshow_value('controller-1', 'created_at')
     current_isotime = datetime.utcnow().isoformat(sep='T')
 
@@ -235,7 +235,7 @@ def test_ceilometer_meters_exist(meters):
 #
 #     args = {'meter-name': 'fake_sample', 'meter-type': 'gauge', 'meter-unit': 'percent',
 #             'sample-volume': 10, 'timestamp': new_time}
-#     ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
+#     ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.get('admin'), **args)
 #
 #     pre_expirer_samples = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
 #     count = 0
@@ -250,7 +250,7 @@ def test_ceilometer_meters_exist(meters):
 #             args = {'meter-name': 'fake_sample', 'meter-type': 'gauge', 'meter-unit': 'percent',
 #                     'sample-volume': 10, 'timestamp': new_time}
 #             LOG.info("\nnow: {}\n59 min ago{}".format(curr_time, new_time))
-#             ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.ADMIN, **args)
+#             ceilometer_helper.create_sample(resource_id=res_id, field='timestamp', auth_info=Tenant.get('admin'), **args)
 #             fake_sample = ceilometer_helper.get_samples(header='Name', meter='fake_sample')
 #             if fake_sample:
 #                 break

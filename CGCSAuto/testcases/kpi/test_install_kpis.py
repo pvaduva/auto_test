@@ -212,7 +212,7 @@ def test_idle_kpi(collect_kpi):
         LOG.info("AIO system found, check platform cores only")
         cpu_arg = ' -P '
         platform_cores_per_proc = host_helper.get_host_cpu_cores_for_function(hostname=active_con,
-                                                                              function='Platform',
+                                                                              func='Platform',
                                                                               core_type='log_core',
                                                                               thread=None, con_ssh=con_ssh)
         platform_cpus = []

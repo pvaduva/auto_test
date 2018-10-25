@@ -1,4 +1,5 @@
 import re
+import os
 import random
 import time
 
@@ -6,6 +7,7 @@ import time
 from consts.auth import Tenant
 from consts.cgcs import GuestImages, Prompt
 from consts.timeout import VolumeTimeout
+from consts.proj_vars import ProjVar
 from keywords import common, glance_helper, keystone_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
@@ -37,7 +39,7 @@ def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=No
 
 
 def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
-                bootable=None, rtn_val='ID', auth_info=Tenant.ADMIN, con_ssh=None):
+                bootable=None, rtn_val='ID', auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
 
@@ -51,7 +53,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         attached_vm (str):
         bootable (str|bool): true or false
         rtn_val
-        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
+        auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
         con_ssh (str):
 
     Returns (list): a list of volume ids based on the given criteria
@@ -87,7 +89,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
 
 
 def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size=None, status=None, attached_vm=None,
-                             rtn_val='ID', auth_info=Tenant.ADMIN, con_ssh=None):
+                             rtn_val='ID', auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
 
@@ -99,7 +101,7 @@ def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size
         status:(str)
         attached_vm (str):
         rtn_val
-        auth_info (dict): could be Tenant.ADMIN,Tenant.TENANT1,Tenant.TENANT2
+        auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
         con_ssh (str):
 
     Returns (list): a list of volume snapshot ids based on the given criteria
@@ -131,7 +133,7 @@ def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size
     return table_parser.get_column(table_, rtn_val)
 
 
-def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Filter out the volumes that are attached to a vm.
     Args:
@@ -270,7 +272,7 @@ def create_volume(name=None, desc=None, image_id=None, source_vol_id=None, snaps
     return 0, volume_id
 
 
-def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_volume_states(vol_id, fields, con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -439,7 +441,7 @@ def get_snapshot_id(status='available', vol_id=None, name=None, size=None, con_s
 
 
 def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=True,
-                              check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                              check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
     """
         check if a specific field still exist in a specified column for cinder list
 
@@ -480,7 +482,7 @@ def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=Tru
                                           "Given volumes: {}. Volumes still exist: {}.".format(volumes, vols_to_check))
 
 
-def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Args:
         volume_id:
@@ -495,7 +497,7 @@ def volume_exists(volume_id, con_ssh=None, auth_info=Tenant.ADMIN):
 
 
 def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, check_first=True, con_ssh=None,
-                   auth_info=Tenant.ADMIN):
+                   auth_info=Tenant.get('admin')):
     """
     Delete volume(s).
 
@@ -588,7 +590,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
     return 0, "Volume(s) deleted successfully"
 
 
-def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,
+def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'),
                             con_ssh=None):
     """
     Delete given volume snapshot via cinder snapshot-delete
@@ -669,7 +671,19 @@ def get_quotas(quotas=None, con_ssh=None, auth_info=None):
     return values
 
 
-def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.get('admin'), sys_con_for_dc=True, **kwargs):
+    """
+
+    Args:
+        tenant:
+        con_ssh:
+        auth_info:
+        sys_con_for_dc (bool): switch to use system controller for Distributed Cloud system
+        **kwargs:
+
+    Returns:
+
+    """
     if tenant is None:
         tenant = Tenant.get_primary()['tenant']
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0]
@@ -683,10 +697,16 @@ def update_quotas(tenant=None, con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
 
     args_ += tenant_id
 
+    if not auth_info:
+        auth_info = Tenant.get_primary()
+
+    if ProjVar.get_var('IS_DC') and sys_con_for_dc and auth_info['region'] != 'SystemController':
+        auth_info = Tenant.get(auth_info['user'], dc_region='SystemController')
+
     cli.cinder('quota-update', args_, ssh_client=con_ssh, auth_info=auth_info)
 
 
-def create_qos_specs(qos_name=None, fail_ok=False, consumer=None, auth_info=Tenant.ADMIN, con_ssh=None, **specs):
+def create_qos_specs(qos_name=None, fail_ok=False, consumer=None, auth_info=Tenant.get('admin'), con_ssh=None, **specs):
     """
     Create QoS with given name and specs
 
@@ -753,7 +773,7 @@ def create_qos_specs(qos_name=None, fail_ok=False, consumer=None, auth_info=Tena
     return 0, qos_id
 
 
-def delete_qos(qos_id, force=None, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_qos(qos_id, force=None, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Delete given QoS via cinder qos-delete
 
@@ -806,7 +826,7 @@ def delete_qos(qos_id, force=None, check_first=True, fail_ok=False, auth_info=Te
     return 0, succ_msg
 
 
-def delete_qos_list(qos_ids, force=False, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_qos_list(qos_ids, force=False, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Delete given list of QoS'
 
@@ -902,7 +922,7 @@ def wait_for_qos_deleted(qos_ids, timeout=10, check_interval=1, fail_ok=False, c
         raise exceptions.CinderError(err_msg)
 
 
-def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Create a volume type with given name
 
@@ -955,7 +975,7 @@ def create_volume_type(name=None, public=None, rtn_val='ID', fail_ok=False, auth
     return 0, vol_type
 
 
-def delete_volume_type(vol_type_id, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN,  con_ssh=None):
+def delete_volume_type(vol_type_id, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'),  con_ssh=None):
     """
     Delete given volume type
 
@@ -1003,7 +1023,7 @@ def delete_volume_type(vol_type_id, check_first=True, fail_ok=False, auth_info=T
     return 0, succ_msg
 
 
-def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Delete given volume type
 
@@ -1061,7 +1081,7 @@ def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Te
     return 0, succ_msg
 
 
-def get_volume_types(ids=None, public=None, name=None, strict=True, rtn_val='ID', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_volume_types(ids=None, public=None, name=None, strict=True, rtn_val='ID', con_ssh=None, auth_info=Tenant.get('admin')):
 
     table_ = table_parser.table(cli.cinder('type-list', ssh_client=con_ssh, auth_info=auth_info))
 
@@ -1082,7 +1102,7 @@ def get_volume_types(ids=None, public=None, name=None, strict=True, rtn_val='ID'
     return vol_types
 
 
-def get_qos_list(rtn_val='id', ids=None, name=None, consumer=None, strict=True, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_qos_list(rtn_val='id', ids=None, name=None, consumer=None, strict=True, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get qos list based on given filters
 
@@ -1131,7 +1151,7 @@ def associate_qos_to_volume_type(qos_spec_id, vol_type_id, fail_ok=False, con_ss
     args_ = qos_spec_id + ' ' + vol_type_id
 
     exit_code, cmd_output = cli.cinder('qos-associate', args_, fail_ok=fail_ok, ssh_client=con_ssh, rtn_list=True,
-                                       auth_info=Tenant.ADMIN)
+                                       auth_info=Tenant.get('admin'))
 
     if exit_code == 1:
         return 1, cmd_output
@@ -1148,7 +1168,7 @@ def disassociate_qos_to_volume_type(qos_spec_id, vol_type_id, fail_ok=False, con
     args_ = qos_spec_id + ' ' + vol_type_id
 
     exit_code, cmd_output = cli.cinder('qos-disassociate', args_, fail_ok=fail_ok, ssh_client=con_ssh, rtn_list=True,
-                                       auth_info=Tenant.ADMIN)
+                                       auth_info=Tenant.get('admin'))
 
     if exit_code == 1:
         return 1, cmd_output
@@ -1159,7 +1179,7 @@ def disassociate_qos_to_volume_type(qos_spec_id, vol_type_id, fail_ok=False, con
 def get_qos_association(qos_spec_id, con_ssh=None):
 
     table_ = table_parser.table(cli.cinder('qos-get-association', qos_spec_id, ssh_client=con_ssh,
-                                           auth_info=Tenant.ADMIN))
+                                           auth_info=Tenant.get('admin')))
 
     return table_
 
@@ -1187,7 +1207,7 @@ def is_volumes_pool_sufficient(min_size=40):
     return True
 
 
-def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.get('admin')):
 
     if not vol_id:
         raise ValueError("Volume is not provided.")
@@ -1198,7 +1218,7 @@ def get_volume_show_values(vol_id, field, con_ssh=None, auth_info=Tenant.ADMIN):
     return val
 
 
-def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN, retries=2):
+def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin'), retries=2):
     """
     Imports a cinder volume from a backup file located in /opt/backups folder. The backup file is expected in
     volume-<uuid>-<date>.tgz  format. Either volume_backup filename or vol_id must be provided
@@ -1270,7 +1290,210 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
     return 0, "Volume {} is imported successfully".format(vol_id_)
 
 
-def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def delete_backups(backup_ids=None, con_ssh=None, fail_ok=False, auth_info=None):
+    LOG.info('Deleting backups:{}'.format(backup_ids))
+
+    if backup_ids is None:
+        backup_ids = get_backup_ids(con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+
+    for backup_id in backup_ids:
+        LOG.info('Deleting backup:{}'.format(backup_id))
+        cli.cinder('backup-delete', backup_id, fail_ok=fail_ok, auth_info=auth_info)
+
+
+def export_free_volume_using_cinder_backup(vol_id=None,
+                                           container='cinder',
+                                           name='',
+                                           con_ssh=None,
+                                           fail_ok=False,
+                                           auth_info=None,
+                                           backup_file_path='/opt/backups'):
+    LOG.info('Exporing free volume using cinder-backup, volume-id:{}'.format(vol_id))
+    if not name:
+        name = 'free_vol_backup_' + str(vol_id)[0:2] + '_' + str(vol_id)[-5:]
+    output = table_parser.table(cli.cinder('backup-create',
+        ' --container {} --name {} {}'.format(container, name, vol_id),
+        fail_ok=fail_ok,
+        auth_info=auth_info))
+
+    backup_id = table_parser.get_value_two_col_table(output, 'id')
+    backup_name = table_parser.get_value_two_col_table(output, 'name')
+    volume_id = table_parser.get_value_two_col_table(output, 'volume_id')
+
+    LOG.info('TODO: backup_id:{}, backup_name:{}, volume_id:{}'.format(backup_id, backup_name, volume_id))
+
+    assert backup_name == name and volume_id == vol_id
+
+    wait_for_backup_ready(backup_id)
+
+    msg = ('backup:{} reached "available" status, check if the files are gerated'.format(backup_id))
+    LOG.info('OK,' + msg)
+    code, output = con_ssh.exec_sudo_cmd('ls -l {}/*{}*'.format(os.path.join(backup_file_path, container), backup_id))
+
+    if code != 0:
+        con_ssh.exec_sudo_cmd('ls -l {}/*'.format(os.path.join(backup_file_path, container)))
+
+    assert 0 == code and output, 'backup became "available", but files are not generated'
+
+    return backup_id
+
+
+def wait_for_backup_ready(backup_id, timeout=900, interval=15, con_ssh=None, fail_ok=False, auth_info=None):
+    LOG.info('Waiting for backup reaches "available" status, backup-id:{}'.format(backup_id))
+    now = time.time()
+    end = now + timeout
+
+    while time.time() < end:
+        time.sleep(interval)
+        status = get_cinder_backup_status(backup_id)
+        if status == 'available':
+            break
+    else:
+        msg = 'backup did not reach status: "available" within {} seconds'.format(timeout)
+        LOG.warning('Error:' + msg)
+        if not fail_ok:
+            assert False, msg
+        return -1
+
+    return 0
+
+
+def create_snapshot_for_vol(vol_id, name, nowait=False, con_ssh=None, fail_ok=False, auth_info=None):
+    LOG.info('TODO: creating snapshot for in-use volume:{}'.format(vol_id))
+    if not name.strip():
+        name = 'vol_cinder_backup_' + vol_id[-4:]
+    snapshot_name = 'snp_' + name
+    args = '--force True --name ' + snapshot_name + ' ' + vol_id
+
+    table_ = table_parser.table(cli.cinder('snapshot-create', args, auth_info=auth_info, ssh_client=con_ssh))
+    snap_shot_id = table_parser.get_values(table_, 'Value', Property='id')[0]
+
+    if nowait:
+        LOG.info("Volume snapshot {} created for volume {}".format(snap_shot_id, vol_id))
+        return snap_shot_id
+
+    _wait_for_snapshot_volume_status(snap_shot_id,
+                                     status='available', fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
+
+    LOG.info("Volume snapshot {} created and READY for volume {}".format(snap_shot_id, vol_id))
+    return snap_shot_id
+
+
+def export_busy_volume_using_cinder_backup(vol_id=None,
+                                           container='cinder',
+                                           name='',
+                                           con_ssh=None,
+                                           fail_ok=False,
+                                           auth_info=None,
+                                           backup_file_path='/opt/backups'
+                                           ):
+    LOG.info('TODO: exporting in-use volume using cinder-backup, vol:{}'.format(vol_id))
+    name = 'inuse_vol_backup_' + vol_id[-4:]
+    snp_id = create_snapshot_for_vol(vol_id, name, con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    output = table_parser.table(cli.cinder('backup-create',
+        ' --container {} --name {} --snapshot-id {} {}'.format(container, name, snp_id, vol_id),
+        fail_ok=fail_ok,
+        auth_info=auth_info))
+
+    backup_id = table_parser.get_value_two_col_table(output, 'id')
+    backup_name = table_parser.get_value_two_col_table(output, 'name')
+    volume_id = table_parser.get_value_two_col_table(output, 'volume_id')
+
+    LOG.info('TODO: backup_id:{}, backup_name:{}, volume_id:{}'.format(backup_id, backup_name, volume_id))
+
+    assert backup_name == name and volume_id == vol_id
+
+    wait_for_backup_ready(backup_id)
+
+    msg = ('backup:{} reached "available" status, check if the files are gerated'.format(backup_id))
+    LOG.info('OK,' + msg)
+    code, output = con_ssh.exec_sudo_cmd('ls -l {}/*{}*'.format(os.path.join(backup_file_path, container), backup_id))
+
+    if code != 0:
+        con_ssh.exec_sudo_cmd('ls -l {}/*'.format(os.path.join(backup_file_path, container)))
+
+    assert 0 == code and output, 'backup became "available", but files are not generated'
+
+    LOG.info('TODO: successfully exported in-use volume using cinder-backup, vol:{}'.format(vol_id))
+
+    return backup_id
+
+
+def export_volumes_using_cinder_backup(vol_ids=None,
+                                    delete_existing=True,
+                                    con_ssh=None,
+                                    fail_ok=False,
+                                    auth_info=None,
+                                    backup_file_path='/opt/backups'):
+    if not vol_ids:
+        LOG.warning('No volume IDs specified, skip the rest of test')
+        return 0, []
+
+    backup_ids = get_backup_ids(searching_status='', con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+
+    if delete_existing and len(backup_ids) > 0:
+        delete_backups(con_ssh=None, fail_ok=fail_ok, auth_info=auth_info)
+
+    code = 0
+    exported_volume_ids = []
+    for vol_id in vol_ids:
+        LOG.info('Backup volume: {}'.format(vol_id))
+
+        if get_volume_states(vol_id, 'status', con_ssh=con_ssh)['status'] == 'available':
+            code = export_free_volume_using_cinder_backup(vol_id=vol_id,
+                        con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info, backup_file_path=backup_file_path)
+
+        elif get_volume_states(vol_id, 'status', con_ssh=con_ssh)['status'] == 'in-use':
+            code = export_busy_volume_using_cinder_backup(vol_id=vol_id,
+                        con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info, backup_file_path=backup_file_path)
+
+        exported_volume_ids.append(vol_id)
+
+    LOG.info('TODO: volumes backuped using cinder-backup:{}'.format(exported_volume_ids))
+    return code, exported_volume_ids
+
+
+def get_backup_ids(searching_status='available', con_ssh=None, fail_ok=False, auth_info=None):
+    if not auth_info:
+        auth_info = Tenant.get('admin')
+
+    states = table_parser.table(cli.cinder('backup-list', fail_ok=fail_ok, auth_info=auth_info))
+
+    if searching_status and searching_status.strip():
+        status = table_parser.get_values(states, 'Status', regex=searching_status)
+    else:
+        status = table_parser.get_values(states, 'Status')
+    backup_ids = table_parser.get_values(states, 'ID')
+    volume_ids = table_parser.get_values(states, 'Volume ID')
+
+    LOG.info('TODO: status:{}'.format(status))
+    LOG.info('TODO: backup_ids:{}'.format(backup_ids))
+    LOG.info('TODO: volume_ids:{}'.format(volume_ids))
+
+    LOG.info('TODO: backup-ids:{}'.format(backup_ids))
+
+    return backup_ids
+
+
+def get_cinder_backup_status(backup_id, con_ssh=None, fail_ok=False, auth_info=None):
+    if not auth_info:
+        auth_info = Tenant.get('admin')
+
+    states = table_parser.table(
+                cli.cinder('backup-show',
+                backup_id,
+                auth_info=auth_info,
+                fail_ok=fail_ok))
+
+    return table_parser.get_value_two_col_table(states, 'status')
+
+
+def export_volumes(vol_ids=None,
+                con_ssh=None,
+                fail_ok=False,
+                auth_info=Tenant.get('admin'),
+                cinder_backup=False,
+                backup_file_path='/opt/backups'):
     """
     Exports cinder volume to controller's /opt/backups folder. The backup file is in
     volume-<uuid>-<date>.tgz  format.
@@ -1287,13 +1510,20 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
         vol_ids = [vol_ids]
     if not vol_ids:
         vol_ids = get_volumes()
+
+    if cinder_backup:
+        return export_volumes_using_cinder_backup(vol_ids=vol_ids,
+                                                  con_ssh=con_ssh,
+                                                  fail_ok=fail_ok,
+                                                  auth_info=auth_info,
+                                                  backup_file_path=backup_file_path)
     volume_exported = []
     for vol_id in vol_ids:
 
         if get_volume_states(vol_id, 'status', con_ssh=con_ssh)['status'] == 'available':
             # export available volume to ~/opt/backups
             LOG.tc_step("export available volume {} ".format(vol_id))
-            table_ = table_parser.table(cli.cinder('export', vol_id, auth_info=Tenant.ADMIN, ssh_client=con_ssh))
+            table_ = table_parser.table(cli.cinder('export', vol_id, auth_info=Tenant.get('admin'), ssh_client=con_ssh))
 
             # wait for volume copy to complete
             if not wait_for_volume_status(vol_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh):
@@ -1312,7 +1542,7 @@ def export_volumes(vol_ids=None,  con_ssh=None, fail_ok=False, auth_info=Tenant.
             LOG.tc_step("export in use volume {} ".format(vol_id))
             snapshot_name = 'snapshot_'+vol_id
             cli_args = '--force True --name '+snapshot_name+' '+vol_id
-            table_ = table_parser.table(cli.cinder('snapshot-create', cli_args, auth_info=Tenant.ADMIN,
+            table_ = table_parser.table(cli.cinder('snapshot-create', cli_args, auth_info=Tenant.get('admin'),
                                                    ssh_client=con_ssh))
             snap_shot_id = table_parser.get_values(table_, 'Value', Property='id')[0]
             LOG.info("Volume snapshot {} created for volume {}".format(snap_shot_id, vol_id))

@@ -19,6 +19,7 @@ function usage {
 	       echo "	-u		User Story number"
 	       echo "	-a		Artifcact or log file"
 	       echo " 	-s		Build server name: yow-cgts4-lx, yow-cgts3-lx, etc"
+	       echo "   -J      Jenkins job name on build server. StarlingX_Upstream_build, Titanium_R6_build, etc"
 	       echo "	-T		List of test tags"
 	       echo "   -L      System Label. regular, storage, aio-dx, aio-sx"
 	       echo "	"
@@ -49,6 +50,7 @@ logfile=""
 userstory=""
 release_name=""
 build_server=""
+build_job=""
 system_label=""
 #tag=""
 
@@ -56,7 +58,7 @@ system_label=""
 #./ini_writer.sh -D -o a -n b -t c -r pass -a junk -d init -j " " -l LLL -u US 
 
 #note have to put in all options, otherwise getopts will choke
-while getopts "hDo:x:n:t:a:r:l:b:d:j:u:s:R:L:" options; do
+while getopts "hDo:x:n:t:a:r:l:b:d:j:u:s:R:L:J:" options; do
   case $options in
     o ) outfile="$OPTARG"
         let numopts+=2;;
@@ -85,6 +87,8 @@ while getopts "hDo:x:n:t:a:r:l:b:d:j:u:s:R:L:" options; do
     s ) build_server="$OPTARG"
         let numopts+=2;;
     L ) system_label="$OPTARG"
+        let numopts+=2;;
+    J ) build_job="$OPTARG"
         let numopts+=2;;
 
 
@@ -154,13 +158,14 @@ echo "environmentSpin = " >> $outfile
 # This section contains dummy values. 
 # It is only used to satisfy the database upload.
 echo "[attributes]" >> $outfile
-echo "project = CGCS 2.0" >> $outfile
+echo "project = CGCSAuto" >> $outfile
 echo "system = $lab" >> $outfile
 echo "system_label = $system_label" >> $outfile
 echo "kernel = 3.10.71-ovp-rt74-r1_preempt-rt" >> $outfile
 echo "domain = $domain" >> $outfile
 echo "build = $build" >> $outfile
 echo "build_server = $build_server" >> $outfile
+echo "build_job = $build_job" >> $outfile
 # echo "lab = $lab" >> $outfile
 
 # This section contains dummy values. 

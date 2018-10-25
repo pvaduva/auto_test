@@ -4,18 +4,18 @@ from pytest import mark, fixture, skip
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment, NumaErr   # Do not remove this. Used in eval()
 from consts.cgcs import FlavorSpec
-from keywords import host_helper, system_helper, vm_helper, nova_helper, check_helper
+from keywords import host_helper, system_helper, vm_helper, nova_helper, check_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
-def compare_cores_to_configure(host, function, p0, p1):
+def compare_cores_to_configure(host, func, p0, p1):
     """
     Compare current cores for given host/function and return whether to configure and numbers to configure
 
     Args:
         host (str):
-        function (str):
+        func (str):
         p0 (int):
         p1 (int):
 
@@ -23,7 +23,7 @@ def compare_cores_to_configure(host, function, p0, p1):
         (<is_match>, <p0_to_config>, <p1_to_config>)
 
     """
-    proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function=function, core_type='log_core')
+    proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, func=func, core_type='log_core')
     current_p0_num = len(proc_core_dict[0])
     current_p1_num = len(proc_core_dict[1])
 
@@ -53,23 +53,24 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     if not host:
         skip("No nova host available to reconfigure in the system.")
 
-    vswitch_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
-    pform_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
+    vswitch_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, func='vSwitch', core_type='log_core')
+    pform_proc_core_dict = host_helper.get_host_cpu_cores_for_function(host, func='platform', core_type='log_core')
 
+    proc1_exists = True if 1 in vswitch_proc_core_dict else False
     vswitch_original_num_p0 = len(vswitch_proc_core_dict[0])
-    vswitch_original_num_p1 = len(vswitch_proc_core_dict[1])
+    vswitch_original_num_p1 = len(vswitch_proc_core_dict[1]) if proc1_exists else None
     platform_ogigin_num_p0 = len(pform_proc_core_dict[0])
-    platform_original_num_p1 = len(pform_proc_core_dict[1])
+    platform_original_num_p1 = len(pform_proc_core_dict[1]) if proc1_exists else None
 
     def revert():
-        post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, function='vSwitch', core_type='log_core')
-        post_pform_dict = host_helper.get_host_cpu_cores_for_function(host, function='platform', core_type='log_core')
+        post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, func='vSwitch', core_type='log_core')
+        post_pform_dict = host_helper.get_host_cpu_cores_for_function(host, func='platform', core_type='log_core')
         HostsToRecover.add(host, scope='module')
 
         LOG.fixture_step('(module) Revert host vswitch/platform cores if more than 2 cores per proc are assigned')
         if (vswitch_proc_core_dict != post_vswitch_dict or pform_proc_core_dict != post_pform_dict) and \
-                (len(post_vswitch_dict[0]) > 2 or len(post_vswitch_dict[1]) > 2
-                 or len(post_pform_dict[0]) > 2 or len(post_pform_dict[1]) > 2):
+                (any([len(v) > 2 for v in post_vswitch_dict.values()]) or
+                 any([len(v) > 2 for v in post_pform_dict.values()])):
             host_helper.lock_host(host, swact=True)
             host_helper.modify_host_cpu(host, 'vswitch', p0=vswitch_original_num_p0, p1=vswitch_original_num_p1)
             host_helper.modify_host_cpu(host, 'platform', p0=platform_ogigin_num_p0, p1=platform_original_num_p1)
@@ -131,6 +132,7 @@ class TestVSwitchCPUReconfig:
 
         Args:
             host_to_config: hostname of the host to reconfig
+            flavor_: fixture
             platform: cpu cores to config for platform
             vswitch: cpu cores to config for vswitch
             ht_required: whether hyperthreading is required for the testcase. skip test if requirement is not met
@@ -318,7 +320,7 @@ def _get_vms_cores_nums(host, vswitch_cores_dict):
     """
     #  vswitch and non-vswitch nodes should be one each when this is called
 
-    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='VMs')
+    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='VMs')
 
     vswitch_procs = [proc for proc in vms_cores_dict if vswitch_cores_dict[proc]]
     nonvswitch_procs = [proc for proc in vms_cores_dict if not vswitch_cores_dict[proc]]
@@ -380,34 +382,34 @@ class TestNovaSchedulerAVS:
     def hosts_configured(self, skip_for_ovs, get_hosts, config_host_class):
         host0, host1, storage_backing, ht_enabled = get_hosts
 
-        function = 'vSwitch'
+        func = 'vSwitch'
         LOG.fixture_step("(class) Configure hosts to have 0 vSwitch cores on p0 and 2 vSwitch cores on p1: {}".
                          format((host0, host1)))
 
         def _mod_host(host_, p0, p1):
-            host_helper.modify_host_cpu(host_, function, p0=p0, p1=p1)
+            host_helper.modify_host_cpu(host_, func, p0=p0, p1=p1)
 
         hosts_to_config = {}
 
-        h0p0_is_match, h0p0_p0_to_conf, h0p0_p1_to_conf = compare_cores_to_configure(host0, function, p0=2, p1=0)
+        h0p0_is_match, h0p0_p0_to_conf, h0p0_p1_to_conf = compare_cores_to_configure(host0, func, p0=2, p1=0)
         if h0p0_is_match:
             p0_host = host0  # No config for host0
             p1_host = host1
-            h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, function, p0=0, p1=2)
+            h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, func, p0=0, p1=2)
             if not h1p1_is_match:   # config host1
                 hosts_to_config[p1_host] = {'p0': h1p1_p0_to_conf, 'p1': h1p1_p1_to_conf}
 
         else:
-            h1p0_is_match, h1p0_p0_to_conf, h1p0_p1_to_conf = compare_cores_to_configure(host1, function, p0=2, p1=0)
+            h1p0_is_match, h1p0_p0_to_conf, h1p0_p1_to_conf = compare_cores_to_configure(host1, func, p0=2, p1=0)
             if h1p0_is_match:
                 p0_host = host1
                 p1_host = host0
-                h0p1_is_match, h0p1_p0_to_conf, h0p1_p1_to_conf = compare_cores_to_configure(host0, function, p0=0,
+                h0p1_is_match, h0p1_p0_to_conf, h0p1_p1_to_conf = compare_cores_to_configure(host0, func, p0=0,
                                                                                              p1=2)
                 if not h0p1_is_match:
                     hosts_to_config[p1_host] = {'p0': h0p1_p0_to_conf, 'p1': h0p1_p1_to_conf}
             else:
-                h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, function, p0=0,
+                h1p1_is_match, h1p1_p0_to_conf, h1p1_p1_to_conf = compare_cores_to_configure(host1, func, p0=0,
                                                                                              p1=2)
                 if h1p1_is_match:
                     p1_host = host1
@@ -419,7 +421,7 @@ class TestNovaSchedulerAVS:
                     p0_host = host1
                     hosts_to_config[p0_host] = {'p0': h1p0_p0_to_conf, 'p1': h1p0_p1_to_conf}
                     p1_host = host0
-                    h0p1_is_match, h0p1_p0_to_conf, h0p1_p1_to_conf = compare_cores_to_configure(host0, function, p0=0,
+                    h0p1_is_match, h0p1_p0_to_conf, h0p1_p1_to_conf = compare_cores_to_configure(host0, func, p0=0,
                                                                                                  p1=2)
                     if not h0p1_is_match:
                         hosts_to_config[p1_host] = {'p0': h0p1_p0_to_conf, 'p1': h0p1_p1_to_conf}
@@ -429,8 +431,8 @@ class TestNovaSchedulerAVS:
         for host_, configs in hosts_to_config.items():
             config_host_class(host_, _mod_host, **configs)
 
-        is_match_p0 = compare_cores_to_configure(p0_host, function, p0=2, p1=0)[0]
-        is_match_p1 = compare_cores_to_configure(p1_host, function, p0=0, p1=2)[0]
+        is_match_p0 = compare_cores_to_configure(p0_host, func, p0=2, p1=0)[0]
+        is_match_p1 = compare_cores_to_configure(p1_host, func, p0=0, p1=2)[0]
         assert is_match_p0, "{} does not match vswitch core (2, 0)".format(p0_host)
         assert is_match_p1, "{} does not match vswitch core (0, 2)".format(p1_host)
 
@@ -508,7 +510,7 @@ class TestNovaSchedulerAVS:
             hosts_configured[1]: 0,
         }
         for host in hosts_configured:
-            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, function='VMs')
+            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='VMs')
             vswitch_vm_cores = len(vms_cores_dict[hosts_vswitch_proc[host]])
             if system_helper.is_hyperthreading_enabled(host):
                 vswitch_vm_cores *= 2
@@ -676,7 +678,7 @@ class TestNovaSchedulerAVS:
         LOG.fixture_step("(class) Determine host to boot vms on and calculate the vcpus for flavor")
 
         initial_host, other_host = hosts_configured
-        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, function='VMs')
+        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='VMs')
         p1_vm_cores = len(vms_cores_dict[1])
         # p0_vm_cores = len(vms_cores_dict[0])
         if system_helper.is_hyperthreading_enabled(initial_host):
@@ -778,7 +780,7 @@ class TestNovaSchedulerAVS:
         nova_helper.remove_hosts_from_aggregate('cgcsauto', other_host)
 
         LOG.fixture_step("(class) Check vswitch numa node on {} doesn't have the most vm cores.".format(target_host))
-        vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(target_host, function='vSwitch')
+        vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(target_host, func='vSwitch')
         vswitch_vm_cores_num, nonvswitch_vm_cores_num = _get_vms_cores_nums(target_host, vswitch_cores_dict)
         assert nonvswitch_vm_cores_num > vswitch_vm_cores_num, "vSwitch numa node has the most vm cores."
 
@@ -792,7 +794,8 @@ class TestNovaSchedulerAVS:
         ResourceCleanup.add('flavor', resource_id=pre_flavor, scope='class')
         nova_helper.set_flavor_extra_specs(pre_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
-        LOG.fixture_step("(class) Create dest flavor with vcpu number larger than the available cores on current numa node")
+        LOG.fixture_step("(class) Create dest flavor with vcpu number larger than the available cores on "
+                         "current numa node")
         huge_flavor = nova_helper.create_flavor(name='many_vcpus', vcpus=vswitch_vm_cores_num + 1)[1]
         ResourceCleanup.add('flavor', huge_flavor, scope='class')
         nova_helper.set_flavor_extra_specs(huge_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
@@ -974,7 +977,8 @@ class TestSpanNumaNodes:
 
         return vcpu_on_numa
 
-    @mark.parametrize(('vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'),[
+    @mark.parametrize(
+        ('vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'),[
         (3, 'strict', 0, 0, 512, 1, '1,2', 512),
         (2, 'strict', None, 0, 512, None, 1, 512),
         # (2, 'prefer', None, None, None, None, None, None),
@@ -1086,3 +1090,42 @@ class TestSpanNumaNodes:
             check_helper._check_vm_topology_via_vm_topology(vm_id, expt_vcpu, 'dedicated', cpu_thr_pol=None, numa_num=2,
                                                             vm_host=vm_host, is_ht=ht_enabled,
                                                             vcpus_on_numa=post_vcpu_on_numa)
+
+
+def test_compute_cpu_kernel_boot_args(hosts=None):
+    """
+    Check cpu config values in /proc/cmdline are inline with what's shown in system host-cpu-list
+    Args:
+        hosts (str|list|None):
+
+    """
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    elif not hosts:
+        hosts = host_helper.get_up_hypervisors()
+
+    for host in hosts:
+        is_lowlat = host_helper.is_lowlatency_host(host=host)
+        funcs = ('Platform', 'vSwitch', None)
+        platform_cores, vswitch_cores, all_cores = \
+            host_helper.get_host_cpu_cores_for_function(hostname=host, func=funcs, thread=None, rtn_dict_per_proc=False)
+
+        rcu_nocbs = list(set(all_cores) - set(platform_cores))
+        expt_dict = {
+            'rcu_nocbs': rcu_nocbs,
+            'kthread_cpus': platform_cores,
+            'irqaffinity': platform_cores,
+            'isolcpus': rcu_nocbs if is_lowlat else vswitch_cores
+        }
+
+        LOG.info('---Check grub and cmdline args for cpu configs on {}'.format(host))
+        with host_helper.ssh_to_host(hostname=host) as host_ssh:
+            file = '/proc/cmdline'     # do not check /etc/default/grub since it's only the default
+            output = host_ssh.exec_cmd('cat {}'.format(file), fail_ok=False)[1]
+            for k, expt_v in expt_dict.items():
+                actual_v = re.findall('{}=([\d\-,]+)(\s|$)'.format(k), output)
+                assert actual_v, "{} match not found in {} on {}".format(k, file, host)
+                actual_v = common.parse_cpus_list(cpus=actual_v[0][0])
+                assert sorted(expt_v) == actual_v, \
+                    "{}: {} in {} is different than expected. Items missing in grub: {}; extra items in grub: {}".\
+                    format(host, k, file, list(set(expt_v)-set(actual_v)), list(set(actual_v)-set(expt_v)))

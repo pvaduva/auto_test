@@ -11,9 +11,12 @@ from keywords import system_helper, host_helper, install_helper, orchestration_h
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils.kpi import kpi_log_parser
+from consts.kpi_vars import UpgradeActivate, UpgradeComplete, UpgradeStart, UpgradeOrchestration, UpgradeController1, \
+    UpgradeController0
 
 
-def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                  lock=False, unlock=False):
     """
     Upgrade given host
@@ -55,7 +58,6 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
         exitcode, output = simplex_host_upgrade(con_ssh=con_ssh)
         return exitcode, output
 
-
     exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info,
                                   rtn_list=True, fail_ok=True, timeout=timeout)
     if exitcode == 1:
@@ -68,7 +70,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     # sleep for 180 seconds to let host be re-installed with upgrade release
     time.sleep(180)
 
-    if not host_helper.wait_for_host_states(host, timeout=timeout, check_interval=60,
+    if not host_helper.wait_for_host_values(host, timeout=timeout, check_interval=60,
                                             availability=HostAvailState.ONLINE, con_ssh=con_ssh,
                                             fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
@@ -108,7 +110,7 @@ def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
     return 0, None
 
 
-def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN,
+def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                   lock=False, unlock=False):
     """
     Upgrade given hosts list one by one
@@ -158,7 +160,7 @@ def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     return 0, "hosts {} upgrade done ".format(hosts_to_upgrade)
 
 
-def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.ADMIN,
+def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.get('admin'),
                                               fail_ok=False, con_ssh=None):
     """
     Waits until upgrade data migration is complete or fail
@@ -292,7 +294,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
     if alarms:
         # Check if it alarm
-        table_ = table_parser.table(cli.system('alarm-list'))
+        table_ = table_parser.table(cli.fm('alarm-list'))
         alarm_severity_list = table_parser.get_column(table_, "Severity")
         if len(alarm_severity_list) > 0 and \
                 ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
@@ -348,30 +350,28 @@ def get_system_health_query_upgrade_2(con_ssh=None):
             elif "Locked or disabled hosts" in k:
                 failed[k.strip()] = v.strip()
 
-
         elif "Missing manifests" in line:
             failed[line] = line
         elif "alarms found" in line:
-            if len (line.split(',')) > 1:
+            if len(line.split(',')) > 1:
                 failed["managment affecting"] = int(line.split(',')[1].strip()[1])
-
 
     if len(failed) == 0:
         LOG.info("system health is OK to start upgrade......")
         return 0, None,  None
 
-    actions = { "lock_unlock": [[], ""],
-                "force_upgrade": [False, ''],
-                "swact": [False, ''],
-                }
+    actions = {"lock_unlock": [[], ""],
+               "force_upgrade": [False, ''],
+               "swact": [False, ''],
+               }
 
     for k, v in failed.items():
         if "No alarms" in k:
-            alarms = True
-            table_ = table_parser.table(cli.system('alarm-list --uuid'))
+            table_ = table_parser.table(cli.fm('alarm-list --uuid'))
             alarm_severity_list = table_parser.get_column(table_, "Severity")
-            if len(alarm_severity_list) > 0 and \
-                ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
+            if len(alarm_severity_list) > 0 \
+                    and "major" not in alarm_severity_list \
+                    and "critical" not in alarm_severity_list:
                 # minor alarm present
                 LOG.warn("System health query upgrade found minor alarms: {}".format(alarm_severity_list))
                 actions["force_upgrade"] = [True, "Minor alarms present"]
@@ -388,10 +388,8 @@ def get_system_health_query_upgrade_2(con_ssh=None):
                 LOG.error("System health query upgrade found major or critical alarms.")
                 return 1, failed, None
 
-
         elif "Missing manifests" in k:
-            manifest = True
-
+            # manifest = True
             if "controller-1" in k:
                 if "controller-1" not in actions["lock_unlock"][0]:
                     actions["lock_unlock"][0].append("controller-1")
@@ -402,12 +400,11 @@ def get_system_health_query_upgrade_2(con_ssh=None):
             actions["lock_unlock"][1] += "Missing manifests;"
 
         elif any(s in k for s in ("Cinder configuration", "Incomplete configuration")):
-            cinder_config = True
-            actions["swact"][0] = True
-            actions["swact"][1] += "Invalid Cinder configuration;"
+            # cinder_config = True
+            actions["swact"] = [True, actions["swact"][1] + "Invalid Cinder configuration;"]
 
         elif "Placement Services Enabled" in k or "Hosts missing placement configuration" in k:
-            placement_services = True
+            # placement_services = True
             if "controller-1" in v:
                 if "controller-1" not in actions["lock_unlock"][0]:
                     actions["lock_unlock"][0].append("controller-1")
@@ -437,6 +434,7 @@ def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
         (2, <stderr>) : "applicable only if fail_ok is true. upgrade-start rejected:
         An upgrade is already in progress."
     """
+
     if force:
         rc, output = cli.system("upgrade-start", positional_args='--force', fail_ok=True, ssh_client=con_ssh)
     else:
@@ -771,7 +769,7 @@ def orchestration_upgrade_hosts(upgraded_hosts, orchestration_nodes, storage_app
         upgrade_hosts_ = list(orchestration_nodes)
         upgraded_computes = len([h for h in upgraded_hosts if 'storage' not in h and 'controller' not in h])
         computes_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' not in h and 'controller' not in h])
-        storages_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' in h])
+        # storages_to_upgrade = len([h for h in upgrade_hosts_ if 'storage' in h])
 
         if maximum_parallel_computes:
             num_parallel_computes = int(maximum_parallel_computes)
@@ -866,7 +864,7 @@ def upgrade_host_lock_unlock(host, con_ssh=None):
     if swact_back:
         time.sleep(60)
 
-        if not host_helper.wait_for_host_states(host, timeout=360, fail_ok=True,
+        if not host_helper.wait_for_host_values(host, timeout=360, fail_ok=True,
                                                 operational=HostOperState.ENABLED,
                                                 availability=HostAvailState.AVAILABLE):
             err_msg = " Swacting to standby is not possible because {} is not in available state " \
@@ -902,7 +900,7 @@ def get_upgraded_hosts(upgrade_version, con_ssh=None, fail_ok=False, source_cred
     return table_parser.get_values(table_, 'hostname')
 
 
-def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
+def wait_for_upgrade_states(states, timeout=60, check_interval=6, fail_ok=False):
     """
      Waits for the  upgrade state to be changed.
 
@@ -918,7 +916,7 @@ def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
     end_time = time.time() + timeout
     if not states:
         raise ValueError("Expected host state(s) has to be specified via keyword argument states")
-    state_match=False
+    state_match = False
     while time.time() < end_time:
         table_ = system_upgrade_show()[1]
         act_state = table_parser.get_value_two_col_table(table_, "state")
@@ -930,8 +928,8 @@ def wait_for_upgrade_states(states, timeout=60, check_interval=6,fail_ok=False):
     if state_match:
         return True
     if fail_ok:
-       LOG.warning(msg)
-       return False
+        LOG.warning(msg)
+        return False
     raise exceptions.TimeoutException(msg)
 
 
@@ -964,4 +962,156 @@ def simplex_host_upgrade(con_ssh=None, fail_ok=False):
     else:
         return 0, "host upgrade success"
 
+
+def collect_upgrade_start_kpi(lab, collect_kpi ):
+    """
+
+    Returns:
+
+    """
+
+    lab_name =  lab['short_name']
+    log_path = UpgradeStart.LOG_PATH
+    kpi_name = UpgradeStart.NAME
+    host = "controller-0"
+    start_pattern = UpgradeStart.START
+    end_pattern = UpgradeStart.END
+
+    try:
+
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                                  log_path=log_path, lab_name=lab_name, host=host,
+                                  start_pattern=start_pattern,
+                                  end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+    except ValueError as evalue:
+
+        LOG.info("Unable to collect upgrade start kpi for lab {}: {}".format(lab_name, evalue))
+
+
+def collected_upgrade_controller1_kpi(lab, collect_kpi, init_time=None):
+    """
+
+    Args:
+        lab:
+        collect_kpi:
+
+    Returns:
+
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test.  Skip due to kpi collection is not enabled")
+        return
+
+    lab_name = lab['short_name']
+    log_path = UpgradeController1.LOG_PATH
+    kpi_name = UpgradeController1.NAME
+    host = "controller-0"
+    start_pattern = UpgradeController1.START
+    start_path = UpgradeController1.START_PATH
+    end_pattern = UpgradeController1.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern, start_path=start_path,
+                              end_pattern=end_pattern, init_time=init_time, sudo=True, topdown=True)
+
+
+def collected_upgrade_controller0_kpi(lab, collect_kpi, init_time=None):
+    """
+
+    Args:
+        lab:
+        collect_kpi:
+
+    Returns:
+
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test.  Skip due to kpi collection is not enabled")
+        return
+
+    lab_name = lab['short_name']
+    log_path = UpgradeController0.LOG_PATH
+    kpi_name = UpgradeController0.NAME
+    host = "controller-1"
+    start_pattern = UpgradeController0.START
+    start_path = UpgradeController0.START_PATH
+    end_pattern = UpgradeController0.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern, start_path=start_path,
+                              end_pattern=end_pattern, init_time=init_time, sudo=True, topdown=True)
+
+
+def collect_upgrade_orchestration_kpi(lab, collect_kpi):
+    """
+
+    Args:
+        lab:
+        collect_kpi:
+
+    Returns:
+
+    """
+    if not collect_kpi:
+        LOG.info("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = lab['short_name']
+    print("Upgrade host: {}".format(upgrade_host))
+    host = "controller-1"
+
+    kpi_name = UpgradeOrchestration.NAME.format(upgrade_host)
+
+    orchestration_duration = orchestration_helper.get_current_strategy_phase_duration("upgrade", "apply")
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, lab_name=lab_name,
+                              kpi_val=orchestration_duration)
+
+
+def collect_upgrade_activate_kpi(lab, collect_kpi):
+    """
+    This measures the time to run upgrade-activate.
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = lab['short_name']
+    host = "controller-1"
+
+    kpi_name = UpgradeActivate.NAME
+    log_path = UpgradeActivate.LOG_PATH
+    start_pattern = UpgradeActivate.START
+    end_pattern = UpgradeActivate.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                          log_path=log_path, lab_name=lab_name, host=host,
+                          start_pattern=start_pattern,
+                          end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+
+
+
+def collect_upgrade_complete_kpi(lab, collect_kpi):
+    """
+    This measures the time to run upgrade-activate.
+    """
+
+    if not collect_kpi:
+        LOG.info("KPI only test. Skip due to kpi collection is not enabled")
+
+    lab_name = lab['short_name']
+    host = "controller-0"
+
+    kpi_name = UpgradeComplete.NAME
+    log_path = UpgradeComplete.LOG_PATH
+    start_pattern = UpgradeComplete.START
+    end_pattern = UpgradeComplete.END
+
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                          log_path=log_path, lab_name=lab_name, host=host,
+                          start_pattern=start_pattern,
+                          end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
 

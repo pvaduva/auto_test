@@ -98,7 +98,7 @@ def test_vif_model_from_image(img_vif, skip_for_ovs):
                               cleanup='function')[1]
 
     LOG.tc_step("Verify nics info from nova show to ensure tenant net vif is as specified in image metadata")
-    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=Tenant.get('admin')))
     actual_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
     actual_nics = [eval(nic_) for nic_ in actual_nics]
 

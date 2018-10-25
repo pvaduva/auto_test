@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from keywords import vm_helper, nova_helper, host_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import FlavorSpec, GuestImages
-from consts.reasons import SkipHypervisor, SkipStorageBacking
+from consts.reasons import SkipStorageBacking
 
 
 def id_gen(val):
@@ -335,7 +335,7 @@ def get_cpu_count(hosts_with_backing):
 
     # increase quota
     LOG.fixture_step("Increase quota of allotted cores")
-    vm_helper.ensure_vms_quotas(cores_num=(numa0_avail_cpus + 30))
+    vm_helper.ensure_vms_quotas(cores_num=int(numa0_avail_cpus + 30))
 
     return vm_host, numa0_avail_cpus, compute_space_dict
 
@@ -395,7 +395,7 @@ class TestResizeDiffHost:
 
         # launch another vm
         LOG.tc_step("Create a flavor to occupy vcpus")
-        occupy_amount = cpu_count - 1
+        occupy_amount = int(cpu_count) - 1
         second_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
         flavor_2 = nova_helper.create_flavor(vcpus=occupy_amount, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_2)

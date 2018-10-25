@@ -1,6 +1,4 @@
-
 import re
-
 from collections import defaultdict
 
 from pytest import fixture, mark, skip
@@ -9,6 +7,7 @@ from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from consts.timeout import VMTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 core_flavor_name = 'flavor_vtpm'
 vtpm_base_dir = '/etc/nova/instances/{vm_id}/vtpm-{instance_name}/state'
@@ -20,12 +19,21 @@ g_flavors = defaultdict(str)
 g_vms = defaultdict(dict)
 
 
-@fixture(scope='session', autouse=True)
+def reset_vms():
+    g_vms.clear()
+    g_vms.update(vtpm=None, autorc=None, non_autorc=None)
+    
+
+@fixture(scope='module', autouse=True)
 def prepare_vms(request):
+
+    # if not system_helper.is_avs():
+    #     skip('CGTS-9999')
+
     global g_flavors, g_vms
 
     LOG.info('Prepare VMs for vTPM test')
-    g_vms.update(vtpm=None, autorc=None, non_autorc=None)
+    reset_vms()
 
     def clean_up():
         LOG.info('Clean up: delete VMs, volumes, flavors and etc.')
@@ -129,10 +137,10 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('cold-migration', 'transient'),
         ('stop_start', 'transient'),
         ('evacuate', 'transient'),
-        ('evacuate', 'persistent', 'vtpm'), # CGTS-9620
-        ('evacuate', 'persistent', 'autorc'), # CGTS-9620
-        ('evacuate', 'non_volatile', 'vtpm'), # CGTS-9620
-        ('evacuate', 'non_volatile', 'autorc'), # CGTS-9620
+        ('evacuate', 'persistent', 'vtpm'),  # CGTS-9620
+        ('evacuate', 'persistent', 'autorc'),  # CGTS-9620
+        ('evacuate', 'non_volatile', 'vtpm'),  # CGTS-9620
+        ('evacuate', 'non_volatile', 'autorc'),  # CGTS-9620
         ('resize_to_autorc', 'transient'),
         ('resize_to_non_autorc', 'transient'),
         ('resize_to_non_vtpm', 'non_volatile'),
@@ -143,10 +151,10 @@ def vm_op_policy(vm_feature, vm_op, mem_type):
         ('reboot_host', 'transient', 'vtpm'),
         ('reboot_host', 'transient', 'autorc'),
         ('reboot_host', 'transient', 'non_autorc'),
-        ('reboot_host', 'persistent', 'vtpm'), # CGTS-9620
-        ('reboot_host', 'persistent', 'autorc'), # CGTS-9620
-        ('reboot_host', 'non_volatile', 'vtpm'), # CGTS-9620
-        ('reboot_host', 'non_volatile', 'autorc'), # CGTS-9620
+        ('reboot_host', 'persistent', 'vtpm'),  # CGTS-9620
+        ('reboot_host', 'persistent', 'autorc'),  # CGTS-9620
+        ('reboot_host', 'non_volatile', 'vtpm'),  # CGTS-9620
+        ('reboot_host', 'non_volatile', 'autorc'),  # CGTS-9620
 
     }
 
@@ -497,11 +505,11 @@ def create_flavor(vm_type, flavor_type=None, name=core_flavor_name):
     else:
         extra_specs['sw:wrs:vtpm'] = 'true'
 
-    if 'non_autorc' in vm_type:
+    if 'non_autorc' in vm_type or (flavor_type and 'non_autorc' in flavor_type):
         name += '_nonrc'
         extra_specs['sw:wrs:auto_recovery'] = 'false'
 
-    elif 'autorc' in vm_type:
+    elif 'autorc' in vm_type or (flavor_type and 'autorc' in flavor_type):
         name += '_autorc'
         extra_specs['sw:wrs:auto_recovery'] = 'true'
 
@@ -532,24 +540,22 @@ def create_vm_values_for_type(vm_type, flavor=None):
     LOG.info('Creating VM for vTPM using flavor:' + g_flavors[vm_type])
 
     flavor = flavor if flavor is not None else g_flavors[vm_type]
-    vm_values = {'id': vm_helper.boot_vm(flavor=flavor)[1]}
+    code, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm-{}'.format(vm_type), flavor=flavor, fail_ok=True)
+    if code != 0:
+        if vm_id:
+            ResourceCleanup.add('vm', vm_id)
+        if new_vol:
+            ResourceCleanup.add('volume', new_vol)
+        assert code == 0, msg
 
+    vm_values = {'id': vm_id}
+    g_vms[vm_type] = vm_values
+
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_values['id']) as ssh_to_vm:
         vm_values['values'] = create_values(ssh_to_vm, vm_type)
 
-    g_vms[vm_type] = vm_values
-    return vm_values['id']
-
-
-def create_vms():
-    global g_flavors, g_vms
-
-    vm_types = ['vtpm', 'autorc', 'non_autorc']
-
-    for vm_type in vm_types:
-        create_vm_values_for_type(vm_type)
-
-    return g_vms.values()
+    return vm_id
 
 
 def create_values(ssh_con, vm_type):
@@ -560,8 +566,6 @@ def create_values(ssh_con, vm_type):
     values = {}
     for value_type in all_types:
         values[value_type] = create_value(ssh_con, value_type)
-
-    g_vms[vm_type] = {'values': values}
 
     return values
 
@@ -654,7 +658,7 @@ def perform_vm_operation(vm_type, vm_id, op='live_migration', extra_specs='vtpm'
 
     op_table = {
         'live_migration': lambda x, y: vm_helper.live_migrate_vm(y),
-        'cold-migration': lambda x, y: vm_helper.cold_migrate_vm(y),
+        'cold_migration': lambda x, y: vm_helper.cold_migrate_vm(y),
         'stop_start': lambda x, y: (vm_helper.stop_vms(y), vm_helper.start_vms(y)),
         'suspend_resume': lambda x, y: (vm_helper.suspend_vm(y), vm_helper.resume_vm(y)),
         'pause_unpause': lambda x, y: (vm_helper.pause_vm(y), vm_helper.unpause_vm(y)),
@@ -706,15 +710,16 @@ def get_vm_id(vm_type, reuse=True):
 
     LOG.info('Make sure the VM for the specified type exists, create if it does not')
 
-    if g_vms[vm_type] and 'id' in g_vms[vm_type]:
+    if reuse and g_vms[vm_type] and 'id' in g_vms[vm_type]:
         vm_id = g_vms[vm_type]['id']
         LOG.info('VM exists for type:{}, vm_id:{}'.format(vm_type, vm_id))
 
-        if reuse:
+        if reuse and nova_helper.get_vm_status(vm_id=vm_id) == VMStatus.ACTIVE:
             return vm_id
 
-        else:
-            vm_helper.delete_vms(vm_id)
+    LOG.info('not reusing...')
+    vm_helper.delete_vms()
+    reset_vms()
 
     if not g_flavors[vm_type]:
         create_flavor(vm_type)
@@ -730,7 +735,7 @@ def reuse_existing_vms(vm_operation, extra_specs):
     if not g_reusable:
         return False
 
-    if 'reboot_host' == vm_operation or 'non_autorc' in extra_specs or 'non_vtpm' in extra_specs:
+    if 'reboot_host' == vm_operation or 'evacuate' in vm_operation or 'non_autorc' in extra_specs or 'non_vtpm' in extra_specs:
         return False
 
     return True
@@ -744,9 +749,9 @@ def reuse_existing_vms(vm_operation, extra_specs):
     ('live_migration', 'autorc'),
     ('live_migration', 'non_autorc'),
     #
-    ('code_migration', 'vtpm'),
-    ('code_migration', 'autorc'),
-    ('code_migration', 'non_autorc'),
+    ('cold_migration', 'vtpm'),
+    ('cold_migration', 'autorc'),
+    ('cold_migration', 'non_autorc'),
     #
     ('stop_start', 'vtpm'),
     ('stop_start', 'autorc'),
@@ -801,7 +806,6 @@ def test_vtpm(vm_operation, extra_specs):
 
     for vm_type in vm_types:
         reuse = reuse_existing_vms(vm_operation, extra_specs)
-        g_reusable = False
 
         vm_id = get_vm_id(vm_type, reuse=reuse)
         LOG.info('-check vTPM supports on hosting node for VM:' + vm_id + ', vm-type:' + vm_type)
@@ -809,10 +813,10 @@ def test_vtpm(vm_operation, extra_specs):
         verify_vtpm_on_host(vm_id, host=None)
         LOG.info('-OK, passed checking on hosting node for VM:' + vm_id + ', vm-type:' + vm_type)
 
-        if vm_operation == 'creation':
+        if vm_operation == 'create':
             with vm_helper.ssh_to_vm_from_natbox(vm_id) as ssh_to_vm:
                 LOG.info('Create all types of contents: volatile, non_volatile and persistent')
-                create_values(ssh_to_vm, vm_type)
+                # create_values(ssh_to_vm, vm_type)
 
         values = g_vms[vm_type]['values']
         LOG.info('Running test on VM:{}, type:{}, values:{}'.format(vm_id, vm_type, values))
@@ -820,28 +824,33 @@ def test_vtpm(vm_operation, extra_specs):
         # fail_ok = (vm_operation == 'resize_to_non_vtpm')
         fail_ok = True
         perform_vm_operation(vm_type, vm_id, op=vm_operation, extra_specs=extra_specs)
+        ping_timeout = VMTimeout.DHCP_RETRY if vm_operation in ('reboot_host', 'evacuate') else VMTimeout.PING_VM
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=ping_timeout)
 
         with vm_helper.ssh_to_vm_from_natbox(vm_id, timeout=(int(VMTimeout.SSH_LOGIN * 1.3))) as ssh_to_vm:
             LOG.info('After VM operation:{}, check all types of contents'.format(vm_operation))
 
             passed = []
             if 'persistent' in values:
-                if check_persistent_values(ssh_to_vm, values['persistent'],
-                                           expecting=vm_op_policy(vm_type, vm_operation, 'persistent'),
-                                           fail_ok=fail_ok)[0]:
+                if check_persistent_values(
+                        ssh_to_vm, values['persistent'],
+                        expecting=vm_op_policy(vm_type, vm_operation, 'persistent'),
+                        fail_ok=fail_ok)[0]:
                     passed.append('persistent')
 
             if 'non_volatile' in values:
-                if check_nv_values(ssh_to_vm, values['non_volatile'],
-                                expecting=vm_op_policy(vm_type, vm_operation, 'non_volatile'),
-                                fail_ok=fail_ok)[0]:
+                if check_nv_values(
+                        ssh_to_vm, values['non_volatile'],
+                        expecting=vm_op_policy(vm_type, vm_operation, 'non_volatile'),
+                        fail_ok=fail_ok)[0]:
                     passed.append('non_volatile')
 
             if 'transient' in values:
-                if check_transient_values(ssh_to_vm,
-                                       handles=values['transient'],
-                                       expecting=vm_op_policy(vm_type, vm_operation, 'transient'),
-                                       fail_ok=fail_ok)[0]:
+                if check_transient_values(
+                        ssh_to_vm,
+                        handles=values['transient'],
+                        expecting=vm_op_policy(vm_type, vm_operation, 'transient'),
+                        fail_ok=fail_ok)[0]:
                     passed.append('transient')
 
             if len(passed) < 3:
@@ -850,6 +859,7 @@ def test_vtpm(vm_operation, extra_specs):
                 assert False, message
 
             if 'reboot_host' == vm_operation \
+                    or 'evacuate' in vm_operation\
                     or 'resize_to_non_vtpm' in vm_operation\
                     or 'non_autorc' in extra_specs \
                     or 'non_vtpm' in extra_specs:

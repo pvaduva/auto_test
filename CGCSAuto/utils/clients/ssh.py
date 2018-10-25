@@ -20,7 +20,7 @@ colorgrn = "\033[1;32m{0}\033[00m"
 colorblue = "\033[1;34m{0}\033[00m"
 coloryel = "\033[1;34m{0}\033[00m"
 
-CONTROLLER_PROMPT = '.*controller\-[01]\:~\$ '
+CONTROLLER_PROMPT = Prompt.CONTROLLER_PROMPT
 ADMIN_PROMPT = Prompt.ADMIN_PROMPT
 TENANT1_PROMPT = Prompt.TENANT1_PROMPT
 TENANT2_PROMPT = Prompt.TENANT2_PROMPT
@@ -205,7 +205,6 @@ class SSHClient:
                         before_str = self._parse_output(self._session.before)
                         after_str = self._parse_output(self._session.after)
                         output = before_str + after_str
-                        print("output: {}".format(output))
                         if 'your password' in output:
                             LOG.warning("Login failed possibly due to password expire warning. "
                                         "Retry with small searchwindowsize")
@@ -331,12 +330,6 @@ class SSHClient:
         if not isinstance(blob_list, list):
             blob_list = [blob_list]
 
-        exit_cmd = (self.cmd_sent == EXIT_CODE_CMD)
-        # if not exit_cmd:
-        #     LOG.debug("Expecting: \'{}\'...".format('\', \''.join(str(blob) for blob in blob_list)))
-        # else:
-            # LOG.debug("Expecting exit code...")
-
         kwargs = {}
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
@@ -346,13 +339,12 @@ class SSHClient:
         try:
             index = self._session.expect(blob_list, timeout=timeout, **kwargs)
         except pexpect.EOF:
-            # LOG.warning("No match found for {}!\npexpect exception caught: {}".format(blob_list, e.__str__()))
             # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
             #                                         self._parse_output(self._session.after)))
             if fail_ok:
                 return -1
             else:
-                LOG.warning("No match found for {}!\nEOF caught.".format(blob_list))
+                LOG.warning("EOF caught.")
                 raise
         except pexpect.TIMEOUT:
             if fail_ok:
@@ -438,7 +430,7 @@ class SSHClient:
             self.send_control('c')
             self.flush(timeout=10)
             if fail_ok:
-                LOG.warning(e)
+                LOG.warning(e.__str__())
             else:
                 raise
 
@@ -452,7 +444,6 @@ class SSHClient:
         return code, output
 
     def _process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
-
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.info("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
@@ -488,12 +479,12 @@ class SSHClient:
 
     def get_exit_code(self):
         self.send(EXIT_CODE_CMD)
-        self.expect(timeout=30)
+        self.expect(timeout=30, fail_ok=False)
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
         return int(matches[-1])
 
     def get_hostname(self):
-        return self.exec_cmd('hostname')[1].splitlines()[0]
+        return self.exec_cmd('hostname', get_exit_code=False)[1].splitlines()[0]
 
     def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None,
               pre_opts=None, timeout=60, fail_ok=False):
@@ -619,18 +610,21 @@ class SSHClient:
         if exit_code != 0:
             msg = "SCP failed - {}".format(self.cmd_output)
             if fail_ok:
-                LOG.error(msg)
+                LOG.warning(msg)
             else:
                 raise exceptions.SSHException(msg)
 
-    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True):
+    def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True,
+                    is_dir=False):
         source = source_path
         if source_ip:
             source = '{}:{}'.format(source_ip, source)
             if source_user:
                 source = '{}@{}'.format(source_user, source)
 
-        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} {}'.format(source, dest_path)
+        option = '-r ' if is_dir else ''
+        scp_cmd = 'scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}'.format(option, source,
+                                                                                                   dest_path)
 
         try:
             self.send(scp_cmd)
@@ -648,7 +642,7 @@ class SSHClient:
             if not exit_code == 0:
                 raise exceptions.CommonError("scp unsuccessfully")
 
-            if not self.file_exists(file_path=dest_path):
+            if not is_dir and not self.file_exists(file_path=dest_path):
                 raise exceptions.CommonError("{} does not exist after download".format(dest_path))
         except:
             if cleanup:
@@ -702,7 +696,11 @@ class SSHClient:
         try:
             yield self
         finally:
-            if self.get_current_user() == 'root':
+            try:
+                current_user = self.get_current_user(prompt=[ROOT_PROMPT, original_prompt])
+            except:
+                current_user = None
+            if current_user == 'root':
                 self.set_prompt(original_prompt)
                 self.send('exit')
                 self.expect()
@@ -757,9 +755,12 @@ class SSHClient:
         LOG.debug("Sending ctrl+{}".format(char))
         self._session.sendcontrol(char=char)
 
-    def get_current_user(self):
-        output = self.exec_cmd('whoami')[1]
-        return output.splitlines()[0]
+    def get_current_user(self, prompt=None):
+        output = self.exec_cmd('whoami', blob=prompt, expect_timeout=10, get_exit_code=False)[1]
+        if output:
+            output = output.splitlines()[0]
+
+        return output
 
     def close(self):
         self._session.close(True)
@@ -901,6 +902,62 @@ class SSHClient:
 
     def update_host(self, new_host):
         self.host = new_host
+
+
+class ContainerClient(SSHClient):
+    """
+        Base class for Starting Docker Container
+        """
+
+    def __init__(self, ssh_client, entry_cmd, user='root', host=None, password=None, initial_prompt=None,
+                 timeout=60):
+        """
+        Instantiate a container client
+        Args:
+            ssh_client: SSH Client object that's currently connected
+            entry_cmd: cmd to run to enter the container shell, e.g., docker run -it -e /bin/bash
+            host: host to connect to from the existing ssh session
+            user: default user in container shell
+            password: password for given user
+            initial_prompt: prompt for container shell
+
+        """
+        if not initial_prompt:
+            initial_prompt = '.*{}@.*# .*'.format(user)
+        if not host:
+            host = ssh_client.host
+        if not password:
+            password = ssh_client.password
+
+        super(ContainerClient, self).__init__(host=host, user=user, password=password, initial_prompt=initial_prompt,
+                                              timeout=timeout, session=ssh_client._session)
+        self.parent = ssh_client
+        self.docker_cmd = entry_cmd
+        self.timeout = timeout
+
+    def connect(self, retry=False, retry_interval=1, retry_timeout=60, prompt=None,
+                use_current=True, use_password=False, timeout=30):
+        docker_cmd = self.docker_cmd
+        if prompt:
+            self.prompt = prompt
+        self.exec_sudo_cmd(docker_cmd, expect_timeout=timeout, get_exit_code=False)
+
+        # Really don't know why, but following two lines are needed, otherwise exec_cmd will fail
+        self.send()
+        self.expect(timeout=5)
+
+        # Ensure exec_cmd works after above workaround
+        self.exec_cmd(cmd='', expect_timeout=5)
+
+    def close(self, force=False):
+        if force or self._is_connected():
+            self.send('exit')
+            self.parent.expect()
+            LOG.info("ssh session to {} is closed and returned to parent session {}".
+                     format(self.host, self.parent.host))
+        else:
+            LOG.info("ssh session to {} is not open. Flushing the buffer for parent session.".format(self.host))
+            self.parent.flush()
 
 
 class SSHFromSSH(SSHClient):
@@ -1057,6 +1114,8 @@ class VMSSHClient(SSHFromSSH):
             password:
             natbox_client:
             prompt:
+            retry
+            retry_timeout
 
         Returns:
 
@@ -1102,9 +1161,9 @@ class VMSSHClient(SSHFromSSH):
 
         # Check if connecting to vm through port forwarding rule
         if vm_ext_port:
-            self.ssh_cmd = 'ssh {} -p {} {}@{}'.format(ssh_options, vm_ext_port, self.user, self.host)
+            self.ssh_cmd = 'ssh -vvv {} -p {} {}@{}'.format(ssh_options, vm_ext_port, self.user, self.host)
         else:
-            self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)
+            self.ssh_cmd = 'ssh -vvv {} {}@{}'.format(ssh_options, self.user, self.host)
 
         self.connect(use_password=password, retry=retry, retry_timeout=retry_timeout)
 
@@ -1153,7 +1212,11 @@ class NATBoxClient:
             if num_natbox == 0:
                 raise exceptions.NatBoxClientUnsetException
 
-        return cls.__natbox_ssh_map[natbox_ip][idx]   # KeyError will be thrown if not exist
+        if len(cls.__natbox_ssh_map[natbox_ip]) > idx:
+            return cls.__natbox_ssh_map[natbox_ip][idx]   # KeyError will be thrown if not exist
+
+        LOG.warning('No NatBox client set for Thread-{}'.format(idx))
+        return None
 
     @classmethod
     def set_natbox_client(cls, natbox_ip=NatBoxes.NAT_BOX_HW['ip']):
@@ -1205,55 +1268,51 @@ class ControllerClient:
     __lab_list = [lab for lab in __lab_list if isinstance(lab, dict)]
     __lab_ssh_map = {}     # item such as 'PV0': [con_ssh, ...]
 
+    __default_name = None
+
     @classmethod
-    def get_active_controller(cls, lab_name=None, fail_ok=False):
+    def get_active_controller(cls, name=None, fail_ok=False):
         """
         Attempt to match given lab or current lab, otherwise return first ssh
         Args:
-            lab_name: The lab dictionary name in Labs class, such as 'PV0', 'HP380'
+            name: The lab dictionary name in Labs class, such as 'PV0', 'HP380'
             fail_ok: when True: return None if no active controller was set
 
         Returns:
 
         """
-        if not lab_name:
-            lab_dict = ProjVar.get_var('lab')
-            if lab_dict is None:
-                return None
-
-            for lab_ in cls.__lab_list:
-                if lab_dict['floating ip'] == lab_.get('floating ip'):
-                    lab_name = lab_.get('short_name')
-                    break
+        if not name:
+            if cls.__default_name:
+                name = cls.__default_name
             else:
-                lab_name = 'no_name'
+                lab_dict = ProjVar.get_var('lab')
+                if lab_dict is None:
+                    return None
+
+                for lab_ in cls.__lab_list:
+                    if lab_dict['floating ip'] == lab_.get('floating ip'):
+                        name = lab_.get('short_name')
+                        break
+                else:
+                    name = 'no_name'
 
         curr_thread = threading.current_thread()
         idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         for lab_ in cls.__lab_ssh_map:
-            if lab_ == lab_name.lower():
+            if lab_ == name:
                 LOG.debug("Getting active controller client for {}".format(lab_))
                 controller_ssh = cls.__lab_ssh_map[lab_][idx]
                 if isinstance(controller_ssh, SSHClient):
                     return controller_ssh
 
-        if not lab_name:
-            LOG.debug("No lab ssh matched. Getting an active controller ssh client if one is set.")
-            controllers = cls.get_active_controllers(fail_ok=fail_ok)
-            if len(controllers) == 0:
-                return None
-            if len(controllers) > 1:
-                LOG.warning("Multiple active controller sessions available. Returning the one for this thread.")
-                LOG.debug("ssh client for {} returned".format(controllers[0].host))
-                return controllers[0]
-
         if fail_ok:
             return None
-        raise exceptions.ActiveControllerUnsetException(("The lab_name provided - {} does not have a corresponding "
-                                                         "controller ssh session set").format(lab_name))
+        raise exceptions.ActiveControllerUnsetException(("The name - {} does not have a corresponding "
+                                                         "controller ssh session set. ssh_map: {}").
+                                                        format(name, cls.__lab_ssh_map))
 
     @classmethod
-    def get_active_controllers(cls, fail_ok=False):
+    def get_active_controllers(cls, fail_ok=True, current_thread_only=True):
         """ Get all the active controllers ssh sessions.
 
         Used when running tests in multiple labs in parallel. i.e.,get all the active controllers' ssh sessions, and
@@ -1263,9 +1322,17 @@ class ControllerClient:
 
         """
         controllers = []
+        idx = 0
+        if current_thread_only:
+            curr_thread = threading.current_thread()
+            idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         for value in cls.__lab_ssh_map.values():
-            if value is not None:
-                controllers.append(value)
+            if value:
+                if current_thread_only:
+                    if len(value) > idx:
+                        controllers.append(value[idx])
+                else:
+                    controllers += value
 
         if len(controllers) == 0 and not fail_ok:
             raise exceptions.ActiveControllerUnsetException
@@ -1273,12 +1340,17 @@ class ControllerClient:
         return controllers
 
     @classmethod
-    def set_active_controller(cls, ssh_client):
+    def get_active_controllers_map(cls):
+        return cls.__lab_ssh_map
+
+    @classmethod
+    def set_active_controller(cls, ssh_client, name=None):
         """
         lab_name for new entry
 
         Args:
             ssh_client:
+            name: used in distributed cloud, when ssh for multiple systems need to be stored. e.g., name='subcloud-1'
 
         Returns:
 
@@ -1286,36 +1358,37 @@ class ControllerClient:
         if not isinstance(ssh_client, SSHClient):
             raise TypeError("ssh_client has to be an instance of SSHClient!")
 
-        for lab_ in cls.__lab_list:
-            if ssh_client.host == lab_.get('floating ip') or ssh_client.host == lab_.get('controller-0 ip') \
-                    or ssh_client.host == lab_.get('external_ip'):
-                lab_name_ = lab_.get('short_name')
-                break
-        else:
-            lab_name_ = 'no_name'
+        if not name:
+            for lab_ in cls.__lab_list:
+                if ssh_client.host == lab_.get('floating ip') or ssh_client.host == lab_.get('controller-0 ip') \
+                        or ssh_client.host == lab_.get('external_ip'):
+                    name = lab_.get('short_name')
+                    break
+            else:
+                name = 'no_name'
 
         # new lab or ip address
-        if lab_name_ not in cls.__lab_ssh_map:
-            cls.__lab_ssh_map[lab_name_] = []
+        if name not in cls.__lab_ssh_map:
+            cls.__lab_ssh_map[name] = []
 
         curr_thread = threading.current_thread()
         idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         # set ssh for new lab
-        if len(cls.__lab_ssh_map[lab_name_]) == idx:
-            cls.__lab_ssh_map[lab_name_].append(ssh_client)
+        if len(cls.__lab_ssh_map[name]) == idx:
+            cls.__lab_ssh_map[name].append(ssh_client)
         # change existing ssh
-        elif len(cls.__lab_ssh_map[lab_name_]) > idx:
-            cls.__lab_ssh_map[lab_name_][idx] = ssh_client
+        elif len(cls.__lab_ssh_map[name]) > idx:
+            cls.__lab_ssh_map[name][idx] = ssh_client
         # fill with copy of new ssh session until list is correct length
         # (only when a different lab or ip address has also been added)
         else:
             new_ssh = SSHClient(ssh_client.host, ssh_client.user, ssh_client.password)
             new_ssh.connect(use_current=False)
-            while len(cls.__lab_ssh_map[lab_name_]) < idx:
-                cls.__lab_ssh_map[lab_name_].append(new_ssh)
-            cls.__lab_ssh_map[lab_name_].append(ssh_client)
+            while len(cls.__lab_ssh_map[name]) < idx:
+                cls.__lab_ssh_map[name].append(new_ssh)
+            cls.__lab_ssh_map[name].append(ssh_client)
 
-        LOG.info("Active controller client for {} is set. Host ip/name: {}".format(lab_name_.upper(), ssh_client.host))
+        LOG.info("Active controller client for {} is set. Host ip/name: {}".format(name, ssh_client.host))
 
     @classmethod
     def set_active_controllers(cls, *args):
@@ -1330,6 +1403,22 @@ class ControllerClient:
         for lab_ssh in args:
             cls.set_active_controller(ssh_client=lab_ssh)
 
+    @classmethod
+    def set_default_ssh(cls, name=None):
+        """
+        Set ssh client to be used by default. This is usually used by distributed cloud.
+        Unset if name=None.
+        Args:
+            name (str|None):
+        """
+        if not name:
+            cls.__default_name = None
+        elif name in cls.__lab_ssh_map:
+            cls.__default_name = name
+        else:
+            raise ValueError('{} is not in lab_ssh_map: {}. Please add the ssh client to lab_ssh_map '
+                             'via set_active_controller() before setting it to default'.format(name, cls.__lab_ssh_map))
+
 
 def ssh_to_controller0(ssh_client=None):
     if ssh_client is None:
@@ -1343,9 +1432,10 @@ def ssh_to_controller0(ssh_client=None):
     return con_0_ssh
 
 
-def get_cli_client():
+def get_cli_client(central_region=False):
     from utils.clients.local import RemoteCLIClient
     if ProjVar.get_var('REMOTE_CLI'):
         return RemoteCLIClient.get_remote_cli_client()
 
-    return ControllerClient.get_active_controller()
+    name = 'central_region' if central_region and ProjVar.get_var('IS_DC') else None
+    return ControllerClient.get_active_controller(name=name)

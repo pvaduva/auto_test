@@ -42,8 +42,8 @@ def test_create_snapshot_using_boot_from_image_vm():
 
     # nova image-create generates a glance image
     LOG.tc_step("Create a snapshot based on that VM")
-    cmd = "image-create {} {}".format(vm_id, snapshot_name)
-    cli.nova(cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
+    nova_cmd = "image-create {} {}".format(vm_id, snapshot_name)
+    cli.nova(nova_cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
     # exception will be thrown if nova cmd rejected
     image_id = glance_helper.get_image_id_from_name(name=snapshot_name, strict=True, fail_ok=False)
     ResourceCleanup.add('image', image_id)
@@ -53,9 +53,9 @@ def test_create_snapshot_using_boot_from_image_vm():
 
     image_filename = '/home/wrsroot/images/temp'
     LOG.tc_step("Download the image snapshot")
-    cmd = "image-download --file {} {}".format(image_filename, image_id)
+    glance_cmd = "image-download --file {} {}".format(image_filename, image_id)
     # Throw exception if glance cmd rejected
-    cli.glance(cmd, ssh_client=con_ssh, fail_ok=False)
+    cli.glance(glance_cmd, ssh_client=con_ssh, fail_ok=False)
 
     # Downloading should be good enough for validation.  If the file is
     # zero-size, download will report failure.
@@ -134,8 +134,8 @@ def test_create_snapshot_using_boot_from_volume_vm():
     # nova image-create generates a glance image of 0 size
     # real snapshot is stored in cinder
     LOG.tc_step("Create a snapshot based on that VM")
-    cmd = "image-create {} {}".format(vm_id, snapshot_name)
-    cli.nova(cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
+    nova_cmd = "image-create {} {}".format(vm_id, snapshot_name)
+    cli.nova(nova_cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
     image_id = glance_helper.get_image_id_from_name(name=snapshot_name)
     ResourceCleanup.add('image', image_id)
 
@@ -248,8 +248,8 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     # nova image-create generates a glance image of 0 size
     # real snapshot is stored in cinder
     LOG.tc_step("Create a snapshot based on that VM")
-    cmd = "image-create {} {}".format(vm_id, snapshot_name)
-    cli.nova(cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
+    nova_cmd = "image-create {} {}".format(vm_id, snapshot_name)
+    cli.nova(nova_cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
 
     LOG.tc_step("Wait for the snapshot to become active")
     image_id = glance_helper.get_image_id_from_name(name=snapshot_name)

@@ -9,7 +9,7 @@ from keywords import common
 
 def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, start=None, stop=None, overlap=None,
                             refresh=None, resource_ids=None, extra_query=None, fail_ok=False,
-                            auth_info=Tenant.ADMIN, con_ssh=None):
+                            auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get measurements via 'openstack metric measures aggregation'
     Args:
@@ -65,7 +65,7 @@ def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, s
 
 
 def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val='id', fail_ok=False,
-                     auth_info=Tenant.ADMIN, con_ssh=None):
+                     auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get metric info via 'openstack metric show'
     Args:
@@ -102,7 +102,8 @@ def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val
     return table_parser.get_value_two_col_table(table_, rtn_val)
 
 
-def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=True, auth_info=Tenant.get('admin'),
+                con_ssh=None):
     """
     Get metrics values via 'openstack metric list'
     Args:
@@ -120,18 +121,18 @@ def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=False,
     arg = '-f value '
     arg += ' '.join(['-c {}'.format(column) for column in columns])
 
-    greps = [metric_name, resource_id]
-    greps = [item for item in greps if item is not None]
-    grep_str = '|'.join(greps)
-    if grep_str:
-        grep_str = ' | grep --color=never -E -i {}'.format(grep_str)
+    grep_str = ''
+    if resource_id:
+        grep_str += ' | grep --color=never -E -i {}'.format(resource_id)
+    if metric_name:
+        grep_str += ' | grep --color=never -E -i {}'.format(metric_name)
 
     arg += grep_str
 
     code, output = cli.openstack('metric list', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
                                  fail_ok=fail_ok)
     if code > 0:
-        return 1, '{} not found in "openstack metric list"'.format(greps)
+        return []
 
     lines = output.splitlines()
     index = columns.index(rtn_val.lower())

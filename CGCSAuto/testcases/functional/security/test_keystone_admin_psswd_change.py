@@ -9,7 +9,7 @@ from consts.reasons import SkipSysType
 
 @fixture()
 def _revert_admin_pw(request):
-    prev_pswd = Tenant.ADMIN['password']
+    prev_pswd = Tenant.get('admin')['password']
 
     def _revert():
         # revert password
@@ -55,7 +55,7 @@ def test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
         LOG.tc_step("Result of the lock was: {}".format(res))
 
     # change password
-    prev_pswd = Tenant.ADMIN['password']
+    prev_pswd = Tenant.get('admin')['password']
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.tc_step('Changing admin password to {}'.format(post_pswd))

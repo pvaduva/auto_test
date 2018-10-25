@@ -13,7 +13,7 @@ from utils.clients.ssh import ControllerClient, SSHClient
 
 def pre_check_patch():
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
 
     # Check system health for patch orchestration;
@@ -242,9 +242,11 @@ def test_system_patch_orchestration(patch_orchestration_setup):
     else:
         LOG.info("Patches are already in repo")
 
+
     if len(uploaded) > 0:
         LOG.tc_step("Applying patches ...")
-        applied = patching_helper.apply_patches(patch_ids=patch_ids)
+        uploaded_patch_ids = ' '.join(uploaded)
+        applied = patching_helper.apply_patches(patch_ids=uploaded_patch_ids)
 
         LOG.info("Patches applied: {}".format(applied))
     else:

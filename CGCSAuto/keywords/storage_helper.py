@@ -8,8 +8,8 @@ import time
 
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import EventLogID, BackendState, BackendTask
-from keywords import system_helper, host_helper
+from consts.cgcs import EventLogID, BackendState, BackendTask, MULTI_REGION_MAP
+from keywords import system_helper, host_helper, keystone_helper
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, get_cli_client
 from utils.tis_log import LOG
@@ -506,7 +506,7 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
             raise exceptions.TimeoutException(err_msg)
 
 
-def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.ADMIN):
+def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.get('admin')):
     # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
     if 'ceph' in backend:
         backend = 'ceph-store'
@@ -520,7 +520,7 @@ def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.ADMI
     return table_
 
 
-def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get storage backend pool allocation info
 
@@ -556,7 +556,7 @@ def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.
     return backend_info
 
 
-def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.get('admin')):
     table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
     vals = []
     if isinstance(fields, str):
@@ -694,7 +694,7 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         return rc, output
 
 
-def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.ADMIN, **filters):
+def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.get('admin'), **filters):
     table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
 
     filters['FS Name'] = fs_name
@@ -805,10 +805,10 @@ def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True)
 
 
 def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rtn_val='free capacity (GiB)',
-                      con_ssh=None, auth_info=Tenant.ADMIN):
+                      con_ssh=None, auth_info=Tenant.get('admin')):
     auth_info_tmp = dict(auth_info)
     region = ProjVar.get_var('REGION')
-    if region != 'RegionOne':
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
         if service != 'cinder':
             auth_info_tmp['region'] = 'RegionOne'
 
@@ -821,3 +821,48 @@ def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rt
     table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info_tmp))
     val = table_parser.get_values(table_, rtn_val, service=service, **kwargs)[0]
     return float(val)
+
+
+def modify_swift(enable=True, check_first=True, fail_ok=False, apply=True, con_ssh=None):
+    """
+    Enable/disable swift service
+    Args:
+        enable:
+        check_first:
+        fail_ok:
+        apply:
+        con_ssh
+
+    Returns (tuple):
+        (-1, "swift service parameter is already xxx")      only apply when check_first=True
+        (0, <success_msg>)
+        (1, <std_err>)      system service-parameter-modify cli got rejected.
+
+    """
+    if enable:
+        expt_val = 'true'
+        extra_str = 'enable'
+    else:
+        expt_val = 'false'
+        extra_str = 'disable'
+
+    if check_first:
+        swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh, cli_filter=False)
+        if enable is bool(swift_endpoints):
+            msg = "swift service parameter is already {}d. Do nothing.".format(extra_str)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info("Modify system service parameter to {} Swift".format(extra_str))
+    code, msg = system_helper.modify_service_parameter(service='swift', section='config', name='service_enabled',
+                                                       value=expt_val, apply=apply, check_first=False,
+                                                       fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if apply and code == 0:
+        LOG.info("Check Swift endpoints after service {}d".format(extra_str))
+        swift_endpoints = keystone_helper.get_endpoints(service_name='swift', con_ssh=con_ssh, cli_filter=False)
+        if enable is not bool(swift_endpoints):
+            raise exceptions.SwiftError("Swift endpoints did not {} after modify".format(extra_str))
+        msg = 'Swift is {}d successfully'.format(extra_str)
+
+    return code, msg

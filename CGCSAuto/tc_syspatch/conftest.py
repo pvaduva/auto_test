@@ -43,10 +43,9 @@ def setup_test_session():
 
     """
     print("Syspatch test session ...")
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-
+    ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    setups.set_env_vars(con_ssh)
     setups.copy_test_files()
 
     global natbox_ssh
@@ -56,13 +55,7 @@ def setup_test_session():
     else:
         natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), natbox, con_ssh=con_ssh)
 
-    # set build id to be used to upload/write test results
-    build_id, build_server, job = setups.get_build_info(con_ssh)
-    ProjVar.set_var(BUILD_ID=build_id)
-    ProjVar.set_var(BUILD_SERVER=build_server)
-    ProjVar.set_var(JOB=job)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-
     setups.set_session(con_ssh=con_ssh)
 
 
@@ -92,8 +85,8 @@ def pytest_collectstart():
         con_ssh = setups.setup_tis_ssh(lab)
     ProjVar.set_var(con_ssh=con_ssh)
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    Tenant.ADMIN['auth_url'] = CliAuth.get_var('OS_AUTH_URL')
-    Tenant.ADMIN['region'] = CliAuth.get_var('OS_REGION_NAME')
+    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def pytest_runtest_teardown():

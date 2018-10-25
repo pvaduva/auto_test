@@ -1,11 +1,8 @@
 from utils.tis_log import LOG
-from keywords import host_helper, system_helper
-from pytest import mark
-
 from utils import cli, table_parser
+from consts.cgcs import NtpPool
+from keywords import host_helper, system_helper
 
-from consts.cgcs import EventLogID, NtpPool
-from time import sleep
 
 def test_ntp_alarm_in_sync_with_ntpq_stats():
     for host in system_helper.get_controllers():
@@ -13,16 +10,9 @@ def test_ntp_alarm_in_sync_with_ntpq_stats():
         host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
 
 
-
 def test_system_ntp_modify():
     """
-    Test that ntp servers were initially configured
-
-    Args:
-        none
-
-    Setups:
-        none
+    Test that ntp servers were initially configured and can be reconfigured
 
     Test Steps:
         - Execute system ntp-show
@@ -40,36 +30,17 @@ def test_system_ntp_modify():
     LOG.tc_step("Actual ntp fields Names are {}".format(actual_fields))
     assert set(expt_sub_fields) <= set(actual_fields), "Some expected fields are not included in system show table."
 
-    actual_fields = table_parser.get_column(table_, 'Value')
-    LOG.tc_step("Actual ntp fields Values are {}".format(actual_fields))
-
     LOG.tc_step("Modify 'system ntp-modify' and verify that it contains expected fields")
-    new_ntp_ = "ntpservers={}".format(NtpPool.NTP_POOL_2)
-    exitcode, output = cli.system('ntp-modify', new_ntp_, rtn_list=True, fail_ok=False)
-    LOG.tc_step("ntp-modify exitcode:{} output:{}".format(exitcode,output))
-    assert exitcode == 0 , "system ntp-modify did not exit with 0"
+    ntp_pool = NtpPool.NTP_POOL_1
+    if sorted(system_helper.get_ntp_vals(rtn_val='ntpservers')[0].split(',')) == sorted(ntp_pool.split(',')):
+        ntp_pool = NtpPool.NTP_POOL_2
 
-    sleep(5)
-    LOG.tc_step ("Checking config status of controllers and lock/unlock to clear")
-    if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
-        rc, output = host_helper.lock_unlock_controllers()
-        assert rc == 0, "Failed to lock/unlock controller: {}".format(output)
-
-
-    LOG.tc_step("Verifying that config out of date alarms cleared...")
-    system_helper.wait_for_alarms_gone([EventLogID.CONFIG_OUT_OF_DATE, ], fail_ok=False)
-
+    system_helper.modify_ntp(ntp_servers=ntp_pool)
 
 
 def test_system_ntp_modify_reject_too_many_servers():
     """
     Test that attempting to configure more than 3 ntp servers is rejected
-
-    Args:
-        none
-
-    Setups:
-        none
 
     Test Steps:
         - Attempt to configure more than 3 ntp servers
@@ -78,22 +49,15 @@ def test_system_ntp_modify_reject_too_many_servers():
     """
 
     LOG.tc_step("Test system ntp-modify is rejected if more than 3 NTP servers defined in the list")
-    new_ntp_ = "ntpservers={}".format(NtpPool.NTP_POOL_TOO_LONG)
-    exitcode, output = cli.system('ntp-modify', new_ntp_, rtn_list=True, fail_ok=True)
-    LOG.tc_step("ntp-modify exitcode:{} output:{}\r".format(exitcode,output))
-    assert exitcode == 1 , "system ntp-modify did not exit with 1"
+    code, output = system_helper.modify_ntp(ntp_servers=NtpPool.NTP_POOL_TOO_LONG, fail_ok=True,
+                                            wait_with_best_effort=True)
 
+    assert 1 == code, 'Expect ntp-modify is not rejected with more than 3 NPT servers defined'
 
 
 def test_system_ntp_modify_reject_server_name_too_long():
     """
     Test that attempting to configure more than 3 ntp servers is rejected
-
-    Args:
-        none
-
-    Setups:
-        none
 
     Test Steps:
         - Attempt to configure ntp server with longer than 255 characters
@@ -102,18 +66,7 @@ def test_system_ntp_modify_reject_server_name_too_long():
     """
 
     LOG.tc_step("Test system ntp-modify is rejected if server name is > than 255 characters")
-    new_ntp_ = "ntpservers={}".format(NtpPool.NTP_NAME_TOO_LONG)
-    exitcode, output = cli.system('ntp-modify', new_ntp_, rtn_list=True, fail_ok=True)
-    LOG.tc_step("ntp-modify exitcode:{} output:{}".format(exitcode, output))
-    assert exitcode == 1, "system ntp-modify did not exit with 1"
+    code, output = system_helper.modify_ntp(ntp_servers=NtpPool.NTP_NAME_TOO_LONG, fail_ok=True,
+                                            wait_with_best_effort=True)
 
-
-
-
-
-
-
-
-
-
-
+    assert 1 == code, 'Expect ntp-modify is not rejected with server name longer than 255 characters'

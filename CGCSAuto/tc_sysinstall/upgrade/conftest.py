@@ -6,7 +6,7 @@ from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.proj_vars import ProjVar, InstallVars, UpgradeVars
+from consts.proj_vars import InstallVars, UpgradeVars, BackupVars
 from keywords import install_helper,  patching_helper, upgrade_helper, common
 from testfixtures.pre_checks_and_configs import *
 from utils import table_parser, cli
@@ -28,6 +28,9 @@ def pytest_configure(config):
     compute_apply_strategy = config.getoption('compute_strategy')
     max_parallel_computes = config.getoption('max_parallel_computes')
     alarm_restrictions = config.getoption('alarm_restrictions')
+    use_usb = config.getoption('use_usb')
+    backup_dest_path = config.getoption('backup_path')
+    delete_backups = not config.getoption('keep_backups')
 
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
@@ -41,12 +44,17 @@ def pytest_configure(config):
                                  alarm_restrictions=alarm_restrictions)
 
 
+    backup_dest = 'USB' if use_usb else 'local'
+    BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
+                           delete_backups=delete_backups)
+
+
 @pytest.fixture(scope='session')
 def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-
+    is_simplex = system_helper.is_simplex()
     # check if all nodes are unlocked
     assert system_helper.are_hosts_unlocked(con_ssh), \
         'All nodes must be unlocked. Upgrade cannot be started when there ' \
@@ -74,6 +82,7 @@ def pre_check_upgrade():
     # check if upgrade version is supported
     current_version = system_helper.get_system_software_version()
     upgrade_version = UpgradeVars.get_upgrade_var('upgrade_version')
+    backup_dest_path = BackupVars.get_backup_var('BACKUP_DEST_PATH')
 
     if upgrade_version is None:
         upgrade_version = [u[1] for u in SUPPORTED_UPGRADES if u[0] == current_version][0]
@@ -87,12 +96,23 @@ def pre_check_upgrade():
 
     assert [current_version, upgrade_version] in SUPPORTED_UPGRADES, "Upgrade from {} to {} is not supported"
 
+    if is_simplex:
+       assert backup_dest_path is not None ,"Simplex Upgrade need backup destianation path please add " \
+                                                      "--backup_path=< >"
+
+
+
+
 
 @pytest.fixture(scope='session')
 def upgrade_setup(pre_check_upgrade):
 
     LOG.tc_func_start("UPGRADE_TEST")
     lab = InstallVars.get_install_var('LAB')
+    col_kpi = ProjVar.get_var('COLLECT_KPI')
+    collect_kpi_path = None
+    if  col_kpi:
+        collect_kpi_path = ProjVar.get_var('KPI_PATH')
 
     # establish ssh connection with controller-0
     controller0_conn = ControllerClient.get_active_controller()
@@ -171,12 +191,18 @@ def upgrade_setup(pre_check_upgrade):
 
     # Check for simplex and return
     if is_simplex:
+        backup_dest_path = BackupVars.get_backup_var('backup_dest_path')
+
+        delete_backups = BackupVars.get_backup_var('delete_buckups')
+
         _upgrade_setup_simplex = {'lab': lab,
                                   'cpe': cpe,
                                   'output_dir': output_dir,
                                   'current_version': current_version,
                                   'upgrade_version': upgrade_version,
-                                  'build_server': bld_server_obj
+                                  'build_server': bld_server_obj,
+                                  'backup_dest_path': backup_dest_path,
+                                   'delete_backups' : delete_backups
                                   }
         return _upgrade_setup_simplex
             # check which nodes are upgraded using orchestration
@@ -250,6 +276,7 @@ def upgrade_setup(pre_check_upgrade):
                       'compute_apply_strategy': compute_apply_strategy,
                       'max_parallel_computes': max_parallel_computes,
                       'alarm_restrictions': alarm_restrictions,
+                      'col_kpi': collect_kpi_path,
                       }
     ver = (system_helper.get_imported_load_version()).pop()
     assert upgrade_version in ver, "Import error. Expected " \

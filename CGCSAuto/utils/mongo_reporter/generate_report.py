@@ -16,6 +16,7 @@ TMP_FILE = '/tmp/cgcs_emailmessage.html'
 REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 <b>Lab: </b>{}
 <b>Load: </b>{}
+<b>Job: </b>{}
 <b>Build Server: </b>{}
 <b>Node Config: </b>{}{}{}
 
@@ -33,13 +34,14 @@ REPORT_FORMAT = """<html><basefont face="arial" size="2"> \
 </html>
 """
 
-COMPLIANCE_PATTERN = 'refstack|compliance'
+COMPLIANCE_PATTERN = 'refstack|compliance|dovetail'
 
 
 def write_report_file(sys_config=None, source='mongo', tags=None, start_date=None, end_date=None, logs_dir=None):
     """
 
     Args:
+        sys_config (str)
         source (str): 'mongo' or <local test results path>
         tags (str|list):
         start_date (str):
@@ -61,7 +63,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
             start_date = start_date.strftime("%Y-%m-%d")
             end_date = now.strftime("%Y-%m-%d")
 
-        lab, build, build_server, overall_status, log_path, summary, testcases_res = \
+        lab, build, build_server, overall_status, log_path, summary, testcases_res, build_job = \
             _get_results_from_mongo(tags=tags, start_date=start_date, end_date=end_date, logs_dir=logs_dir)
 
         if logs_dir:
@@ -75,7 +77,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
 
         source = source if res_file in source else os.path.join(logs_dir, res_file)
         source = os.path.expanduser(source)
-        lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches = \
+        lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches, build_job = \
             _get_local_results(source)
 
     lab = lab.upper()
@@ -98,7 +100,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
         try:
             with open(summary_txt) as f:
                 summary = f.read()
-        except:
+        except FileNotFoundError:
             print("summary.txt not found in {}!".format(log_path))
             pass
 
@@ -110,7 +112,7 @@ def write_report_file(sys_config=None, source='mongo', tags=None, start_date=Non
 
     log_path = re.sub(TEST_SERVER_FS_AUTOLOG, TEST_SERVER_HTTP_AUTOLOG, log_path, count=1)
     with open(TMP_FILE, mode='w') as f:
-        f.write(REPORT_FORMAT.format(lab, build, build_server, sys_config, sw_version, patches,
+        f.write(REPORT_FORMAT.format(lab, build, build_job, build_server, sys_config, sw_version, patches,
                                      overall_status, log_path, summary, testcases_res).replace('\n', '<br>'))
     if 'RED' in overall_status:
         raw_status = 'RED'
@@ -134,6 +136,8 @@ def _get_local_results(res_path):
 
     lab = re.findall('Lab: (.*)\n', other_info)[0].strip()
     build = re.findall('Build ID: (.*)\n', other_info)[0].strip()
+    build_job = re.findall('Job: (.*)\n', other_info)
+    build_job = build_job[0].strip() if build_job else 'Unknown'
     build_server = re.findall('Build Server: (.*)\n', other_info)[0].strip()
     sw_version, patches = _get_version_and_patch(raw_res=raw_res)
     log_path = re.findall('Automation LOGs DIR: (.*)\n', other_info)[0].strip()
@@ -143,7 +147,7 @@ def _get_local_results(res_path):
     summary = other_info.split(sep='\nSummary:')[-1].strip()
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches, build_job
 
 
 def _get_version_and_patch(res_path=None, raw_res=None):
@@ -220,7 +224,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
     # example "attributes" : [ [ "board_name", "WCP_76_77" ], [ "build", "2017-01-05_22-02-35" ],
     # [ "domain", "COMMON" ], [ "kernel", "3.10.71-ovp-rt74-r1_preempt-rt" ], [ "lab", "WCP_76_77" ],
     # [ "project", "CGCS 2.0" ] ]
-    lab = build = build_server = ''
+    lab = build = build_server = build_job = ''
     first_rec = last_records[0]
     for attr in first_rec['attributes']:
         if attr[0] in ('system', 'board_name'):
@@ -229,6 +233,8 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
             build = attr[1]
         elif attr[0] == 'build_server':
             build_server = attr[1]
+        elif attr[0] == 'build_job':
+            build_job = attr[1]
 
     if not logs_dir or lab.lower().replace('-', '-') not in str(logs_dir):
         panorama_url = "<a href='http://panorama.wrs.com:8181/#/testResults/?database=RNT&view=list" \
@@ -247,7 +253,7 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
 
     overall_status = _get_overall_status(pass_rate)
 
-    return lab, build, build_server, overall_status, log_path, summary, testcases_res
+    return lab, build, build_server, overall_status, log_path, summary, testcases_res, build_job
 
 
 def _get_overall_status(pass_rate):
@@ -278,29 +284,39 @@ def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=
     if status not in ['RED', 'YELLOW', 'GREEN']:
         raise ValueError("Invalid status {}".format(status))
 
-    if not build_path:
+    if build_path:
+        build_paths = [build_path]
+    else:
         if not build_id:
             raise ValueError("Either build_id or build_dir has to be provided")
-        if not builds_dir:
-            builds_dir = BuildServerPath.DEFAULT_HOST_BUILDS_DIR
+        if builds_dir:
+            builds_dirs = [builds_dir]
+        else:
+            builds_dirs = (BuildServerPath.TITANIUM_HOST_BUILDS_DIR, BuildServerPath.STX_HOST_BUILDS_DIR,
+                           BuildServerPath.STX_RELEASE_DIR)
 
-        build_path = builds_dir + '/' + build_id
+        build_paths = ['{}/{}'.format(dir_, build_id) for dir_ in builds_dirs]
 
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
-        if not bld_srv_ssh.file_exists(file_path=build_path):
-            raise ValueError("Build path {} does not exist!".format(build_path))
+        for build_path in build_paths:
+            if not bld_srv_ssh.file_exists(file_path=build_path):
+                print("Build path {} does not exist".format(build_path))
+                continue
 
-        status_file = '{}/{}'.format(build_path, status)
-        bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
-        if not bld_srv_ssh.file_exists(file_path=status_file):
-            raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
+            status_file = '{}/{}'.format(build_path, status)
+            bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
+            if not bld_srv_ssh.file_exists(file_path=status_file):
+                raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
 
-        print("{} is successfully touched on {}".format(status_file, build_server))
+            print("{} is successfully touched on {}".format(status_file, build_server))
 
-        if status == 'GREEN':
-            green_path = '{}/latest_green_build'.format(builds_dir)
-            bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
-            bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
+            if status == 'GREEN':
+                green_path = '{}/latest_green_build'.format(os.path.dirname(os.path.abspath(build_path)))
+                bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
+                bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
+            break
+        else:
+            raise ValueError('Build path not found on {}: {}'.format(build_server, build_paths))
 
 
 def send_report(subject, recipients, msg_file=TMP_FILE):
@@ -344,13 +360,11 @@ def generate_report(recipients, subject='', source='mongo', tags=None, start_dat
     try:
         if mark_status in [True, 'true', 'True', 'TRUE']:
             mark_status_on_build_server(status=raw_status, build_server=build_server, build_id=build)
-    except:
-        raise
     finally:
         subject = subject.strip()
         subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
         recipients = recipients.strip()
-        if ' ' in recipients and not ';' in recipients:
+        if ' ' in recipients and ';' not in recipients:
             recipients = ';'.join(recipients.split())
         send_report(subject=subject, recipients=recipients)
 

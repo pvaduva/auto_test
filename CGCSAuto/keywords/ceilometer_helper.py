@@ -8,7 +8,7 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-def get_alarms(header='alarm_id', name=None, strict=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def get_alarms(header='alarm_id', name=None, strict=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
@@ -31,7 +31,7 @@ def get_alarms(header='alarm_id', name=None, strict=False, auth_info=Tenant.ADMI
 
 
 def get_resources(header='Resource ID', limit=10, timeout=CMDTimeout.RESOURCE_LIST, con_ssh=None,
-                  auth_info=Tenant.ADMIN):
+                  auth_info=Tenant.get('admin')):
     """
     Get a list of resources that can be tracked by Ceilometer
     Args:
@@ -51,7 +51,7 @@ def get_resources(header='Resource ID', limit=10, timeout=CMDTimeout.RESOURCE_LI
     return values
 
 
-def get_samples(header='Resource ID', limit=10, meter=None, query=None, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_samples(header='Resource ID', limit=10, meter=None, query=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Gets the values from the header column from the list of samples
     Args:
@@ -79,7 +79,7 @@ def get_samples(header='Resource ID', limit=10, meter=None, query=None, con_ssh=
     return values
 
 
-def create_sample(resource_id, field='message_id', con_ssh=None, auth_info=Tenant.ADMIN, **kwargs):
+def create_sample(resource_id, field='message_id', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
     """
     Creates a sample
     Args:
@@ -111,7 +111,7 @@ def delete_samples():
     ssh_client.exec_sudo_cmd('/usr/bin/ceilometer-expirer', fail_ok=False, expect_timeout=90)
 
 
-def wait_for_sample_expire(meter, timeout=CeilTimeout.EXPIRE, fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def wait_for_sample_expire(meter, timeout=CeilTimeout.EXPIRE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Wait for given sample to disappear from 'ceilometer sample-list'
     Args:
@@ -139,7 +139,7 @@ def wait_for_sample_expire(meter, timeout=CeilTimeout.EXPIRE, fail_ok=False, con
     raise exceptions.CeilometerError(err_msg)
 
 
-def get_statistics_table(meter, period=None, groupby=None, aggregate=None, query=None, auth_info=Tenant.ADMIN,
+def get_statistics_table(meter, period=None, groupby=None, aggregate=None, query=None, auth_info=Tenant.get('admin'),
                          con_ssh=None):
     """
     Get ceilometer statistics with given criteria
@@ -175,7 +175,7 @@ def get_statistics_table(meter, period=None, groupby=None, aggregate=None, query
     return table_
 
 
-def get_meters_table(limit=None, unique=None, meter=None, resource=None, auth_info=Tenant.ADMIN, con_ssh=None, query=None):
+def get_meters_table(limit=None, unique=None, meter=None, resource=None, auth_info=Tenant.get('admin'), con_ssh=None, query=None):
     """
 
     Args:

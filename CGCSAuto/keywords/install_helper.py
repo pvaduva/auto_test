@@ -3,13 +3,12 @@ import os
 import re
 import threading
 import time
-from contextlib import contextmanager
 
 import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.auth import Tenant, CliAuth
-from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN, \
+# from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
+from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath
@@ -32,6 +31,7 @@ outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ", "compute
 
 lab_ini_info = {}
 
+
 def get_ssh_public_key():
     return local_host.get_ssh_key()
 
@@ -45,7 +45,7 @@ def check_system_health_for_upgrade():
     return system_helper.get_system_health_query_upgrade()
 
 
-def  download_upgrade_license(lab, server, license_path):
+def download_upgrade_license(lab, server, license_path):
 
     cmd = "test -h " + license_path
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  'Upgrade license file not found in {}:{}'.format(
@@ -57,8 +57,8 @@ def  download_upgrade_license(lab, server, license_path):
             external_ip = lab['external_ip']
             external_port = lab['external_port']
             server.ssh_conn.rsync("-L " + license_path, external_ip,
-                              os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-                              pre_opts=pre_opts, ssh_port=external_port)
+                                  os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                                  pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
@@ -239,7 +239,7 @@ def open_telnet_session(node_obj, install_output_dir, log_file_prefix=''):
                                       int(node_obj.telnet_port),
                                       negotiate=node_obj.telnet_negotiate,
                                       port_login=True if node_obj.telnet_login_prompt else False,
-                                      vt100query=node_obj.telnet_vt100query,\
+                                      vt100query=node_obj.telnet_vt100query,
                                       log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
                                       ".telnet.log", debug=False)
 
@@ -290,7 +290,7 @@ def wipe_disk_hosts(hosts, close_telnet_conn=True):
                 node_obj = lab[hostname]
                 if node_obj:
 
-                    prompt = '.*{}\:~\$ ' + '|' +  Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
+                    prompt = '.*{}\:~\$ ' + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(node_obj.host_name)
                 else:
                     prompt = Prompt.TIS_NODE_PROMPT_BASE.format(hostname)
                 if hostname == controller0_node.name:
@@ -550,6 +550,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
                           lab['floating ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
+
 def bulk_add_hosts(lab, hosts_xml_file):
     controller_ssh = ControllerClient.get_active_controller(lab["short_name"])
     cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
@@ -729,6 +730,8 @@ def get_usb_device_name(con_ssh=None):
     if rc != 0:
         msg = "No USB found in lab node. Please plug in usb ."
         LOG.info(msg)
+        return ''
+
     else:
         usb_ls = output.strip().splitlines()[0].split("->").pop()
 
@@ -739,7 +742,7 @@ def get_usb_device_name(con_ssh=None):
         LOG.info("USB device is: {}".format(usb_device))
 
     LOG.info("USB device is: {}".format(usb_device))
-    if 'sd' not in usb_device or len(usb_device) != 3:
+    if usb_device and 'sd' not in usb_device or len(usb_device) != 3:
         return None
     return usb_device
 
@@ -1041,7 +1044,6 @@ def usb_create_partition_for_backup(usb_device=None, con_ssh=None):
         LOG.info(msg)
         return False, msg
 
-
     con_ssh.send("\n")
     if index != prompts.index(FDISK_COMMAND_PROMPT):
         msg = "Unexpeced output from fdisk command; expecting: {}".format(FDISK_LAST_SECTOR_PROMPT)
@@ -1175,7 +1177,7 @@ def delete_backup_files_from_usb(usb_device, con_ssh=None):
     """
     Deletes backup files from the usb to make it ready for next backup.
     Args:
-        usb_info:
+        usb_device:
         con_ssh:
 
     Returns (bool):
@@ -1369,6 +1371,126 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
     return rc, output, compute_configured
 
 
+def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=False):
+    """
+    Restores the controller system config for system restore.
+    Args:
+        system_backup(str): The system config backup file
+        tel_net_session:
+        fail_ok:
+
+    Returns (tuple): rc, text message
+        0 - Success
+        1 - Execution of upgrade command failed
+        2 - Patches not applied after system reboot
+        3 - Unexpected result after system restore
+    """
+
+    if system_backup is None or not os.path.abspath(system_backup):
+        msg = "Full path of the system backup file must be provided: {}".format(system_backup)
+        LOG.info(msg)
+        raise ValueError(msg)
+
+    lab = InstallVars.get_install_var("LAB")
+    output_dir = ProjVar.get_var('LOG_DIR')
+    controller0_node = lab['controller-0']
+
+    if tel_net_session is None:
+        if controller0_node.telnet_conn is None:
+            controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+            controller0_node.telnet_conn.login()
+        tel_net_session = controller0_node.telnet_conn
+
+    cmd = 'echo "{}" | sudo -S upgrade_controller_simplex {}'.format(HostLinuxCreds.get_password(),
+                                                                     system_backup)
+    os.environ["TERM"] = "xterm"
+    outputs_conf = ("Data restore complete", "login:")
+    rc, output = tel_net_session.exec_cmd(cmd, extra_expects=outputs_conf, timeout=HostTimeout.SYSTEM_RESTORE,
+                                          will_reboot=True)
+    if rc == 0:
+        if output in 'System restore complete':
+            msg = "System restore completed successfully"
+            LOG.info(msg)
+            return 0, msg
+        else:
+            msg = 'This controller has been patched'
+            LOG.warn("Controller is patched")
+            LOG.info('re-login to re-excute the upgrade_controller_simplex')
+            tel_net_session.login()
+            rc, output = tel_net_session.exec_cmd(cmd, extra_expects=outputs_conf,
+                                                  timeout=HostTimeout.SYSTEM_RESTORE, alt_prompt='login:',
+                                                  will_reboot=True)
+            if output in 'System restore complete':
+                msg = "System restore completed successfully"
+                LOG.info(msg)
+                return 0, msg
+            else:
+                LOG.debug('rc:{}, output:{}'.format(rc, output))
+
+    err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
+    LOG.error(err_msg)
+
+    if fail_ok:
+        return 1, err_msg
+    raise exceptions.CLIRejected(err_msg)
+
+
+def restore_compute(tel_net_session=None, fail_ok=False):
+    """
+    Restores the controller system compute for system restore.
+    Args:
+       tel_net_session:
+        fail_ok:
+
+    Returns (tuple): rc, text message
+        0 - Success
+        1 - Execution of restore command failed
+        2 - System compute restore did not complete
+
+    """
+
+    lab = InstallVars.get_install_var("LAB")
+    output_dir = ProjVar.get_var('LOG_DIR')
+    controller0_node = lab['controller-0']
+    if tel_net_session is None:
+
+        if controller0_node.telnet_conn is None:
+            controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
+            controller0_node.telnet_conn.login()
+
+        tel_net_session = controller0_node.telnet_conn
+
+    cmd = "echo " + HostLinuxCreds.get_password() + " | sudo -S config_controller --restore-compute"
+    os.environ["TERM"] = "xterm"
+    outputs_conf = ('controller-0','login:')
+    rc, output = tel_net_session.exec_cmd(cmd,extra_expects=outputs_conf, timeout=HostTimeout.SYSTEM_RESTORE,
+                                          will_reboot=True)
+    if rc != 0:
+        err_msg = "{} failed: {} {}".format(cmd, rc, output)
+        LOG.error(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.CLIRejected(err_msg)
+    LOG.info('re-login to re-excute the upgrade_controller_simplex')  ####/Commented due to promot issue need to be fixed in library
+    time.sleep(HostTimeout.REBOOT)
+    tel_net_session.login()
+    LOG.info('Waiting for the simplex to reconnect')
+    host_helper._wait_for_simplex_reconnect(timeout=HostTimeout.REBOOT)
+    if not host_helper.wait_for_host_values('controller-0', timeout=HostTimeout.CONTROLLER_UNLOCK,
+                                            check_interval=10, availability=[HostAvailState.AVAILABLE]):
+        err_msg = "Host did not become online  after downgrade"
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+    # compute restored
+    msg = "compute restore completed successfully"
+    LOG.info(msg)
+    return 0, msg
+
+
 def restore_controller_system_images(images_backup, tel_net_session=None, fail_ok=False):
     """
     Restores the controller system images for system restore.
@@ -1524,15 +1646,15 @@ def get_titanium_backup_filenames_usb(pattern=None, usb_device=None, con_ssh=Non
     """
 
     if pattern is None:
-        pattern = TITANIUM_BACKUP_FILE_PATTERN
+        pattern = r'titanium_backup_(\.\w)*.+_(.*)_(system|images)\.tgz'
     found_backup_files = []
 
     backup_files = get_backup_files_from_usb(pattern=pattern, usb_device=usb_device, con_ssh=con_ssh)
 
     lab = InstallVars.get_install_var("LAB")
-    system_name = lab['name']
+    system_name = lab['name'].strip()
     for file in backup_files:
-        if system_name.strip() in file:
+        if system_name in file:
             LOG.info("Found matching backup file: {}".format(file))
             found_backup_files.append(file)
 
@@ -1613,7 +1735,7 @@ def get_cinder_volume_backup_filenames_usb(pattern=None, con_ssh=None):
     return get_backup_files_from_usb(pattern=pattern, con_ssh=con_ssh)
 
 
-def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
+def restore_cinder_volumes_from_backup(con_ssh=None, fail_ok=False):
     """
     Restores cinder volumes from backup files for system restore. If volume snaphot exist for a volume, it will be
     deleted before restoring the volume
@@ -1648,21 +1770,22 @@ def restore_cinder_volumes_from_backup( con_ssh=None, fail_ok=False):
                 if cinder_helper.delete_volume_snapshots(id, con_ssh=con_ssh, force=True)[0] == 0:
                     LOG.info(" Deleted snapshot id {} ... ".format(id))
 
-        restored_cinder_volumes = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
+        restored_cinder_volumes, volumes_in_db = import_volumes_from_backup(cinder_volume_backups, con_ssh=con_ssh)
 
         LOG.info("Restored volumes: {}".format(restored_cinder_volumes))
         restored = len(restored_cinder_volumes)
 
-        if restored > 0:
-            if restored == len(cinder_volume_backups):
-                LOG.info("All volumes restored successfully")
-                return 0, restored_cinder_volumes
-            else:
-                LOG.info("NOT all volumes were restored")
-                return -1, restored_cinder_volumes
+        if restored != len(volumes_in_db):
+            LOG.info("NOT all volumes were restored, restored:{}, should to be restored:{}".format(restored, len(volumes_in_db)))
+            return -1, restored_cinder_volumes
+
+        elif restored > 0:
+            LOG.info("All volumes restored successfully")
+            return 0, restored_cinder_volumes
+
         else:
-            LOG.info("Fail to restore any of the volumes")
-            return 2, None
+            LOG.info("OK, no volumes recorded in DB hence none needs to be restored")
+            return 0, []
 
 
 def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
@@ -1691,7 +1814,7 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
             volume_backup = os.path.basename(volume_backup_path)
             vol_id = volume_backup[7:-20]
             if vol_id not in volumes:
-                LOG.warning("The volume {} does not exist; cannot be imported".format(vol_id))
+                LOG.warning("The volume {} does not exist; cannot be imported, volume_backup:{}".format(vol_id, volume_backup_path))
                 continue
 
             LOG.info("Importing Volume id={} ...".format(vol_id))
@@ -1707,11 +1830,11 @@ def import_volumes_from_backup(cinder_volume_backups, con_ssh=None):
             imported_volumes.append(vol_id)
             LOG.info("Volume id={} imported successfully\n".format(vol_id))
 
-    return imported_volumes
+    return imported_volumes, volumes
 
 
-def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None, copy_to_usb=None,
-                          delete_backup_file=True, con_ssh=None, fail_ok=False):
+def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_BACKUP_PATH, dest_server=None,
+                          copy_to_usb=None, delete_backup_file=True, con_ssh=None, fail_ok=False, cinder_backup=False):
     """
     Exports all available and in-use cinder volumes for system backup.
     Args:
@@ -1740,7 +1863,7 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
 
     if len(current_volumes) > 0:
         LOG.info("Exporting Cinder volumes {}".format(current_volumes))
-        volumes_exported.extend(cinder_helper.export_volumes()[1])
+        volumes_exported.extend(cinder_helper.export_volumes(cinder_backup=cinder_backup, con_ssh=con_ssh)[1])
 
         if len(volumes_exported) > 0:
             LOG.info("Cinder volumes exported: {}".format(volumes_exported))
@@ -1748,7 +1871,13 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                 LOG.warn("Not all current cinder volumes are  exported; Unexported volumes: {}"
                          .format(set(current_volumes) - set(volumes_exported)))
 
-            src_files = "/opt/backups/volume-*.tgz"
+            if cinder_backup:
+                container = 'cinder'
+                is_dir = True
+                src_files = "/opt/backups/{}".format(container)
+            else:
+                is_dir = False
+                src_files = "/opt/backups/volume-*.tgz"
 
             if backup_dest == 'local':
                 if dest_server:
@@ -1758,7 +1887,10 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                     if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
                         local_host.exec_cmd(["mkdir -p {}".format(backup_dest_path)])
 
-                common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+                common.scp_from_active_controller_to_test_server(src_files,
+                                                                 backup_dest_path,
+                                                                 is_dir=is_dir,
+                                                                 multi_files=True)
 
                 LOG.info("Verifying if backup files are copied to destination")
                 if dest_server:
@@ -1767,7 +1899,8 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                     rc, output = local_host.exec_cmd(["ls {}".format(backup_dest_path)])
 
                 if rc != 0:
-                    err_msg = "Failed to scp cinder backup files {} to local destination: {}".format(backup_dest_path, output)
+                    err_msg = "Failed to scp cinder backup files {} to local destination: {}".format(backup_dest_path,
+                                                                                                     output)
                     LOG.info(err_msg)
                     if fail_ok:
                         return 2, err_msg
@@ -1867,7 +2000,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
                  .format(copy_to_usb, get_usb_mount_point(usb_device=copy_to_usb)))
     date = time.strftime(BACKUP_FILE_DATE_STR)
     build_id = ProjVar.get_var('BUILD_ID')
-    backup_file_name = "{}{}_{}_{}".format(PREFIX_BACKUP_FILE, date, build_id, lab_system_name)
+    backup_file_name = "{}{}_{}_{}".format(backup_file_prefix, date, build_id, lab_system_name)
     cmd = 'config_controller --backup {}'.format(backup_file_name)
 
     # max wait 1800 seconds for config controller backup to finish
@@ -2158,11 +2291,10 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     Boots controller-0 either from tuxlab or USB.
     Args:
         bld_server_conn:
-        load_path:
         patch_dir_paths:
         boot_usb:
         small_footprint:
-        lowlat:
+        low_latency:
         clone_install:
         system_restore:
 
@@ -2230,7 +2362,7 @@ def apply_patches(lab, build_server, patch_dir):
 
     Args:
         lab:
-        server:
+        build_server:
         patch_dir:
 
     Returns:
@@ -2366,11 +2498,11 @@ def get_lab_info(barcode):
 def run_cpe_compute_config_complete(controller0_node, controller0):
     output_dir = ProjVar.get_var('LOG_DIR')
 
-    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
-
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = open_telnet_session(controller0_node, output_dir)
         controller0_node.telnet_conn.login()
+
+    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
 
     telnet_client = controller0_node.telnet_conn
 
@@ -2431,12 +2563,13 @@ def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_s
     """
     Creates system cloned image for AIO systems and copy the iso image to to USB.
     Args:
-        cloned_image_file_prefix(str): The prefix to the generated system cloned image iso file. The default is "titanium_backup_"
+        cloned_image_file_prefix(str): The prefix to the generated system cloned image iso file.
+            The default is "titanium_backup_"
         lab_system_name(str): is the lab system name
         timeout(inst): is the timeout value the system clone is expected to finish.
         dest_labs (str/list): list of labs the cloned image iso file is scped. Default is local.
-        usb_device(str): usb device name, if specified,the cloned image iso file is copied to.
-        delete_cloned_image_file(bool): if USB is available, the cloned image iso file is deleted from system to save disk space.
+        delete_cloned_image_file(bool): if USB is available, the cloned image iso file is deleted from system to
+            save disk space.
          Default is enabled
         con_ssh:
         fail_ok:
@@ -2537,7 +2670,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
          system show
          system host-show <host>
          system host-ethernet-port-list <host>
-         system host-if-list <host>
+         system host-if-show <host> <if>
          system host-disk-list <host>
 
     Args:
@@ -2599,14 +2732,20 @@ def check_cloned_hardware_status(host, fail_ok=False):
             "Host {} mgmt mac address {} not match".format(host, host_mgmt_mac)
 
     LOG.info("Executing system host interface list on cloned system host {}".format(host))
+
     table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
                                            con_telnet=controller_0_node.telnet_conn))
-    assert len(table_parser.filter_table(table_, **{'network type':'data'})['values']) >= 1, \
+    assert table_parser.get_values(table_, target_header='name', **{'class': 'data'}), \
         "No data interface type found in Host {} after system clone-install".format(host)
-    assert len(table_parser.filter_table(table_, **{'network type':'mgmt'})['values']) >= 1, \
-        "No mgmt interface type found in Host {} after system clone-install".format(host)
-    assert len(table_parser.filter_table(table_, **{'network type':'oam'})['values']) >= 1, \
-        "No oam interface type found in Host {} after system clone-install".format(host)
+    platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
+    net_types = ['mgmt', 'oam']
+    for pif in platform_ifs:
+        host_if_show_tab = table_parser.table(cli.system('host-if-show', '{} {}'.format(host, pif), use_telnet=True,
+                                                         con_telnet=controller_0_node.telnet_conn))
+        net_type = table_parser.get_value_two_col_table(host_if_show_tab, 'networks')
+        if net_type in net_types:
+            net_types.remove(net_type)
+    assert not net_types, "No {} interface found in Host {} after system clone-install".format(net_types, host)
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
@@ -2749,11 +2888,12 @@ def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,
             if lab_dict['system_type'] == 'CPE' and lab_dict['system_mode'] == src_lab['system_mode']:
                 verified_dest_labs.append(lab_dict)
             else:
-                LOG.warn("Lab {} has not the same TiS system configuration as  source lab {}-{}"
-                         .format(lab_['short_name'], lab_info._get_sys_type(src_lab_name)))
+                LOG.warn("Lab {} has not the same TiS system configuration as source lab {}".
+                         format(lab_['short_name'], lab_info._get_sys_type(src_lab_name)))
 
     if len(verified_dest_labs) == 0:
-        err_msg = "None of the specified labs match the system type and mode of the source lab {} ".format(src_lab['name'])
+        err_msg = "None of the specified labs match the system type and mode of the source lab {} ".\
+            format(src_lab['name'])
         if fail_ok:
             return 2, err_msg
         else:
@@ -2858,7 +2998,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
         con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
                           dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
 
-    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, con_ssh=con_ssh) \
+    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, ssh_client=con_ssh) \
             as node_ssh:
 
         if node_ssh.exec_cmd("ls {}".format(clone_image_iso_dest_path))[0] != 0:
@@ -2884,7 +3024,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
                 err_msg = "Failed to copy the cloned image iso file to USB {}: {}".format(usb_device, output)
                 LOG.info(err_msg)
                 if fail_ok:
-                     return 3, err_msg
+                    return 3, err_msg
                 else:
                     raise exceptions.BackupSystem(err_msg)
 
@@ -2899,7 +3039,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
             err_msg = "No USB device found in destination lab {}".format(dest_lab_name)
             LOG.info(err_msg)
             if fail_ok:
-                 return 4, err_msg
+                return 4, err_msg
             else:
                 raise exceptions.BackupSystem(err_msg)
 

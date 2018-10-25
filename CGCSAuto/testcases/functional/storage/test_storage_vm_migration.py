@@ -433,7 +433,7 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
         LOG.info("---------Collecting router and dhcp agent host info-----------")
         router_host = network_helper.get_router_info(field='wrs-net:host')
         mgmt_net = network_helper.get_mgmt_net_id()
-        dhcp_tab = table_parser.table(cli.neutron('dhcp-agent-list-hosting-net', mgmt_net, auth_info=Tenant.ADMIN,
+        dhcp_tab = table_parser.table(cli.neutron('dhcp-agent-list-hosting-net', mgmt_net, auth_info=Tenant.get('admin'),
                                                   fail_ok=False))
         dhcp_host = table_parser.get_values(dhcp_tab, 'host')[0]
 

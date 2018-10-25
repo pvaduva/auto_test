@@ -59,11 +59,11 @@ def _get_test_id_from_name(test_name, cursor):
         return rows[0][0]
 
 
-def _get_lab_id_from_name(lab_name, cursor):
-    rows = __select_rows(column='lab_name', value=lab_name, cursor=cursor, table='lab_info', rtn='id')
+def _get_lab_id_from_name(lab_name_, cursor):
+    rows = __select_rows(column='lab_name', value=lab_name_, cursor=cursor, table='lab_info', rtn='id')
     if rows:
         if len(rows) > 1:
-            print("WARNING! More than multiple rows found for lab name: {}".format(lab_name, rows))
+            print("WARNING! More than multiple rows found for lab name: {}".format(lab_name_, rows))
         return rows[0][0]
 
 
@@ -105,7 +105,7 @@ def _insert_row(cursor, table_name, col_names, values, returning=None):
 
 
 def get_lab_id(lab_name, cursor):
-    lab_id = _get_lab_id_from_name(lab_name=lab_name, cursor=cursor)
+    lab_id = _get_lab_id_from_name(lab_name_=lab_name, cursor=cursor)
     if not lab_id:
         lab_id = insert_lab(lab_name, cursor=cursor, check_first=False)[1]
 
@@ -116,7 +116,7 @@ def insert_lab(lab_name, cursor, check_first=True):
     if isinstance(lab_name, dict):
         lab_name = lab_name['name']
     if check_first:
-        lab_id = _get_lab_id_from_name(lab_name=lab_name, cursor=cursor)
+        lab_id = _get_lab_id_from_name(lab_name_=lab_name, cursor=cursor)
         if lab_id:
             return -1, lab_id
 
@@ -187,9 +187,9 @@ def insert_test_history(cursor, **test_info):
     try:
         exec_id = _insert_row(cursor=cursor, table_name='history', col_names=col_names, values=values,
                               returning='exec_id')[0]
-    except psycopg2.IntegrityError as e:
-        print("{}".format(e.__str__()))
-        if 'already exists' not in e.__str__():
+    except psycopg2.IntegrityError as err:
+        print("{}".format(err.__str__()))
+        if 'already exists' not in err.__str__():
             raise
 
     return exec_id
@@ -272,7 +272,6 @@ def __get_testcases_info(testcases_res, ends_at=None):
 
         tests_res_list.insert(0, test_res_dict)
         end_time = start_time
-
     return tests_res_list
 
 
@@ -299,7 +298,7 @@ def upload_test_results(cursor, log_dir, tag=None):
         # print("{}".format(session_info))
         session_id = insert_test_session(cursor=cursor, **session_info)
 
-    search_forward = True if 'refstack' in log_dir else False
+    search_forward = True if re.search('refstack|dovetail', log_dir) else False
     tracebacks = parse_log.get_tracebacks_from_pytestlog(log_dir, search_forward=search_forward)
     tests_info = __get_testcases_info(testcases_res=testcases_res, ends_at=ends_at)
     for test_info in tests_info:    # type: dict
@@ -399,8 +398,8 @@ def update_test_record(cursor, exec_id, **test_info):
 
 
 def _get_lab_full_name(lab_short_name):
-    labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
-    for lab in labs:
+    labs_ = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    for lab in labs_:
         if isinstance(lab, dict):
             if lab.get('short_name', None) == lab_short_name:
                 return lab.get('name')
@@ -423,8 +422,8 @@ if __name__ == '__main__':
 
         try:
             with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
-                for lab_name in lab_names:
-                    insert_lab(lab_name, cursor=cur, check_first=True)
+                for _lab_name in lab_names:
+                    insert_lab(_lab_name, cursor=cur, check_first=True)
 
             print("All labs are uploaded!")
         except Exception as e:
@@ -441,4 +440,4 @@ if __name__ == '__main__':
             with open_conn_and_get_cur(dbname=DB_NAME, user=USER, host=HOST, password=PASSWORD) as cur:
                 upload_test_results(cursor=cur, log_dir=logdir, tag=options.session_tag)
         except Exception as e:
-            "Unable to upload test results. Details: {}".format(e.__str__())
+            print("Unable to upload test results. Details: {}".format(e.__str__()))

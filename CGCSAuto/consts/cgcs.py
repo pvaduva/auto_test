@@ -33,7 +33,7 @@ MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
 PREFIX_BACKUP_FILE = 'titanium_backup_'
-TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + '[0-9]{8}\-[0-9]{6}_(.*)_(system|images)\.tgz'
+TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + r'(\.\w)*.+_(.*)_(system|images)\.tgz'
 IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
 CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
@@ -43,21 +43,22 @@ PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
 
-REGION_MAP = {'RegionOne': '',
-              'RegionTwo': '-R2'}
+MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
+SUBCLOUD_PATTERN = 'subcloud'
 
 SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
 
+PLATFORM_NET_TYPES = ('mgmt', 'oam', 'infra', 'pxeboot')
+
+
 class NtpPool:
-    NTP_POOL_1 = '"2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org"'
-    NTP_POOL_2 = '"1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org"'
-    NTP_POOL_3 = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org"'
-    NTP_POOL_TOO_LONG = '"3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,\
-    1.com,2.com,3.com"'
-    NTP_NAME_TOO_LONG = '"garbage_garbage_garbage_garbage_garbage\
-    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
-    _garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage\
-    _garbage_garbage"'
+    NTP_POOL_1 = '2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org'
+    NTP_POOL_2 = '1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org'
+    NTP_POOL_3 = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org'
+    NTP_POOL_TOO_LONG = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,1.com,2.com,3.com'
+    NTP_NAME_TOO_LONG = 'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_' \
+                        'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_' \
+                        'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage'
 
 
 class GuestImages:
@@ -68,7 +69,7 @@ class GuestImages:
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
     # Image files name and size from yow-cgcs-test.wrs.com:/sandbox/images
-    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>
+    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>, <actual file size>
     IMAGE_FILES = {
         'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 3, 'ubuntu_14.qcow2', 0.3),
         'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 0.3),
@@ -91,6 +92,9 @@ class GuestImages:
         'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 1.5),
         'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 1.5),
         'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 1.5),
+        'debian-8-m-agent': ('debian-8-m-agent.qcow2', 1.8, 'debian-8-m-agent.qcow2', 0.5),
+        'trusty_uefi': ('trusty-server-cloudimg-amd64-uefi1.img', 0.3, 'trusty-server-cloudimg-amd64-uefi1.img', 0.3),
+        'uefi_shell': ('uefi_shell.iso', 0.1, 'uefi_shell.iso', 0.1),
     }
 
 
@@ -121,13 +125,13 @@ class Networks:
     @classmethod
     def mgmt_net_name_pattern(cls):
         from consts.proj_vars import ProjVar
-        region = REGION_MAP[ProjVar.get_var('REGION')]
+        region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
         return 'tenant\d{}-mgmt-net'.format(region)
 
     @classmethod
     def data_net_name_pattern(cls):
         from consts.proj_vars import ProjVar
-        region = REGION_MAP[ProjVar.get_var('REGION')]
+        region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
         return 'tenant\d{}-net'.format(region)
 
 
@@ -282,6 +286,7 @@ class ImageMetadata:
     CPU_RT_MASK = 'hw_cpu_realtime_mask'
     CPU_RT = 'hw_cpu_realtime'
     CPU_MODEL = 'hw_cpu_model'
+    HW_FIRMWARE_TYPE = 'hw_firmware_type'
 
 
 class VMMetaData:
@@ -310,41 +315,40 @@ class RouterStatus:
 
 
 class EventLogID:
-    HEARTBEAT_ENABLED = '700.211'
-    HEARTBEAT_DISABLED = '700.015'
-    HEARTBEAT_CHECK_FAILED = '700.215'
-    REBOOT_VM_ISSUED = '700.181'    # soft-reboot or hard-reboot in reason text
-    REBOOT_VM_INPROGRESS = '700.182'
-    REBOOT_VM_COMPLETE = '700.186'
-    GUEST_HEALTH_CHECK_FAILED = '700.215'
-    VM_DELETING = '700.110'
-    VM_DELETED = '700.114'
-    VM_CREATED = '700.108'
-    VM_FAILED = '700.001'
-    VM_REBOOTING = '700.005'
-    STORAGE_DEGRADE = '200.006'
-    STORAGE_ALARM_COND = '800.001'
+    CINDER_IO_CONGEST = '800.101'
     STORAGE_LOR = '800.011'
     STORAGE_POOLQUOTA = '800.003'
-    HOST_LOCK = '200.001'
-    NETWORK_AGENT_NOT_RESPOND = '300.003'
-    CON_DRBD_SYNC = '400.001'
-    SERVICE_GROUP_STATE_CHANGE = '400.001'
+    STORAGE_ALARM_COND = '800.001'
+    HEARTBEAT_CHECK_FAILED = '700.215'
+    HEARTBEAT_ENABLED = '700.211'
+    REBOOT_VM_COMPLETE = '700.186'
+    REBOOT_VM_INPROGRESS = '700.182'
+    REBOOT_VM_ISSUED = '700.181'    # soft-reboot or hard-reboot in reason text
+    VM_DELETED = '700.114'
+    VM_DELETING = '700.110'
+    VM_CREATED = '700.108'
+    MULTI_NODE_RECOVERY = '700.016'
+    HEARTBEAT_DISABLED = '700.015'
+    VM_REBOOTING = '700.005'
+    VM_FAILED = '700.001'
+    IMA = '500.500'
+    SERVICE_GROUP_STATE_CHANGE = '401.001'
     LOSS_OF_REDUNDANCY = '400.002'
-    MTC_MONITORED_PROCESS_FAILURE = '200.006'
+    CON_DRBD_SYNC = '400.001'
+    PROVIDER_NETWORK_FAILURE = '300.005'
+    NETWORK_AGENT_NOT_RESPOND = '300.003'
     CONFIG_OUT_OF_DATE = '250.001'
     INFRA_NET_FAIL = '200.009'
-    INFRA_PORT_FAIL = '100.110'
-    IMA = '500.500'
+    BMC_SENSOR_ACTION = '200.007'
+    STORAGE_DEGRADE = '200.006'
     # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
+    HOST_LOCK = '200.001'
     NTP_ALARM = '100.114'
-    CINDER_IO_CONGEST = '800.101'
-    PROVIDER_NETWORK_FAILURE = '300.005'
-    BMC_SENSOR_ACTION = '200.007'
-    CPU_USAGE_HIGH = '100.101'
+    INFRA_PORT_FAIL = '100.110'
     FS_THRESHOLD_EXCEEDED = '100.104'
+    CPU_USAGE_HIGH = '100.101'
 
 
 class NetworkingVmMapping:
@@ -377,8 +381,32 @@ class LocalStorage:
     TYPE_STORAGE_PROFILE = ['storageProfile', 'localstorageProfile']
 
 
-class VMNetworkStr:
+class VMNetwork:
     NET_IF = r"auto {}\niface {} inet dhcp\n"
+    IFCFG_DHCP = \
+"""
+DEVICE={}
+BOOTPROTO=dhcp
+ONBOOT=yes
+TYPE=Ethernet
+USERCTL=yes
+PEERDNS=yes
+IPV6INIT={}
+PERSISTENT_DHCLIENT=1
+"""
+
+    IFCFG_STATIC = \
+"""
+DEVICE={}
+BOOTPROTO=static
+ONBOOT=yes
+TYPE=Ethernet
+USERCTL=yes
+PEERDNS=yes
+IPV6INIT={}
+PERSISTENT_DHCLIENT=1
+IPADDR={}
+"""
 
 
 class HTTPPort:
@@ -563,6 +591,7 @@ class HeatStackStatus:
     CREATE_COMPLETE = 'CREATE_COMPLETE'
     UPDATE_COMPLETE = 'UPDATE_COMPLETE'
     UPDATE_FAILED = 'UPDATE_FAILED'
+    DELETE_FAILED = 'DELETE_FAILED'
 
 
 class VimEventID:
@@ -585,3 +614,86 @@ class MigStatus:
 class IxiaServerIP:
     tcl_server_ip = '128.224.151.42'
     chassis_ip = '128.224.151.109'
+
+
+class MuranoEnvStatus:
+    READY_TO_CONFIGURE = 'ready to configure'
+    READY_TO_DEPLOY = 'ready to deploy'
+    READY = 'ready'
+    DEPLOYING = 'deploying'
+    DEPLOY_FAILURE = 'deploy failure'
+    DELETING = 'deleting'
+    DELETE_FAILURE = 'delete failure'
+
+
+class TrafficControl:
+    CLASSES = {'1:40': 'default', '1:1': 'root', '1:10': 'hiprio', '1:20': 'storage', '1:30': 'migration',
+               '1:50': 'drbd'}
+
+    RATE_PATTERN_ROOT = 'class htb 1:1 root rate (\d+)([GMK])bit ceil (\d+)([GMK])bit burst \d+b cburst \d+b'
+    RATE_PATTERN = 'class htb (1:\d+) parent 1:1 leaf \d+: prio \d+ rate (\d+)([GMK])bit ceil (\d+)([GMK])bit ' \
+                   'burst \d+b cburst \d+b'
+
+    # no infra
+    MGMT_NO_INFRA = {
+        'config': 'no infra',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2),
+        'storage': (0.5, 1),
+        'migration': (0.3, 1),
+        'drbd': (0.8, 1)}
+
+    # infra must be sep
+    MGMT_SEP = {
+        'config': 'separate mgmt',
+        'root': (1, 1),
+        'default': (0.1, 1),
+        'hiprio': (0.1, 1)}
+
+    # infra could be sep or over pxe
+    MGMT_USES_PXE = {
+        'config': 'mgmt consolidated over pxeboot',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2)}
+
+    # infra over mgmt
+    MGMT_USED_BY_INFRA = {
+        'config': 'infra consolidated over mgmt',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2),
+        'storage': (0.5, 1),
+        'migration': (0.3, 1),
+        'drbd': (0.8, 1)}
+
+    # infra over mgmt
+    INFRA_USES_MGMT = {
+        'config': 'infra consolidated over mgmt',
+        'root': (0.99, 0.99),
+        'default': (0.99*0.1, 0.99*0.2),
+        'hiprio': (0.99*0.1, 0.99*0.2),
+        'storage': (0.99*0.5, 0.99*1),
+        'migration': (0.99*0.3, 0.99*1),
+        'drbd': (0.99*0.8, 0.99*1)}
+
+    # mgmt could be sep or over pxe
+    INFRA_SEP = {
+        'config': 'separate infra',
+        'root': (1, 1),
+        'default': (0.1, 0.2),
+        'hiprio': (0.1, 0.2),
+        'storage': (0.5, 1),
+        'migration': (0.3, 1),
+        'drbd': (0.8, 1)}
+
+    # mgmt must be over pxe
+    INFRA_USES_PXE = {
+        'config': 'infra and mgmt consolidated over pxeboot',
+        'root': (1, 1),
+        'default': (0.99*0.1, 0.99*0.2),    # 0.1, 0.2 is the ratio for mgmt
+        'hiprio': (0.99*0.1, 0.99*0.2),     # 0.1, 0.2 is the ratio for mgmt
+        'storage': (0.99*0.5, 0.99),
+        'migration': (0.99*0.3, 0.99),
+        'drbd': (0.99*0.8, 0.99)}

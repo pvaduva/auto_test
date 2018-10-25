@@ -4,10 +4,11 @@
 import time
 
 from pytest import fixture
-from consts.cgcs import EventLogID, Prompt
+from consts.cgcs import EventLogID, MULTI_REGION_MAP
 from consts.filepaths import TestServerPath
 from consts.proj_vars import ProjVar
-from keywords import host_helper, system_helper, common, html_helper, keystone_helper
+from consts.auth import CliAuth
+from keywords import host_helper, system_helper, common, keystone_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
 from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
@@ -65,11 +66,12 @@ def test_firewall_rules_default():
     default_ports = [123, 161, 199, 5000, 6080, 6385, 8000, 8003, 8004, 8041, 8774, 8776, 8778, 9292, 9696, 15491]
 
     from consts.proj_vars import ProjVar
-    if ProjVar.get_var('REGION') != 'RegionOne':
+    region = ProjVar.get_var('REGION')
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
         default_ports.remove(5000)
         default_ports.remove(9292)
 
-    default_ports.append(443) if keystone_helper.is_https_lab() else default_ports.append(80)
+    default_ports.append(443) if CliAuth.get_var('HTTPS') else default_ports.append(80)
 
     active_controller = system_helper.get_active_controller_name()
     con_ssh = ControllerClient.get_active_controller()
@@ -77,13 +79,14 @@ def test_firewall_rules_default():
     _verify_iptables_status(con_ssh, active_controller)
     _check_ports_with_netstat(con_ssh, active_controller, default_ports)
 
-    LOG.tc_step("Swact {}".format(active_controller))
-    host_helper.swact_host(active_controller)
-    active_controller = system_helper.get_active_controller_name()
-    con_ssh = ControllerClient.get_active_controller()
+    active_controller, new_active = system_helper.get_active_standby_controllers()
+    if new_active:
+        LOG.tc_step("Swact {} and verify firewall rules".format(active_controller))
+        host_helper.swact_host(active_controller)
+        con_ssh = ControllerClient.get_active_controller()
 
-    _verify_iptables_status(con_ssh, active_controller)
-    _check_ports_with_netstat(con_ssh, active_controller, default_ports)
+        _verify_iptables_status(con_ssh, new_active)
+        _check_ports_with_netstat(con_ssh, new_active, default_ports)
 
 
 def _verify_iptables_status(con_ssh, active_controller):
@@ -263,19 +266,16 @@ def _modify_firewall_rules(firewall_rules_path):
     start_time = common.get_date_in_format()
     time.sleep(1)
     cli.system('firewall-rules-install', firewall_rules_path)
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
-                                  **{'Entity Instance ID': 'host=controller-0',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
-                                  **{'Entity Instance ID': 'host=controller-1',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=120,
-                                  **{'Entity Instance ID': 'host=controller-0',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
-    # Extend timeout for controller-1 config-out-date clear to 5min due to CGTS-8497
-    system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=300,
-                                  **{'Entity Instance ID': 'host=controller-1',
-                                     'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
+
+    controllers = system_helper.get_controllers()
+    for controller in controllers:
+        system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=60,
+                                      **{'Entity Instance ID': 'host={}'.format(controller),
+                                         'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'set'})
+        # Extend timeout for controller-1 config-out-date clear to 5min due to CGTS-8497
+        system_helper.wait_for_events(start=start_time, fail_ok=False, timeout=300,
+                                      **{'Entity Instance ID': 'host={}'.format(controller),
+                                         'Event Log ID': EventLogID.CONFIG_OUT_OF_DATE, 'State': 'clear'})
     # Ensures iptables has enough time to populate the list with new ports
     time.sleep(10)
 

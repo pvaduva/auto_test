@@ -20,9 +20,9 @@ def _test_tc4693_verify_no_alarms():
 
     alarms_found = False
 
-    output = cli.system('alarm-list')
+    output = cli.fm('alarm-list')
 
-    LOG.tc_step("Check no unexpected alarms in output for system alarm-list: \n%s" % output)
+    LOG.tc_step("Check no unexpected alarms in output for fm alarm-list: \n%s" % output)
 
     if (('warning' in output) or
             ('minor' in output) or

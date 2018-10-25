@@ -4,7 +4,8 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec
-from keywords import vm_helper, nova_helper, network_helper, host_helper, common, system_helper
+from consts.timeout import VMTimeout
+from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -17,9 +18,9 @@ Notes:
 """
 
 
-def check_vm_pci_interface(vms, net_type, seg_id=None):
+def check_vm_pci_interface(vms, net_type, seg_id=None, ping_timeout=VMTimeout.PING_VM):
     for vm in vms:
-        vm_helper.wait_for_vm_pingable_from_natbox(vm)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm, timeout=ping_timeout)
 
     LOG.tc_step("Check vms mgmt and {} interfaces reachable from other vm".format(net_type))
     if seg_id:
@@ -232,7 +233,7 @@ class TestSriov:
             vm_host = nova_helper.get_vm_host(vm_id=vm)
             assert other_host == vm_host, "VM did not move to {} after locking {}".format(other_host, initial_host)
 
-        check_vm_pci_interface(vms, net_type=net_type)
+        check_vm_pci_interface(vms, net_type=net_type, ping_timeout=VMTimeout.DHCP_RETRY)
         vfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
         assert vfs_use_post_boot == vfs_use_post_lock, "Number of PCI vfs used after locking host is not as expected"
 
@@ -271,13 +272,13 @@ class TestPcipt:
 
         LOG.fixture_step("Get seg_id for {} for vlan tagging on pci-passthough device later".format(pci_net_id))
         seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.ADMIN)
+                                             auto_info=Tenant.get('admin'))
         assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net_id)
 
         if other_pcipt_net_name:
             extra_pcipt_seg_id = network_helper.get_net_info(net_id=other_pcipt_net_name, field='segmentation_id',
                                                              strict=False,
-                                                             auto_info=Tenant.ADMIN)
+                                                             auto_info=Tenant.get('admin'))
             seg_id = {pci_net_name: seg_id,
                       other_pcipt_net_name: extra_pcipt_seg_id}
 

@@ -64,11 +64,11 @@ def ht_and_nonht_hosts():
     max_vcpus_proc0 = 0
     max_vcpus_proc1 = 0
     for host in target_hosts:
-        vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, function='VMs', thread=None)
+        vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, func='VMs', thread=None)
         max_vcpus_proc0 = max(max_vcpus_proc0, len(vm_cores_per_proc[0]))
         max_vcpus_proc1 = max(max_vcpus_proc1, len(vm_cores_per_proc.get(1, [])))
 
-        host_helper.get_host_cpu_cores_for_function(host, function='VMs')
+        host_helper.get_host_cpu_cores_for_function(host, func='VMs')
         if system_helper.is_hyperthreading_enabled(host):
             ht_hosts[host] = vm_cores_per_proc
         else:
@@ -146,9 +146,8 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     expt_max_cpu = expt_current_cpu = vcpus
     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
 
-    LOG.tc_step("Get used cpus for all hosts before scaling vm")
+    LOG.info("Get used cpus for all hosts before scaling vm")
     host_allocated_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')[vm_host]
-
     expt_vcpu_num_change = 2 if (cpu_thread_pol == 'isolate' and vm_host in ht_hosts) else 1
 
     # Scale down test
@@ -156,7 +155,7 @@ def test_nova_actions_post_cpu_scale(vcpus, cpu_thread_pol, min_vcpus, numa_0, h
     if expt_current_cpu > expt_min_cpu:
         LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
         for i in range(expt_current_cpu - expt_min_cpu):
-            LOG.tc_step("Scale down once and check vm vcpus change in nova show")
+            LOG.info("Scale down once and check vm vcpus change in nova show")
             vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
             expt_current_cpu -= 1
             expt_total_increase -= expt_vcpu_num_change

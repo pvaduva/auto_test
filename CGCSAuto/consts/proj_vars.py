@@ -1,5 +1,6 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.build_server import YOW_CGTS4_LX
 
 
 class ProjVar:
@@ -10,7 +11,6 @@ class ProjVar:
                   'BUILD_PATH': None,
                   'LOG_DIR': None,
                   'SOURCE_CREDENTIAL': None,
-                  'VSWITCH_INFO_HOSTS': [],
                   'SW_VERSION': [],
                   'PATCH': None,
                   'SESSION_ID': None,
@@ -33,6 +33,8 @@ class ProjVar:
                   'USER_FILE_DIR': WRSROOT_HOME,
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
+                  'IS_DC': False,
+                  'BUILD_INFO': None
                   }
 
     @classmethod
@@ -310,9 +312,11 @@ class RestoreVars:
 
     @classmethod
     def set_restore_vars(cls, backup_src=None,
+                         build_server=None,
                          backup_src_path=None,
                          backup_build_id=None,
-                         backup_builds_dir=None):
+                         backup_builds_dir=None,
+                         cinder_backup=False):
 
         if backup_src.lower() == 'usb':
             if backup_src_path is None or \
@@ -334,6 +338,8 @@ class RestoreVars:
             'SKIP_SETUP_FEED': False,
             'SKIP_REINSTALL': False,
             'LOW_LATENCY': False,
+            'BUILD_SERVER': build_server,
+            'CINDER_BACKUP': cinder_backup,
         }
 
     @classmethod
@@ -361,7 +367,7 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None):
+    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None, cinder_backup=False):
 
         if backup_dest.lower() == 'usb':
             if backup_dest_path is None or \
@@ -378,6 +384,7 @@ class BackupVars:
             'DELETE_BUCKUPS': delete_backups,
             'DEST_LABS': dest_labs.split(',') if dest_labs else None,
             'BACKUP_DEST_SERVER': None,
+            'CINDER_BACKUP': cinder_backup,
         }
 
     @classmethod
@@ -397,8 +404,10 @@ class BackupVars:
 
 
 class ComplianceVar:
-    __var_dict = {'REFSTACK_SUITE': None,
-                  }
+    __var_dict = {
+        'REFSTACK_SUITE': None,
+        'DOVETAIL_SUITE': None,
+    }
 
     @classmethod
     def set_var(cls, append=False, **kwargs):

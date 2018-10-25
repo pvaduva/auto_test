@@ -9,10 +9,10 @@ import ipaddress
 from contextlib import contextmanager, ExitStack
 import pexpect
 
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import VMStatus, UUID, BOOT_FROM_VOLUME, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, \
-    VMNetworkStr, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
-from consts.filepaths import TiSPath, VMPath, UserData, TestServerPath, IxiaPath
+    VMNetwork, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
+from consts.filepaths import VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout, CMDTimeout
 from keywords import network_helper, nova_helper, cinder_helper, host_helper, glance_helper, common, system_helper, \
@@ -22,7 +22,6 @@ from testfixtures.recover_hosts import HostsToRecover
 from utils import exceptions, cli, table_parser, multi_thread
 from utils import local_host
 from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
-from utils.clients.local import LocalHostClient
 from utils.guest_scripts.scripts import TisInitServiceScript
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
@@ -239,7 +238,7 @@ def is_attached_volume_mounted(vm_id, rootfs, vm_image_name=None, vm_ssh=None):
         return False
 
 
-def get_vm_volume_attachments(vm_id, vol_id=None, rtn_val='device', con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_volume_attachments(vm_id, vol_id=None, rtn_val='device', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get volume attachments for given vm
     Args:
@@ -490,14 +489,15 @@ def auto_mount_vm_disks(vm_id, disks=None, guest_os=None):
 
 def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
-            block_device_mapping=None,  vm_host=None, avail_zone=None, file=None, config_drive=False, meta=None,
+            block_device_mapping=None, sec_group_name=None, vm_host=None, avail_zone=None, file=None,
+            config_drive=False, meta=None,
             fail_ok=False, auth_info=None, con_ssh=None, reuse_vol=False, guest_os='', poll=True, cleanup=None):
     """
     Boot a vm with given parameters
     Args:
         name (str):
         flavor (str):
-        source (str): 'image', 'volume', or 'snapshot'
+        source (str): 'image', 'volume', 'snapshot', or 'block_device'
         source_id (str): id of the specified source. such as volume_id, image_id, or snapshot_id
         min_count (int):
         max_count (int):
@@ -507,11 +507,13 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         user_data (str|list):
         vm_host (str): which host to place the vm
         avail_zone (str): availability zone for vm host, Possible values: 'nova', 'cgcsauto', etc
-        block_device:
+        block_device (dict|list|tuple): dist or list of dict, each dictionary is a block device.
+            e.g, {'source': 'volume', 'volume_id': xxxx, ...}
         block_device_mapping (str):  Block device mapping in the format '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-
                                 terminate>'.
         auth_info (dict):
         con_ssh (SSHClient):
+        sec_group_name (str): add nova boot option --security-groups $(sec_group_name)
         nics (list): nics to be created for the vm
             each nic: <net-id=net-uuid,net-name=network-name,v4-fixed-ip=ip-addr,v6-fixed-ip=ip-addr,
                         port-id=port-uuid,vif-model=model>,vif-pci-address=pci-address>
@@ -552,6 +554,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     name = "{}-{}".format(tenant, name)
 
     name = common.get_unique_name(name, resource_type='vm')
+
+    # Handle mandatory arg - key_name
+    key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
 
     # Handle mandatory arg - flavor
     if flavor is None:
@@ -601,40 +606,39 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
-    volume_id = image = snapshot_id = None
-    if source is None:
-        if min_count is None and max_count is None:
-            source = 'volume'
-        else:
-            source = 'image'
-
-    new_vol = ''
-    if source.lower() == 'volume':
-        if source_id:
-            volume_id = source_id
-        else:
-            vol_name = 'vol-' + name
-            if reuse_vol:
-                is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info,
-                                                                 con_ssh=con_ssh)
-                if is_new:
-                    new_vol = volume_id
+    volume_id = image = snapshot_id = new_vol = None
+    if source != 'block_device':
+        if source is None:
+            if min_count is None and max_count is None:
+                source = 'volume'
             else:
-                new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info, con_ssh=con_ssh,
-                                                                  guest_image=guest_os, rtn_exist=False)[1]
+                source = 'image'
 
-    elif source.lower() == 'image':
-        img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
-        image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True, fail_ok=False)
+        if source.lower() == 'volume':
+            if source_id:
+                volume_id = source_id
+            else:
+                vol_name = 'vol-' + name
+                if reuse_vol:
+                    is_new, volume_id = cinder_helper.get_any_volume(new_name=vol_name, auth_info=auth_info,
+                                                                     con_ssh=con_ssh)
+                    if is_new:
+                        new_vol = volume_id
+                else:
+                    new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info,
+                                                                      con_ssh=con_ssh, guest_image=guest_os,
+                                                                      rtn_exist=False)[1]
 
-    elif source.lower() == 'snapshot':
-        if not snapshot_id:
-            snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
+        elif source.lower() == 'image':
+            img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
+            image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True,
+                                                                                     fail_ok=False)
+
+        elif source.lower() == 'snapshot':
             if not snapshot_id:
-                raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
-
-    # Handle mandatory arg - key_name
-    key_name = key_name if key_name is not None else get_any_keypair(auth_info=auth_info, con_ssh=con_ssh)
+                snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
+                if not snapshot_id:
+                    raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
 
     if hint:
         hint = ','.join(["{}={}".format(key, hint[key]) for key in hint])
@@ -659,12 +663,15 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                           '--swap': swap,
                           '--user-data': user_data,
                           '--ephemeral': ephemeral,
-                          '--block-device': block_device,
                           '--hint': hint,
                           '--availability-zone': host_zone,
                           '--file': file,
                           '--config-drive': str(config_drive) if config_drive else None,
+                          '--block-device-mapping': block_device_mapping,
                           }
+
+    if sec_group_name is not None:
+        optional_args_dict["--security-groups"] = sec_group_name
 
     args_ = ' '.join([__compose_args(optional_args_dict), nics_args, name])
 
@@ -675,6 +682,14 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if poll:
         args_ += ' --poll'
 
+    if block_device:
+        if isinstance(block_device, dict):
+            block_device = [block_device]
+        for dev in block_device:
+            dev_params = ['{}={}'.format(k, v) for k, v in dev.items()]
+            args_ += ' --block-device {}'.format(','.join(dev_params))
+
+    pre_boot_vms = []
     if not (min_count is None and max_count is None):
         name_str = name + '-'
         pre_boot_vms = nova_helper.get_vms(auth_info=auth_info, con_ssh=con_ssh, strict=False, name=name_str)
@@ -723,6 +738,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 raise exceptions.VMPostCheckFailed(message)
 
         LOG.info("VM {} is booted successfully.".format(vm_id))
+
         return 0, vm_id, 'VM is booted successfully', new_vol
 
     else:
@@ -743,7 +759,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
             return 1, vm_ids, output
 
         result, vms_in_state, vms_failed_to_reach_state = wait_for_vms_values(vm_ids, fail_ok=True, timeout=tmout,
-                                                                              con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+                                                                              con_ssh=con_ssh,
+                                                                              auth_info=Tenant.get('admin'))
         if not result:
             msg = "VMs failed to reach ACTIVE state: {}".format(vms_failed_to_reach_state)
             if fail_ok:
@@ -788,13 +805,21 @@ def wait_for_vm_pingable_from_natbox(vm_id, timeout=200, fail_ok=False, con_ssh=
             raise exceptions.VMNetworkError(msg)
 
 
-def __compose_args(optional_args_dict):
+def __compose_args(optional_args_dict, *other_args):
     args = []
     for key, val in optional_args_dict.items():
         if val is not None:
             arg = key + ' ' + val
             args.append(arg)
-    return ' '.join(args)
+    return ' '.join(args + list(other_args))
+
+
+def __merge_dict(base_dict, merge_dict):
+    # identical to {**base_dict, **merge_dict} in python3.6+
+    d = dict(base_dict)     # id() will be different, making a copy
+    for k in merge_dict:
+        d[k] = merge_dict[k]
+    return d
 
 
 def get_any_keypair(auth_info=None, con_ssh=None):
@@ -819,11 +844,23 @@ def get_any_keypair(auth_info=None, con_ssh=None):
     else:
         pubkey_dir = ProjVar.get_var('USER_FILE_DIR')
         pubkey_path = '{}/key.pub'.format(pubkey_dir)
+        if not con_ssh:
+            con_ssh = ControllerClient.get_active_controller()
+
+        if ProjVar.get_var('IS_DC') and not con_ssh.file_exists(pubkey_path):
+            LOG.info("Copy public key from central region to subcloud")
+            sys_con = ControllerClient.get_active_controller('central_region')
+            sys_con.scp_on_source(source_path=pubkey_path, dest_ip=auth_info['region'],
+                                  dest_path=pubkey_path, dest_user=HostLinuxCreds.get_user(),
+                                  dest_password=HostLinuxCreds.get_password(), timeout=60)
+
         args_ = '--pub-key {} keypair-{}'.format(pubkey_path, user)
-        table_ = table_parser.table(cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh))
+        cli.nova('keypair-add', args_, auth_info=auth_info, ssh_client=con_ssh)
+        table_ = table_parser.table(cli.nova('keypair-list', ssh_client=con_ssh, auth_info=auth_info))
         if key_name not in table_parser.get_column(table_, 'Name'):
             raise exceptions.CLIRejected("Failed to add {}".format(key_name))
         LOG.info("Keypair {} added.".format(key_name))
+
     return key_name
 
 
@@ -909,7 +946,7 @@ def launch_vms_via_script(vm_type='avp', num_vms=1, launch_timeout=120, tenant_n
 
 
 def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None, force=None, fail_ok=False,
-                    auth_info=Tenant.ADMIN):
+                    auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -963,7 +1000,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
 
     before_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
     before_status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
-                                                       auth_info=Tenant.ADMIN)
+                                                       auth_info=Tenant.get('admin'))
     if not before_status == VMStatus.ACTIVE:
         LOG.warning("Non-active VM status before live migrate: {}".format(before_status))
 
@@ -989,7 +1026,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     while time.time() < end_time:
         time.sleep(2)
         status = nova_helper.get_vm_nova_show_value(vm_id, 'status', strict=True, con_ssh=con_ssh,
-                                                    auth_info=Tenant.ADMIN)
+                                                    auth_info=Tenant.get('admin'))
         if status == before_status:
             LOG.info("Live migrate vm {} completed".format(vm_id))
             break
@@ -1087,7 +1124,7 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     return ''
 
 
-def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -1189,7 +1226,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
     return 0, success_msg
 
 
-def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.ADMIN):
+def resize_vm(vm_id, flavor_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
     Resize vm to given flavor
 
@@ -1332,7 +1369,7 @@ def wait_for_vm_values(vm_id, timeout=VMTimeout.STATUS_CHANGE, check_interval=3,
 
 
 def wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, check_interval=3, fail_ok=False,
-                       con_ssh=None, auth_info=Tenant.ADMIN):
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -1374,7 +1411,7 @@ def wait_for_vm_status(vm_id, status=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_C
 def _confirm_or_revert_resize(vm, revert=False, con_ssh=None, fail_ok=False):
         cmd = 'resize-revert' if revert else 'resize-confirm'
 
-        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.ADMIN, rtn_list=True,
+        return cli.nova(cmd, vm, ssh_client=con_ssh, auth_info=Tenant.get('admin'), rtn_list=True,
                         fail_ok=fail_ok)
 
 
@@ -1390,11 +1427,8 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         raise ValueError("Invalid net type(s) provided. Valid net_types: {}. net_types given: {}".
                          format(valid_net_types, net_types))
 
-    if vshell and 'data' not in net_types:
-        LOG.warning("'data' is not included in net_types, while vshell ping is only supported on 'data' network")
-
     vms_ips = []
-    vshell_ips = []
+    vshell_ips_dict = dict(data=[], internal=[])
     if 'mgmt' in net_types:
         mgmt_ips = network_helper.get_mgmt_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not mgmt_ips:
@@ -1412,7 +1446,7 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         if not data_ips:
             raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
         if vshell:
-            vshell_ips += data_ips
+            vshell_ips_dict['data'] = data_ips
         else:
             vms_ips += data_ips
 
@@ -1420,14 +1454,17 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         internal_ips = network_helper.get_internal_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not internal_ips:
             raise exceptions.VMNetworkError("Internal net ip is not found for vms {}".format(vm_ids))
-        vms_ips += internal_ips
+        if vshell:
+            vshell_ips_dict['internal'] = internal_ips
+        else:
+            vms_ips += internal_ips
 
-    return vms_ips, vshell_ips
+    return vms_ips, vshell_ips_dict
 
 
 def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fail_ok=False, use_fip=False,
               net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False,
-              sep_file=None):
+              sep_file=None, source_net_types=None):
     """
 
     Args:
@@ -1439,6 +1476,15 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         fail_ok (bool): Whether it's okay to have 100% packet loss rate.
         use_fip (bool): Whether to ping floating ip only if a vm has more than one management ips
         sep_file (str|None)
+        net_types (str|list|tuple)
+        source_net_types (str|list|tuple|None):
+            vshell specific
+            None:   use the same net_type s as the target IPs'
+            str:    use the specified net_type for all target IPs
+            tuple:  (net_type_data, net_type_internal)
+                use net_type_data for data IPs
+                use net_type_internal for internal IPs
+            list:   same as tuple
 
     Returns (tuple): (res (bool), packet_loss_dict (dict))
         Packet loss rate dictionary format:
@@ -1449,7 +1495,7 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         }
 
     """
-    vms_ips, vshell_ips = _get_vms_ips(vm_ids=vm_ids, net_types=net_types, con_ssh=con_ssh, vshell=vshell)
+    vms_ips, vshell_ips_dict = _get_vms_ips(vm_ids=vm_ids, net_types=net_types, con_ssh=con_ssh, vshell=vshell)
 
     res_bool = False
     res_dict = {}
@@ -1459,10 +1505,27 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
                                                           timeout=timeout, fail_ok=True, vshell=False)[0]
             res_dict[ip] = packet_loss_rate
 
-        for vshell_ip in vshell_ips:
-            packet_loss_rate = network_helper.ping_server(server=vshell_ip, ssh_client=ssh_client, num_pings=num_pings,
-                                                          timeout=timeout, fail_ok=True, vshell=True)[0]
-            res_dict[vshell_ip] = packet_loss_rate
+        for net_type, vshell_ips in vshell_ips_dict.items():
+
+            if source_net_types is None:
+                pass
+            elif isinstance(source_net_types, str):
+                net_type = source_net_types
+            else:
+                net_type_data, net_type_internal = source_net_types
+                if net_type == 'data':
+                    net_type = net_type_data
+                elif net_type == 'internal':
+                    net_type = net_type_internal
+                else:
+                    raise ValueError(net_type)
+
+            for vshell_ip in vshell_ips:
+                packet_loss_rate = network_helper.ping_server(server=vshell_ip, ssh_client=ssh_client,
+                                                              num_pings=num_pings,
+                                                              timeout=timeout, fail_ok=True,
+                                                              vshell=True, net_type=net_type)[0]
+                res_dict[vshell_ip] = packet_loss_rate
 
         res_bool = not any(loss_rate == 100 for loss_rate in res_dict.values())
         if res_bool:
@@ -1486,6 +1549,166 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
             common.write_to_file(sep_file, content="{}\nLogged into vm via {}. Result: {}".format(msg, ssh_client.host,
                                                                                                   res_dict))
         raise exceptions.VMNetworkError(err_msg)
+
+
+def get_vm_interfaces(vm_id, rtn_val='IP addresses', **filters):
+    """
+    Get vm interfaces values via nova interface-list <vm_id>
+    Args:
+        vm_id:
+        rtn_val:
+        **filters:
+
+    Returns:
+
+    """
+    table_ = table_parser.table(cli.nova('interface-list', vm_id))
+    return table_parser.get_values(table_, target_header=rtn_val, **filters)
+
+
+def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None, restart_service=True, reboot=False):
+    """
+    Configure vm routes if the vm has multiple vifs on same network.
+    Args:
+        vm_id (str):
+        vm_ips (str|list): ips for specific vifs. Only works if vifs are up with ips assigned
+        vnics (list of dict): vnics to configure.
+        vm_prompt (None|str)
+
+    Returns:
+
+    """
+
+    if isinstance(vm_ips, str):
+        vm_ips = [vm_ips]
+
+    vnics_info = {}
+    if vnics:
+        LOG.info("Get vm interfaces' mac and ip addressess")
+        if isinstance(vnics, dict):
+            vnics = [vnics]
+        vm_interfaces_table = table_parser.table(cli.nova('interface-list', vm_id))
+        vm_interfaces_dict = table_parser.row_dict_table(table_=vm_interfaces_table, key_header='Port ID')
+        for i in range(len(vnics)):
+            vnic = vnics[i]
+            port_id = vnic['port_id']
+            vif_info = vm_interfaces_dict[port_id]
+            vif_ip = vif_info['ip addresses']
+            if not vif_ip:
+                if not vm_ips:
+                    raise ValueError("vm_ips for matching vnics has to be provided for ports without ip address "
+                                     "listed in neutron port-list")
+                vif_ip = vm_ips[i]
+            cidr = vif_ip.rsplit('.', maxsplit=1)[0] + '.0/24'
+            vif_mac = vif_info['mac addr']
+            vnics_info[vif_mac] = (cidr, vif_ip)
+
+    with ssh_to_vm_from_natbox(vm_id=vm_id, prompt=vm_prompt) as vm_ssh:
+        vifs_to_conf = {}
+        if not vnics:
+            extra_grep = '| grep --color=never -E "{}"'.format('|'.join(vm_ips)) if vm_ips else ''
+            kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
+            cidr_dict = {}
+            for line in kernel_routes.splitlines():
+                found = re.findall('^(.*/\d+)\sdev\s(.*)\sproto kernel.*\ssrc\s(.*)$', line)
+                cidr, dev_name, dev_ip = found[0]
+                if cidr not in cidr_dict:
+                    cidr_dict[cidr] = []
+                cidr_dict[cidr].append((dev_name, dev_ip))
+
+            for cidr_, val in cidr_dict.items():
+                if not vm_ips:
+                    val = val[1:]
+                for eth_info in val:
+                    dev_name, dev_ip = eth_info
+                    vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
+
+            if not vifs_to_conf:
+                LOG.info("Did not find multiple vifs on same subnet. Do nothing.")
+
+        else:
+            for mac_addr in vnics_info:
+                dev_name = network_helper.get_eth_for_mac(vm_ssh, mac_addr=mac_addr)
+                cidr_, dev_ip = vnics_info[mac_addr]
+                vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
+
+        used_tables = vm_ssh.exec_cmd('grep --color=never -E "^[0-9]" {}'.format(VMPath.RT_TABLES))[1]
+        used_tables = [int(re.split('[\s\t]', line_)[0].strip()) for line_ in used_tables.splitlines()]
+
+        start_range = 110
+        for eth_name, eth_info in vifs_to_conf.items():
+            cidr_, vif_ip, table_name = eth_info
+            exiting_tab = vm_ssh.exec_cmd('grep --color=never {} {}'.format(table_name, VMPath.RT_TABLES))[1]
+            if not exiting_tab:
+                for i in range(start_range, 250):
+                    if i not in used_tables:
+                        LOG.info("Append new routing table {} to rt_tables".format(table_name))
+                        vm_ssh.exec_sudo_cmd('echo "{} {}" >> {}'.format(i, table_name, VMPath.RT_TABLES))
+                        start_range = i + 1
+                        break
+                else:
+                    raise ValueError("Unable to get a valid table number to create route for {}".format(eth_name))
+
+            LOG.info("Update arp_filter, arp_announce, route and rule scripts for vm {} {}".format(vm_id, eth_name))
+            vm_ssh.exec_sudo_cmd('echo 2 > {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
+            vm_ssh.exec_sudo_cmd('echo 1 > {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
+            route = '{} dev {} proto kernel scope link src {} table {}'.format(cidr_, eth_name, vif_ip, table_name)
+            vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(route, VMPath.ETH_RT_SCRIPT.format(eth_name)))
+            rule = 'table {} from {}'.format(table_name, vif_ip)
+            vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(rule, VMPath.ETH_RULE_SCRIPT.format(eth_name)))
+
+        if restart_service and not reboot:
+            LOG.info("Restart network service")
+            vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=120)
+            vm_ssh.exec_cmd('ip addr')
+
+    if reboot:
+        reboot_vm(vm_id=vm_id)
+
+
+def cleanup_routes_for_vifs(vm_id, vm_ips, rm_ifcfg=True, restart_service=True, reboot=False):
+    """
+    Cleanup the configured routes for specified vif(s). This is needed when a vif is detached from a vm.
+
+    Args:
+        vm_id:
+        vm_ips:
+        rm_ifcfg
+
+    Returns:
+
+    """
+    with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+
+        if isinstance(vm_ips, str):
+            vm_ips = [vm_ips]
+
+        for vm_ip in vm_ips:
+            LOG.info("Clean up route for dev with ip {}".format(vm_ip))
+            route = vm_ssh.exec_sudo_cmd('grep --color=never {} {}'.format(vm_ip, VMPath.ETH_RT_SCRIPT.format('*')))[1]
+            if not route:
+                continue
+
+            pattern = '(.*) dev (.*) proto kernel .* src {} table (.*)'.format(vm_ip)
+            found = re.findall(pattern, route)
+            if found:
+                cidr, eth_name, table_name = found[0]
+                LOG.info("Update arp_filter, arp_announce, route and rule scripts for vm {} {}".format(vm_id, eth_name))
+                # vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_ANNOUNCE.format(eth_name)))
+                # vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_ARP_FILTER.format(eth_name)))
+                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RULE_SCRIPT.format(eth_name)))
+                vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_RT_SCRIPT.format(eth_name)))
+                vm_ssh.exec_sudo_cmd("sed -n -i '/{}/!p' {}".format(table_name, VMPath.RT_TABLES))
+
+                if rm_ifcfg:
+                    vm_ssh.exec_sudo_cmd('rm -f {}'.format(VMPath.ETH_PATH_CENTOS.format(eth_name)))
+
+        if restart_service and not reboot:
+            LOG.info("Restart network service")
+            vm_ssh.exec_sudo_cmd('systemctl restart network')
+
+    if reboot:
+        reboot_vm(vm_id=vm_id)
 
 
 def ping_vms_from_natbox(vm_ids=None, natbox_client=None, con_ssh=None, num_pings=5, timeout=30, fail_ok=False,
@@ -1547,14 +1770,16 @@ def get_console_logs(vm_ids, length=None, con_ssh=None, sep_file=None):
     """
     if isinstance(vm_ids, str):
         vm_ids = [vm_ids]
+
+    vm_ids = list(set(vm_ids))
     console_logs = {}
     args = '--length={} '.format(length) if length else ''
     content = ''
     for vm_id in vm_ids:
         vm_args = '{}{}'.format(args, vm_id)
-        output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.ADMIN)
+        output = cli.nova('console-log', vm_args, ssh_client=con_ssh, auth_info=Tenant.get('admin'))
         console_logs[vm_id] = output
-        content += "Console log for vm {}:\n{}\n".format(vm_id, output)
+        content += "\n#### Console log for vm {} ####\n{}\n".format(vm_id, output)
 
     if sep_file:
         common.write_to_file(sep_file, content=content)
@@ -1586,8 +1811,9 @@ def wait_for_cloud_init_finish(vm_id, timeout=300, con_ssh=None):
 
 
 def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt=None, con_ssh=None, natbox_client=None,
-                     num_pings=5, timeout=60, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
-                     net_types='mgmt', retry=3, retry_interval=3, vlan_zero_only=True, exclude_nets=None, vshell=False):
+                     num_pings=5, timeout=120, fail_ok=False, from_vm_ip=None, to_fip=False, from_fip=False,
+                     net_types='mgmt', retry=3, retry_interval=5, vlan_zero_only=True, exclude_nets=None,
+                     vshell=False, source_net_types=None):
     """
 
     Args:
@@ -1605,7 +1831,7 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         from_vm_ip (str): vm ip to ssh to if given. from_fip flag will be considered only if from_vm_ip=None
         to_fip (bool): Whether to ping floating ip if a vm has floating ip associated with it
         from_fip (bool): whether to ssh to vm's floating ip if it has floating ip associated with it
-        net_types (list|str): 'mgmt', 'data', or 'internal'
+        net_types (list|str|tuple): 'mgmt', 'data', or 'internal'
         retry (int): number of times to retry
         retry_interval (int): seconds to wait between each retries
         vlan_zero_only (bool): used if 'internal' is included in net_types. Ping vm over internal net with vlan id 0 if
@@ -1614,7 +1840,14 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
         vshell (bool): whether to ping vms' data interface through internal interface.
             Usage: when set to True, use 'vshell ping --count 3 <other_vm_data_ip> <internal_if_id>'
                 - dpdk vms should be booted from lab_setup scripts
-                - 'data' has to be included in net_types
+        source_net_types (str|list|tuple|None):
+            vshell specific
+            None:   use the same net_type s as the target IPs'
+            str:    use the specified net_type for all target IPs
+            tuple:  (net_type_data, net_type_internal)
+                use net_type_data for data IPs
+                use net_type_internal for internal IPs
+            list:   same as tuple
 
     Returns (tuple):
         A tuple in form: (res (bool), packet_loss_dict (dict))
@@ -1656,39 +1889,40 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
                 res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
                                 timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
                                 retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
-                                vshell=vshell, sep_file=f_path)
+                                vshell=vshell, sep_file=f_path, source_net_types=source_net_types)
                 return res
 
     except:
         ProjVar.set_var(PING_FAILURE=True)
+        collect_to_vms = False if list(to_vms) == [from_vm] else True
         get_console_logs(vm_ids=from_vm, length=20, sep_file=f_path)
-        get_console_logs(vm_ids=to_vms, sep_file=f_path)
+        if collect_to_vms:
+            get_console_logs(vm_ids=to_vms, sep_file=f_path)
         network_helper.collect_networking_info(vms=to_vms, sep_file=f_path)
         try:
             LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to from_vm and collect vm networking info")
             with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
                                        prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip,
                                        use_fip=from_fip) as from_vm_ssh:
-                _collect_vm_networking_info(vm_ssh=from_vm_ssh, sep_file=f_path)
+                _collect_vm_networking_info(vm_ssh=from_vm_ssh, sep_file=f_path, vm_id=from_vm)
 
-            LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
-            for vm_ in to_vms:
-                with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
-                    _collect_vm_networking_info(to_ssh, sep_file=f_path)
+            if collect_to_vms:
+                LOG.warning("Ping vm(s) from vm failed - Attempt to ssh to to_vms and collect vm networking info")
+                for vm_ in to_vms:
+                    with ssh_to_vm_from_natbox(vm_, retry=False, con_ssh=con_ssh) as to_ssh:
+                        _collect_vm_networking_info(to_ssh, sep_file=f_path, vm_id=vm_)
         except:
             pass
 
         raise
 
 
-def _collect_vm_networking_info(vm_ssh, sep_file=None):
-    content = 'VM network info collected when logged in via {}:'.format(vm_ssh.host)
-    output = vm_ssh.exec_cmd('ip addr', get_exit_code=False)[1]
-    content += '\nSent: ip addr\nOutput:\n{}\n'.format(output)
-    output = vm_ssh.exec_cmd('ip neigh', get_exit_code=False)[1]
-    content += '\nSent: ip neigh\nOutput:\n{}\n'.format(output)
-    output = vm_ssh.exec_cmd('ip route', get_exit_code=False)[1]
-    content += '\nSent: ip route\nOutput:\n{}\n'.format(output)
+def _collect_vm_networking_info(vm_ssh, sep_file=None, vm_id=None):
+    vm = vm_id if vm_id else ''
+    content = '#### VM network info collected when logged into vm {}via {} ####'.format(vm, vm_ssh.host)
+    for cmd in ('ip addr', 'ip neigh', 'ip route'):
+        output = vm_ssh.exec_cmd(cmd, get_exit_code=False)[1]
+        content += '\nSent: {}\nOutput:\n{}\n'.format(cmd, output)
 
     if sep_file:
         common.write_to_file(sep_file, content=content)
@@ -1737,6 +1971,7 @@ def scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout=60, validate=Tr
     natbox_client.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
 
     # calculate sha1sum
+    src_sha1 = None
     if validate:
         src_sha1 = natbox_client.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
         src_sha1 = src_sha1.split(' ')[0]
@@ -1779,7 +2014,6 @@ def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_s
         validate (bool): verify src and dest sha1sum
         source_ssh (SSHClient|None): the source ssh session, or None to use 'localhost'
         natbox_client (NATBoxClient|None):
-        sha1sum (str|None): validates the source file prior to operation, or None to skip, only used if validate=True
 
     Returns (None):
 
@@ -1823,7 +2057,7 @@ def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_s
 def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=None, prompt=None,
                           timeout=VMTimeout.SSH_LOGIN, natbox_client=None, con_ssh=None, vm_ip=None,
                           vm_ext_port=None, use_fip=False, retry=True, retry_timeout=120, close_ssh=True,
-                          auth_info=Tenant.ADMIN):
+                          auth_info=Tenant.get('admin')):
     """
     ssh to a vm from natbox.
 
@@ -1866,9 +2100,9 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         natbox_client = NATBoxClient.get_natbox_client()
 
     try:
-        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port, vm_img_name=vm_image_name,
-                             user=username, password=password, prompt=prompt, timeout=timeout, retry=retry,
-                             retry_timeout=retry_timeout)
+        vm_ssh = VMSSHClient(natbox_client=natbox_client, vm_ip=vm_ip, vm_ext_port=vm_ext_port,
+                             vm_img_name=vm_image_name, user=username, password=password, prompt=prompt,
+                             timeout=timeout, retry=retry, retry_timeout=retry_timeout)
     except:
         LOG.warning('Failed to ssh to VM {}! Collecting vm console log'.format(vm_id))
         get_console_logs(vm_ids=vm_id)
@@ -1913,7 +2147,7 @@ class VMInfo:
     __instances = {}
     active_controller_ssh = None
 
-    def __init__(self, vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+    def __init__(self, vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
         """
 
         Args:
@@ -2018,7 +2252,8 @@ class VMInfo:
 
     def get_storage_type(self):
         flavor_id = self.get_flavor_id()
-        table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh, auth_info=Tenant.ADMIN))
+        table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh,
+                                             auth_info=Tenant.get('admin')))
         extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
         return extra_specs['aggregate_instance_extra_specs:storage']
 
@@ -2026,7 +2261,7 @@ class VMInfo:
         if self.boot_info['type'] == 'image':
             return True
         flavor_id = self.get_flavor_id()
-        table_ = table_parser.table(cli.nova('flavor-list', ssh_client=self.con_ssh, auth_info=Tenant.ADMIN))
+        table_ = table_parser.table(cli.nova('flavor-list', ssh_client=self.con_ssh, auth_info=Tenant.get('admin')))
         swap = table_parser.get_values(table_, 'Swap', ID=flavor_id)[0]
         ephemeral = table_parser.get_values(table_, 'Ephemeral', ID=flavor_id)[0]
         return bool(swap or int(ephemeral))
@@ -2055,7 +2290,7 @@ class VMInfo:
 
 
 def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False,
-               stop_first=True, con_ssh=None, auth_info=Tenant.ADMIN):
+               stop_first=True, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Delete given vm(s) (and attached volume(s)). If None vms given, all vms on the system will be deleted.
 
@@ -2107,13 +2342,14 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         vms_to_del = vms
 
     if stop_first:  # best effort only
-        active_vms = nova_helper.get_vms(vms=vms_to_del, auth_info=Tenant.ADMIN, con_ssh=con_ssh, all_vms=True,
+        active_vms = nova_helper.get_vms(vms=vms_to_del, auth_info=Tenant.get('admin'), con_ssh=con_ssh, all_vms=True,
                                          Status=VMStatus.ACTIVE)
         if active_vms:
             stop_vms(active_vms, fail_ok=True, con_ssh=con_ssh, auth_info=auth_info)
 
     vms_to_del_str = ' '.join(vms_to_del)
 
+    vols_to_del = []
     if delete_volumes:
         vols_to_del = cinder_helper.get_volumes_attached_to_vms(vms=vms_to_del, auth_info=auth_info, con_ssh=con_ssh)
 
@@ -2161,7 +2397,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
 
 
 def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=True,
-                          check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                          check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Wait for specific vm to be removed from nova list
 
@@ -2212,7 +2448,7 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
 
 
 def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VMTimeout.STATUS_CHANGE, fail_ok=True,
-                        check_interval=3, con_ssh=None, auth_info=Tenant.ADMIN):
+                        check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
 
     """
     Wait for specific vms to reach any of the given state(s)
@@ -2240,7 +2476,7 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     res_pass = {}
     res_fail = {}
     end_time = time.time() + timeout
-    arg = '--all-tenants' if auth_info == Tenant.ADMIN else ''
+    arg = '--all-tenants' if auth_info == Tenant.get('admin') else ''
     while time.time() < end_time:
         table_ = table_parser.table(cli.nova('list', positional_args=arg, ssh_client=con_ssh, auth_info=auth_info))
 
@@ -2264,7 +2500,8 @@ def wait_for_vms_values(vms, header='Status', values=VMStatus.ACTIVE, timeout=VM
     raise exceptions.VMPostCheckFailed(fail_msg)
 
 
-def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.ADMIN, con_ssh=None):
+def set_vm_state(vm_id, check_first=False, error_state=True, fail_ok=False, auth_info=Tenant.get('admin'),
+                 con_ssh=None):
     """
     Set vm state to error or active via nova reset-state.
 
@@ -2328,7 +2565,7 @@ def reboot_vm(vm_id, hard=False, fail_ok=False, con_ssh=None, auth_info=None, cl
 
     # expt_reboot = VMStatus.HARD_REBOOT if hard else VMStatus.SOFT_REBOOT
     # _wait_for_vm_status(vm_id, expt_reboot, check_interval=0, fail_ok=False)
-    LOG.info("Wait for vm reboot events to appear in system event-list")
+    LOG.info("Wait for vm reboot events to appear in fm event-list")
     expt_reason = 'hard-reboot' if hard else 'soft-reboot'
     system_helper.wait_for_events(timeout=30, num=10, entity_instance_id=vm_id, start=start_time, fail_ok=False,
                                   strict=False, **{'Event Log ID': EventLogID.REBOOT_VM_ISSUED,
@@ -2457,7 +2694,7 @@ def _start_or_stop_vms(vms, action, expt_status, timeout=VMTimeout.STATUS_CHANGE
 
 
 def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fail_ok=False, con_ssh=None,
-               auth_info=Tenant.ADMIN, **metadata):
+               auth_info=Tenant.get('admin'), **metadata):
 
     if image_id is None:
         image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
@@ -2500,7 +2737,7 @@ def rebuild_vm(vm_id, image_id=None, new_name=None, preserve_ephemeral=None, fai
     return 0, succ_msg
 
 
-def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.ADMIN):
+def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Scale up/down vm cpu
 
@@ -2578,7 +2815,7 @@ def parse_cpu_list(list_in_str, prefix=''):
 def _parse_cpu_siblings(siblings_str):
     results = []
 
-    found = re.search(r'[,]?\s*siblings:\s*((\{\d+,\d+\})(,(\{\d+,\d+\}))*)', siblings_str, re.IGNORECASE)
+    found = re.search(r'[,]?\s*siblings:\s*(({\d+,\d+\})(,({\d+,\d+\}))*)', siblings_str, re.IGNORECASE)
 
     if found:
         for cpus in found.group(1).split('},'):
@@ -2590,7 +2827,7 @@ def _parse_cpu_siblings(siblings_str):
     return results
 
 
-def get_vm_pci_dev_info_via_nova_show(vm_id, con_ssh=None, auth_info=Tenant.ADMIN):
+def get_vm_pci_dev_info_via_nova_show(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get vm pci devices info via nova show. Returns a list of dictionaries.
     Args:
@@ -2807,7 +3044,7 @@ def get_instance_topology(vm_id, con_ssh=None, source='vm-topology'):
     return instance_topology_all
 
 
-def perform_action_on_vm(vm_id, action, auth_info=Tenant.ADMIN, con_ssh=None, **kwargs):
+def perform_action_on_vm(vm_id, action, auth_info=Tenant.get('admin'), con_ssh=None, **kwargs):
     """
     Perform action on a given vm.
 
@@ -2962,7 +3199,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                         if vlan_name not in output_pre:
                             if eth_name not in output_pre:
                                 LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
-                                if_to_add = VMNetworkStr.NET_IF.format(eth_name, eth_name)
+                                if_to_add = VMNetwork.NET_IF.format(eth_name, eth_name)
                                 vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                                 format(if_to_add), fail_ok=False)
 
@@ -2972,7 +3209,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
                                                 format(net_seg_id, eth_name), fail_ok=False)
                             else:
                                 LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
-                                if_to_add = VMNetworkStr.NET_IF.format(vlan_name, vlan_name)
+                                if_to_add = VMNetwork.NET_IF.format(vlan_name, vlan_name)
                                 vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
                                                 format(if_to_add), fail_ok=False)
 
@@ -3035,6 +3272,7 @@ def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=3, timeout=180):
 
 def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True, con_ssh=None):
 
+    pre_vm_host = None
     if check_host_unchanged:
         pre_vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
 
@@ -3101,7 +3339,7 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
     Returns (list): such as [10, 30]
 
     """
-    cmd = '''ps-sched.sh | grep qemu | grep {} | grep -v grep | awk '{{print $2;}}' | xargs -i /bin/sh -c "taskset -pc {{}}"'''
+    cmd = '''ps-sched.sh|grep qemu|grep {}|grep -v grep|awk '{{print $2;}}'|xargs -i /bin/sh -c "taskset -pc {{}}"'''
 
     if host_ssh:
         if not vm_host or not instance_name:
@@ -3215,7 +3453,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
     eth_path = VMPath.ETH_PATH_CENTOS
     new_user = None
 
-    if 'ubuntu' in guest_os:
+    if 'ubuntu' in guest_os or 'trusty_uefi' in guest_os:
         guest_os = 'ubuntu'
         # vm_if_path = VMPath.VM_IF_PATH_UBUNTU
         eth_path = VMPath.ETH_PATH_UBUNTU
@@ -3343,7 +3581,7 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
     Args:
         vm_id (str):
         end_event (Events): Event for kill the dd processes
-        new_dd_events (list): Event(s) for adding new dd process(es)
+        new_dd_events (list|Events): list of Event(s) for adding new dd process(es)
         dd_event (Events): Event to set after sending first dd cmd.
         timeout: Max time to wait for the end_event to be set before killing dd.
         con_ssh
@@ -3541,10 +3779,8 @@ def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=120
 
         events = new_dd_events + [end_event]
         while time.time() < scale_up_end_time:
-            time.sleep(10)
             current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus',
                                                                   con_ssh=con_ssh))[1]
-
             if current_now > current_:
                 for x in range(current_now - current_):
                     event_ = events.pop(0)
@@ -3631,8 +3867,6 @@ def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_t
                 LOG.info("Writing in vm continues...")
                 time.sleep(write_interval)
 
-        except:
-            raise
         finally:
             vm_ssh_.send_control('c')
 
@@ -3686,7 +3920,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
 
     args += ' {}'.format(vm_id)
 
-    prev_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
+    prev_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
     code, output = cli.nova('interface-attach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                             auth_info=auth_info)
 
@@ -3694,7 +3928,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
         return code, output
 
     LOG.info("Post interface-attach checks started...")
-    post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info)
+    post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
     last_nic = post_nics[-1]
     last_port = last_nic['port_id']
 
@@ -3740,7 +3974,65 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
     return 0, last_port
 
 
-def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None):
+def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no', reboot=True, vm_prompt=None,
+                      **extra_configs):
+    """
+
+    Args:
+        vm_id:
+        vm_eths (str|list):
+        vnics (list of dict):
+        static_ips (None|str|list):
+        ipv6:
+        reboot:
+        **extra_configs:
+
+    Returns:
+
+    """
+
+    with ssh_to_vm_from_natbox(vm_id, prompt=vm_prompt) as vm_ssh:
+        if not vm_eths:
+            vm_eths = []
+            if not vnics:
+                raise ValueError("vm_eths or vnics has to be provided")
+
+            for vnic in vnics:
+                mac_addr = vnic['mac_address']
+                eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+                assert eth_name, "vif not found for expected mac_address {} in vm {}".format(mac_addr, vm_id)
+                vm_eths.append(eth_name)
+        elif isinstance(vm_eths, str):
+            vm_eths = [vm_eths]
+
+        if static_ips:
+            if isinstance(static_ips, str):
+                static_ips = [static_ips]
+            if len(static_ips) != len(vm_eths):
+                raise ValueError("static_ips count has to be the same as vm devs to be configured")
+
+        for i in range(len(vm_eths)):
+            eth = vm_eths[i]
+            if static_ips:
+                static_ip = static_ips[i]
+                script_content = VMNetwork.IFCFG_STATIC.format(eth, ipv6, static_ip)
+            else:
+                script_content = VMNetwork.IFCFG_DHCP.format(eth, ipv6)
+
+            if extra_configs:
+                extra_str = '\n'.join(['{}={}'.format(k, v) for k, v in extra_configs.items()])
+                script_content += '\n{}'.format(extra_str)
+
+            script_path = VMPath.ETH_PATH_CENTOS.format(eth)
+            vm_ssh.exec_sudo_cmd('touch {}'.format(script_path))
+            vm_ssh.exec_sudo_cmd("cat > {} << 'EOT'\n{}\nEOT".format(script_path, script_content), fail_ok = False)
+
+    if reboot:
+        reboot_vm(vm_id=vm_id)
+
+
+def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_info=None, con_ssh=None,
+                     verify_virsh=True):
     """
     Detach a port from vm
     Args:
@@ -3749,6 +4041,8 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
+        cleanup_route (bool)
+        verify_virsh (bool): Whether to verify in virsh xmldump for detached port
 
     Returns (tuple): (<return_code>, <msg>)
         (0, Port <port_id> is successfully detached from VM <vm_id>)
@@ -3756,6 +4050,20 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
         (2, "Port <port_id> is not detached from VM <vm_id>")   - detached port is still shown in nova show
 
     """
+    target_ips = None
+    if cleanup_route:
+        fixed_ips = network_helper.get_ports(rtn_val='fixed_ips', port_id=port_id, merge_lines=False,
+                                             con_ssh=con_ssh, auth_info=auth_info)[0]
+        if isinstance(fixed_ips, str):
+            fixed_ips = [fixed_ips]
+        target_ips = [eval(fixed_ip)['ip_address'] for fixed_ip in fixed_ips]
+
+    mac_to_check = None
+    if verify_virsh:
+        prev_nics = nova_helper.get_vm_interfaces_info(vm_id, auth_info=auth_info, con_ssh=con_ssh)
+        for prev_nic in prev_nics:
+            if port_id == prev_nic['port_id']:
+                mac_to_check = prev_nic['mac_address']
 
     LOG.info("Detaching port {} from vm {}".format(port_id, vm_id))
     args = '{} {}'.format(vm_id, port_id)
@@ -3774,8 +4082,40 @@ def detach_interface(vm_id, port_id, fail_ok=False, auth_info=None, con_ssh=None
 
     succ_msg = "Port {} is successfully detached from VM {}".format(port_id, vm_id)
     LOG.info(succ_msg)
+
+    if cleanup_route and target_ips:
+        cleanup_routes_for_vifs(vm_id=vm_id, vm_ips=target_ips, reboot=True)
+
+    if verify_virsh and mac_to_check:
+        if not (cleanup_route and target_ips):
+            reboot_vm(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
+
+        check_devs_detached(vm_id=vm_id, mac_addrs=mac_to_check, con_ssh=con_ssh)
+
     return 0, succ_msg
 
+
+def check_devs_detached(vm_id, mac_addrs, con_ssh=None):
+    if isinstance(mac_addrs, str):
+        mac_addrs = [mac_addrs]
+
+    LOG.info("Check virsh xmldump on compute host")
+    inst_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
+    host_err = ''
+    with host_helper.ssh_to_host(vm_host, con_ssh=con_ssh) as host_ssh:
+        for mac_addr in mac_addrs:
+            if host_ssh.exec_sudo_cmd('virsh dumpxml {} | grep -B 1 -A 1 "{}"'.format(inst_name, mac_addr))[0] == 0:
+                host_err += 'VM interface with mac address {} still exists in virsh\n'.format(mac_addr)
+    assert not host_err, host_err
+
+    LOG.info("Check dev detached from vm")
+    vm_err = ''
+    with ssh_to_vm_from_natbox(vm_id=vm_id, con_ssh=con_ssh) as vm_ssh:
+        for mac_addr in mac_addrs:
+            if vm_ssh.exec_cmd('ip addr | grep -B 1 "{}"'.format(mac_addr))[0] == 0:
+                vm_err += 'Interface with mac address {} still exists in vm\n'.format(mac_addr)
+
+    assert not vm_err, vm_err
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
                  vlm=False, force=True, ping_vms=False):
@@ -3805,6 +4145,7 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
 
     HostsToRecover.add(host)
     is_swacted = False
+    standby = None
     if wait_for_host_up:
         active, standby = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
         if standby and active == host:
@@ -3866,12 +4207,11 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
         if ping_vms:
             LOG.tc_step("Ping vms after evacuated")
             for vm_ in vms_to_check:
-                wait_for_vm_pingable_from_natbox(vm_id=vm_)
+                wait_for_vm_pingable_from_natbox(vm_id=vm_, timeout=VMTimeout.DHCP_RETRY)
 
         LOG.info("All vms are successfully evacuated to other host")
         return 0, []
-    except:
-        raise
+
     finally:
         if vlm:
             LOG.tc_step("Powering on {} from vlm".format(host))
@@ -3883,6 +4223,9 @@ def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up
             host_helper.wait_for_tasks_affined(host=host, con_ssh=con_ssh)
             if is_swacted:
                 host_helper.wait_for_tasks_affined(standby, con_ssh=con_ssh)
+            time.sleep(60)      # Give some idle time before continue.
+            if system_helper.is_two_node_cpe(con_ssh=con_ssh):
+                system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CPU_USAGE_HIGH, fail_ok=True, check_interval=30)
 
 
 def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='function', avail_zone='nova', vms_num=5):
@@ -4080,8 +4423,9 @@ def ensure_vms_quotas(vms_num=10, cores_num=None, vols_num=None, tenant=None, co
         nova_helper.update_quotas(instances=vms_num, cores=cores_num, con_ssh=con_ssh, tenant=tenant)
 
 
-def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source=None, guest_os=None,
-               avail_zone=None, target_host=None, ping_vms=False, con_ssh=None, auth_info=None, cleanup='function'):
+def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, image=None, boot_source=None,
+               guest_os=None, avail_zone=None, target_host=None, ping_vms=False, con_ssh=None, auth_info=None,
+               cleanup='function', **boot_vm_kwargs):
 
     """
 
@@ -4090,6 +4434,9 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         count:
         nics:
         flavor:
+        storage_backing (str):
+            storage backend for flavor to be created
+            only used if flavor is None
         image:
         boot_source:
         guest_os
@@ -4098,14 +4445,16 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
         ping_vms
         con_ssh:
         auth_info:
-        cleanup
+        cleanup:
+        boot_vm_kwargs (dict):
+            additional kwargs to pass to boot_vm
 
     Returns:
 
     """
 
     if not flavor:
-        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2)[1]
+        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2, storage_backing=storage_backing)[1]
         if cleanup:
             ResourceCleanup.add('flavor', flavor, scope=cleanup)
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
@@ -4151,7 +4500,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, image=None, boot_source
     for i in range(count):
         vm_id = boot_vm(name="{}-{}".format(vm_type, i), flavor=flavor, source=boot_source, source_id=resource_id,
                         nics=nics, guest_os=guest_os, avail_zone=avail_zone, vm_host=target_host, user_data=user_data,
-                        auth_info=auth_info, con_ssh=con_ssh, cleanup=cleanup)[1]
+                        auth_info=auth_info, con_ssh=con_ssh, cleanup=cleanup, **boot_vm_kwargs)[1]
         vms.append(vm_id)
 
         if ping_vms:
@@ -4505,10 +4854,10 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
         vms = [vms]
 
     info = dict()
-    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.ADMIN))
-    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.ADMIN))
+    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.get('admin')))
+    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.get('admin')))
     for vm in vms:
-        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.ADMIN))
+        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.get('admin')))
         nics = table_parser.get_value_two_col_table(table, "wrs-if:nics")
         if not issubclass(type(nics), list):
             nics = [nics]
@@ -4575,7 +4924,7 @@ def _set_vm_route(vm_id, target_subnet, via_ip, dev_or_mac, persist=True):
             return True
 
 
-def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
+def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     """
     Route the pair of VMs' data interfaces through internal interfaces
     If multiple interfaces available on either of the VMs, the last one is used
@@ -4592,8 +4941,6 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
             if True, also routes from vm2 to vm1
         validate (bool):
             validate pings between the pair over the data network
-        persist (bool):
-            keep the route after possible VM reboots
 
     Returns (dict):
         the interfaces used for routing,
@@ -4604,9 +4951,9 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
 
     LOG.info("Collecting VMs' networks")
     interfaces = {
-        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.ADMIN),
+        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.get('admin')),
               "internal": network_helper.get_internal_ips_for_vms(vm1)},
-        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.ADMIN),
+        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.get('admin')),
               "internal": network_helper.get_internal_ips_for_vms(vm2)},
     }
 
@@ -4621,22 +4968,39 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True, persist=True):
     if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
         raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
 
-    vshell_vm1 = _set_vm_route(
+    vshell_ = _set_vm_route(
         vm1,
         interfaces[vm2]['data']['cidr'], interfaces[vm2]['internal']['ip'], interfaces[vm1]['internal']['mac'])
 
     if bidirectional:
-        vshell_vm2 = _set_vm_route(
-            vm2,
-            interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'], interfaces[vm2]['internal']['mac'])
+        _set_vm_route(vm2, interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'],
+                      interfaces[vm2]['internal']['mac'])
 
     if validate:
         LOG.info("Validating route(s) across data")
-        ping_vms_from_vm(vm2, vm1, net_types='data', vshell=vshell_vm1)
-        if bidirectional:
-            ping_vms_from_vm(vm1, vm2, net_types='data', vshell=vshell_vm2)
+        ping_between_routed_vms(to_vm=vm2, from_vm=vm1, vshell=vshell_, bidirectional=bidirectional)
 
     return interfaces
+
+
+def ping_between_routed_vms(to_vm, from_vm, vshell=True, bidirectional=True, timeout=120):
+    """
+    Ping between routed vm pair
+    Args:
+        to_vm:
+        from_vm:
+        vshell:
+        bidirectional:
+        timeout:
+
+    Returns:
+
+    """
+    ping_vms_from_vm(to_vms=to_vm, from_vm=from_vm, net_types='data', vshell=vshell, source_net_types='internal',
+                     timeout=timeout)
+    if bidirectional:
+        ping_vms_from_vm(to_vms=from_vm, from_vm=to_vm, net_types='data', vshell=vshell, source_net_types='internal',
+                         timeout=timeout)
 
 
 def setup_kernel_routing(vm_id, **kwargs):
@@ -4667,7 +5031,7 @@ def setup_kernel_routing(vm_id, **kwargs):
         TisInitServiceScript.start(ssh_client)
 
 
-def setup_avr_routing(vm_id, **kwargs):
+def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
     """
     Setup avr routing (vswitch L3) function for the specified VM
     replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
@@ -4678,36 +5042,78 @@ def setup_avr_routing(vm_id, **kwargs):
     Args:
         vm_id (str):
             the VM to be configured
+        mtu (int):
+            1500 by default
+            for jumbo frames (9000), tenant net support is required
+        vm_type (str):
+            PCI NIC_DEVICE
+            vhost: "${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_VIRTIO}:${PCI_SUBDEVICE_NET}"
+            any other: "${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_MEMORY}:${PCI_SUBDEVICE_AVP}" (default)
         kwargs (dict):
             kwargs for TisInitServiceScript.configure
 
     """
     LOG.info("Setting up avr routing for VM {}, kwargs={}".format(vm_id, kwargs))
-    data = network_helper.get_data_ips_for_vms(vm_id)[0]
-    internal = network_helper.get_internal_ips_for_vms(vm_id)[0]
+    datas = network_helper.get_data_ips_for_vms(vm_id)
+    data_dict = dict()
+    try:
+        internals = network_helper.get_internal_ips_for_vms(vm_id)
+    except ValueError:
+        internals = list()
+    internal_dict = dict()
     for vm, info in get_vms_ports_info([vm_id]).items():
         for ip, cidr, mac in info:
-            if ip == data:
-                data_netmask = ipaddress.ip_network(cidr).netmask
-            elif ip == internal:
-                internal_netmask = ipaddress.ip_network(cidr).netmask
+            if ip in datas:
+                data_dict[ip] = ipaddress.ip_network(cidr).netmask
+            elif ip in internals:
+                internal_dict[ip] = ipaddress.ip_network(cidr).netmask
+
+    interfaces = list()
+    items = list(data_dict.items()) + list(internal_dict.items())
+
+    if len(items) > 2:
+        LOG.warn("wrs_guest_setup/tis_automation_init does not support more than two DPDK NICs")
+        LOG.warn("stripping {} from interfaces".format(items[2:]))
+        items = items[:2]
+
+    for (ip, netmask), ct in zip(items, range(len(items))):
+        interfaces.append("""\"{},{},eth{},{}\"""".format(ip, netmask, ct, str(mtu)))
+
+    nic_device = ""
+    if vm_type == 'vhost':
+        nic_device = "\"${PCI_VENDOR_VIRTIO}:${PCI_DEVICE_VIRTIO}:${PCI_SUBDEVICE_NET}\""
 
     scp_to_vm(vm_id, TisInitServiceScript.src(), TisInitServiceScript.dst())
     with ssh_to_vm_from_natbox(vm_id) as ssh_client:
-        TisInitServiceScript.configure(ssh_client, FUNCTIONS="avr,", ROUTES="(\n#ROUTING_STUB\n)", ADDRESSES="""(
-    "{},{},eth0,1500"
-    "{},{},eth1,1500"
+        TisInitServiceScript.configure(
+            ssh_client, NIC_DEVICE=nic_device,
+            NIC_COUNT=str(len(items)), FUNCTIONS="avr,",
+            ROUTES="""(
+    #ROUTING_STUB
+)""",
+            ADDRESSES="""(
+    {}
 )
-""".format(data, data_netmask, internal, internal_netmask), **kwargs)
+""".format("\n    ".join(interfaces)), **kwargs)
         TisInitServiceScript.enable(ssh_client)
         TisInitServiceScript.start(ssh_client)
 
 
 @contextmanager
-def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=1000):
+def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=True,
+                        fps=1000, fps_type="framesPerSecond", mtu=1500, start_traffic=True):
     """
     Create traffic between VMs during 'operation'
     Statistics can be retrieved through ixia_session.get_statistics
+
+    The ixncfg shall only have one traffic item with one endpoint set,
+    when vm_pairs contain multiple pairs, each pair is configured as a duplicated traffic item.
+    the duplicated traffic items are configured in the order of the supplied vm_pairs, named as,
+    vm_pairs[0] -> 'vm_pairs[0]'
+    vm_pairs[1] -> 'vm_pairs[1]'
+    vm_pairs[n] -> 'vm_pairs[n]'
+
+    the original traffic item in the ixncfg will be disabled.
 
     Args:
         vm_pairs (list)
@@ -4718,20 +5124,31 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
         ixia_session (IxiaSession|None):
             IxiaSession object, must be connected
             or None, released upon context ends
+        ixncfg (str|None):
+            ixncfg path on the ixia server
+            or None to use IxiaPath.CFG_500FPS
         bidirectional (bool):
             if the traffic is bidirectional
         fps (int):
-            frames per second
+            line rate, scale by 'fps_type'
             if the traffic is bidirectional, this value is implicitly halved
+        fps_type (str):
+            "framesPerSecond" or "percentLineRate"
+            specifies the scale for 'fps'
+        mtu (int):
+            interface mtu
+        start_traffic (bool):
+            start traffic before yielding ixia_session
 
     Returns (context):
         (IxiaSession) with traffic started
         stopped upon context ends, released if ixia_session is None
     """
-    LOG.info("Setting up traffic for pairs {}".format(vm_pairs))
+    LOG.tc_step("Setting up traffic for pairs {}".format(vm_pairs))
 
     src = dict()
     dest = dict()
+    ip_pairs = list()
     for source, destination in vm_pairs:
         if issubclass(type(source), (list, tuple)):
             ip, vm_id = source
@@ -4741,6 +5158,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             ip = network_helper.get_data_ips_for_vms(vm_id)[0]
         src[ip] = vm_id
         LOG.info("src: vm_id={} ip={}".format(vm_id, ip))
+        src_ip = ip
 
         if issubclass(type(destination), (list, tuple)):
             ip, vm_id = destination
@@ -4750,12 +5168,13 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             ip = network_helper.get_data_ips_for_vms(vm_id)[0]
         dest[ip] = vm_id
         LOG.info("dst: vm_id={} ip={}".format(vm_id, ip))
+        ip_pairs.append((src_ip, ip))
 
     LOG.info("Getting VLANs associated")
     for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=True).items():
         for ip, subnet_id, mac in ports:
             if ip in src or ip in dest:
-                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.ADMIN))
+                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.get('admin')))
                 cidr = table_parser.get_value_two_col_table(table, "cidr")
                 net_type = table_parser.get_value_two_col_table(table, "wrs-provider:network_type")
                 seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
@@ -4801,11 +5220,12 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
                 dest_ports[(ip, vlan)] = port
                 break
 
-    LOG.info("Port matching complete src_ports={} dest_ports={}".format(src_ports, dest_ports))
+    LOG.info("Port Matching Complete src_ports={} dest_ports={}".format(src_ports, dest_ports))
     assert len(set(src_ports.values()).intersection(set(dest_ports.values()))) == 0, \
         "at least one src-dest pair shares the same ixia port (i.e., self-destined)"
     assert len(src_ports) and len(dest_ports), "at least one of the pairs cannot be associated with an ixia port"
 
+    # collect IPs in-use, so the IxNetwork interfaces could choose one from the remaining ones
     unavailable_ips = set()
     for ports in network_helper.get_ports('fixed_ips', merge_lines=False):
         if not issubclass(type(ports), list):
@@ -4821,14 +5241,24 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             ixia_session = ixia_helper.IxiaSession()
             ixia_session.connect()
             stack.callback(ixia_session.disconnect, traffic_stop=True)
+        else:
+            stack.callback(ixia_session.traffic_stop)
 
-        ixia_session.load_config(IxiaPath.CFG_500FPS)
+        if ixncfg is None:
+            ixia_session.load_config(IxiaPath.CFG_500FPS)
+        else:
+            ixia_session.load_config(ixncfg)
         ixia_session.add_chassis(clear=True)
-        vports = ixia_session.connect_ports(list(src_ports.values())+list(dest_ports.values()),
+        vports = ixia_session.connect_ports(list(set(src_ports.values()))+list(set(dest_ports.values())),
                                             existing=True, rtn_dict=True)
 
+        # disable existing interfaces in the old configuration
+        for port in vports.values():
+            for interface in ixia_session.getList(port, 'interface'):
+                ixia_session.configure(interface, enabled=False)
+
         # create new interfaces
-        source_ifs = list()
+        source_ifs = dict()
         for ip, vlan in src_ports:
             port = src_ports[(ip, vlan)]
             cidr = src[ip][1]
@@ -4840,12 +5270,12 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             else:
                 raise ValueError("No available IPs in subnet")
             if ipaddress.ip_address(ip).version == 4:
-                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan, mtu=mtu)
             else:
-                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
-            source_ifs.append(iface)
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan, mtu=mtu)
+            source_ifs[ip] = iface
 
-        dest_ifs = list()
+        dest_ifs = dict()
         for ip, vlan in dest_ports:
             port = dest_ports[(ip, vlan)]
             cidr = dest[ip][1]
@@ -4857,27 +5287,196 @@ def traffic_between_vms(vm_pairs, ixia_session=None, bidirectional=True, fps=100
             else:
                 raise ValueError("No available IPs in subnet")
             if ipaddress.ip_address(ip).version == 4:
-                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan)
+                iface = ixia_session.configure_protocol_interface(port, (iface_ip, ip), None, vlan, mtu=mtu)
             else:
-                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan)
-            dest_ifs.append(iface)
+                iface = ixia_session.configure_protocol_interface(port, None, (iface_ip, ip), vlan, mtu=mtu)
+            dest_ifs[ip] = iface
 
         # assuming the configuration only has one trafficItem in it
-        trafficItem = ixia_session.getList(ixia_session.getRoot()+'/traffic', 'trafficItem')[0]
+        traffic_item = ixia_session.getList(ixia_session.getRoot() + '/traffic', 'trafficItem')[0]
         if bidirectional:
-            ixia_session.configure(trafficItem, biDirectional='true')
             fps /= 2
-        else:
-            ixia_session.configure(trafficItem, biDirectional='false')
+        ixia_session.configure(traffic_item, biDirectional=bidirectional)
 
-        # enable only newly created interfaces for traffic
-        endpointSet = ixia_session.getList(trafficItem, 'endpointSet')[0]
-        ixia_session.configure_endpoint_set(endpointSet, source_ifs, dest_ifs, append=False)
+        # set tracking options
+        ixia_session.configure(
+            traffic_item + '/tracking',
+            trackBy=["trackingenabled0", "vlanVlanId0", "ipv4SourceIp0", "ipv4DestIp0"])
+        ixia_session.configure(ixia_session.getRoot() + "/traffic/statistics/packetLossDuration", enabled=True)
 
-        # traffic not started yet, use configElements to adjust settings
-        configElement = ixia_session.getList(trafficItem, 'configElement')[0]
-        ixia_session.configure(configElement+'/frameRate', rate=fps)
+        # disable old traffic item
+        ixia_session.configure(traffic_item, enabled=False)
 
-        ixia_session.traffic_start()
+        traffic_items = ixia_session.duplicate_traffic_item(traffic_item, len(ip_pairs))
+        for traffic_item, (src_ip, dest_ip), ip_pair_index in zip(traffic_items, ip_pairs, range(len(ip_pairs))):
+            endpoint_set = ixia_session.getList(traffic_item, 'endpointSet')[0]
+            ixia_session.configure_endpoint_set(endpoint_set, [source_ifs[src_ip]], [dest_ifs[dest_ip]], append=False)
+
+            # traffic not started yet, use configElements to adjust settings
+            config_element = ixia_session.getList(traffic_item, 'configElement')[0]
+            ixia_session.configure(config_element + '/frameRate', rate=fps, type=fps_type)
+
+            # enable newly configured traffic item(s)
+            ixia_session.configure(traffic_item, enabled=True)
+
+            # assign name with respect to the order in ip_pairs
+            ixia_session.configure(traffic_item, name="vm_pairs[{}]".format(ip_pair_index))
+
+        if start_traffic:
+            ixia_session.traffic_start()
 
         yield ixia_session
+
+
+def get_traffic_loss_duration_on_operation(vm_id, vm_observer, oper_func, *func_args, **func_kwargs):
+    """
+    Get frames delta for operation
+    the operation must restore traffic between the vm pair before it ends
+    vm_id and vm_observer must be properly routed and enabled for L3 forwarding
+
+    Args:
+        vm_id (str):
+            the first vm of the pair for traffic
+        vm_observer (str):
+            the second vm of the pair for traffic
+        oper_func (function|lambda):
+            the operation to be performed under traffic
+        *func_args (list):
+            arguments for oper_func
+        **func_kwargs (list):
+            keyword arguments for oper_func
+
+    Returns (int):
+        "Frames Delta"
+        by default, in (milli-seconds)
+    """
+    with traffic_between_vms([(vm_id, vm_observer)]) as session:
+        oper_func(*func_args, **func_kwargs)
+        return session.get_frames_delta(stable=True)
+
+
+def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None, **launch_vms_kwargs):
+    """
+    Launch a pair of routed VMs
+    one on the primary tenant, and the other on the secondary tenant
+
+    Args:
+        vm_type (str):
+            one of 'virtio', 'avp', 'dpdk'
+        primary_kwargs (dict):
+            launch_vms_kwargs for the VM launched under the primary tenant
+        secondary_kwargs (dict):
+            launch_vms_kwargs for the VM launched under the secondary tenant
+        **launch_vms_kwargs:
+            additional keyword arguments for launch_vms for both tenants
+            overlapping keys will be overridden by primary_kwargs and secondary_kwargs
+            shall not specify count, ping_vms, auth_info
+
+    Returns (tuple):
+        (vm_id_on_primary_tenant, vm_id_on_secondary_tenant)
+    """
+    LOG.info("Launch a {} test-observer pair of VMs".format(vm_type))
+    for invalid_key in ('count', 'ping_vms'):
+        if invalid_key in launch_vms_kwargs:
+            launch_vms_kwargs.pop(invalid_key)
+
+    primary_kwargs = dict() if not primary_kwargs else primary_kwargs
+    secondary_kwargs = dict() if not secondary_kwargs else secondary_kwargs
+    if 'auth_info' not in primary_kwargs:
+        primary_kwargs['auth_info'] = Tenant.get_primary()
+    if 'auth_info' not in secondary_kwargs:
+        secondary_kwargs['auth_info'] = Tenant.get_secondary()
+
+    if 'nics' not in primary_kwargs or 'nics' not in secondary_kwargs:
+        if vm_type in ['pci-sriov', 'pci-passthrough']:
+            raise NotImplemented("nics has to be provided for pci-sriov and pci-passthrough")
+
+        if vm_type in ['vswitch', 'dpdk', 'vhost']:
+            vif_model = 'avp'
+        else:
+            vif_model = vm_type
+
+        internal_net_id = network_helper.get_internal_net_id()
+        for tenant_info in (primary_kwargs, secondary_kwargs):
+            auth_info_ = tenant_info['auth_info']
+            mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info_)
+            tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info_)
+            nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                    {'net-id': tenant_net_id, 'vif-model': vif_model},
+                    {'net-id': internal_net_id, 'vif-model': vif_model}]
+            tenant_info['nics'] = nics
+
+    vm_test = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
+                         **__merge_dict(launch_vms_kwargs, primary_kwargs))[0][0]
+    ping_vms_from_vm(vm_test, vm_test, net_types=('data', 'internal'))
+    vm_observer = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
+                             **__merge_dict(launch_vms_kwargs, secondary_kwargs))[0][0]
+    ping_vms_from_vm(vm_observer, vm_observer, net_types=('data', 'internal'))
+    LOG.info("Route the {} test-observer VM pair".format(vm_type))
+    if vm_type in ('dpdk', 'vhost', 'vswitch'):
+        setup_avr_routing(vm_test, vm_type=vm_type)
+        setup_avr_routing(vm_observer, vm_type=vm_type)
+    else:
+        # vm_type in ('virtio', 'avp'):
+        setup_kernel_routing(vm_test)
+        setup_kernel_routing(vm_observer)
+
+    route_vm_pair(vm_test, vm_observer)
+
+    return vm_test, vm_observer
+
+
+def launch_vm_with_both_providernets(vm_type,
+                                     cidr_tenant1="172.168.33.0/24", cidr_tenant2="172.186.33.0/24",
+                                     skip_routing=False, cleanup='function'):
+    """
+    Launch a VM connected with both provider nets (data0, data1)
+    IPv4 subnets only
+
+    Args:
+        vm_type (str):
+            one of 'virtio', 'avp', 'dpdk'
+        cidr_tenant1 (str):
+            cidr for tenant1's subnet, shall be unique on the system
+        cidr_tenant2 (str):
+            cidr for tenant2's subnet, shall be unique on the system
+        skip_routing (bool):
+            skip default routing setups (for advanced configs)
+        cleanup (str):
+            cleanup level, shared with networks and VMs created
+
+    Returns (str):
+        vm_id
+    """
+    nw_primary = network_helper.create_network(name=common.get_unique_name(name_str='tenant1-net'),
+                                               shared=True, tenant_name=Tenant.TENANT1['tenant'],
+                                               auth_info=Tenant.get('admin'), cleanup=cleanup)[1]
+    nw_secondary = network_helper.create_network(name=common.get_unique_name(name_str='tenant2-net'),
+                                                 shared=True, tenant_name=Tenant.TENANT2['tenant'],
+                                                 auth_info=Tenant.get('admin'), cleanup=cleanup)[1]
+
+    network_helper.create_subnet(nw_primary, cidr=cidr_tenant1, dhcp=True, no_gateway=True,
+                                 tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
+    network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
+                                 tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
+
+    if vm_type in ('virtio', 'vhost'):
+        vif_model = 'virtio'
+    else:
+        vif_model = 'avp'
+
+    nics = [{'net-id': network_helper.get_mgmt_net_id(), 'vif-model': 'virtio'},
+            {'net-id': nw_primary, 'vif-model': vif_model},
+            {'net-id': nw_secondary, 'vif-model': vif_model},
+            ]
+    vms, nics = launch_vms(
+        vm_type=vm_type, count=1, ping_vms=True, nics=nics, cleanup=cleanup)
+    vm_id = vms[0]
+
+    if not skip_routing:
+        if vm_type == 'virtio' or vm_type == 'avp':
+            setup_kernel_routing(vm_id)
+        elif vm_type == 'dpdk' or vm_type == 'vhost' or vm_type == 'vswitch':
+            setup_avr_routing(vm_id, vm_type=vm_type)
+
+    return vm_id

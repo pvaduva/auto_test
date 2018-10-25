@@ -1,9 +1,13 @@
+from pytest import fixture
+
 from utils.horizon.regions import messages
 from utils.horizon.pages.project.compute import keypairspage
-from pytest import fixture
 from utils.tis_log import LOG
-from testfixtures.horizon import tenant_home_pg, driver
+from consts import auth
 from consts import horizon
+from keywords import nova_helper
+from testfixtures.horizon import tenant_home_pg, driver
+
 
 class TestKeypair:
 
@@ -14,6 +18,9 @@ class TestKeypair:
         LOG.fixture_step('Go to Project > Compute > Key Pairs')
         keypairs_pg = keypairspage.KeypairsPage(tenant_home_pg.driver)
         keypairs_pg.go_to_target_page()
+        keypairs_list = nova_helper.get_key_pair(auth_info=auth.Tenant.get('tenant1'))
+        if self.KEYPAIR_NAME in keypairs_list:
+            keypairs_pg.delete_keypair(self.KEYPAIR_NAME)
 
         def teardown():
             LOG.fixture_step('Back to Key Pairs Page')
@@ -41,6 +48,7 @@ class TestKeypair:
             - Delete the newly created key pair
             - Verify that the key pair is not in the list
         """
+
         LOG.tc_step('Create new key pair {} and verify it appears in the list'.format(self.KEYPAIR_NAME))
         keypairs_pg.create_keypair(self.KEYPAIR_NAME)
         assert not keypairs_pg.find_message_and_dismiss(messages.ERROR)

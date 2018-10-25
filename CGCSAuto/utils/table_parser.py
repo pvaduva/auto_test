@@ -341,24 +341,25 @@ def __get_row_indexes_string(table_, header, value, strict=False, exclude=False)
     value = value.strip().lower()
 
     header = header.strip().lower()
-    column = get_column(table_, header)
+    column = get_column(table_, header, merge_lines=True)
 
     row_index = []
     for i in range(len(column)):
-        item = column[i]
-        if isinstance(item, list):
-            item = ''.join(item)
-        item = item.strip().lower()
+        actual_val = column[i]
+        if isinstance(actual_val, list):
+            actual_val = ''.join(actual_val)
+        actual_val = actual_val.strip().lower()
+
         if strict:
-            is_valid = item == value
-        elif isinstance(value, list):
-            is_valid = True
-            for v in value:
-                if v not in item:
-                    is_valid = False
-                    break
+            is_valid = actual_val == value
+        # elif isinstance(value, list):
+        #     is_valid = True
+        #     for v in value:
+        #         if v not in actual_val:
+        #             is_valid = False
+        #             break
         else:
-            is_valid = value in item
+            is_valid = value in actual_val
 
         if is_valid is not exclude:
             row_index.append(i)

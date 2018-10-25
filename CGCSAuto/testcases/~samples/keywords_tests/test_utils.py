@@ -71,7 +71,7 @@ def test_cmd_timeout():
 
 def test_cli_timeout():
     LOG.tc_step("event-list")
-    cli.system('event-list', fail_ok=True, timeout=3)
+    cli.fm('event-list', fail_ok=True, timeout=3)
 
     LOG.tc_step("nova list")
     cli.nova('list', '--a', fail_ok=False)

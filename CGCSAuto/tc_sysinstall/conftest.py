@@ -83,13 +83,10 @@ def setup_test_session(global_setup):
     TIS ssh was already set up at collecting phase.
     """
     print("SysInstall test session ..." )
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
-    # con_ssh.set_prompt()
-    setups.set_env_vars(con_ssh)
     setups.copy_test_files()
-    # con_ssh.set_prompt()
 
     global natbox_ssh
     natbox = ProjVar.get_var('NATBOX')
@@ -101,7 +98,7 @@ def setup_test_session(global_setup):
 
     # set build id to be used to upload/write test results
     setups.get_build_info(con_ssh)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
+    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
     setups.set_session(con_ssh=con_ssh)
 
@@ -134,8 +131,8 @@ def pytest_collectstart():
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
     # if setups.is_https(con_ssh):
     #     CliAuth.set_vars(HTTPS=True)
-    Tenant.ADMIN['auth_url'] = CliAuth.get_var('OS_AUTH_URL')
-    Tenant.ADMIN['region'] = CliAuth.get_var('OS_REGION_NAME')
+    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def pytest_runtest_teardown(item):

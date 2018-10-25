@@ -26,6 +26,9 @@ def _wait_for_heat_stack_deleted(stack_name=None, timeout=120, check_interval=3,
         stack_status = get_stack_status(stack_name=stack_name, auth_info=auth_info, con_ssh=con_ssh)
         if not stack_status:
             return True
+        elif stack_status[0] == HeatStackStatus.DELETE_FAILED:
+            LOG.warning('Heat stack in DELETE_FAILED state')
+            return False
 
         time.sleep(check_interval)
 
@@ -57,12 +60,17 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
     fail_status = current_status = None
     if status == HeatStackStatus.CREATE_COMPLETE:
         fail_status = HeatStackStatus.CREATE_FAILED
+    elif status == HeatStackStatus.UPDATE_COMPLETE:
+        fail_status = HeatStackStatus.UPDATE_FAILED
 
     while time.time() < end_time:
         current_status = get_stack_status(stack_name=stack_name, auth_info=auth_info, con_ssh=con_ssh)[0]
         if status == current_status:
             return True, 'Heat stack {} has reached {} status'.format(stack_name, status)
         elif fail_status == current_status:
+            stack_id = get_stack_value(stack=stack_name, rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+            get_stack_resources(stack=stack_id, auth_info=auth_info, con_ssh=con_ssh)
+
             err = "Heat stack {} failed to reach {}, actual status: {}".format(stack_name, status, fail_status)
             if fail_ok:
                 LOG.warning(err)
@@ -71,12 +79,19 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
 
         time.sleep(check_interval)
 
+    stack_id = get_stack_value(stack=stack_name, rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+    get_stack_resources(stack=stack_id, auth_info=auth_info, con_ssh=con_ssh)
     err_msg = "Heat stack {} did not reach {} within {}s. Actual status: {}".format(stack_name, status, timeout,
                                                                                     current_status)
     if fail_ok:
         LOG.warning(err_msg)
         return False, err_msg
     raise exceptions.HeatError(err_msg)
+
+
+def get_stack_value(stack, rtn_val='stack_status_reason', con_ssh=None, auth_info=None):
+    table_ = table_parser.table(cli.openstack('stack show', stack, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_value_two_col_table(table_=table_, field=rtn_val)
 
 
 def get_stacks(name=None, con_ssh=None, auth_info=None, all_=True):
@@ -122,7 +137,7 @@ def get_stack_status(stack_name, con_ssh=None, auth_info=None, all_=True):
         if auth_info['user'] == 'admin' and all_:
             args = '--a'
     table_ = table_parser.table(cli.openstack('stack list', args, ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'stack_status', stack_name=stack_name)
+    return table_parser.get_values(table_, 'Stack Status', ** {'Stack Name': stack_name})
 
 
 def get_stack_resources(stack, rtn_val='resource_name', auth_info=None, con_ssh=None, **kwargs):
@@ -175,6 +190,9 @@ def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, aut
         return 1, output
 
     if not _wait_for_heat_stack_deleted(stack_name=stack_name, auth_info=auth_info):
+        stack_id = get_stack_value(stack=stack_name, rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+        get_stack_resources(stack=stack_id, auth_info=auth_info, con_ssh=con_ssh)
+
         msg = "heat stack {} is not removed after stack-delete.".format(stack_name)
         if fail_ok:
             LOG.warning(msg)

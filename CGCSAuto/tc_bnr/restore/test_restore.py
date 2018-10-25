@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from consts.auth import SvcCgcsAuto, HostLinuxCreds
+from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
@@ -13,13 +13,27 @@ from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.timeout import HostTimeout
 from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from setups import collect_tis_logs
-from utils import cli
+from utils import cli, table_parser
 from utils import node
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
 def collect_logs(con_ssh=None, fail_ok=True):
+    """
+    Collect logs on the system by calling collect_tis_logs, backup logs under /scratch before head if any, so that there
+    are enough disk space.
+
+    Args:
+        con_ssh:
+            - ccurrent ssh connection to the target
+        fail_ok:
+            - True: do not break the whole test case if there's any error during collecting logs
+              False: abort the entire test case if there's any eorr. True by default.
+
+    Return:
+        None
+    """
 
     log_tarball = r'/scratch/ALL_NODES*'
     log_dir = r'~/collected-logs'
@@ -54,6 +68,23 @@ def collect_logs(con_ssh=None, fail_ok=True):
 
 @pytest.fixture(scope='session', autouse=True)
 def pre_restore_checkup():
+    """
+    Fixture to check the system states before doing system restore, including:
+        - collect logs
+        - check if backup files exist on the backup media
+        - check if the build-ids match with each other
+         - wipe disks
+
+    Args:
+        scope
+            - If this ia per module/session/function fixture.
+        autouse
+            - Whether this fixture is automatically run for its scope
+
+    Return:
+        backup files:
+            - the backup files to restore with
+    """
 
     lab = InstallVars.get_install_var('LAB')
     LOG.info("Lab info; {}".format(lab))
@@ -85,10 +116,10 @@ def pre_restore_checkup():
             LOG.info("Connection established with controller-0 ....")
             ControllerClient.set_active_controller(ssh_client=controller_conn)
 
-            LOG.tc_step("Checking if a USB flash drive with backup files is plugged in... ")
+            LOG.info("Checking if a USB flash drive with backup files is plugged in... ")
             usb_device_name = install_helper.get_usb_device_name(con_ssh=controller_conn)
             assert usb_device_name, "No USB found "
-            LOG.tc_step("USB flash drive found, checking for backup files ... ")
+            LOG.info("USB flash drive found, checking for backup files ... ")
             usb_part_info = install_helper.get_usb_device_partition_info(usb_device=usb_device_name,
                                                                          con_ssh=controller_conn)
             assert usb_part_info and len(usb_part_info) > 0, "No USB or partition found"
@@ -130,8 +161,6 @@ def pre_restore_checkup():
             LOG.info(" SSH connection not available yet with controller-0;  "
                      "USB will be checked after controller boot ....")
     else:
-        # local_hostname = socket.gethostname()
-        # ssh to test server
         test_server_attr = dict()
         test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
         test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
@@ -195,6 +224,18 @@ def pre_restore_checkup():
 
 @pytest.fixture(scope='session')
 def restore_setup(pre_restore_checkup):
+    """
+    Fixture to do preparation before system restore.
+
+    Args:
+        pre_restore_checkup:
+            - actions done prior to this
+
+    Returen:
+        a dictionary
+            - containing infromation about target system, output directory,
+                build server and backup files.
+    """
 
     LOG.debug('Restore with settings:\n{}'.format(RestoreVars.get_restore_vars()))
     lab = InstallVars.get_install_var('LAB')
@@ -214,7 +255,8 @@ def restore_setup(pre_restore_checkup):
                                                                   initial_prompt=extra_controller_prompt, fail_ok=True)
         bld_server_obj = None
     else:
-        bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
+        # bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
+        bld_server = get_build_server_info(RestoreVars.get_restore_var('BUILD_SERVER'))
 
         LOG.info("Connecting to Build Server {} ....".format(bld_server['name']))
         bld_server_attr = dict()
@@ -234,6 +276,7 @@ def restore_setup(pre_restore_checkup):
         # If controller is accessible, check if USB with backup files is avaialble
 
         load_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, RestoreVars.get_restore_var("BACKUP_BUILDS_DIR"),
+        # load_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, InstallVars.get_install_var("TIS_BUILD_DIR"),
                                  backup_build_id)
 
         InstallVars.set_install_var(tis_build_dir=load_path)
@@ -324,6 +367,21 @@ def restore_setup(pre_restore_checkup):
 
 
 def make_sure_all_hosts_locked(con_ssh, max_tries=5):
+    """
+    Make sure all the hosts are locked before doing system restore.
+
+    Args:
+        con_ssh:
+            - ssh connection to the target lab
+
+        max_tries:
+            - number of times to try before fail the entire test case when any hosts keep failing to lock.
+
+    Return:
+        None
+
+    """
+
     LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
 
     base_cmd = 'host-lock'
@@ -358,6 +416,17 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
 
 
 def install_non_active_node(node_name, lab):
+    """
+    Install the non-active controller node, usually it is controller-1, the second controller
+        on a non-AIO SX system.
+
+    Args:
+        node_name:
+            - the name of the host/node, usually 'controller-1'
+        lab:
+            - lab to test
+    """
+
     boot_interfaces = lab['boot_device_dict']
     LOG.tc_step("Restoring {}".format(node_name))
     install_helper.open_vlm_console_thread(node_name, boot_interface=boot_interfaces, vlm_power_on=True)
@@ -378,13 +447,169 @@ def install_non_active_node(node_name, lab):
     LOG.info('{} is installed'.format(node_name))
 
 
-def restore_volumes():
+def get_backup_list(con_ssh):
+    """
+    Get a list of all the cinder-backups.
+
+    Args:
+        con_ssh:
+            - the current ssh connection to the target
+
+    Return:
+        list of ID and Volume ID for the current cinder-backups
+
+    """
+
+    rc, output = con_ssh.exec_cmd('cinder backup-list')
+    table_ = table_parser.table(output)
+    LOG.info('cinder backups: {}'.format(table_))
+
+    backup_volumes = table_parser.get_columns(table_, ['ID', 'Volume ID'])
+    LOG.info('TODO: backup and volumes: {}'.format(backup_volumes))
+
+    return backup_volumes
+
+
+def wait_for_backup_status(backup_id,
+                       target_status='available',
+                       timeout=1800,
+                       wait_between_check=30,
+                       fail_ok=False,
+                       con_ssh=None):
+    """
+    Wait the specified cinder-backup to reach certain status.
+
+    Args:
+        target_status:
+            - the expected status to wait, by default it's 'available'
+
+        timeout:
+            - how long to wait if the cinder-backup does not reach expected status,
+                1800 seconds by default
+
+        wait_between_check:
+            - interval between checking the status, 30 seconds by default
+
+        fail_ok:
+            - if the test case should be failed if any error occurs, False by default
+
+        con_ssh:
+            - current ssh connection the lab
+
+    Return:
+        error-code:
+            -   0   -- success
+            -   1   -- failed
+        error-msg:
+            -   message about the reason of failure
+    """
+
+    cmd = 'cinder backup-show ' + backup_id
+    end_time = time.time() + timeout
+
+    output = ''
+    while time.time() < end_time:
+        rc, output = con_ssh.exec_cmd(cmd)
+        table_ = table_parser.table(output)
+        status = table_parser.get_value_two_col_table(table_, 'status')
+        if status.lower() == target_status.lower():
+            break
+        time.sleep(wait_between_check)
+
+    else:
+        msg = 'Backup:{} did not reach status:{} in {} seconds'.format(backup_id, target_status, timeout)
+        LOG.warn(msg + 'output:' + output)
+        assert fail_ok, msg
+        return 1, msg
+
+    return 0, 'all cinder backup:{} reached status:{} after {} seconds'.format(backup_id, target_status, timeout)
+
+
+def restore_cinder_backup(backup_id, volume_id, con_ssh):
+    """
+    Restore a cinder volume with the specified backup id and volume id
+
+    Args:
+        backup_id:
+            - the cinder-backup id
+
+        volume_id:
+            - the cinder volume id
+
+        con_ssh:
+            - the ssh connection to the target host
+
+    Return:
+        error-code:
+            - 0 --  success
+
+        message:
+            - more detailed message about the final status of volume to restore
+    """
+
+    LOG.info('new cinder backup CLI: backupid={}, volume_id={}'.format(backup_id, volume_id))
+
+    cmd = 'cinder backup-restore --volume {} {}'.format(volume_id, backup_id)
+    rc, output = con_ssh.exec_cmd(cmd)
+    
+    LOG.info('TODO: output: {}\ncmd:{}'.format(output, cmd))
+    wait_for_backup_status(backup_id, target_status='available', con_ssh=con_ssh)
+
+    target_volume_status = ['available', 'in-use']
+    cinder_helper.wait_for_volume_status(volume_id, status=target_volume_status, con_ssh=con_ssh, auth_info=Tenant.ADMIN)
+
+    return 0, 'Volume reached status: {}'.format(target_volume_status)
+
+
+def restore_from_cinder_backups(volumes, con_ssh):
+    """
+    Restore specified cinder volumes using cinder-backup CLIs
+
+    Args:
+        volumes:
+            - ID of cinder volumes to restore
+
+        con_ssh:
+            - ssh connection to the target lab
+
+    Return:
+        code, volume IDs
+    """
+
+    LOG.info('Restore volumes using new cinder backup CLI')
+    backup_volumes = {volume_id: backup_id for backup_id, volume_id in get_backup_list(con_ssh)}
+
+    LOG.info('TODO: restoring backup: {}'.format(backup_volumes))
+    for volume_id in volumes:
+        if volume_id in backup_volumes:
+            backup_id = backup_volumes[volume_id]
+            LOG.info('TODO: RESTORING volume: ' + volume_id)
+            rc, output = restore_cinder_backup(backup_id, volume_id, con_ssh)
+            assert rc == 0, 'Failed to restore backup, rc={}, output={}'.format(rc, output)
+            LOG.info('TODO Volume is successfully restored from backup:{}, volume:{}'.format(backup_id, volume_id))
+        else:
+            LOG.warning('No "cinder backup" for volume {}'.format(volume_id))
+
+    return 0, volumes
+
+
+def restore_volumes(con_ssh=None):
+    LOG.info('Restore cinder volumes using new (UPSTREAM) cinder-backup CLIs')
     # Getting all registered cinder volumes
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    using_cinder_backup = RestoreVars.get_restore_var('cinder_backup')
     volumes = cinder_helper.get_volumes()
 
     if len(volumes) > 0:
         LOG.info("System has {} registered volumes: {}".format(len(volumes), volumes))
-        rc, restored_vols = install_helper.restore_cinder_volumes_from_backup()
+        if not using_cinder_backup:
+            rc, restored_vols = install_helper.restore_cinder_volumes_from_backup()
+        else:
+            rc, restored_vols = restore_from_cinder_backups(volumes, con_ssh)
+
         assert rc == 0, "All or some volumes has failed import: Restored volumes {}; Expected volumes {}"\
             .format(restored_vols, volumes)
         LOG.info('all {} volumes are imported'.format(len(restored_vols)))
@@ -405,7 +630,7 @@ def test_restore(restore_setup):
     backup_src_path = RestoreVars.get_restore_var('backup_src_path'.upper())
 
     controller_node = lab[controller0]
-    con_ssh = ControllerClient.get_active_controller(lab_name=lab['short_name'], fail_ok=True)
+    con_ssh = ControllerClient.get_active_controller(name=lab['short_name'], fail_ok=True)
 
     if not con_ssh:
         LOG.info ("Establish ssh connection with {}".format(controller0))
@@ -515,18 +740,31 @@ def test_restore(restore_setup):
         restore_volumes()
 
         if not compute_configured:
-            LOG.tc_step('Old-load on AIO/CPE lab: config its compute functionalities')
-            # LOG.warn('compute-config-complete was obsoleted by CGTS-9756!!!')
+            LOG.tc_step('Latest 18.07 EAR1 or Old-load on AIO/CPE lab: config its compute functionalities')
             # install_helper.run_cpe_compute_config_complete(controller_node, controller0)
 
-            # LOG.info('closing current ssh connection')
-            # con_ssh.close()
+            LOG.info('closing current ssh connection')
+            con_ssh.close()
 
-            # LOG.info('rebuild ssh connection')
-            # con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
-            # controller_node.ssh_conn = con_ssh
+            LOG.tc_step('Run restore-complete (CGTS-9756)')
+            controller_node.telnet_conn.login()
 
+            cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+            controller_node.telnet_conn.exec_cmd(cmd, extra_expects=' will reboot ')
+            controller_node.telnet_conn.close()
+
+            LOG.info('Wait until "config_controller" reboot the active controller')
+            time.sleep(180)
+
+            controller_node.telnet_conn = install_helper.open_telnet_session(controller_node,
+                                                                             ProjVar.get_var('LOG_DIR'))
+            controller_node.telnet_conn.login()
+            time.sleep(120)
+
+            con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+            controller_node.ssh_conn = con_ssh
             ControllerClient.set_active_controller(con_ssh)
+
             host_helper.wait_for_hosts_ready(controller0)
 
         LOG.tc_step('Install the standby controller: {}'.format(controller1))
@@ -569,10 +807,14 @@ def test_restore(restore_setup):
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
-        LOG.tc_step('Run restore-complete (CGTS-9756)')
+        LOG.tc_step('Run restore-complete (CGTS-9756), regular lab')
         controller_node.telnet_conn.login()
         cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
-        controller_node.telnet_conn.exec_cmd(cmd, extra_expects=['controller-0 login:'])
+        controller_node.telnet_conn.exec_cmd(cmd, extra_expects='controller-0 login:')
+
+        LOG.info('rebuild ssh connection')
+        con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
+        controller_node.ssh_conn = con_ssh
 
         LOG.tc_step("Restoring Compute Nodes ...")
         if len(compute_hosts) > 0:

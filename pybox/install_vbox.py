@@ -149,12 +149,12 @@ def menu_selector(stream, controller_type, securityprofile, release, lowlatency,
         time.sleep(4)
 
 
-def setup_networking(stream, release, ctrlr0_ip, password='Li69nux*'):
+def setup_networking(stream, release, ctrlr0_ip, hostadapter_ip, password='Li69nux*'):
     """
     Setup initial networking so we can transfer files.
     """
     ip = ctrlr0_ip 
-    host_ip = "10.10.10.254"
+    host_ip = hostadapter_ip
     if release == "R2":
         interface = "eth0"
     else:
@@ -186,7 +186,7 @@ def setup_networking(stream, release, ctrlr0_ip, password='Li69nux*'):
 
 @pytest.mark.unit
 def install_controller_0(cont0_stream, controller_type, securityprofile, release, lowlatency,
-                         install_mode, ctrlr0_ip, username='wrsroot', password='Li69nux*'):
+                         install_mode, ctrlr0_ip, hostadapter_ip, username='wrsroot', password='Li69nux*'):
     """
     Installation of controller-0.
     Takes about 30 mins
@@ -223,7 +223,7 @@ def install_controller_0(cont0_stream, controller_type, securityprofile, release
 
     # Setup basic networking
     time.sleep(10)
-    setup_networking(cont0_stream, release, ctrlr0_ip, password=password)
+    setup_networking(cont0_stream, release, ctrlr0_ip, hostadapter_ip, password=password)
     
 
 def start_and_connect_nodes(host_list=None):
@@ -481,7 +481,8 @@ def create_lab(vboxoptions):
             for item in node_config:
                 if item['node_type'] == node_type:
                     vboxmanage.vboxmanage_modifyvm(node, cpus=str(item['cpus']), memory=str(item['memory']))
-                    vboxmanage.vboxmanage_createmedium(node, item['disks'], vbox_home_dir=vboxoptions.vbox_home_dir)
+                    vboxmanage.vboxmanage_createmedium(node, item['disks'][vboxoptions.controller_disks],
+                                                       vbox_home_dir=vboxoptions.vbox_home_dir)
             if platform == 'win32' or platform == 'win64':
                 vboxmanage.vboxmanage_modifyvm(node, uartbase=serial_config[0]['uartbase'],
                                                uartport=serial_config[0]['uartport'],
@@ -502,6 +503,8 @@ def create_lab(vboxoptions):
                     for adapter in item.keys():
                         if adapter.isdigit():
                             data = item[adapter]
+                            if vboxoptions.hostonly_adapter is not 'none' and data['nic'] is 'hostonly':
+                                data['hostonlyadapter'] = vboxoptions.hostonly_adapter
                             vboxmanage.vboxmanage_modifyvm(node,
                                                            nic=data['nic'], nictype=data['nictype'],
                                                            nicpromisc=data['nicpromisc'],
@@ -523,9 +526,9 @@ def create_lab(vboxoptions):
         for item in buildservers:
             if item['short_name'].upper() == vboxoptions.buildserver:
                 remote_server = item['ip']
-            else:
-                print ("WEI temp fix. buildserver is not given. exit...")
-                sys.exit(1)
+        if remote_server is None:
+            print ("WEI temp fix. buildserver is not given. exit...")
+            sys.exit(1)
         ##TODO (WEI): Fix it! Ensure that vboxoptions.buildserver is set in this scenario
         sftp_get(remote_path, remote_server, env.ISOPATH.format(vboxoptions.release))
         PATH = env.ISOPATH.format(vboxoptions.release)
@@ -565,11 +568,15 @@ if __name__ == "__main__":
     vboxoptions = handle_args().parse_args()
 
     lab_config = [getattr(env.Lab, attr) for attr in dir(env.Lab) if not attr.startswith('__')]
+    oam_config = [getattr(OAM, attr) for attr in dir(OAM) if not attr.startswith('__')]
     if vboxoptions.labname is None:
         vboxoptions.labname = lab_config[0]['name']
 
     if vboxoptions.controller0_ip is None:
         vboxoptions.controller0_ip = lab_config[0]['controller-0_ip']
+
+    if vboxoptions.hostadapter_ip is None:
+        vboxoptions.hostadapter_ip = oam_config[0]['ip']
 
     ## Just to delete the lab.
     ## Add this option for convenience 
@@ -595,7 +602,7 @@ if __name__ == "__main__":
 
     ## First do semantic checks
     if not vboxoptions.release:
-        vboxoptions.release = 'R5'
+        vboxoptions.release = 'R6'
 
     if platform == 'win32' or platform == 'win64':
         if not os.path.exists(env.FILEPATH):
@@ -627,13 +634,13 @@ if __name__ == "__main__":
         assert vboxoptions.buildserver, "Buildserver must be specified."
         vboxoptions.install_lab = True
         vboxoptions.run_scripts = True
-        if vboxoptions.release != "R5":
+        if vboxoptions.release != "R6":
             vboxoptions.get_patches = True
             vboxoptions.install_patches = True
         vboxoptions.deletelab = True
         vboxoptions.createlab = True
         vboxoptions.get_setup = True
-        if (vboxoptions.release == 'R5' or vboxoptions.release == "R2") or vboxoptions.config_file:
+        if (vboxoptions.release == 'R6' or vboxoptions.release == "R2") or vboxoptions.config_file:
             vboxoptions.configure = True
     if vboxoptions.controllers is None and vboxoptions.computes is None:
         if vboxoptions.aio == 'AIO-DX':
@@ -651,10 +658,16 @@ if __name__ == "__main__":
         vboxoptions.hostiocache = 'on'
     else:
         vboxoptions.hostiocache = 'off'
-    
+    if vboxoptions.conf_files is None:
+        vboxoptions.conf_files = {"~/lab_setup.conf"}
+    else:
+        vboxoptions.conf_files = vboxoptions.conf_files
+    if vboxoptions.controller_disks is None:
+        vboxoptions.controller_disks = 2
+
     LOG.info(vboxoptions)
 
-    ctrlr0 = vboxoptions.labname + "-controller-0" 
+    ctrlr0 = vboxoptions.labname + "-controller-0"
 
     if vboxoptions.createlab:
         controller_type = create_lab(vboxoptions)
@@ -675,13 +688,15 @@ if __name__ == "__main__":
     try:
         if not vboxoptions.debug_rest:
             if vboxoptions.createlab:
-                install_controller_0(cont0_stream, controller_type, vboxoptions.securityprofile, 
+                install_controller_0(cont0_stream, controller_type, vboxoptions.securityprofile,
                                      vboxoptions.release, vboxoptions.lowlatency, 
                                      install_mode=vboxoptions.install_mode, ctrlr0_ip=vboxoptions.controller0_ip,
+                                     hostadapter_ip=vboxoptions.hostadapter_ip,
                                      username=vboxoptions.username, password=vboxoptions.password)
             else:
                 host_helper.login(cont0_stream, timeout=60, username=vboxoptions.username, password=vboxoptions.password)
-                setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip, password=vboxoptions.password)
+                setup_networking(cont0_stream, vboxoptions.release, vboxoptions.controller0_ip,
+                                 hostadapter_ip=vboxoptions.hostadapter_ip, password=vboxoptions.password)
 
             ## WZWZ DEBUG
             ## Take snapshot
@@ -700,12 +715,14 @@ if __name__ == "__main__":
         else:
             host_type = "Standard"
 
+
         if vboxoptions.setup_files:
-            install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files, 
+            install_lab.get_lab_setup_files(cont0_stream, local_path=vboxoptions.setup_files,
                                             host_type=host_type, ctrlr0_ip=vboxoptions.controller0_ip, 
                                             username=vboxoptions.username, password=vboxoptions.password)
         elif vboxoptions.get_setup:
-            install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release, host_type=host_type)
+            install_lab.get_lab_setup_files(cont0_stream, remote_host=remote_server, release=vboxoptions.release,
+                                            ctrlr0_ip=vboxoptions.controller0_ip, host_type=host_type)
 
         if vboxoptions.get_patches:
             install_lab.get_patches(cont0_stream, vboxoptions.controller0_ip, remote_host=remote_server, release=vboxoptions.release, 
@@ -749,7 +766,7 @@ if __name__ == "__main__":
             #if vboxoptions.snapshot:
             #    take_snapshot(vboxoptions.labname, "snapshot-AFTER-config-controller")
 
-            if vboxoptions.release == 'R5':
+            if vboxoptions.release == 'R6':
                 # TODO (WEI): Remove it. cinder-volumes partition is created by lab_setup.sh
                 # 
                 #serial.send_bytes(cont0_stream, "source /etc/nova/openrc", prompt='keystone')
@@ -758,7 +775,8 @@ if __name__ == "__main__":
 
                 ## Wait for online status, run lab_setup, unlock cont0, provision hosts, continue from before.
                 install_lab.lab_setup_controller_0_locked(cont0_stream,
-                                                          username=vboxoptions.username, password=vboxoptions.password)
+                                                          username=vboxoptions.username, password=vboxoptions.password,
+                                                          conf_files=vboxoptions.conf_files)
 
                 if vboxoptions.snapshot:
                     take_snapshot(vboxoptions.labname, "snapshot-AFTER-unlock-controller-0")
@@ -815,7 +833,8 @@ if __name__ == "__main__":
                 install_lab.run_install_scripts(cont0_stream, host_list=node_list, aio_type=vboxoptions.aio,
                              storage=vboxoptions.storage, release=vboxoptions.release, 
                              socks=socks, streams=streams, labname=vboxoptions.labname, 
-                             username=vboxoptions.username, password=vboxoptions.password)
+                             username=vboxoptions.username, password=vboxoptions.password,
+                             conf_files=vboxoptions.conf_files)
 
                 ## TODO(WEI): To uncomment it later 
                 #if vboxoptions.snapshot:

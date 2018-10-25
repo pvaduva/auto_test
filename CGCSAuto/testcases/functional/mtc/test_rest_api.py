@@ -241,7 +241,7 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     HostsToRecover.add(hostname, scope='function')
     html_helper.patch_request(url=url, headers=headers, data=lock_data, verify=False)
 
-    host_helper.wait_for_host_states(hostname, timeout=HostTimeout.LOCK, administrative=HostAdminState.LOCKED)
+    host_helper.wait_for_host_values(hostname, timeout=HostTimeout.LOCK, administrative=HostAdminState.LOCKED)
 
     hostinfo = html_helper.get_request(url=url, headers=headers, verify=False)
     assert 'locked' == hostinfo['administrative'], "FAIL: Couldn't lock {}".format(hostname)

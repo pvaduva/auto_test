@@ -1,8 +1,7 @@
+from keywords import compliance_helper
 from consts.compliance import RefStack
 from utils.tis_log import LOG
 from utils.exceptions import RefStackError
-from keywords import host_helper
-
 
 TEST_MAX_TIMEOUT = 20000
 
@@ -25,7 +24,7 @@ def test_refstack():
 
     """
     LOG.tc_step("Run RefStack test in venv")
-    with host_helper.ssh_to_compliance_server() as compliance_ssh:
+    with compliance_helper.ssh_to_compliance_server() as compliance_ssh:
         compliance_ssh.exec_cmd('cd {}'.format(RefStack.CLIENT_DIR))
 
         # activate venv

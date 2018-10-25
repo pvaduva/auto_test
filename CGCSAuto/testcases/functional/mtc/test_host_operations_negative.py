@@ -25,7 +25,7 @@ def test_delete_host_if_unlock_negative():
     """
     hosts = host_helper.get_hosts(administrative='unlocked')
     host = hosts[len(hosts) - 1]
-    uuid = system_helper.get_host_interfaces_info(host, rtn_val='uuid', if_type='ethernet')[0]
+    uuid = system_helper.get_host_interfaces(host, rtn_val='uuid', if_type='ethernet')[0]
     LOG.tc_step("Attempting to delete interface {} from host {}".format(uuid, host))
     code, out = cli.system('host-if-delete', '{} {}'.format(host, uuid), fail_ok=True, rtn_list=True)
     LOG.tc_step("Verify that the cli was rejected")
@@ -37,7 +37,8 @@ def lock_(request):
     hosts = host_helper.get_hypervisors()
     host = hosts[0]
     if hosts[0] == system_helper.get_active_controller_name():
-        host = hosts[1]
+        if not system_helper.is_simplex():
+            host = hosts[1]
     host_helper.lock_host(host)
 
     def unlock_():

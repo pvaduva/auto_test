@@ -7,6 +7,7 @@ import time
 
 from pytest import mark, fixture, skip
 
+from consts.cgcs import MULTI_REGION_MAP
 from consts.auth import HostLinuxCreds
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
@@ -625,38 +626,45 @@ class MonitoredProcess:
 
         return {}
 
-    def matched_pmon_event(self, process, event, host, process_type, severity, impact=''):
+    def matched_pmon_event(self, process, event, host, process_type, severity, impact='', headers=None):
         event_log_id = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
         reason_pattern, entity_id_pattern = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
 
         matched_event = {}
+        event_log_id_index = list(headers).index('Event Log ID')
+        state_index = headers.index('State')
+        severity_index = headers.index('Severity')
+        reason_index = headers.index('Reason Text')
+        uuid_index = headers.index('UUID')
+
         try:
-            actual_event_id = event[3].strip()
+            actual_event_id = event[event_log_id_index].strip()
             if actual_event_id != event_log_id:
                 LOG.debug('Event ID not matching: expected ID:{}, in-event:{}, event:{}'.format(
                     event_log_id, actual_event_id, event))
                 return {}
 
-            actual_state = event[2]
+            actual_state = event[state_index]
             if actual_state not in ('set', 'clear'):
                 LOG.debug('Event State not set/clear: state in-event:{}, event:{}'.format(
                     actual_state, event))
                 return {}
 
-            actual_severity = event[6].strip()
+            actual_severity = event[severity_index].strip()
             if actual_severity != severity:
                 LOG.debug('Event Severity not matching: expected severity:{} in-event:{}, event:{}'.format(
                     severity, actual_severity, event))
                 return {}
 
-            matched = self.matched_pmon_event_reason(event[4].strip(), reason_pattern, host, process, severity)
+            matched = self.matched_pmon_event_reason(event[reason_index].strip(), reason_pattern, host,
+                                                     process, severity)
             if not matched:
                 LOG.debug('Event Reason not matching: event:{}'.format(event))
                 return {}
 
             matched_event.update(dict(
-                uuid=event[0],
-                event=event[1:-1],
+                uuid=event[uuid_index],
+                event=event,
                 severity=actual_severity
             ))
             matched_event.update(matched)
@@ -677,11 +685,9 @@ class MonitoredProcess:
         event_log_id = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
         reason_pattern, entity_id_pattern = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
 
-        if last_events and last_events['values']:
-            last_event = last_events['values'][0]
-            start_time = last_event[1].replace('-', '').replace('T', ' ').split('.')[0]
-        else:
-            start_time = ''
+        start_time = None
+        if last_events and last_events.get('values', None):
+            start_time = table_parser.get_column(last_events, 'Time Stamp')[0]
 
         search_keys = {
             'Event Log ID': event_log_id,
@@ -696,8 +702,8 @@ class MonitoredProcess:
             retry += 1
             if matched_events:
                 matched_events[:] = []
-            events_table = mtc_helper.search_event(
-                event_id=event_log_id,
+            events_table = system_helper.get_events_table(
+                show_uuid=True, event_log_id=event_log_id,
                 start=start_time, limit=10, con_ssh=con_ssh, regex=True, **search_keys)
 
             if not events_table or not events_table['values']:
@@ -706,15 +712,18 @@ class MonitoredProcess:
                                                                  start_time, search_keys, severity))
                 continue
 
+            headers = events_table['headers']
+            state_index = headers.index('State')
             for event in events_table['values']:
-                matched_event = self.matched_pmon_event(service, event, host, process_type, severity)
+                matched_event = self.matched_pmon_event(service, event, host, process_type, severity, headers=headers)
                 if not matched_event:
                     continue
 
                 matched_events.append(matched_event)
 
                 if len(matched_events) > 1:
-                    if matched_events[0]['event'][1] == 'clear' and matched_events[1]['event'][1] == 'set':
+                    if matched_events[0]['event'][state_index] == 'clear' and \
+                            matched_events[1]['event'][state_index] == 'set':
                         LOG.info('OK, found matched events:{}'.format(matched_events))
                         return 0, tuple(matched_events)
                         # return True, tuple(matched_events)
@@ -726,7 +735,7 @@ class MonitoredProcess:
                 LOG.warn('Only 1 event recorded? matched_event:\n{}\n'.format(matched_events[0]))
                 if service in ('ntpd', ):
                     event = matched_events[0]['event']
-                    if event[1] == 'set':
+                    if event[state_index] == 'set':
                         LOG.warn('Treat NTP specially, pass since it is set')
                         return 0, tuple(matched_events)
 
@@ -746,8 +755,9 @@ class MonitoredProcess:
                                             retries=2, interval=1, debounce=20, wait_recover=True, con_ssh=None):
         LOG.debug('Kill process and verify system behavior for PMON process:{}, impact={}, process_type={}'.format(
             name, impact, process_type))
-        last_events = mtc_helper.search_event(mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
-                                              limit=2, con_ssh=con_ssh)
+        last_events = system_helper.get_events_table(
+            event_log_id=mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
+            limit=2, con_ssh=con_ssh)
         if not pid_file:
             LOG.error('No pid-file provided')
             return -1
@@ -858,7 +868,7 @@ class MonitoredProcess:
 
                 LOG.info("After process:{} been killed {} times, wait for {} to reach: {}".format(name, retries,
                                                                                                   host, expected))
-                reached = host_helper.wait_for_host_states(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
+                reached = host_helper.wait_for_host_values(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
                                                            fail_ok=True, **expected)
 
             if not reached:
@@ -890,7 +900,7 @@ class MonitoredProcess:
                         wait_time += 60
 
                     expected = {'operational': 'enabled', 'availability': 'available'}
-                    reached = host_helper.wait_for_host_states(
+                    reached = host_helper.wait_for_host_values(
                         host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True, **expected)
                     if not reached:
                         LOG.error('host {} did not recoverd to enabled-available status from status:{} '
@@ -1112,8 +1122,9 @@ def test_process_monitoring(process_name, con_ssh=None):
 
             ntpd            SKIPPED, 'ntpd is not a restartable process'
     """
-    if ProjVar.get_var('REGION') != 'RegionOne' and re.search('keystone|glance', process_name):
-        skip("Keystone and Glance services are on primary region only")
+    region = ProjVar.get_var('REGION')
+    if region != 'RegionOne' and region in MULTI_REGION_MAP and re.search('keystone|glance', process_name):
+        skip("Keystone and Glance services are on primary region only for multi-region system")
 
     LOG.tc_step('Start testing SM/PM Process Monitoring')
 

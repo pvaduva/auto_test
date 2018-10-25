@@ -5,7 +5,7 @@ from pytest import fixture
 
 from consts.proj_vars import ProjVar
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, WRSROOT_HOME
-from keywords import vm_helper, nova_helper, common, heat_helper, network_helper
+from keywords import vm_helper, nova_helper, common, heat_helper, network_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import exceptions
 from utils.clients.ssh import ControllerClient
@@ -60,7 +60,7 @@ def _get_stress_ng_heat(con_ssh=None):
     tenant_nets = network_helper.get_tenant_net_ids(rtn_val='name')
     net_count = len(tenant_nets)
     if net_count <= 3:
-        LOG.info("Less than tenant networks configured. Update heat template.")
+        LOG.info("Less than 3 tenant networks configured. Update heat template.")
         con_ssh.exec_cmd("sed -i 's/tenant2-net3/tenant2-net{}/g' {}".format(net_count-1, file_path))
         if net_count <= 2:
             con_ssh.exec_cmd("sed -i 's/tenant2-net2/tenant2-net{}/g' {}".format(net_count-1, file_path))
@@ -69,13 +69,16 @@ def _get_stress_ng_heat(con_ssh=None):
 
     # update heat file for multi-region system
     from consts.proj_vars import ProjVar
-    from consts.cgcs import REGION_MAP
+    from consts.cgcs import MULTI_REGION_MAP
     region = ProjVar.get_var("REGION")
-    if region != 'RegionOne':
-        region_str = REGION_MAP.get(region)
+    if region != 'RegionOne' and region in MULTI_REGION_MAP:
+        region_str = MULTI_REGION_MAP.get(region)
         con_ssh.exec_cmd("sed -i 's/tenant2-net/tenant2{}-net/g' {}".format(region_str, file_path))
         con_ssh.exec_cmd("sed -i 's/tenant2-mgmt-net/tenant2{}-mgmt-net/g' {}".format(region_str, file_path))
 
+    if not system_helper.is_avs():
+        con_ssh.exec_cmd("sed -i 's/avp/virtio/g' {}".format(file_path))
+        
     return file_path
 
 
@@ -91,7 +94,7 @@ def wait_for_stress_ng(ssh_client):
     proc_name = 'stress-ng'
     end_time = time.time() + 800
     while time.time() < end_time:
-        if proc_name in ssh_client.exec_cmd('ps -aef | grep stress-ng')[1]:
+        if proc_name in ssh_client.exec_cmd('ps -aef | grep -v grep | grep -v yum | grep stress-ng')[1]:
             output = ssh_client.exec_cmd('ps -aef | grep stress-ng')[1]
             if re.search('stress-ng', output):
                 return 0

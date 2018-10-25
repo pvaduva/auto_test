@@ -1,6 +1,7 @@
 from pytest import skip, fixture
 
 from utils.tis_log import LOG
+from consts.timeout import VMTimeout
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 
@@ -57,7 +58,7 @@ def test_force_lock_with_mig_vms(get_hosts_with_backing):
     vm_helper.wait_for_vms_values(vm_ids, fail_ok=False)
 
     for vm in vm_ids:
-        vm_helper.wait_for_vm_pingable_from_natbox(vm)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm, timeout=VMTimeout.DHCP_RETRY)
 
 
 @fixture()
@@ -117,4 +118,4 @@ def test_force_lock_with_non_mig_vms(add_host_to_zone):
     host_helper.unlock_host(host_under_test)
 
     vm_helper.wait_for_vm_values(vm_id, timeout=300, fail_ok=False, **{'status': 'ACTIVE'})
-    vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=VMTimeout.DHCP_RETRY)

@@ -64,7 +64,7 @@ def test_alarms_and_events_timestamp_order(generate_alarms):
     alarm_id = generate_alarms
 
     LOG.tc_step("Check system events are displayed in chronological order")
-    events_table = system_helper.get_events_table(num=15, uuid=True)
+    events_table = system_helper.get_events_table(limit=15, show_uuid=True)
     check_timestamps_order(events_table)
 
     LOG.tc_step("Check active alarms are displayed in chronological order")

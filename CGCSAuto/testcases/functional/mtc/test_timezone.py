@@ -1,9 +1,10 @@
 import time
 import random
 
-from keywords import host_helper, system_helper, mtc_helper, cinder_helper, glance_helper, vm_helper
+from keywords import host_helper, system_helper, cinder_helper, glance_helper, vm_helper
 from utils import table_parser, cli
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from testfixtures.fixture_resources import ResourceCleanup
@@ -88,9 +89,9 @@ def test_modify_timezone_alarm_timestamps(get_out_of_date_alarms):
         - N/A
     """
     LOG.tc_step("Gathering pre-modify timezone data")
-    table_ = system_helper.get_events_table(num=1, uuid=True)
-    event_uuid = table_parser.get_column(table_, 'UUID')
-    pre_timestamp = table_parser.get_column(table_, 'Time Stamp')
+    event = system_helper.get_events(rtn_vals=('UUID', 'Event Log ID', 'Entity Instance ID', 'State', 'Time Stamp'),
+                                     limit=1, combine_entries=False)[0]
+    event_uuid, event_log_id, entity_instance_id, event_state, pre_timestamp = event
     post_timestamp = ''
 
     current_timezone = get_timezone()
@@ -107,12 +108,14 @@ def test_modify_timezone_alarm_timestamps(get_out_of_date_alarms):
     system_helper.wait_for_alarms_gone(out_of_date_alarms)
 
     LOG.tc_step("Waiting for timezone change to effect events/alarms")
-    timeout = time.time() + 30
+    timeout = time.time() + 60
     while time.time() < timeout:
-        table_ = mtc_helper.search_event(**{"UUID": event_uuid})
-        post_timestamp = table_parser.get_column(table_, 'Time Stamp')
+        post_event = system_helper.get_events(rtn_vals=('Time Stamp', ), event_id=event_log_id,
+                                              entity_id=entity_instance_id, uuid=event_uuid, state=event_state)[0]
+        post_timestamp = post_event[0]
         if pre_timestamp != post_timestamp:
             break
+        time.sleep(5)
 
     LOG.tc_step("Checking timezone change effected timestamp")
     assert pre_timestamp != post_timestamp, "Timestamp did not change with timezone change."
@@ -151,7 +154,7 @@ def test_modify_timezone_log_timestamps(get_out_of_date_alarms):
     Test Teardown
         - N/A
     """
-    logs = ['auth.log', 'daemon.log', 'fm-event.log', 'fsmond.log', 'io-monitor.log', 'kern.log', 'openstack.log',
+    logs = ['auth.log', 'daemon.log', 'fm-event.log', 'fsmond.log', 'kern.log', 'openstack.log',
             'pmond.log', 'sm-scheduler.log', 'user.log']
     out_of_date_alarms = get_out_of_date_alarms
     active_controller = system_helper.get_active_controller_name()
@@ -316,14 +319,14 @@ def test_modify_timezone_cli_timestamps(cli_timestamp_teardown, get_out_of_date_
     LOG.tc_step("Getting timestamps before timezone change")
 
     LOG.info("Getting ceilometer timestamp")
-    table_ = table_parser.table(cli.ceilometer("event-list", "--limit 1", auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.ceilometer("event-list", "--limit 1", auth_info=Tenant.get('admin')))
     ceilometer_event_id = table_parser.get_column(table_, 'Message ID')[0]
     ceilometer_pre_timestamp = table_parser.get_column(table_, 'Generated')[0]
 
     LOG.info("Getting cinder timestamp")
-    cinder_volume_id = cinder_helper.create_volume(auth_info=Tenant.ADMIN)[1]
+    cinder_volume_id = cinder_helper.create_volume(auth_info=Tenant.get('admin'))[1]
     ResourceCleanup.add('volume', cinder_volume_id)
-    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.get('admin')))
     cinder_pre_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
     LOG.info("Getting glance timestamp")
@@ -359,11 +362,11 @@ def test_modify_timezone_cli_timestamps(cli_timestamp_teardown, get_out_of_date_
     LOG.tc_step("Getting timestamps after timezone change")
 
     LOG.info("Getting ceilometer timestamp")
-    table_ = table_parser.table(cli.ceilometer("event-show {}".format(ceilometer_event_id), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.ceilometer("event-show {}".format(ceilometer_event_id), auth_info=Tenant.get('admin')))
     ceilometer_post_timestamp = table_parser.get_value_two_col_table(table_, 'generated')
 
     LOG.info("Getting cinder timestamp")
-    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.ADMIN))
+    table_ = table_parser.table(cli.cinder("show {}".format(cinder_volume_id), auth_info=Tenant.get('admin')))
     cinder_post_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
     LOG.info("Getting glance timestamp")

@@ -15,6 +15,7 @@ from utils.tis_log import LOG
 DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
+
 @fixture()
 def aio_precheck():
     if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():
@@ -50,61 +51,24 @@ def freespace_check():
         skip("Not enough free space to complete test.")
 
 
-@mark.usefixtures("aio_precheck")
-def _test_reclaim_sda():
+@fixture(scope='function')
+def post_check(request):
     """
-    On Simplex or Duplex systems that use a dedicated disk for nova-local,
-    recover reserved root disk space for use by the cgts-vg volume group to allow
-    for controller filesystem expansion.
-
-    Assumptions:
-    - System is AIO-SX or AIO-DX
-
-    Test Steps:
-    - Get host list
-    - Retrieve current value of cgts-vg
-    - Reclaim space on hosts
-    - Check for the config out-of-date alarm to raise and clear
-    - Retrieve current value of cgts-vg
-    - Check that the cgts-vg size is larger than before
-
-    CONFIRMED THAT WE NEED TO REWRITE
+    This is to remove the file that was created
+    return: code 0/1
     """
-
     con_ssh = ControllerClient.get_active_controller()
+    file_loc = "/opt/extension"
+    cmd = "cd " + file_loc
+    rm_cmd = "rm testFile"
+    file_path = file_loc + "/" + "testFile"
 
-    hosts = host_helper.get_hosts()
-
-    cmd = "pvs -o vg_name,pv_size --noheadings | grep cgts-vg"
-    cgts_vg_regex = "([0-9.]*)g$"
-
-    rc, out = con_ssh.exec_sudo_cmd(cmd)
-    cgts_vg_val = re.search(cgts_vg_regex, out)
-
-    LOG.info("cgts-vg is currently: {}".format(cgts_vg_val.group(1)))
-
-    for host in hosts:
-        LOG.info("Reclaiming space for {}".format(host))
-        pos_args = "{} cgts-vg /dev/sda".format(host)
-        table_ = table_parser.table(cli.system('host-pv-add', positional_args=pos_args))
-        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                     entity_id="host={}".format(host))
-
-    LOG.info("Wait for config out-of-date alarms to clear")
-    for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host))
-
-    time.sleep(10)
-
-    cmd = "pvs -o vg_name,pv_size --noheadings | grep cgts-vg"
-    cgts_vg_regex = "([0-9.]*)g$"
-
-    rc, out = con_ssh.exec_sudo_cmd(cmd)
-    new_cgts_vg_val = re.search(cgts_vg_regex, out)
-
-    LOG.info("cgts-vg is now: {}".format(new_cgts_vg_val.group(1)))
-    assert float(new_cgts_vg_val.group(1)) > float(cgts_vg_val.group(1)), "cgts-vg size did not increase"
+    def rm_file():
+        LOG.fixture_step("Removing the file that was created to fill the space")
+        if con_ssh.file_exists(file_path=file_path):
+            con_ssh.exec_cmd(cmd)
+            con_ssh.exec_sudo_cmd(rm_cmd)
+    request.addfinalizer(rm_file)
 
 
 @mark.usefixtures("freespace_check")
@@ -417,7 +381,7 @@ def _test_modify_drdb():
                                           entity_id="host={}".format(host),
                                           timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
-    host_helper.wait_for_host_states(standby_cont, availability=HostAvailState.AVAILABLE)
+    host_helper.wait_for_host_values(standby_cont, availability=HostAvailState.AVAILABLE)
     host_helper.swact_host()
 
     act_cont = system_helper.get_active_controller_name()
@@ -566,3 +530,84 @@ def test_increase_ceph_mon():
     ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
     assert ceph_mon_gib != new_ceph_mon_gib, "ceph-mon did not change"
 
+
+@mark.usefixtures("freespace_check")
+@mark.usefixtures("post_check")
+def test_increase_extensionfs_with_alarm():
+    """
+    This test increases the size of the extenteion controllerfs filesystems while there is an alarm condition for the
+    fs.
+
+    Arguments:
+    - None
+
+    Test Steps:
+    - Query the filesystem for their current size
+    - cause an alarm condition by filling the space on that fs
+    - verify controller-0 is degraded
+    - Increase the size of extension filesystem.
+    - Verify alarm is gone
+
+    Assumptions:
+    - There is sufficient free space to allow for an increase, otherwise skip
+      test.
+    """
+    file_loc = "/opt/extension"
+    cmd = "cd " + file_loc
+    rm_cmd = "rm testFile"
+    file_path = file_loc + "/" + "testFile"
+    drbdfs_val = {}
+    fs = "extension"
+
+    active_controller = system_helper.get_active_controller_name()
+
+    LOG.tc_step("Determine the space available for extension filesystem")
+    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
+
+    # get the 91% of the current size
+    LOG.info("Will attempt to fill up the space to 90% of fs {} of value of {}".format(fs, drbdfs_val[fs]))
+    file_size = int((drbdfs_val[fs] * 0.91)*1000)
+    file_size= str(file_size) + "M"
+    cmd1 = "fallocate -l {} testFile".format(file_size)
+    con_ssh = ControllerClient.get_active_controller()
+    rc, out = con_ssh.exec_cmd(cmd)
+    rc, out = con_ssh.exec_sudo_cmd(cmd1)
+    if not con_ssh.file_exists(file_path=file_path):
+        LOG.info("File {} is not created".format(file_path))
+        return 0
+
+    #fill_in_fs(size=file_size)
+    LOG.tc_step("Verifying that the alarm is created after filling the fs space in {}".format(fs))
+    system_helper.wait_for_alarm(alarm_id="100.104", entity_id=active_controller, timeout=600, strict=False)
+
+    # verify the controller is in degraded state
+    LOG.tc_step("Verifying controller is degraded after filling the fs space in {}".format(fs))
+    host_helper.wait_for_host_values(active_controller,availability='degraded')
+
+    drbdfs_val[fs] = drbdfs_val[fs] + 2
+
+    LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
+
+    LOG.tc_step("Increase the size of extension filesystem")
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in drbdfs_val.items()]
+    args_ = ' '.join(attr_values_)
+    filesystem_helper.modify_controllerfs(**drbdfs_val)
+
+    # Need to wait until the change takes effect before checking the
+    # filesystems
+    hosts = system_helper.get_controllers()
+    for host in hosts:
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                         entity_id="host={}".format(host),
+                                         timeout=600)
+        LOG.tc_step("Verifying that the alarm is cleared after increasing the fs space in {}".format(fs))
+        system_helper.wait_for_alarm_gone(alarm_id="100.104", entity_id="host={}".format(host), timeout=600,
+                                          strict=False)
+
+    LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
+    filesystem_helper.check_controllerfs(**drbdfs_val)
+
+    # verify the controller is in available state
+    LOG.tc_step("Verifying that the controller is in available state after increasing the fs space in {}".format(fs))
+    host_helper.wait_for_host_values(active_controller, availability='available')

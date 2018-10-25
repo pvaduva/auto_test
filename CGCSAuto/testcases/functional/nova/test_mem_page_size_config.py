@@ -3,12 +3,12 @@
 ##########################################################################
 
 import re
-import time
 
 from pytest import fixture, mark, skip
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
+from consts.filepaths import CompConfPath
 from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
 from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -24,54 +24,28 @@ def flavor_2g(add_1g_and_4k_pages):
     return flavor, hosts, storage_backing
 
 
-def parse_mem_modify_error(err, origin_avail):
-    current_2g_pattern = 'Max 1G pages is \d+ when 2M is (\d+)'
-    max_2m_res = re.findall(current_2g_pattern, err)
-    assert max_2m_res, "system host-memory-modify failed with unexpected error: {}".format(err)
-    current_2g = int(max_2m_res[0])
-    
-    max_2m_pattern = 'Max 2M pages is (\d+) when 1G is (\d+)'
-    res = re.findall(max_2m_pattern, err)[0]
-    max_2m, current_1g = [int(i) for i in res]
-    
-    origin_total = int(origin_avail/2)
-    current_total = max_2m + current_1g*512
-    adjusted_2m = current_2g - (origin_total+1-current_total)
-    LOG.info("Host modify failed due to memory fluctuation. 2M pages adjusted from {} to {}".
-             format(current_2g, adjusted_2m))
-    return adjusted_2m
-
-
-def get_max_2m_from_err(err):
-    max_2m_pattern = 'Max 2M pages is (\d+) when 1G is'
-    res = re.findall(max_2m_pattern, err)
-    return int(res[0])
-
-
 def check_host_mem_configs(hosts):
     host0, host1 = hosts
     config_needed = {host0: {}, host1: {}}
     LOG.info("Ensure only {} proc1 has 2+ 1G pages, and only {} proc1 has 2GiB+ 4K pages".format(host0, host1))
     headers = ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'mem_avail(MiB)']
-    mem_host_0_proc_0 = system_helper.get_host_mem_values(host0, headers, 0)
-    mem_host_0_proc_1 = system_helper.get_host_mem_values(host0, headers, 1)
-    mem_host_1_proc_0 = system_helper.get_host_mem_values(host1, headers, 0)
-    mem_host_1_proc_1 = system_helper.get_host_mem_values(host1, headers, 1)
-    mem_host_0_proc_0 = [int(val) for val in mem_host_0_proc_0]
-    mem_host_0_proc_1 = [int(val) for val in mem_host_0_proc_1]
-    mem_host_1_proc_0 = [int(val) for val in mem_host_1_proc_0]
-    mem_host_1_proc_1 = [int(val) for val in mem_host_1_proc_1]
+    mem_host0 = system_helper.get_host_mem_values(host0, headers, (0, 1))
+    mem_host1 = system_helper.get_host_mem_values(host1, headers, (0, 1))
+    mem_host_0_proc_0 = [int(val) for val in mem_host0[0]]
+    mem_host_0_proc_1 = [int(val) for val in mem_host0[1]]
+    mem_host_1_proc_0 = [int(val) for val in mem_host1[0]]
+    mem_host_1_proc_1 = [int(val) for val in mem_host1[1]]
 
-    expt_4k = 2 * 1024 * 1024 / 4
-    expt_1g = 2
+    page_4k_2gib = 2 * 1024 * 1024 / 4
+    page_1g_2gib = 2
     host0_proc0_mod = host0_proc1_mod = host1_proc0_mod = host1_proc1_mod = True
-    if mem_host_0_proc_0[0] < expt_4k and mem_host_0_proc_0[2] < expt_1g:
+    if mem_host_0_proc_0[0] < page_4k_2gib and mem_host_0_proc_0[2] < page_1g_2gib:
         host0_proc0_mod = False
-    if mem_host_0_proc_1[0] < expt_4k and mem_host_0_proc_1[2] >= expt_1g:
+    if mem_host_0_proc_1[0] < page_4k_2gib and mem_host_0_proc_1[2] >= page_1g_2gib:
         host0_proc1_mod = False
-    if mem_host_1_proc_0[0] < expt_4k and mem_host_1_proc_0[2] < expt_1g:
+    if mem_host_1_proc_0[0] < page_4k_2gib and mem_host_1_proc_0[2] < page_1g_2gib:
         host1_proc0_mod = False
-    if mem_host_1_proc_1[0] >= expt_4k and mem_host_1_proc_1[2] < expt_1g:
+    if mem_host_1_proc_1[0] >= page_4k_2gib and mem_host_1_proc_1[2] < page_1g_2gib:
         host1_proc1_mod = False
 
     if host0_proc0_mod:
@@ -86,8 +60,8 @@ def check_host_mem_configs(hosts):
     return config_needed
 
 
-@fixture(scope='module', autouse=True)
-def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
+@fixture(scope='module')
+def add_1g_and_4k_pages(add_hosts_to_zone, config_host_module):
     storage_backing, hosts = add_hosts_to_zone
 
     LOG.fixture_step("Configure system if needed so that only {} proc1 has 2+ 1G pages, "
@@ -96,88 +70,24 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
 
     def _modify(host):
         host_config_needed = config_needed[host]
+        actual_mems = host_helper._get_actual_mems(host=host)
         if host == hosts[0]:
             if host_config_needed.get(0):
-                host0_proc0_2m = int((int(host_config_needed[0][3]) - 1024) / 2 - 1024)
-                LOG.fixture_step("Modify host0 proc0 to have 0 of 1G pages and >2GiB of 4K pages")
-                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(host0_proc0_2m, 0, hosts[0], 0))
+                LOG.fixture_step("Modify host0 proc0 to have 0 of 1G pages and <2GiB of 4K pages")
+                host_helper.modify_host_memory(host, proc=0, gib_1g=0, gib_4k_range=(None, 2), actual_mems=actual_mems)
 
             if host_config_needed.get(1):
-                origin_avail = int(host_config_needed[1][3])
-                host0_proc1_2m = int((origin_avail - 2 * 1024) / 2 - 150)
                 LOG.fixture_step("Modify host0 proc1 to have 2GiB of 1G pages and <2GiB of 4K pages")
-                code, out = cli.system("host-memory-modify -2M {} -1G {} {} {}".
-                                       format(int(host0_proc1_2m), 2, hosts[0], 1), fail_ok=True, rtn_list=True)
-                if code > 0:
-                    adjusted_2m = parse_mem_modify_error(err=out, origin_avail=origin_avail)
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(adjusted_2m, 2, hosts[0], 1))
-                
+                host_helper.modify_host_memory(host, proc=1, gib_1g=2, gib_4k_range=(None, 2), actual_mems=actual_mems)
+
         elif host == hosts[1]:
             if host_config_needed.get(0):
-                origin_avail = int(host_config_needed[0][3])
-                host1_proc0_2m = int((origin_avail - 1024) / 2 - 150)
                 LOG.fixture_step("Modify host1 proc0 to have 0 of 1G pages and <2GiB of 4K pages")
-                code, out = cli.system("host-memory-modify -2M {} -1G {} {} {}".
-                                       format(int(host1_proc0_2m), 0, hosts[1], 0), fail_ok=True, rtn_list=True)
-                if code > 0:
-                    adjusted_2m = parse_mem_modify_error(err=out, origin_avail=origin_avail)
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(adjusted_2m, 2, hosts[0], 1))
+                host_helper.modify_host_memory(host, proc=0, gib_1g=0, gib_4k_range=(None, 2), actual_mems=actual_mems)
 
             if host_config_needed.get(1):
-                host1_proc1_2m = int((int(host_config_needed[1][3]) - 2*1024) / 2 - 1024)
-                LOG.fixture_step("Modify host1 proc1 to have 0 of 1G pages and >2GiB of 4K pages")
-                cli.system("host-memory-modify -2M {} -1G {} {} {}".format(host1_proc1_2m, 0, hosts[1], 1))
-
-    def _revert(host):
-        header = ['mem_avail(MiB)']
-        host_config_needed = config_needed[host]
-        if host == hosts[0]:
-            host0_proc0_mod = host_config_needed.get(0)
-            if host0_proc0_mod:
-                mem_host_0_proc_0 = host0_proc0_mod
-                host_0_proc_0_2g = ((int(system_helper.get_host_mem_values(hosts[0], header, 0)[0]) -
-                                    (int(mem_host_0_proc_0[2]) * 1024)) / 2) - 500
-                if host_0_proc_0_2g < mem_host_0_proc_0[1]:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_0_proc_0_2g),
-                                                                               mem_host_0_proc_0[2], hosts[0], 0))
-                else:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_0[1]),
-                                                                               mem_host_0_proc_0[2], hosts[0], 0))
-
-            host0_proc1_mod = host_config_needed.get(1)
-            if host0_proc1_mod:
-                mem_host_0_proc_1 = host0_proc1_mod
-                host_0_proc_1_2g = ((int(system_helper.get_host_mem_values(hosts[0], header, 1)[0]) -
-                                    (int(mem_host_0_proc_1[2]) * 1024)) / 2) - 500
-                if host_0_proc_1_2g < mem_host_0_proc_1[1]:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_0_proc_1_2g),
-                                                                               mem_host_0_proc_1[2], hosts[0], 1))
-                else:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_0_proc_1[1]),
-                                                                               mem_host_0_proc_1[2], hosts[0], 1))
-        elif host == hosts[1]:
-            host1_proc0_mod = host_config_needed.get(0)
-            if host1_proc0_mod:
-                mem_host_1_proc_0 = host1_proc0_mod
-                host_1_proc_0_2g = ((int(system_helper.get_host_mem_values(hosts[1], header, 0)[0]) -
-                                    (int(mem_host_1_proc_0[2]) * 1024)) / 2) - 500
-                if host_1_proc_0_2g < mem_host_1_proc_0[1]:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_1_proc_0_2g),
-                                                                               mem_host_1_proc_0[2], hosts[1], 0))
-                else:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_0[1]),
-                                                                               mem_host_1_proc_0[2], hosts[1], 0))
-            host1_proc1_mod = host_config_needed.get(1)
-            if host1_proc1_mod:
-                mem_host_1_proc_1 = host1_proc1_mod
-                host_1_proc_1_2g = ((int(system_helper.get_host_mem_values(hosts[1], header, 1)[0]) -
-                                    (int(mem_host_1_proc_1[2]) * 1024)) / 2) - 500
-                if host_1_proc_1_2g < mem_host_1_proc_1[1]:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(host_1_proc_1_2g),
-                                                                               mem_host_1_proc_1[2], hosts[1], 1))
-                else:
-                    cli.system("host-memory-modify -2M {} -1G {} {} {}".format(int(mem_host_1_proc_1[1]),
-                                                                               mem_host_1_proc_1[2], hosts[1], 1))
+                LOG.fixture_step("Modify host1 proc1 to have 0 of 1G pages and >=2GiB of 4K pages")
+                host_helper.modify_host_memory(host, proc=1, gib_1g=0, gib_4k_range=(2, None), actual_mems=actual_mems)
 
     configured = False
     host0_config = config_needed[hosts[0]]
@@ -185,58 +95,37 @@ def add_1g_and_4k_pages(config_host_module, add_hosts_to_zone):
     host0_proc1_mod = host0_config.get(1)
     if host0_proc0_mod or host0_proc1_mod:
         configured = True
-        config_host_module(host=hosts[0], modify_func=_modify, revert_func=_revert)
+        config_host_module(host=hosts[0], modify_func=_modify)
         LOG.fixture_step("Check mem pages for {} are modified and updated successfully".format(hosts[0]))
         if host0_proc0_mod:
-            _wait_for_mempage_update(host=hosts[0], proc_id=0, expt_1g=0)
+            host_helper.wait_for_mempage_update(host=hosts[0], proc_id=0, expt_1g=0)
         if host0_proc1_mod:
-            _wait_for_mempage_update(host=hosts[0], proc_id=1, expt_1g=2)
+            host_helper.wait_for_mempage_update(host=hosts[0], proc_id=1, expt_1g=2)
 
     host1_config = config_needed[hosts[1]]
     host1_proc0_mod = host1_config.get(0)
     host1_proc1_mod = host1_config.get(1)
     if host1_proc1_mod or host1_proc0_mod:
         configured = True
-        config_host_module(host=hosts[1], modify_func=_modify, revert_func=_revert)
+        config_host_module(host=hosts[1], modify_func=_modify)
         LOG.fixture_step("Check mem pages for {} are modified successfully".format(hosts[1]))
         if host1_proc0_mod:
-            _wait_for_mempage_update(host=hosts[1], proc_id=0, expt_1g=0)
+            host_helper.wait_for_mempage_update(host=hosts[1], proc_id=0, expt_1g=0)
         if host1_proc1_mod:
-            _wait_for_mempage_update(host=hosts[1], proc_id=1, expt_1g=0)
+            host_helper.wait_for_mempage_update(host=hosts[1], proc_id=1, expt_1g=0)
 
     if configured:
         LOG.fixture_step("Check host memories for {} after mem config completed".format(hosts))
         post_modify_config_needed = check_host_mem_configs(hosts=hosts)
         assert not post_modify_config_needed[hosts[0]], \
-            "Failed to configure {} proc1 to support 2+ 1G pages".format(hosts[0])
+            "Failed to configure {}. Expt: proc0:1g<2,4k<2ib;proc1:1g>=2,4k<2gib".format(hosts[0])
         assert not post_modify_config_needed[hosts[1]], \
-            "Failed to configure {} proc1 to support 2+ 4K pages".format(hosts[1])
+            "Failed to configure {}. Expt: proc0:1g<2,4k<2ib;proc1:1g<2,4k>=2gib".format(hosts[1])
 
     return hosts, storage_backing
 
 
-def _wait_for_mempage_update(host, proc_id, expt_1g, timeout=300, fail_ok=False):
-    expt_1g = int(expt_1g)
-    headers = ['vm_hp_total_1G', 'vm_hp_pending_2M']
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        actual_1g, pending_2m = system_helper.get_host_mem_values(host, headers, proc_id=proc_id)
-        pending_2m = pending_2m.lower()
-        actual_1g = int(actual_1g)
-        if expt_1g == actual_1g and 'none' == pending_2m:
-            LOG.info("1g page number for {} proc{} is {} as expected".format(host, proc_id, expt_1g))
-            return True
-        time.sleep(15)
-
-    err = "Pending 2M: {}; Expected: 1G: {}, actual: {}".format(pending_2m, expt_1g, actual_1g)
-    if fail_ok:
-        LOG.warning(err)
-    else:
-        assert expt_1g == actual_1g, "Actual vs expt 1G: {}, {}".format(actual_1g, expt_1g)
-        assert pending_2m == 'none', "Pending 2M: {}".format(pending_2m)
-
-
-@fixture(scope='function', autouse=True)
+@fixture(scope='function')
 def print_hosts_memories(add_1g_and_4k_pages):
     hosts, storage_backing = add_1g_and_4k_pages
     host_helper.get_hypervisor_info(hosts=hosts)
@@ -245,7 +134,7 @@ def print_hosts_memories(add_1g_and_4k_pages):
 
 
 @fixture(scope='module')
-def add_hosts_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
+def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_role_module):
     storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
 
     if len(target_hosts) < 2:
@@ -283,9 +172,7 @@ def skip_4k_for_ovs(mempage_size):
 
 @fixture(scope='module')
 def image_mempage():
-    image_id = glance_helper.create_image(name='mempage')[1]
-    ResourceCleanup.add('image', image_id, scope='module')
-
+    image_id = glance_helper.create_image(name='mempage', cleanup='module')[1]
     return image_id
 
 
@@ -431,9 +318,8 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
 
     LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))
 
-    instance_topology = vm_helper.get_instance_topology(vm_id)
-    for topology in instance_topology:
-        vm_page_size = topology['pgsize']
+    instance_topology = vm_helper.get_instance_topology(vm_id)[0]
+    vm_page_size = instance_topology['pgsize']
 
     if mem_page_size == 'small':
         mem_table_header = 'A:mem_4K'
@@ -462,3 +348,99 @@ def test_schedule_vm_mempage_config(flavor_2g, mem_page_size):
 
     LOG.tc_step("Ensure vm is pingable from NatBox")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+
+
+def test_compute_mempage_vars(hosts=None):
+    """
+    Steps:
+        - Collect host mempage stats from system host-memory-list
+        - Ensure the stats collected are reflected in following places:
+            - nova hypervisor-show
+            - compute_extend.conf and compute_reserved.conf on compute host
+            - /sys/devices/system/node/node*/hugepages/ on compute host
+
+    Args:
+        hosts (str|None|list|tuple): this param is reserved if any test wants to call this as verification step
+
+    """
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    elif not hosts:
+        hosts = host_helper.get_up_hypervisors()
+
+    LOG.info("---Collect host memory info via system host-memory-list cmd")
+    for host in hosts:
+        headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G',
+                   'vm_hp_avail_2M', 'vm_hp_avail_1G']
+        host_helper.wait_for_mempage_update(host)
+        expt_compute_extend = {
+            'vswitch_2M_pages': [],
+            'vswitch_1G_pages': [],
+            'vm_4K_pages': [],
+            'vm_2M_pages': [],
+            'vm_1G_pages': []
+        }
+
+        expt_sys_hp = {
+            '2048kB': {'nr': [], 'free': []},
+            '1048576kB': {'nr': [], 'free': []}
+        }
+
+        LOG.info("---Check {} memory info in nova hypervisor-show is the same as system host-memory-list".format(host))
+        vals = host_helper.get_hypervisor_info(hosts=host, rtn_val=('memory_mb_node', 'memory_mb_used_node'))[host]
+        hypervisor_total, hypervisor_used = vals
+
+        host_mems = system_helper.get_host_mem_values(host, headers, rtn_dict=False)
+        for proc in range(len(host_mems)):
+            hypervisor_proc_total = hypervisor_total[str(proc)]
+            hypervisor_proc_used = hypervisor_used[str(proc)]
+            hypervisor_mems = []
+            for memsize in ('2M', '1G', '4K'):
+                mem_mib_total = hypervisor_proc_total[memsize]
+                mem_mib_avail = mem_mib_total - hypervisor_proc_used[memsize]
+                hypervisor_mems += [mem_mib_total, mem_mib_avail]
+            hypervisor_mems = hypervisor_mems[:-1]
+            LOG.info("{} memories in MiB via nova hypervisor-show: {}".format(host, hypervisor_mems))
+
+            proc_mems = host_mems[proc]
+            vs_size, vs_page, vm_4k, vm_2m, vm_1g, vm_avail_2m, vm_avail_1g = proc_mems
+            syinv_mems = [vm_2m*2, vm_avail_2m*2, vm_1g*1024, vm_avail_1g*1024, int(vm_4k*4/1024)]
+            assert hypervisor_mems == syinv_mems, "nova hypervisor show is different than system host memory list"
+
+            if vs_size == 1024:
+                vs_1g = vs_page
+                vs_2m = 0
+            else:
+                vs_1g = 0
+                vs_2m = vs_page
+
+            expt_compute_extend['vswitch_2M_pages'].append(str(vs_2m))
+            expt_compute_extend['vswitch_1G_pages'].append(str(vs_1g))
+            expt_compute_extend['vm_4K_pages'].append(str(vm_4k))
+            expt_compute_extend['vm_2M_pages'].append(str(vm_2m))
+            expt_compute_extend['vm_1G_pages'].append(str(vm_1g))
+
+            expt_sys_hp['2048kB']['nr'].append(vm_2m+vs_2m)
+            expt_sys_hp['1048576kB']['nr'].append(vm_1g+vs_1g)
+            expt_sys_hp['2048kB']['free'].append(vm_avail_2m)
+            expt_sys_hp['1048576kB']['free'].append(vm_avail_1g)
+
+        with host_helper.ssh_to_host(hostname=host) as host_ssh:
+            comp_extend = CompConfPath.COMP_EXTEND
+            LOG.info("---Check mempage values in {} on {}".format(comp_extend, host))
+            output = host_ssh.exec_cmd('cat {}'.format(comp_extend), fail_ok=False)[1]
+            for key, expt_val in expt_compute_extend.items():
+                expt_val = ','.join(expt_val)
+                actual_val = re.findall('{}=(.*)'.format(key), output)[0].strip()
+                assert expt_val == actual_val, "{} in host-memory-list {}: {}; in {}: {}".\
+                    format(key, host, expt_val, comp_extend, actual_val)
+
+            LOG.info("---Check {} hugepages via /sys/devices/system/node/node*/hugepages/".format(host))
+            for pagesize in expt_sys_hp:
+                for mem_status in expt_sys_hp[pagesize]:
+                    file_path = '/sys/devices/system/node/node*/hugepages/hugepages-{}/{}_hugepages'.\
+                        format(pagesize, mem_status)
+                    output = host_ssh.exec_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+                    actual_res = [int(val) for val in output.splitlines()]
+                    assert expt_sys_hp[pagesize][mem_status] == actual_res, \
+                        "{}: system host-memory-list and {} mismatch".format(host, file_path)
