@@ -610,7 +610,7 @@ class Labs:
 
     WCP_122 = {
         'short_name': 'wcp_122',
-        'name': 'cgcs-wildcat-122',
+        'name': 'yow-cgcs-wildcat-122',
         'floating ip': '128.224.151.170',
         'controller-0 ip': '128.224.151.170',
         'controller_nodes': [64873],
