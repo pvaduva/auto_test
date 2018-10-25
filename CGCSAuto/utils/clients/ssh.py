@@ -1161,9 +1161,9 @@ class VMSSHClient(SSHFromSSH):
 
         # Check if connecting to vm through port forwarding rule
         if vm_ext_port:
-            self.ssh_cmd = 'ssh {} -p {} {}@{}'.format(ssh_options, vm_ext_port, self.user, self.host)
+            self.ssh_cmd = 'ssh -vvv {} -p {} {}@{}'.format(ssh_options, vm_ext_port, self.user, self.host)
         else:
-            self.ssh_cmd = 'ssh {} {}@{}'.format(ssh_options, self.user, self.host)
+            self.ssh_cmd = 'ssh -vvv {} {}@{}'.format(ssh_options, self.user, self.host)
 
         self.connect(use_password=password, retry=retry, retry_timeout=retry_timeout)
 
