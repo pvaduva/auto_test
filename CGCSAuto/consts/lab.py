@@ -603,6 +603,8 @@ class Labs:
         'floating ip': '128.224.150.148',
         'controller-0 ip': '128.224.150.148',
         'controller_nodes': [95980],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     WCP_113_121 = {
