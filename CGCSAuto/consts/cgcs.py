@@ -542,7 +542,7 @@ class BackupRestore:
 
 
 class CpuModel:
-    CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX',
+    CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX', 'Haswell-noTSX-IBRS',
                   'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')
 
 
