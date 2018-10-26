@@ -4354,7 +4354,18 @@ def create_pci_alias_for_devices(dev_type, hosts=None, devices=None, alias_names
     return devices_to_create
 
 
-def _check_pci_alias_created(devices, con_ssh=None):
+def _check_pci_alias_created(devices, con_ssh=None, timeout=60):
+    end_time = time.time() + timeout
+    out = None
+    while time.time() < end_time:
+        code, out = cli.nova('device-list', ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=True,
+                             rtn_list=True)
+        if code == 0:
+            break
+        time.sleep(10)
+    else:
+        raise exceptions.NovaError('nova device-list failed. Error: \n{}'.format(out))
+
     pci_alias_dict = get_pci_device_list_info(con_ssh=con_ssh)
     for param_ in devices:
         pci_alias = param_.get('pci alias')
