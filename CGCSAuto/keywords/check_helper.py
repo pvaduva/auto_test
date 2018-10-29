@@ -727,6 +727,8 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
     LOG.info("loss_paths: {}, no_loss_paths: {}, total_file_pahts: {}".format(loss_paths, no_loss_paths, final_paths))
     res_files = {}
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=guest_os) as vm_ssh:
+        vm_ssh.exec_sudo_cmd('cat /etc/fstab')
+        vm_ssh.exec_sudo_cmd("mount | grep --color=never '/dev'")
 
         for file_path in loss_paths:
             vm_ssh.exec_sudo_cmd('touch {}2'.format(file_path), fail_ok=False)

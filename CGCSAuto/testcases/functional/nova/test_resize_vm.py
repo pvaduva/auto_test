@@ -195,11 +195,12 @@ class TestResizeSameHost:
         LOG.tc_step("Check files after resize revert")
         if storage_backing == 'remote' and swap and dest_flavor[2]:
             swap_size = dest_flavor[2]
+
+        time.sleep(30)
+        prev_host = nova_helper.get_vm_host(vm_id)
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, root=root, ephemeral=ephemeral,
                                     swap=swap_size, vm_type=boot_source, vm_action=None, file_paths=file_paths,
                                     content=content, disks=vm_disks, check_volume_root=True)
-
-        prev_host = nova_helper.get_vm_host(vm_id)
 
         # Check for TC5155 blocked by JIRA: CGTS-8299
         # if expect_to_check:
