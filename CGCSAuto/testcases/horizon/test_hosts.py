@@ -23,7 +23,7 @@ def host_inventory_pg(admin_home_pg, request):
 @mark.parametrize('host_name', [
     # 'controller-1', 'compute-2'
 ])
-def test_host_lock_unlock(host_inventory_pg, host_name):
+def _test_host_lock_unlock(host_inventory_pg, host_name):
 
     """
     Test the host lock and unlock functionality:
