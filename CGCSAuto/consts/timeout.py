@@ -47,7 +47,7 @@ class VMTimeout:
 
 class VolumeTimeout:
     STATUS_CHANGE = 2700  # Windows guest takes a long time
-    DELETE = 60
+    DELETE = 90
 
 
 class SysInvTimeout:
