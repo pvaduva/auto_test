@@ -44,6 +44,7 @@ def prepare_vms(request):
                 if vm_id:
                     vm_helper.delete_vms(vm_id)
         nova_helper.delete_flavors(g_flavors.values())
+        g_flavors.clear()
 
     request.addfinalizer(clean_up)
 
