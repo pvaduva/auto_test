@@ -316,6 +316,8 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
 
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
+
 
 # Fails due to product issue
 def _test_modify_drdb():
