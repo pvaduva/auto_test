@@ -949,6 +949,7 @@ class ContainerClient(SSHClient):
         # Ensure exec_cmd works after above workaround
         self.exec_cmd(cmd='', expect_timeout=5)
 
+
     def close(self, force=False):
         if force or self._is_connected():
             self.send('exit')

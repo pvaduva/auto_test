@@ -50,7 +50,8 @@ def test_dovetail(pre_configs):
                      "-v $DOVETAIL_HOME:$DOVETAIL_HOME " \
                      "-v /var/run/docker.sock:/var/run/docker.sock opnfv/dovetail:ovp.1.0.0 /bin/bash"
 
-        with compliance_helper.start_container_shell(host_client=server_ssh, docker_cmd=docker_cmd) as docker_conn:
+        with compliance_helper.start_container_shell(host_client=server_ssh, docker_cmd=docker_cmd, remove=True) \
+                as docker_conn:
             LOG.tc_step("Starting Dovetail Testarea Mandatory")
             docker_conn.exec_cmd('cd compliance', fail_ok=False)
             dovetail_suite = ComplianceVar.get_var('DOVETAIL_SUITE')
