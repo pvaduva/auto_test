@@ -203,26 +203,33 @@ def test_modify_mtu_oam_interface(mtu_range):
 
     assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
 
-    LOG.tc_step("Swact active controller")
-    host_helper.swact_host(fail_ok=False)
-    host_helper.wait_for_webservice_up(first_host)
+    if second_host == first_host:
+        LOG.tc_step("Active-controller and Standby-controller are the same, likely a SIMPLEX lab," +
+                "hence, done with the testing")
+    else:
+        LOG.tc_step("Make sure current standby_controller is in available status in order to swact to")
+        host_helper.wait_for_hosts_states(second_host, availability=['available'])
 
-    LOG.tc_step("Modify new standby controller {} oam interface MTU to: {}, and "
+        LOG.tc_step("Swact active controller")
+        host_helper.swact_host(fail_ok=False)
+        host_helper.wait_for_webservice_up(first_host)
+
+        LOG.tc_step("Modify new standby controller {} oam interface MTU to: {}, and "
                 "ensure it's applied successfully after unlock".format(second_host, mtu))
 
-    code, res = host_helper.modify_mtu_on_interfaces(second_host,
+        code, res = host_helper.modify_mtu_on_interfaces(second_host,
                                                      mtu_val=mtu, network_type='oam', lock_unlock=True, fail_ok=True)
 
-    LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
-    code_revert, res_revert = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=pre_oam_mtu,
+        LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
+        code_revert, res_revert = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=pre_oam_mtu,
                                                                    network_type='oam',
                                                                    lock_unlock=True, fail_ok=True)
-    if 0 == code:
-        assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
-    else:
-        assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
+        if 0 == code:
+            assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
+        else:
+            assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
 
-    assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
+        assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
 
 
 @fixture()
