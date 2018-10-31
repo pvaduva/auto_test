@@ -40,8 +40,11 @@ def check_controllerfs(**kwargs):
 
     for fs in kwargs:
         if fs == "database":
-            fs_name = "pgsql-lv" 
+            fs_name = "pgsql-lv"
             expected_size = int(kwargs[fs]) * 2
+        elif fs == "glance":
+            fs_name = "cgcs-lv"
+            expected_size = int(kwargs[fs])
         else:
             fs_name = fs + "-lv"
             expected_size = int(kwargs[fs])
