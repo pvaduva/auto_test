@@ -12,7 +12,7 @@ from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
-DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
+DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension', 'gnocchi']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
 
