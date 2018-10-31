@@ -514,6 +514,8 @@ def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.get(
         backend = 'lvm-store'
     elif 'file' in backend:
         backend = 'file-store'
+    elif 'external' in backend:
+        backend = 'ceph-external'
 
     table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh, auth_info=auth_info),
                                 combine_multiline_entry=True)
