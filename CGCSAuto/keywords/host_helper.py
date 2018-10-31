@@ -1721,7 +1721,7 @@ def _get_actual_mems(host):
     return actual_mems
 
 
-def wait_for_mempage_update(host, proc_id=None, expt_1g=None, timeout=300):
+def wait_for_mempage_update(host, proc_id=None, expt_1g=None, timeout=420):
     """
     Wait for host memory to be updated after modifying and unlocking host.
     Args:
