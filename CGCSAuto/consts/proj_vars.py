@@ -34,6 +34,7 @@ class ProjVar:
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
                   'IS_DC': False,
+                  'PRIMARY_SUBCLOUD': None,
                   'BUILD_INFO': None
                   }
 

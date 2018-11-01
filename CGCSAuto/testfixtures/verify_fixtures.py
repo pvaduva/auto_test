@@ -1,6 +1,7 @@
 from pytest import fixture, skip
 
 from consts.auth import Tenant
+from consts.cgcs import SysType
 from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -175,30 +176,27 @@ def ping_vms_from_nat(request):
 
 
 @fixture()
-def ceph_precheck(request):
+def ceph_precheck():
     """
     Run test pre-checks before running CEPH storage tests.
 
-    Args:
-        request: caller of this fixture. i.e., test func.
     """
-    # yang TODO: probably can remove
-    con_ssh = ControllerClient.get_active_controller()
-
     LOG.info('Ensure the system has storage nodes')
-    nodes = system_helper.get_storage_nodes(con_ssh)
-    LOG.info('System has the following storage nodes {}'.format(nodes))
-    if not nodes:
+    sys_type = system_helper.get_sys_type()
+    if not sys_type == SysType.STORAGE:
         skip('SUT does not have storage nodes')
 
     LOG.info('Verify the health of the CEPH cluster')
-    rtn, msg = storage_helper.is_ceph_healthy(con_ssh)
+    rtn, msg = storage_helper.is_ceph_healthy()
     LOG.info('{}'.format(msg))
 
     LOG.info('Verify if there are OSDs provisioned')
-    osds = storage_helper.get_num_osds(con_ssh)
+    osds = storage_helper.get_num_osds()
     LOG.info('System has {} OSDS'.format(osds))
     assert osds != 0, 'There are no OSDs assigned'
+
+    LOG.info('Query storage usage info')
+    storage_helper.get_storage_usage()
 
     return
 
