@@ -68,7 +68,7 @@ class SSHClient(pxssh.pxssh):
             self.force_password = True
             self.username = username
             self.hostname = hostname
-            self.login(hostname, username, password, auto_prompt_reset=False, quiet=False)
+            self.login(hostname, username, password, auto_prompt_reset=False, quiet=False, login_timeout=SSH_EXPECT_TIMEOUT)
 
         except (pxssh.ExceptionPxssh, pexpect.EOF):
             msg = "Failed to login to SSH session: {}@{}".format(username, hostname)
