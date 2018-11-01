@@ -44,8 +44,7 @@ def test_autorecovery_image_metadata_in_volume(auto_recovery, disk_format, conta
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
                 format(auto_recovery, disk_format, container_format))
     image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
-                                          **{property_key: auto_recovery})[1]
-    ResourceCleanup.add('image', resource_id=image_id)
+                                          cleanup='function', **{property_key: auto_recovery})[1]
 
     LOG.tc_step("Create a volume from the image")
     vol_id = cinder_helper.create_volume(name='auto_recov', image_id=image_id, rtn_exist=False)[1]
@@ -118,11 +117,11 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
                 format(image_auto_recovery, disk_format, container_format))
     if image_auto_recovery is None:
-        image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format)[1]
+        image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
+                                              cleanup='function')[1]
     else:
         image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
-                                              **{property_key: image_auto_recovery})[1]
-    ResourceCleanup.add('image', resource_id=image_id)
+                                              cleanup='function', **{property_key: image_auto_recovery})[1]
 
     # auto recovery in image metadata will not work if vm booted from volume
     # LOG.tc_step("Create a volume from the image")

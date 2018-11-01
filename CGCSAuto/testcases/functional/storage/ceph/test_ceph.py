@@ -784,11 +784,10 @@ def test_import_with_cache_raw():
     for image in image_names:
         source_image_loc = img_dir + "/" + image
         img_name = 'testimage_{}'.format(image)
-        ret = glance_helper.create_image(source_image_file=source_image_loc,
+        ret = glance_helper.create_image(source_image_file=source_image_loc, cleanup='function',
                                          disk_format='qcow2',
                                          container_format='bare',
                                          cache_raw=True, wait=True, name=img_name)
-        ResourceCleanup.add('image', ret[1])
         LOG.info("ret {}".format(ret))
         assert ret[0] == 0, ret[2]
         end_time = time.time() + 30
@@ -906,11 +905,10 @@ def test_import_raw_with_cache_raw():
     LOG.tc_step('Import raw images into glance with --cache-raw')
     for image in image_names:
         source_image_loc = img_dir + '/' + image
-        ret = glance_helper.create_image(source_image_file=source_image_loc,
+        ret = glance_helper.create_image(source_image_file=source_image_loc, cleanup='function',
                                          disk_format='raw',
                                          container_format='bare',
                                          cache_raw=True)
-        ResourceCleanup.add('image', ret[1])
         LOG.info("ret {}".format(ret))
         assert ret[0] == 0, ret[2]
 
@@ -963,12 +961,10 @@ def _test_exceed_size_of_img_pool():
     timeout = 7200
     end_time = time.time() + timeout
     while time.time() < end_time:
-        code, image_id = glance_helper.create_image(source_image_file=source_img_path,
+        code, image_id = glance_helper.create_image(source_image_file=source_img_path, cleanup='function',
                                                     disk_format='qcow2',
                                                     container_format='bare',
                                                     cache_raw=True, wait=True)
-        ResourceCleanup.add('image', image_id)
-
         if code != 0:
             break
     else:
@@ -1057,11 +1053,10 @@ def _test_import_large_images_with_cache_raw():
 
     LOG.tc_step('Import image into glance')
     source_img = img_dir + '/' + qcow2_img
-    out = glance_helper.create_image(source_image_file=source_img,
+    out = glance_helper.create_image(source_image_file=source_img, cleanup='function',
                                      disk_format='qcow2',
                                      container_format='bare',
                                      cache_raw=True, wait=True)
-    ResourceCleanup.add('image', out[1])
     msg = 'Failed to import {} into glance'.format(qcow2_img)
     assert out[0] == 0, msg
 

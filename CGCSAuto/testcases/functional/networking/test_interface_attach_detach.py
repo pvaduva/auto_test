@@ -76,9 +76,8 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
         ResourceCleanup.add('port', internal_port_id)
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
-    image_id = glance_helper.get_guest_image(guest_os=guest_os)
-    if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
-        ResourceCleanup.add('image', image_id, scope='module')
+    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
+    image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
 
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
@@ -203,9 +202,8 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
     initial_port_id = network_helper.create_port(tenant_net_id, 'if_attach_tenant_port')[1]
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
-    image_id = glance_helper.get_guest_image(guest_os=guest_os)
-    if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
-        ResourceCleanup.add('image', image_id, scope='module')
+    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
+    image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
 
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
@@ -326,9 +324,8 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg
     initial_port_id = network_helper.create_port(tenant_net_id, 'if_attach_tenant_port')[1]
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
-    image_id = glance_helper.get_guest_image(guest_os=guest_os)
-    if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
-        ResourceCleanup.add('image', image_id, scope='module')
+    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
+    image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
 
     LOG.tc_step("Create a flavor with 1 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]

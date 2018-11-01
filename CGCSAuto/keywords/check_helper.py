@@ -610,9 +610,9 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
-    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
-        ResourceCleanup.add('image', img_id)
+    cleanup = None if re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os) else 'function'
+    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk, cleanup=cleanup)
+    return img_id
 
 
 def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths, content, root=None, vm_action=None,

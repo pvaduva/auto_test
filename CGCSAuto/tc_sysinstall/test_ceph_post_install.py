@@ -263,8 +263,8 @@ def test_ceph_post_install(ceph_post_install_info):
     # for image_file in current_images:
     new_img_name = '{}_rbd_store'.format(current_images[0].split('.')[0])
     source_image = '{}/{}'.format(img_dir, current_images[0])
-    rc, image_id_rbd, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image)
-    ResourceCleanup.add("image", image_id_rbd)
+    rc, image_id_rbd, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image,
+                                                       cleanup='function')
     assert rc == 0, "Fail to create image {} ceph as backend storage: {}".format(new_img_name, msg)
     store = glance_helper.get_image_properties(image_id_rbd, 'store')['store']
     assert store == 'rbd', "Invalid backend; store value used = {}; expected rbd".format(store)

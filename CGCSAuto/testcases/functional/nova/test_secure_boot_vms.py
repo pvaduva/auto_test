@@ -57,10 +57,9 @@ def create_image_with_metadata(guest_os, property_key, values, disk_format, cont
         if not img_id:
             image_path = glance_helper._scp_guest_image(img_os=guest_os)
 
-            image_id = glance_helper.create_image(source_image_file=image_path,
+            image_id = glance_helper.create_image(source_image_file=image_path, cleanup='function',
                                                   disk_format=disk_format, container_format=container_format,
                                                   **{property_key: value})[1]
-            ResourceCleanup.add('image', resource_id=image_id)
             image_ids.append(image_id)
 
             LOG.tc_step("Verify image property is set correctly via glance image-show.")

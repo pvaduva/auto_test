@@ -289,8 +289,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     image_id = None
     if rt_mask_img is not None:
         image_medata = {ImageMetadata.CPU_RT_MASK: rt_mask_img}
-        image_id = glance_helper.create_image(name='rt_mask', **image_medata)[1]
-        ResourceCleanup.add('image', image_id)
+        image_id = glance_helper.create_image(name='rt_mask', cleanup='function', **image_medata)[1]
 
     vol_id = cinder_helper.create_volume(image_id=image_id)[1]
     ResourceCleanup.add('volume', vol_id)
