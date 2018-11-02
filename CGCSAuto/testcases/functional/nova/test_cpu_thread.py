@@ -1127,7 +1127,7 @@ class TestHTDisabled:
 
 class TestVariousHT:
 
-    @fixture(scope='class', autouse=True, params=['two_plus_ht', 'one_ht'])
+    @fixture(scope='class', params=['two_plus_ht', 'one_ht'])
     def ht_hosts_mix(self, request, ht_and_nonht_hosts):
 
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts
