@@ -205,7 +205,7 @@ def test_modify_mtu_oam_interface(mtu_range):
 
     if second_host == first_host:
         LOG.tc_step("Active-controller and Standby-controller are the same, likely a SIMPLEX lab," +
-                "hence, done with the testing")
+                    "hence, done with the testing")
     else:
         LOG.tc_step("Make sure current standby_controller is in available status in order to swact to")
         host_helper.wait_for_hosts_states(second_host, availability=['available'])
@@ -215,15 +215,16 @@ def test_modify_mtu_oam_interface(mtu_range):
         host_helper.wait_for_webservice_up(first_host)
 
         LOG.tc_step("Modify new standby controller {} oam interface MTU to: {}, and "
-                "ensure it's applied successfully after unlock".format(second_host, mtu))
+                    "ensure it's applied successfully after unlock".format(second_host, mtu))
 
         code, res = host_helper.modify_mtu_on_interfaces(second_host,
-                                                     mtu_val=mtu, network_type='oam', lock_unlock=True, fail_ok=True)
+                                                         mtu_val=mtu, network_type='oam', lock_unlock=True,
+                                                         fail_ok=True)
 
         LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
         code_revert, res_revert = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=pre_oam_mtu,
-                                                                   network_type='oam',
-                                                                   lock_unlock=True, fail_ok=True)
+                                                                       network_type='oam',
+                                                                       lock_unlock=True, fail_ok=True)
         if 0 == code:
             assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
         else:
@@ -265,6 +266,7 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
     The min mtu for data interface can be 1500,9000 or 9216, in which case MTU is unchangable. Need to confirm
     Args:
         mtu_range (str): A string that contain the mtu want to be tested
+        revert_data_mtu: A fixture to restore changed mtus if any to their original values
 
     Setup:
         - Nothing
