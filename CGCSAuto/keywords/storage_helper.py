@@ -63,6 +63,8 @@ def get_num_osds(con_ssh=None):
 
     Returns (numeric): Return the number of OSDs on the system,
     """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
 
     cmd = 'ceph -s'
 

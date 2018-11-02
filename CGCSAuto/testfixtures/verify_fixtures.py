@@ -198,5 +198,4 @@ def ceph_precheck():
     LOG.info('Query storage usage info')
     storage_helper.get_storage_usage()
 
-    return
 
