@@ -316,6 +316,9 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
 
+    # Appearance of sync alarm is delayed so wait for it to appear and then
+    # clear
+    system_helper.wait_for_alarm(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
     system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
 
 
