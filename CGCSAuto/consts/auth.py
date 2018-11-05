@@ -82,7 +82,7 @@ class Tenant:
         """
         Get tenant auth dict that can be passed to auth_info in cli cmd
         Args:
-            tenant_dictname (str): e.g., tenant1, TENANT2, subcloud-1, SUBCLOUD_2, system_controller
+            tenant_dictname (str): e.g., tenant1, TENANT2, system_controller
             dc_region (None|str): key for dc_region added via add_dc_region. Used to update auth_url and region
                 e.g., SystemController, RegionOne, subcloud-2
 

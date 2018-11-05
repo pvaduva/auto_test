@@ -102,7 +102,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
             flags = '{} {}'.format(auth_args.strip(), flags.strip())
 
-    complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags, sub_cmd, positional_args]).strip()
+    complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags.strip(), sub_cmd, positional_args]).strip()
 
     # workaround for CGTS-10031
     if complete_cmd.startswith('dcmanager'):
@@ -355,7 +355,7 @@ def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=No
 
 
 def dcmanager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-              auth_info=Tenant.get('admin', dc_region='SystemController'), err_only=False, timeout=CLI_TIMEOUT,
+              auth_info=Tenant.get('admin', dc_region='RegionOne'), err_only=False, timeout=CLI_TIMEOUT,
               rtn_list=False):
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller('central_region')

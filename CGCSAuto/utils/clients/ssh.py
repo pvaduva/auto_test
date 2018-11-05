@@ -915,7 +915,9 @@ class ContainerClient(SSHClient):
         Instantiate a container client
         Args:
             ssh_client: SSH Client object that's currently connected
-            entry_cmd: cmd to run to enter the container shell, e.g., docker run -it -e /bin/bash
+            entry_cmd: cmd to run to enter the container shell, e.g.,
+                docker run -it -e /bin/bash <docker_image>
+                docker start <container_id>; docker attach <container_id>
             host: host to connect to from the existing ssh session
             user: default user in container shell
             password: password for given user
@@ -937,18 +939,31 @@ class ContainerClient(SSHClient):
 
     def connect(self, retry=False, retry_interval=1, retry_timeout=60, prompt=None,
                 use_current=True, use_password=False, timeout=30):
+        """
+        Enter interactive mode for a container
+        Args:
+            retry:
+            retry_interval:
+            retry_timeout:
+            prompt:
+            use_current:
+            use_password:
+            timeout:
+
+        Returns:
+
+        """
         docker_cmd = self.docker_cmd
         if prompt:
             self.prompt = prompt
         self.exec_sudo_cmd(docker_cmd, expect_timeout=timeout, get_exit_code=False)
 
-        # Really don't know why, but following two lines are needed, otherwise exec_cmd will fail
+        # Known issue with docker where an extra ENTER is needed to show prompt
         self.send()
         self.expect(timeout=5)
 
         # Ensure exec_cmd works after above workaround
         self.exec_cmd(cmd='', expect_timeout=5)
-
 
     def close(self, force=False):
         if force or self._is_connected():

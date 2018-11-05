@@ -22,6 +22,7 @@ from testfixtures.recover_hosts import HostsToRecover
 from utils import exceptions, cli, table_parser, multi_thread
 from utils import local_host
 from utils.clients.ssh import NATBoxClient, VMSSHClient, ControllerClient, Prompt, get_cli_client
+from utils.clients.local import LocalHostClient
 from utils.guest_scripts.scripts import TisInitServiceScript
 from utils.multi_thread import MThread, Events
 from utils.tis_log import LOG
@@ -2018,39 +2019,47 @@ def scp_to_vm(vm_id, source_file, dest_file, timeout=60, validate=True, source_s
     Returns (None):
 
     """
-    if natbox_client is None:
+    if not natbox_client:
         natbox_client = NATBoxClient.get_natbox_client()
-    if source_ssh is None:
-        source_ssh = NATBoxClient.set_natbox_client('localhost')
 
-    # scp-ing from natbox, forward the call
-    if source_ssh.host == natbox_client.host:
-        return scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout, validate, natbox_client=natbox_client)
+    close_source = False
+    if not source_ssh:
+        source_ssh = LocalHostClient()
+        source_ssh.connect()
+        close_source = True
 
-    LOG.info("scp-ing from {} to natbox {}".format(source_ssh.host, natbox_client.host))
+    try:
+        # scp-ing from natbox, forward the call
+        if source_ssh.host == natbox_client.host:
+            return scp_to_vm_from_natbox(vm_id, source_file, dest_file, timeout, validate, natbox_client=natbox_client)
 
-    tmp_loc = '/tmp'
-    fname = os.path.basename(os.path.normpath(source_file))
+        LOG.info("scp-ing from {} to natbox {}".format(source_ssh.host, natbox_client.host))
+        tmp_loc = '~'
+        fname = os.path.basename(os.path.normpath(source_file))
 
-    # ensure source file exists
-    source_ssh.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
+        # ensure source file exists
+        source_ssh.exec_cmd('test -f {}'.format(source_file), fail_ok=False)
 
-    # calculate sha1sum
-    if validate:
-        src_sha1 = source_ssh.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
-        src_sha1 = src_sha1.split(' ')[0]
-        LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
-    else:
-        src_sha1 = None
+        # calculate sha1sum
+        if validate:
+            src_sha1 = source_ssh.exec_cmd('sha1sum {}'.format(source_file), fail_ok=False)[1]
+            src_sha1 = src_sha1.split(' ')[0]
+            LOG.info("src: {}, sha1sum: {}".format(source_file, src_sha1))
+        else:
+            src_sha1 = None
 
-    # scp to natbox
-    natbox_client.exec_cmd('mkdir -p {}'.format(tmp_loc))
-    source_ssh.scp_on_source(
-        source_file, natbox_client.user, natbox_client.host, tmp_loc, natbox_client.password, timeout=timeout)
+        # scp to natbox
+        # natbox_client.exec_cmd('mkdir -p {}'.format(tmp_loc))
+        source_ssh.scp_on_source(
+            source_file, natbox_client.user, natbox_client.host, tmp_loc, natbox_client.password, timeout=timeout)
 
-    return scp_to_vm_from_natbox(
-        vm_id, '/'.join([tmp_loc, fname]), dest_file, timeout, validate,
-        natbox_client=natbox_client, sha1sum=src_sha1)
+        return scp_to_vm_from_natbox(
+            vm_id, '/'.join([tmp_loc, fname]), dest_file, timeout, validate,
+            natbox_client=natbox_client, sha1sum=src_sha1)
+
+    finally:
+        if close_source:
+            source_ssh.close()
 
 
 @contextmanager

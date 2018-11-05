@@ -1171,9 +1171,10 @@ def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), **k
     return 0, ''
 
 
-def get_system_value(field='name', fail_ok=True, con_ssh=None, use_telnet=False, con_telnet=None):
+def get_system_value(field='name', fail_ok=True, auth_info=Tenant.get('admin'), con_ssh=None,
+                     use_telnet=False, con_telnet=None):
 
-    table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet,
+    table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
                                            con_telnet=con_telnet, fail_ok=fail_ok)[1])
     value = table_parser.get_value_two_col_table(table_, field=field)
     return value
@@ -1288,75 +1289,76 @@ def get_retention_period(name='metering_time_to_live', con_ssh=None):
     return int(ret_per)
 
 
-def get_dns_servers(con_ssh=None):
+def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get the DNS servers currently in-use in the System
 
     Args:
+        auth_info(dict)
         con_ssh
 
-    Returns (tuple): a list of DNS servers will be returned
+    Returns (list): a list of DNS servers will be returned
 
     """
-    table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh))
-    return table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
+    table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh, auth_info=auth_info))
+    dns_servers = table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
+
+    region = ''
+    if isinstance(auth_info, dict):
+        region = auth_info.get('region', None)
+        region = ' for {}'.format(region) if region else ''
+    LOG.info('Current dns servers{}: {}'.format(region, dns_servers))
+    return dns_servers
 
 
-def set_dns_servers(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), nameservers=None,
-                    with_action_option=None):
+def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail_ok=True, con_ssh=None,
+                    auth_info=Tenant.get('admin'), ):
     """
     Set the DNS servers
 
-
     Args:
         fail_ok:
+        check_first
         con_ssh:
         auth_info:
-        nameservers (list): list of IP addresses (in plain text) of new DNS servers to change to
+        nameservers (list|tuple): list of IP addresses (in plain text) of new DNS servers to change to
         with_action_option: whether invoke the CLI with or without "action" option
                             - None      no "action" option at all
                             - install   system dns-modify <> action=install
                             - anystr    system dns-modify <> action=anystring...
-    Returns:
-
-    Skip Conditions:
-
-    Prerequisites:
-
-    Test Setups:
-        - Do nothing and delegate to the class fixture to save the currently in-use DNS servers for restoration
-            after testing
-
-    Test Steps:
-        - Set the DNS severs
-        - Check if the DNS servers are changed correctly
-        - Verify the DNS servers are working (assuming valid DNS are input for testing purpose)
-        - Check if new DNS are saved to the persistent storage
-
-    Test Teardown:
-        - Do nothing and delegate to the class fixture for restoring the original DNS servers after testing
+    Returns (tuple):
+        (-1, <dns_servers>)
+        (0, <dns_servers>)
+        (1, <std_err>)
 
     """
-    if not nameservers or len(nameservers) < 1:
+    if not nameservers:
         raise ValueError("Please specify DNS server(s).")
+
+    if check_first:
+        dns_servers = get_dns_servers(con_ssh=con_ssh, auth_info=auth_info)
+        if dns_servers == nameservers:
+            msg = 'DNS servers already set to {}. Do nothing.'.format(dns_servers)
+            LOG.info(msg)
+            return -1, dns_servers
 
     args_ = 'nameservers="{}"'.format(','.join(nameservers))
 
-    # args_ += ' action={}'.format(with_action_option) if with_action_option is not None else ''
     if with_action_option is not None:
         args_ += ' action={}'.format(with_action_option)
 
     LOG.info('args_:{}'.format(args_))
     code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                               rtn_list=True, timeout=SysInvTimeout.DNS_MODIFY)
-
     if code == 1:
         return 1, output
-    elif code == 0:
-        return 0, ''
-    else:
-        # should not get here: cli.system() should already have been handled these cases
-        pass
+
+    post_dns_servers = get_dns_servers(auth_info=auth_info, con_ssh=con_ssh)
+    if post_dns_servers != nameservers:
+        raise exceptions.SysinvError('dns servers expected: {}; actual: {}'.format(nameservers, post_dns_servers))
+
+    LOG.info("DNS servers successfully updated to: {}".format(nameservers))
+    return 0, nameservers
 
 
 def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False, exclude_one_col_table=True):

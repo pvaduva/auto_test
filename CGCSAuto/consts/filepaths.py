@@ -139,3 +139,7 @@ class CompConfPath:
 class MuranoPath:
     APP_DEMO_PATH = '/folk/cgts/users/jsun3/com.wrs.titanium.murano.examples.demo.zip'
     BASE_PACKAGES = ["/var/cache/murano/meta/io.murano.zip", "/var/cache/murano/meta/io.murano.applications.zip"]
+
+
+class SysLogPath:
+    DC_MANAGER = '/var/log/dcmanager/dcmanager.log'

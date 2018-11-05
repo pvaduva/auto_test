@@ -1,5 +1,4 @@
 import os
-from consts.proj_vars import ProjVar
 
 
 class TisInitServiceScript(object):
@@ -36,14 +35,14 @@ WantedBy=multi-user.target
         vm_ssh.exec_sudo_cmd(
             "systemctl daemon-reload", fail_ok=False)
         vm_ssh.exec_sudo_cmd(
-            "systemctl enable %s" % (cls.service_name), fail_ok=False)
+            "systemctl enable %s" % cls.service_name, fail_ok=False)
 
     @classmethod
     def start(cls, vm_ssh):
         vm_ssh.exec_sudo_cmd(
             "systemctl daemon-reload", fail_ok=False)
         vm_ssh.exec_sudo_cmd(
-            "systemctl start %s" % (cls.service_name), fail_ok=False)
+            "systemctl start %s" % cls.service_name, fail_ok=False)
 
     @classmethod
     def src(cls):
