@@ -1,23 +1,22 @@
 import uuid
-import time
 
 from pytest import mark, skip, fixture
 from consts.auth import Tenant
 
 from utils.tis_log import LOG
 from utils.clients.telnet import TelnetClient
+from utils.clients.ssh import ControllerClient
 from utils import node, cli
-from keywords import security_helper, system_helper
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import ProjVar
 from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
-from utils.clients.ssh import ControllerClient
+from keywords import security_helper, system_helper
 
 
 theLdapUserManager = security_helper.get_ldap_user_manager()
 
 
-def _make_sure_user_exist(user_name, shell=2, sudoer=False, secondary_group=False, password_expiry_days=90,
+def _make_sure_user_exist(user_name, sudoer=False, secondary_group=False, password_expiry_days=90,
                           password_expiry_warn_days=2, delete_if_existing=True):
     """
     Make sure there is a LDAP User with the specified name existing, create one if not.
@@ -25,10 +24,7 @@ def _make_sure_user_exist(user_name, shell=2, sudoer=False, secondary_group=Fals
     Args:
         user_name (str):
                                     the user name of the LDAP User
-        shell (int):
-                                    1   -   bash
-                                    2   -   lshell (limited shell)
-        sudoer (bol):               create sudoer or not
+        sudoer (bool):               create sudoer or not
         secondary_group (str):
                                     the second group the user belongs to
         password_expiry_days (int):
@@ -44,11 +40,11 @@ def _make_sure_user_exist(user_name, shell=2, sudoer=False, secondary_group=Fals
     """
 
     code, user_info = theLdapUserManager.create_ldap_user(
-        user_name, check_if_existing=True, delete_if_existing=delete_if_existing, shell=shell, sudoer=sudoer,
+        user_name, check_if_existing=True, delete_if_existing=delete_if_existing, sudoer=sudoer,
         secondary_group=secondary_group, password_expiry_days=password_expiry_days,
         password_expiry_warn_days=password_expiry_warn_days)
 
-    if 0 != code and 1 != code:
+    if code > 0:
         LOG.error('Failed to make sure the LDAP User {} exist with code {}'.format(user_name, code))
         return False, user_info
 
@@ -72,7 +68,7 @@ def test_ldap_change_password(user_name, change_own_password):
     Returns:
 
     """
-    LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not'.format(user_name))
+    LOG.tc_step('Make sure LDAP user exist:{}, create it if not'.format(user_name))
     created, user_info = _make_sure_user_exist(user_name, delete_if_existing=True)
     if not created:
         skip('No LDAP User:{} existing or created to test changing password'.format(user_name))
@@ -119,7 +115,7 @@ def test_ldap_login_as_user(user_name, pre_store_credential):
         2   Login as the user (exit the login session after test)
     """
 
-    LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not'.format(user_name))
+    LOG.tc_step('Make sure LDAP user exist:{}, create it if not'.format(user_name))
     created, user_info = _make_sure_user_exist(user_name, delete_if_existing=True)
 
     if not created:
@@ -157,7 +153,7 @@ def test_ldap_delete_user(user_name):
         1   Create a LDAP User with the specified name (using the existing one if there's any)
         2   Delete the LDAP User
     """
-    LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not'.format(user_name))
+    LOG.tc_step('Make sure LDAP user exist:{}, create it if not'.format(user_name))
     if not _make_sure_user_exist(user_name, delete_if_existing=False):
         skip('No LDAP User:{} existing to delete'.format(user_name))
         return
@@ -209,39 +205,28 @@ def test_ldap_find_user(user_name):
     assert existing, 'Failed to find user:{}'.format(user_name)
 
 
-@mark.parametrize(('user_name', 'shell', 'sudoer', 'secondary_group', 'expiry_days', 'expiry_warn_days'), [
-    mark.p1(('ldap_defaul_user01', None, None, None, None, None)),
-    mark.p1(('ldap_bash_user02', 1, None, None, None, None)),
-    mark.p1(('ldap_bash_sudoer_user03', 1, True, None, None, None)),
-    mark.p1(('ldap_bash_sudoer_2nd_grp_user04', 1, True, True, None, None)),
-    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_user05', 1, True, True, 2, None)),
-    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_1day_user06', 1, True, True, 2, 1)),
+@mark.parametrize(('user_name', 'sudoer', 'secondary_group', 'expiry_days', 'expiry_warn_days'), [
+    # mark.p1(('ldap_defaul_user01', None, None, None, None)),
+    mark.p1(('ldap_bash_user02', None, None, None, None)),
+    mark.p1(('ldap_bash_sudoer_user03', 'sudoer', None, None, None)),
+    mark.p1(('ldap_bash_sudoer_2nd_grp_user04', 'sudoer', 'secondary_group', None, None)),
+    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_user05', 'sudoer', 'secondary_group', 2, None)),
+    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_1day_user06', 'sudoer', 'secondary_group', 2, 1)),
 ])
-def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days, expiry_warn_days):
+def test_ldap_create_user(user_name, sudoer, secondary_group, expiry_days, expiry_warn_days):
 
     """
     Create a LDAP User with the specified name
 
     User Stories:   US70961
 
-    Args:
-        user_name:
-
-    Returns:
-
     Steps:
         1   create a LDAP User with the specified name
         2   verify the LDAP User is successfully created and get its details
 
-    Teardown:
-
-            0   -- successfully created a LDAP User withe specified name and attributes
-            1   -- a LDAP User already existing with the same name (don't care other attributes for now)
-            -1  -- a LDAP User already existing but fail_on_existing specified
-            -2  -- CLI to create a user succeeded but cannot find the user after
-            -3  -- failed to create a LDAP User (the CLI failed)
-
     """
+    sudoer = True if sudoer == 'sudoer' else False
+    secondary_group = True if secondary_group == 'secondary_group' else False
 
     LOG.tc_step('Check if any LDAP User with name:{} existing'.format(user_name))
     existing, user_info = theLdapUserManager.find_ldap_user(user_name)
@@ -259,10 +244,8 @@ def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days
 
     code, user_settings = theLdapUserManager.create_ldap_user(
         user_name,
-        shell=shell,
         sudoer=sudoer,
         secondary_group=secondary_group,
-        # secondary_group_name='',
         password_expiry_days=expiry_days,
         password_expiry_warn_days=expiry_warn_days,
         check_if_existing=True,
@@ -271,11 +254,11 @@ def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days
     if 0 == code:
         LOG.info('OK, created LDAP for User:{}, user-details:\n{}'.format(user_name, user_settings))
     else:
-        if -1 == code:
+        if 1 == code:
             msg = 'Already exists the LDAP User:{}.'.format(user_name)
-        elif -2 == code:
+        elif 2 == code:
             msg = 'Failed to find the created LDAP User:{} although creating succeeded.'.format(user_name)
-        elif -3 == code:
+        elif 3 == code:
             msg = 'Failed to create the LDAP User:{}.'.format(user_name)
         else:
             msg = 'Failed to create the LDAP User:{} for unknown reason.'.format(user_name)
@@ -290,7 +273,7 @@ def test_ldap_create_user(user_name, shell, sudoer, secondary_group, expiry_days
 def ldap_user_for_test(request):
 
     user_name = 'ldapuser04'
-    LOG.fixture_step('Make sure the specified LDAP User existing:{}, create it if not exist'.format(user_name))
+    LOG.fixture_step('Make sure LDAP user exist:{}, create it if not exist'.format(user_name))
     created, user_info = _make_sure_user_exist(user_name, delete_if_existing=True)
 
     if not created:
@@ -330,50 +313,52 @@ def test_ldap_user_password(ldap_user_for_test):
 
     # change password to simple using ssh_con verify it fail
     LOG.tc_step('Set the new simple password should fail: {}'.format(simple_password))
-    rc, output = security_helper.set_ldap_user_password(user_name, simple_password, check_if_existing=False, fail_ok=True)
+    rc, output = security_helper.set_ldap_user_password(user_name, simple_password, check_if_existing=False,
+                                                        fail_ok=True)
     # change password to complex using ssh_con and verify it pass
-    assert 'Error' in output, 'Expect to {} but see {} instead'.format('Error', output )
+    assert 'Error' in output, 'Expect to {} but see {} instead'.format('Error', output)
     LOG.info('OK, succeeded  as the LDAP User: {}, password: {}'.format(user_name, password))
 
     # change password to complex using ssh_con verify it fail
     LOG.tc_step('Set the new complex password should work: {}'.format(complex_password))
-    rc, output = security_helper.set_ldap_user_password(user_name, complex_password, check_if_existing=False, fail_ok=True)
+    rc, output = security_helper.set_ldap_user_password(user_name, complex_password, check_if_existing=False,
+                                                        fail_ok=True)
     # change password to complex using ssh_con and verify it pass
-    assert 'Success' in output, 'Expect to {} but see {} instead'.format('Success', output )
+    assert 'Success' in output, 'Expect to {} but see {} instead'.format('Success', output)
     LOG.info('OK, succeeded  as the LDAP User: {}, password: {}'.format(user_name, complex_password))
 
 
-@mark.parametrize(('user_name','shell_type','sudo_type'), [
-    mark.p1(('ldapuser06', 'bash', True)),
-    mark.p1(('ldapuser07', 'lshell', False)),
+@mark.parametrize(('user_name', 'sudo_type'), [
+    mark.p1(('ldapuser06', 'sudoer')),
+    mark.p1(('ldapuser07', 'non-sudoer')),
 ])
-def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
+def test_cmds_login_as_ldap_user(user_name, sudo_type):
     """
     this test cover both CGTS-4909 and CGTS-6623
     Args:
-        user_name: username of the ldap user should be admin for thist test
-        shell_type: create the user under bash or lshell
+        user_name: username of the ldap user should be admin for this test
+        sudo_type
 
     Test Steps:
-        - created ldap user for /bash/lshell
-        - execute sudo user command for user under bash
-        - execute openstack user list command for lshell user
+        - created ldap user
+        - execute sudo user command for sudoer
+        - execute openstack user list command for non-sudoer
 
     Teardowns:
         - delete created ldap user
 
     """
     hostname = system_helper.get_active_controller_name()
-    if shell_type == 'bash':
-        shell_code = 1
+    if sudo_type == 'sudoer':
         # sudo user is only support in Bash
         prompt = Prompt.CONTROLLER_PROMPT
+        sudo_type = True
     else:
-        shell_code = 2
         prompt = '\[{}@{} \({}\)\]\$'.format(user_name, hostname, Tenant.get('admin')['user'])
+        sudo_type = False
 
-    LOG.tc_step('Make sure the specified LDAP User existing:{}, create it if not exist'.format(user_name))
-    created, user_info = _make_sure_user_exist(user_name, sudoer=sudo_type, shell=shell_code, delete_if_existing=True)
+    LOG.tc_step('Make sure LDAP user exist:{}, create it if not exist'.format(user_name))
+    _make_sure_user_exist(user_name, sudoer=sudo_type, delete_if_existing=True)
 
     LOG.tc_step('Get the password of the user {}'.format(user_name))
     password = theLdapUserManager.get_ldap_user_password(user_name)
@@ -384,7 +369,7 @@ def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
     original_con = ControllerClient.get_active_controller()
     original_prompt = original_con.get_prompt()
     original_password = original_con.password
-    logged_in, password, ssh_con = theLdapUserManager.login_as_ldap_user(user_name, password, shell=shell_code,
+    logged_in, password, ssh_con = theLdapUserManager.login_as_ldap_user(user_name, password,
                                                                          host=hostname, pre_store=True,
                                                                          disconnect_after=False)
 
@@ -398,14 +383,13 @@ def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
             LOG.tc_step("Execute sudo command 'sudo ls'")
             ssh_con.exec_sudo_cmd("ls", fail_ok=False)
 
-        # lshell_env_setup are set to run openstack user list
         LOG.tc_step("Execute openstack command 'openstack user list'")
         cli.openstack('user list', auth_info=Tenant.get('admin'), ssh_client=ssh_con)
 
     finally:
         if logged_in:
             # reset password/prompt back to original
-            ssh_con.send('exit') # exit from user login
+            ssh_con.send('exit')    # exit from user login
             ssh_con.set_prompt(original_prompt)
             ssh_con.password = original_password
             ssh_con.flush()
@@ -416,12 +400,9 @@ def test_cmds_login_as_ldap_user(user_name, shell_type, sudo_type):
     # mark.p1(('operator', 'operator', 'controller-0')),
 ])
 def test_telnet_ldap_admin_access(user_name):
-    '''
-
+    """
     Args:
         user_name: username of the ldap user should be admin for thist test
-        hostname: the name of the host for this test.
-
 
     Test Steps:
         - telnet to active controller
@@ -431,7 +412,6 @@ def test_telnet_ldap_admin_access(user_name):
     Teardowns:
         - Disconnect telnet
     """
-    '''
 
     if ProjVar.get_var('COLLECT_TELNET'):
         skip('Telnet is in use for collect log. This test which require telnet will be skipped')
@@ -460,7 +440,7 @@ def test_telnet_ldap_admin_access(user_name):
 
         code, output = telnet.exec_cmd('ls {}'.format(WRSROOT_HOME), fail_ok=False)
         LOG.info('output from test {}'.format(output))
-        assert not '*** forbidden' in output, 'not able to ls to /home/wrsroot as admin user'
+        assert '*** forbidden' not in output, 'not able to ls to /home/wrsroot as admin user'
     finally:
         telnet.send('exit')
         telnet.close()
