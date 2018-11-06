@@ -247,8 +247,6 @@ class TestImagesBasic:
 
             LOG.tc_step('Delete volume {}.'.format(volume_name))
             volumes_pg.delete_volume(volume_name)
-            assert volumes_pg.find_message_and_dismiss(messages.SUCCESS)
-            assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
             assert volumes_pg.is_volume_deleted(volume_name)
 
             LOG.tc_step('Delete image {}.'.format(self.IMAGE_NAME))
