@@ -81,6 +81,11 @@ def _select_and_get_host_infra_info(host_type):
         raise ValueError("Unknown host_type: {}".format(host_type))
 
     infra_ifs = host_helper.get_host_interfaces_for_net_type(host=host, net_type='infra')
+    infra_aes = []
+    for i in infra_ifs['ae']:
+        infra_aes += i[1]
+
+    infra_ifs = infra_ifs['ethernet'] + infra_ifs['vlan'] + infra_aes
 
     LOG.info("{} is selected. Infra ifs: {}".format(host, infra_ifs))
     return host, infra_ifs

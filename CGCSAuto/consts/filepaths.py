@@ -158,3 +158,7 @@ class LogPath:
     LAB_SETUP_PATH = '/home/wrsroot/lab_setup.group0.log'
     HEAT_SETUP_PATH = '/home/wrsroot/launch_heat_stacks.log'
     CONFIG_CONTROLLER_PATH = '/var/log/puppet/latest/puppet.log'
+
+
+class SysLogPath:
+    DC_MANAGER = '/var/log/dcmanager/dcmanager.log'

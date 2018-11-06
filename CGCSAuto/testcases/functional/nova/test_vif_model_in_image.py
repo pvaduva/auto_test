@@ -49,8 +49,8 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
     pre_nics = network_helper.get_vm_nics(vm_id)
 
     LOG.tc_step("Create an image with vif model metadata set to {}".format(vol_vif))
-    img_id = glance_helper.create_image('vif_{}'.format(vol_vif), **{ImageMetadata.VIF_MODEL: vol_vif})[1]
-    ResourceCleanup.add('image', img_id)
+    img_id = glance_helper.create_image('vif_{}'.format(vol_vif), cleanup='function',
+                                        **{ImageMetadata.VIF_MODEL: vol_vif})[1]
 
     LOG.tc_step("Boot a volume from above image")
     volume_id = cinder_helper.create_volume('vif_{}'.format(vol_vif), image_id=img_id)[1]
@@ -75,8 +75,8 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
 def test_vif_model_from_image(img_vif, skip_for_ovs):
 
     LOG.tc_step("Create an image with vif model metadata set to {}".format(img_vif))
-    img_id = glance_helper.create_image('vif_{}'.format(img_vif), **{ImageMetadata.VIF_MODEL: img_vif})[1]
-    ResourceCleanup.add('image', img_id)
+    img_id = glance_helper.create_image('vif_{}'.format(img_vif), cleanup='function',
+                                        **{ImageMetadata.VIF_MODEL: img_vif})[1]
 
     LOG.tc_step("Boot a volume from above image")
     volume_id = cinder_helper.create_volume('vif_{}'.format(img_vif), image_id=img_id)[1]

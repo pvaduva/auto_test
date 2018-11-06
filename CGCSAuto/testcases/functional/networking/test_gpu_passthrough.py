@@ -74,9 +74,8 @@ def test_gpu_passthrough(setup_alias):
     initial_usb_pfs_used = _calculate_pf_used(nova_usb_alias)
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
-    image_id = glance_helper.get_guest_image(guest_os=guest_os)
-    if not re.search(GuestImages.TIS_GUEST_PATTERN, guest_os):
-        ResourceCleanup.add('image', image_id, scope='module')
+    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
+    image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()

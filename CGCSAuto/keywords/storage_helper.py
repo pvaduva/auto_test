@@ -65,6 +65,8 @@ def get_num_osds(con_ssh=None):
 
     Returns (numeric): Return the number of OSDs on the system,
     """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
 
     cmd = 'ceph -s'
 
@@ -509,8 +511,10 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
 
 
 def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.get('admin')):
-    # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
-    if 'ceph' in backend:
+    # valid_backends = ['ceph-store', 'lvm-store', 'file-store', 'ceph-external']
+    if 'external' in backend:
+        backend = 'ceph-external'
+    elif 'ceph' in backend:
         backend = 'ceph-store'
     elif 'lvm' in backend:
         backend = 'lvm-store'

@@ -589,7 +589,7 @@ class Labs:
     WCP_106 = {
         'short_name': 'wcp_106',
         'name': 'yow-cgcs-wildcat-106',
-        'floating ip': '128.224.150.95',
+        'floating ip': '128.224.150.94',
         'controller-0 ip': '128.224.150.94',
         'controller_nodes': [23601],
         'system_type': 'CPE',

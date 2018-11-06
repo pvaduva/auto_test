@@ -26,8 +26,8 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         expt_vswitch_map = host_helper.get_expected_vswitch_port_engine_map(host_ssh)
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
-    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', rtn_list=True)
-    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, rtn_list=True)
+    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', ports_only=True)
+    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, ports_only=True)
 
     ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
 
@@ -610,9 +610,9 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
-    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
-        ResourceCleanup.add('image', img_id)
+    cleanup = None if re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os) else 'function'
+    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk, cleanup=cleanup)
+    return img_id
 
 
 def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths, content, root=None, vm_action=None,
@@ -727,6 +727,8 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
     LOG.info("loss_paths: {}, no_loss_paths: {}, total_file_pahts: {}".format(loss_paths, no_loss_paths, final_paths))
     res_files = {}
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=guest_os) as vm_ssh:
+        vm_ssh.exec_sudo_cmd('cat /etc/fstab')
+        vm_ssh.exec_sudo_cmd("mount | grep --color=never '/dev'")
 
         for file_path in loss_paths:
             vm_ssh.exec_sudo_cmd('touch {}2'.format(file_path), fail_ok=False)

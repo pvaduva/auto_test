@@ -13,7 +13,7 @@ from consts.cgcs import MuranoEnvStatus
 from keywords import murano_helper, host_helper, system_helper, glance_helper, common, network_helper
 
 
-@fixture(scope='session', autouse=True)
+@fixture(scope='module', autouse=True)
 def configure_murano(request):
 
     def _disable_murano_service():
@@ -66,7 +66,7 @@ def test_murano(configure_murano):
 
     # import and create murano image
     LOG.tc_step("Importing and Creating Murano image... ")
-    img_id = glance_helper.get_guest_image('debian-8-m-agent', cleanup="session")
+    img_id = glance_helper.get_guest_image('debian-8-m-agent', cleanup="module")
     LOG.info('Image with name debian-8-m-agent with id {} has been created'.format(img_id))
 
     # set and update image

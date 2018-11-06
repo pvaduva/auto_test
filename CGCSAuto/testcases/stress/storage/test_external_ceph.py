@@ -127,9 +127,9 @@ def add_external_ceph(dest_filepath, ceph_services):
     assert volume_type == 'ceph-external', "Volume created in wrong backend"
 
 
-@mark.parameterize(('ceph_lab', 'ceph_services'),
+@mark.parametrize(('ceph_lab', 'ceph_services'),
                    [('WCP_7_12', ['cinder', 'glance', 'nova'])])
-def _test_configure_external_ceph(ceph_lab, ceph_services):
+def test_configure_external_ceph(ceph_lab, ceph_services):
     """
     This test will configure external ceph on a system.  Currently this is only
     supported on wcp3-6, using wcp7-12 as the external ceph system.  In order

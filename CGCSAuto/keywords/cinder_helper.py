@@ -49,7 +49,7 @@ def get_volumes(vols=None, name=None, name_strict=False, vol_type=None, size=Non
         name_strict (bool):
         vol_type (str):
         size (str):
-        status:(str)
+        status:(str|list|tuple)
         attached_vm (str):
         bootable (str|bool): true or false
         rtn_val
@@ -521,7 +521,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
 
     """
     if volumes is None:
-        volumes = get_volumes(status='available', auth_info=auth_info, con_ssh=con_ssh)
+        volumes = get_volumes(status=('available', 'error'), auth_info=auth_info, con_ssh=con_ssh)
 
     LOG.info("Deleting volume(s): {}".format(volumes))
 

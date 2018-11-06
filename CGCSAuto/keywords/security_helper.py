@@ -319,9 +319,7 @@ class LdapUserManager(object, metaclass=Singleton):
         return code, output
 
     @staticmethod
-    def validate_user_settings(shell=2,
-                               sudoer=False,
-                               secondary_group=False,
+    def validate_user_settings(secondary_group=False,
                                secondary_group_name=None,
                                password_expiry_days=90,
                                password_expiry_warn_days=2
@@ -330,22 +328,11 @@ class LdapUserManager(object, metaclass=Singleton):
         Validate the settings to be used as attributes of a LDAP User
 
         Args:
-            shell (int):
-                1   -   Bash
-                2   -   LShell (limited shell)
-
-            sudoer (boo)
-                True    -   Add the user to sudoer list
-                False   -   Do not add the user to sudoer list
-
             secondary_group (bool):
                 True    -   Secondary group to add user to
                 False   -   No secondary group
-
             secondary_group_name (str):     Name of secondary group (will be ignored if secondary_group is False
-
             password_expiry_days (int):
-
             password_expiry_warn_days (int):
 
         Returns:
@@ -353,31 +340,23 @@ class LdapUserManager(object, metaclass=Singleton):
         """
 
         try:
-            opt_shell = int(shell)
             opt_expiry_days = int(password_expiry_days)
             opt_expiry_warn_days = int(password_expiry_warn_days)
             bool(secondary_group)
             str(secondary_group_name)
         except ValueError:
-            return -1, 'invalid input: {}, {}, {}'.format(shell, password_expiry_days, password_expiry_warn_days)
-
-        if opt_shell not in [1, 2]:
-            return -2, 'input error: unknown SHELL:{}, only 1) Bash 2) LShell are supported'.format(shell)
-
-        if sudoer and 1 != opt_shell:
-            return -3, 'input error: sudoer only supported when 1) Bash is selected'
+            return 1, 'invalid input: {}, {}'.format(password_expiry_days, password_expiry_warn_days)
 
         if opt_expiry_days <= 0:
-            return -4, 'invalid password expiry days:{}'.format(opt_expiry_days)
+            return 4, 'invalid password expiry days:{}'.format(opt_expiry_days)
 
         if opt_expiry_warn_days <= 0:
-            return -5, 'invalid password expiry days:{}'.format(opt_expiry_warn_days)
+            return 5, 'invalid password expiry days:{}'.format(opt_expiry_warn_days)
 
         return 0, ''
 
     def create_ldap_user(self,
                          user_name,
-                         shell=2,
                          sudoer=False,
                          secondary_group=False,
                          secondary_group_name=None,
@@ -389,55 +368,43 @@ class LdapUserManager(object, metaclass=Singleton):
 
         Args:
             user_name (str):        user name of the LDAP User
-
-            shell (int):
-                1   -   Bash
-                2   -   LShell (limited shell)
-
             sudoer (boo)
                 True    -   Add the user to sudoer list
                 False   -   Do not add the user to sudoer list
-
             secondary_group (bool):
                 True    -   Secondary group to add user to
                 False   -   No secondary group
-
             secondary_group_name (str):     Name of secondary group (will be ignored if secondary_group is False
-
             password_expiry_days (int):
-
             password_expiry_warn_days (int):
-
             delete_if_existing (bool):
                 True    -   Delete the user if it is already existing
                 False   -   Return the existing LDAP User
-
             check_if_existing (bool):
                 True    -   Check if the LDAP User existing with the specified name
                 False   -   Do not check if any LDAP Users with the specified name existing
 
         Returns tuple(code, user_infor):
             code (int):
+                -1   -- a LDAP User already existing with the same name (don't care other attributes for now)
                 0   -- successfully created a LDAP User withe specified name and attributes
-                1   -- a LDAP User already existing with the same name (don't care other attributes for now)
-                -1  -- a LDAP User already existing but fail_on_existing specified
-                -2  -- CLI to create a user succeeded but cannot find the user after
-                -3  -- failed to create a LDAP User (the CLI failed)
-                -4  -- failed to change the initial password and login the first time
-                -5  -- invalid inputs
+                1  -- a LDAP User already existing but fail_on_existing specified
+                2  -- CLI to create a user succeeded but cannot find the user after
+                3  -- failed to create a LDAP User (the CLI failed)
+                4  -- failed to change the initial password and login the first time
+                5  -- invalid inputs
         """
-        shell = 2 if shell is None else shell
         password_expiry_days = 90 if password_expiry_days is None else password_expiry_days
         password_expiry_warn_days = 2 if password_expiry_warn_days is None else password_expiry_warn_days
         secondary_group = False if secondary_group is None else secondary_group
         secondary_group_name = '' if secondary_group_name is None else secondary_group_name
 
-        code, message = self.validate_user_settings(shell=shell, sudoer=sudoer, secondary_group=secondary_group,
+        code, message = self.validate_user_settings(secondary_group=secondary_group,
                                                     secondary_group_name=secondary_group_name,
                                                     password_expiry_days=password_expiry_days,
                                                     password_expiry_warn_days=password_expiry_warn_days)
         if 0 != code:
-            return -5, {}
+            return 5, {}
 
         if check_if_existing:
             existing, user_info = self.find_ldap_user(user_name)
@@ -445,9 +412,9 @@ class LdapUserManager(object, metaclass=Singleton):
                 if delete_if_existing:
                     code, message = self.rm_ldap_user(user_name)
                     if 0 != code:
-                        return -1, user_info
+                        return 1, user_info
                 else:
-                    return 1, user_info
+                    return -1, user_info
         cmds_expectings = [
             (
                 'sudo ldapusersetup',
@@ -456,38 +423,15 @@ class LdapUserManager(object, metaclass=Singleton):
             ),
             (
                 '{}'.format(user_name),
-                (
-                    'Select Login Shell option # \[2\]:.*',
-                    '\d+.* Bash.*',
-                    '\d+.* Lshell'
-                ),
+                ('Add {} to sudoer list? (yes/NO): '.format(user_name), ),
                 ('Critical setup error: cannot add user.*',),
             ),
-        ]
-        if 1 == shell:
-            cmds_expectings += [
-                (
-                    '1',
-                    ('Add {} to sudoer list? (yes/NO): '.format(user_name), ),
-                    ()
-                ),
-                (
-                    'yes' if sudoer else 'NO',
-                    ('Add .* to secondary user group\? \(yes/NO\):', ),
-                    ()
-                ),
+            (
+                'yes' if sudoer else 'NO',
+                ('Add .* to secondary user group\? \(yes/NO\):', ),
+                ()
+            ),
             ]
-        elif 2 == shell:
-            cmds_expectings += [
-                (
-                    '2',
-                    ('Add .* to secondary user group\? \(yes/NO\):', ),
-                    ()
-                )
-            ]
-        # else:
-        #     # fatal error: unknow shell
-        #     return -5, {}
 
         if secondary_group:
             cmds_expectings += [
@@ -549,26 +493,25 @@ class LdapUserManager(object, metaclass=Singleton):
             if existing:
                 success, password = self.login_as_ldap_user_first_time(user_name)
                 if not success:
-                    code = -4
+                    code = 4
                 else:
                     user_info['passwords'] = [password]
                     self.users_info[user_name] = user_info
                     code = 0
             else:
-                code = - 2
+                code = 2
         else:
-            code = -3
+            code = 3
 
         return code, user_info
 
-    def login_as_ldap_user(self, user_name, password, shell=2, host=None, pre_store=False, disconnect_after=False):
+    def login_as_ldap_user(self, user_name, password, host=None, pre_store=False, disconnect_after=False):
         """
         Login as the specified user name and password onto the specified host
 
         Args:
             user_name (str):        user name
             password (str):         password
-            shell (int)
             host (str):             host to login to
             pre_store (bool):
                     True    -       pre-store keystone user credentials for session
@@ -589,80 +532,23 @@ class LdapUserManager(object, metaclass=Singleton):
                 host = 'controller-0'
 
         prompt_keystone_user_name = 'Enter Keystone username \[{}\]: '.format(user_name)
-        if shell == 1:
-            cmd_expected = (
-                (
-                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, host),
-                    ('Are you sure you want to continue connecting \(yes/no\)\?',),
-                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(host),),
-                ),
-                (
-                    'yes',
-                    ('{}@{}\'s password: '.format(user_name, host),),
-                    (),
-                ),
-                (
-                    '{}'.format(password),
-                    (prompt_keystone_user_name, Prompt.CONTROLLER_PROMPT,),
-                    ('Permission denied, please try again\.',),
-                ),
-            )
-
-        elif shell == 2:
-
-            cmd_expected = (
-                (
-                    'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, host),
-                    ('Are you sure you want to continue connecting \(yes/no\)\?',),
-                    ('ssh: Could not resolve hostname {}: Name or service not known'.format(host),),
-                ),
-                (
-                    'yes',
-                    ('{}@{}\'s password: '.format(user_name, host),),
-                    (),
-                ),
-                (
-                    '{}'.format(password),
-                    ('Pre-store Keystone user credentials for this session\? \(y/N\): ',),
-                    ('Permission denied, please try again\.',),
-                ),
-                (
-                    '{}'.format('y' if pre_store else 'N'),
-                    (
-                        prompt_keystone_user_name,
-                        Prompt.CONTROLLER_PROMPT,
-                    ),
-                    (),
-                ),
-                (
-                    '{}'.format(self.KEYSTONE_USER_NAME),
-                    ('Enter Keystone user domain name: ',),
-                    (),
-                ),
-                (
-                    '{}'.format(self.KEYSTONE_USER_DOMAIN_NAME),
-                    ('Enter Project name: ',),
-                    (),
-                ),
-                (
-                    '{}'.format(self.PROJECT_NAME),
-                    ('Enter Project domain name: ',),
-                    (),
-                ),
-                (
-                    '{}'.format(self.PROJECT_DOMAIN_NAME),
-                    ('Enter Keystone password:',),
-                    (),
-                ),
-                (
-                    '{}'.format(password),
-                    ('Keystone credentials preloaded\!.*\[{}@{} \({}\)\]\$'.format(
-                        user_name, host, self.KEYSTONE_USER_NAME),),
-                    (),
-                ),
-            )
-        else:
-            raise ValueError('Invalid shell. Please choose 1 or 2.')
+        cmd_expected = (
+            (
+                'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, host),
+                ('Are you sure you want to continue connecting \(yes/no\)\?',),
+                ('ssh: Could not resolve hostname {}: Name or service not known'.format(host),),
+            ),
+            (
+                'yes',
+                ('{}@{}\'s password: '.format(user_name, host),),
+                (),
+            ),
+            (
+                '{}'.format(password),
+                (prompt_keystone_user_name, Prompt.CONTROLLER_PROMPT,),
+                ('Permission denied, please try again\.',),
+            ),
+        )
 
         logged_in = False
         self.ssh_con.flush()

@@ -136,6 +136,10 @@ def parse_args():
     lab_grp.add_argument('--ovs', dest='ovs',
                          action='store_true',
                          help="Use ovs-dpdk versions of files")
+    
+    lab_grp.add_argument('--kubernetes', dest='kubernetes',
+                         action='store_true',
+                         help="Use kubernetes option in config_controller")
 
     lab_grp.add_argument('--lowlat', dest='lowlat',
                          action='store_true',
@@ -1085,7 +1089,7 @@ def apply_patches(node, bld_server_conn, patch_dir_paths):
     node.telnet_conn.get_read_until(LOGIN_PROMPT, REBOOT_TIMEOUT)
 
 
-def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os="centos"):
+def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os="centos", fm_alarm=False):
     '''
     Function for waiting until an alarm clears
     '''
@@ -1101,6 +1105,9 @@ def wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_i
                 cmd = "source /etc/nova/openrc; system alarm-list --nowrap"
             else:
                 cmd = "source /etc/nova/openrc; system alarm-list"
+
+            if fm_alarm:
+                cmd = "source /etc/nova/openrc; fm alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
 
             if not find_error_msg(output, alarm_id):
@@ -1487,6 +1494,11 @@ def setupHeat(bld_server_conn):
     if rc != 0:
         log.info("{} not found.  Skipping heat setup.".format(heat_resources_path))
         return
+    cmd = "test -f /home/wrsroot/.this_didnt_work"
+    rc, output = controller0.ssh_conn.exec_cmd(cmd)
+    if rc == 0:
+        log.info("Skipping heat setup")
+        return
 
     # Check if /home/wrsroot/create_resource_stacks.sh exists
     stack_create_script = WRSROOT_HOME_DIR + STACK_CREATE_SCRIPT
@@ -1537,7 +1549,8 @@ def setupHeat(bld_server_conn):
         wr_exit()._exit(1, msg)
 
 
-def configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region):
+def configureController(bld_server_conn, host_os, install_output_dir, banner,
+                        branding, config_region, kubernetes):
     # Configure the controller as required
     global controller0
     if not cumulus:
@@ -1571,10 +1584,14 @@ def configureController(bld_server_conn, host_os, install_output_dir, banner, br
             else:
                 rc, output = controller0.ssh_conn.exec_cmd(cmd)
             cmd = "echo " + WRSROOT_PASSWORD + " | sudo -S"
-            if config_region is False:
-                cmd += " config_controller --config-file " + cfgfile
-            else:
+
+            if config_region:
                 cmd += " config_region " + cfgfile
+            elif kubernetes:
+                cmd += " config_controller --kubernetes --config-file " + cfgfile
+            else:
+                cmd += " config_controller --config-file " + cfgfile
+
             os.environ["TERM"] = "xterm"
             if host_os == "centos" and not cumulus:
                 rc, output = controller0.telnet_conn.exec_cmd(cmd, timeout=CONFIG_CONTROLLER_TIMEOUT)
@@ -1910,8 +1927,10 @@ def main():
     wipedisk = args.wipedisk
     security = args.security
     ovs = args.ovs
+    kubernetes = args.kubernetes
 
     branding = args.branding
+    fm_alarm = False
 
     if args.bld_server != "":
         bld_server = args.bld_server
@@ -2029,6 +2048,7 @@ def main():
     logutils.print_name_value("Security", security)
     logutils.print_name_value("Low Lat", lowlat)
     logutils.print_name_value("OVS", ovs)
+    logutils.print_name_value("Kubernetes", kubernetes)
     logutils.print_name_value("Run Postinstall Scripts", postinstall)
     logutils.print_name_value("Run config_region instead of config_controller", config_region)
 
@@ -2381,7 +2401,7 @@ def main():
     lab_install_step = install_step(msg, 3, ['regular', 'storage', 'cpe', 'simplex'])
 
     if do_next_install_step(lab_type, lab_install_step):
-        configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region)
+        configureController(bld_server_conn, host_os, install_output_dir, banner, branding, config_region, kubernetes)
         # controller0.ssh_conn.disconnect()
         controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
         # Depends on when we poll whether controller0 is offline or online
@@ -2413,7 +2433,6 @@ def main():
                     log.error(msg)
                     wr_exit()._exit(1, msg)
 
-
             run_labsetup()
             # Test if the node is locked before attempting an unlock
             node_locked = test_state(controller0, ADMINISTRATIVE, LOCKED)
@@ -2438,6 +2457,20 @@ def main():
     cmd = "source /etc/nova/openrc"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to source environment")
+
+    cmd = "system alarm-list"
+    rc, out = controller0.ssh_conn.exec_cmd(cmd)
+    if rc == 2:
+        log.info("Use fm alarm-list instead of system alarm-list")
+        fm_alarm = True
+    
+    if fm_alarm:
+        cmd = "touch .this_didnt_work"
+        rc, output = controller0.ssh_conn.exec_cmd(cmd)
+        if rc != 0:
+            msg = "Failed to disable heat stacks"
+            log.error(msg)
+            wr_exit()._exit(1, msg)
 
     if stop == "3":
         wr_exit()._exit(0, "User requested stop after {}".format(msg))
@@ -2562,9 +2595,12 @@ def main():
     # Configuration action is required to provision compute function (250.010)
     # drbd-sync (400.001)
     if lab_type is 'cpe':
-        wait_until_alarm_clears(controller0, timeout=840, check_interval=60, alarm_id="400.002", host_os=host_os)
-        wait_until_alarm_clears(controller0, timeout=720, check_interval=60, alarm_id="250.010", host_os=host_os)
-        wait_until_alarm_clears(controller0, timeout=25200, check_interval=60, alarm_id="400.001", host_os=host_os)
+        wait_until_alarm_clears(controller0, timeout=840, check_interval=60, alarm_id="400.002",
+                                host_os=host_os, fm_alarm=fm_alarm)
+        wait_until_alarm_clears(controller0, timeout=720, check_interval=60, alarm_id="250.010",
+                                host_os=host_os, fm_alarm=fm_alarm)
+        wait_until_alarm_clears(controller0, timeout=25200, check_interval=60, alarm_id="400.001",
+                                host_os=host_os, fm_alarm=fm_alarm)
 
     # For storage lab run lab setup
     executed = False
@@ -2592,7 +2628,8 @@ def main():
     # After unlocking storage nodes, wait for ceph to come up
     if lab_type == 'storage':
         time.sleep(10)
-        wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
+        wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001",
+                                host_os=host_os, fm_alarm=fm_alarm)
 
     # Lab-install -  run_lab_setup - applicable storage labs
     lab_install_step = install_step("run_lab_setup", 15, ['storage'])
@@ -2639,12 +2676,16 @@ def main():
 
         if host_os == "centos" and len(controller_dict) > 1:
             cmd = "system alarm-list --nowrap"
+            if fm_alarm:
+                cmd = "fm alarm-list --nowrap"
             output = controller0.ssh_conn.exec_cmd(cmd)[1]
 
             # Wait for degrade sysinv set to raise
             time.sleep(10)
-            wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="400.001", host_os=host_os)
-            wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001", host_os=host_os)
+            wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="400.001",
+                                    host_os=host_os, fm_alarm=fm_alarm)
+            wait_until_alarm_clears(controller0, timeout=600, check_interval=60, alarm_id="800.001",
+                                    host_os=host_os, fm_alarm=fm_alarm)
 
             if find_error_msg(output, "250.001"):
                 log.info('Config out-of-date alarm is present')
@@ -2675,11 +2716,11 @@ def main():
 
                 # Wait until config out-of-date clears
                 wait_until_alarm_clears(controller1, timeout=1200, check_interval=60, alarm_id="250.001",
-                                        host_os=host_os)
+                                        host_os=host_os, fm_alarm=fm_alarm)
 
                 # Wait until sm-services are up
                 wait_until_alarm_clears(controller1, timeout=600, check_interval=60, alarm_id="400.002",
-                                        host_os=host_os)
+                                        host_os=host_os, fm_alarm=fm_alarm)
 
                 cmd = "system host-swact controller-1"
                 rc, output = controller1.ssh_conn.exec_cmd(cmd)
@@ -2695,12 +2736,15 @@ def main():
         elif host_os == "centos" and len(controller_dict) == 1:
             log.info("Skipping this step since we only have one controller")
 
-    wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="250.001", host_os=host_os)
+    wait_until_alarm_clears(controller0, timeout=1200, check_interval=60, alarm_id="250.001",
+                            host_os=host_os, fm_alarm=fm_alarm)
 
     if postinstall and host_os == "centos":
         run_postinstall(controller0)
 
     cmd = "source /etc/nova/openrc; system alarm-list"
+    if fm_alarm:
+        cmd = "source /etc/nova/openrc; fm alarm-list"
     if controller0.ssh_conn.exec_cmd(cmd)[0] != 0:
         log.error("Failed to get alarm list")
 

@@ -31,22 +31,28 @@ def add_route_for_vm_access(compliance_client):
 
 
 @contextmanager
-def start_container_shell(host_client, docker_cmd, prompt='.*root@.*# .*'):
+def start_container_shell(host_client, docker_cmd, prompt='.*root@.*# .*', remove=False):
     """
 
     Args:
         host_client (SSHClient):
         docker_cmd (str):
         prompt (str):
+        remove (bool): whether to remove the container after exiting
 
     """
     docker_conn = ContainerClient(host_client, entry_cmd=docker_cmd, initial_prompt=prompt)
     docker_conn.connect()
+    docker_id = None
+    if remove:
+        docker_id = docker_conn.exec_cmd('docker ps -q')[1]
 
     try:
         yield docker_conn
     finally:
         docker_conn.close()
+        if remove:
+            host_client.exec_cmd('docker rm {}'.format(docker_id))
 
 
 @contextmanager

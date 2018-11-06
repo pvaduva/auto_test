@@ -356,9 +356,8 @@ class TestHTEnabled:
             image_meta[ImageMetadata.CPU_POLICY] = img_cpu_pol
 
         LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-        image_id = glance_helper.create_image(name='cpu_thread_{}'.format(img_cpu_thr_pol), **image_meta)[1]
-        ResourceCleanup.add('image', image_id)
-
+        image_id = glance_helper.create_image(name='cpu_thread_{}'.format(img_cpu_thr_pol), cleanup='function',
+                                              **image_meta)[1]
         if create_vol:
             LOG.tc_step("Create a volume from above image")
             source_id = cinder_helper.create_volume(name='cpu_thr_img', image_id=image_id)[1]
@@ -840,8 +839,7 @@ class TestHTEnabled:
 
         image_meta = {ImageMetadata.CPU_POLICY: cpu_pol, ImageMetadata.CPU_THREAD_POLICY: cpu_thr_pol}
         LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-        image_id = glance_helper.create_image(name=name_str, **image_meta)[1]
-        ResourceCleanup.add('image', image_id)
+        image_id = glance_helper.create_image(name=name_str, cleanup='function', **image_meta)[1]
 
         if boot_source == 'volume':
             LOG.tc_step("Create a volume from above image")
@@ -990,8 +988,7 @@ class TestHTEnabled:
 
             image_meta = {ImageMetadata.CPU_POLICY: cpu_pol, ImageMetadata.CPU_THREAD_POLICY: cpu_thr_pol}
             LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-            image_id = glance_helper.create_image(name=name_str, **image_meta)[1]
-            ResourceCleanup.add('image', image_id)
+            image_id = glance_helper.create_image(name=name_str, cleanup='function', **image_meta)[1]
 
             if boot_source == 'volume':
                 LOG.tc_step("Create a volume from above image")
@@ -1130,7 +1127,7 @@ class TestHTDisabled:
 
 class TestVariousHT:
 
-    @fixture(scope='class', autouse=True, params=['two_plus_ht', 'one_ht'])
+    @fixture(scope='class', params=['two_plus_ht', 'one_ht'])
     def ht_hosts_mix(self, request, ht_and_nonht_hosts):
 
         ht_hosts, non_ht_hosts = ht_and_nonht_hosts

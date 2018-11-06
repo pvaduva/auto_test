@@ -1,14 +1,16 @@
+from time import sleep
+
+from pytest import fixture
+from pytest import mark, raises
+
 from utils.horizon.regions import messages
 from utils.horizon.pages.project.volumes import volumespage
-from pytest import fixture
 from utils.horizon import helper
 from utils.horizon.pages.project.compute import imagespage
-from time import sleep
 from utils.horizon.pages.project.compute import instancespage
 from utils.tis_log import LOG
-from pytest import mark, raises
-from testfixtures.horizon import tenant_home_pg, driver
 from consts import horizon
+from testfixtures.horizon import tenant_home_pg, driver
 
 
 class TestVolumesBasic:
@@ -72,23 +74,23 @@ class TestVolumesBasic:
         volumes_pg.create_volume(
             volume_name=self.VOLUME_NAME,
             volume_source_type=volume_source_type,
-            source_name=source_name)
-        assert volumes_pg.find_message_and_dismiss(messages.INFO)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
+            source_name=source_name
+        )
 
         LOG.tc_step('Check that the volume is in the list with Available')
         assert volumes_pg.is_volume_status(self.VOLUME_NAME, 'Available')
 
         LOG.tc_step('Delete volume {}'.format(self.VOLUME_NAME))
         volumes_pg.delete_volume(self.VOLUME_NAME)
-        assert volumes_pg.find_message_and_dismiss(messages.SUCCESS)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Check that the volume is absent in the list')
         assert volumes_pg.is_volume_deleted(self.VOLUME_NAME)
         horizon.test_result = True
 
-    def test_manage_volume_attachments(self, instances_pg):
+    @mark.parametrize(('boot_source_type', 'source_name', 'flavor_name', 'network_names'), [
+        ('Image', 'tis-centos-guest', 'small', ['tenant1-mgmt-net']),
+    ])
+    def test_manage_volume_attachments(self, instances_pg, boot_source_type, source_name, flavor_name, network_names):
         """
         Test the attach/detach actions for volume:
 
@@ -114,11 +116,11 @@ class TestVolumesBasic:
         instance_name = helper.gen_resource_name('volume_attachment')
         LOG.tc_step('Create new instance {}'.format(instance_name))
         instances_pg.create_instance(instance_name,
-                                     boot_source_type='Image',
+                                     boot_source_type=boot_source_type,
                                      create_new_volume=False,
-                                     source_name='tis-centos-guest',
-                                     flavor_name='small',
-                                     network_names=['tenant1-mgmt-net'])
+                                     source_name=source_name,
+                                     flavor_name=flavor_name,
+                                     network_names=network_names)
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
         assert instances_pg.is_instance_active(instance_name)
 
@@ -127,14 +129,10 @@ class TestVolumesBasic:
         volumes_pg.go_to_target_page()
         sleep(3)
         volumes_pg.create_volume(self.VOLUME_NAME)
-        volumes_pg.find_message_and_dismiss(messages.INFO)
-        assert not (volumes_pg.find_message_and_dismiss(messages.ERROR))
         assert (volumes_pg.is_volume_status(self.VOLUME_NAME, 'Available'))
 
         LOG.tc_step('Attach the volume to the newly created instance')
         volumes_pg.attach_volume_to_instance(self.VOLUME_NAME, instance_name)
-        volumes_pg.find_message_and_dismiss(messages.INFO)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Check that volume is In-use and link to instance')
         assert volumes_pg.is_volume_status(self.VOLUME_NAME, 'In-use')
@@ -142,16 +140,12 @@ class TestVolumesBasic:
 
         LOG.tc_step('Detach volume from instance')
         volumes_pg.detach_volume_from_instance(self.VOLUME_NAME, instance_name)
-        volumes_pg.find_message_and_dismiss(messages.SUCCESS)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Check volume is Available instead of In-use')
         assert volumes_pg.is_volume_status(self.VOLUME_NAME, 'Available')
 
         LOG.tc_step('Delete the volume {}'.format(self.VOLUME_NAME))
         volumes_pg.delete_volume(self.VOLUME_NAME)
-        volumes_pg.find_message_and_dismiss(messages.SUCCESS)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
         assert volumes_pg.is_volume_deleted(self.VOLUME_NAME)
 
         LOG.tc_step('Delete the instance {}'.format(instance_name))
@@ -176,20 +170,15 @@ class TestVolumesBasic:
             volumes_pg.go_to_target_page()
             LOG.fixture_step('Delete volume {}'.format(self.VOLUME_NAME))
             self._delete_volume(volumes_pg)
-
         request.addfinalizer(teardown)
         return volumes_pg
 
     def _create_volume(self, volumespage):
         volumespage.create_volume(self.VOLUME_NAME)
-        assert volumespage.find_message_and_dismiss(messages.INFO)
-        assert not volumespage.find_message_and_dismiss(messages.ERROR)
         assert volumespage.is_volume_status(self.VOLUME_NAME, 'Available')
 
     def _delete_volume(self, volumespage):
         volumespage.delete_volume(self.VOLUME_NAME)
-        assert volumespage.find_message_and_dismiss(messages.SUCCESS)
-        assert not volumespage.find_message_and_dismiss(messages.ERROR)
         assert volumespage.is_volume_deleted(self.VOLUME_NAME)
 
     def test_volume_edit(self, volumes_pg_action):
@@ -213,8 +202,6 @@ class TestVolumesBasic:
         LOG.tc_step('Edit the volume')
         new_name = "edited_" + self.VOLUME_NAME
         volumes_pg_action.edit_volume(self.VOLUME_NAME, new_name, "description", True)
-        assert volumes_pg_action.find_message_and_dismiss(messages.INFO)
-        assert not volumes_pg_action.find_message_and_dismiss(messages.ERROR)
 
         LOG.tc_step('Check that the volume is edited successfully')
         assert volumes_pg_action.is_volume_present(new_name)
@@ -244,8 +231,6 @@ class TestVolumesBasic:
         LOG.tc_step('Extend volume')
         orig_size = int(volumes_pg_action.get_volume_info(self.VOLUME_NAME, 'Size')[:-3])
         volumes_pg_action.extend_volume(self.VOLUME_NAME, str(orig_size + 1))
-        assert volumes_pg_action.find_message_and_dismiss(messages.INFO)
-        assert not volumes_pg_action.find_message_and_dismiss(messages.ERROR)
         assert volumes_pg_action.is_volume_status(self.VOLUME_NAME, 'Available')
 
         LOG.tc_step('Check that the volume size is changed')
@@ -298,7 +283,10 @@ class TestVolumesBasic:
             volumes_pg_action.go_to_target_page()
         horizon.test_result = True
 
-    def test_volume_launch_as_instance(self, volumes_pg_action):
+    @mark.parametrize(('flavor_name', 'network_names', 'boot_source_type'), [
+        ('small', ['tenant1-mgmt-net'], 'Volume'),
+    ])
+    def test_volume_launch_as_instance(self, volumes_pg_action, boot_source_type, flavor_name, network_names):
         """
         This test case checks launch volume as instance functionality:
 
@@ -315,8 +303,8 @@ class TestVolumesBasic:
         Test Steps:
             - Edit new volume as bootable
             - Launch volume as instance
-            - Check that volume status is 'in use'
             - Check that instance is 'active' and attached by the volume
+            - Check that volume status is 'in use'
             - Delete the instance
         """
         LOG.tc_step('Edit new volume as Bootable')
@@ -324,18 +312,21 @@ class TestVolumesBasic:
         instance_name = helper.gen_resource_name('volume_instance')
 
         LOG.tc_step('Launch volume {} as instance'.format(self.VOLUME_NAME))
-        volumes_pg_action.launch_as_instance(self.VOLUME_NAME, instance_name, delete_volume_on_instance_delete=True,
-                                             flavor_name='small', network_names=['tenant1-mgmt-net'])
-
-        LOG.tc_step('Check that volume status is In-use')
-        assert volumes_pg_action.is_volume_status(self.VOLUME_NAME, 'In-use')
-
+        volumes_pg_action.launch_as_instance(self.VOLUME_NAME,
+                                             instance_name,
+                                             boot_source_type=boot_source_type,
+                                             delete_volume_on_instance_delete=False,
+                                             flavor_name=flavor_name,
+                                             network_names=network_names)
         LOG.tc_step('Check that instance is Active and attached by the volume')
         instances_pg = instancespage.InstancesPage(volumes_pg_action.driver)
         instances_pg.go_to_target_page()
         assert instances_pg.is_instance_active(instance_name)
         volumes_pg_action.go_to_target_page()
         assert instance_name in volumes_pg_action.get_volume_info(self.VOLUME_NAME, "Attached To")
+
+        LOG.tc_step('Check that volume status is In-use')
+        assert volumes_pg_action.is_volume_status(self.VOLUME_NAME, 'In-use')
 
         LOG.tc_step('Delete the instance')
         instances_pg.go_to_target_page()
@@ -345,7 +336,10 @@ class TestVolumesBasic:
         assert instances_pg.is_instance_deleted(instance_name)
         horizon.test_result = True
 
-    def test_non_bootable_volume_launch_as_instance_negative(self, volumes_pg_action):
+    @mark.parametrize(('flavor_name', 'network_names'), [
+        ('small', ['tenant1-mgmt-net']),
+    ])
+    def test_non_bootable_volume_launch_as_instance_negative(self, volumes_pg_action, flavor_name, network_names):
         """
         This test case checks launch non-bootable volume will raise valueError:
 
@@ -368,5 +362,5 @@ class TestVolumesBasic:
         LOG.tc_step('Meet Error when launching non-bootable volume {} as instance'.format(self.VOLUME_NAME))
         with raises(ValueError):
             volumes_pg_action.launch_as_instance(self.VOLUME_NAME, instance_name, delete_volume_on_instance_delete=True,
-                                                 flavor_name='small', network_names=['tenant1-mgmt-net'])
+                                                 flavor_name=flavor_name, network_names=network_names)
         horizon.test_result = True

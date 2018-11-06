@@ -330,8 +330,7 @@ def test_heat_template(template_name, revert_quota):
     elif template_name == 'OS_Nova_Server.yaml':
         # create new image to do update later
         LOG.tc_step("Creating an Image to be used for heat update later")
-        image_id = glance_helper.create_image(name='tis-centos2')[1]
-        ResourceCleanup.add('image', image_id)
+        glance_helper.create_image(name='tis-centos2', cleanup='function')
 
     # add test step
     verify_basic_template(template_name)

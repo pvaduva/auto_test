@@ -10,7 +10,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 core_flavor_name = 'flavor_vtpm'
-vtpm_base_dir = '/etc/nova/instances/{vm_id}/vtpm-{instance_name}/state'
+vtpm_base_dir = '/var/lib/nova/instances/{vm_id}/vtpm-{instance_name}/state'
 vtpm_file_name = 'tpm2-00.permall'
 vtpm_device = '/dev/tpm0'
 
@@ -44,6 +44,7 @@ def prepare_vms(request):
                 if vm_id:
                     vm_helper.delete_vms(vm_id)
         nova_helper.delete_flavors(g_flavors.values())
+        g_flavors.clear()
 
     request.addfinalizer(clean_up)
 

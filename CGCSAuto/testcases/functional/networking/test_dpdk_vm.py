@@ -28,8 +28,7 @@ def _get_dpdk_user_data(con_ssh=None):
 
 
 def image_with_vif_multiq():
-    img_id = glance_helper.create_image(name='vif_multq')[1]
-    ResourceCleanup.add('image', img_id)
+    img_id = glance_helper.create_image(name='vif_multq', cleanup='function')[1]
     glance_helper.set_image(image=img_id, properties={'hw_vif_multiqueue_enabled': True})
     return img_id
 

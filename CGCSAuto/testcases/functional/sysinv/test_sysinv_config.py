@@ -9,6 +9,7 @@ from pytest import mark, skip
 from consts.auth import Tenant
 from consts.cgcs import SystemType
 from consts.timeout import SysInvTimeout
+from consts.proj_vars import ProjVar
 from keywords import network_helper
 from keywords import system_helper
 from utils import cli, table_parser
@@ -249,6 +250,9 @@ class TestDnsSettings:
             request: request passed in by py.test system
 
         """
+        if ProjVar.get_var('IS_DC'):
+            skip("Distributed Cloud has different procedure for DNS configuration.")
+
         self.dns_servers = system_helper.get_dns_servers(con_ssh=None)
         LOG.info('Save current DNS-servers:{}'.format(self.dns_servers))
 

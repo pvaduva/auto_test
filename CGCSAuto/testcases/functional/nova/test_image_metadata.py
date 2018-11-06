@@ -36,8 +36,7 @@ def test_create_image_with_metadata(property_key, values, disk_format, container
         LOG.tc_step("Creating image with property {}={}, disk_format={}, container_format={}".
                     format(property_key, value, disk_format, container_format))
         image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
-                                              **{property_key: value})[1]
-        ResourceCleanup.add('image', resource_id=image_id)
+                                              cleanup='function', **{property_key: value})[1]
 
         LOG.tc_step("Verify image property is set correctly via glance image-show.")
         actual_property_val = glance_helper.get_image_properties(image_id, property_key)[property_key]

@@ -92,9 +92,8 @@ def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', av
         nova_helper.set_flavor_extra_specs(flavor=flv_id,  **{FlavorSpec.VCPU_MODEL: flv_model})
 
     if img_model:
-        image_id = glance_helper.create_image(name='vcpu_{}'.format(img_model),
+        image_id = glance_helper.create_image(name='vcpu_{}'.format(img_model), cleanup='function',
                                               **{ImageMetadata.CPU_MODEL: img_model})[1]
-        ResourceCleanup.add('image', image_id)
     else:
         image_id = glance_helper.get_guest_image(guest_os=GuestImages.DEFAULT_GUEST)
 
