@@ -318,8 +318,9 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     # Appearance of sync alarm is delayed so wait for it to appear and then
     # clear
-    system_helper.wait_for_alarm(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
+    if not system_helper.is_simplex():
+        system_helper.wait_for_alarm(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
 
 
 # Fails due to product issue
