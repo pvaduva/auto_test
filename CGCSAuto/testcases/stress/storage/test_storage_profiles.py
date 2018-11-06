@@ -66,6 +66,7 @@ from consts.cgcs import HostAvailState
 from consts.proj_vars import InstallVars
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import host_helper, system_helper, install_helper, vm_helper, storage_helper, partition_helper
+from setups import _rsync_files_to_con1
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.node import create_node_boot_dict, create_node_dict
@@ -233,6 +234,10 @@ def test_storage_profile(personality, from_backing, to_backing):
 
     if len(candidate_hosts) < 2:
         skip("Insufficient hardware compatible hosts to run test")
+
+    # Rsync lab setup dot files between controllers
+    con_ssh = ControllerClient.get_active_controller()
+    _rsync_files_to_con1(con_ssh=con_ssh, file_to_check="force.txt")
 
     # Take the hardware compatible hosts and check if any of them already have
     # the backend that we want.  This will save us test time.
