@@ -349,16 +349,9 @@ def test_cmds_login_as_ldap_user(user_name, sudo_type):
 
     """
     hostname = system_helper.get_active_controller_name()
-    if sudo_type == 'sudoer':
-        # sudo user is only support in Bash
-        prompt = Prompt.CONTROLLER_PROMPT
-        sudo_type = True
-    else:
-        prompt = '\[{}@{} \({}\)\]\$'.format(user_name, hostname, Tenant.get('admin')['user'])
-        sudo_type = False
 
     LOG.tc_step('Make sure LDAP user exist:{}, create it if not exist'.format(user_name))
-    _make_sure_user_exist(user_name, sudoer=sudo_type, delete_if_existing=True)
+    _make_sure_user_exist(user_name, sudoer=(sudo_type == 'sudoer'), delete_if_existing=True)
 
     LOG.tc_step('Get the password of the user {}'.format(user_name))
     password = theLdapUserManager.get_ldap_user_password(user_name)
@@ -375,7 +368,7 @@ def test_cmds_login_as_ldap_user(user_name, sudo_type):
 
     try:
         # set password/prompt for ldap user login
-        ssh_con.set_prompt(prompt)
+        ssh_con.set_prompt(Prompt.CONTROLLER_PROMPT)
         ssh_con.password = password
         ssh_con.flush()
 
