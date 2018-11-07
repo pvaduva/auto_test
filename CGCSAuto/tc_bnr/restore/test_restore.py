@@ -246,7 +246,9 @@ def restore_setup(pre_restore_checkup):
     output_dir = ProjVar.get_var('LOG_DIR')
     controller_node = lab['controller-0']
 
+    controller_prompt = ''
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+
     if RestoreVars.get_restore_var('skip_reinstall'):
         LOG.info('Skip reinstall as instructed')
         LOG.info('Connect to controller-0 now')
@@ -302,10 +304,10 @@ def restore_setup(pre_restore_checkup):
             # establish ssh connection with controller
             LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
 
-            # node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
-            # normalized_name = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
+            node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
+            controller_prompt = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
 
-    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    controller_prompt = controller_prompt + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
 
     LOG.info('initial_prompt=' + controller_prompt)
     controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
@@ -418,7 +420,12 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
         else:
             LOG.info('All hosts were rejecting to lock after tried:{}'.format(tried))
     else:
+        cli.system('host-list', con_ssh=con_ssh)
         LOG.info('Failed to lock or force-lock some of the hosts')
+        assert False, 'Failed to lock or force-lock some of the hosts after tried:{} times'.format(tried)
+
+    cli.system('host-list', con_ssh=con_ssh)
+            
 
     code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
     LOG.debug('code:{}, output:{}'.format(code, output))

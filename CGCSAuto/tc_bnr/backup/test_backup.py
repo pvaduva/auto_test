@@ -289,7 +289,6 @@ def test_backup(pre_system_backup):
     con_ssh = ControllerClient.get_active_controller()
     backup_info['con_ssh'] = con_ssh
 
-
     is_ceph = backup_info.get('is_storage_lab', False)
 
     if is_ceph:
@@ -330,8 +329,9 @@ def test_backup(pre_system_backup):
 
     collect_logs('after_backup')
 
-    # Copying system backup ISO file for future restore
-    assert backup_load_iso_image(backup_info)
+    if system_helper.is_avs(con_ssh=con_ssh):
+        # Copying system backup ISO file for future restore
+        assert backup_load_iso_image(backup_info)
 
 
 def backup_load_iso_image(backup_info):
@@ -364,6 +364,11 @@ def backup_load_iso_image(backup_info):
             format(build_id, build_server, load_path)
 
         iso_file_path = os.path.join(load_path, "export", install_helper.UPGRADE_LOAD_ISO_FILE)
+
+        if not build_server_conn.exec_cmd("test -e " + iso_file_path):
+            LOG.warn("No ISO found on path:{}".format(iso_file_path))
+            return True
+
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server_conn.rsync("-L " + iso_file_path, lab['controller-0 ip'],
         build_server_conn.rsync("-L " + iso_file_path, html_helper.get_ip_addr(),
