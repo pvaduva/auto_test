@@ -324,7 +324,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
 
 # Fails due to product issue
-def _test_modify_drdb():
+def test_modify_drdb_swact_then_reboot():
     """ 
     This test modifies the size of the drbd based filesystems, does and
     immediate swact and then reboots the active controller.
@@ -344,7 +344,7 @@ def _test_modify_drdb():
 
     """
 
-    drbdfs = ['backup', 'glance', 'database', 'img-conversions']
+    drbdfs = DRBDFS
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step("Determine the available free space on the system")
@@ -364,7 +364,7 @@ def _test_modify_drdb():
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
 
-    LOG.tc_step("Increase the size of the backup and glance filesystem")
+    LOG.tc_step("Increase the size of the backup and img-conversions filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
     if float(free_space) > 10:
@@ -372,14 +372,14 @@ def _test_modify_drdb():
     else:
         backup_freespace = 1
     new_partition_value = backup_freespace + int(partition_value)
-    cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
-    rc, out = con_ssh.exec_cmd(cmd)
-    partition_name = "glance"
+    cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
+    cli.system(cmd)
+    partition_name = "img-conversions"
     partition_value = drbdfs_val[partition_name]
     cgcs_free_space = math.trunc(backup_freespace / 2)
     new_partition_value = backup_freespace + int(partition_value)
-    cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
+    cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
+    cli.system(cmd)
 
     hosts = system_helper.get_controllers()
     for host in hosts:
