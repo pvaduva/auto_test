@@ -25,7 +25,7 @@ PROC_RESTART_TIME = 30          # number of seconds between process restarts
 # Tested on PV1.  Runtime: 278.40  Date: Aug 2nd, 2017.  Status: Pass
 @mark.nightly
 @mark.usefixtures('ceph_precheck')
-def _test_ceph_osd_process_kill():
+def test_ceph_osd_process_kill():
     """
     us69932_tc1_ceph_osd_process_kill from us69932_ceph_monitoring.odt
 
@@ -45,16 +45,16 @@ def _test_ceph_osd_process_kill():
         2.  Determine how many OSDs we have provisioned
         3.  Randomly pick one OSD and get the pid of the OSD process
         4.  Kill the ceph-osd PID for that OSD
-        5.  Take the OSD out of service (ceph osd out, ceph osd down, ceph osd
-        rm)
-        6.  Verify expected alarms are raised
-        7.  Re-add OSD via 'ceph osd create'
-        8.  Wait for alarms to clear
         9.  Ensure ceph-osd process is running again
 
     Potential flaws:
-        1.  We're not checking if unexpected alarms are raised (TODO).  If we
-        do this, that means tests cannot run concurrently.
+        We're no longer checking if the expected alarms are raised.  OSDs
+        recover too fast after process kill for this to be detected.  User
+        should do alarm validation as a seperate activity.  Alarms expected if
+        the process stayed down would be:
+        1.  Ceph health warn
+        2.  Loss of replication
+        3.  Failure of osd.X process
 
     Teardown:
         - None
@@ -84,45 +84,10 @@ def _test_ceph_osd_process_kill():
     assert osd_pid, msg
     LOG.info(msg)
 
-    LOG.tc_step("Set ceph to no out")
-    cmd = 'ceph osd set noout'
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    LOG.tc_step('Kill the OSD process')
+    LOG.tc_step('Kill OSD processes')
     proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid)
     assert proc_killed, msg
     LOG.info(msg)
-
-    with host_helper.ssh_to_host(osd_host) as host_ssh:
-        LOG.tc_step('Take OSD {} out of service'.format(osd_id))
-        cmd = 'ceph osd out {}'.format(osd_id)
-        host_ssh.exec_cmd(cmd, fail_ok=False)
-
-        LOG.tc_step('Bring OSD {} down'.format(osd_id))
-        cmd = 'ceph osd down {}'.format(osd_id)
-        host_ssh.exec_cmd(cmd, fail_ok=False)
-
-        LOG.tc_step('Remove OSD {}'.format(osd_id))
-        cmd = 'ceph osd rm {}'.format(osd_id)
-        host_ssh.exec_cmd(cmd, fail_ok=False)
-
-    LOG.tc_step('Check for loss of replication alarm in group {}'.format(storage_group))
-    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, timeout=180)
-    
-    LOG.tc_step('Check for ceph health warning alarm')
-    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=180)
-
-    LOG.tc_step('Check for OSD failure alarm')
-    entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
-
-    LOG.tc_step("Set ceph to unset no out")
-    cmd = 'ceph osd unset noout'
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    LOG.tc_step('Put the OSD {} back in service'.format(osd_id))
-    cmd = 'ceph osd create 5'.format(osd_id)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Check the OSD process is restarted with a different pid')
     endtime = time.time() + 300
@@ -137,16 +102,6 @@ def _test_ceph_osd_process_kill():
     assert osd_pid2 != osd_pid, msg
 
     LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
-
-    LOG.tc_step('Check that loss of replication alarm in group {} alarm clears'.format(storage_group))
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_LOR, timeout=300)
-    
-    LOG.tc_step('Check that ceph health warning clears')
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=300)
-
-    LOG.tc_step('Check the OSD failure alarm clears')
-    entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=300)
 
 
 @mark.parametrize('monitor', [
