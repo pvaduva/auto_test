@@ -1,6 +1,6 @@
 import os
 
-from consts.auth import Tenant
+from consts.auth import Tenant, CliAuth
 from consts.cgcs import Prompt
 from consts.openstack_cli import NEUTRON_MAP
 from consts.proj_vars import ProjVar
@@ -27,8 +27,6 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             Multiple args string example: 'arg1 value1 arg2 value2 arg3'
             Multiple args list example: ['arg1 value1','arg2 value2', 'arg3']
         ssh_client:
-        use_telnet
-        con_telnet
         auth_info: (dict) authorization information to run cli commands.
         source_openrc (None|bool)
         force_source (bool): whether to source if already sourced.
@@ -89,26 +87,18 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                          "--os-user-domain-name Default --os-project-domain-name Default".
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
 
-            if cmd in ('openstack', 'sw-manager'):
-                flags += ' --os-interface internal'
+            # Add additional auth args for https lab
+            if CliAuth.get_var('HTTPS'):
+                if cmd in ['openstack', 'sw-manager']:
+                    flags += ' --os-interface internal'
+                else:
+                    flags += ' --os-endpoint-type internalURL'
             else:
-                flags += ' --os-endpoint-type internalURL'
-
-            # # Add additional auth args for https lab
-            # if CliAuth.get_var('HTTPS'):
-            #     if cmd in ['openstack', 'sw-manager']:
-            #         flags += ' --os-interface internal'
-            #     else:
-            #         flags += ' --os-endpoint-type internalURL'
-            # else:
-            #     if cmd == 'sw-manager':
-            #         flags += ' --os-interface internal'
+                if cmd == 'sw-manager':
+                    flags += ' --os-interface internal'
 
             if cmd != 'dcmanager':
-                region = auth_info['region']
-                if cmd == 'nova' and region == 'RegionOne':
-                    region = 'SystemController'
-                flags += ' --os-region-name {}'.format(region)
+                flags += ' --os-region-name {}'.format(auth_info['region'])
 
             flags = '{} {}'.format(auth_args.strip(), flags.strip())
 
@@ -319,6 +309,14 @@ def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, 
     return exec_cli('keystone', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_cred_)
+
+
+def qemu_img(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
+             auth_info=Tenant.get('admin'), source_creden_=True, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+
+    return exec_cli('qemu-img', sub_cmd=cmd, positional_args=positional_args, flags=flags,
+                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def sw_manager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',

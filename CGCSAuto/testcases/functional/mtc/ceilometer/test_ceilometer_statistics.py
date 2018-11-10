@@ -44,8 +44,7 @@ from keywords import common, host_helper, ceilometer_helper, network_helper, gla
 #         assert 0 <= header_val, "Value for {} in {} stats table is less than zero".format(header, meter)
 
 
-def _wait_for_measurements(meter, resource_type, extra_query, start_time, overlap=None, timeout=1860,
-                           check_interval=60):
+def _wait_for_measurements(meter, resource_type, extra_query, start_time, overlap=None, timeout=720, check_interval=60):
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -71,7 +70,7 @@ def test_measurements_for_metric(meter):
     LOG.tc_step('Get ceilometer statistics table for image.size meter')
 
     now = datetime.utcnow()
-    start = (now - timedelta(minutes=10))
+    start = (now - timedelta(minutes=15))
     start = start.strftime("%Y-%m-%dT%H:%M:%S")
     image_name = GuestImages.DEFAULT_GUEST
     resource_type = 'image'
