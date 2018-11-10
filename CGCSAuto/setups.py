@@ -584,15 +584,16 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
-                       patch_dir=None, ovs=False, boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None,
-                       wipedisk=False, boot="pxe", iso_path=None, security="standard", low_latency=False, stop=99):
+                       patch_dir=None, ovs=False, build_server=None, tis_builds_dir=None, tis_build_dir="latest_build",
+                       boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
+                       boot="pxe", iso_path=None, security="standard", low_latency=False, stop=99):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
     elif not installconf_path:
-        installconf_path = write_installconf(lab=lab, controller=None, tis_build_dir=None,
-                                             lab_files_dir=None, build_server=BuildServerPath.DEFAULT_BUILD_SERVER,
+        installconf_path = write_installconf(lab=lab, controller=None, tis_builds_dir=tis_builds_dir,
+                                             tis_build_dir=tis_build_dir, lab_files_dir=None, build_server=build_server,
                                              compute=None, storage=None, license_path=None, guest_image=None,
                                              heat_templates=None, security=security, low_latency=low_latency, stop=stop,
                                              skip=skip, resume=resume, boot_server=boot_server, boot=boot,
@@ -618,6 +619,10 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     heat_templates = None
     license_path = None
     out_put_dir = None
+
+    multi_region_lab = None
+    dist_cloud_lab = None
+
     vbox = True if lab and 'vbox' in lab.lower() else False
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
@@ -661,7 +666,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                       'STORAGES': 'storage_nodes'}
 
         for confkey, constkey in naming_map.items():
-            value_in_conf = nodes_info[confkey]
+
+            value_in_conf = nodes_info[confkey] if confkey in nodes_info.keys() else None
             if value_in_conf:
                 barcodes = value_in_conf.split(sep=' ')
                 lab_to_install[constkey] = barcodes
@@ -688,7 +694,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         conf_files = installconf['CONF_FILES']
         conf_files_server = conf_files['FILES_SERVER']
         conf_license_path = conf_files['LICENSE_PATH']
-        conf_tis_config = conf_files['TIS_CONFIG_PATH']
+        conf_tis_config = conf_files['FILES_DIR']
         conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
         conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
         conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
@@ -743,34 +749,38 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if errors:
         raise ValueError("Install param error(s): {}".format(errors))
 
-    # add lab resource type and any other lab information in the lab files
-    if low_latency:
-        try:
-            files_dir = files_dir + '-lowlatency'
-            lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
-                           host_build_dir=host_build_dir)
-        except:
-            files_dir = files_dir[:files_dir.find('-lowlatency')]
+    if files_dir:
+        # add lab resource type and any other lab information in the lab files
+        if low_latency:
+            try:
+                files_dir = files_dir + '-lowlatency'
+                lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
+                               host_build_dir=host_build_dir)
+            except:
+                files_dir = files_dir[:files_dir.find('-lowlatency')]
 
-    lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
-                                            host_build_dir=host_build_dir)
-    lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items() if "system" in system_label))
-    multi_region_lab = lab_info_dict["multi_region"]
-    dist_cloud_lab = lab_info_dict["dist_cloud"]
+        lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
+                                                host_build_dir=host_build_dir)
+        lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items() if "system" in system_label))
+        multi_region_lab = lab_info_dict["multi_region"]
+        dist_cloud_lab = lab_info_dict["dist_cloud"]
+        lab_to_install.update(lab_info_dict)
 
-    if 'system_mode' not in lab_info_dict:
+
+    if 'system_mode' not in lab_to_install:
         if 'storage_nodes' in lab_to_install:
             system_mode = SysType.STORAGE
         else:
             system_mode = SysType.REGULAR
     else:
-        if "simplex" in lab_info_dict['system_mode']:
+        if "simplex" in lab_to_install['system_mode']:
             system_mode = SysType.AIO_SX
         else:
             system_mode = SysType.AIO_DX
 
     lab_to_install['system_mode'] = system_mode
     ProjVar.set_var(sys_type=system_mode)
+
 
     # add nodes dictionary
     lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
@@ -783,7 +793,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if vbox:
         lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
     else:
-        lab_to_install['boot_device_dict'] = lab_info_dict['boot_device_dict']
+        if 'boot_device_dict' not in lab_to_install:
+            lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
 
     if vbox:
         # get the ip address of the local linux vm
@@ -815,6 +826,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if resume is True:
         resume = fresh_install_helper.get_resume_step(lab_to_install)
 
+
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
                                  skips=skip,
                                  wipedisk=wipedisk,
@@ -845,7 +857,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  )
 
 
-def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_dir, compute, storage, patch_dir,
+def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_dir, tis_build_dir, compute, storage, patch_dir,
                       license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop, ovs,
                       boot_server, resume, skip):
     """
@@ -866,7 +878,12 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
 
     """
     __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
-    host_build_dir = tis_build_dir if tis_build_dir and tis_build_dir != "" else BuildServerPath.DEFAULT_HOST_BUILD_PATH
+    host_builds_dir_name = tis_builds_dir if tis_builds_dir else BuildServerPath.BldsDirNames.TITANIUM_R6_BUILD
+    host_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
+
+    host_build_dir_path = install_helper.get_default_latest_build_path(builds_dir_name=host_builds_dir_name) \
+        if host_build_dir == BuildServerPath.LATEST_BUILD else os.path.join(BuildServerPath.DEFAULT_WORK_SPACE,
+                                                                            host_builds_dir_name, host_build_dir)
     files_server = __build_server
     if lab_files_dir:
         files_dir = lab_files_dir
@@ -881,8 +898,9 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
         lab_dict = ProjVar.get_var("LAB")
     if not lab_dict:
         lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server)
-    files_dir = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
-                                      install_helper.get_git_name(lab_dict['name'])) if not files_dir else files_dir
+
+    files_dir = "{}/yow/{}".format(install_helper.get_default_lab_config_files_path(host_builds_dir_name),
+                                   install_helper.get_git_name(lab_dict['name'])) if not files_dir else files_dir
     # Write .ini file
     config = configparser.ConfigParser(allow_no_value=True)
     config.optionxform = str
@@ -908,14 +926,20 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
     node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
 
     # [BUILD] and [CONF_FILES] section
-    build_dict = {"BUILD_SERVER": build_server, "TIS_BUILD_PATH": tis_build_dir, "BUILD_ISO_PATH": iso_path,
-                  "PATCHES": patch_dir}
-    files_dict = {"FILES_SERVER": files_server, "FILES_DIR": files_dir, "LICENSE_PATH": license_path,
-                 "GUEST_IMAGE_PATH": guest_image, "HEAT_TEMPLATES": heat_templates, "OVS_CONFIG": str(ovs)}
-    boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server, "SECURITY_PROFILE": security,
+    build_dict = {"BUILD_SERVER": build_server,
+                  "TIS_BUILD_PATH": host_build_dir_path, "BUILD_ISO_PATH": iso_path if iso_path else '', "PATCHES": patch_dir if patch_dir else ''}
+    files_dict = {"FILES_SERVER": files_server, "FILES_DIR": files_dir if files_dir else '',
+                  "LICENSE_PATH": license_path if license_path else '',
+                  "GUEST_IMAGE_PATH": guest_image if guest_image else '',
+                  "HEAT_TEMPLATES": heat_templates if heat_templates else '',
+                  "LAB_SETUP_CONF_PATH": files_dir,
+                  "BOOT_IF_SETTINGS_PATH": '',
+                  "HOST_BULK_ADD_PATH": '',
+                  "OVS_CONFIG": str(ovs)}
+    boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server if boot_server else '', "SECURITY_PROFILE": security,
                  "LOW_LATENCY_INSTALL": low_latency}
-    control_dict = {"RESUME_POINT": resume if not isinstance(resume, bool) else None,
-                    "STEPS_TO_SKIP": skip, "STOP_POINT": stop}
+    control_dict = {"RESUME_POINT": resume if not isinstance(resume, bool) else '',
+                    "STEPS_TO_SKIP": skip if skip else '', "STOP_POINT": stop}
     config["LAB"] = labconf_lab_dict
     config["NODES"] = node_dict
     config["BUILD"] = build_dict
@@ -938,6 +962,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_build_di
             install_config_file.close()
 
     return install_config_path
+
 
 
 def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir=None):

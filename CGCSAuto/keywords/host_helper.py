@@ -658,6 +658,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
         time.sleep(30)
         con_ssh.connect(retry=True, retry_timeout=timeout)
+        ControllerClient.set_active_controller(con_ssh)
     else:
         if not con_telnet:
             raise ValueError("con_telnet has to be provided when use_telnet=True.")

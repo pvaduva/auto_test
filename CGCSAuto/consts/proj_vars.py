@@ -1,9 +1,6 @@
 import os
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.build_server import YOW_CGTS4_LX
 from consts.cgcs import DROPS
-import keywords
-from keywords import install_helper
 
 
 class ProjVar:
@@ -128,9 +125,11 @@ class InstallVars:
         __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.LATEST_HOST_BUILD_PATHS.get(
             DROPS.get(drop_num), BuildServerPath.DEFAULT_HOST_BUILD_PATH)
         __files_server = files_server if files_server else __build_server
+
+        from keywords import install_helper
         __files_dir = files_dir if files_dir else \
             "{}/{}/{}".format(__host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
-                              keywords.install_helper.get_git_name(lab['name']))
+                              install_helper.get_git_name(lab['name']))
         __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
         iso_server = __build_server
         if __iso_path.find(":/") != -1:
@@ -150,7 +149,6 @@ class InstallVars:
         else:
             guest_image_path = BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop_num), BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
 
-
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
@@ -163,7 +161,7 @@ class InstallVars:
             'OVS': ovs,
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR': host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
+            'TIS_BUILD_DIR': __host_build_dir,
 
             # Files paths
             'FILES_SERVER': __files_server,
@@ -189,7 +187,7 @@ class InstallVars:
             'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
             'GUEST_IMAGE': guest_image_path,
             'GUEST_SERVER': guest_server,
-            'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
+            'HEAT_TEMPLATES': heat_templates,
             'BUILD_ID': None,
             'CONTROLLER0_CEPH_MON_DEVICE': controller0_ceph_mon_device,
             'CONTROLLER1_CEPH_MON_DEVICE': controller1_ceph_mon_device,

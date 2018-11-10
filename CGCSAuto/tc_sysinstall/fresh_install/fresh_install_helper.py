@@ -1,3 +1,4 @@
+import os
 import re
 from pytest import skip
 import threading
@@ -145,10 +146,11 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
 
 def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None, lab_files_dir=None,
                        load_path=None, guest_path=None, license_path=None, lab=None, final_step=None):
+
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if lab_files_dir is None:
         lab_files_dir = InstallVars.get_install_var('LAB_FILES_DIR')
-    if load_path is None or load_path == BuildServerPath.DEFAULT_HOST_BUILD_PATH:
+    if load_path is None:
         load_path = set_load_path(build_server_conn=build_server.ssh_conn, sys_version=sys_version)
     if not load_path.endswith("/"):
         load_path += "/"
@@ -159,11 +161,17 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     if lab is None:
         lab = InstallVars.get_install_var('LAB')
 
+    heat_path = InstallVars.get_install_var("HEAT_TEMPLATES")
+    if not sys_version:
+        sys_version = ProjVar.get_var('SW_VERSION')[0]
+    if not heat_path:
+        heat_path = os.path.join(load_path, BuildServerPath.HEAT_TEMPLATES_EXTS[sys_version])
+
     test_step = "Download lab files"
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("Downloading heat templates")
-        install_helper.download_heat_templates(lab, build_server, load_path, heat_path=load_path + InstallVars.get_install_var("HEAT_TEMPLATES"))
+        install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
         LOG.info("Downloading guest image")
         install_helper.download_image(lab, guest_server, guest_path)
         LOG.info("Copying license")
@@ -201,7 +209,8 @@ def set_license_var(sys_version=None, sys_type=None):
 def set_load_path(build_server_conn, sys_version=None):
     if sys_version is None:
         sys_version = ProjVar.get_var('SW_VERSION')[0]
-    host_build_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[sys_version]
+    host_build_path = install_helper.get_default_latest_build_path(version=sys_version)
+    #host_build_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[sys_version]
     load_path = host_build_path + "/"
 
     InstallVars.set_install_var(tis_build_dir=host_build_path)

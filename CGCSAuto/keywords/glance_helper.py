@@ -1,12 +1,9 @@
-from pytest import skip
 import os
 import re
 import time
 import json
 
-from utils import table_parser, cli, exceptions
-from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
-from utils.tis_log import LOG
+from pytest import skip
 
 from consts.auth import Tenant, SvcCgcsAuto
 from consts.cgcs import GuestImages
@@ -16,7 +13,9 @@ from consts.filepaths import WRSROOT_HOME
 from consts.timeout import ImageTimeout
 from keywords import common, system_helper, host_helper, dc_helper
 from testfixtures.fixture_resources import ResourceCleanup
-
+from utils import table_parser, cli, exceptions
+from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
+from utils.tis_log import LOG
 
 
 def get_images(images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True, exclude=False, **kwargs):

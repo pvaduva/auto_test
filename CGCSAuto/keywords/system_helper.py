@@ -1167,6 +1167,7 @@ def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), **k
 
     if code == 1:
         return 1, output
+
     return 0, ''
 
 
@@ -2092,14 +2093,31 @@ def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True,
     Returns (list):
 
     """
-    ports = get_host_ports_for_net_type(host, net_type=net_type, ports_only=rtn_list, con_ssh=con_ssh,
-                                        auth_info=auth_info)
+    ports = get_host_mgmt_network_port_name(host)
     pci_addresses = []
     for port in ports:
         pci_address = get_host_port_pci_address(host, port, con_ssh=con_ssh, auth_info=auth_info)
         pci_addresses.append(pci_address)
 
     return pci_addresses
+
+
+def get_host_mgmt_network_port_name(host, rtn_list=True, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+
+    Args:
+        host:
+        rtn_list:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    from keywords.host_helper import get_hostshow_value
+    mgmt_ip = get_hostshow_value(host=host, field='mgmt_ip', con_ssh=con_ssh)
+    return get_host_ifname_by_address(host,address=mgmt_ip)
+
 
 
 def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -2703,6 +2721,19 @@ def is_patch_current(con_ssh=None):
     return 'OK' in patch_line.pop()
 
 
+def get_installed_build_info_dict(con_ssh=None, use_telnet=False, con_telnet=None):
+
+    build_info_dict = {}
+    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,)
+    if build_info:
+        for l in build_info.splitlines():
+            if '=' in l:
+                item = l.split('=')
+                build_info_dict[item[0].strip()] = item[1].strip()
+
+    return build_info_dict
+
+
 def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,):
     """
 
@@ -3092,6 +3123,38 @@ def disable_murano(con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     msg = "Disabled Murano Service"
 
     return 0, msg
+
+
+def get_host_ifname_by_address(host, rtn_val='ifname', address=None, id_=None, con_ssh=None, auth_info=Tenant.get('admin'),
+                       fail_ok=False):
+    """
+    Get the host ifname by address.
+    Args:
+        host
+        con_ssh (SSHClient):
+        address:
+        id_:
+        rtn_val:
+        auth_info (dict):
+        fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
+
+    Returns:
+
+    """
+
+    table_ = table_parser.table(cli.system('host-addr-list', host,  ssh_client=con_ssh, auth_info=auth_info,
+                                fail_ok=fail_ok, rtn_list=True)[1])
+    args_dict = {
+        'uuid': id_,
+        'address': address,
+    }
+    kwargs = {}
+    for key, value in args_dict.items():
+        if value:
+            kwargs[key] = value
+
+    ifname = table_parser.get_values(table_, rtn_val, strict=True, regex=True, merge_lines=True, **kwargs)
+    return ifname
 
 
 def get_host_addr_list(host, rtn_val='address', ifname=None, id_=None, con_ssh=None, auth_info=Tenant.get('admin'),

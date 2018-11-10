@@ -17,6 +17,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     missing_manifests = False
     cinder_configuration = False
     force = False
+
     controller0 = lab['controller-0']
     if not host_helper.is_host_provisioned(controller0.name):
         rc, output = upgrade_helper.upgrade_host_lock_unlock(controller0.name)
@@ -192,7 +193,8 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     LOG.tc_step("Downloading images to upgraded {} lab ".format(upgrade_version))
     install_helper.download_image(lab, bld_server, BuildServerPath.GUEST_IMAGE_PATHS[upgrade_version])
 
-    load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
+    load_path = upgrade_setup['load_path']
+
     LOG.tc_step("Downloading heat temples to upgraded {} lab ".format(upgrade_version))
     install_helper.download_heat_templates(lab, bld_server, load_path)
 

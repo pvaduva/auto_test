@@ -32,6 +32,7 @@ def pytest_configure(config):
     backup_dest_path = config.getoption('backup_path')
     delete_backups = not config.getoption('keep_backups')
 
+
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
                                  tis_build_dir=tis_build_dir,
@@ -43,10 +44,11 @@ def pytest_configure(config):
                                  max_parallel_computes=max_parallel_computes,
                                  alarm_restrictions=alarm_restrictions)
 
-
     backup_dest = 'USB' if use_usb else 'local'
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
                            delete_backups=delete_backups)
+    LOG.info("")
+    LOG.info("Upgrade vars set: {}".format(UpgradeVars.get_upgrade_vars()))
 
 
 @pytest.fixture(scope='session')
@@ -129,6 +131,8 @@ def upgrade_setup(pre_check_upgrade):
             license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][0]
     bld_server = get_build_server_info(UpgradeVars.get_upgrade_var('BUILD_SERVER'))
     load_path = UpgradeVars.get_upgrade_var('TIS_BUILD_DIR')
+    if isinstance(load_path, list):
+        load_path = load_path[0]
     output_dir = ProjVar.get_var('LOG_DIR')
     patch_dir = UpgradeVars.get_upgrade_var('PATCH_DIR')
 
@@ -171,7 +175,7 @@ def upgrade_setup(pre_check_upgrade):
     if not system_helper.get_imported_load_version():
         LOG.tc_step("Downloading the {} target release  load iso image file {}:{}"
                     .format(upgrade_version, bld_server_obj.name, load_path))
-        install_helper.download_upgrade_load(lab, bld_server_obj, load_path,upgrade_ver=upgrade_version)
+        install_helper.download_upgrade_load(lab, bld_server_obj, load_path, upgrade_ver=upgrade_version)
         upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
 
         cmd = "test -e {}".format(upgrade_load_path)
@@ -201,6 +205,7 @@ def upgrade_setup(pre_check_upgrade):
                                   'current_version': current_version,
                                   'upgrade_version': upgrade_version,
                                   'build_server': bld_server_obj,
+                                  'load_path': load_path,
                                   'backup_dest_path': backup_dest_path,
                                    'delete_backups' : delete_backups
                                   }
@@ -270,6 +275,7 @@ def upgrade_setup(pre_check_upgrade):
                       'current_version': current_version,
                       'upgrade_version': upgrade_version,
                       'build_server': bld_server_obj,
+                      'load_path': load_path,
                       'man_upgrade_nodes': man_upgrade_nodes,
                       'orchestration_nodes': orchestration_nodes,
                       'storage_apply_strategy': storage_apply_strategy,

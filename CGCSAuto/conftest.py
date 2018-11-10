@@ -547,6 +547,14 @@ def pytest_addoption(parser):
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
     ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
                         "volume, in GiB (the default value is 20)"
+    build_server_help = "TiS build server host name where the Titium load software is downloaded from." \
+                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
+    tis_builds_dir_help = "Directory name under build workspace (/localdisk/loadbuild/jenkins) containing " \
+                          "directories for Titanium Server loads (default: Titanium_R6_build)  e.g. TS_15.12_Host, " \
+                          "TS_16.10_Build, TS_16.10_Prestaging_Build, TC_17.06_Host, TC_18.03_Host, TC_18.07_Host, " \
+                          "CGCS_6.0_Host, StarlingX_18.10, StarlingX_Upstream_build, Titanium_R6_build. Default" \
+                          " is Titanium_R6_build"
+
     parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
                      action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
     parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
@@ -555,11 +563,16 @@ def pytest_addoption(parser):
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
     parser.addoption('--boot-server', '--boot_server', dest='boot_server',
                      help='server to boot from. Default is yow-tuxlab2')
+    parser.addoption('--build-server', '--build_server',  dest='build_server',
+                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
+                     help=build_server_help)
+    parser.addoption('--tis-builds-dir', '--tis_builds_dir',  dest='tis_builds_dir',
+                     action='store', metavar='DIR',  help=tis_builds_dir_help)
 
     # install help
     file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
-                    "Default is: <load_path>/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/<lab_name>"
+                    "Default is: <load_path>/lab/yow/<lab_name>"
     controller_help = "space-separated list of VLM barcodes for controllers"
     compute_help = "space-separated list of VLM barcodes for computes"
     storage_help = "space-separated list of VLM barcodes for storage nodes"
@@ -579,7 +592,7 @@ def pytest_addoption(parser):
                      default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
     parser.addoption('--heat_templates', '--heat-templates', '--heat_templates_path', '--heat-templates-path',
                      dest='heat_templates', action='store', metavar='heat templates full path',
-                     default=BuildServerPath.HEAT_TEMPLATES, help=heat_help)
+                     default=None, help=heat_help)
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
     parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
@@ -591,9 +604,8 @@ def pytest_addoption(parser):
 
     upgrade_version_help = "TiS next software version that the lab is upgraded to. " \
                            "Valid options are: {}".format(' '.join(v[1] for v in cgcs.SUPPORTED_UPGRADES))
-    build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
-                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
-    upgrade_build_dir_path = "The path to the upgrade software release build directory in build server." \
+
+    upgrade_build_dir_path_help = "The path to the upgrade software release build directory in build server." \
                              " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
                              " Otherwise the default  build dir path for the upgrade software " \
                              "version will be used"
@@ -610,11 +622,9 @@ def pytest_addoption(parser):
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
-    parser.addoption('--build-server', '--build_server',  dest='build_server',
-                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
-                     help=build_server_help)
+
     parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
-                     action='store', metavar='DIR',  help=upgrade_build_dir_path)
+                     action='store', metavar='DIR',  help=upgrade_build_dir_path_help)
     parser.addoption('--license',  dest='upgrade_license', action='store',
                      metavar='license full path', help=license_help)
 

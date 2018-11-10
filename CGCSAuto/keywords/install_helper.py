@@ -15,7 +15,8 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout, ImageTimeout
 from consts.vlm import VlmAction
-from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper
+from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
+    vlm_helper
 from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
 from utils.clients.telnet import TelnetClient, TELNET_LOGIN_PROMPT
@@ -532,10 +533,10 @@ def download_image(lab, server, guest_path):
 def download_heat_templates(lab, server, load_path, heat_path=None):
 
     if not heat_path:
-        heat_path = load_path + BuildServerPath.HEAT_TEMPLATES
+        sys_version = extract_software_version_from_string_path(load_path)
+        heat_path = os.path.join(load_path, BuildServerPath.HEAT_TEMPLATES_EXTS[sys_version])
     else:
         heat_path = heat_path
-
 
     cmd = "test -e " + heat_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
@@ -552,26 +553,45 @@ def download_heat_templates(lab, server, load_path, heat_path=None):
 
 
 def download_lab_config_files(lab, server, load_path, conf_server=None):
+
     if 'vbox' in lab["name"]:
         return
+
+    lab_config_path = InstallVars.get_install_var("LAB_SETUP_PATH")
+    lab_name = lab['name']
+    if "yow" in lab_name:
+        lab_name = lab_name[4:]
+
     if not conf_server:
         conf_server = server
 
-    config_path = InstallVars.get_install_var("LAB_FILES_DIR")
-    script_path = load_path + BuildServerPath.CONFIG_LAB_REL_PATH + "/scripts"
+    sys_version = extract_software_version_from_string_path(load_path)
+    default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) \
+        if sys_version else load_path + BuildServerPath.CONFIG_LAB_REL_PATH
+
+
+    if not lab_config_path or lab_config_path == '':
+        lab_config_path = default_lab_config_path + "/yow/{}".format(lab['name'])
+
+
+    config_path = lab_config_path
+    script_path = os.path.join(default_lab_config_path, "scripts")
+
+    LOG.info("Getting lab config file from specified path: {}".format(lab_config_path))
+
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     cmd = "test -e " + config_path
-    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             server.name, config_path)
     conf_server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
     cmd = "test -e " + script_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            server.name, script_path)
-    server.ssh_conn.rsync(script_path + "/*",
+    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            conf_server.name, script_path)
+    conf_server.ssh_conn.rsync(script_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
@@ -3404,11 +3424,12 @@ def post_install(controller0_node=None):
 
 def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_first=True):
+
     if check_first:
         if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
                               con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
             LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-            host_helper.wait_for_host_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
+            host_helper.wait_for_hosts_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
                                                      HostAvailState.DEGRADED], con_ssh=con_ssh,
                                  use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
 
@@ -3424,18 +3445,22 @@ def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_onl
     if exitcode == 1:
         return 1, output
 
+    lab = InstallVars.get_install_var('LAB')
+    LOG.info("Lab: {}".format(lab))
+    if not len(lab['controller_nodes']) > 1:
+        LOG.info("This is simplex lab; Waiting for controller reconnection after unlock")
     host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
-    if not host_helper.wait_for_host_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+    if not host_helper.wait_for_hosts_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
         return 2, "Host is not in unlocked state"
 
-    if not host_helper.wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+    if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet,
                                 availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
         return 3, "Host state did not change to available or degraded within timeout"
 
-    if not host_helper.wait_for_host_states(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
+    if not host_helper.wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
@@ -3445,7 +3470,7 @@ def unlock_controller(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_onl
             LOG.warning("Host is in degraded state after unlocked.")
             return 4, "Host is in degraded state after unlocked."
         else:
-            if not host_helper.wait_for_host_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+            if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
                                         use_telnet=use_telnet, con_telnet=con_telnet,
                                         availability=HostAvailState.AVAILABLE):
                 err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
@@ -3782,3 +3807,85 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
 
     return 0, output
 
+
+def is_valid_builds_dir_name(dir_name):
+        return hasattr(BuildServerPath.BldsDirNames, dir_name.upper().replace('.', '_') if dir_name else '')
+
+
+def get_default_latest_build_path(version=None, builds_dir_name=None):
+
+    if builds_dir_name and not is_valid_builds_dir_name(builds_dir_name):
+        raise ValueError(" The  builds dir name {} is not valid".format(builds_dir_name))
+
+    path = None
+    if version is None and builds_dir_name is None:
+        raise ValueError("Either version or tis_build_dir must be specified")
+
+    elif builds_dir_name:
+        path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, builds_dir_name, BuildServerPath.LATEST_BUILD)
+
+    elif version:
+        paths = BuildServerPath.LATEST_HOST_BUILD_PATHS[version]
+        if paths is not None and isinstance(paths, list):
+            path = paths[0]
+        else:
+            path = paths
+
+    LOG.info("The default path to latest build: {}".format(path))
+    return path
+
+
+def get_default_lab_config_files_path(builds_dir_name):
+    """
+    Gets the path for lab configuration files in default build server
+    Args:
+        builds_dir_name (str): indicates the builds dir name like Titanium_R6_build, StarlingX_18.10, etc.
+
+    Returns:
+
+    """
+    if is_valid_builds_dir_name(builds_dir_name):
+        LOG.info("Getting the default path for {} builds".format(builds_dir_name))
+        sys_version = ProjVar.get_var('SW_VERSION')
+
+        if not sys_version:
+            sys_version = extract_software_version_from_string_path(builds_dir_name)
+        else:
+            sys_version = sys_version[0]
+
+        return os.path.join(get_default_latest_build_path(version=sys_version, builds_dir_name=builds_dir_name),
+                            BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) if sys_version else None
+    else:
+        raise ValueError(" The  builds dir name {} is not valid".format(builds_dir_name))
+
+
+def extract_software_version_from_string_path(path):
+
+
+    version = None
+    if path:
+
+        if re.compile(BuildServerPath.BldsDirNames.R2_VERSION_SEARCH_REGEX).search(path):
+            version = '15.12'
+        elif re.compile(BuildServerPath.BldsDirNames.R3_VERSION_SEARCH_REGEX).search(path):
+            version = '16.10'
+        elif re.compile(BuildServerPath.BldsDirNames.R4_VERSION_SEARCH_REGEX).search(path):
+            version = '17.06'
+        elif re.compile(BuildServerPath.BldsDirNames.R5_VERSION_SEARCH_REGEX).search(path):
+            version = '18.03'
+        elif re.compile(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX).search(path):
+            version = '18.10'
+        else:
+            version = None
+
+    LOG.info("Version extracted from {} is {}".format(path, version))
+    return version
+
+
+def is_simplex(lab):
+     if not lab:
+         lab = InstallVars.get_install_var("LAB")
+     if 'system_mode' in lab:
+         return lab['system_mode'] == 'simplex'
+     else:
+         return len(lab['controller_nodes']) == 1
