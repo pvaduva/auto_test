@@ -20,7 +20,7 @@ thereby utilizing the feature.
 
 from pytest import mark, skip
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxCreds, Tenant
 from consts.proj_vars import ProjVar
 from consts.cgcs import BackendState
 from keywords import cinder_helper, storage_helper
@@ -30,7 +30,7 @@ from utils.clients.ssh import ControllerClient, SSHClient
 from setups import get_lab_dict
 
 
-def check_cinder_type(cinder_type="ceph-external"):
+def check_cinder_type(cinder_type="ceph-external-ceph-external"):
     """
     This function checks if a particular cinder type is now listed in the
     cinder type list.
@@ -43,7 +43,7 @@ def check_cinder_type(cinder_type="ceph-external"):
     """
 
     table_ = table_parser.table(cli.cinder('type-list'))
-    cinder_types = table_parser.get_values(table_, 'name')
+    cinder_types = table_parser.get_values(table_, 'Name')
 
     return bool(cinder_type in cinder_types)
 
@@ -118,13 +118,13 @@ def add_external_ceph(dest_filepath, ceph_services):
     # Need to confirm if we actually had a config out-of-date alarm
 
     LOG.tc_step('Check the expected cinder type is added')
-    assert check_cinder_type(cinder_type="ceph_external"), "External ceph cinder type was not found"
+    assert check_cinder_type(cinder_type="ceph-external-ceph-external"), "External ceph cinder type was not found"
 
     LOG.tc_step('Launch a volume and ensure it is created in the external ceph backend')
     vol_id = cinder_helper.create_volume(cleanup="function")[1]
-    table_ = table_parser.table(cli.cinder('show', vol_id))
-    volume_type = table_parser.get_value_two_col_table(table_, 'volume_type', strict=False)
-    assert volume_type == 'ceph-external', "Volume created in wrong backend"
+    table_ = table_parser.table(cli.cinder('show', vol_id, auth_info=Tenant.get('admin')))
+    volume_type = table_parser.get_value_two_col_table(table_, 'os-vol-host-attr:host', strict=False)
+    assert volume_type == 'controller@ceph-external#ceph-external', "Volume created in wrong backend"
 
 
 @mark.parametrize(('ceph_lab', 'ceph_services'),

@@ -76,7 +76,7 @@ def ensure_synced(subclouds_to_test):
     'change_order',
     'remove_one_server',
 ))
-def test_dc_dns_update(ensure_synced, scenario):
+def test_dc_dns_modify(ensure_synced, scenario):
     """
     Update DNS servers on central region and check it is propagated to subclouds
     Args:

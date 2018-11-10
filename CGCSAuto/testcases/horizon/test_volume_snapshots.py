@@ -35,14 +35,10 @@ class TestVolumeSnapshots:
 
     def _create_volume(self, volumespage):
         volumespage.create_volume(self.VOLUME_NAME)
-        assert volumespage.find_message_and_dismiss(messages.INFO)
-        assert not volumespage.find_message_and_dismiss(messages.ERROR)
         assert volumespage.is_volume_status(self.VOLUME_NAME, 'Available')
 
     def _delete_volume(self, volumespage):
         volumespage.delete_volume(self.VOLUME_NAME)
-        assert volumespage.find_message_and_dismiss(messages.SUCCESS)
-        assert not volumespage.find_message_and_dismiss(messages.ERROR)
         assert volumespage.is_volume_deleted(self.VOLUME_NAME)
 
     def test_create_edit_delete_volume_snapshot(self, volumes_pg):
@@ -143,8 +139,6 @@ class TestVolumeSnapshots:
         LOG.tc_step('Delete volume {}'.format(new_volume))
         volumes_pg.go_to_target_page()
         volumes_pg.delete_volume(new_volume)
-        assert volumes_pg.find_message_and_dismiss(messages.SUCCESS)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
         assert volumes_pg.is_volume_deleted(new_volume)
         horizon.test_result = True
 
