@@ -245,6 +245,7 @@ def configure_controller(controller0_node, final_step=None):
         install_helper.controller_system_config(con_telnet=controller0_node.telnet_conn)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
         LOG.info("running lab_setup.sh")
         install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
         if do_step("unlock_active_controller"):
