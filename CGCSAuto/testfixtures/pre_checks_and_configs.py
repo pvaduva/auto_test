@@ -29,7 +29,7 @@ def skip_for_ovs():
     Skip test for OVS system, if test name contains avs_pattern
     """
     test_name = ProjVar.get_var('TEST_NAME')
-    avs_pattern = 'avp|avr|avs|dpdk'
+    avs_pattern = 'avp|avr|avs|dpdk|e1000'
     if re.search(avs_pattern, test_name) and not system_helper.is_avs():
         skip("Test unsupported by OVS")
 

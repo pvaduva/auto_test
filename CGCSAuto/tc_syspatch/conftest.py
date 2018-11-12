@@ -53,7 +53,8 @@ def setup_test_session():
     if natbox['ip'] == 'localhost':
         natbox_ssh = 'localhost'
     else:
-        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), natbox, con_ssh=con_ssh)
+        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'))
+        setups.copy_keyfiles(nat_ssh=natbox_ssh, con_ssh=con_ssh)
 
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
     setups.set_session(con_ssh=con_ssh)

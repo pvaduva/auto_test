@@ -1037,28 +1037,24 @@ class SSHFromSSH(SSHClient):
         while time.time() < end_time:
             self.send(self.ssh_cmd)
             try:
-                if use_password:
-                    res_index = self.expect([PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
-                                            timeout=timeout, fail_ok=False)
-                    if res_index == 2:
-                        raise exceptions.SSHException(
-                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
-                    if res_index == 1:
-                        self.send('yes')
-                        self.expect(PASSWORD_PROMPT)
+                res_index = self.expect([prompt, PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
+                                        timeout=timeout, fail_ok=False)
+                if res_index == 3:
+                    raise exceptions.SSHException(
+                            "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
+
+                if res_index == 2:
+                    self.send('yes')
+                    self.expect([prompt, PASSWORD_PROMPT])
+
+                if res_index == 1:
+                    if not use_password:
+                        retry = False
+                        raise exceptions.SSHException('password prompt appeared. Non-password auth failed.')
 
                     self.send(self.password)
                     self.expect(prompt, timeout=timeout)
-                else:
-                    res_index = self.expect([Prompt.ADD_HOST, prompt, self.parent.get_prompt()], timeout=timeout,
-                                            fail_ok=False)
-                    if res_index == 2:
-                        raise exceptions.SSHException(
-                                "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
 
-                    if res_index == 0:
-                        self.send('yes')
-                        self.expect(prompt, timeout=timeout)
                 # Set prompt for matching
                 self.set_prompt(prompt)
                 LOG.info("Successfully connected to {} from {}!".format(self.host, self.parent.host))

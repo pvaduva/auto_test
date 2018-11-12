@@ -12,7 +12,7 @@ from keywords import system_helper
 
 
 def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
-                  auth_info=Tenant.get('admin', 'SystemController'), con_ssh=None):
+                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None):
     """
 
     Args:
@@ -285,3 +285,38 @@ def wait_for_subcloud_dns_config(subcloud=None, subcloud_ssh=None, expected_dns=
     func_kwargs = {'con_ssh': subcloud_ssh} if subcloud_ssh else {}
     return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='DNS', expected_value=expected_dns,
                                     fail_ok=fail_ok, timeout=timeout, check_interval=check_interval, **func_kwargs)
+
+
+def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=None, clear_alarm=True, fail_ok=False,
+                                 timeout=DCTimeout.SYNC, check_interval=30):
+    """
+    Wait for ntp configuration to reach expected value
+    Args:
+        subcloud (str|None):
+        subcloud_ssh (None|SSHClient):
+        expected_ntp (None|str|list):
+        clear_alarm (bool)
+        fail_ok (bool):
+        timeout (int):
+        check_interval (int):
+
+    Returns (tuple):
+        (0, <subcloud_ntp_servers>)     # same as expected
+        (1, <subcloud_ntp_servers>)     # did not update within timeout
+        (2, <subcloud_ntp_servers>)     # updated to unexpected value
+
+    """
+    if not subcloud:
+        subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
+    func_kwargs = {'auth_info': Tenant.get('admin', subcloud)}
+    if subcloud_ssh:
+        func_kwargs['con_ssh'] = subcloud_ssh
+
+    func = system_helper.get_ntp_servers
+    res = wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='NTP', expected_value=expected_ntp,
+                                   fail_ok=fail_ok, timeout=timeout, check_interval=check_interval, **func_kwargs)
+
+    if res[0] in (0, 2) and clear_alarm:
+        system_helper.wait_and_clear_config_out_of_date_alarms(host_type='controller', **func_kwargs)
+
+    return res

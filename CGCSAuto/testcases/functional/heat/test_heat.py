@@ -64,7 +64,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
         resource_found = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
 
     elif to_verify is 'nova_flavor':
-        resource_found = nova_helper.get_flavor_id(name='sample-flavor')
+        resource_found = nova_helper.get_flavor(name='sample-flavor')
 
     elif to_verify is 'neutron_net':
         resource_found = network_helper.get_tenant_net_id(net_name='sample-net')

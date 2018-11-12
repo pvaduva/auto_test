@@ -93,8 +93,8 @@ def setup_test_session(global_setup):
     if natbox['ip'] == 'localhost':
         natbox_ssh = 'localhost'
     else:
-        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), natbox, con_ssh=con_ssh)
-    # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
+        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'))
+        setups.copy_keyfiles(nat_ssh=natbox_ssh, con_ssh=con_ssh)
 
     # set build id to be used to upload/write test results
     setups.get_build_info(con_ssh)

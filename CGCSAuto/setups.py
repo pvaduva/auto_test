@@ -28,7 +28,7 @@ def less_than_two_controllers(con_ssh=None, auth_info=Tenant.get('admin')):
     return len(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) < 2
 
 
-def setup_tis_ssh(lab, prompt=''):
+def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
@@ -71,28 +71,34 @@ def setup_primary_tenant(tenant):
     LOG.info("Primary Tenant for test session is set to {}".format(tenant['tenant']))
 
 
-def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
+def setup_natbox_ssh(natbox):
     natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
     nat_ssh = NATBoxClient.get_natbox_client()
-    nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
     ProjVar.set_var(natbox_ssh=nat_ssh)
 
-    _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
-    _copy_pubkey()
     return nat_ssh
 
 
-def _copy_pubkey():
-    with host_helper.ssh_to_host('controller-0') as con_0_ssh:
+def copy_keyfiles(nat_ssh, con_ssh):
+    try:
+        nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
+        _copy_privkey_to_natbox(nat_ssh=nat_ssh, con_ssh=con_ssh)
+        _copy_pubkey(con_ssh=con_ssh)
+    except Exception as e:
+        LOG.error('Copy private/public key failed. Continue test session. \n{}'.format(e.__str__()))
+
+
+def _copy_pubkey(con_ssh):
+    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
         pubkey_path = '{}/key.pub'.format(WRSROOT_HOME)
         if not con_0_ssh.file_exists(pubkey_path):
             try:
                 LOG.info("Attempt to copy public key to both controllers and localhost if applicable")
                 # copy public key to key.pub
-                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path))
+                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path), expect_timeout=30)
 
-                if not system_helper.is_simplex():
+                if con_0_ssh.exec_cmd('nslookup controller-1')[0] == 0:
                     # copy publickey to controller-1
                     con_0_ssh.scp_on_source(source_path=pubkey_path, dest_path=pubkey_path,
                                             dest_ip='controller-1',
@@ -108,7 +114,7 @@ def _copy_pubkey():
             LOG.info("Public key file copied to localhost")
 
 
-def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
+def _copy_privkey_to_natbox(con_ssh, nat_ssh=None, keyfile_path=None):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -118,36 +124,43 @@ def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
+    if not keyfile_path:
+        keyfile_path = ProjVar.get_var('KEYFILE_PATH')
+
     LOG.info("scp key file from controller to NATBox")
     keyfile_name = keyfile_path.split(sep='/')[-1]
+
+    if not nat_ssh:
+        nat_ssh = NATBoxClient.get_natbox_client()
 
     if not con_ssh.file_exists(keyfile_name):
         if not con_ssh.file_exists(PrivKeyPath.OPT_PLATFORM):
 
             gen_new_key = False
-            with host_helper.ssh_to_host('controller-0') as con_0_ssh:
+            with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
                 if not con_0_ssh.file_exists(PrivKeyPath.WRS_HOME):
                     gen_new_key = True
 
-            if gen_new_key:
-                if nova_helper.get_key_pair():
+            if gen_new_key and nova_helper.get_key_pair():
                     raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
 
+            with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
                 passphrase_prompt_1 = '.*Enter passphrase.*'
                 passphrase_prompt_2 = '.*Enter same passphrase again.*'
 
-                con_ssh.send('ssh-keygen')
-                index = con_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+                con_0_ssh.send('ssh-keygen')
+                index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
                 if index == 1:
-                    con_ssh.send()
-                    con_ssh.expect(passphrase_prompt_1)
-                con_ssh.send()    # Enter empty passphrase
-                con_ssh.expect(passphrase_prompt_2)
-                con_ssh.send()    # Repeat passphrase
-                con_ssh.expect(Prompt.CONTROLLER_0)
+                    con_0_ssh.send()
+                    con_0_ssh.expect(passphrase_prompt_1)
+                    con_0_ssh.send()    # Enter empty passphrase
 
-            # ssh keys should now exist under wrsroot home dir
-            active_con = system_helper.get_active_controller_name()
+                con_0_ssh.expect(passphrase_prompt_2)
+                con_0_ssh.send()    # Repeat passphrase
+                con_0_ssh.expect(Prompt.CONTROLLER_0)
+
+            # ssh keys should now exist under wrsroot home dir on controller-0
+            active_con = con_ssh.get_hostname()
             if active_con != 'controller-0':
                 con_ssh.send(
                         'scp controller-0:{} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.WRS_HOME))

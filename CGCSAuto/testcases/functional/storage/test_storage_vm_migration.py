@@ -525,7 +525,7 @@ def _test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size)
     if backing == 'image':
         backing = 'local_image'
 
-    flav_id = nova_helper.get_flavor_id(name=backing, strict=False)
+    flav_id = nova_helper.get_flavor(name=backing, strict=False)
     if not flav_id:
         flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing, check_storage_backing=False)[1]
 
@@ -628,7 +628,7 @@ def _test_4911_other_stress_tests(action, backing, image, size):
         backing = 'local_image'
     i = 0
 
-    flav_id = nova_helper.get_flavor_id(name=backing, strict=False)
+    flav_id = nova_helper.get_flavor(name=backing, strict=False)
     if not flav_id:
         flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing, check_storage_backing=False)[1]
 

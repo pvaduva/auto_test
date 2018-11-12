@@ -15,8 +15,8 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
-                  is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None,
-                  storage_backing=None, check_storage_backing=True):
+                  is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.get('admin'),
+                  con_ssh=None, storage_backing=None, check_storage_backing=True, rtn_id=True, cleanup=None):
     """
     Create a flavor with given criteria.
 
@@ -39,9 +39,11 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
             Valid values: 'local_image', 'local_lvm', 'remote'
         check_storage_backing (bool): whether to check the system storage backing configuration to auto determine the
             local_storage extra spec if storage_backing param is set to None.
+        rtn_id (bool): return id or name
+        cleanup (str|None): cleanup scope. function, class, module, or session
 
     Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
-        (0, <flavor_id>): flavor created successfully
+        (0, <flavor_id/name>): flavor created successfully
         (1, <stderr>): create flavor cli rejected
 
     """
@@ -85,6 +87,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     flavor_id = table_parser.get_column(table_, 'ID')[0]
     LOG.info("Flavor {} created successfully.".format(flavor_name))
 
+    if cleanup:
+        ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
+
     if not storage_backing:
         if check_storage_backing:
             LOG.info("Choose storage backing used by most hosts")
@@ -97,7 +102,8 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
                                **{FlavorSpec.STORAGE_BACKING: storage_backing})
 
-    return 0, flavor_id, storage_backing
+    flavor = flavor_id if rtn_id else flavor_name
+    return 0, flavor, storage_backing
 
 
 def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
@@ -229,8 +235,8 @@ def delete_flavors(flavor_ids, fail_ok=False, con_ssh=None, auth_info=Tenant.get
     return 0, success_msg
 
 
-def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
-                  con_ssh=None, auth_info=None, strict=True):
+def get_flavor(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
+               flv_id=None, con_ssh=None, auth_info=None, strict=True, rtn_id=True):
     """
     Get a flavor id with given criteria. If no criteria given, a random flavor will be returned.
 
@@ -243,11 +249,13 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
         vcpu (int): number of vcpus
         rxtx (str):
         is_public (bool):
+        flv_id (str)
         con_ssh (SSHClient):
         auth_info (dict):
         strict (bool): whether or not to perform strict search on provided values
+        rtn_id (bool)
 
-    Returns (str): id of a flavor
+    Returns (str): id/name of a flavor
 
     """
     if str(swap) == '0':
@@ -261,6 +269,7 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
                 'VCPUs': vcpu,
                 'RXTX_Factor': rxtx,
                 'IS_PUBLIC': is_public,
+                'ID': flv_id,
                 }
 
     final_dict = {}
@@ -270,22 +279,24 @@ def get_flavor_id(name=None, memory=None, disk=None, ephemeral=None, swap=None, 
 
     table_ = table_parser.table(cli.nova('flavor-list', ssh_client=con_ssh, auth_info=auth_info))
 
+    rtn_field = 'ID' if rtn_id else 'Name'
     if not final_dict:
-        ids = table_parser.get_column(table_, 'ID')
+        flvs = table_parser.get_column(table_, rtn_field)
     else:
-        ids = table_parser.get_values(table_, 'ID', strict=strict, **final_dict)
-    if not ids:
+        flvs = table_parser.get_values(table_, rtn_field, strict=strict, **final_dict)
+    if not flvs:
         return ''
-    return random.choice(ids)
+    return random.choice(flvs)
 
 
-def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
+def get_basic_flavor(auth_info=None, con_ssh=None, guest_os='', rtn_id=True):
     """
     Get a basic flavor with the default arg values and without adding extra specs.
     Args:
         auth_info (dict):
         con_ssh (SSHClient):
         guest_os
+        rtn_id (bool): return flavor id or name
 
     Returns (str): id of the basic flavor
 
@@ -295,12 +306,12 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os=''):
     size = GuestImages.IMAGE_FILES[guest_os][1]
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
-    flavor_id = get_flavor_id(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
-    if flavor_id == '':
-        flavor_id = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh)[1]
-        ResourceCleanup.add('flavor', flavor_id, scope='session')
+    flavor = get_flavor(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False, rtn_id=rtn_id)
+    if flavor == '':
+        flavor = create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh, cleanup='session',
+                               rtn_id=rtn_id)[1]
 
-    return flavor_id
+    return flavor
 
 
 def set_flavor_extra_specs(flavor, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False, **extra_specs):
@@ -1077,7 +1088,7 @@ def get_vm_flavor(vm_id, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin
     flavor = get_vm_nova_show_value(vm_id, field='flavor:original_name', strict=True, con_ssh=con_ssh,
                                     auth_info=auth_info)
     if 'id' in rtn_val:
-        flavor = get_flavor_id(name=flavor, strict=True, con_ssh=con_ssh, auth_info=auth_info)
+        flavor = get_flavor(name=flavor, strict=True, con_ssh=con_ssh, auth_info=auth_info)
 
     return flavor
 

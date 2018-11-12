@@ -2205,7 +2205,7 @@ class VMInfo:
 
         """
         flavor_name = table_parser.get_value_two_col_table(self.table_, 'flavor:original_name')
-        flavor_id = nova_helper.get_flavor_id(name=flavor_name, strict=True)
+        flavor_id = nova_helper.get_flavor(name=flavor_name, strict=True)
         return flavor_id
 
     def __get_boot_info(self):
@@ -4258,14 +4258,11 @@ def boot_vms_various_types(storage_backing=None, target_host=None, cleanup='func
 
     """
     LOG.info("Create a flavor without ephemeral or swap disks")
-    flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
-    if cleanup:
-        ResourceCleanup.add('flavor', flavor_1, scope=cleanup)
+    flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing, cleanup=cleanup)[1]
 
     LOG.info("Create another flavor with ephemeral and swap disks")
-    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing)[1]
-    if cleanup:
-        ResourceCleanup.add('flavor', flavor_2, scope=cleanup)
+    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing,
+                                         cleanup=cleanup)[1]
 
     launched_vms = []
     for i in range(int(math.ceil(vms_num/5.0))):
@@ -4463,9 +4460,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, i
     """
 
     if not flavor:
-        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2, storage_backing=storage_backing)[1]
-        if cleanup:
-            ResourceCleanup.add('flavor', flavor, scope=cleanup)
+        flavor = nova_helper.create_flavor(name=vm_type, vcpus=2, storage_backing=storage_backing, cleanup=cleanup)[1]
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
 
         if vm_type in ['vswitch', 'dpdk', 'vhost']:
