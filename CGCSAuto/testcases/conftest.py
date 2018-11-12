@@ -26,8 +26,7 @@ def setup_test_session(global_setup, request):
     # set up natbox connection and copy keyfile
     global natbox_ssh
     try:
-        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'), ProjVar.get_var('NATBOX'),
-                                             con_ssh=con_ssh)
+        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('NATBOX'))
     except:
         if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
             setups.collect_sys_net_info(lab=ProjVar.get_var('LAB'))
@@ -48,6 +47,8 @@ def setup_test_session(global_setup, request):
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     natbox_ssh.flush()
     natbox_ssh.connect(retry=True)
+    # copy private key to natbox and public key to localhost (if remote cli)
+    setups.copy_keyfiles(nat_ssh=natbox_ssh, con_ssh=con_ssh)
 
     # collect telnet logs for all hosts
     if ProjVar.get_var('COLLECT_TELNET'):

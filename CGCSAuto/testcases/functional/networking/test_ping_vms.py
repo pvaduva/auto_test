@@ -40,7 +40,8 @@ def _append_nics(vifs, net_ids, nics):
 
 @mark.parametrize(('guest_os', 'vifs'), [
     # ('cgcs-guest', (('avp', '00:1e'), ('virtio', '01:04'))),
-    mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('ubuntu_14', (('e1000', None), ('virtio', None)))),
+    mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('ubuntu_14', (('virtio', None), ('virtio', None)))),
+    mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('tis-centos-guest', (('virtio', None), ('virtio', None)))),
     mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('tis-centos-guest', (('avp', None), ('virtio', None)))),
     ('ubuntu_14', (('e1000', '00:1f'), ('virtio', None))),
     ('tis-centos-guest', (('avp', '00:1e'), ('virtio', '08:09')))
