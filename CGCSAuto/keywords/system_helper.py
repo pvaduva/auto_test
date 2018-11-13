@@ -3528,63 +3528,126 @@ def get_servicegroups_list_table(header='uuid', uuid=None, service_group_name=No
     return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
 
 
-def create_snmp_comm_string(comm_string=None, con_ssh=None, auth_info=Tenant.get('admin')):
+def create_snmp_comm(comm_string, rtn_val='uuid', fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
-    Get system host-disk-list <host> table
+    Create a new SNMP community string
     Args:
         comm_string (str): Community string to create
+        rtn_val (str): property to return
+        fail_ok (bool)
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (tuple):
 
     """
-    args = ''
-    args += '-c ' + comm_string
+    args = '-c "{}"'.format(comm_string)
+    code, out = cli.system('snmp-comm-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                           rtn_list=True)
 
-    out = cli.system('snmp-comm-add', args, ssh_client=con_ssh, auth_info=auth_info)
+    if code > 0:
+        return 1, out
 
-    return out
+    val = table_parser.get_value_two_col_table(table_parser.table(out), field=rtn_val)
+
+    return 0, val
 
 
-def get_snmp_comm_string(con_ssh=None, auth_info=Tenant.get('admin')):
+def create_snmp_trapdest(comm_string, ip_addr, rtn_val='uuid', fail_ok=False, con_ssh=None,
+                         auth_info=Tenant.get('admin')):
     """
-    Get system host-disk-list <host> table
+    Create a new SNMP trap destination
+    Args:
+        comm_string (str): SNMP community string
+        ip_addr (str): IP address of the trap destination
+        rtn_val (str): property to return
+        fail_ok (bool)
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+
+    """
+    args = '-c "{}" -i "{}"'.format(comm_string, ip_addr)
+    code, out = cli.system('snmp-trap-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                           rtn_list=True)
+
+    if code > 0:
+        return 1, out
+
+    val = table_parser.get_value_two_col_table(table_parser.table(out), field=rtn_val)
+
+    return 0, val
+
+
+def get_snmp_comms(con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get SNMP community strings
     Args:
         con_ssh (SSHClient):
         auth_info (dict):
 
-    Returns (dict):
+    Returns (list):
 
     """
-
     table_ = table_parser.table(cli.system('snmp-comm-list', ssh_client=con_ssh, auth_info=auth_info))
-    comm_strings = table_parser.get_values(table_, 'snmp community', strict=True)
 
-    return comm_strings
+    return table_parser.get_values(table_, 'SNMP community')
 
 
-def delete_snmp_comm_string(comm_string, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_snmp_trapdests(rtn_val='IP Address', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
     """
-    Get system host-disk-list <host> table
+    Get SNMP trap destination ips
     Args:
-        comm_string (str): Community string to create
+        rtn_val (str):
+        con_ssh (SSHClient):
+        auth_info (dict):
+        kwargs
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('snmp-comm-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    return table_parser.get_values(table_, rtn_val, **kwargs)
+
+
+def delete_snmp_comm(comm_string, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Delete snmp community string
+    Args:
+        comm_string (str): Community string or uuid to delete
+        fail_ok (bool)
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+
+    """
+    comm_string = '"{}"'.format(comm_string)
+    code, out = cli.system('snmp-comm-delete', comm_string, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                           rtn_list=True)
+
+    return code, out
+
+
+def delete_snmp_trapdest(ip_addr, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Delete SNMP trap destination
+    Args:
+        ip_addr (str): SNMP trap destination IP address
+        fail_ok (bool)
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (dict):
 
     """
-    args = ''
-    args += ' ' + comm_string
-    code = 0
+    ip_addr = '"{}"'.format(ip_addr)
+    code, out = cli.system('snmp-trap-delete', ip_addr, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                           rtn_list=True)
 
-    out = cli.system('snmp-comm-delete', args, ssh_client=con_ssh, auth_info=auth_info)
-
-    if re.search("Deleting", out):
-        code = 1
-
-    return code
+    return code, out
 
 
 def get_oam_ips():
