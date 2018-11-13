@@ -144,20 +144,21 @@ def _copy_privkey_to_natbox(con_ssh, nat_ssh=None, keyfile_path=None):
             if gen_new_key and nova_helper.get_key_pair():
                     raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
 
-            with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
-                passphrase_prompt_1 = '.*Enter passphrase.*'
-                passphrase_prompt_2 = '.*Enter same passphrase again.*'
+            if gen_new_key:
+                with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
+                    passphrase_prompt_1 = '.*Enter passphrase.*'
+                    passphrase_prompt_2 = '.*Enter same passphrase again.*'
 
-                con_0_ssh.send('ssh-keygen')
-                index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
-                if index == 1:
-                    con_0_ssh.send()
-                    con_0_ssh.expect(passphrase_prompt_1)
-                    con_0_ssh.send()    # Enter empty passphrase
+                    con_0_ssh.send('ssh-keygen')
+                    index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+                    if index == 1:
+                        con_0_ssh.send()
+                        con_0_ssh.expect(passphrase_prompt_1)
+                        con_0_ssh.send()    # Enter empty passphrase
 
-                con_0_ssh.expect(passphrase_prompt_2)
-                con_0_ssh.send()    # Repeat passphrase
-                con_0_ssh.expect(Prompt.CONTROLLER_0)
+                    con_0_ssh.expect(passphrase_prompt_2)
+                    con_0_ssh.send()    # Repeat passphrase
+                    con_0_ssh.expect(Prompt.CONTROLLER_0)
 
             # ssh keys should now exist under wrsroot home dir on controller-0
             active_con = con_ssh.get_hostname()
