@@ -1,15 +1,15 @@
 from time import sleep
 
-from pytest import fixture
-from pytest import mark, raises
+from pytest import fixture, mark, raises
 
 from utils.horizon.regions import messages
-from utils.horizon.pages.project.volumes import volumespage
 from utils.horizon import helper
-from utils.horizon.pages.project.compute import imagespage
-from utils.horizon.pages.project.compute import instancespage
+from utils.horizon.pages.project.compute import imagespage, instancespage
+from utils.horizon.pages.project.volumes import volumespage
 from utils.tis_log import LOG
 from consts import horizon
+from consts.auth import Tenant
+from keywords import nova_helper, network_helper
 from testfixtures.horizon import tenant_home_pg, driver
 
 
@@ -67,7 +67,7 @@ class TestVolumesBasic:
             - Check that the volume is in the list and Available
             - Edit the volume
             - Check that the volum is edited successfully
-            - Delete the volume 
+            - Delete the volume
             - Check that the volume is absent in the list
         """
         LOG.tc_step('Create new volume {}, with source type {}'.format(self.VOLUME_NAME, volume_source_type))
@@ -87,10 +87,10 @@ class TestVolumesBasic:
         assert volumes_pg.is_volume_deleted(self.VOLUME_NAME)
         horizon.test_result = True
 
-    @mark.parametrize(('boot_source_type', 'source_name', 'flavor_name', 'network_names'), [
-        ('Image', 'tis-centos-guest', 'small', ['tenant1-mgmt-net']),
+    @mark.parametrize(('boot_source_type', 'source_name'), [
+        ('Image', 'tis-centos-guest'),
     ])
-    def test_manage_volume_attachments(self, instances_pg, boot_source_type, source_name, flavor_name, network_names):
+    def test_manage_volume_attachments(self, instances_pg, boot_source_type, source_name):
         """
         Test the attach/detach actions for volume:
 
@@ -115,12 +115,15 @@ class TestVolumesBasic:
 
         instance_name = helper.gen_resource_name('volume_attachment')
         LOG.tc_step('Create new instance {}'.format(instance_name))
+        flavor_name = nova_helper.get_basic_flavor(auth_info=Tenant.get('admin'), rtn_id=False)
+        mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get('tenant1'))
+        network_names = network_helper.get_net_name_from_id(net_id=mgmt_net_id, auth_info=Tenant.get('tenant1'))
         instances_pg.create_instance(instance_name,
                                      boot_source_type=boot_source_type,
                                      create_new_volume=False,
                                      source_name=source_name,
                                      flavor_name=flavor_name,
-                                     network_names=network_names)
+                                     network_names=[network_names])
         assert not instances_pg.find_message_and_dismiss(messages.ERROR)
         assert instances_pg.is_instance_active(instance_name)
 
@@ -283,10 +286,7 @@ class TestVolumesBasic:
             volumes_pg_action.go_to_target_page()
         horizon.test_result = True
 
-    @mark.parametrize(('flavor_name', 'network_names', 'boot_source_type'), [
-        ('small', ['tenant1-mgmt-net'], 'Volume'),
-    ])
-    def test_volume_launch_as_instance(self, volumes_pg_action, boot_source_type, flavor_name, network_names):
+    def test_volume_launch_as_instance(self, volumes_pg_action):
         """
         This test case checks launch volume as instance functionality:
 
@@ -312,12 +312,14 @@ class TestVolumesBasic:
         instance_name = helper.gen_resource_name('volume_instance')
 
         LOG.tc_step('Launch volume {} as instance'.format(self.VOLUME_NAME))
+        flavor_name = nova_helper.get_basic_flavor(auth_info=Tenant.get('admin'), rtn_id=False)
+        mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get('tenant1'))
+        network_names = network_helper.get_net_name_from_id(net_id=mgmt_net_id, auth_info=Tenant.get('tenant1'))
         volumes_pg_action.launch_as_instance(self.VOLUME_NAME,
                                              instance_name,
-                                             boot_source_type=boot_source_type,
                                              delete_volume_on_instance_delete=False,
                                              flavor_name=flavor_name,
-                                             network_names=network_names)
+                                             network_names=[network_names])
         LOG.tc_step('Check that instance is Active and attached by the volume')
         instances_pg = instancespage.InstancesPage(volumes_pg_action.driver)
         instances_pg.go_to_target_page()
@@ -336,10 +338,7 @@ class TestVolumesBasic:
         assert instances_pg.is_instance_deleted(instance_name)
         horizon.test_result = True
 
-    @mark.parametrize(('flavor_name', 'network_names'), [
-        ('small', ['tenant1-mgmt-net']),
-    ])
-    def test_non_bootable_volume_launch_as_instance_negative(self, volumes_pg_action, flavor_name, network_names):
+    def test_non_bootable_volume_launch_as_instance_negative(self, volumes_pg_action):
         """
         This test case checks launch non-bootable volume will raise valueError:
 
@@ -360,7 +359,10 @@ class TestVolumesBasic:
 
         instance_name = helper.gen_resource_name('volume_instance')
         LOG.tc_step('Meet Error when launching non-bootable volume {} as instance'.format(self.VOLUME_NAME))
+        flavor_name = nova_helper.get_basic_flavor(auth_info=Tenant.get('admin'), rtn_id=False)
+        mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get('tenant1'))
+        network_names = network_helper.get_net_name_from_id(net_id=mgmt_net_id, auth_info=Tenant.get('tenant1'))
         with raises(ValueError):
             volumes_pg_action.launch_as_instance(self.VOLUME_NAME, instance_name, delete_volume_on_instance_delete=True,
-                                                 flavor_name=flavor_name, network_names=network_names)
+                                                 flavor_name=flavor_name, network_names=[network_names])
         horizon.test_result = True
