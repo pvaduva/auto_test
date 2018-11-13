@@ -168,7 +168,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
 
 def get_mgmt_boot_device(node):
     boot_device = {}
-    boot_interfaces = system_helper.get_host_port_pci_address_for_net_type(node.name)
+    boot_interfaces = system_helper.get_host_mgmt_pci_address(node.name)
     for boot_interface in boot_interfaces:
         a1, a2, a3 = boot_interface.split(":")
         boot_device[node.name] = a2 + "0" + a3.split(".")[1]

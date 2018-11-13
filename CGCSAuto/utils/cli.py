@@ -96,10 +96,9 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
             if cmd != 'dcmanager':
                 region = auth_info['region']
-                if region == 'SystemController' and ProjVar.get_var('IS_DC'):
-                    syscon_cmds = ('system', 'fm')      # endpoints in RegionOne only
-                    if cmd in syscon_cmds:
-                        region = 'RegionOne'
+                if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
+                    syscon_cmds = ('system', 'fm')
+                    region = 'RegionOne' if cmd in syscon_cmds else 'SystemController'
 
                 flags += ' --os-region-name {}'.format(region)
 

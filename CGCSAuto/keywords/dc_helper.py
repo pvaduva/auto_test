@@ -121,7 +121,8 @@ def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False):
 
 
 def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, expected_value=None, auth_name='admin',
-                             fail_ok=False, timeout=DCTimeout.SYNC, check_interval=30, **func_kwargs):
+                             fail_ok=False, timeout=DCTimeout.SYNC, check_interval=30, strict_order=True,
+                             **func_kwargs):
     """
     Wait for subcloud configuration to reach expected value
     Args:
@@ -134,6 +135,7 @@ def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, 
         fail_ok (bool):
         timeout (int):
         check_interval (int):
+        strict_order (bool)
         **func_kwargs: kwargs for defined func. auth_info and con_ssh has to be provided here
 
     Returns (tuple):
@@ -153,6 +155,9 @@ def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, 
     elif isinstance(expected_value, str):
         expected_value = expected_value.split(sep=',')
 
+    if not strict_order:
+        expected_value = sorted(list(expected_value))
+
     LOG.info("Wait for {}{} to be {}".format(subcloud, config_name, expected_value))
     if not func_kwargs.get('con_ssh', None):
         func_kwargs['con_ssh'] = ControllerClient.get_active_controller(name=subcloud)
@@ -161,6 +166,12 @@ def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, 
 
     origin_subcloud_val = func(*func_args, **func_kwargs)
     subcloud_val = copy.copy(origin_subcloud_val)
+    if isinstance(subcloud_val, str):
+        subcloud_val = subcloud_val.split(sep=',')
+
+    if not strict_order:
+        subcloud_val = sorted(list(subcloud_val))
+
     end_time = time.time() + timeout + check_interval
     while time.time() < end_time:
         if subcloud_val == expected_value:
@@ -285,6 +296,56 @@ def wait_for_subcloud_dns_config(subcloud=None, subcloud_ssh=None, expected_dns=
     func_kwargs = {'con_ssh': subcloud_ssh} if subcloud_ssh else {}
     return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='DNS', expected_value=expected_dns,
                                     fail_ok=fail_ok, timeout=timeout, check_interval=check_interval, **func_kwargs)
+
+
+def wait_for_subcloud_snmp_comms(subcloud=None, subcloud_ssh=None, expected_comms=None, fail_ok=False,
+                                 timeout=DCTimeout.SYNC, check_interval=30):
+    """
+    Wait for dns configuration to reach expected value
+    Args:
+        subcloud (str|None):
+        subcloud_ssh (None|SSHClient):
+        expected_comms (None|str|list):
+        fail_ok (bool):
+        timeout (int):
+        check_interval (int):
+
+    Returns (tuple):
+        (0, <subcloud_dns_servers>)     # same as expected
+        (1, <subcloud_dns_servers>)     # did not update within timeout
+        (2, <subcloud_dns_servers>)     # updated to unexpected value
+
+    """
+    func = system_helper.get_snmp_comms
+    func_kwargs = {'con_ssh': subcloud_ssh} if subcloud_ssh else {}
+    return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='SNMP Community strings',
+                                    expected_value=expected_comms, fail_ok=fail_ok, timeout=timeout,
+                                    check_interval=check_interval, strict_order=False, **func_kwargs)
+
+
+def wait_for_subcloud_snmp_trapdests(subcloud=None, subcloud_ssh=None, expected_trapdests=None, fail_ok=False,
+                                     timeout=DCTimeout.SYNC, check_interval=30):
+    """
+    Wait for dns configuration to reach expected value
+    Args:
+        subcloud (str|None):
+        subcloud_ssh (None|SSHClient):
+        expected_trapdests (None|str|list):
+        fail_ok (bool):
+        timeout (int):
+        check_interval (int):
+
+    Returns (tuple):
+        (0, <subcloud_dns_servers>)     # same as expected
+        (1, <subcloud_dns_servers>)     # did not update within timeout
+        (2, <subcloud_dns_servers>)     # updated to unexpected value
+
+    """
+    func = system_helper.get_snmp_trapdests
+    func_kwargs = {'con_ssh': subcloud_ssh} if subcloud_ssh else {}
+    return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='SNMP Community strings',
+                                    expected_value=expected_trapdests, fail_ok=fail_ok, timeout=timeout,
+                                    check_interval=check_interval, strict_order=False, **func_kwargs)
 
 
 def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=None, clear_alarm=True, fail_ok=False,

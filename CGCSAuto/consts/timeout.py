@@ -4,13 +4,12 @@ CLI_TIMEOUT = 600
 class HostTimeout:
     ONLINE_AFTER_LOCK = 1200    # Host in online state after locked
     COMPUTE_UNLOCK = 840    # Compute host reaches enabled/available state after system host-unlock returned
-    CONTROLLER_UNLOCK = 9000 # 1360    # Host reaches enabled/available state after system host-unlock returned
-    CONFIG_CONTROLLER_TIMEOUT = 1800
+    CONTROLLER_UNLOCK = 1360    # Host reaches enabled/available state after system host-unlock returned
     # REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
     REBOOT = 2400  # Host reaches enabled/available state after sudo reboot -f from host
     SWACT = 180     # Active controller switched and being able to run openstack CLI after system host-swact returned
     LOCK = 900      # Host in locked state after system host-lock cli returned
-    TASK_CLEAR = 900    # Task clears in system host-show after host reaches enabled/available state
+    TASK_CLEAR = 300    # Task clears in system host-show after host reaches enabled/available state
     FAIL_AFTER_REBOOT = 120     # Host in offline or failed state via system host-show after sudo reboot -f returned
     HYPERVISOR_UP = 300     # Hypervsior in enabled/up state after host in available state and task clears
     WEB_SERVICE_UP = 180    # Web service up in sudo sm-dump after host in available state and task clears
@@ -27,7 +26,7 @@ class HostTimeout:
     INSTALL_CONTROLLER = 2400
     INSTALL_LOAD = 3600
     POST_INSTALL_SCRIPTS = 3600
-
+    CONFIG_CONTROLLER_TIMEOUT = 1800
 
 
 class VMTimeout:

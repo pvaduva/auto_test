@@ -3,10 +3,11 @@ import getpass
 import os
 import subprocess
 import re
-from utils.tis_log import LOG
 
+from utils.tis_log import LOG
 from consts.auth import SvcCgcsAuto
 from consts.vlm import VlmAction
+
 
 SSH_DIR = "~/.ssh"
 SSH_KEY_FPATH = SSH_DIR + "/id_rsa"
@@ -22,7 +23,7 @@ VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_FORCE_
             VlmAction.VLM_TURNOFF, VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
 
 
-def get_hostname():
+def get_host_name():
     return socket.gethostname()
 
 
@@ -178,6 +179,6 @@ def ping_to_host(host_ip, count=4):
 
     if host_ip is None:
         raise ValueError("Valid host ip must be provided")
-    ping_cmd = ['ping', '-c', 4, host_ip]
+    ping_cmd = ['ping', '-c', count, host_ip]
 
     return True if exec_cmd(ping_cmd)[0] == 0 else False

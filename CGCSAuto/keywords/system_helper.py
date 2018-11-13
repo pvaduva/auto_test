@@ -1600,7 +1600,6 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
     cmd = 'host-memory-list --nowrap'
     table_ = table_parser.table(cli.system(cmd, host, ssh_client=con_ssh, auth_info=auth_info))
 
-
     if isinstance(proc_id, (str, int)):
         proc_id = [int(proc_id)]
     elif proc_id is None:
@@ -1909,7 +1908,6 @@ def get_host_interfaces_table(host, show_all=False, con_ssh=None, use_telnet=Fal
     return table_
 
 
-
 def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_ifs=None, used_by_ifs=None,
                         show_all=False, strict=True, regex=False, con_ssh=None, auth_info=Tenant.get('admin'),
                         exclude=False, **kwargs):
@@ -2085,7 +2083,6 @@ def get_host_port_pci_address(host, interface, con_ssh=None, auth_info=Tenant.ge
     return pci_address
 
 
-
 def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True, con_ssh=None,
                                            auth_info=Tenant.get('admin')):
     """
@@ -2100,7 +2097,8 @@ def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True,
     Returns (list):
 
     """
-    ports = get_host_mgmt_network_port_name(host)
+    ports = get_host_ports_for_net_type(host, net_type=net_type, ports_only=rtn_list, con_ssh=con_ssh,
+                                        auth_info=auth_info)
     pci_addresses = []
     for port in ports:
         pci_address = get_host_port_pci_address(host, port, con_ssh=con_ssh, auth_info=auth_info)
@@ -2109,12 +2107,11 @@ def get_host_port_pci_address_for_net_type(host, net_type='mgmt', rtn_list=True,
     return pci_addresses
 
 
-def get_host_mgmt_network_port_name(host, rtn_list=True, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_host_mgmt_pci_address(host, con_ssh=None, auth_info=Tenant.get('admin')):
     """
 
     Args:
         host:
-        rtn_list:
         con_ssh:
         auth_info:
 
@@ -2122,10 +2119,14 @@ def get_host_mgmt_network_port_name(host, rtn_list=True, con_ssh=None, auth_info
 
     """
     from keywords.host_helper import get_hostshow_value
-    mgmt_ip = get_hostshow_value(host=host, field='mgmt_ip', con_ssh=con_ssh)
-    return get_host_ifname_by_address(host,address=mgmt_ip)
+    mgmt_ip = get_hostshow_value(host=host, field='mgmt_ip', con_ssh=con_ssh, auth_info=auth_info)
+    mgmt_ports = get_host_ifnames_by_address(host, address=mgmt_ip)
+    pci_addresses = []
+    for port in mgmt_ports:
+        pci_address = get_host_port_pci_address(host, port, con_ssh=con_ssh, auth_info=auth_info)
+        pci_addresses.append(pci_address)
 
-
+    return
 
 def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Tenant.get('admin')):
     args = "{} {}".format(host, interface)
@@ -2143,7 +2144,6 @@ def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Ten
 
 def get_hosts_interfaces_info(hosts, fields, con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
                               **interface_filters):
-
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -3133,8 +3133,8 @@ def disable_murano(con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     return 0, msg
 
 
-def get_host_ifname_by_address(host, rtn_val='ifname', address=None, id_=None, con_ssh=None, auth_info=Tenant.get('admin'),
-                       fail_ok=False):
+def get_host_ifnames_by_address(host, rtn_val='ifname', address=None, id_=None, fail_ok=False, con_ssh=None,
+                                auth_info=Tenant.get('admin')):
     """
     Get the host ifname by address.
     Args:
@@ -3146,7 +3146,7 @@ def get_host_ifname_by_address(host, rtn_val='ifname', address=None, id_=None, c
         auth_info (dict):
         fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
 
-    Returns:
+    Returns (list):
 
     """
 
@@ -3161,8 +3161,8 @@ def get_host_ifname_by_address(host, rtn_val='ifname', address=None, id_=None, c
         if value:
             kwargs[key] = value
 
-    ifname = table_parser.get_values(table_, rtn_val, strict=True, regex=True, merge_lines=True, **kwargs)
-    return ifname
+    ifnames = table_parser.get_values(table_, rtn_val, strict=True, regex=True, merge_lines=True, **kwargs)
+    return ifnames
 
 
 def get_host_addr_list(host, rtn_val='address', ifname=None, id_=None, con_ssh=None, auth_info=Tenant.get('admin'),
@@ -3569,7 +3569,7 @@ def create_snmp_trapdest(comm_string, ip_addr, rtn_val='uuid', fail_ok=False, co
 
     """
     args = '-c "{}" -i "{}"'.format(comm_string, ip_addr)
-    code, out = cli.system('snmp-trap-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+    code, out = cli.system('snmp-trapdest-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                            rtn_list=True)
 
     if code > 0:
@@ -3595,28 +3595,33 @@ def get_snmp_comms(con_ssh=None, auth_info=Tenant.get('admin')):
     return table_parser.get_values(table_, 'SNMP community')
 
 
-def get_snmp_trapdests(rtn_val='IP Address', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
+def get_snmp_trapdests(rtn_val='IP Address', con_ssh=None, auth_info=Tenant.get('admin'), exclude_system=True,
+                       **kwargs):
     """
     Get SNMP trap destination ips
     Args:
         rtn_val (str):
         con_ssh (SSHClient):
         auth_info (dict):
+        exclude_system
         kwargs
 
     Returns (list):
 
     """
     table_ = table_parser.table(cli.system('snmp-comm-list', ssh_client=con_ssh, auth_info=auth_info))
+    if exclude_system:
+        table_ = table_parser.filter_table(table_, exclude=True, **{'SNMP Community': 'dcorchAlarmAggregator'})
 
     return table_parser.get_values(table_, rtn_val, **kwargs)
 
 
-def delete_snmp_comm(comm_string, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def delete_snmp_comm(comms, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Delete snmp community string
     Args:
-        comm_string (str): Community string or uuid to delete
+        comms (str): Community string or uuid to delete
+        check_first (bool)
         fail_ok (bool)
         con_ssh (SSHClient):
         auth_info (dict):
@@ -3624,18 +3629,38 @@ def delete_snmp_comm(comm_string, fail_ok=False, con_ssh=None, auth_info=Tenant.
     Returns (tuple):
 
     """
-    comm_string = '"{}"'.format(comm_string)
-    code, out = cli.system('snmp-comm-delete', comm_string, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+    if isinstance(comms, str):
+        comms = comms.split(sep=' ')
+    else:
+        comms = list(comms)
+
+    if check_first:
+        current_comms = get_snmp_comms(con_ssh=con_ssh, auth_info=auth_info)
+        comms = [comm for comm in comms if comm in current_comms]
+        if not comms:
+            msg = '"{}" SNMP community string does not exist. Do nothing.'.format(comms)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info('Deleting SNMP community strings: {}'.format(comms))
+    comms = ' '.join(['"{}"'.format(comm) for comm in comms])
+    code, out = cli.system('snmp-comm-delete', comms, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                            rtn_list=True)
 
+    if code == 0:
+        msg = 'SNMP community string "{}" is deleted successfully'.format(comms)
+    else:
+        msg = 'SNMP community string "{}" failed to delete'.format(comms)
+
+    LOG.info(msg)
     return code, out
 
 
-def delete_snmp_trapdest(ip_addr, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def delete_snmp_trapdest(ip_addrs, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Delete SNMP trap destination
     Args:
-        ip_addr (str): SNMP trap destination IP address
+        ip_addrs (str|list): SNMP trap destination IP address(es)
         fail_ok (bool)
         con_ssh (SSHClient):
         auth_info (dict):
@@ -3643,8 +3668,13 @@ def delete_snmp_trapdest(ip_addr, fail_ok=False, con_ssh=None, auth_info=Tenant.
     Returns (dict):
 
     """
-    ip_addr = '"{}"'.format(ip_addr)
-    code, out = cli.system('snmp-trap-delete', ip_addr, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+    if isinstance(ip_addrs, str):
+        ip_addrs = ip_addrs.split(sep=' ')
+
+    arg = ''
+    for ip_addr in ip_addrs:
+        arg += '"{}" '.format(ip_addr)
+    code, out = cli.system('snmp-trapdest-delete', arg, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                            rtn_list=True)
 
     return code, out
