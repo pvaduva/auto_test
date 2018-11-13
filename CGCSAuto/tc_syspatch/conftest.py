@@ -58,7 +58,6 @@ def setup_test_session():
     # set build id to be used to upload/write test results
     setups.get_build_info(con_ssh)
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
-
     setups.set_session(con_ssh=con_ssh)
 
 
