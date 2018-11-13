@@ -33,7 +33,10 @@ INTERVAL_BETWEEN_SWACT = 300 + 10
 
 IS_SIMPLEX = system_helper.is_simplex()
 
-SKIP_PROCESS_LIST = ('postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd')
+SKIP_PROCESS_LIST = ['postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd']
+
+if IS_SIMPLEX:
+    SKIP_PROCESS_LIST.append('haproxy')
 
 PROCESSES = {
     'sm': {
