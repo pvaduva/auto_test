@@ -214,11 +214,11 @@ def login_as_linux_user(user, password, host, cmd='whoami', expecting_fail=False
         # LOG.info('Caught exception:\n{}\n'.format(e))
         msg = 'Expecting to login but failed with exception:{}'.format(e)
         assert expecting_fail, msg
-        assert 'Permission denied,' in str(e), msg
-        assert '{}@{}'.format(user, host) in str(e), msg
-
-        LOG.info('Failed to login as expected on host:{}, user:{}, password:{}, for "Permission denied"'.format(
-            host, user, password))
+        if not 'Permission denied,' in str(e):
+            LOG.warning('Login as {}/{} failed without Permission denied error.'.format(user, password))
+        else:
+            LOG.info('Failed to login as expected on host:{}, user:{}, password:{}, for "Permission denied"'.
+                     format(host, user, password))
 
         return False, str(e)
 
