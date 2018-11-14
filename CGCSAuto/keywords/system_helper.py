@@ -2128,6 +2128,7 @@ def get_host_mgmt_pci_address(host, con_ssh=None, auth_info=Tenant.get('admin'))
 
     return
 
+
 def get_host_if_show_values(host, interface, fields, con_ssh=None, auth_info=Tenant.get('admin')):
     args = "{} {}".format(host, interface)
     table_ = table_parser.table(cli.system('host-if-show', args, ssh_client=con_ssh, auth_info=auth_info))
@@ -3646,6 +3647,11 @@ def delete_snmp_comm(comms, check_first=True, fail_ok=False, con_ssh=None, auth_
     comms = ' '.join(['"{}"'.format(comm) for comm in comms])
     code, out = cli.system('snmp-comm-delete', comms, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                            rtn_list=True)
+
+    post_comms = get_snmp_comms(con_ssh=con_ssh, auth_info=auth_info)
+    undeleted_comms = [comm for comm in comms if comm in post_comms]
+    if undeleted_comms:
+        raise exceptions.SysinvError("Community string still exist after deletion: {}".format(undeleted_comms))
 
     if code == 0:
         msg = 'SNMP community string "{}" is deleted successfully'.format(comms)

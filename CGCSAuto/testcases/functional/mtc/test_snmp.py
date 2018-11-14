@@ -21,10 +21,8 @@ def test_snmp_community_string():
 
     LOG.tc_step("Check if the snmp community string {} is created".format(comm_string))
     comm_strings = system_helper.get_snmp_comms()
-
     assert comm_string in comm_strings, "Failed to create the snmp community string"
 
     # delete the community-string
     LOG.tc_step("Deleting snmp community string {}".format(comm_string))
-    code = system_helper.delete_snmp_comm(comm_string)
-    assert code == 0, "Failed to delete the snmp community string"
+    system_helper.delete_snmp_comm(comm_string, check_first=False)
