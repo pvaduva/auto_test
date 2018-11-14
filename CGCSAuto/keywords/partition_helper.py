@@ -147,8 +147,9 @@ def get_partition_info(host, uuid, param=None):
 
 def wait_for_partition_status(host, uuid, final_status=[PartitionStatus.READY], interim_status=PartitionStatus.CREATING, timeout=120,
                               fail_ok=False):
+    
+    final_status = [None] if not final_status else final_status
     valid_status = copy.deepcopy(final_status)
-    print("This is final status: {}".format(final_status))
     if isinstance(interim_status, str):
         interim_status = (interim_status,)
     for status_ in interim_status:
@@ -159,7 +160,6 @@ def wait_for_partition_status(host, uuid, final_status=[PartitionStatus.READY], 
     while time.time() < end_time:
         status = get_partition_info(host, uuid, "status")
         assert status in valid_status, "Partition has unexpected state {}".format(status)
-        print("This is final status: {}".format(final_status))
 
         if status in final_status:
             LOG.info("Partition {} on host {} has reached state: {}".format(uuid, host, status))
