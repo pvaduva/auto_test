@@ -5,7 +5,7 @@ import time
 
 from pytest import fixture, skip, mark
 
-from consts.cgcs import EventLogID, HostAvailState
+from consts.cgcs import EventLogID, HostAvailState, PartitionStatus
 from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper, partition_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
@@ -394,7 +394,6 @@ def test_modify_drdb_swact_then_reboot():
     host_helper.reboot_hosts(act_cont)
 
 
-@mark.usefixtures("lvm_precheck")
 def test_increase_cinder():
     """
     Increase the size of the cinder filesystem.
@@ -414,9 +413,11 @@ def test_increase_cinder():
     hosts = system_helper.get_controllers()
     if len(hosts) > 1:
         hosts = [standby, active]
+    else:
+        hosts = [active]
 
     LOG.tc_step("Determine location of cinder")
-    table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(standby)))
+    table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(hosts[0])))
     pv_type = table_parser.get_values(table_, "pv_type", **{"lvm_vg_name": "cinder-volumes"})
     if not pv_type:
         skip("Cinder disk or partition is not present in lab")
@@ -424,14 +425,17 @@ def test_increase_cinder():
         skip("Code not present for this scenario")
     else:
         for host in hosts:
+            print("This is hosts: {}".format(hosts))
             if host == active and len(hosts) > 1:
                 host_helper.swact_host()
-            host_helper.lock_host(host)
             LOG.tc_step("Check if disk hosting the partition has space available for resize")
             table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(host)))
             device_node = table_parser.get_values(table_, "disk_or_part_device_node", **{"lvm_vg_name": "cinder-volumes"})[0]
             device_path = table_parser.get_values(table_, 'disk_or_part_device_path', **{"lvm_vg_name": "cinder-volumes"})[0]
-            device_node = re.sub(r"\d+$", "", device_node)
+            if "nvme" in device_node:
+                device_node = re.sub(r"p\d+$", "", device_node)
+            else:
+                device_node = re.sub(r"\d+$", "", device_node)
             table_ = table_parser.table(cli.system("host-disk-show {} {}".format(host, device_node)))
             available_gib = table_parser.get_value_two_col_table(table_, 'available_gib')
             disk_uuid = table_parser.get_value_two_col_table(table_, 'uuid')
@@ -440,16 +444,21 @@ def test_increase_cinder():
                 skip("Insufficient disk space available for test")
 
             LOG.tc_step("Modify the cinder partition to a larger size")
+            host_helper.lock_host(host)
             table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(host, device_path)))
             partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
             partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
             partition_size_gib = float(partition_size_mib) / 1024
             LOG.info("Current partition size is {}".format(partition_size_gib))
-            partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10))
+            if len(hosts) > 1:
+                partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10))
+            else:
+                final_status = [PartitionStatus.READY, PartitionStatus.IN_USE]
+                partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10), final_status=final_status)
             host_helper.unlock_host(host, available_only=True)
 
     # Need to swact again for cinder-volumes to be updated on both controllers 
-    if len(host) > 1:
+    if len(hosts) > 1:
         host_helper.swact_host()
 
     LOG.tc_step("Confirm partition size of cinder is increased")
