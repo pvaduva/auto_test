@@ -3918,7 +3918,7 @@ def get_ptp_vals(rtn_val='mode', rtn_dict=False, con_ssh=None):
 
 
 def modify_ptp(enabled=None, mode=None, transport=None, mechanism=None, fail_ok=False, con_ssh=None, clear_alarm=True,
-               wait_with_best_effort=False, auth_info=Tenant.get('admin')):
+               wait_with_best_effort=False, check_first=True, auth_info=Tenant.get('admin')):
     """
     Modify ptp with given parameters
     Args:
@@ -3929,6 +3929,7 @@ def modify_ptp(enabled=None, mode=None, transport=None, mechanism=None, fail_ok=
         fail_ok (bool):
         clear_alarm (bool):
         wait_with_best_effort (bool):
+        check_first:
         auth_info (dict):
         con_ssh:
 
@@ -3951,6 +3952,19 @@ def modify_ptp(enabled=None, mode=None, transport=None, mechanism=None, fail_ok=
         raise ValueError("At least one parameter has to be specified.")
 
     arg_str = ' '.join(['--{} {}'.format(k, v) for k, v in args_dict.items()])
+
+    if check_first:
+        actual_val_list = get_ptp_vals(rtn_val=list(args_dict.keys()), con_ssh=con_ssh, rtn_dict=True)
+        changeparm = False
+        for field in args_dict:
+            param_val = args_dict[field]
+            actual_val = actual_val_list[field]
+            if actual_val != param_val:
+                changeparm = True
+                break
+        if not changeparm:
+            return -1, 'No parameter chage'
+
     code, output = cli.system('ptp-modify', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
                               rtn_list=True)
     if code > 0:
@@ -4015,7 +4029,7 @@ def get_ntp_servers(con_ssh=None, auth_info=Tenant.get('admin')):
     return ntp_servers
 
 
-def modify_ntp(enable=None, ntp_servers=None, check_first=True, fail_ok=False, clear_alarm=True,
+def modify_ntp(enabled=None, ntp_servers=None, check_first=True, fail_ok=False, clear_alarm=True,
                wait_with_best_effort=False, con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
     """
 
@@ -4027,6 +4041,7 @@ def modify_ntp(enable=None, ntp_servers=None, check_first=True, fail_ok=False, c
         clear_alarm (bool): Whether to wait and lock/unlock hosts to clear alarm
         wait_with_best_effort (bool): whether to wait for alarm with best effort only
         con_ssh:
+        check_first:
         auth_info:
         **kwargs
 
@@ -4035,12 +4050,11 @@ def modify_ntp(enable=None, ntp_servers=None, check_first=True, fail_ok=False, c
         (1, <std_err>)      # cli rejected
 
     """
-
     arg = ''
     verify_args = {}
-    if enable is not None:
-        arg += '--enabled {}'.format(enable).lower()
-        verify_args['enabled'] = str(enable)
+    if enabled is not None:
+        arg += '--enabled {}'.format(enabled).lower()
+        verify_args['enabled'] = str(enabled)
 
     if ntp_servers:
         if isinstance(ntp_servers, (tuple, list)):
