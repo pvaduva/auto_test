@@ -4070,18 +4070,28 @@ def modify_ntp(enabled=None, ntp_servers=None, check_first=True, fail_ok=False, 
     if not arg:
         raise ValueError("Nothing to modify. enable, ntp_servers or kwwargs has to be provided")
 
-    if check_first and not get_alarms(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id='controller',
-                                      con_ssh=con_ssh, auth_info=auth_info):
+    prev_args = None
+    toggle_state = False
+    if enable is not None:
         prev_args = get_ntp_vals(rtn_val=list(verify_args.keys()), con_ssh=con_ssh, rtn_dict=True)
-        for field in verify_args:
-            expt_val = verify_args[field]
-            actual_val = prev_args[field]
-            if actual_val != expt_val:
-                break
-        else:
-            msg = 'NTP already configured with given criteria {}. Do nothing.'.format(verify_args)
-            LOG.info(msg)
-            return -1, msg
+        if prev_args['enabled'] != verify_args['enabled']:
+            toggle_state = True
+
+    if check_first and not toggle_state:
+        if not clear_alarm or (clear_alarm and not get_alarms(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, con_ssh=con_ssh,
+                                                              entity_id='controller', auth_info=auth_info)):
+            if not prev_args:
+                prev_args = get_ntp_vals(rtn_val=list(verify_args.keys()), con_ssh=con_ssh, rtn_dict=True)
+
+            for field in verify_args:
+                expt_val = verify_args[field]
+                actual_val = prev_args[field]
+                if actual_val != expt_val:
+                    break
+            else:
+                msg = 'NTP already configured with given criteria {}. Do nothing.'.format(verify_args)
+                LOG.info(msg)
+                return -1, msg
 
     code, out = cli.system('ntp-modify', arg.strip(), fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
                            rtn_list=True)
@@ -4089,7 +4099,10 @@ def modify_ntp(enabled=None, ntp_servers=None, check_first=True, fail_ok=False, 
         return 1, out
 
     if clear_alarm:
-        wait_and_clear_config_out_of_date_alarms(host_type='controller', con_ssh=con_ssh, auth_info=auth_info,
+        # config out-of-date alarm only on controller if only ntp servers are changed.
+        # If ntp state changes, ALL hosts need to be lock/unlock.
+        host_type = None if toggle_state else 'controller'
+        wait_and_clear_config_out_of_date_alarms(host_type=host_type, con_ssh=con_ssh, auth_info=auth_info,
                                                  wait_with_best_effort=wait_with_best_effort)
 
     post_args = get_ntp_vals(rtn_val=list(verify_args.keys()), con_ssh=con_ssh, rtn_dict=True, auth_info=auth_info)

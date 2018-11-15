@@ -1289,6 +1289,7 @@ class ControllerClient:
     __lab_ssh_map = {}     # item such as 'PV0': [con_ssh, ...]
 
     __default_name = None
+    __prev_client = None
 
     @classmethod
     def get_active_controller(cls, name=None, fail_ok=False):
@@ -1301,7 +1302,9 @@ class ControllerClient:
         Returns:
 
         """
+        log_func = LOG.info
         if not name:
+            log_func = LOG.debug
             if cls.__default_name:
                 name = cls.__default_name
             else:
@@ -1320,12 +1323,18 @@ class ControllerClient:
         idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         for lab_ in cls.__lab_ssh_map:
             if lab_ == name:
-                LOG.debug("Getting active controller client for {}".format(lab_))
                 controller_ssh = cls.__lab_ssh_map[lab_][idx]
                 if isinstance(controller_ssh, SSHClient):
+                    msg = "Getting active controller client for {}".format(lab_)
+                    if name != cls.__prev_client:
+                        LOG.info(msg)
+                        cls.__prev_client = name
+                    else:
+                        LOG.debug(msg)
                     return controller_ssh
 
         if fail_ok:
+            LOG.warning('No ssh client found for {}'.format(name))
             return None
         raise exceptions.ActiveControllerUnsetException(("The name - {} does not have a corresponding "
                                                          "controller ssh session set. ssh_map: {}").

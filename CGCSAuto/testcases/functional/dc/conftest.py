@@ -1,4 +1,4 @@
-from pytest import fixture, skip
+from pytest import fixture, skip, mark
 
 from consts.proj_vars import ProjVar
 

@@ -74,9 +74,10 @@ def test_dc_snmp(snmp_precheck):
 
     Test Steps:
         - Un-manage primary subcloud
-        - Configure DNS servers on central region to new value based on given scenario
-        - Wait for new DNS config to sync over to managed online subclouds
-        - Ensure DNS config is not updated on unmanaged primary subcloud
+        - Add a SNMP community string and a trapdest on unmanaged subcloud locally
+        - Add a different SNMP community string and trapdest on central region
+        - Wait for new SNMP configs to sync over to managed online subclouds
+        - Ensure central SNMP configs are not updated on unmanaged primary subcloud
         - Re-manage primary subcloud and ensure DNS config syncs over
         - Verify nslookup works in Central Region and primary subcloud
 
@@ -92,8 +93,8 @@ def test_dc_snmp(snmp_precheck):
     dc_helper.unmanage_subcloud(subcloud=primary_subcloud, check_first=False)
 
     LOG.tc_step('Add SNMP community string and trapdest to unmanaged subcloud - {}'.format(primary_subcloud, SNMP_COMM))
-    system_helper.create_snmp_comm('cgcsauto comm local', auth_info=sub_auth)
-    system_helper.create_snmp_trapdest(comm_string="cgcsauto trapdest local", ip_addr='8.8.8.8', auth_info=sub_auth)
+    system_helper.create_snmp_comm('cgcsauto_comm_local', auth_info=sub_auth)
+    system_helper.create_snmp_trapdest(comm_string="cgcsauto_trapdest_local", ip_addr='8.8.8.8', auth_info=sub_auth)
 
     LOG.tc_step('Add SNMP community string and trapdest to central region')
     system_helper.create_snmp_comm(SNMP_COMM, auth_info=central_auth)

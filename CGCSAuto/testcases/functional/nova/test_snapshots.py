@@ -1,6 +1,6 @@
 import math
 
-from pytest import skip
+from pytest import skip, mark
 
 from consts.cgcs import ImageStatus
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper
@@ -10,6 +10,7 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
+@mark.dc
 def test_create_snapshot_using_boot_from_image_vm():
     """
     This test creates a snapshot from a VM that is booted from image using
@@ -68,6 +69,7 @@ def test_create_snapshot_using_boot_from_image_vm():
     vm_helper.boot_vm(name=snapshot_vm, source="image", source_id=image_id, cleanup='function', fail_ok=False)
 
 
+@mark.dc
 def test_create_snapshot_using_boot_from_volume_vm():
     """
     This test creates a snapshot from a VM that is booted from volume using
@@ -144,7 +146,7 @@ def test_create_snapshot_using_boot_from_volume_vm():
 
     cinder_snapshotname = "snapshot for {}".format(snapshot_name)
     LOG.tc_step("Get snapshot ID of {}".format(cinder_snapshotname))
-    snapshot_id = cinder_helper.get_snapshot_id(name=cinder_snapshotname)
+    snapshot_id = cinder_helper.get_vol_snapshot(name=cinder_snapshotname)
     assert snapshot_id, "Snapshot was not found"
     ResourceCleanup.add('vol_snapshot', snapshot_id)
     vol_name = "vol_from_snapshot"
@@ -258,7 +260,7 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
 
     cinder_snapshotname = "snapshot for {}".format(snapshot_name)
     LOG.tc_step("Get snapshot ID of {}".format(cinder_snapshotname))
-    snapshot_id = cinder_helper.get_snapshot_id(name=cinder_snapshotname)
+    snapshot_id = cinder_helper.get_vol_snapshot(name=cinder_snapshotname)
     ResourceCleanup.add('vol_snapshot', snapshot_id)
     assert snapshot_id, "Snapshot was not found"
 

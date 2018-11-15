@@ -637,7 +637,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
         elif source.lower() == 'snapshot':
             if not snapshot_id:
-                snapshot_id = cinder_helper.get_snapshot_id(auth_info=auth_info, con_ssh=con_ssh)
+                snapshot_id = cinder_helper.get_vol_snapshot(auth_info=auth_info, con_ssh=con_ssh)
                 if not snapshot_id:
                     raise ValueError("snapshot id is required to boot vm; however no snapshot exists on the system.")
 

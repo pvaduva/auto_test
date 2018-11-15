@@ -97,6 +97,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
     if isinstance(hostnames, str):
         hostnames = [hostnames]
 
@@ -277,7 +278,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         raise exceptions.HostPostCheckFailed(err_msg)
 
 
-def recover_simplex(con_ssh=None, fail_ok=False):
+def recover_simplex(con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
     Ensure simplex host is unlocked, available, and hypervisor up
     This function should only be called for simplex system
@@ -285,20 +286,28 @@ def recover_simplex(con_ssh=None, fail_ok=False):
     Args:
         con_ssh (SSHClient):
         fail_ok (bool)
+        auth_info (dict)
+
     """
     if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller()
+        con_name = None
+        if auth_info and ProjVar.get_var('IS_DC'):
+            region = auth_info.get('region')
+            con_name = 'central_region' if region in ('SystemController', 'RegionOne') else region
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     if not con_ssh._is_connected():
         con_ssh.connect(retry=True, retry_timeout=HostTimeout.REBOOT)
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=HostTimeout.REBOOT)
+    _wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=HostTimeout.REBOOT, auth_info=auth_info)
 
     host = 'controller-0'
-    is_unlocked = (get_hostshow_value(host=host, field='administrative') == HostAdminState.UNLOCKED)
+    is_unlocked = (get_hostshow_value(host=host, field='administrative', auth_info=auth_info, con_ssh=con_ssh)
+                   == HostAdminState.UNLOCKED)
+
     if not is_unlocked:
-        unlock_host(host=host, available_only=True, fail_ok=fail_ok)
+        unlock_host(host=host, available_only=True, fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
     else:
-        wait_for_hosts_ready(host, fail_ok=fail_ok, check_task_affinity=False)
+        wait_for_hosts_ready(host, fail_ok=fail_ok, check_task_affinity=False, con_ssh=con_ssh, auth_info=auth_info)
 
 
 def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -522,17 +531,16 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         (6, "Task is not cleared within 180 seconds after host goes online")
 
     """
-    LOG.info("Locking {}...".format(host))
-    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
-                          con_telnet=con_telnet) in ['offline', 'failed']:
+    host_avail, host_admin = get_hostshow_values(host, ('availability', 'administrative'), rtn_list=True,
+                                                 con_ssh=con_ssh, auth_info=auth_info,
+                                                 use_telnet=use_telnet, con_telnet=con_telnet)
+    if host_avail in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
         LOG.warning("Host in offline or failed state before locking!")
 
-    if check_first:
-        admin_state = get_hostshow_value(host, 'administrative', con_ssh=con_ssh, auth_info=auth_info,
-                                         use_telnet=use_telnet, con_telnet=con_telnet)
-        if admin_state == 'locked':
-            LOG.info("Host already locked. Do nothing.")
-            return -1, "Host already locked. Do nothing."
+    if check_first and host_admin == 'locked':
+        msg = "{} already locked. Do nothing.".format(host)
+        LOG.info(msg)
+        return -1, msg
 
     is_aio_dup = system_helper.is_two_node_cpe(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                                auth_info=auth_info)
@@ -548,7 +556,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
                 time.sleep(90)
 
     if check_cpe_alarm and is_aio_dup:
-        LOG.info("For AIO-duplex, wait for cpu usage high alarm gone on active controller")
+        LOG.info("For AIO-duplex, wait for cpu usage high alarm gone on active controller before locking standby")
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh, use_telnet=use_telnet,
                                                               con_telnet=con_telnet, auth_info=auth_info)
         entity_id = 'host={}'.format(active_con)
@@ -562,6 +570,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         positional_arg += ' --force'
         extra_msg = 'force '
 
+    LOG.info("Locking {}...".format(host))
     exitcode, output = cli.system('host-lock', positional_arg, ssh_client=con_ssh, fail_ok=fail_ok,
                                   auth_info=auth_info, rtn_list=True, use_telnet=use_telnet,
                                   con_telnet=con_telnet)
@@ -711,7 +720,11 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     """
     LOG.info("Unlocking {}...".format(host))
     if not use_telnet and not con_ssh:
-        con_ssh = ControllerClient.get_active_controller()
+        con_name = None
+        if auth_info and ProjVar.get_var('IS_DC'):
+            region = auth_info.get('region')
+            con_name = 'central_region' if region in ('SystemController', 'RegionOne') else region
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     if check_first:
         if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
@@ -902,8 +915,6 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
     if len(hosts_to_unlock) != len(hosts):
         LOG.info("Some host(s) already unlocked. Unlocking the rest: {}".format(hosts_to_unlock))
 
-    if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller()
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                           auth_info=auth_info)
     hosts_to_check = []
@@ -1023,14 +1034,14 @@ def get_hostshow_value(host, field, merge_lines=False, con_ssh=None, use_telnet=
 
 
 def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telnet=False, con_telnet=None,
-                        auth_info=Tenant.get('admin')):
+                        auth_info=Tenant.get('admin'), rtn_list=False):
     """
     Get values of specified fields for given host
 
     Args:
         host (str):
         con_ssh (SSHClient):
-        fields (list|str): field names
+        fields (list|str|tuple): field names
         merge_lines (bool)
         use_telnet
         con_telnet
@@ -1048,11 +1059,17 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
     if isinstance(fields, str):
         fields = [fields]
 
-    rtn = {}
+    res_dict= {}
+    res_list = []
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field, merge_lines=merge_lines)
-        rtn[field] = val
-    return rtn
+        if rtn_list:
+            res_list.append(val)
+        else:
+            res_dict[field] = val
+
+    res = res_list if rtn_list else res_dict
+    return res
 
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=10,
@@ -1095,7 +1112,11 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
 
     if not use_telnet:
         if con_ssh is None:
-            con_ssh = ControllerClient.get_active_controller()
+            con_name = None
+            if auth_info and ProjVar.get_var('IS_DC'):
+                region = auth_info.get('region')
+                con_name = 'central_region' if region in ('SystemController', 'RegionOne') else region
+            con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     while time.time() < cli_enable_end_time:
         try:
@@ -4566,7 +4587,6 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
 
     if use_telnet and not telnet_session:
         raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
-
 
     if not ssh_client and not use_telnet:
         ssh_client = ControllerClient.get_active_controller()

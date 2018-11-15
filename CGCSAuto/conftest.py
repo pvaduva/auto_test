@@ -935,6 +935,11 @@ def pytest_collection_modifyitems(items):
             LOG.debug(msg=msg)
             item.add_marker(eval("pytest.mark.known_issue"))
 
+        # add dc maker to all tests start with test_dc_xxx
+        dc_maker = item.get_marker('dc')
+        if not dc_maker and 'test_dc_' in item.nodeid:
+            item.add_marker(pytest.mark.dc)
+
     # add trylast tests to the end
     for item in move_to_last:
         items.remove(item)
