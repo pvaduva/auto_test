@@ -383,7 +383,7 @@ def run_lab_setup(con_ssh, final_step=None, ovs=None):
     ovs = InstallVars.get_install_var("OVS") if ovs is None else ovs
     if ovs and lab_setup_count == 0:
         LOG.debug("setting up ovs lab_setup configuration")
-        con_ssh.exec_cmd("mv lab_setup_ovs.conf lab_setup.conf")
+        con_ssh.exec_cmd("rm lab_setup.conf; mv lab_setup_ovs.conf lab_setup.conf")
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
