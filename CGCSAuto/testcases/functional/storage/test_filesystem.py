@@ -402,7 +402,6 @@ def test_increase_cinder():
     1.  Query the size of cinder
     2.  Determine the available space on the disk hosting cinder
     3.  Increase the size of the cinder filesystem
-    4.  Lock/unlock controllers
     5.  Check cinder to see if the filesystem is increased
 
     Enhancement:
@@ -444,7 +443,7 @@ def test_increase_cinder():
                 skip("Insufficient disk space available for test")
 
             LOG.tc_step("Modify the cinder partition to a larger size")
-            host_helper.lock_host(host)
+            #host_helper.lock_host(host)
             table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(host, device_path)))
             partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
             partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
@@ -455,7 +454,7 @@ def test_increase_cinder():
             else:
                 final_status = [PartitionStatus.READY, PartitionStatus.IN_USE]
                 partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10), final_status=final_status)
-            host_helper.unlock_host(host, available_only=True)
+            #host_helper.unlock_host(host, available_only=True)
 
     # Need to swact again for cinder-volumes to be updated on both controllers 
     if len(hosts) > 1:
