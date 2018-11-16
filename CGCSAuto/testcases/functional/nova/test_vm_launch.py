@@ -23,7 +23,6 @@ def hosts_per_backing(add_admin_role_module):
 @mark.parametrize('boot_from', [
     'volume',
     'local_image',
-    'local_lvm',
     'remote'
 ])
 def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_backing, boot_from):
@@ -195,8 +194,9 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
 
 # TC5080
+# DO NOT RUN - DOES NOT APPLY ANYMORE
 @mark.parametrize('storage', ['local_lvm'])
-def test_check_vm_disk_on_compute(storage, hosts_per_backing):
+def _test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
     """
         Tests that existence of volumes are properly reported for lvm-backed vms.

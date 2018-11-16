@@ -78,7 +78,6 @@ class TestDefaultGuest:
 
     @mark.parametrize('storage_backing', [
         'local_image',
-        'local_lvm',
         'remote',
     ])
     def test_evacuate_vms_with_inst_backing(self, storage_backing):

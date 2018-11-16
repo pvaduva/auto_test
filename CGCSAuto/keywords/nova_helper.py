@@ -36,7 +36,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
         storage_backing (str): storage backing in extra flavor. Auto set storage backing based on system config if None.
-            Valid values: 'local_image', 'local_lvm', 'remote'
+            Valid values: 'local_image', 'remote'
         check_storage_backing (bool): whether to check the system storage backing configuration to auto determine the
             local_storage extra spec if storage_backing param is set to None.
         rtn_id (bool): return id or name
@@ -110,14 +110,14 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     """
     Get storage backing that has the most hypervisors
     Args:
-        prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
+        prefer (str): preferred storage_backing. If unset, local_image > remote
         rtn_down_hosts (bool): whether to return down hosts if no up hosts available
         con_ssh (SSHClient):
 
     Returns (tuple): (<storage_backing>(str), <hosts>(list))
         Examples:
             Regular/Storage system: ('local_image',['compute-1', 'compute-3'])
-            AIO: ('local_lvm', ['controller-0', 'controller-1'])
+            AIO: ('local_image', ['controller-0', 'controller-1'])
 
     """
     up_hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
@@ -129,7 +129,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
         LOG.warning("No up hypervisors. Check all hypervisors")
     hosts_len = len(hosts)
 
-    valid_backings = ['local_image', 'local_lvm', 'remote']
+    valid_backings = ['local_image', 'remote']
     valid_backings.remove(prefer)
     valid_backings.insert(0, prefer)
 
@@ -908,7 +908,7 @@ def get_vm_storage_type(vm_id, con_ssh=None):
         vm_id (str):
         con_ssh (SSHClient):
 
-    Returns (str): storage extra spec value. Possible return values: 'local_image', 'local_lvm', or 'remote'
+    Returns (str): storage extra spec value. Possible return values: 'local_image' or 'remote'
 
     """
     # TODO: Update to get it from nova show directly
