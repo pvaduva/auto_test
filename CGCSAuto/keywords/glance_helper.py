@@ -619,6 +619,11 @@ def get_image_properties(image, property_keys, auth_info=Tenant.get('admin'), co
     return results
 
 
+def get_image_value(image, field, auth_info=Tenant.get('admin'), con_ssh=None):
+    table_ = table_parser.table(cli.glance('image-show', image, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_value_two_col_table(table_, field)
+
+
 def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
     """
 

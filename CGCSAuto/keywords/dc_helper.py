@@ -220,6 +220,8 @@ def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, timeout=DCTimeou
     if isinstance(subclouds, str):
         subclouds = [subclouds]
 
+    LOG.info("Waiting for sync audit in dcmanager.log for: {}".format(subclouds))
+
     expt_list = ['Handling update_subcloud_endpoint_status request for: {}'.format(subcloud) for subcloud in subclouds]
     res = {subcloud: False for subcloud in subclouds}
     subclouds_to_wait = list(subclouds)
@@ -234,6 +236,7 @@ def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, timeout=DCTimeou
                 res[subclouds_to_wait.pop(index)] = True
                 expt_list.pop(index)
                 if not subclouds_to_wait:
+                    LOG.info("sync request logged for: {}".format(subclouds))
                     return True, res
             else:
                 msg = 'sync request for {} not shown in {} in {}s'.format(subclouds_to_wait,
