@@ -4034,7 +4034,7 @@ def modify_ntp(enabled=None, ntp_servers=None, check_first=True, fail_ok=False, 
     """
 
     Args:
-        enable (bool|None):
+        enabled (bool|None):
         ntp_servers (str|None|list|tuple):
         check_first (bool)
         fail_ok (bool)
@@ -4072,7 +4072,7 @@ def modify_ntp(enabled=None, ntp_servers=None, check_first=True, fail_ok=False, 
 
     prev_args = None
     toggle_state = False
-    if enable is not None:
+    if enabled is not None:
         prev_args = get_ntp_vals(rtn_val=list(verify_args.keys()), con_ssh=con_ssh, rtn_dict=True)
         if prev_args['enabled'] != verify_args['enabled']:
             toggle_state = True
