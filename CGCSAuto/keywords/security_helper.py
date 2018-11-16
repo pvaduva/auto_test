@@ -722,10 +722,10 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
         conn.connect(retry=False, use_password=True)
         for cmd, expected, errors in input_outputs:
             # conn.flush()
-            LOG.info('send cmd:{}\n'.format(cmd))
+            LOG.info("Send '{}'\n".format(cmd))
             conn.send(cmd)
             blob_list = list(expected) + list(errors)
-            LOG.info('expecting:{}\n'.format(blob_list))
+            LOG.info("Expect: {}\n".format(blob_list))
             index = conn.expect(blob_list=blob_list)
             LOG.info('returned index:{}\n'.format(index))
             if len(expected) <= index:
