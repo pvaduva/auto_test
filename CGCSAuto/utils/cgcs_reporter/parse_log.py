@@ -1,7 +1,7 @@
 import re
 from os import path
 
-write_command_pattern = "^(?!.*(show|list|echo \$\?|whoami|hostname|exit|stat|ls|Send '')).*"
+write_command_pattern = "^(?!.*((system|nova|cinder|fm|openstack|ceilometer|heat|glance|gnocchi).*(show|list)|echo \$\?|whoami|hostname|exit|stat|ls|Send '')).*"
 test_steps_pattern = "^=+ (Setup|Test|Teardown) Step \d+"
 
 
@@ -137,7 +137,7 @@ def parse_test_steps(log_dir, failures_only=True):
             open("{}/test_steps.log".format(log_dir), 'w') as log:
         for line in file:
 
-            if test_steps_length >= 1000:
+            if test_steps_length >= 500:
                 log.write(''.join(test_steps))
                 test_steps_length = 0
                 test_steps = []
