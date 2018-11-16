@@ -575,7 +575,7 @@ def get_events(rtn_vals=('Event Log ID', 'Entity Instance ID'), limit=10, event_
     """
     Get a list of alarms with values for specified fields.
     Args:
-        rtn_vals (tuple): fields to get values for
+        rtn_vals (tuple|list|str): fields to get values for
         limit (int)
         event_id (str): filter event using event log id
         reason_text (str): reason text to filter out the table (strict defined in param)
@@ -621,6 +621,8 @@ def get_events(rtn_vals=('Event Log ID', 'Entity Instance ID'), limit=10, event_
         table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
 
     rtn_vals_list = []
+    if isinstance(rtn_vals, str):
+        rtn_vals = (rtn_vals, )
     for header in rtn_vals:
         vals = table_parser.get_column(table_, header)
         if not vals:
@@ -1171,11 +1173,11 @@ def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), **k
     return 0, ''
 
 
-def get_system_value(field='name', fail_ok=True, auth_info=Tenant.get('admin'), con_ssh=None,
-                     use_telnet=False, con_telnet=None):
+def get_system_value(field='name', auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None):
 
     table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
-                                           con_telnet=con_telnet, fail_ok=fail_ok)[1])
+                                           con_telnet=con_telnet))
+
     value = table_parser.get_value_two_col_table(table_, field=field)
     return value
 
@@ -4186,3 +4188,54 @@ def wait_and_clear_config_out_of_date_alarms(hosts=None, host_type=None, lock_un
 
     if not wait_with_best_effort and all_hosts != hosts_out_of_date:
         raise exceptions.SysinvError("Expect config out of date: {}; actual: {}".format(all_hosts, hosts_out_of_date))
+
+
+def get_timezone(auth_info=Tenant.get('admin'), con_ssh=None):
+    return get_system_value(field='timezone', auth_info=auth_info, con_ssh=con_ssh)
+
+
+def modify_timezone(timezone, check_first=True, fail_ok=False, clear_alarm=True, auth_info=Tenant.get('admin'),
+                    con_ssh=None):
+    """
+    Modify timezone to given zone
+    Args:
+        timezone:
+        check_first:
+        fail_ok:
+        clear_alarm:
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
+
+    """
+    if check_first:
+        current_timezone = get_timezone(auth_info=auth_info, con_ssh=con_ssh)
+        if current_timezone == timezone:
+            msg = "Timezone is already set to {}. Do nothing.".format(timezone)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info("Modifying Timezone to {}".format(timezone))
+    code, out = modify_system(fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh, timezone=timezone)
+    if code > 0:
+        return 1, out
+
+    if clear_alarm:
+        if wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=30, con_ssh=con_ssh, fail_ok=True,
+                          auth_info=auth_info)[0]:
+            wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=180, con_ssh=con_ssh,
+                                auth_info=auth_info)
+
+    time.sleep(10)
+    post_timezone = get_timezone(auth_info=auth_info, con_ssh=con_ssh)
+    if post_timezone != timezone:
+        msg = 'Timezone is {} instead of {} after modify'.format(post_timezone, timezone)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, post_timezone
+
+        raise exceptions.SysinvError(msg)
+
+    LOG.info("Timezone is successfully modified to {}".format(timezone))
+    return 0, timezone

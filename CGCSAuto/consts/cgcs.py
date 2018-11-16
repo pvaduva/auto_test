@@ -51,6 +51,16 @@ SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01']
 DROPS = {1: '18.07'}
 PLATFORM_NET_TYPES = ('mgmt', 'oam', 'infra', 'pxeboot')
 
+TIMEZONES = [
+    "Asia/Hong_Kong",       # UTC+8
+    "America/Los_Angeles",  # UTC-8, DST:UTC-7
+    "Canada/Eastern",       # UTC-5, DST:UTC-4
+    "Canada/Central",       # UTC-6, DST:UTC-5
+    # "Europe/London",      # UTC, DST:UTC+1
+    "Europe/Berlin",        # UTC+1, DST:UTC+2
+    "UTC"
+]
+
 
 class NtpPool:
     NTP_POOL_1 = '2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org'
