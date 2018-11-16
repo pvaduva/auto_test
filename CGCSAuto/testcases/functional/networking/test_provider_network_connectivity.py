@@ -350,7 +350,7 @@ def table_segment_id_filter(table_, value):
     # filter out the number of rows in the table that match value or the number range contain value
 
     if not table_['headers']:
-        LOG.warning("Empty table supplied")
+        LOG.debug("Empty table supplied")
         return table_
 
     column = table_parser.get_column(table_, 'segmentation_ids')

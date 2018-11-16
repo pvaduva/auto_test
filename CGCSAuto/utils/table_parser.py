@@ -176,7 +176,10 @@ def table(output_lines, combine_multiline_entry=False):
     table_ = __table(output_lines)
     rows = get_all_rows(table_)
     if not rows:
-        LOG.debug("Empty table supplied! table_: {}".format(table_))
+        if not table_['headers']:
+            LOG.info('No table returned')
+        else:
+            LOG.info("Empty table returned")
         return table_
 
     line_count = len(rows)
@@ -317,7 +320,7 @@ def get_column(table_, header, merge_lines=False):
 
     """
     if not table_['headers']:
-        LOG.warning("Empty table supplied")
+        # LOG.info("Table is empty")
         return []
     rows = get_all_rows(table_)
     index = get_column_index(table_, header)
@@ -442,7 +445,6 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
 
     """
     if not table_['headers']:
-        LOG.warning('Empty table supplied')
         return []
 
     new_kwargs = {}
@@ -637,7 +639,6 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
         return table_
 
     if not table_['headers']:
-        LOG.warning("Empty table supplied")
         return table_
 
     row_indexes = []
