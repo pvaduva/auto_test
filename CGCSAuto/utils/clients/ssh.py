@@ -1233,7 +1233,9 @@ class NATBoxClient:
                 raise exceptions.NatBoxClientUnsetException
 
         if len(cls.__natbox_ssh_map[natbox_ip]) > idx:
-            return cls.__natbox_ssh_map[natbox_ip][idx]  # KeyError will be thrown if not exist
+            nat_client = cls.__natbox_ssh_map[natbox_ip][idx]  # KeyError will be thrown if not exist
+            LOG.info("Getting NatBox Client...")
+            return nat_client
 
         LOG.warning('No NatBox client set for Thread-{}'.format(idx))
         return None
@@ -1290,6 +1292,7 @@ class ControllerClient:
 
     __default_name = None
     __prev_client = None
+    __prev_idx = None
 
     @classmethod
     def get_active_controller(cls, name=None, fail_ok=False):
@@ -1302,9 +1305,7 @@ class ControllerClient:
         Returns:
 
         """
-        log_func = LOG.info
         if not name:
-            log_func = LOG.debug
             if cls.__default_name:
                 name = cls.__default_name
             else:
@@ -1326,9 +1327,10 @@ class ControllerClient:
                 controller_ssh = cls.__lab_ssh_map[lab_][idx]
                 if isinstance(controller_ssh, SSHClient):
                     msg = "Getting active controller client for {}".format(lab_)
-                    if name != cls.__prev_client:
+                    if name != cls.__prev_client or idx != cls.__prev_idx:
                         LOG.info(msg)
                         cls.__prev_client = name
+                        cls.__prev_idx = idx
                     else:
                         LOG.debug(msg)
                     return controller_ssh

@@ -169,7 +169,7 @@ def test_create_snapshot_using_boot_from_volume_vm():
     image_id = glance_helper.get_image_id_from_name(name=image_name)
     ResourceCleanup.add('image', image_id)
     glance_helper.wait_for_image_states(image_id, status=ImageStatus.SAVING, fail_ok=True, timeout=30)
-    glance_helper.wait_for_image_states(image_id, status=ImageStatus.ACTIVE, fail_ok=False, timeout=120)
+    glance_helper.wait_for_image_states(image_id, status=ImageStatus.ACTIVE, fail_ok=False, timeout=240)
     print("Waiting for {} to be active".format(image_id))
 
     image_filename = '/home/wrsroot/images/temp'

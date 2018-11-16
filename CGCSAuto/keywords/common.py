@@ -17,9 +17,10 @@ from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli
 from utils.tis_log import LOG
 
 
-def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None,
+                                          central_region=False):
     if con_ssh is None:
-        con_ssh = get_cli_client()
+        con_ssh = get_cli_client(central_region=central_region)
     if dest_name is None:
         dest_name = source_path.split(sep='/')[-1]
 
