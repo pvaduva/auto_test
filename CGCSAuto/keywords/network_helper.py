@@ -4121,7 +4121,7 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
         prev_vals = None
         end_time = time.time() + timeout
         while time.time() < end_time:
-            vals = get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh,
+            vals = get_providernet_connectivity_test_results(audit_id=audit_id, con_ssh=con_ssh, auth_info=auth_info,
                                                              rtn_val='segmentation_ids')
             if vals and vals == prev_vals:
                 LOG.info("providernet connectivity test scheduled successfully.")
