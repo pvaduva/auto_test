@@ -112,7 +112,8 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
                 code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
                 assert 0 == code, msg
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
-                vm_helper.ping_between_routed_vms(vm_id, vm_observer)
+                # kernel routing
+                vm_helper.ping_between_routed_vms(vm_id, vm_observer, vshell=False)
 
             time.sleep(30)
             duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation_live, vm_id)
@@ -130,7 +131,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
             code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
             assert 0 == code, msg
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
-            vm_helper.ping_between_routed_vms(vm_id, vm_observer)
+            vm_helper.ping_between_routed_vms(vm_id, vm_observer, vshell=False)
 
         time.sleep(30)
         duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation_cold, vm_id)
