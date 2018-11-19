@@ -152,6 +152,8 @@ def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_r
 
 
 testdata = [None, 'any', 'large', 'small', '2048', '1048576']
+
+
 @fixture(params=testdata)
 def flavor_mem_page_size(request, flavor_2g):
     flavor_id = flavor_2g[0]
