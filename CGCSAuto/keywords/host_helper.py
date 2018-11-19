@@ -4015,14 +4015,23 @@ def get_ntpq_status(host, con_ssh=None):
     return 0, "{} NTPQ is in healthy state".format(host)
 
 
-def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_ssh=None):
+def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_ssh=None,
+                      auth_info=Tenant.get('admin')):
 
     LOG.info("Waiting for ntp alarm to clear or sudo ntpq -pn indicate unhealthy server for {}".format(host))
     end_time = time.time() + timeout
     msg = ntp_alarms = None
+    if not con_ssh:
+        region = None
+        if ProjVar.get_var('IS_DC') and auth_info:
+            region = auth_info.get('region', None)
+            if region in ('RegionOne', 'SystemController'):
+                region = 'central_region'
+        con_ssh = ControllerClient.get_active_controller(name=region)
+
     while time.time() < end_time:
         ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False,
-                                              con_ssh=con_ssh)
+                                              con_ssh=con_ssh, auth_info=auth_info)
         status, msg = get_ntpq_status(host, con_ssh=con_ssh)
         if ntp_alarms and status != 0:
             LOG.info("Valid NTP alarm")

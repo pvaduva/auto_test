@@ -3,7 +3,6 @@ from pytest import fixture, skip
 from consts.auth import Tenant
 from consts.cgcs import SysType
 from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper
-from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
@@ -63,7 +62,8 @@ def check_i40e_hosts(request):
     start_time = common.get_date_in_format(date_format="%Y-%m-%dT%T")
 
     def check_kern_log():
-        cmd = """cat /var/log/kern.log | grep -i --color=never "(i40e): transmit queue" | awk '$0 > "{}"'""".format(start_time)
+        cmd = """cat /var/log/kern.log | grep -i --color=never "(i40e): transmit queue" | awk '$0 > "{}"'""".\
+            format(start_time)
         i40e_errs = []
         host_helper.wait_for_hosts_ready(hosts=hosts)
         for host in hosts:
@@ -103,12 +103,6 @@ def __get_system_crash_and_coredumps(scope):
 
     core_dumps_and_reports = host_helper.get_coredumps_and_crashreports()
     return core_dumps_and_reports
-
-
-@fixture()
-def check_hosts(request):
-    LOG.fixture_step("Gathering systems hosts status before test begins.")
-    raise NotImplementedError
 
 
 @fixture()
@@ -197,5 +191,3 @@ def ceph_precheck():
 
     LOG.info('Query storage usage info')
     storage_helper.get_storage_usage()
-
-

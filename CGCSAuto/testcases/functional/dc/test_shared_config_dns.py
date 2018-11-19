@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-from keywords import dc_helper, system_helper
+from keywords import dc_helper, system_helper, host_helper
 
 
 @fixture(scope='module')
@@ -55,7 +55,7 @@ def compose_new_dns_servers(scenario, prev_dns_servers):
 
 
 @fixture()
-def ensure_synced(subclouds_to_test):
+def ensure_synced(subclouds_to_test, check_central_alarms):
     primary_subcloud, managed_subclouds = subclouds_to_test
 
     LOG.fixture_step("Ensure {} is managed and DNS config is valid and synced".format(primary_subcloud))
@@ -169,6 +169,11 @@ def test_dc_dns_override_local_change(ensure_synced):
     central_res, local_res = verify_dns_on_central_and_subcloud(primary_subcloud, fail_ok=True)
     assert 0 == central_res, "nslookup failed on central region"
     assert 1 == local_res, "nslookup succeeded on {} with unreachable DNS servers configured".format(primary_subcloud)
+
+    central_auth = Tenant.get('admin', dc_region='RegionOne')
+    if system_helper.get_standby_controller_name(auth_info=central_auth):
+        LOG.tc_step("Swact in central region")
+        host_helper.swact_host(auth_info=central_auth)
 
     LOG.tc_step('Re-manage {} and ensure local DNS config is overridden by central config'.format(primary_subcloud))
     dc_helper.manage_subcloud(subcloud=primary_subcloud, check_first=False)
