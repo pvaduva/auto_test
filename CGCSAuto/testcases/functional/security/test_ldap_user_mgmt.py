@@ -372,9 +372,12 @@ def test_cmds_login_as_ldap_user(user_name, sudo_type):
         ssh_con.password = password
         ssh_con.flush()
 
-        if sudo_type:
-            LOG.tc_step("Execute sudo command 'sudo ls'")
-            ssh_con.exec_sudo_cmd("ls", fail_ok=False)
+        LOG.tc_step("Attemt to execute sudo command 'sudo ls'")
+        code, out = ssh_con.exec_sudo_cmd("ls", fail_ok=True)
+        if sudo_type == 'sudoer':
+            assert code == 0, "Sudoer ldap user {} failed to run sudo cmd".format(user_name)
+        else:
+            assert code == 1, "Non-sudoer ldap user {} is able to run sudo cmd".format(user_name)
 
         LOG.tc_step("Execute openstack command 'openstack user list'")
         cli.openstack('user list', auth_info=Tenant.get('admin'), ssh_client=ssh_con)
