@@ -26,7 +26,7 @@ from consts.cgcs import BackendState
 from keywords import cinder_helper, storage_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
-from utils.clients.ssh import ControllerClient, SSHClient
+from utils.clients.ssh import ControllerClient
 from setups import get_lab_dict
 
 
@@ -127,8 +127,9 @@ def add_external_ceph(dest_filepath, ceph_services):
     assert volume_type == 'controller@ceph-external#ceph-external', "Volume created in wrong backend"
 
 
-@mark.parametrize(('ceph_lab', 'ceph_services'),
-                   [('WCP_7_12', ['cinder', 'glance', 'nova'])])
+@mark.parametrize(('ceph_lab', 'ceph_services'), [
+    'WCP_7_12', 'cinder_glance_nova'
+])
 def test_configure_external_ceph(ceph_lab, ceph_services):
     """
     This test will configure external ceph on a system.  Currently this is only
@@ -158,8 +159,9 @@ def test_configure_external_ceph(ceph_lab, ceph_services):
 
     con_ssh = ControllerClient.get_active_controller()
 
-    source_server = get_lab_dict(ceph_lab)['floating ip']
-    source_lab_name = get_lab_dict(ceph_lab)['short_name']
+    ceph_lab = get_lab_dict(ceph_lab)
+    source_server = ceph_lab['floating ip']
+    source_lab_name = ceph_lab['short_name']
     dest_server = ProjVar.get_var('LAB').get('floating ip')
 
     source_filepath = "/etc/ceph/ceph.conf"
@@ -176,4 +178,4 @@ def test_configure_external_ceph(ceph_lab, ceph_services):
         skip("External ceph.conf not present on the system")
 
     LOG.tc_step("Provision storage-backend for external ceph")
-    add_external_ceph(dest_filepath, ceph_services)
+    add_external_ceph(dest_filepath, ceph_services.split(sep='_'))
