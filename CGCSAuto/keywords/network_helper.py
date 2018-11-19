@@ -4157,7 +4157,7 @@ def get_dpdk_user_data(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = '{}/userdata'.format(ProjVar.get_var('USER_FILE_DIR'))
+    file_dir = '{}/userdata/'.format(ProjVar.get_var('USER_FILE_DIR'))
     file_name = UserData.DPDK_USER_DATA
     file_path = file_dir + file_name
 
@@ -4173,7 +4173,7 @@ def get_dpdk_user_data(con_ssh=None):
     cmd = 'mkdir -p {};touch {}'.format(file_dir, file_path)
     con_ssh.exec_cmd(cmd, fail_ok=False)
 
-    content = "#wrs-config\nFUNCTIONS=hugepages,\n"
+    content = "#wrs-config\nFUNCTIONS=hugepages,avr\n"
     con_ssh.exec_cmd('echo "{}" >> {}'.format(content, file_path), fail_ok=False)
     output = con_ssh.exec_cmd('cat {}'.format(file_path))[1]
     assert output in content
