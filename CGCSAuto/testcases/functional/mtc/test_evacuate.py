@@ -146,7 +146,7 @@ class TestEvacKPI:
     @fixture(scope='class')
     def get_hosts(self, ixia_supported, skip_test_if_less_than_two_hosts):
         hosts = host_helper.get_hosts_in_storage_aggregate()
-        if len(hosts) < 2 or len(hosts) > 4:
+        if len(hosts) < 2:
             skip("Lab not suitable for this test. Too many or too few hosts with local_image backing")
 
         return hosts
@@ -193,8 +193,9 @@ class TestEvacKPI:
             """
             Setup:
                 VM1 on COMPUTE-A
-                ROUTER1 not on COMPUTE-A
-                VM2, ROUTER2 not on COMPUTE-A
+                VM2 not on COMPUTE-A
+                ROUTER1 on COMPUTE-B
+                ROUTER2 on COMPUTE-C
             """
             if len(get_hosts) < 3:
                 skip("Lab not suitable for without_router, requires at least three hypervisors")
@@ -234,7 +235,8 @@ class TestEvacKPI:
             """
             Setup:
                 VM1, ROUTER1 on COMPUTE-A
-                VM2, ROUTER2 not on COMPUTE-A
+                VM2 not on COMPUTE-A
+                ROUTER2 on COMPUTE-B 
             """
             LOG.tc_step("Ensure VM1, ROUTER1 on COMPUTE-A")
 
@@ -300,11 +302,12 @@ class TestEvacKPI:
 
         host_helper.wait_for_hosts_ready(hosts=host_src_evacuation)
 
-        host_src_evacuation, host_observer = self._prepare_test(
-            vm_test, vm_observer, get_hosts.copy(), with_router=False)
-        time.sleep(60)
-        without_router_kpi = vm_helper.get_traffic_loss_duration_on_operation(
-            vm_test, vm_observer, operation, vm_test, host_src_evacuation)
-        assert without_router_kpi > 0, "Traffic loss duration is not properly detected"
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'no'),
-                                  kpi_val=without_router_kpi/1000, uptime=5)
+        if len(get_hosts) > 2:
+            host_src_evacuation, host_observer = self._prepare_test(
+                vm_test, vm_observer, get_hosts.copy(), with_router=False)
+            time.sleep(60)
+            without_router_kpi = vm_helper.get_traffic_loss_duration_on_operation(
+                vm_test, vm_observer, operation, vm_test, host_src_evacuation)
+            assert without_router_kpi > 0, "Traffic loss duration is not properly detected"
+            kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'no'),
+                                      kpi_val=without_router_kpi/1000, uptime=5)

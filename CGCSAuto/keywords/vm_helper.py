@@ -5413,10 +5413,9 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None,
 
     vm_test = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
                          **__merge_dict(launch_vms_kwargs, primary_kwargs))[0][0]
-    ping_vms_from_vm(vm_test, vm_test, net_types=('data', 'internal'))
     vm_observer = launch_vms(vm_type=vm_type, count=1, ping_vms=True,
                              **__merge_dict(launch_vms_kwargs, secondary_kwargs))[0][0]
-    ping_vms_from_vm(vm_observer, vm_observer, net_types=('data', 'internal'))
+
     LOG.info("Route the {} test-observer VM pair".format(vm_type))
     if vm_type in ('dpdk', 'vhost', 'vswitch'):
         setup_avr_routing(vm_test, vm_type=vm_type)
