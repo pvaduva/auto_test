@@ -306,7 +306,8 @@ def restore_setup(pre_restore_checkup):
             node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
             controller_prompt = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
 
-    controller_prompt = controller_prompt + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    controller_prompt = controller_prompt + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(
+        lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
 
     LOG.info('initial_prompt=' + controller_prompt)
     controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
@@ -381,6 +382,9 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
 
     LOG.info('System restore procedure requires to lock all nodes except the active controller/controller-0')
 
+    LOG.info('current host list before trying to lock them')
+    cli.system('host-list')
+
     base_cmd = 'host-lock'
     locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailState.OFFLINE}
 
@@ -419,12 +423,11 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
         else:
             LOG.info('All hosts were rejecting to lock after tried:{}'.format(tried))
     else:
-        cli.system('host-list', con_ssh=con_ssh)
+        cli.system('host-list', ssh_client=con_ssh)
         LOG.info('Failed to lock or force-lock some of the hosts')
-        assert False, 'Failed to lock or force-lock some of the hosts after tried:{} times'.format(tried)
+        assert False, 'Failed to lock or force-lock some of the hosts after tried:{} times'.format(max_tries)
 
-    cli.system('host-list', con_ssh=con_ssh)
-            
+    cli.system('host-list', ssh_client=con_ssh)
 
     code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
     LOG.debug('code:{}, output:{}'.format(code, output))
