@@ -851,7 +851,7 @@ def get_any_keypair(auth_info=None, con_ssh=None):
 
         if ProjVar.get_var('IS_DC') and not con_ssh.file_exists(pubkey_path):
             LOG.info("Copy public key from central region to subcloud")
-            sys_con = ControllerClient.get_active_controller('central_region')
+            sys_con = ControllerClient.get_active_controller('RegionOne')
             sys_con.scp_on_source(source_path=pubkey_path, dest_ip=auth_info['region'],
                                   dest_path=pubkey_path, dest_user=HostLinuxCreds.get_user(),
                                   dest_password=HostLinuxCreds.get_password(), timeout=60)

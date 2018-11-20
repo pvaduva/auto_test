@@ -1,4 +1,3 @@
-import datetime
 import os
 
 from pytest import fixture, skip, mark
@@ -6,12 +5,12 @@ from pytest import fixture, skip, mark
 from consts.auth import HostLinuxCreds
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import PatchingVars
-
-from keywords import host_helper, patching_helper, system_helper, html_helper
 from utils import lab_info
 from utils import table_parser, cli
-from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
+from keywords import host_helper, patching_helper, system_helper, html_helper
+
 
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'

@@ -1320,6 +1320,9 @@ class ControllerClient:
                 else:
                     name = 'no_name'
 
+        if name in ('SystemController', 'central_region'):
+            name = 'RegionOne'
+
         curr_thread = threading.current_thread()
         idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
         for lab_ in cls.__lab_ssh_map:
@@ -1468,5 +1471,5 @@ def get_cli_client(central_region=False):
     if ProjVar.get_var('REMOTE_CLI'):
         return RemoteCLIClient.get_remote_cli_client()
 
-    name = 'central_region' if central_region and ProjVar.get_var('IS_DC') else None
+    name = 'RegionOne' if central_region and ProjVar.get_var('IS_DC') else None
     return ControllerClient.get_active_controller(name=name)

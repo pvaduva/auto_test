@@ -150,7 +150,7 @@ def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, 
     config_name = ' ' + config_name if config_name else ''
 
     if expected_value is None:
-        central_ssh = ControllerClient.get_active_controller(name='central_region')
+        central_ssh = ControllerClient.get_active_controller(name='RegionOne')
         expected_value = func(con_ssh=central_ssh, auth_info=Tenant.get(auth_name, dc_region='RegionOne'))
     elif isinstance(expected_value, str):
         expected_value = expected_value.split(sep=',')
@@ -215,7 +215,7 @@ def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, timeout=DCTimeou
 
     """
     if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller('central_region')
+        con_ssh = ControllerClient.get_active_controller('RegionOne')
 
     if isinstance(subclouds, str):
         subclouds = [subclouds]
@@ -267,7 +267,7 @@ def wait_for_subcloud_or_patch_audit(patch_audit=False, timeout=DCTimeout.SUBCLO
 
     """
     if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller('central_region')
+        con_ssh = ControllerClient.get_active_controller('RegionOne')
 
     con_ssh.send('tail -n 0 -f {}'.format(SysLogPath.DC_MANAGER))
     try:

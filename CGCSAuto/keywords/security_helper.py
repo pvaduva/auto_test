@@ -892,7 +892,7 @@ def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Te
 
     """
     if check_first:
-        is_https = keystone_helper.is_https_lab(source_openrc=False)
+        is_https = keystone_helper.is_https_lab(source_openrc=False, auth_info=auth_info, con_ssh=con_ssh)
         if (is_https and enable_https) or (not is_https and not enable_https):
             msg = "Https is already {}. Do nothing.".format('enabled' if enable_https else 'disabled')
             LOG.info(msg)
@@ -906,17 +906,17 @@ def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Te
 
     LOG.info("Wait up to 60s for config out-of-date alarm with best effort.")
     system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id='controller-', strict=False,
-                                 con_ssh=con_ssh, timeout=60, fail_ok=True)
+                                 con_ssh=con_ssh, timeout=60, fail_ok=True, auth_info=auth_info)
 
     LOG.info("Wait up to 600s for config out-of-date alarm to clear.")
     system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE, con_ssh=con_ssh, timeout=600,
-                                      check_interval=20, fail_ok=False)
+                                      check_interval=20, fail_ok=False, auth_info=auth_info)
 
     LOG.info("Wait up to 300s for public endpoints to be updated")
     expt_status = 'enabled' if enable_https else 'disabled'
     end_time = time.time() + 300
     while time.time() < end_time:
-        if keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=False) == enable_https:
+        if keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=False, auth_info=auth_info) == enable_https:
             break
         time.sleep(10)
     else:
@@ -925,7 +925,11 @@ def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Te
     msg = 'Https is {} successfully'.format(expt_status)
     LOG.info(msg)
     # TODO: install certificate for https. There will be a warning msg if self-signed certificate is used
-    CliAuth.set_vars(HTTPS=enable_https)
+
+    if not ProjVar.get_var('IS_DC') or \
+            (auth_info and auth_info.get('region', None) in ('RegionOne', 'SystemController')):
+        # If DC, use the central region https as system https, since that is the one used for external access
+        CliAuth.set_vars(HTTPS=enable_https)
 
     return 0, msg
 

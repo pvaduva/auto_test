@@ -290,10 +290,7 @@ def recover_simplex(con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
 
     """
     if not con_ssh:
-        con_name = None
-        if auth_info and ProjVar.get_var('IS_DC'):
-            region = auth_info.get('region')
-            con_name = 'central_region' if region in ('SystemController', 'RegionOne') else region
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     if not con_ssh._is_connected():
@@ -657,12 +654,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
     time.sleep(30)
     if not use_telnet:
         if not con_ssh:
-            con_name = None
-            if ProjVar.get_var('IS_DC') and auth_info and ProjVar.get_var('PRIMARY_SUBCLOUD') != auth_info.get(
-                    'region'):
-                con_name = auth_info.get('region')
-                if con_name in ('RegionOne', 'SystemController'):
-                    con_name = 'central_region'
+            con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
             con_ssh = ControllerClient.get_active_controller(name=con_name)
 
         wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
@@ -720,10 +712,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     """
     LOG.info("Unlocking {}...".format(host))
     if not use_telnet and not con_ssh:
-        con_name = None
-        if auth_info and ProjVar.get_var('IS_DC'):
-            region = auth_info.get('region')
-            con_name = 'central_region' if region in ('SystemController', 'RegionOne') else region
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     if check_first:
@@ -838,11 +827,7 @@ def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None, auth_
 
     LOG.info("Check {} non-existent on {}".format(PLATFORM_AFFINE_INCOMPLETE, host))
     if not con_ssh:
-        con_name = None
-        if ProjVar.get_var('IS_DC') and auth_info and ProjVar.get_var('PRIMARY_SUBCLOUD') != auth_info.get('region'):
-            con_name = auth_info.get('region')
-            if con_name in ('RegionOne', 'SystemController'):
-                con_name = 'central_region'
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
@@ -1110,13 +1095,9 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
                                                       con_telnet=con_telnet_, auth_info=auth_info)
         LOG.info("'system cli enabled")
 
-    if not use_telnet:
-        if con_ssh is None:
-            con_name = None
-            if auth_info and ProjVar.get_var('IS_DC'):
-                region = auth_info.get('region')
-                con_name = 'central_region' if region in ('SystemController', 'RegionOne') else region
-            con_ssh = ControllerClient.get_active_controller(name=con_name)
+    if not use_telnet and not con_ssh:
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     while time.time() < cli_enable_end_time:
         try:
@@ -1325,11 +1306,7 @@ def wait_for_swact_complete(before_host, con_ssh=None, swact_start_timeout=HostT
     start = time.time()
     end_swact_start = start + swact_start_timeout
     if con_ssh is None:
-        con_name = None
-        if ProjVar.get_var('IS_DC') and auth_info and ProjVar.get_var('PRIMARY_SUBCLOUD') != auth_info.get('region'):
-            con_name = auth_info.get('region')
-            if con_name in ('RegionOne', 'SystemController'):
-                con_name = 'central_region'
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     while con_ssh._is_connected(fail_ok=True):
@@ -4022,11 +3999,7 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
     end_time = time.time() + timeout
     msg = ntp_alarms = None
     if not con_ssh:
-        region = None
-        if ProjVar.get_var('IS_DC') and auth_info:
-            region = auth_info.get('region', None)
-            if region in ('RegionOne', 'SystemController'):
-                region = 'central_region'
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=region)
 
     while time.time() < end_time:

@@ -112,7 +112,7 @@ class MThread(threading.Thread):
 
             if ProjVar.get_var('IS_DC'):
                 LOG.info("Connecting to subclouds fip in new thread...")
-                ControllerClient.set_active_controller(con_ssh, 'central_region')
+                ControllerClient.set_active_controller(con_ssh, 'RegionOne')
                 con_ssh_dict = ControllerClient.get_active_controllers_map()
                 for name in con_ssh_dict:
                     if name in lab:

@@ -1,9 +1,7 @@
-import time
-from pytest import mark, fixture, skip
+from pytest import fixture
 
 from keywords import security_helper, keystone_helper
 from utils.tis_log import LOG
-from consts.auth import Tenant,CliAuth
 
 
 @fixture(scope='module')
