@@ -2297,6 +2297,7 @@ def set_network_boot_feed(bld_server_conn, load_path, skip_cfg=False):
     Returns:
 
     """
+
     if load_path is None:
         load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
 
@@ -2616,7 +2617,7 @@ def establish_ssh_connection(host, user=HostLinuxCreds.get_user(), password=Host
                              initial_prompt=Prompt.CONTROLLER_PROMPT, retry=False, fail_ok=False):
 
     try:
-        _ssh_conn = SSHClient(host, user=user, password=password, initial_prompt=initial_prompt)
+        _ssh_conn = SSHClient(host, user=user, password=password, initial_prompt=initial_prompt, timeout=360)
         _ssh_conn.connect(retry=retry)
         return _ssh_conn
 

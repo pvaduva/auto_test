@@ -733,7 +733,7 @@ def pytest_addoption(parser):
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
-                     action='store_true', help="Using upstream cinder-backup CLIs")
+                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
     parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
                      dest='low_latency', action='store_true', help="Restore a low-latency lab")
 
