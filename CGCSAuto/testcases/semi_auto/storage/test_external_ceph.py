@@ -128,7 +128,7 @@ def add_external_ceph(dest_filepath, ceph_services):
 
 
 @mark.parametrize(('ceph_lab', 'ceph_services'), [
-    'WCP_7_12', 'cinder_glance_nova'
+    ('WCP_7_12', 'cinder_glance_nova')
 ])
 def test_configure_external_ceph(ceph_lab, ceph_services):
     """
