@@ -73,7 +73,7 @@ def setup_test_session(global_setup):
     # set build id to be used to upload/write test results
     ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
 
-    setups.get_build_info(con_ssh)
+    setups.set_build_info(con_ssh)
     setups.set_session(con_ssh=con_ssh)
 
 
@@ -90,7 +90,7 @@ def setup_build_vars(request):
             setups.copy_test_files()
 
             # set build id to be used to upload/write test results
-            setups.get_build_info(con_ssh)
+            setups.set_build_info(con_ssh)
         except:
             LOG.warning('Unable to set BUILD info')
             pass

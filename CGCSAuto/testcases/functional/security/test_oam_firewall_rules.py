@@ -274,12 +274,9 @@ def _modify_firewall_rules(firewall_rules_path):
     """
     :param firewall_rules_path: Path to the firewalls rules file (including the file name)
     """
-    dc_region = ssh_name = None
-    if ProjVar.get_var('IS_DC'):
-        dc_region = 'RegionOne'
-        ssh_name = 'central_region'
+    dc_region = 'RegionOne' if ProjVar.get_var('IS_DC') else None
 
-    ssh_client = ControllerClient.get_active_controller(name=ssh_name)
+    ssh_client = ControllerClient.get_active_controller(name=dc_region)
     LOG.info("Install firewall rules: {}".format(firewall_rules_path))
     auth_info = Tenant.get('admin', dc_region=dc_region)
     start_time = common.get_date_in_format(ssh_client=ssh_client)

@@ -39,7 +39,7 @@ def get_ssh_public_key():
 
 
 def get_current_system_version():
-    return system_helper.get_system_software_version()
+    return system_helper.get_system_software_version(use_existing=False)
 
 
 def check_system_health_for_upgrade():

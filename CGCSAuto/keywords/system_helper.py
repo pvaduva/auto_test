@@ -30,6 +30,7 @@ def _get_info_non_cli(cmd, con_ssh=None, use_telnet=False, con_telnet=None):
         exitcode, output = con_ssh.exec_cmd(cmd, rm_date=True)
     else:
         exitcode, output = con_telnet.exec_cmd(cmd)
+
     if not exitcode == 0:
         raise exceptions.SSHExecCommandFailed("Command failed to execute.")
 
@@ -1366,12 +1367,7 @@ def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail
 def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False, exclude_one_col_table=True,
                            auth_info=Tenant.get('admin')):
     if con_ssh is None:
-        con_name = None
-        if ProjVar.get_var('IS_DC') and auth_info and ProjVar.get_var('PRIMARY_SUBCLOUD') != auth_info.get(
-                'region'):
-            con_name = auth_info.get('region')
-            if con_name in ('RegionOne', 'SystemController'):
-                con_name = 'central_region'
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     show_args = ','.join(table_names)
@@ -2735,30 +2731,39 @@ def is_patch_current(con_ssh=None):
 def get_installed_build_info_dict(con_ssh=None, use_telnet=False, con_telnet=None):
 
     build_info_dict = {}
-    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,)
-    if build_info:
-        for l in build_info.splitlines():
-            if '=' in l:
-                item = l.split('=')
-                build_info_dict[item[0].strip()] = item[1].strip()
+    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+    pattern = re.compile('(.*)="(.*)"')
+    for line in build_info.splitlines():
+        res = pattern.match(line)
+        if res:
+            key, val = res.groups()
+            build_info_dict[key.strip()] = val.strip()
 
     return build_info_dict
 
 
-def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,):
+def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None, use_existing=True):
     """
 
     Args:
         con_ssh:
         use_telnet
         con_telnet
+        use_existing
 
     Returns (str): e.g., 16.10
 
     """
-    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,)
-    sw_line = [l for l in build_info.splitlines() if "SW_VERSION" in l]
-    return ((sw_line.pop()).split("=")[1]).replace('"', '')
+    sw_versions = ProjVar.get_var('SW_VERSION')
+    if use_existing and sw_versions:
+        return sw_versions[-1]
+
+    info_dict = get_installed_build_info_dict(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+    sw_version = info_dict.get('SW_VERSION')
+    if not sw_version in sw_versions:
+        ProjVar.set_var(append=True, SW_VERSION=sw_version)
+
+    return sw_version
 
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, source_creden_=None, upgrade_ver=None):

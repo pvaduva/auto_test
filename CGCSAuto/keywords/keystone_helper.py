@@ -1,6 +1,7 @@
 import re
 
 from consts.auth import Tenant, HostLinuxCreds
+from consts.proj_vars import ProjVar
 from utils import cli, exceptions, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -321,25 +322,28 @@ def get_endpoints(rtn_val='ID', endpoint_id=None, service_name=None, service_typ
     return endpoints
 
 
-def get_endpoints_value(endpoint_id, target_field, con_ssh=None):
+def get_endpoints_value(endpoint_id, target_field, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Gets the  endpoint target field value for given  endpoint Id
     Args:
         endpoint_id: the endpoint id to get the value of
         target_field: the target field name to retrieve value of
         con_ssh:
+        auth_info
 
     Returns: list of endpoint field values
 
     """
     args = endpoint_id
-    table_ = table_parser.table(cli.openstack('endpoint show', args,  ssh_client=con_ssh, auth_info=Tenant.get('admin')))
+    table_ = table_parser.table(cli.openstack('endpoint show', args,  ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_value_two_col_table(table_, target_field)
 
 
 def is_https_lab(con_ssh=None, source_openrc=True, auth_info=Tenant.get('admin')):
     if not con_ssh:
-        con_ssh = ControllerClient.get_active_controller()
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
+
     table_ = table_parser.table(cli.openstack('endpoint list', source_openrc=source_openrc, ssh_client=con_ssh,
                                               auth_info=auth_info))
     con_ssh.exec_cmd('unset OS_REGION_NAME')    # Workaround for CGTS-8348

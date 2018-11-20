@@ -52,7 +52,6 @@ def pre_download_setup():
     return _download_setup
 
 
-
 def test_download_post_upgrade(pre_download_setup):
     """
     This test downloads lab setup scripts and images from build server to the upgraded lab based on the version.

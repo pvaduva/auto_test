@@ -109,7 +109,7 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
     file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
 
     if con_ssh is None:
-        name = 'central_region' if ProjVar.get_var('IS_DC') else None
+        name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
         con_ssh = ControllerClient.get_active_controller(name=name)
     if 0 == con_ssh.exec_cmd('ceph df')[0]:
         # assume image storage for ceph is sufficient
@@ -299,7 +299,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         properties['hw_firmware_type'] = 'uefi'
 
     if sys_con_for_dc and ProjVar.get_var('IS_DC'):
-        con_ssh = ControllerClient.get_active_controller('central_region')
+        con_ssh = ControllerClient.get_active_controller('RegionOne')
         create_auth = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController').copy()
         image_host_ssh = get_cli_client(central_region=True)
     else:
@@ -551,7 +551,7 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
     imgs_to_del_str = ' '.join(imgs_to_del)
 
     if sys_con_for_dc and ProjVar.get_var('IS_DC'):
-        con_ssh = ControllerClient.get_active_controller('central_region')
+        con_ssh = ControllerClient.get_active_controller('RegionOne')
         auth_info = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController')
 
     LOG.debug("images to delete: {}".format(imgs_to_del))

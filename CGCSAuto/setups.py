@@ -36,8 +36,6 @@ def setup_tis_ssh(lab):
         try:
             con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                 CONTROLLER_PROMPT)
-
-            #con_ssh.connect(retry=True, retry_timeout=30, prompt=r'.*\:~\$')
             con_ssh.connect(retry=True, retry_timeout=30)
             ControllerClient.set_active_controller(con_ssh)
         except:
@@ -285,7 +283,7 @@ def get_tis_timestamp(con_ssh):
     return con_ssh.exec_cmd('date +"%T"')[1]
 
 
-def get_build_info(con_ssh):
+def set_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
     build_path = None
     if code != 0:
@@ -372,7 +370,7 @@ def copy_test_files():
     if ProjVar.get_var('IS_DC'):
         _rsync_files_to_con1(con_ssh=ControllerClient.get_active_controller(name=ProjVar.get_var('PRIMARY_SUBCLOUD')),
                              file_to_check='{}/heat/README'.format(WRSROOT_HOME), central_region=central_region)
-        con_ssh = ControllerClient.get_active_controller(name='central_region')
+        con_ssh = ControllerClient.get_active_controller(name='RegionOne')
         central_region = True
 
     _rsync_files_to_con1(con_ssh=con_ssh, central_region=central_region)
@@ -1171,15 +1169,15 @@ def set_region(region=None):
 
 
 def set_dc_vars():
-    if not ProjVar.get_var('IS_DC') or ControllerClient.get_active_controller(name='central_region', fail_ok=True):
+    if not ProjVar.get_var('IS_DC') or ControllerClient.get_active_controller(name='RegionOne', fail_ok=True):
         return
 
     central_con_ssh = ControllerClient.get_active_controller()
-    ControllerClient.set_active_controller(central_con_ssh, name='central_region')
+    ControllerClient.set_active_controller(central_con_ssh, name='RegionOne')
+    primary_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
     sub_clouds = dc_helper.get_subclouds(avail='online', con_ssh=central_con_ssh)
     LOG.info("Online subclouds: {}".format(sub_clouds))
 
-    primary_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
     lab = ProjVar.get_var('LAB')
 
     for subcloud in sub_clouds:

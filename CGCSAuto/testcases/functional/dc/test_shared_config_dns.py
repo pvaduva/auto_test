@@ -185,7 +185,7 @@ def test_dc_dns_override_local_change(ensure_synced):
 
 def verify_dns_on_central_and_subcloud(primary_subcloud, fail_ok=False):
     res = []
-    for region in ('central_region', primary_subcloud):
+    for region in ('RegionOne', primary_subcloud):
         LOG.info("Check dns on {}".format(region))
         con_ssh = ControllerClient.get_active_controller(name=region)
         code, out = con_ssh.exec_cmd('nslookup -timeout=1 www.google.com', fail_ok=fail_ok, expect_timeout=30)
