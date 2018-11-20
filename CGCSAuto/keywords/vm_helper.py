@@ -611,7 +611,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if source != 'block_device':
         if source is None:
             if min_count is None and max_count is None:
-                source = 'volume'
+                source = 'image'        # hack container
             else:
                 source = 'image'
 
