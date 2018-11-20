@@ -347,9 +347,10 @@ def verify_custom_lab_cfg_location(bld_server_conn, lab_cfg_location, tis_on_tis
     found_system_cfg_file = False
     found_lab_settings_file = False
     found_lab_setup_cfg_file = False
+    cfgfile_list = CENTOS_CFGFILE_LIST + WRL_CFGFILE_LIST
     exit = False
+
     for file in os.listdir(lab_cfg_location):
-        cfgfile_list = CENTOS_CFGFILE_LIST + WRL_CFGFILE_LIST
         if file in cfgfile_list:
             found_system_cfg_file = True
         elif file == BULK_CFG_FILENAME:
@@ -381,11 +382,12 @@ def verify_custom_lab_cfg_location(bld_server_conn, lab_cfg_location, tis_on_tis
         exit = True
 
     if exit:
+        log.error(msg)
         msg = 'Missing required configuration files'
         wr_exit()._exit(1, msg)
 
     if not found_lab_settings_file:
-        log.info('Settings.ini not found. Will use stored values.')
+        log.info('Settings.ini not found in {}. Will use stored values.' .format(lab_cfg_location))
         lab_cfg_location = get_settings(bld_server_conn, lab_cfg_path)
         lab_settings_filepath = SCRIPT_DIR + "/" + LAB_SETTINGS_DIR + "/" + lab_cfg_location + ".ini"
         log.info('Using lab settings file path: {}'.format(lab_settings_filepath))
