@@ -84,6 +84,11 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                                remote_cli=use_remote_cli, force=force_source)
     else:
         if auth_info:
+            # hack starts
+            if cmd not in ('fm', 'system'):
+                auth_info = dict(auth_info)
+                auth_info['auth_url'] = 'http://keystone.openstack.svc.cluster.local/v3'
+            # hack ends
             auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {} "
                          "--os-user-domain-name Default --os-project-domain-name Default".
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
