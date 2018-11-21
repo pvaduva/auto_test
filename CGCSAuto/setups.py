@@ -938,8 +938,11 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_d
     node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
 
     # [BUILD] and [CONF_FILES] section
-    build_dict = {"BUILD_SERVER": build_server,
-                  "TIS_BUILD_PATH": host_build_dir_path, "BUILD_ISO_PATH": iso_path if iso_path else '', "PATCHES": patch_dir if patch_dir else ''}
+    build_dict = {"BUILD_SERVER": __build_server,
+                  "TIS_BUILD_PATH": host_build_dir_path,
+                  "BUILD_ISO_PATH": iso_path if iso_path else '',
+                  "PATCHES": patch_dir if patch_dir else ''}
+
     files_dict = {"FILES_SERVER": files_server, "FILES_DIR": files_dir if files_dir else '',
                   "LICENSE_PATH": license_path if license_path else '',
                   "GUEST_IMAGE_PATH": guest_image if guest_image else '',
@@ -950,7 +953,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_d
                   "OVS_CONFIG": str(ovs)}
     boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server if boot_server else '', "SECURITY_PROFILE": security,
                  "LOW_LATENCY_INSTALL": low_latency}
-    control_dict = {"RESUME_POINT": resume if not isinstance(resume, bool) else '',
+    control_dict = {"RESUME_POINT": resume if resume else '',
                     "STEPS_TO_SKIP": skip if skip else '', "STOP_POINT": stop}
     config["LAB"] = labconf_lab_dict
     config["NODES"] = node_dict
