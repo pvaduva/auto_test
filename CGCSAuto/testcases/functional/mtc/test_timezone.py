@@ -132,7 +132,6 @@ def test_modify_timezone_log_timestamps():
 
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step("Ensure the system date is changed when the timezone is changed.")
-    pre_system_epoch = get_epoch_date(con_ssh=con_ssh)
 
     # Saving the last entry from the logs; If it is the same later, there is no new entry in the log.
     LOG.info("Saving the last entry from all logs.")
@@ -142,6 +141,8 @@ def test_modify_timezone_log_timestamps():
         last_line = con_ssh.exec_cmd('tail -n 1 /var/log/{}'.format(log))[1]
         log_epoch = parse_log_time(last_line)
         prev_timestamps[log] = log_epoch
+
+    pre_system_epoch = get_epoch_date(con_ssh=con_ssh)
 
     system_helper.modify_timezone(timezone=post_timezone)
     post_system_epoch = get_epoch_date(con_ssh=con_ssh)
@@ -159,13 +160,14 @@ def test_modify_timezone_log_timestamps():
             # If last line does not exist in last_log_entries; New line is in the log; Add log to
             # logs_to_test
             new_log_epoch = parse_log_time(last_line)
-            epoch_diff = abs(new_log_epoch - prev_timestamps[log_name])
+            epoch_diff = abs(new_log_epoch - pre_system_epoch)
 
             if epoch_diff > 600:
                 LOG.info("{} has new timestamps. Adding to logs_to_test.".format(log_name))
                 logs_to_test[log_name] = new_log_epoch
                 del prev_timestamps[log_name]
                 break
+
         # If last_log_entries is empty, break from checking logs as there is none left to check
         if len(prev_timestamps) == 0:
             break
@@ -184,8 +186,8 @@ def test_modify_timezone_log_timestamps():
 
 
 def get_cli_timestamps(ceil_id, vol_id, img_id, net_id, vm_id):
-    table_ = table_parser.table(cli.ceilometer("event-show {}".format(ceil_id), auth_info=Tenant.get('admin')))
-    ceil_timestamp = table_parser.get_value_two_col_table(table_, 'generated')
+    ceil_timestamp = ceilometer_helper.get_events(event_type='router.create.end', header='generated',
+                                                  message_id=ceil_id)[0]
 
     table_ = table_parser.table(cli.cinder("show {}".format(vol_id), auth_info=Tenant.get('admin')))
     cinder_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
