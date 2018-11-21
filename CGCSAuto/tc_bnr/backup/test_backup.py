@@ -372,7 +372,9 @@ def backup_load_iso_image(backup_info):
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server_conn.rsync("-L " + iso_file_path, lab['controller-0 ip'],
         build_server_conn.rsync("-L " + iso_file_path, html_helper.get_ip_addr(),
-                                os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
+                                os.path.join(WRSROOT_HOME, "bootimage.iso"),
+                                pre_opts=pre_opts,
+                                timeout=360)
 
     if backup_dest == 'usb':
         usb_part1 = None
