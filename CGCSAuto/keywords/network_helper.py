@@ -74,6 +74,7 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
         fail_ok (bool):
         auth_info (dict): run 'openstack network create' cli using these authorization info
         con_ssh (SSHClient):
+        cleanup (str|None): function, module, class, session or None
 
     Returns (tuple): (rnt_code (int), net_id (str), message (str))
 
