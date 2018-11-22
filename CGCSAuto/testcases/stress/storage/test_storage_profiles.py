@@ -6,7 +6,7 @@ is being tested.  It will then determine which is the largest group with
 compatible hardware and execute the tests on that.
 
 For compute or controller+compute nodes, the tests will also take into account
-the storage backing as either lvm, image or remote.  It will try to see if
+the storage backing as either image or remote.  It will try to see if
 there is already a host with the desired from storage backing, or already a
 host with the desired to storage backing, in order to save time.  Otherwise, it
 will simply pick a random host with the right hardware and perform the
@@ -168,14 +168,8 @@ def delete_lab_setup_files(con_ssh, host, files):
 
 
 @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
-    mark.p1(('controller', 'lvm', 'image')),
-    mark.p1(('controller', 'image', 'lvm')),
-    mark.p1(('compute', 'lvm', 'image')),
     mark.p1(('compute', 'image', 'remote')),
-    mark.p1(('compute', 'remote', 'lvm')),
-    mark.p1(('compute', 'lvm', 'remote')),
     mark.p1(('compute', 'remote', 'image')),
-    mark.p1(('compute', 'image', 'lvm')),
     mark.p1(('storage', None, None)),
 ])
 @mark.usefixtures('delete_profiles_teardown')
@@ -189,8 +183,8 @@ def test_storage_profile(personality, from_backing, to_backing):
 
     Arguments:
     - personality (string) - controller, compute or storage
-    - from_backing (string) - lvm, image, remote or None
-    - to_backing (string) - lvm, image, remote or None
+    - from_backing (string) - image, remote or None
+    - to_backing (string) - image, remote or None
 
     Test Steps:
     1.  Query system and determine which nodes have compatible hardware.

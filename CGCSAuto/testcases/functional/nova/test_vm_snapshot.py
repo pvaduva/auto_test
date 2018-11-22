@@ -28,7 +28,6 @@ def create_snapshot_from_instance(vm_id, name):
 
 @mark.parametrize('inst_backing', [
     'local_image',
-    # 'local_lvm'
 ])
 def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
     """

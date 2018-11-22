@@ -15,9 +15,6 @@ def check_alarms():
     ('image', 'two'),
     ('image', 'one'),
     ('image', 'all'),
-    ('lvm', 'two'),
-    ('lvm', 'one'),
-    ('lvm', 'all'),
     ('remote', 'two'),
     ('remote', 'one'),
     ('remote', 'all'),
@@ -103,9 +100,6 @@ def get_candidate_hosts(number_of_hosts):
     ('image', 'two'),
     ('image', 'one'),
     ('image', 'zero'),
-    ('lvm', 'two'),
-    ('lvm', 'one'),
-    ('lvm', 'zero'),
     ('remote', 'zero'),
     ('remote', 'one'),
     ('remote', 'two')
@@ -149,6 +143,7 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         number_to_config = number_of_hosts - len(hosts_with_backing)
         hosts_pool = list(set(candidate_hosts) - set(hosts_with_backing))
     else:
+        # TODO
         backing_to_config = 'lvm' if instance_backing == 'image' else 'image'
         number_to_config = len(hosts_with_backing) - number_of_hosts
         hosts_pool = hosts_with_backing

@@ -108,13 +108,6 @@ class TestResizeSameHost:
         ('remote',      (4, 0, 0), (1, 1, 512), 'volume'),
         ('remote',      (4, 1, 512), (8, 2, 1024), 'volume'),
         ('remote',      (4, 1, 512), (0, 1, 0), 'volume'),
-        ('local_lvm',   (4, 0, 0), (5, 1, 512), 'image'),
-        ('local_lvm',   (4, 1, 512), (5, 2, 1024), 'image'),
-        ('local_lvm',   (4, 1, 512), (4, 1, 0), 'image'),
-        ('local_lvm',   (4, 0, 0), (2, 1, 512), 'volume'),
-        ('local_lvm',   (4, 1, 512), (0, 1, 0), 'volume'),
-        ('local_lvm', (4, 0, 512), (4, 0, 1024), 'volume'),
-        ('local_lvm', (4, 1, 0), (4, 2, 0), 'volume'),
         ('local_image', (4, 0, 0), (5, 1, 512), 'image'),
         mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (5, 2, 1024), 'image')),
         ('local_image', (5, 1, 512), (5, 1, 0), 'image'),
@@ -233,10 +226,6 @@ class TestResizeSameHost:
         ('remote',      (5, 2, 512), (5, 1, 512), 'image'),     # check ephemeral disk cannot be smaller than origin
         # ('remote',      (1, 0, 0), (0, 0, 0), 'volume'),   This should not fail, root disk size from volume not flavor
         ('remote',      (1, 1, 512), (1, 0, 512), 'volume'),     # check ephemeral disk cannot be smaller than origin
-        ('local_lvm',   (5, 0, 0), (0, 0, 0), 'image'),     # Root disk can be resized, but cannot be 0
-        ('local_lvm',   (5, 2, 512), (5, 1, 512), 'image'),
-        # ('local_lvm',   (1, 0, 0), (0, 0, 0), 'volume'),      root disk size from volume not flavor
-        ('local_lvm',   (1, 2, 512), (1, 1, 512), 'volume'),
         ('local_image', (5, 0, 0), (0, 0, 0), 'image'),      # Root disk can be resized, but cannot be 0
         ('local_image', (5, 2, 512), (5, 1, 512), 'image'),
         ('local_image', (5, 1, 512), (4, 1, 512), 'image'),
@@ -345,7 +334,7 @@ class TestResizeDiffHost:
     # TC5155
     @mark.parametrize('storage_backing', [
         'local_image',
-        'local_lvm',
+        'remote',
         ])
     def test_resize_different_comp_node(self, storage_backing, get_hosts_per_backing):
         """
