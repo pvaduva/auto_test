@@ -1575,7 +1575,7 @@ def get_hosts_in_storage_aggregate(storage_backing='local_image', up_only=True, 
     System: Regular, Small footprint
 
     Args:
-        storage_backing (str): 'local_image', 'local_lvm', or 'remote'
+        storage_backing (str): 'local_image', or 'remote'
         up_only (bool): whether to return only up hypervisors
         con_ssh (SSHClient):
         auth_info
@@ -1588,13 +1588,11 @@ def get_hosts_in_storage_aggregate(storage_backing='local_image', up_only=True, 
     storage_backing = storage_backing.strip().lower()
     if 'image' in storage_backing:
         aggregate = 'local_storage_image_hosts'
-    elif 'lvm' in storage_backing:
-        aggregate = 'local_storage_lvm_hosts'
     elif 'remote' in storage_backing:
         aggregate = 'remote_storage_hosts'
     else:
         raise ValueError("Invalid storage backing provided. "
-                         "Please use one of these: 'local_image', 'local_lvm', 'remote'")
+                         "Please use one of these: 'local_image', 'remote'")
 
     hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh, auth_info=auth_info)
 
