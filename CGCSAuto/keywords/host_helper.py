@@ -4000,7 +4000,7 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
     msg = ntp_alarms = None
     if not con_ssh:
         con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
-        con_ssh = ControllerClient.get_active_controller(name=region)
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     while time.time() < end_time:
         ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False,
