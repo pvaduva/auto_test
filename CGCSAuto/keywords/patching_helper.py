@@ -596,14 +596,14 @@ def upload_patch_files(files=None, con_ssh=None):
     return tuple(return_ids)
 
 
-def get_expected_patch_states(action='upload', patch_ids=None, pre_patches_states=None, con_ssh=None):
+def get_expected_patch_states(patch_ids, pre_patches_states, action='upload', con_ssh=None):
     """
     Returns the expected patch state based on the action
 
         Args:
-            action (string)
-            patch_ids (list)
-            pre_patches_states
+            action (str)
+            patch_ids (list|str)
+            pre_patches_states (dict|None)
             con_ssh
 
         Returns:
@@ -612,6 +612,9 @@ def get_expected_patch_states(action='upload', patch_ids=None, pre_patches_state
     # heuristic codes trying to figure out the next state of patches
     if not patch_ids or not pre_patches_states:
         return {}
+
+    if isinstance(patch_ids, str):
+        patch_ids = [patch_ids]
 
     action = action.upper()
     expected_states = {}
@@ -940,7 +943,7 @@ def get_patches_in_state(expected_states=None, con_ssh=None):
     Returns the patch ids that are in specified states
 
         Args:
-            expected_states (list)
+            expected_states (list|str)
             con_ssh
 
         Returns:
@@ -950,8 +953,7 @@ def get_patches_in_state(expected_states=None, con_ssh=None):
 
     if not expected_states:
         return list(states.keys())
-
-    if not isinstance(expected_states, list) and not isinstance(expected_states, tuple):
+    elif isinstance(expected_states, str):
         expected_states = [expected_states]
 
     return [patch for patch in states if states[patch]['state'] in expected_states]
@@ -1394,13 +1396,14 @@ def orchestration_patch_hosts(controller_apply_type='serial', storage_apply_type
     # Create patch strategy
     orchestration = 'patch'
 
-    LOG.tc_step("Creating patch  strategy  ......")
+    LOG.tc_step("Create patch strategy  ......")
     orchestration_helper.create_strategy(orchestration, controller_apply_type=controller_apply_type,
                                          storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
                                          max_parallel_computes=max_parallel_computes,
                                          instance_action=instance_action, alarm_restrictions=alarm_restrictions)
 
-    LOG.tc_step("Applying patch strategy ......")
+    LOG.tc_step("Apply patch strategy ......")
     orchestration_helper.apply_strategy(orchestration)
+
     LOG.tc_step("Delete patch orchestration strategy ......")
     orchestration_helper.delete_strategy(orchestration)

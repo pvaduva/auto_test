@@ -625,3 +625,18 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
             raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
 
     return args
+
+
+def get_symlink(ssh_client, file_path):
+    code, output = ssh_client.exec_cmd('ls -l {} | grep --color=never ""'.format(file_path))
+    if code != 0:
+        LOG.warning('{} not found!'.format(file_path))
+        return None
+
+    res = re.findall('> (.*)', output)
+    if not res:
+        LOG.warning('No symlink found for {}'.format(file_path))
+        return None
+
+    link = res[0].strip()
+    return link

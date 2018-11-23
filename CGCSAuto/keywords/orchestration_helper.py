@@ -12,10 +12,9 @@ from consts.timeout import OrchestrationPhaseTimeout, HostTimeout
 from keywords import common
 
 
-
 PHASE_COMPLETION_CHECK_INTERVAL = 20
-
 IGNORED_ALARM_IDS = ['200.001', '700.004', '900.001', '900.005', '900.101']
+
 
 def create_strategy(orchestration, controller_apply_type="serial", storage_apply_type="serial",
                     compute_apply_type="serial", max_parallel_computes=0, instance_action="stop-start",
@@ -93,10 +92,8 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
         else:
             raise exceptions.OrchestrationError(msg)
 
-
     if wait_for_completion:
         if timeout is None:
-            #timeout = OrchestStrategyPhases.PHASE_COMPLETION_TIMOUT[OrchestStrategyPhases.BUILD]
             timeout = OrchestrationPhaseTimeout.BUILD
 
         if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.BUILD, timeout,
@@ -151,19 +148,16 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
         (3, err_msg) - Strategy apply failed
 
     """
-    if orchestration is None:
+    if orchestration not in ('patch', 'upgrade'):
         raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
 
-    strategy_values = get_current_strategy_values(orchestration)
-
-    cmd = ''
-
+    # strategy_values = get_current_strategy_values(orchestration)
     if orchestration is "patch":
-        cmd += "patch-strategy apply"
-    elif orchestration is "upgrade":
-        cmd += "upgrade-strategy apply"
+        cmd = "patch-strategy apply"
+    else:
+        cmd = "upgrade-strategy apply"
 
-    rc, output = cli.sw_manager(cmd, '', ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
+    rc, output = cli.sw_manager(cmd, ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
 
     if rc != 0:
         msg = " CLI command {} rejected: {}".format(cmd, output)
@@ -186,7 +180,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
             done = False
             if c_phase == OrchestStrategyPhase.APPLY and int(c_compl.strip()[:-1]) > 50:
                 done = wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.APPLY, timeout=timeout,
-                                              conn_ssh=conn_ssh, fail_ok=True)[0]
+                                                      conn_ssh=conn_ssh, fail_ok=True)[0]
             if not done:
                 msg = "The {} strategy apply phase failed to complete within the specified timeout={}."\
                     .format(orchestration, timeout)
@@ -235,8 +229,8 @@ def delete_strategy(orchestration, conn_ssh=None, abort=True, fail_ok=False):
     Deletes an orchestration strategy
     Args:
         orchestration (str): indicates the orchestration strategy type. Choices are  patch or upgrade
-
         conn_ssh:
+        abort (bool)
         fail_ok:
 
     Returns (tupble):
@@ -254,12 +248,12 @@ def delete_strategy(orchestration, conn_ssh=None, abort=True, fail_ok=False):
     elif orchestration is "upgrade":
         cmd += "upgrade-strategy "
 
-
     strategy_values = get_current_strategy_values(orchestration)
-    if len(strategy_values) > 0:
+    if strategy_values:
 
         startegy_state = strategy_values[OrchStrategyKey.STATE] if OrchStrategyKey.STATE in strategy_values else None
-        if startegy_state and startegy_state in [OrchStrategyState.APPLYING, OrchStrategyState.BUILDING, OrchStrategyState.BUILDING]:
+        if startegy_state and \
+                startegy_state in [OrchStrategyState.APPLYING, OrchStrategyState.BUILDING, OrchStrategyState.BUILDING]:
             if abort:
                 cli.sw_manager(cmd + "abort", '', ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
                 wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.ABORT)
@@ -270,7 +264,6 @@ def delete_strategy(orchestration, conn_ssh=None, abort=True, fail_ok=False):
                     return 1, msg
                 else:
                     raise exceptions.OrchestrationError(msg)
-
 
         rc, output = cli.sw_manager(cmd + "delete", '', ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
 
@@ -292,16 +285,14 @@ def get_current_strategy_values(orchestration, conn_ssh=None):
     """
     Gets orchestration strategy values
     Args:
-        orchestration:
+        orchestration (str):
         conn_ssh:
 
     Returns: dict of strategy values
 
     """
 
-    if orchestration is None:
-        raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
-    if orchestration is not "patch" and orchestration is not "upgrade":
+    if orchestration not in ("patch", "upgrade"):
         raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified")
 
     cmd = ''
@@ -322,7 +313,7 @@ def get_current_strategy_values(orchestration, conn_ssh=None):
     rtn = {}
     if rc == 0 and output is not None and ('strategy-uuid' in [tr.strip() for tr in output.split(':')]):
         lines = output.splitlines()
-        lines = [ l.strip() for l in lines]
+        lines = [l.strip() for l in lines]
         for line in lines:
             pairs = line.split(':')
             rtn[pairs[0].strip()] = pairs[1].strip()
@@ -347,7 +338,7 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
 
     if orchestration is None:
         raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
-    if orchestration is not "patch" and orchestration is not "upgrade":
+    elif orchestration is not "patch" and orchestration is not "upgrade":
         raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified")
 
     if not validate_current_strategy_phase(orchestration, current_phase):
@@ -376,15 +367,14 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
 
     while time.time() < end_time:
         if not conn_ssh._is_connected(fail_ok=True):
-            ## ssh connection is lost. Controllers may swact in path application.
+            # ssh connection is lost. Controllers may swact in path application.
             time.sleep(30)
             conn_ssh.connect(retry=True, retry_timeout=HostTimeout.SWACT-30)
-            ControllerClient.set_active_controller(conn_ssh)
             time.sleep(60)
             end_time = end_time + HostTimeout.SWACT
 
         output = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
-        if len(output) > 0:
+        if output:
             if output[OrchStrategyKey.CURRENT_PHASE] == OrchestStrategyPhase.ABORT:
                 msg = "{} strategy {} phase was aborted before specified time: {}"\
                     .format(orchestration, current_phase, output)
@@ -558,23 +548,19 @@ def get_current_strategy_phase_duration(orchestration, phase, conn_ssh=None):
     Args:
         orchestration:
         phase:
-        conn_ssh:
+        conn_ssh
 
     Returns:
 
     """
-
-    if orchestration is None:
-        raise ValueError("The orchestration type (choices are 'patch' or 'upgrade') must be specified")
-    if orchestration is not "patch" and orchestration is not "upgrade":
+    if orchestration not in ("patch", "upgrade"):
         raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified")
 
-    if phase is None:
-         raise ValueError("The orchestration phase (choices are 'build' or 'apply') must be specified")
-    if phase is not "build" and phase is not "apply":
+    if phase not in ("build", "apply"):
         raise ValueError("Invalid orchestration phase type (choices are 'build' or 'apply') specified")
+
     duration = None
-    strategy_details = get_current_strategy_details(orchestration)
+    strategy_details = get_current_strategy_details(orchestration, conn_ssh=conn_ssh)
     if phase in strategy_details.keys():
         start_date_time = strategy_details[phase]["start-date-time"]
         end_date_time = strategy_details[phase]["end-date-time"]

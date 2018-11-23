@@ -14,7 +14,7 @@ from keywords import system_helper,  install_helper, patching_helper, orchestrat
 
 def pre_check_patch():
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
+    ProjVar.set_var(SOURCE_CREDENTIAL=True)
     LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
 
     # Check system health for patch orchestration;
@@ -51,17 +51,9 @@ def patch_orchestration_setup():
     lab = InstallVars.get_install_var('LAB')
     pre_check_patch()
 
-    build_id = system_helper.get_system_build_id()
-
     bld_server = get_build_server_info(PatchingVars.get_patching_var('PATCH_BUILD_SERVER'))
     output_dir = ProjVar.get_var('LOG_DIR')
     patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
-    if not patch_dir:
-        patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
-        if build_id:
-            patch_dir = patch_base_dir + '/' + build_id
-        else:
-            patch_dir = patch_base_dir + '/latest_build'
 
     LOG.info("Using  patch directory path: {}".format(patch_dir))
     bld_server_attr = dict()

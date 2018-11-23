@@ -14,9 +14,7 @@ from keywords import host_helper, patching_helper, system_helper, html_helper
 
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
-PATCH_FILE_DIR_LOCAL = 'patch-files'
-
-patch_dir_in_lab = None
+PATCH_FILE_DIR_LOCAL = 'test_patches'
 
 
 @fixture()
@@ -186,10 +184,6 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
     US99792 Update patching to use matching test patch for specific load by default
     """
 
-    global patch_dir_in_lab
-    if patch_dir_in_lab:
-        return patch_dir_in_lab
-
     patch_build_server = PatchingVars.get_patching_var('patch_build_server')
     remote_patch_dir = PatchingVars.get_patching_var('patch_dir')
     local_patch_dir = os.path.join(WRSROOT_HOME, PATCH_FILE_DIR_LOCAL)
@@ -198,7 +192,6 @@ def download_patch_files(con_ssh=None, single_file_ok=False):
     assert 0 == rt_code, 'Failed to create patch dir:{} on the active-controller'.format(local_patch_dir)
 
     with host_helper.ssh_to_build_server(patch_build_server) as ssh_to_server:
-
         patch_dir_or_files = find_patches_on_server(remote_patch_dir,
                                                     ssh_to_server,
                                                     single_file_ok=single_file_ok,
@@ -269,15 +262,44 @@ def _install_impacted_hosts(applied_patches, con_ssh=None):
         if not applied_patches:
             LOG.info('OK, test is done, no patches applied hence no hosts need to be installed')
         else:
-            LOG.warning('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
+            LOG.warning('No patches applied but there are hosts need to install, hosts:\n"{}"'.
+                        format(hosts_need_install))
     else:
         if not applied_patches:
-            LOG.warning('No patches applied but there are hosts need to install, hosts:\n"{}"'.format(hosts_need_install))
+            LOG.warning('No patches applied but there are hosts need to install, hosts:\n"{}"'.
+                        format(hosts_need_install))
 
         LOG.info('Install impacted hosts')
         install_impacted_hosts(applied_patches, current_states=states, con_ssh=con_ssh)
 
         LOG.info('OK, hosts are installed')
+
+
+def get_affected_hosts(patch_type):
+    host_funcs = {
+        'controller': system_helper.get_controllers,
+        'compute': host_helper.get_hypervisors,
+        'storage': system_helper.get_storage_nodes
+    }
+
+    host_types = []
+    if patch_type in ('ALLNODES', 'NOVA', 'LARGE'):
+        if system_helper.is_small_footprint():
+            host_types = ['controller']
+        else:
+            host_types = ['controller', 'compute', 'storage']
+    elif patch_type in ('CONTROLLER', 'COMPUTE', 'STORAGE'):
+        host_types = [patch_type.lower()]
+
+    affected_hosts = []
+    for host_type in host_types:
+        affected_hosts.append(host_funcs[host_type]())
+
+    all_hosts = system_helper.get_hostnames()
+    unaffected_hosts = list(set(all_hosts) - set(affected_hosts))
+
+    LOG.info("Hosts to be affected by {} patches: {}".format(patch_type, affected_hosts))
+    return affected_hosts, unaffected_hosts
 
 
 class TestPatches:
@@ -358,15 +380,15 @@ class TestPatches:
 
         assert applied_patches == removed_patches, "Not all applied patches were removed."
 
-    @mark.parametrize(('patch', 'affected_hosts'), [
-        ('ALLNODES', ['controller', 'compute', 'storage']),
-        ('CONTROLLER', ['controller']),
-        ('COMPUTE', ['compute']),
-        ('STORAGE', ['storage']),
-        ('NOVA', ['controller', 'compute', 'storage']),
-        ('LARGE', ['controller', 'compute', 'storage'])
+    @mark.parametrize('patch_type', [
+        'ALLNODES',
+        'CONTROLLER',
+        'COMPUTE',
+        'STORAGE',
+        'NOVA',
+        'LARGE'
     ])
-    def test_patch_host_correlations(self, upload_test_patches, patch, affected_hosts):
+    def test_patch_host_correlations(self, upload_test_patches, patch_type):
         """
         Test that compute patches only effect compute nodes, storage patches only effect storage nodes, etc...
 
@@ -389,32 +411,27 @@ class TestPatches:
 
         patch_ids = []
         for patch_id in all_patches:
-            if patch in patch_id and "FAILURE" not in patch_id:
+            if patch_type in patch_id and "FAILURE" not in patch_id:
                 patching_helper.upload_patch_file("{}/{}.patch".format(patch_dir, patch_id))
                 patch_ids.append(patch_id)
 
         if not patch_ids:
-            skip("Requested patch(es) {} not found.".format(patch))
+            skip("Requested patch(es) {} not found.".format(patch_type))
 
-        # In an AIO system all patches except storage effect the controller nodes
-        if system_helper.is_small_footprint():
-            if 'STORAGE' not in patch:
-                affected_hosts = ['controller']
-
-        controllers, computes, storages = system_helper.get_hosts_by_personality()
+        affected_hosts, unaffected_hosts = get_affected_hosts(patch_type=patch_type)
 
         for patch_id in patch_ids:
             LOG.tc_step("Verify system patch state is normal")
 
             LOG.info("Verifying all hosts are patch current")
-            _, output = patching_helper.get_hosts_states()
-            for key, value in output.items():
-                assert value['patch-current'] == 'Yes', "{} is not patch current".format(key)
+            hosts_states = patching_helper.get_hosts_states()[1]
+            for host_, states_ in hosts_states.items():
+                assert states_['patch-current'] == 'Yes', "{} is not patch current".format(host_)
 
             LOG.info("Verifying all patches are in Available state")
-            _, output = patching_helper.get_patches_states()
-            for key, value in output.items():
-                assert value['state'] == "Available", "{} patch is not in the Available state".format(patch)
+            patches_states = patching_helper.get_patches_states()[1]
+            for patch_, states_ in patches_states.items():
+                assert states_['state'] == "Available", "{} patch is not in the Available state".format(patch_)
 
             LOG.tc_step("Apply patch {}".format(patch_id))
             applied_patch = _apply_patches([patch_id])
@@ -424,32 +441,15 @@ class TestPatches:
 
             LOG.tc_step("Verify the patch only affects the correct host(s)")
             hosts_states = patching_helper.get_hosts_states()[1]
-            for controller in controllers:
-                LOG.info("Verifying patch-current state on {}".format(controller))
-                if 'controller' in affected_hosts:
-                    assert hosts_states[controller]['patch-current'] == 'No', \
-                        "{} was patch-current. Expected not patch-current.".format(controller)
-                else:
-                    assert hosts_states[controller]['patch-current'] == 'Yes', \
-                        "{} was not patch-current. Expected patch-current".format(controller)
 
-            for compute in computes:
-                LOG.info("Verifying patch-current state on {}".format(compute))
-                if 'compute' in affected_hosts:
-                    assert hosts_states[compute]['patch-current'] == 'No', \
-                        "{} was patch-current. Expected not patch-current.".format(compute)
-                else:
-                    assert hosts_states[compute]['patch-current'] == 'Yes', \
-                        "{} was not patch-current. Expected patch-current".format(compute)
+            LOG.info("Verifying patch-current state is No on affected hosts {}".format(affected_hosts))
+            for host in affected_hosts:
+                assert hosts_states[host]['patch-current'] == 'No', \
+                   "{} is patch-current after apply {} patch".format(host, patch_type)
 
-            for storage in storages:
-                LOG.info("Verifying patch-current state on {}".format(storage))
-                if 'storage' in affected_hosts:
-                    assert hosts_states[storage]['patch-current'] == 'No', \
-                        "{} was patch-current. Expected not patch-current.".format(storage)
-                else:
-                    assert hosts_states[storage]['patch-current'] == 'Yes', \
-                        "{} was not patch-current. Expected patch-current".format(storage)
+            for host_ in unaffected_hosts:
+                assert hosts_states[host_]['patch-current'] == 'Yes', \
+                    "{} is not patch-current after apply {} patch".format(host_, patch_type)
 
             LOG.tc_step("Remove patch {}".format(patch_id))
             remove_patches(patch_id)

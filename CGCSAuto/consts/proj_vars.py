@@ -311,24 +311,18 @@ class UpgradeVars:
 
 class PatchingVars:
     __var_dict = {
-        'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        #'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
-        'DEF_PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_6.0_Test_Patch_Build',
-        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/',
-        'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
+        # Common patch vars
         'PATCH_DIR': None,
-        'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
-        'PASSWORD': ')OKM0okm',  # getpass.getpass()
-        'PATCH_BASE_DIR': None,
-        # Patch orchestration
+        'PATCH_BUILD_SERVER': None,
+
+        # Formal release patch vars
+        'PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/TC_18.03_Patch_Formal_Build',
         'CONTROLLER_APPLY_TYPE': "serial",
         'STORAGE_APPLY_TYPE': "serial",
         'COMPUTE_APPLY_TYPE': "serial",
         'MAX_PARALLEL_COMPUTES': 2,
         'INSTANCE_ACTION': "stop-start",
         'ALARM_RESTRICTIONS': "strict",
-
     }
 
     @classmethod

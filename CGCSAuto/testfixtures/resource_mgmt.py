@@ -185,7 +185,8 @@ def _delete_resources(resources, scope):
 
     if vol_snapshots:
         LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
-        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True, auth_info=Tenant.get('admin'))
+        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True,
+                                                          auth_info=Tenant.get('admin'))
         if code > 0:
             err_msgs.append(msg)
 

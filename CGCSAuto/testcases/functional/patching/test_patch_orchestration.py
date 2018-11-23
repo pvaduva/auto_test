@@ -1,26 +1,19 @@
-import time
-import pytest
 import os
 import re
+import time
+
+from pytest import mark, skip, fixture
+
 from utils.tis_log import LOG
-from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from keywords import system_helper, host_helper, install_helper, patching_helper, \
-    orchestration_helper, nova_helper, vm_helper
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.build_server import Server, get_build_server_info
-from consts.proj_vars import ProjVar, PatchingVars, InstallVars
-from consts.cgcs import Prompt, HostAvailState
-from utils.clients.ssh import ControllerClient, SSHClient
+from utils.clients.ssh import ControllerClient
+from consts.auth import HostLinuxCreds
+from consts.filepaths import WRSROOT_HOME
+from consts.proj_vars import ProjVar
+from consts.cgcs import HostAvailState
+from keywords import system_helper, host_helper, patching_helper, orchestration_helper, nova_helper, vm_helper
 
 
-@pytest.fixture(scope='session')
-def pre_check_patch():
-
-    # ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
-    LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
-
-    # Check system health for patch orchestration;
-    check_health()
+PATCH_FILE_DIR_LOCAL = WRSROOT_HOME + 'test_patches'
 
 
 def check_health(check_patch_ignored_alarms=True):
@@ -45,106 +38,27 @@ def check_health(check_patch_ignored_alarms=True):
     return rc, health
 
 
-@pytest.fixture(scope='session')
-def patch_orchestration_setup():
+@fixture(scope='session', autouse=True)
+def patch_orchestration_setup(set_test_patch_info, request):
+    check_health()
 
-    lab = InstallVars.get_install_var('LAB')
-    pre_check_patch()
-    current_release = system_helper.get_system_software_version()
-    build_id = system_helper.get_system_build_id()
+    bld_server, patch_dir = set_test_patch_info
+    patch_dest_dir = WRSROOT_HOME + PATCH_FILE_DIR_LOCAL
 
-    bld_server = get_build_server_info(PatchingVars.get_patching_var('PATCH_BUILD_SERVER'))
-    output_dir = ProjVar.get_var('LOG_DIR')
-    patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
+    con_ssh = ControllerClient.get_active_controller()
+    con_ssh.exec_cmd("rm {}/*".format(patch_dest_dir))
 
     LOG.info("Using  patch directory path: {}".format(patch_dir))
-    bld_server_attr = dict()
-    bld_server_attr['name'] = bld_server['name']
-    bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
-    bld_server_conn = SSHClient(bld_server_attr['name'], user=SvcCgcsAuto.USER,
-                                password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
-    bld_server_conn.connect()
-    bld_server_conn.exec_cmd("bash")
-    bld_server_conn.set_prompt(bld_server_attr['prompt'])
-    bld_server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
-    bld_server_attr['ssh_conn'] = bld_server_conn
-    bld_server_obj = Server(**bld_server_attr)
+    with host_helper.ssh_to_build_server(bld_srv=bld_server) as bs_ssh:
 
-    if not patch_dir:
-        patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
-        if build_id:
-            patch_dir = patch_base_dir + '/' + build_id
-            rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
-            if rc != 0 or bld_server_obj.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))[0] != 0:
-                patch_dir = patch_base_dir + '/latest_build'
-        else:
-            patch_dir = patch_base_dir + '/latest_build'
+        # Download patch files from specified patch dir
+        LOG.info("Downloading patch files from patch dir {}".format(patch_dir))
+        patches = download_patches(bs_ssh, patch_dir)
 
-    # Download patch files from specified patch dir
-    LOG.info("Downloading patch files from patch dir {}".format(patch_dir))
-
-    rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir)[0]
-    if rc != 0:
-        if 'latest_build' in os.path.basename(patch_dir):
-            assert False, "Patch directory path {} not found".format(patch_dir)
-        else:
-            patch_dir_latest = os.path.join(os.path.split(patch_dir)[0], 'latest_build')
-            LOG.info("Test Patch directory {} not found. Trying the latest_build subdir:{}".
-                     format(patch_dir, patch_dir_latest))
-            rc = bld_server_obj.ssh_conn.exec_cmd("test -d " + patch_dir_latest)[0]
-            assert rc == 0, "Test Patch directory {} not found".format(patch_dir_latest)
-            patch_dir = patch_dir_latest
-
-    clear_patch_dest_dir()
-    patches = download_patches(lab, bld_server_obj, patch_dir)
-    if len(patches) == 0:
-        pytest.skip("No patch files found in {}:{}.".format(bld_server_obj.name, patch_dir))
-
-    enable_dev_certificate = BuildServerPath.PATCH_ENABLE_DEV_CERTIFICATES[current_release]
-
-    get_patch_dev_enabler_certificate(bld_server_obj, enable_dev_certificate, lab)
-
-    _patching_setup = {'lab': lab, 'output_dir': output_dir, 'build_server': bld_server_obj,
-                       'patch_dir': patch_dir, 'enable_dev_certificate': enable_dev_certificate,
-                       'patches': patches}
-
-    LOG.info("Patch Orchestration ready to start: {} ".format(_patching_setup))
-    return _patching_setup
-
-
-def clear_patch_dest_dir():
-
-    patch_dest_path = WRSROOT_HOME + "patches/"
-    con_ssh = ControllerClient.get_active_controller()
-    con_ssh.exec_cmd("rm {}/*".format(patch_dest_path))
-
-
-def delete_patch_strategy():
-
-    orchestration_helper.delete_strategy("patch")
-
-
-def get_patch_dev_enabler_certificate(server, cert_path, lab):
-
-    current_release = system_helper.get_system_software_version()
-    enable_dev_certificate = BuildServerPath.PATCH_ENABLE_DEV_CERTIFICATES[current_release]
-    rc = server.ssh_conn.exec_cmd("test -f " + enable_dev_certificate)[0]
-    assert rc == 0, "Designer patch enabler certificate {} not found.".format(enable_dev_certificate)
-    active_controller = system_helper.get_active_controller_name()
-    patch_dest_dir = WRSROOT_HOME + "patches/"
-    dest_server = lab[active_controller + ' ip']
-
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-
-    server.ssh_conn.rsync(cert_path, dest_server, patch_dest_dir, ssh_port=None, pre_opts=pre_opts)
-
-
-@pytest.fixture(scope='session', autouse=True)
-def patch_tear_down(request):
+    controllers, computes, storages = system_helper.get_hosts_by_personality()
 
     def remove_on_teardown():
-        delete_patch_strategy()
+        orchestration_helper.delete_strategy("patch")
         applied_patches = patching_helper.get_patches_in_state(expected_states='Applied')
         applied_patches = [p for p in applied_patches if "RR_" or "INSVC" in p]
         partial_applied_patches = [p for p in patching_helper.get_partial_applied() if "RR_" or "INSVC" in p]
@@ -169,77 +83,42 @@ def patch_tear_down(request):
 
     request.addfinalizer(remove_on_teardown)
 
-
-def get_downloaded_patch_files(patch_dest_dir=None, conn_ssh=None):
-
-    if conn_ssh is None:
-        conn_ssh = ControllerClient.get_active_controller()
-    if not patch_dest_dir:
-        patch_dest_dir = WRSROOT_HOME + "patches/"
-    patch_names = []
-    rc, output = conn_ssh.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dest_dir))
-    assert rc == 0, "Failed to list downloaded patch files in directory path {}.".format(patch_dest_dir)
-    if output is not None:
-        for item in output.splitlines():
-            # Remove ".patch" extension
-            patch_file_name = os.path.basename(item)
-            LOG.info("Found patch named: " + patch_file_name)
-            patch_names.append(os.path.basename(patch_file_name))
-
-    return patch_names
+    return patch_dir, patches, controllers, computes, storages
 
 
-def download_patches(lab, server, patch_dir, conn_ssh=None):
+def download_patches(patch_server_ssh, patch_dir):
     """
-
+    Copy test patches from build server to active controller
     Args:
-        lab:
-        server:
-        patch_dir:
-        conn_ssh:
-
+        patch_server_ssh (SSHClient):
+        patch_dir (str):
     Returns:
 
     """
+    dest_server = ProjVar.get_var('LAB')['floating ip']
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+
+    patch_server_ssh.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir), fail_ok=False)
+    patch_server_ssh.rsync(patch_dir+"/*.patch", dest_server, PATCH_FILE_DIR_LOCAL, ssh_port=None, pre_opts=pre_opts,
+                           timeout=600)
+
+    con_ssh = ControllerClient.get_active_controller()
+    output = con_ssh.exec_cmd("ls -1  {}/*.patch".format(PATCH_FILE_DIR_LOCAL), fail_ok=False)[1]
 
     patches = {}
+    for line in output.splitlines():
+        patches[os.path.splitext(os.path.basename(line))[0]] = line
 
-    rc, output = server.ssh_conn.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir))
-    assert rc == 0, "Failed to list patch files in directory path {}.".format(patch_dir)
-
-    if output is not None:
-        patch_dest_dir = WRSROOT_HOME + "patches/"
-        active_controller = system_helper.get_active_controller_name()
-        dest_server = lab[active_controller + ' ip']
-        ssh_port = None
-        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-
-        server.ssh_conn.rsync(patch_dir + "/*.patch", dest_server, patch_dest_dir, ssh_port=ssh_port,
-                              pre_opts=pre_opts)
-
-        if conn_ssh is None:
-            conn_ssh = ControllerClient.get_active_controller()
-
-        rc, output = conn_ssh.exec_cmd("ls -1  {}/*.patch".format(patch_dest_dir))
-        assert rc == 0, "Failed to list downloaded patch files in directory path {}.".format(patch_dest_dir)
-
-        if output is not None:
-            for item in output.splitlines():
-                patches[os.path.splitext(os.path.basename(item))[0]] = item
-
-            patch_ids = " ".join(patches.keys())
-            LOG.info("List of patches:\n {}".format(patch_ids))
+    LOG.info("List of patches:\n {}".format(list(patches.keys())))
 
     return patches
 
 
 def check_alarms_():
-
     current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
     affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
-    if len(affecting_alarms) > 0:
-        assert system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=True)[0],\
-            "Alarms present: {}".format(affecting_alarms)
+    if affecting_alarms:
+        system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=False)
 
 
 def run_patch_orchestration_strategy(controller_apply_type='serial', storage_apply_type='serial',
@@ -248,14 +127,7 @@ def run_patch_orchestration_strategy(controller_apply_type='serial', storage_app
 
     patches_ids = patching_helper.get_patches_in_state(expected_states=['Partial-Apply', 'Partial-Remove'])
 
-    # current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
-    # affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
-    # if len(affecting_alarms) > 0:
-    #     assert system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=True)[0],\
-    #         "Alarms present: {}".format(affecting_alarms)
-
     LOG.tc_step("Running patch orchestration with parameters: {}.....".format(locals()))
-
     patching_helper.orchestration_patch_hosts(
             controller_apply_type=controller_apply_type,
             storage_apply_type=storage_apply_type,
@@ -267,7 +139,12 @@ def run_patch_orchestration_strategy(controller_apply_type='serial', storage_app
     LOG.info(" Applying Patch orchestration strategy completed for {} ....".format(patches_ids))
 
 
-@pytest.mark.parametrize('test_patch_type', ['_RR_', '_INSVC_', '_LARGE', '_[A-C]'])
+@mark.parametrize('test_patch_type', [
+    '_RR_',
+    '_INSVC_',
+    '_LARGE',
+    '_[A-C]'
+])
 def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type):
     """
     Verifies apply/remove rr and in-service test patches through patch orchestration
@@ -278,16 +155,14 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     Returns:
 
     """
-    lab = patch_orchestration_setup['lab']
-    downloaded_patches = patch_orchestration_setup['patches']
+    patch_dir, downloaded_patches, controllers, computes, storages = patch_orchestration_setup
     reg_str = '^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
     reg_str = reg_str + test_patch_type + ')'
     reg = re.compile(reg_str)
 
     patchs = [k for k in downloaded_patches.keys() if "FAILURE" not in k and reg.match(k)]
-    if len(patchs) == 0:
-        pytest.skip("No patches with pattern {} availabe in patch-dir {}"
-                    .format(test_patch_type, patch_orchestration_setup['patch-dir']))
+    if not patchs:
+        skip("No patches with pattern {} availabe in patch-dir {}".format(test_patch_type, patch_dir))
 
     patch_files = [downloaded_patches[patch] for patch in patchs]
     patches_to_upload = ' '.join(patch_files)
@@ -301,12 +176,12 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     applied = patching_helper.apply_patches(patch_ids=uploaded_ids, apply_all=True)
     LOG.info(" Patch {} applied .....".format(applied))
 
-    computes = len(lab['compute_nodes']) if 'compute_nodes' in lab.keys() else 0
-    storages = len(lab['storage_nodes']) if 'storage_nodes' in lab.keys() else 0
+    compute_count = len(computes)
+    storage_count = len(storages)
 
-    compute_apply_type = 'parallel' if computes > 2 else 'serial'
-    max_parallel_computes = 4 if computes > 5 else 2
-    storage_apply_type = 'parallel' if storages / 2 >= 2 else 'serial'
+    compute_apply_type = 'parallel' if compute_count > 2 else 'serial'
+    max_parallel_computes = 4 if compute_count > 5 else 2
+    storage_apply_type = 'parallel' if storage_count / 2 >= 2 else 'serial'
 
     LOG.tc_step("Installing patches through orchestration .....")
     check_alarms_()
@@ -334,14 +209,15 @@ def test_rr_insvc_patch_orchestration(patch_orchestration_setup, test_patch_type
     LOG.info(" Testing apply/remove through patch orchestration completed for patches {}.....".format(applied))
 
 
-@pytest.mark.parametrize('storage_apply_type, compute_apply_type, max_parallel_computes, instance_action, test_patch',
-                         [('serial', 'serial', 2, 'migrate', 'INSVC_COMPUTE'),
-                          ('serial', 'serial', 2, 'migrate', 'INSVC_ALLNODES'),
-                          ('serial', 'parallel', 2, 'stop-start', 'RR_COMPUTE'),
-                          ('serial', 'parallel', 2, 'stop-start', 'INSVC_NOVA'),
-                          ('parallel', 'parallel', 2, 'migrate', 'INSVC_ALLNODES'),
-                          ('serial', 'parallel', 4, 'stop-start', 'RR_NOVA'),
-                          ('serial', 'parallel', 4, 'stop-start', 'INSVC_COMPUTE')])
+@mark.parametrize('storage_apply_type, compute_apply_type, max_parallel_computes, instance_action, test_patch', [
+    ('serial', 'serial', 2, 'migrate', 'INSVC_COMPUTE'),
+    ('serial', 'serial', 2, 'migrate', 'INSVC_ALLNODES'),
+    ('serial', 'parallel', 2, 'stop-start', 'RR_COMPUTE'),
+    ('serial', 'parallel', 2, 'stop-start', 'INSVC_NOVA'),
+    ('parallel', 'parallel', 2, 'migrate', 'INSVC_ALLNODES'),
+    ('serial', 'parallel', 4, 'stop-start', 'RR_NOVA'),
+    ('serial', 'parallel', 4, 'stop-start', 'INSVC_COMPUTE')
+])
 def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply_type, compute_apply_type,
                                         max_parallel_computes, instance_action, test_patch):
     """
@@ -358,29 +234,26 @@ def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply
     Returns:
 
     """
+    patch_dir, patches, controllers, computes, storages = patch_orchestration_setup
     personality = test_patch[6:].lower() if 'INSVC' in test_patch else test_patch[3:].lower()
 
     if 'allnodes' not in personality and 'nova' not in personality \
-            and len(system_helper.get_hostnames(personality=personality)) == 0:
-            pytest.skip("No {} hosts in system".format(personality))
+            and not system_helper.get_hostnames(personality=personality):
+            skip("No {} hosts in system".format(personality))
 
     check_health()
 
-    controllers = system_helper.get_hostnames(personality='controller')
-    computes = system_helper.get_hostnames(personality='compute')
-    storages = system_helper.get_hostnames(personality='storage')
     hosts = controllers + computes + storages
     if "parallel" in storage_apply_type and len(storages) < 4:
-        pytest.skip("At least two pairs tier storages required for this test: {}".format(storages))
+        skip("At least two pairs tier storages required for this test: {}".format(storages))
     if "parallel" in compute_apply_type and len(computes) < (max_parallel_computes + 1):
-        pytest.skip("At least {} computes are required for this test: {}".format(1 + max_parallel_computes, hosts))
+        skip("At least {} computes are required for this test: {}".format(1 + max_parallel_computes, hosts))
 
     LOG.info("Launching a VM ... ")
 
     vm_id = vm_helper.boot_vm(cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    patches = patch_orchestration_setup['patches']
     patch = [k for k in patches.keys() if test_patch in k][0]
     patch_file = patches[patch]
     LOG.tc_step("Uploading patch file {} .....".format(patch_file))
@@ -429,7 +302,9 @@ def test_patch_orchestration_apply_type(patch_orchestration_setup, storage_apply
     LOG.info(" Testing apply/remove through patch orchestration completed for patch {}.....".format(applied))
 
 
-@pytest.mark.parametrize('ignored_alarm_texts', ['HOST_LOCK-VM_STOPPED'])
+@mark.parametrize('ignored_alarm_texts', [
+    'HOST_LOCK-VM_STOPPED'
+])
 def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, ignored_alarm_texts):
     """
     This test verifies the patch orchestration operation with presence of alarms that are normally ignored by the
@@ -444,16 +319,14 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
     """
     check_health()
 
-    controllers = system_helper.get_hostnames(personality='controller')
-    computes = system_helper.get_hostnames(personality='compute')
-    storages = system_helper.get_hostnames(personality='storage')
+    patch_dir, patches, controllers, computes, storages = patch_orchestration_setup
     hosts = controllers + computes + storages
     host = None
     host_locked = False
     vm_stopped = False
 
     if 'HOST_LOCK' in ignored_alarm_texts and (len(computes) <= 1 or len(controllers) == 1):
-        pytest.skip("Not enough hosts present in the system")
+        skip("Not enough hosts present in the system")
 
     if 'HOST_LOCK' in ignored_alarm_texts:
         if len(computes) > 0:
@@ -488,7 +361,6 @@ def test_patch_orchestration_with_ignored_alarms(patch_orchestration_setup, igno
         vm_stopped = True
 
     if vm_stopped or host_locked:
-        patches = patch_orchestration_setup['patches']
         patch = [k for k in patches.keys() if 'INSVC_ALLNODES' in k][0]
         patch_file = patches[patch]
         LOG.tc_step("Uploading patch file {} .....".format(patch_file))
@@ -544,12 +416,12 @@ def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
 
     """
     check_health()
+    patch_dir, patches, controllers, computes, storages = patch_orchestration_setup
 
-    # generate VM paused ( 700.002) critical alarm
+    # generate VM paused (700.002) critical alarm
     LOG.tc_step("Generating VM paused ( 700.002) critical alarm .....")
 
     vms = nova_helper.get_all_vms()
-    # vm_id_to_pause = None
     if len(vms) > 0:
         vm_id_to_pause = vms[0]
     else:
@@ -563,7 +435,6 @@ def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
     assert system_helper.wait_for_alarm(alarm_id='700.002')[0], \
         "Timeout waiting for  VM paused alarm to be generated"
 
-    patches = patch_orchestration_setup['patches']
     patch = [k for k in patches.keys() if 'RR_ALLNODES' in k][0]
     patch_file = patches[patch]
     LOG.tc_step("Uploading patch file {} .....".format(patch_file))
@@ -603,8 +474,12 @@ def test_patch_orchestration_with_alarms_negative(patch_orchestration_setup):
     LOG.info(" Testing apply/remove through patch orchestration with  alarm is completed......")
 
 
-@pytest.mark.parametrize('failure_patch_type', ['_RESTART_FAILURE', '_PREINSTALL_FAILURE', '_POSTINSTALL_FAILURE'])
-def test_failure_patches_patch_orchestration(patch_orchestration_setup, failure_patch_type):
+@mark.parametrize('failure_patch_type', [
+    '_RESTART_FAILURE',
+    '_PREINSTALL_FAILURE',
+    '_POSTINSTALL_FAILURE'
+])
+def test_patch_orch_failure_patches(patch_orchestration_setup, failure_patch_type):
     """
     This test verifies the patch orchestration operation with invalid or failure test patches. The patches are
     expected to fail on applying the patch orchestration.
@@ -616,16 +491,14 @@ def test_failure_patches_patch_orchestration(patch_orchestration_setup, failure_
     Returns:
 
     """
-    lab = patch_orchestration_setup['lab']
-    downloaded_patches = patch_orchestration_setup['patches']
+    patch_dir, downloaded_patches, controllers, computes, storages = patch_orchestration_setup
     reg_str = '^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
     reg_str = reg_str + "_INSVC" + failure_patch_type + ')'
     reg = re.compile(reg_str)
 
     patchs = [k for k in downloaded_patches.keys() if reg.match(k)]
-    if len(patchs) == 0:
-        pytest.skip("No patches with pattern {} availabe in patch-dir {}"
-                    .format(failure_patch_type, patch_orchestration_setup['patch-dir']))
+    if not patchs:
+        skip("No patches with pattern {} availabe in patch-dir {}".format(failure_patch_type, patch_dir))
 
     patch_files = [downloaded_patches[patch] for patch in patchs]
     patches_to_upload = ' '.join(patch_files)
@@ -690,9 +563,8 @@ def test_failure_patches_patch_orchestration(patch_orchestration_setup, failure_
     new_states = patching_helper.get_system_patching_states()
     new_host_states = new_states['host_states']
     for host in impacts_hosts.keys():
-
         host_patch_state = new_host_states[host]
-        LOG.info('Host patch install states = {}'.format( host_patch_state))
+        LOG.info('Host patch install states = {}'.format(host_patch_state))
         assert host_patch_state['patch-current'], "Unable to remove patches {}".format(applied)
 
     LOG.tc_step("Deleting test patch {} from repo .....".format(applied))
@@ -702,4 +574,3 @@ def test_failure_patches_patch_orchestration(patch_orchestration_setup, failure_
     assert applied not in all_patches, "Unable to delete patch {} from repo".format(applied)
 
     LOG.info(" Testing apply/remove  invalid patches through patch orchestration is completed......")
-

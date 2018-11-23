@@ -494,7 +494,7 @@ class SSHClient:
         return self.exec_cmd('hostname', get_exit_code=False)[1].splitlines()[0]
 
     def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None,
-              pre_opts=None, timeout=60, fail_ok=False):
+              pre_opts=None, timeout=120, fail_ok=False):
 
         dest_user = dest_user or HostLinuxCreds.get_user()
         dest_password = dest_password or HostLinuxCreds.get_password()

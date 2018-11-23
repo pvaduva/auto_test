@@ -6,9 +6,9 @@ from pytest import fixture, skip
 from consts.auth import Tenant
 from consts.cgcs import EventLogID, HostAvailState
 from consts.filepaths import HeatTemplate
-from consts.proj_vars import ProjVar
+from consts.proj_vars import ProjVar, PatchingVars
 from consts.reasons import SkipSysType
-from keywords import system_helper, host_helper, keystone_helper, security_helper
+from keywords import system_helper, host_helper, keystone_helper, security_helper, common
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -151,3 +151,21 @@ def heat_files_check():
     heat_dir = HeatTemplate.HEAT_DIR
     if not con_ssh.file_exists(heat_dir):
         skip("HEAT templates directory not found. Expected heat dir: {}".format(heat_dir))
+
+
+@fixture(scope='session')
+def set_test_patch_info():
+
+    build_path = ProjVar.get_var('BUILD_PATH')
+    build_server = ProjVar.get_var('BUILD_SERVER')
+    if not build_path or not build_server:
+        skip('Build path or server not found from /etc/build.info')
+
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bs_ssh:
+        patch_dir = common.get_symlink(bs_ssh, file_path='{}/test_patches'.format(build_path))
+
+    if not patch_dir:
+        skip("Test patches are not available for {}:{}".format(build_server, build_path))
+
+    PatchingVars.set_patching_var(patch_dir=patch_dir)
+    return build_server, patch_dir
