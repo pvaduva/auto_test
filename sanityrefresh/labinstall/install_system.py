@@ -2261,13 +2261,13 @@ def main():
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-        cmd = "sudo rm -rf /export/pxeboot/pxelinux.cfg/{}".format(c0_targetId)
+        cmd = "sudo rm -rf /export/pxeboot/pxeboot.cfg/{}".format(c0_targetId)
         if tuxlab_conn.exec_cmd(cmd)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-        cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{}  -t /export/pxeboot/pxelinux.cfg/{}".format(
+        cmd = "/media/iso/{}/pxeboot_setup.sh -u http://128.224.150.110/umalab/{}  -t /export/pxeboot/pxeboot.cfg/{}".format(
             c0_targetId, c0_targetId, c0_targetId)
         if tuxlab_conn.exec_cmd(cmd)[0] != 0:
             msg = "failed to execute: {}".format(cmd)
