@@ -1542,8 +1542,6 @@ def wait_for_webservice_up(hosts, timeout=HostTimeout.WEB_SERVICE_UP, check_inte
 def get_hosts_in_aggregate(aggregate, con_ssh=None, auth_info=Tenant.get('admin')):
     if 'image' in aggregate:
         aggregate = 'local_storage_image_hosts'
-    elif 'lvm' in aggregate:
-        aggregate = 'local_storage_lvm_hosts'
     elif 'remote' in aggregate:
         aggregate = 'remote_storage_hosts'
     else:
@@ -2582,10 +2580,6 @@ def is_host_local_image_backing(host, con_ssh=None):
     return is_host_with_instance_backing(host, storage_type='image', con_ssh=con_ssh)
 
 
-def is_host_local_lvm_backing(host, con_ssh=None):
-    return is_host_with_instance_backing(host, storage_type='lvm', con_ssh=con_ssh)
-
-
 def __parse_total_cpus(output):
     last_line = output.splitlines()[-1]
     print(last_line)
@@ -2930,13 +2924,11 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
         con_ssh:
 
     Returns (dict): {'local_image': <cow hosts list>,
-                    'local_lvm': <lvm hosts list>,
                     'remote': <remote hosts list>
                     }
     """
 
     hosts = {'local_image': get_hosts_in_storage_aggregate('local_image', up_only=False, con_ssh=con_ssh),
-             'local_lvm': get_hosts_in_storage_aggregate('local_lvm', up_only=False, con_ssh=con_ssh),
              'remote': get_hosts_in_storage_aggregate('remote', up_only=False, con_ssh=con_ssh)}
 
     if up_only:
