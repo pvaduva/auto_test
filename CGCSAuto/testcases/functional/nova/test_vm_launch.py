@@ -196,7 +196,7 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
 # TC5080
 # DO NOT RUN - DOES NOT APPLY ANYMORE
-@mark.parametrize('storage', ['local_lvm'])
+# @mark.parametrize('storage', ['local_lvm'])
 def _test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
     """
