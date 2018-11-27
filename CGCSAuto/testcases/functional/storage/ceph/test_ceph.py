@@ -605,8 +605,7 @@ def test_storgroup_semantic_checks():
 
     table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
     capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
-    replication = ast.literal_eval(capabilities)
-    replication_factor = replication['replication']
+    replication_factor = capabilities[1]
     storage_nodes = host_helper.get_hosts(personality='storage')
     LOG.info("The replication factor is: {}".format(replication_factor))
 
