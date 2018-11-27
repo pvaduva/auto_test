@@ -904,14 +904,13 @@ class Telnet:
             log.info("Pressing down key")
             self.write(str.encode(DOWN))
             time.sleep(3)
-            log.info("Pressing down key")
-            self.write(str.encode(DOWN))
             if small_footprint:
                 log.info("Pressing ENTER key")
                 self.write(str.encode(DOWN))
             if lowlat:
                 log.info("Pressing ENTER key")
                 self.write(str.encode(DOWN))
+            time.sleep(3)
             self.write(str.encode("\n"))
 
             # Press enter for Serial Console
