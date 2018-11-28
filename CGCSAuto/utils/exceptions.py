@@ -222,8 +222,12 @@ class DovetailError(TiSError):
 
 
 class MuranoError(TiSError):
-    message = 'Murano error'
+    message = 'Murano error.'
 
 
 class DCError(TiSError):
     message = 'DC error.'
+
+
+class PatchError(TiSError):
+    message = 'Patch error.'

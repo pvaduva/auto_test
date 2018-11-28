@@ -5,8 +5,8 @@ from datetime import datetime
 
 from pytest import mark, fixture, skip
 
-from consts.cgcs import VMStatus, VMMetaData
-from keywords import vm_helper, host_helper, nova_helper, patching_helper
+from consts.cgcs import VMMetaData
+from keywords import vm_helper, nova_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
@@ -160,7 +160,7 @@ class TestPrioritizedVMEvacuation:
         LOG.tc_step('Triggering evacuation on host: {} via action:{}'.format(self.current_host, self.operation))
         action = self.operation.lower()
 
-        self.start_time = patching_helper.lab_time_now()[1]
+        self.start_time = common.lab_time_now()[1]
         vms = [vm_dict['vm_id'] for vm_dict in self.vms_info.values()]
 
         if action in VALID_OPERATIONS:

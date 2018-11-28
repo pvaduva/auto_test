@@ -326,6 +326,7 @@ class RouterStatus:
 
 
 class EventLogID:
+    PATCH_INSTALL_FAIL = '900.002'
     CINDER_IO_CONGEST = '800.101'
     STORAGE_LOR = '800.011'
     STORAGE_POOLQUOTA = '800.003'
@@ -708,3 +709,18 @@ class TrafficControl:
         'storage': (0.99*0.5, 0.99),
         'migration': (0.99*0.3, 0.99),
         'drbd': (0.99*0.8, 0.99)}
+
+
+class PatchState:
+    APPLIED = 'Applied'
+    PARTIAL_APPLY = 'Partial-Apply'
+    PARTIAL_REMOVE = 'Partial-Remove'
+    AVAILABLE = 'Available'
+
+
+class PatchPattern:
+    # msg returned when upload patch(es)
+    UPLOADED = '(.*) is now available'
+    ALREADY_UPLOADED = '(.*) is already imported'
+    VALIDATE_FAILED = 'Patch validation failed for (.*):'
+    FILE_NOT_EXIST = 'File does not exist: (.*)'

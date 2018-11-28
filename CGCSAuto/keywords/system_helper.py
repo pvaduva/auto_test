@@ -2539,17 +2539,14 @@ def get_system_health_query_upgrade(con_ssh=None):
 
 def get_system_health_query(con_ssh=None):
 
-    output = (cli.system('health-query', ssh_client=con_ssh)).splitlines()
-    failed = {}
-    ok = {}
+    output = (cli.system('health-query', ssh_client=con_ssh, fail_ok=False)).splitlines()
+    failed = []
     for line in output:
-        if ":" in line:
-            k, v = line.split(":")
-            if "[OK]" in v.strip():
-                ok[k.strip()] = v.strip()
-            elif "[Fail]" in v.strip():
-                failed[k.strip()] = v.strip()
-    if len(failed) > 0:
+        if "[Fail]" in line:
+            failed_item = line.split(sep=': ')[0]
+            failed.append(failed_item.strip())
+
+    if failed:
         return 1, failed
     else:
         return 0, None

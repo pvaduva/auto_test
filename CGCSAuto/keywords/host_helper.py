@@ -1031,6 +1031,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
         use_telnet
         con_telnet
         auth_info
+        rtn_list
 
     Returns (dict): {field1: value1, field2: value2, ...}
 

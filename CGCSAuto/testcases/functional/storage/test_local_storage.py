@@ -239,7 +239,8 @@ class TestLocalStorage:
 
         return host_pv_sizes
 
-    def test_local_storage_operations(self, setup_local_storage, ensure_two_hypervisors, ensure_multiple_disks):
+    # Obsolete following test due to feature already covered in test_storage_profiles.py.
+    def _test_local_storage_operations(self, setup_local_storage, ensure_two_hypervisors, ensure_multiple_disks):
         """
         Args:
             setup_local_storage: test fixture to configure storage backing for selected host
@@ -335,7 +336,8 @@ class TestLocalStorage:
         assert host_helper.is_host_with_instance_backing(compute_dest, storage_type=local_storage_type), \
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
-    def test_apply_profile_to_smaller_sized_host(self, setup_local_storage, ensure_two_hypervisors):
+    # Obsolete following test due to feature already covered in test_storage_profiles.py.
+    def _test_apply_profile_to_smaller_sized_host(self, setup_local_storage, ensure_two_hypervisors):
         """
 
         Args:

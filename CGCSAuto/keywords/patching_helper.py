@@ -4,12 +4,20 @@ import re
 import time
 from datetime import datetime
 
-from utils import cli, table_parser, exceptions
+from pytest import skip
+
+from utils import exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from consts.cgcs import PatchState, PatchPattern, EventLogID
+from consts.filepaths import WRSROOT_HOME
+from consts.proj_vars import ProjVar, PatchingVars
+from consts.auth import HostLinuxCreds
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, orchestration_helper
+from keywords import host_helper, system_helper, orchestration_helper, common
 
+
+LOG_DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 PATCH_CMDS = {
     'apply': {
@@ -97,8 +105,6 @@ IMPACTS_ON_SYSTEM = {
         'log_record': r'Starting (\w+) node \(version (.*)\)'
     }
 }
-
-LOG_DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
 def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=100, fail_if_not_found=False):
@@ -201,49 +207,48 @@ def check_log_records(action='upload',
         return False, []
 
 
-def repeat(times=5, wait_per_iter=10, expected_code=0, expected_hits=2, stop_codes=(),
-           wait_first=False, show_progress=False, message='', verbose=False):
+def repeat(wait_per_iter=10, expected_code=0, expected_hits=2, stop_codes=(),
+           wait_first=False, message='', verbose=False, default_timeout=60):
 
     def wrapper(func):
 
         @functools.wraps(func)
         def wrapped_func(*args, **kw):
+            timeout = kw.get('timeout', default_timeout)
 
             if wait_first:
                 time.sleep(wait_per_iter)
 
-            cnt = 0
             hit_cnt = 0
+            total_cnt = 0
             output = ''
             previous_code = 0
 
             wait_for_check = wait_per_iter
-            while cnt < times:
-                cnt += 1
+            end_time = time.time() + timeout
+            while time.time() < end_time:
                 code, output = func(*args, **kw)
+                total_cnt += 1
                 if code != previous_code:
-                    LOG.warning('not stabilized yet: previous code: {}, current code:{}'.format(previous_code, code))
-                    if hit_cnt > 0:
-                        # US100411 US93673 US94532
-                        LOG.error('not stabilized after hit expected-code:{} times, ' +
-                                  'previous code: {}, current code:{}'.format(previous_code, code))
+                    LOG.info('Result changed after hitting expected-code {}/{} times. Prev code: {}, '
+                             'current code:{}'.format(hit_cnt, total_cnt, previous_code, code))
                     previous_code = code
 
                 if code == expected_code:
                     hit_cnt += 1
-                    LOG.info('{}: hits {} for expected code {} at iteration {}'.format(message, hit_cnt, code, cnt))
+                    LOG.debug('{}: reached expected code {} {}/{} times'.format(message, code, hit_cnt, total_cnt))
                     if hit_cnt >= expected_hits:
                         return code, output
-                elif code in stop_codes:
-                    LOG.info('{}: hit stop code {} at iteration {}'.format(message, stop_codes, cnt))
-                    return code, output
 
-                if verbose or (show_progress and cnt % 5 == 0):
+                elif code in stop_codes:
+                    LOG.info('{}: hit stop code {} at iteration {}'.format(message, stop_codes, total_cnt))
+
+                if verbose:
                     LOG.info('{}: continue to wait for code {}, found code {} output {}'.format(
                         message, expected_code, code, output))
 
                 if hit_cnt < 1 and wait_for_check < 180:
-                    wait_for_check = wait_per_iter * cnt
+                    wait_for_check = wait_per_iter * total_cnt
 
                 time.sleep(wait_for_check)
             return -1, output
@@ -254,61 +259,78 @@ def repeat(times=5, wait_per_iter=10, expected_code=0, expected_hits=2, stop_cod
 
 
 def run_cmd(cmd, con_ssh=None, **kwargs):
-    LOG.debug('run patch cmd:' + cmd)
-    ssh_client = con_ssh or ControllerClient.get_active_controller()
-    if isinstance(ssh_client, list):
-        LOG.info('ssh_client is a LIST:{}'.format(ssh_client))
-        ssh_client = ssh_client[0]
+    LOG.debug('run cmd:' + cmd)
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
-    return ssh_client.exec_cmd(cmd, **kwargs)
-
-
-def get_track_back(log_file='patching.log', con_ssh=None):
-    command = '\grep -i "traceback" {} 2>/dev/null'.format(os.path.join(BASE_LOG_DIR, log_file))
-    patching_trace_backs = run_cmd(command, con_ssh=con_ssh)[1]
-
-    return [record.strip() for record in patching_trace_backs.splitlines()]
+    return con_ssh.exec_cmd(cmd, **kwargs)
 
 
-def check_error_states(con_ssh=None, pre_states=None, pre_trace_backs=None, no_checking=True, fail_on_error=False):
-    states = get_system_patching_states(con_ssh=con_ssh)
+def get_tracebacks(log_file='patching.log', start_time=None, con_ssh=None, hosts=None):
+    """
 
-    trace_backs = get_track_back(con_ssh=con_ssh)
+    Args:
+        log_file:
+        start_time:
+        con_ssh:
+        hosts (str|list): hosts to check
 
-    if no_checking:
-        return states, trace_backs
-    else:
-        for tb in trace_backs:
-            if tb not in pre_trace_backs:
-                LOG.warning('New traceback found in patching log:{}'.format(tb))
-                assert not fail_on_error, 'New traceback found:{}'.format(tb)
+    Returns (dict): {<hostname>(str): <tracebacks>(list)}
 
-        alarms_tab = states['alarms']
-        new_alarms = [alarm for alarm in alarms_tab if alarm not in pre_states['alarms']]
+    """
+    log_path = os.path.join(BASE_LOG_DIR, log_file)
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
-        if len([alarm for alarm in new_alarms if PATCH_ALARM_ID not in alarm]) > 0:
-            LOG.warning('Unknown non-patching alarms found:\n{}'.format(new_alarms))
+    results = {}
+    output = common.search_log(file_path=log_path, ssh_client=con_ssh, pattern='traceback', start_time=start_time)
+    hostname = con_ssh.get_hostname()
+    records = [record.strip() for record in output.splitlines()]
+    results[hostname] = records
 
-    return states, trace_backs
+    if hosts:
+        if isinstance(hosts, str):
+            hosts = [hosts]
+
+        for host in hosts:
+            if host == hostname:
+                continue
+
+            with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+                host_output = common.search_log(file_path=log_path, ssh_client=con_ssh, pattern='traceback',
+                                                start_time=start_time)
+                results[host] = [record.strip() for record in host_output.splitlines()]
+
+    return results
 
 
-def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=600):
+def check_no_tracebacks(start_time, con_ssh=None, hosts=None, log_file='patching.log'):
+    traces_per_host = get_tracebacks(log_file=log_file, con_ssh=con_ssh, hosts=hosts, start_time=start_time)
+    for host, traces in traces_per_host.items():
+        assert not traces, "traceback logged in {} since {}".format(log_file, start_time)
+
+
+def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=600, parse_output=True):
 
     assert cmd in PATCH_CMDS, 'Unknown patch command:<{}>'.format(cmd)
     LOG.debug('run patch cmd: ' + cmd)
 
-    ssh_client = con_ssh or ControllerClient.get_active_controller()
-    if isinstance(ssh_client, list):
-        LOG.info('ssh_client is a LIST:{}'.format(ssh_client))
-        ssh_client = ssh_client[0]
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     cmd_info = PATCH_CMDS.get(cmd)
     command = 'sw-patch {} {}'.format(cmd_info['cmd'], args)
-    code, output = ssh_client.exec_sudo_cmd(command, fail_ok=fail_ok, expect_timeout=timeout)
+    code, output = con_ssh.exec_sudo_cmd(command, fail_ok=fail_ok, expect_timeout=timeout)
+
+    if not parse_output:
+        return code, output
 
     result_patterns = cmd_info.get('result_pattern')
     if not result_patterns:
-        return code, output, 0
+        return code, output
 
     results = []
     matched = 0
@@ -321,25 +343,7 @@ def run_patch_cmd(cmd, args='', con_ssh=None, fail_ok=False, timeout=600):
                 matched += 1
                 results.append((values.groups(), rtn_code))
 
-    return code, results, matched
-
-
-def is_file(filename, con_ssh=None):
-    if not filename:
-        return False
-
-    code = run_cmd('test -f {}'.format(filename), con_ssh=con_ssh, fail_ok=True)[0]
-
-    return 0 == code
-
-
-def is_dir(dirname, con_ssh=None):
-    if not dirname:
-        return False
-
-    code = run_cmd('test -d {}'.format(dirname), con_ssh=con_ssh, fail_ok=True)[0]
-
-    return 0 == code
+    return code, results
 
 
 def get_patch_id_from_file(patch_file):
@@ -366,7 +370,11 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
     Returns:
         patches uploaded (list)
     """
-    if not patch_dir or not is_dir(dirname=patch_dir, con_ssh=con_ssh):
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
+
+    if not patch_dir or not common.is_dir(dirname=patch_dir, ssh_client=con_ssh):
         LOG.info('Not a directory:{}'.format(patch_dir))
         return -2, []
 
@@ -377,7 +385,7 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
 
     assert check_patches_version(patch_ids_in_dir, con_ssh=con_ssh), \
         'Mismatched versions between patch files and system image load'
-    patch_states = get_patches_states(con_ssh=con_ssh)[1]
+    patch_states = get_patches_states(con_ssh=con_ssh)
 
     patches_to_upload = list(set(patch_ids_in_dir) - set(patch_states.keys()))
 
@@ -395,7 +403,7 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
         LOG.info("All patches in dir already in system. Patches in Available state: {}".format(patches_uploaded))
         return -1, patches_uploaded
     # time_before = datetime.now()
-    time_before = lab_time_now()[0]
+    time_before = common.lab_time_now(con_ssh=con_ssh)[0]
 
     run_patch_cmd('upload-dir', args=patch_dir, con_ssh=con_ssh)
 
@@ -416,41 +424,50 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
     return 0, patches_to_upload + patches_uploaded
 
 
-def wait_for_hosts_states(expected_states=None, con_ssh=None):
-    if not expected_states:
-        return 0, None
+def wait_for_hosts_patch_states(expected_states, con_ssh=None, timeout=120, fail_ok=False):
 
     for host, expected_state in expected_states.items():
-        code, state = wait_host_states(host, expected_states=expected_state, con_ssh=con_ssh)
-        assert 0 == code, \
-            'Host:{} failed to reach state: "{}"\nactual states: "{}"'.format(host, expected_state, state)
-        LOG.info('OK, host: {} reach state: {} as expected: {}'.format(host, state, expected_state))
+        code, state = wait_for_host_patch_states(host, expected_states=expected_state, con_ssh=con_ssh, timeout=timeout)
 
-    return 0, expected_states
+        if code != 0:
+            msg = 'Host:{} failed to reach state: {}; actual state: {}'.format(host, expected_state, state)
+            if fail_ok:
+                LOG.info(msg)
+                return False
+            else:
+                raise exceptions.PatchError(msg)
+
+        LOG.info('OK, host:{} reached state: {} as expected'.format(host, state))
+
+    return True
 
 
 def delete_patches(patch_ids=None, con_ssh=None):
     """
     Deletes supplied patches from software system
 
-        Args:
-            patch_ids (list)
-            con_ssh
+    Args:
+        patch_ids (list)
+        con_ssh
 
-        Returns:
-            delete command return string
+    Returns:
+        delete command return string
     """
-    LOG.info('Deleting patches: "{}"'.format(patch_ids))
     if not patch_ids:
-        return []
+        LOG.info("No patches to delete. Do nothing.")
+        return -1, []
 
-    time_before = lab_time_now()[0]
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
+    time_before = common.lab_time_now(con_ssh=con_ssh)[0]
+    LOG.info('Deleting patches: "{}"'.format(patch_ids))
     args = ' '.join(patch_ids)
-    code, patch_info, _ = run_patch_cmd('delete', args=args, con_ssh=con_ssh)
+    code, patch_info = run_patch_cmd('delete', args=args, con_ssh=con_ssh)
     assert 0 == code, 'Failed to delete patch(es):{}'.format(args)
 
-    assert check_if_patches_exist(patch_ids=patch_ids, expecting_exist=False, con_ssh=con_ssh)
+    check_if_patches_exist(patch_ids=patch_ids, expecting_exist=False, con_ssh=con_ssh)
 
     found, patches = check_log_records(action='delete',
                                        start_time=time_before,
@@ -460,157 +477,116 @@ def delete_patches(patch_ids=None, con_ssh=None):
 
     LOG.info('OK, deleted patches: "{}"'.format(patch_ids))
 
-    return code, patch_info
+    return code, patch_ids
 
 
-def delete_patch(patch_id, con_ssh=None):
-    """
-    Deletes supplied patch from software system
-
-        Args:
-            patch_id (string)
-            con_ssh
-
-        Returns:
-            delete command return string
-    """
-    LOG.info('deleting patch:{}'.format(patch_id))
-    code, deleted_ids = delete_patches([patch_id], con_ssh=con_ssh)
-
-    return code, deleted_ids[0]
-
-
-def upload_patch_file(patch_file=None, con_ssh=None, fail_if_existing=False, attempt_to_delete=False):
+def upload_patches(patch_files, check_first=True, fail_ok=False, check_available=True, con_ssh=None):
     """
     Uploads single patch file
+    Args:
+        patch_files (str|list|tuple)
+        check_first (bool)
+        fail_ok
+        check_available (bool): raise if check failed, even if fail_ok=True.
+        con_ssh
 
-        Args:
-            patch_file (file)
-            con_ssh
-            fail_if_existing (bool) - fail if already exists on system
-            attempt_to_delete (bool) - attempt to delete patch if it exists already
+    Returns (tuple):    return code 2 and 3 only return if fail_ok=True
+        (-1, <uploaded_patches>, <already_uploaded>)   # some are already uploaded
+        (0, <uploaded_patches>, [])    # uploaded successfully
+        (1, <uploaded_patches>, <patches_failed_validation>)    # some patches failed validation
+        (2  <uploaded_patches>, <non-exist files>)  # some patch files don't exist. check_first=False
 
-        Returns:
-            uploaded patch_id
     """
-    if not patch_file:
-        return ''
+    if isinstance(patch_files, str):
+        patch_files = patch_files.split(sep=' ')
 
-    code, patch_info, _ = run_patch_cmd('upload', args=patch_file, con_ssh=con_ssh)
-    assert code in [0, 1], 'Failed to upload patch:{}, code:{}'.format(patch_file, code)
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
-    if 0 == code:
-        LOG.info('OK, patch file: "{}" uploaded'.format(patch_file))
-        return patch_info[0][0][0]
+    if check_first:
+        for file_ in patch_files:
+            if not common.is_file(file_, con_ssh):
+                raise ValueError("{} is not a file".format(file_))
 
-    assert not fail_if_existing,\
-        'Patch:{} is already installed'.format(patch_file)
+    LOG.info("sw-patch upload files: {}".format(patch_files))
+    code, output = run_patch_cmd('upload', args=' '.join(patch_files), con_ssh=con_ssh, parse_output=False)
 
-    patch_id = patch_info[0][0][0]
+    res_dict = {
+        'uploaded': (re.compile(PatchPattern.UPLOADED), []),
+        'already_uploaded': (re.compile(PatchPattern.ALREADY_UPLOADED), []),
+        'failed': (re.compile(PatchPattern.VALIDATE_FAILED), []),
+        'no_file': (re.compile(PatchPattern.FILE_NOT_EXIST), [])
 
-    if 1 == code:
-        LOG.info('Already exiting, patch: "{}"'.format(patch_id))
+    }
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
 
-    if attempt_to_delete:
-        delete_patch(patch_info[0][0][0], con_ssh=con_ssh)
+        for scenario in res_dict:
+            pattern, patch_ids_ = res_dict[scenario]
+            found = pattern.findall(line)
+            if found:
+                patch_ids_.append(found[0].strip())
+                break
 
-        code, patch_info, _ = run_patch_cmd('upload', args=patch_file, con_ssh=con_ssh)
-        assert 0 == code, 'Failed to upload patch:{}, code:{}, after deleting existing one'.format(patch_file, code)
+    uploaded = res_dict['uploaded'][1]
+    already_uploaded = res_dict['already_uploaded'][1]
+    failed_validate = res_dict['failed'][1]
+    files_not_exist = res_dict['no_file'][1]
+    total_uploaded = uploaded + already_uploaded
 
-        assert 1 == len(patch_info), 'Failed to upload files:{}, patch-ids loaded:{}'.format(patch_file, patch_info)
+    processed_patches = total_uploaded + failed_validate + files_not_exist
+    if len(processed_patches) != len(patch_files):
+        raise exceptions.PatchError("Patch files requested to upload: {}. Processed patches: {}".
+                                    format(patch_files, processed_patches))
 
-        LOG.info('OK, patch file:{} is uploaded, patch-id:{}'.format(patch_file, patch_id))
+    if code > 0:
+        if failed_validate:
+            msg = "Patch file validation failed: {}. ".format(failed_validate)
+            rtn_code = 1
+            failed_patches = failed_validate
+        elif files_not_exist:
+            msg = "Patch file does not exist failed: {}. ".format(files_not_exist)
+            rtn_code = 2
+            failed_patches = files_not_exist
+        else:
+            raise NotImplementedError("Scenario not handled, please add the new failure case.")
 
-    return patch_id
+        if fail_ok:
+            LOG.info(msg)
+            return rtn_code, total_uploaded, failed_patches
+        else:
+            raise exceptions.PatchError(msg)
 
+    if check_available:
+        LOG.info("Check all uploaded or already imported patches are Available: {}".format(total_uploaded))
+        post_upload_states = get_patches_states(patch_ids=total_uploaded)
+        for patch, state in post_upload_states.items():
+            state = state['state']
+            if state != PatchState.AVAILABLE:
+                raise exceptions.PatchError("Patch state is {} instead of Available: {}".format(state, patch))
 
-def upload_patch_files(files=None, con_ssh=None):
-    """
-    Uploads multiple patch files
-
-        Args:
-            files (list)
-            con_ssh
-
-        Returns:
-            uploaded patch_ids (tuple)
-    """
-    files = files if isinstance(files, list) else []
-
-    valid_files = []
-    expected_patch_ids = []
-    existing_patch_ids = get_all_patch_ids(con_ssh=con_ssh)
-    expected_to_fail = []
-    for file in files:
-        if is_file(file, con_ssh=con_ssh):
-            patch_id = get_patch_id_from_file(file)
-            if not patch_id:
-                LOG.warning('Failed to get PATCH ID from PATCH file:{}'.format(file))
-
-            else:
-                valid_files.append((patch_id, file))
-
-                if patch_id in existing_patch_ids:
-                    expected_to_fail.append(patch_id)
-                    LOG.warning('Patch: "{}" already existing, upload again will be rejected'.format(patch_id))
-
-                else:
-                    expected_patch_ids.append(patch_id)
-
-    if not valid_files:
-        LOG.warning('No valid patch files could be uploaded: "{}"'.format(files))
-        return None
-
-    # time_before = datetime.now()
-    time_before = lab_time_now()[0]
-
-    return_ids = []
-    for patch_id, patch_file in valid_files:
-        # Negative testcases included: already existing PATCHes are re-uploaded again
-        uploaded_id = upload_patch_file(patch_file=patch_file,
-                                        fail_if_existing=(patch_id not in expected_to_fail),
-                                        con_ssh=con_ssh)
-        assert patch_id == uploaded_id, 'Failed to upload patch file: "{}"'.format(patch_file)
-        return_ids.append(uploaded_id)
-
-    if len(expected_patch_ids) > 0:
-        if len(expected_to_fail) > 0:
-            LOG.warning('Some patches files: "{}" already in system'.format(expected_to_fail))
-
-    else:
-        if len(expected_to_fail) > 0:
-            LOG.warning('All patches files: "{}" already in system'.format(expected_to_fail))
-        return None
-
-    code, expected_patches = check_patches_uploaded(expected_patch_ids, con_ssh=con_ssh)
-
-    assert 0 == code, \
-        'Failed to confirm all patches were actually uploaded, checked patch ids:{}'.format(expected_patch_ids)
-
-    uploaded, patches = check_log_records(action='upload',
-                                          expected_patches=expected_patch_ids,
-                                          start_time=time_before,
-                                          con_ssh=con_ssh)
-    assert uploaded, 'Log records for upload patch files not found:{}, output: {}'.format(files, patches)
-
-    return tuple(return_ids)
+    rtn_code = -1 if already_uploaded else 0
+    return rtn_code, total_uploaded, already_uploaded
 
 
 def get_expected_patch_states(patch_ids, pre_patches_states, action='upload', con_ssh=None):
     """
     Returns the expected patch state based on the action
 
-        Args:
-            action (str)
-            patch_ids (list|str)
-            pre_patches_states (dict|None)
-            con_ssh
+    Args:
+        action (str)
+        patch_ids (list|str)
+        pre_patches_states (dict|None)
+        con_ssh
 
-        Returns:
-            expected_states (dict)
+    Returns:
+        expected_states (dict)
     """
     # heuristic codes trying to figure out the next state of patches
-    if not patch_ids or not pre_patches_states:
+    if not patch_ids or pre_patches_states is None:
         return {}
 
     if isinstance(patch_ids, str):
@@ -619,58 +595,50 @@ def get_expected_patch_states(patch_ids, pre_patches_states, action='upload', co
     action = action.upper()
     expected_states = {}
 
-    if action == 'UPLOAD':
-        expected_states = {patch_id: 'Available' for patch_id in patch_ids if patch_id not in pre_patches_states}
-        expected_states.update({patch_id: pre_patches_states[patch_id]['state'] for patch_id in pre_patches_states})
-        return expected_states
-
     default_action_states = {
-        'APPLY': 'Partial-Apply',
-        'REMOVE': 'Partial-Remove',
-        'HOST_INSTALL': 'Applied',
+        'APPLY': PatchState.PARTIAL_APPLY,
+        'REMOVE': PatchState.PARTIAL_REMOVE,
+        'HOST_INSTALL': PatchState.APPLIED,
     }
-    is_storage_lab = len(system_helper.get_storage_nodes(con_ssh=con_ssh)) > 0
+    is_storage_lab = system_helper.is_storage_system(con_ssh=con_ssh)
 
-    for patch_id in pre_patches_states:
-        if 'FAILURE' in patch_id:
+    for patch_id in patch_ids:
+        if action == 'UPLOAD':
+            expected_states[patch_id] = pre_patches_states[patch_id]['state'] if patch_id in pre_patches_states \
+                else PatchState.AVAILABLE
+        elif 'FAILURE' in patch_id and 'PREINSTALL_FAILURE' not in patch_id:
+            # Use default
             pass
-
-        if patch_id not in patch_ids:
-            continue
-
         elif 'STORAGE' in patch_id and not is_storage_lab:
             if action == 'APPLY':
-                # final state
-                expected_states[patch_id] = 'Applied'
-
+                expected_states[patch_id] = PatchState.APPLIED
             elif action == 'REMOVE':
-                # final state
-                expected_states[patch_id] = 'Available'
+                expected_states[patch_id] = PatchState.AVAILABLE
         else:
             previous_state = pre_patches_states[patch_id]['state']
             if action == 'APPLY':
-                if previous_state == 'Available':
-                    expected_states[patch_id] = 'Partial-Apply'
-                elif previous_state == 'Partial-Remove':
-                    expected_states[patch_id] = 'Available'
+                if previous_state == PatchState.AVAILABLE:
+                    expected_states[patch_id] = PatchState.PARTIAL_APPLY
+                elif previous_state == PatchState.PARTIAL_REMOVE:
+                    expected_states[patch_id] = PatchState.AVAILABLE
                 else:
                     LOG.warning('Cannot "{}" patch: "{}" while it is now in: "{}" states'.format(
                         action, patch_id, previous_state))
 
             elif action == 'REMOVE':
-                if previous_state == 'Applied':
-                    expected_states[patch_id] = 'Partial-Remove'
-                elif previous_state == 'Partial-Apply':
-                    expected_states[patch_id] = 'Available'
+                if previous_state == PatchState.APPLIED:
+                    expected_states[patch_id] = PatchState.PARTIAL_REMOVE
+                elif previous_state == PatchState.PARTIAL_APPLY:
+                    expected_states[patch_id] = PatchState.AVAILABLE
                 else:
                     LOG.warning('Cannot "{}" patch: "{}" while it is now in: "{}" states'.format(
                         action, patch_id, previous_state))
 
             elif action == 'HOST_INSTALL':
-                if previous_state == 'Partial-Apply':
-                    expected_states[patch_id] = 'Applied'
-                elif previous_state == 'Partial-Remove':
-                    expected_states[patch_id] = 'Available'
+                if previous_state == PatchState.PARTIAL_APPLY:
+                    expected_states[patch_id] = PatchState.APPLIED
+                elif previous_state == PatchState.PARTIAL_REMOVE:
+                    expected_states[patch_id] = PatchState.AVAILABLE
                 else:
                     LOG.warning('Cannot "{}" patch: "{}" while it is now in: "{}" states'.format(
                         action, patch_id, previous_state))
@@ -679,101 +647,88 @@ def get_expected_patch_states(patch_ids, pre_patches_states, action='upload', co
             if action in default_action_states:
                 expected_states[patch_id] = default_action_states[action]
             else:
-                LOG.info('Unknown patch-action: "{}"'.format(action))
+                raise ValueError('Unknown patch-action: "{}"'.format(action))
 
     return expected_states
 
 
-def get_expected_hosts_states(action, patch_ids=None, pre_hosts_states=None, pre_patches_states=None, con_ssh=None):
+def get_expected_hosts_states(action, patch_ids, pre_hosts_states, pre_patches_states, con_ssh=None):
     """
     Returns the expected host state based on the action
+    Args:
+        action (string)
+        patch_ids (list)
+        pre_hosts_states
+        pre_patches_states
+        con_ssh
 
-        Args:
-            action (string)
-            patch_ids (list)
-            pre_hosts_states
-            pre_patches_states
-            con_ssh
-
-        Returns:
-            expected_states (dict)
+    Returns:
+        expected_states (dict)
     """
-    if not action or not patch_ids or not pre_hosts_states or not pre_patches_states:
-        LOG.warning('No action is specified')
-        return 0, {}
 
     action = action.upper()
-    if action == 'UPLOAD':
-        # no impact on host states
-        return 0, {}
-    elif action == 'DELETE':
-        # no impact on host states
-        return 0, {}
-    elif action == 'APPLY' or action == 'REMOVE':
-        impacted_host_types = []
+    if action in ('APPLY', 'REMOVE'):
         reboot_required = False
 
+        impacted_host_types = []
         for patch_id in patch_ids:
-            if '_RR_' in patch_id:
+            if '_RR_' in patch_id or '_LARGE' in patch_id:
                 reboot_required = True
 
             if '_NOVA' in patch_id:
-                impacted_host_types.append('COMPUTE')
-                impacted_host_types.append('CONTROLLER')
+                impacted_host_types += ['COMPUTE', 'CONTROLLER']
+            elif '_CONTROLLER' in patch_id:
+                impacted_host_types += ['CONTROLLER']
+            elif '_COMPUTE' in patch_id:
+                impacted_host_types += ['COMPUTE']
+            elif '_STORAGE' in patch_id:
+                impacted_host_types += ['STORAGE']
+            elif '_ALLNODES' in patch_id:
+                impacted_host_types += ['COMPUTE', 'CONTROLLER', 'STORAGE']
+            else:
+                impacted_host_types += ['COMPUTE', 'CONTROLLER', 'STORAGE']
 
-            if '_CONTROLLER' in patch_id:
-                impacted_host_types.append('CONTROLLER')
-
-            if '_COMPUTE' in patch_id:
-                impacted_host_types.append('COMPUTE')
-
-            if '_STORAGE' in patch_id:
-                impacted_host_types.append('STORAGE')
-
-            if '_ALLNODES' in patch_id:
-                impacted_host_types.append('COMPUTE')
-                impacted_host_types.append('CONTROLLER')
-                impacted_host_types.append('STORAGE')
-
-            if '_LARGE' in patch_id:
-                reboot_required = True
-
+        impacted_host_types = list(set(impacted_host_types))
         controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
         hosts_per_types = {'CONTROLLER': controllers, 'COMPUTE': computes, 'STORAGE': storages}
 
         expected_states = {}
         for host in pre_hosts_states:
-            for host_type, hosts in hosts_per_types.items():
+            for host_type, hosts_ in hosts_per_types.items():
+                if host in hosts_:
+                    if host_type in impacted_host_types:
+                        patch_current = 'No'
 
-                if host in hosts and host_type in impacted_host_types:
-                    patch_current = 'No'
+                        if pre_hosts_states[host]['patch-current'] == 'No':
+                            if action == 'APPLY' and all(state['state'] == PatchState.PARTIAL_REMOVE
+                                                         for state in pre_patches_states.values):
+                                patch_current = 'Yes'
+                            elif action == 'REMOVE' and all(state['state'] == PatchState.PARTIAL_APPLY
+                                                            for state in pre_patches_states.values):
+                                patch_current = 'Yes'
 
-                    if pre_hosts_states[host]['patch-current'] == 'No':
-                        if action == 'APPLY' \
-                                and all(state['state'] == 'Partial-Remove' for state in pre_patches_states.values):
-                            patch_current = 'Yes'
-                        elif action == 'REMOVE' \
-                                and all(state['state'] == 'Partial-Apply' for state in pre_patches_states.values):
-                            patch_current = 'Yes'
+                        expected_states[host] = {
+                            'rr': reboot_required,
+                            'patch-current': patch_current
+                        }
+                    else:
+                        expected_states[host] = pre_hosts_states[host]
 
-                    expected_states[host] = {
-                        'rr': reboot_required,
-                        'patch-current': patch_current
-                    }
+                    # Break host type loop if host found, since same host can only exist in one host_type
+                    break
+
         LOG.info('expected hosts states:\n{}'.format(expected_states))
 
-        return 0, expected_states
+        return expected_states
 
-    elif action == 'HOST-INSTALL' or action == 'HOST-INSTALL-ASYNC':
-        return 0, {}
-
-    elif action == 'REMOVE':
-        return 0, {}
-
-    return 0, {}
+    else:
+        LOG.info("Action {} has no impact on host patch state".format(action))
+        # action in ('UPLOAD', 'DELETE') has no impact on host states
+        # 'HOST-INSTALL', 'HOST-INSTALL-ASYNC' are not handled
+        return {}
 
 
-def apply_patches(con_ssh=None, patch_ids=None, apply_all=False, fail_if_patched=True, fail_ok=False):
+def apply_patches(patch_ids=None, apply_all=False, fail_ok=False, con_ssh=None, wait_for_host_state=True):
     """
     Applies supplied patch_ids to the system
 
@@ -781,12 +736,21 @@ def apply_patches(con_ssh=None, patch_ids=None, apply_all=False, fail_if_patched
             con_ssh
             patch_ids (list|str)
             apply_all (bool)
-            fail_if_patched (bool)
             fail_ok (bool)
+            wait_for_host_state
 
-        Returns:
-            applied_patch_ids (list)
+        Returns (tuple):
+            (-1, <applied_patch_ids>)   Patch_ids are specified but all patches already applied
+            (0, <applied_patch_ids>)    Patches applied successfully
+            (1, <stderr>)   Given patch does not exist. fail_ok=True
+            (2, [])    --all is used, but no available patch to apply. fail_ok=True
     """
+    if not patch_ids and not apply_all:
+        raise ValueError("Either patch_ids or apply_all has to be specified")
+
+    if isinstance(patch_ids, str):
+        patch_ids = [patch_ids]
+
     if patch_ids is None or apply_all:
         args = ' --all'
     elif any(patch_id.upper() == 'ALL' for patch_id in patch_ids):
@@ -794,64 +758,75 @@ def apply_patches(con_ssh=None, patch_ids=None, apply_all=False, fail_if_patched
     else:
         args = ' '.join(patch_ids)
 
-    pre_patches_states = get_patches_states(con_ssh=con_ssh)[1]
+    pre_patches_states = get_patches_states(con_ssh=con_ssh)
+    pre_hosts_states = get_hosts_patch_states(con_ssh=con_ssh)
 
-    pre_hosts_states = get_hosts_states(con_ssh=con_ssh)[1]
+    LOG.info("Apply patches: {}".format(args))
+    code, output = run_patch_cmd('apply', args=args, con_ssh=con_ssh, fail_ok=fail_ok, parse_output=False)
+    if code > 0:
+        return 1, output
 
-    code, patch_info = run_patch_cmd('apply', args=args, con_ssh=con_ssh, fail_ok=fail_ok)[0:2]
+    # process return code 0 scenarios
 
-    applied_patch_ids = []
-    for ids, rtn_code in patch_info:
-        applied_patch_ids += ids
-
-        if 0 == rtn_code:
-            LOG.info('-OK patch:{} is applied'.format(ids[0]))
-
-        elif 1 == rtn_code:
-            if not fail_if_patched:
-                LOG.warning('-patch:{} already applied'.format(ids[0]))
-            else:
-                assert 1 == rtn_code, '-patch:{} already applied'.format(ids[0])
-
-        elif 2 == rtn_code:
-            LOG.warning('-ALL patches already applied')
-
+    # --all is used but no available patch
+    if 'no available patches to be applied' in output:
+        msg = 'No available patch to apply.'
+        if fail_ok:
+            LOG.info(msg)
+            return 2, []
         else:
-            LOG.warning('-patch:{} not applied for unknown reason'.format(ids or ''))
+            raise exceptions.PatchError(msg)
 
-    if 0 == len(applied_patch_ids):
-        LOG.warning('Patch(es) not applied. Dependencies may be missing or patch(es) already applied.')
-        return applied_patch_ids
+    # patch_ids specified, patch either applied successfully or already applied
+    rtn_code = 0
+    applied_patch_ids = []
+    already_applied = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
 
-    elif set(applied_patch_ids) != set(patch_ids):
-        LOG.warning('Some patch(es) failed to apply, applied patches:{}'.format(applied_patch_ids))
-        LOG.warning('-attempted to apply patches:{}'.format(patch_ids))
+        patch, msg = str(line).split(sep=' ', maxsplit=1)
+        applied_patch_ids.append(patch)
+        if 'now in the repo' in msg:
+            continue
+        elif 'already in the repo' in msg:
+            already_applied.append(patch)
+        else:
+            raise NotImplementedError("patch apply output: '{}' needs to be added to apply_patches")
+
+    if '--all' not in args and set(applied_patch_ids) != set(patch_ids):
+        raise exceptions.PatchError("Patches requested to apply: {}. Applied: {}".format(patch_ids, applied_patch_ids))
+
+    if already_applied:
+        LOG.info('Patch {} already applied'.format(already_applied))
+        rtn_code = -1
 
     expected_states = get_expected_patch_states(action='APPLY',
                                                 patch_ids=applied_patch_ids,
                                                 pre_patches_states=pre_patches_states,
                                                 con_ssh=con_ssh)
-    for pid in applied_patch_ids:
-        expected_state = expected_states[pid]
-        code = wait_for_patch_state(pid, expected_state, con_ssh=con_ssh)
-        assert 0 == code, \
-            'Patch:{} failed to reach state: {} after apply'.format(pid, expected_state)
 
-    code, expected_hosts_states = get_expected_hosts_states('APPLY',
-                                                            patch_ids=applied_patch_ids,
-                                                            pre_hosts_states=pre_hosts_states,
-                                                            pre_patches_states=pre_patches_states,
-                                                            con_ssh=con_ssh)
+    LOG.info("Wait for patch states after apply patch {}: {}".format(applied_patch_ids, expected_states))
+    for patch_id in applied_patch_ids:
+        expected_state = expected_states[patch_id]
+        code, output = wait_for_patch_states(patch_id, expected_state, con_ssh=con_ssh)
+        if not 0 == code:
+            raise exceptions.PatchError('Patch:{} did not reach state: {} after apply. Actual state: {}'.
+                                        format(patch_id, expected_state, output[patch_id]))
 
-    assert 0 == code, 'Failed to get expected states of hosts'
-    LOG.info('Expected states of hosts: "{}"'.format(expected_hosts_states))
+    if wait_for_host_state:
+        expected_hosts_states = get_expected_hosts_states('APPLY',
+                                                          patch_ids=applied_patch_ids,
+                                                          pre_hosts_states=pre_hosts_states,
+                                                          pre_patches_states=pre_patches_states,
+                                                          con_ssh=con_ssh)
 
-    code, output = wait_for_hosts_states(expected_states=expected_hosts_states, con_ssh=con_ssh)
-    assert 0 == code, 'Failed to get expected states of hosts'
+        LOG.info("Wait for host patch states after apply patch: {}".format(expected_hosts_states))
+        wait_for_hosts_patch_states(expected_states=expected_hosts_states, con_ssh=con_ssh, fail_ok=False)
 
-    LOG.info('OK, applied patches: "{}" and hosts in expected states'.format(patch_ids))
-
-    return applied_patch_ids
+    LOG.info('OK, patches {} applied.'.format(applied_patch_ids))
+    return rtn_code, applied_patch_ids
 
 
 def _patch_parser(output, delimits=None):
@@ -884,18 +859,17 @@ def _query_output_parser(output):
     return results
 
 
-def get_patches_states(con_ssh=None, fail_ok=False):
+def get_patches_states(patch_ids=None, con_ssh=None):
     """
     Returns the states of all patches in the system
+    Args:
+        patch_ids (list|tuple|str)
+        con_ssh
 
-        Args:
-            con_ssh
-            fail_ok (bool)
-
-        Returns:
-            (code, output) from "sw-patch query"
+    Returns:
+        (code, output) from "sw-patch query"
     """
-    code, output = run_patch_cmd('query', con_ssh=con_ssh, fail_ok=fail_ok)[0:2]
+    output = run_patch_cmd('query', con_ssh=con_ssh, fail_ok=False)[1]
 
     patch_states = _query_output_parser(output)
 
@@ -903,29 +877,34 @@ def get_patches_states(con_ssh=None, fail_ok=False):
     for patch_id, rr, release, state in patch_states:
         patch_id_states[patch_id] = {'rr': rr == 'Y', 'release': release, 'state': state}
 
-    return code, patch_id_states
+    if patch_ids:
+        if isinstance(patch_ids, str):
+            patch_ids = (patch_ids, )
+        patch_id_states = {patch: states for patch, states in patch_id_states.items() if patch in patch_ids}
+
+    return patch_id_states
 
 
 def check_if_patches_exist(patch_ids=None, expecting_exist=True, con_ssh=None):
     """
     Checks if patch exist in system
 
-        Args:
-            patch_ids (list)
-            expecting_exist(bool)
-            con_ssh
+    Args:
+        patch_ids (list)
+        expecting_exist(bool)
+        con_ssh
 
-        Returns:
-            bool
+    Returns:
+        bool
     """
     if not patch_ids:
-        return True
+        LOG.warning("No patch id provided.")
+        return
 
-    code, patch_id_states = get_patches_states(con_ssh=con_ssh, fail_ok=False)
+    patch_id_states = get_patches_states(con_ssh=con_ssh)
 
-    if not patch_id_states:
-        if expecting_exist:
-            assert 'No patches in the system, while {} are expected'.format(patch_ids)
+    if expecting_exist and not patch_ids:
+        assert False, 'No patches in the system, while {} are expected'.format(patch_ids)
 
     for patch_id in patch_ids:
         if expecting_exist:
@@ -935,69 +914,33 @@ def check_if_patches_exist(patch_ids=None, expecting_exist=True, con_ssh=None):
             assert patch_id not in patch_id_states, \
                 'Patch: {} EXISTING, it should be deleted/not-uploaded'.format(patch_id)
 
-    return True
-
 
 def get_patches_in_state(expected_states=None, con_ssh=None):
     """
     Returns the patch ids that are in specified states
 
         Args:
-            expected_states (list|str)
+            expected_states (list|str|tuple)
             con_ssh
 
         Returns:
             patch_ids (list)
     """
-    states = get_patches_states(con_ssh=con_ssh, fail_ok=False)[1]
+    patches_states = get_patches_states(con_ssh=con_ssh)
 
     if not expected_states:
-        return list(states.keys())
-    elif isinstance(expected_states, str):
-        expected_states = [expected_states]
+        return tuple(patches_states.keys())
 
-    return [patch for patch in states if states[patch]['state'] in expected_states]
+    if isinstance(expected_states, str):
+        expected_states = (expected_states,)
 
-
-def get_patch_states(patch_ids, con_ssh=None, not_existing_ok=True, fail_ok=False):
-    """
-    Returns the expected host state based on the action
-
-        Args:
-            patch_ids (list)
-            con_ssh
-            not_existing_ok (bool)
-            fail_ok (bool)
-
-        Returns:
-            patch_id: states (dict)
-    """
-    states = get_patches_states(con_ssh=con_ssh, fail_ok=fail_ok)[1]
-
-    if not not_existing_ok:
-        assert set(patch_ids).issubset(states.keys()), 'Some patches not found'
-
-    return {patch_id: states[patch_id] for patch_id in patch_ids if patch_id in states}
-
-
-def get_patch_state(patch_id, con_ssh=None):
-    """
-    Returns the states from a specified patch
-
-        Args:
-            patch_id (str)
-            con_ssh
-
-        Returns:
-            patch_state (list)
-    """
-    patch_id_states = get_patches_states(con_ssh=con_ssh)[1]
-
-    return patch_id_states[patch_id]
+    patches = [patch for patch in patches_states if patches_states[patch]['state'] in expected_states]
+    LOG.info("Patches in states {}: {}".format(expected_states, patches))
+    return patches
 
 
 def __get_patch_ids(con_ssh=None, expected_states=None):
-    _, states = get_patches_states(con_ssh=con_ssh)
+    states = get_patches_states(con_ssh=con_ssh)
 
     if expected_states is None:
         return list(states.keys())
@@ -1006,98 +949,34 @@ def __get_patch_ids(con_ssh=None, expected_states=None):
 
 
 def get_partial_applied(con_ssh=None):
-    return __get_patch_ids(con_ssh=con_ssh, expected_states=('Partial-Apply', ))
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=(PatchState.PARTIAL_APPLY, ))
 
 
 def get_partial_removed(con_ssh=None):
-    return __get_patch_ids(con_ssh=con_ssh, expected_states=('Partial-Remove', ))
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=(PatchState.PARTIAL_REMOVE, ))
 
 
 def get_available_patches(con_ssh=None):
-    return __get_patch_ids(con_ssh=con_ssh, expected_states=('Available', ))
+    return __get_patch_ids(con_ssh=con_ssh, expected_states=(PatchState.AVAILABLE, ))
 
 
 def get_all_patch_ids(con_ssh=None, expected_states=None):
     return __get_patch_ids(con_ssh=con_ssh, expected_states=expected_states)
 
 
-def wait_for_patch_state(patch_id, expected='Available', timeout=60, con_ssh=None):
-    """
-    Waits for a patch to reach expected state
-
-        Args:
-            patch_id (str)
-            expected (str) - State to wait for
-            timeout (int)
-            con_ssh
-
-        Returns:
-            0
-    """
-    LOG.info('Wait for patch: "{}" reaches states: "{}"'.format(patch_id, expected))
-
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        state = get_patch_state(patch_id, con_ssh=con_ssh)
-        if state['state'] in expected:
-            LOG.info("{} reached the {} state".format(patch_id, expected))
-            return 0
-
-        time.sleep(5)
-
-    raise exceptions.TimeoutException("Timed out waiting for {} to reach the {} state".format(patch_id, expected))
-
-
-@repeat(times=6, wait_first=True, message='waiting for multiple patches in states:')
-def wait_for_patch_states(patch_ids, expected=None, con_ssh=None):
-    if not patch_ids:
-        return 0, ''
-
-    states = get_patch_states(patch_ids, con_ssh=con_ssh)
-
-    for pid in states.keys():
-        if pid not in patch_ids:
-            continue
-        if states[pid]['state'] != expected[pid]:
-            LOG.info('Patch not in expected status, expected: "{}", actual: "{}"'.format(
-                expected, states[pid]['state']))
-            return 1, states
-
-    return 0, ''
-
-
-def get_hosts_states(con_ssh=None, fail_ok=False):
-    _, output, _ = run_patch_cmd('query-hosts', fail_ok=fail_ok, con_ssh=con_ssh)
+def get_hosts_patch_states(con_ssh=None):
+    _, output = run_patch_cmd('query-hosts', fail_ok=False, con_ssh=con_ssh)
 
     states = _patch_parser(output)
 
-    return 0, {h: {'ip': ip, 'patch-current': pc, 'rr': rr == 'Yes', 'release': release, 'state': state}
-               for h, ip, pc, rr, release, state in states}
+    return {host: {'ip': ip, 'patch-current': pc, 'rr': rr == 'Yes', 'release': release, 'state': state}
+            for host, ip, pc, rr, release, state in states}
 
 
-def get_host_state(host, con_ssh=None):
-    _, hosts_states = get_hosts_states(con_ssh=con_ssh)
+def get_host_patch_state(host, con_ssh=None):
+    hosts_states = get_hosts_patch_states(con_ssh=con_ssh)
 
     return hosts_states.get(host)
-
-
-def get_personality(host, con_ssh=None):
-    """
-    Gets the personality of specified host
-
-        Args:
-            host (string)
-            con_ssh
-
-        Returns:
-            personality (str)
-    """
-    table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh))
-    subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
-
-    personality = table_parser.get_value_two_col_table(table_, 'personality')
-
-    return subfunc + personality
 
 
 def wait_for_hosts_to_check_patch_current(timeout=120):
@@ -1113,7 +992,7 @@ def wait_for_hosts_to_check_patch_current(timeout=120):
     LOG.info("Waiting for hosts to check patch-current status")
     end_time = time.time() + timeout
     while time.time() < end_time:
-        hosts_states = get_hosts_states()[1]
+        hosts_states = get_hosts_patch_states()
         pending_found = False
         for host_states in hosts_states:
             if 'Pending' in hosts_states[host_states].values():
@@ -1127,37 +1006,68 @@ def wait_for_hosts_to_check_patch_current(timeout=120):
     raise exceptions.TimeoutException("Timeout reached while waiting for hosts patch-status:'pending' state")
 
 
-@repeat(times=1000, wait_first=True, expected_hits=2, message='wait_for_hosts_states')
-def wait_host_states(host, expected_states, con_ssh=None):
-    host_state = get_host_state(host, con_ssh=con_ssh)
+@repeat(wait_first=True, expected_hits=2, message='wait_for_hosts_states')
+def wait_for_host_patch_states(host, expected_states, con_ssh=None, timeout=120):
+    """
 
-    for state in expected_states.keys():
+    Args:
+        host:
+        expected_states:
+        con_ssh:
+        timeout: used in decorator
+
+    Returns:
+
+    """
+    host_state = get_host_patch_state(host, con_ssh=con_ssh)
+
+    for state in expected_states:
         if state not in host_state or expected_states[state] != host_state[state]:
             return 1, host_state
+
     return 0, host_state
 
 
-@repeat(times=10, expected_hits=2, wait_per_iter=20, verbose=True, message='waiting for patches in expected status')
-def wait_patch_states(patch_ids, expected_states=('Available',), con_ssh=None, fail_on_not_found=False):
+@repeat(expected_hits=2, wait_per_iter=20, verbose=True, message='Waiting for patches in states', stop_codes=(-1, 2))
+def wait_for_patch_states(patch_ids, expected_states=('Available',), con_ssh=None, fail_on_not_found=False,
+                          timeout=120):
+    """
+
+    Args:
+        patch_ids (list|str):
+        expected_states:
+        con_ssh:
+        fail_on_not_found:
+        timeout: DO NOT remove. used in decorator
+
+    Returns:
+
+    """
     if not patch_ids:
         LOG.warning('No patches to check?')
-        return -1, 'No patches to check?'
+        return -1, []
 
-    cur_patch_states = get_patches_states(con_ssh=con_ssh)[1]
+    if isinstance(patch_ids, str):
+        patch_ids = patch_ids.split(sep=' ')
+
+    cur_patch_states = get_patches_states(con_ssh=con_ssh)
+    res = {}
     for patch_id in patch_ids:
         if patch_id in cur_patch_states:
             state = cur_patch_states[patch_id]['state']
+            res[patch_id] = state
             if state not in expected_states:
-                LOG.info('at least one Patch:{} is not in expected states:{}, actual state:{}'.format(
+                LOG.info('At least one patch:{} is not in expected states: {}, actual state:{}'.format(
                     patch_id, expected_states, cur_patch_states[patch_id]))
-                return 1, [patch_id]
+                return 1, res
         else:
             LOG.info('Patch:{} is not in the system')
             if fail_on_not_found:
+                res[patch_id] = None
                 LOG.error('Patch:{} is not loaded in the system'.format(patch_id))
-                return -1, [patch_id]
+                return 2, res
 
-    return 0, patch_ids
+    return 0, res
 
 
 def check_patches_uploaded(patch_ids, prev_patch_states=None, con_ssh=None):
@@ -1180,15 +1090,68 @@ def check_patches_uploaded(patch_ids, prev_patch_states=None, con_ssh=None):
                 LOG.warning(msg)
                 return 1, [patch_id]
 
-    return wait_patch_states(patch_ids, ('Available',), con_ssh=con_ssh)
+    return wait_for_patch_states(patch_ids, ('Available',), con_ssh=con_ssh)
 
 
-def check_host_installed(host, timeout=600, check_interval=10, fail_ok=False, con_ssh=None):
+def wait_for_hosts_installed(hosts, timeout=600, check_interval=10, fail_ok=False, con_ssh=None):
+    hosts_patch_states = get_hosts_patch_states(con_ssh=con_ssh)
+    if not hosts:
+        hosts = list(hosts_patch_states.keys())
+    elif isinstance(hosts, str):
+        hosts = [hosts]
+
+    end_time = time.time() + timeout
+    installed_hosts = []
+    failed_hosts = []
+    while time.time() < end_time:
+        installed_hosts = []
+        failed_hosts = []
+        for host in hosts:
+            host_states = hosts_patch_states[host]
+            patch_current = host_states['patch-current']
+            host_rr = host_states['rr']
+            if patch_current == 'Failed':
+                failed_hosts.append(host)
+            elif patch_current == 'Yes' and not host_rr:
+                installed_hosts.append(host)
+
+        if len(installed_hosts) + len(failed_hosts) == len(hosts):
+            break
+
+        time.sleep(check_interval)
+        hosts_patch_states = get_hosts_patch_states(con_ssh=con_ssh)
+
+    rtn_code = 0
+    rtn_hosts = installed_hosts
+    msg = "{} are patch current".format(hosts)
+
+    if failed_hosts:
+        msg = "{} failed to install patch".format(failed_hosts)
+        rtn_code = 1
+        rtn_hosts = failed_hosts
+
+    uninstalled_hosts = list(set(hosts) - set(installed_hosts) - set(failed_hosts))
+    if uninstalled_hosts:
+        msg = "{} hosts are not patch current after install within {} seconds".format(uninstalled_hosts, timeout)
+        rtn_code = 2
+        rtn_hosts = uninstalled_hosts
+
+    if rtn_code > 0:
+        if fail_ok:
+            LOG.warning(msg)
+        else:
+            raise exceptions.PatchError(msg)
+    else:
+        LOG.info(msg)
+    return rtn_code, rtn_hosts
+
+
+def wait_for_host_installed(host, timeout=600, check_interval=10, fail_ok=False, con_ssh=None):
     """
     Verifies the specified host is finished installing the patch.
 
         Args:
-            host (string)
+            host (str)
             timeout (int)
             check_interval (int)
             fail_ok (bool)
@@ -1202,7 +1165,7 @@ def check_host_installed(host, timeout=600, check_interval=10, fail_ok=False, co
     host_state = {}
     end_time = time.time() + timeout
     while time.time() < end_time:
-        host_state = get_host_state(host, con_ssh=con_ssh)
+        host_state = get_host_patch_state(host, con_ssh=con_ssh)
 
         if host_state['state'] == 'idle':
             if host_state['patch-current']:
@@ -1218,102 +1181,147 @@ def check_host_installed(host, timeout=600, check_interval=10, fail_ok=False, co
                                           "Current states: {}".format(host, host_state))
 
 
-def install_patches(hosts, reboot_required=None, con_ssh=None):
+def install_patches(async=False, remove=False, fail_ok=False, force_lock=False, con_ssh=None):
     """
-    Installs patches on specified hosts
+    Installs patches on all impacted hosts
 
         Args:
-            hosts (list)
-            reboot_required (bool)
+            async (bool)
+            remove (bool): whether to install hosts after remove. Failed-installed hosts will be installed if remove.
             con_ssh
+            fail_ok
+            force_lock
 
         Returns:
             N/A
     """
+    hosts_patch_states = get_hosts_patch_states(con_ssh=con_ssh)
+
+    install_failed_hosts = []
+    installed_hosts = []
+    cmd = 'host-install-async' if async else 'host-install'
+    active = system_helper.get_active_controller_name(con_ssh=con_ssh)
+    hosts = system_helper.get_hostnames(con_ssh=con_ssh)
+    hosts.remove(active)
+    hosts.append(active)
+    cmd_timeout = 120 if async else 1200
+    state_timeout = 1200 if async else 60
     for host in hosts:
-        if reboot_required is None:
-            reboot_required = True if get_host_state(host)['rr'] else False
+        host_patch_states = hosts_patch_states[host]
+        patch_current = host_patch_states['patch-current']
+        reboot_required = host_patch_states['rr']
+        if not reboot_required and patch_current == 'Yes':
+            LOG.info("{} is patch-current and not reboot-required. Skip install for it.".format(host))
+            continue
+        elif patch_current == 'Failed':
+            if not remove:
+                LOG.warning("Skip install for {} due to patch-current=Failed".format(host))
+                continue
 
+        installed_hosts.append(host)
         if reboot_required:
+            LOG.info("Lock reboot required host {}".format(host))
             HostsToRecover.add(host)
-            host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False, swact=True, lock_timeout=1800, timeout=2000)
+            host_helper.lock_host(host=host, force=force_lock, con_ssh=con_ssh, swact=True)
 
-        LOG.info("Running host-install on {}".format(host))
-        run_patch_cmd("host-install", args=host, con_ssh=con_ssh, timeout=1200)
+        if patch_current != 'Yes':
+            LOG.info("{} is not patch current. Install it.".format(host))
+            cmd_code, output = run_patch_cmd(cmd=cmd, args=host, fail_ok=fail_ok, timeout=cmd_timeout,
+                                             con_ssh=con_ssh, parse_output=False)
+            if cmd_code == 0:
+                expected_states = {'patch-current': 'Yes'}
+                if not reboot_required:
+                    expected_states['rr'] = False
 
-        if reboot_required:
-            host_helper.unlock_host(host)
-
-        check_host_installed(host, con_ssh=con_ssh)
-
-
-def install_patches_async(hosts, reboot_required=None, con_ssh=None):
-    """
-    Installs patches on specified hosts asynchronously
-
-        Args:
-            hosts (list)
-            reboot_required (bool)
-            con_ssh
-
-        Returns:
-            N/A
-    """
-    for host in hosts:
-        if reboot_required is None:
-            reboot_required = True if get_host_state(host)['rr'] else False
+                LOG.info("Wait for {} to be patch current after install".format(host))
+                res, actual = wait_for_host_patch_states(host, expected_states=expected_states, timeout=state_timeout)
+                if res != 0:
+                    msg = '{} patch-current is {} instead of Yes after install'.format(host, actual)
+                    if fail_ok:
+                        LOG.info(msg)
+                        install_failed_hosts.append(host)
+                    else:
+                        raise exceptions.PatchError(msg)
+            else:
+                install_failed_hosts.append(host)
 
         if reboot_required:
-            HostsToRecover.add(host)
-            host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=False, lock_timeout=1800, timeout=2000)
+            LOG.info("Unlock reboot required host {} and check it's patch states".format(host))
+            host_helper.unlock_host(host, con_ssh=con_ssh)
+            HostsToRecover.remove(host)
+            if host not in install_failed_hosts:
+                LOG.info("Wait for {} to be 'patch-current: Yes' and 'rr: No' after unlock".format(host))
+                res, actual = wait_for_host_patch_states(host, expected_states={'patch-current': 'Yes', 'rr': False},
+                                                         timeout=60)
 
-        LOG.info("Running host-install-async on {}".format(host))
-        run_patch_cmd("host-install-async", args=host, con_ssh=con_ssh, timeout=100)
-        LOG.info("Waiting for host-install-async to finish")
-        check_host_installed(host)
+                if res != 0:
+                    msg = '{} states is {} after install and unlock'.format(host, actual)
+                    if fail_ok:
+                        LOG.info(msg)
+                        install_failed_hosts.append(host)
+                    else:
+                        raise exceptions.PatchError(msg)
 
-        if reboot_required:
-            host_helper.unlock_hosts(hosts)
+    rtn_code = 1
+    if not install_failed_hosts:
+        rtn_code = 0
+        if installed_hosts:
+            LOG.info("Hosts {} installed successfully".format(installed_hosts))
+
+    return rtn_code, installed_hosts, install_failed_hosts
 
 
-def remove_patches(patch_ids='', con_ssh=None, fail_ok=False):
+def remove_patches(patch_ids, con_ssh=None, fail_ok=False):
     """
     Removes patches from system
 
         Args:
-            patch_ids (str)
+            patch_ids (list|tuple|str):
             con_ssh
             fail_ok (bool)
 
-        Returns:
-            removed patch_ids
+        Returns (tuple):
+            (0, <removed patches>)
+            (1, <fail_msg>)
+
     """
     patch_ids_removed = []
-    _, pre_patches_states = get_patches_states(con_ssh=con_ssh)
+    pre_patches_states = get_patches_states(con_ssh=con_ssh)
     expected_states = get_expected_patch_states(action='REMOVE',
                                                 patch_ids=patch_ids,
                                                 pre_patches_states=pre_patches_states,
                                                 con_ssh=con_ssh)
 
-    code, output, _ = run_patch_cmd('remove', args=patch_ids, con_ssh=con_ssh, fail_ok=fail_ok)
+    if isinstance(patch_ids, str):
+        patch_ids = patch_ids.split(sep=' ')
+
+    code, output = run_patch_cmd('remove', args=' '.join(patch_ids), con_ssh=con_ssh, fail_ok=fail_ok)
 
     if code != 0:
         LOG.info("Failed to remove patches:{}, \noutput {}".format(patch_ids, output))
-        return patch_ids_removed
+        return 1, output
 
     for patch_id, rtn_code in output:
         patch_ids_removed += patch_id
 
-    assert patch_ids_removed, \
+    assert sorted(patch_ids_removed) == sorted(patch_ids), \
         'Failed to remove patches:{}, \npatch_ids_removed {}'.format(patch_ids, patch_ids_removed)
 
-    code, output = wait_for_patch_states(patch_ids, expected=expected_states, con_ssh=con_ssh)
+    for patch in patch_ids:
+        expected_state = expected_states[patch]
+        code, output = wait_for_patch_states(patch, expected_state, con_ssh=con_ssh)
 
-    assert 0 == code, \
-        'Patches failed to reach states, patches:{}, expected:{}, actual output:{}, code:{}'.format(
-            patch_ids_removed, expected_states, output, code)
+        if 0 != code:
+            actual_state = output[patch]
+            if actual_state == PatchState.PARTIAL_REMOVE and \
+                    pre_patches_states[patch]['state'] == PatchState.PARTIAL_APPLY and \
+                    system_helper.get_alarms(alarm_id=EventLogID.PATCH_INSTALL_FAIL):
+                LOG.info("Patch install failure alarm present. Patch {} is in partial-remove state.".format(patch))
+            else:
+                raise exceptions.PatchError('Patch:{} did not reach state: {} after remove. Actual state: {}'.
+                                            format(patch, expected_state, actual_state))
 
-    return patch_ids_removed
+    return 0, patch_ids_removed
 
 
 def parse_patch_file_name(patch_file_name):
@@ -1371,22 +1379,12 @@ def check_patch_version(file_name='', con_ssh=None):
     return True
 
 
-def get_system_patching_states(con_ssh=None, fail_ok=False):
-    patch_stats = get_patches_states(con_ssh=con_ssh, fail_ok=fail_ok)[1]
-    hosts_stats = get_hosts_states()[1]
+def get_system_patching_states(con_ssh=None):
+    patch_stats = get_patches_states(con_ssh=con_ssh)
+    hosts_stats = get_hosts_patch_states()
     alarms = system_helper.get_alarms()
 
     return {'host_states': hosts_stats, 'patch_states': patch_stats, 'alarms': alarms}
-
-
-def lab_time_now(con_ssh=None):
-
-    timestamp = run_cmd('date +"%Y-%m-%dT%H:%M:%S.%N"', con_ssh=con_ssh, fail_ok=False)[1]
-    with_milliseconds = timestamp.split('.')[0] + '.{}'.format(int(int(timestamp.split('.')[1]) / 1000))
-    format1 = LOG_DATETIME_FORMAT + '.%f'
-    parsed = datetime.strptime(with_milliseconds, format1)
-
-    return with_milliseconds.split('.')[0], parsed
 
 
 def orchestration_patch_hosts(controller_apply_type='serial', storage_apply_type='serial',
@@ -1396,14 +1394,158 @@ def orchestration_patch_hosts(controller_apply_type='serial', storage_apply_type
     # Create patch strategy
     orchestration = 'patch'
 
-    LOG.tc_step("Create patch strategy  ......")
+    LOG.info("Create patch strategy  ......")
     orchestration_helper.create_strategy(orchestration, controller_apply_type=controller_apply_type,
                                          storage_apply_type=storage_apply_type, compute_apply_type=compute_apply_type,
                                          max_parallel_computes=max_parallel_computes,
                                          instance_action=instance_action, alarm_restrictions=alarm_restrictions)
 
-    LOG.tc_step("Apply patch strategy ......")
+    LOG.info("Apply patch strategy ......")
     orchestration_helper.apply_strategy(orchestration)
 
-    LOG.tc_step("Delete patch orchestration strategy ......")
+    LOG.info("Delete patch orchestration strategy ......")
     orchestration_helper.delete_strategy(orchestration)
+
+
+def check_system_health(check_patch_ignored_alarms=True, fail_on_disallowed_failure=True):
+
+    rc, failed_items = system_helper.get_system_health_query()
+    if rc == 0:
+        LOG.info("System health OK for patching ......")
+        return 0, failed_items
+
+    allowed_failures = ('No alarms', 'All hosts are patch current')
+    disallowed_failures = list(set(failed_items) - set(allowed_failures))
+    if disallowed_failures:
+        if not fail_on_disallowed_failure:
+            return 2, disallowed_failures
+        else:
+            raise exceptions.PatchError("System unhealthy. Failed items: {}".format(disallowed_failures))
+
+    if 'All hosts are patch current' in failed_items:
+        LOG.info("Some hosts are not patch current")
+
+    if 'No alarms' in failed_items and check_patch_ignored_alarms:
+        rtn = ('Alarm ID',)
+        current_alarms_ids = system_helper.get_alarms(rtn_vals=rtn, mgmt_affecting=True)
+        affecting_alarms = [id_ for id_ in current_alarms_ids if id_ not in
+                            orchestration_helper.IGNORED_ALARM_IDS]
+        if not fail_on_disallowed_failure:
+            return 3, affecting_alarms
+        else:
+            raise exceptions.PatchError("Management affecting alarm(s) present: {}".format(affecting_alarms))
+
+    return 1, failed_items
+
+
+def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_ssh=None):
+    """
+    Copy test patches from build server to active controller
+    Args:
+        build_server (SSHClient):
+        patch_dir (str):
+        tis_dir
+        con_ssh
+    Returns (dict):
+
+    """
+    if not tis_dir:
+        tis_dir = WRSROOT_HOME + 'test_patches'
+
+    if not build_server:
+        build_server = ProjVar.get_var('BUILD_SERVER')
+
+    build_path = ProjVar.get_var('BUILD_PATH')
+    if not patch_dir:
+        patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
+        if not patch_dir and not build_path:
+            skip('patch_dir is not provided, and build path is found from /etc/build.info')
+
+    if not build_path or not build_server:
+        skip('Build path or server not found from /etc/build.info')
+
+    if not con_ssh:
+        con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
+        if not common.is_dir(tis_dir, con_ssh):
+            con_ssh.exec_cmd('mkdir -p {}'.format(tis_dir))
+
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bs_ssh:
+        if not patch_dir:
+            patch_dir = common.get_symlink(bs_ssh, file_path='{}/test_patches'.format(build_path))
+            if not patch_dir:
+                skip('No symlink to test_patches found for load {}:{}'.format(build_server, build_path))
+            PatchingVars.set_patching_var(PATCH_DIR=patch_dir)
+
+        LOG.info("Download patch files from patch dir {}".format(patch_dir))
+        dest_server = ProjVar.get_var('LAB')['floating ip']
+        bs_ssh.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir), fail_ok=False)
+        pre_opts = 'sshpass -p "{}"'.format(HostLinuxCreds.get_password())
+        bs_ssh.rsync(patch_dir+"/*.patch", dest_server, tis_dir, pre_opts=pre_opts, timeout=600)
+        output = con_ssh.exec_cmd("ls -1  {}/*.patch".format(tis_dir), fail_ok=False)[1]
+
+        patches = {}
+        for line in output.splitlines():
+            patches[os.path.splitext(os.path.basename(line))[0]] = line
+
+        LOG.info("List of patches:\n {}".format(list(patches.keys())))
+
+    active = con_ssh.get_hostname()
+    other_controller = 'controller-0' if active == 'controller-1' else 'controller-1'
+    if 0 == con_ssh.exec_cmd('nslookup {}'.format(other_controller))[0]:
+        with host_helper.ssh_to_host(other_controller, con_ssh=con_ssh, timeout=10) as standby_ssh:
+            if not common.is_dir(tis_dir, standby_ssh):
+                standby_ssh.exec_cmd('mkdir -p {}'.format(tis_dir))
+
+        LOG.info("rsync patch files from {} to {} with best effort".format(active, other_controller))
+        con_ssh.rsync(tis_dir + "/*.patch", dest_server=other_controller, dest=tis_dir, timeout=600)
+
+    return tis_dir, patches
+
+
+def parse_test_patches(patch_ids, search_str, failure_patch=False, prefix_build_id=False, end_with_search_str=False):
+    """
+    Get test patch ids with given criteria.
+    Notes: test will be skipped if no test patch is found
+    Args:
+        patch_ids (list|tuple|dict):
+        search_str (str):
+        end_with_search_str (bool): whether to append '$' to find patches that ends with the search_str
+        failure_patch:
+        prefix_build_id (bool):
+
+    Returns (list):
+
+    """
+    if prefix_build_id:
+        prefix = ProjVar.get_var('BUILD_ID') + ('_' if not search_str.startswith('_') else '')
+        search_str = prefix + search_str
+    if end_with_search_str:
+        search_str += '$'
+
+    if failure_patch:
+        patches = [patch_ for patch_ in patch_ids if re.search(search_str, patch_) and 'FAILURE' in patch_]
+    else:
+        patches = [patch_ for patch_ in patch_ids if re.search(search_str, patch_) and 'FAILURE' not in patch_]
+
+    if not patches:
+        skip('test patch {} not found'.format(search_str))
+
+    if 'A-C' in search_str:
+        patches = sorted(patches)
+
+    return patches
+
+
+def get_affecting_alarms():
+    current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
+    affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
+    return affecting_alarms
+
+
+def wait_for_affecting_alarms_gone():
+    affecting_alarms = get_affecting_alarms()
+    if affecting_alarms:
+        LOG.info("Wait for mgmt affecting alarms to be gone: {}".format(affecting_alarms))
+        system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=False)
+        time.sleep(30)

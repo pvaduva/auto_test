@@ -16,9 +16,9 @@ PHASE_COMPLETION_CHECK_INTERVAL = 20
 IGNORED_ALARM_IDS = ['200.001', '700.004', '900.001', '900.005', '900.101']
 
 
-def create_strategy(orchestration, controller_apply_type="serial", storage_apply_type="serial",
-                    compute_apply_type="serial", max_parallel_computes=0, instance_action="stop-start",
-                    alarm_restrictions="strict", wait_for_completion=True, timeout=None, conn_ssh=None, fail_ok=False):
+def create_strategy(orchestration, controller_apply_type=None, storage_apply_type=None,
+                    compute_apply_type=None, max_parallel_computes=0, instance_action=None,
+                    alarm_restrictions=None, wait_for_completion=True, timeout=None, conn_ssh=None, fail_ok=False):
     """
     Creates a orchestration strategy
     Args:
@@ -43,8 +43,7 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
         (0, dict) - success
         (1, output) - CLI reject
         (2, err_msg) - strategy build completion timeout
-        (3, err_msg) - strtegy build completed but with failed state
-
+        (3, err_msg) - strategy build completed but with failed state
 
     """
     if orchestration is None:
@@ -53,12 +52,11 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
     args_dict = {
         '--storage-apply-type': storage_apply_type,
         '--compute-apply-type': compute_apply_type,
-        '--max-parallel-compute-hosts': str(max_parallel_computes) if max_parallel_computes >= 2 else '',
+        '--max-parallel-compute-hosts': max_parallel_computes if max_parallel_computes >= 2 else None,
         '--alarm-restrictions': alarm_restrictions,
     }
 
     cmd = ''
-
     if orchestration is "patch":
         cmd += "patch-strategy create"
         args_dict['--controller-apply-type'] = controller_apply_type
@@ -96,32 +94,31 @@ def create_strategy(orchestration, controller_apply_type="serial", storage_apply
         if timeout is None:
             timeout = OrchestrationPhaseTimeout.BUILD
 
-        if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.BUILD, timeout,
-                                              conn_ssh=conn_ssh)[0]:
+        if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.BUILD, timeout, conn_ssh=conn_ssh)[0]:
             msg = "The {} strategy created failed build: {}".format(orchestration, output)
-            LOG.warn(msg)
             if fail_ok:
+                LOG.warning(msg)
                 return 2, msg
             else:
                 raise exceptions.OrchestrationError(msg)
 
     # get values of the created strategy
-    results = get_current_strategy_values(orchestration)
+    results = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
 
     if OrchestStrategyPhase.BUILD != results['current-phase']:
 
         msg = "Unexpected {} strategy phase= {} encountered. A 'build' phase was expected. "\
             .format(orchestration, results["current-phase"])
-        LOG.warn(msg)
         if fail_ok:
+            LOG.warning(msg)
             return 3, msg
         else:
             raise exceptions.OrchestrationError(msg)
 
     if "failed" in results["state"]:
         msg = "The {} strategy  'failed' in build phase; reason = {}".format(orchestration, results["build-reason"])
-        LOG.warn(msg)
         if fail_ok:
+            LOG.warning(msg)
             return 3, msg
         else:
             raise exceptions.OrchestrationError(msg)
@@ -173,7 +170,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
 
         if not wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.APPLY, timeout=timeout,
                                               conn_ssh=conn_ssh, fail_ok=True)[0]:
-            current_ = get_current_strategy_values(orchestration)
+            current_ = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
             c_phase = current_[OrchStrategyKey.CURRENT_PHASE]
             c_compl = current_['current-phase-completion']
 
@@ -191,7 +188,7 @@ def apply_strategy(orchestration, wait_for_completion=True, timeout=None, conn_s
                     raise exceptions.OrchestrationError(msg)
 
     # get values of the applied strategy
-    results = get_current_strategy_values(orchestration)
+    results = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
 
     if len(results) == 0:
         msg = "Fail to access the created {} strategy after build completion: {}".format(orchestration, output)
@@ -248,7 +245,7 @@ def delete_strategy(orchestration, conn_ssh=None, abort=True, fail_ok=False):
     elif orchestration is "upgrade":
         cmd += "upgrade-strategy "
 
-    strategy_values = get_current_strategy_values(orchestration)
+    strategy_values = get_current_strategy_values(orchestration, conn_ssh=conn_ssh)
     if strategy_values:
 
         startegy_state = strategy_values[OrchStrategyKey.STATE] if OrchStrategyKey.STATE in strategy_values else None
@@ -295,28 +292,30 @@ def get_current_strategy_values(orchestration, conn_ssh=None):
     if orchestration not in ("patch", "upgrade"):
         raise ValueError("Invalid orchestration type (choices are 'patch' or 'upgrade') specified")
 
+    if not conn_ssh:
+        conn_ssh = ControllerClient.get_active_controller()
+
     cmd = ''
     if orchestration is "patch":
         cmd += "patch-strategy show"
     else:
         cmd += "upgrade-strategy show"
     try:
-        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+        output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=False)
     except:
         time.sleep(20)
         if not conn_ssh._is_connected(fail_ok=True):
             conn_ssh.connect(retry=True)
-            ControllerClient.set_active_controller(ssh_client=conn_ssh)
-
-        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+        output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=False)
 
     rtn = {}
-    if rc == 0 and output is not None and ('strategy-uuid' in [tr.strip() for tr in output.split(':')]):
-        lines = output.splitlines()
-        lines = [l.strip() for l in lines]
-        for line in lines:
-            pairs = line.split(':')
-            rtn[pairs[0].strip()] = pairs[1].strip()
+    if 'No strategy available' in output:
+        return rtn
+
+    for line in output.splitlines():
+        pairs = line.strip().split(':')
+        rtn[pairs[0].strip()] = pairs[1].strip()
+
     return rtn
 
 

@@ -916,7 +916,11 @@ def get_vm_storage_type(vm_id, con_ssh=None):
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
-    return extra_specs['aggregate_instance_extra_specs:storage']
+
+    # No idea how to find out vm backend if vm is in error state.
+    storage_backing = extra_specs.get(FlavorSpec.STORAGE_BACKING, None)
+
+    return storage_backing
 
 
 def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=True, strict=True, regex=False, **kwargs):

@@ -141,7 +141,6 @@ def _delete_resources(resources, scope):
     port_chains = resources['port_chains']
     flow_classifiers = resources['flow_classifiers']
 
-
     err_msgs = []
     if heat_stacks:
         LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
@@ -173,7 +172,8 @@ def _delete_resources(resources, scope):
     if vms_with_vols:
         LOG.fixture_step(
             "({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
-        code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True, auth_info=Tenant.get('admin'))
+        code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True,
+                                         auth_info=Tenant.get('admin'))
         if code not in [0, -1]:
             err_msgs.append(msg)
 
@@ -229,7 +229,8 @@ def _delete_resources(resources, scope):
     if floating_ips:
         LOG.fixture_step("({}) Attempt to delete following floating ips: {}".format(scope, floating_ips))
         for fip in floating_ips:
-            code, msg = network_helper.delete_floating_ip(fip, fip_val='ip', fail_ok=True, auth_info=Tenant.get('admin'))
+            code, msg = network_helper.delete_floating_ip(fip, fip_val='ip', fail_ok=True,
+                                                          auth_info=Tenant.get('admin'))
             if code > 0:
                 err_msgs.append(msg)
 
@@ -254,7 +255,6 @@ def _delete_resources(resources, scope):
                                                                        auth_info=Tenant.ADMIN)[:3]
         if code > 0:
             err_msgs.append('Failed to delete port pair(s): {}'.format(rej_pairs))
-
 
     if ports:
         LOG.fixture_step("({}) Attempt to delete following ports: {}".format(scope, ports))
