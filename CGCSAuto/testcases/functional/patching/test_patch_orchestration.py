@@ -77,7 +77,7 @@ def get_test_patches(state=None):
     return test_patches
 
 
-def remove_test_patches():
+def remove_test_patches(failure_patch=False):
 
     LOG.info("Delete patch orchestration strategy")
     orchestration_helper.delete_strategy("patch")
@@ -93,7 +93,7 @@ def remove_test_patches():
         run_patch_orchestration_strategy(alarm_restrictions='relaxed')
 
     # Install if needed
-    patching_helper.install_patches(remove=True)
+    install_code, installed, failed = patching_helper.install_patches(remove=True, fail_ok=True)
 
     available_patches = get_test_patches(state=PatchState.AVAILABLE)
     if available_patches:
@@ -101,6 +101,9 @@ def remove_test_patches():
         patching_helper.delete_patches(available_patches)
 
     patching_helper.wait_for_affecting_alarms_gone()
+
+    if not failure_patch:
+        assert install_code <= 0, "Patches failed to install on removal: {}".format(failed)
 
 
 def check_vms(vms):
@@ -334,7 +337,6 @@ def test_patch_orch_with_ignored_alarms(patch_orchestration_setup, patch_functio
         vm_helper.stop_vms(vm_id_to_stop)
 
     patching_helper.remove_patches(patch_ids=applied)
-    assert 0 == patching_helper.wait_for_patch_states(applied, expected_states=PatchState.AVAILABLE)
 
     LOG.tc_step("Remove patch through orchestration: {}".format(applied))
     run_patch_orchestration_strategy(alarm_restrictions='relaxed')
@@ -391,10 +393,6 @@ def test_patch_orch_reject_with_alarms(patch_orchestration_setup, patch_function
     patching_helper.remove_patches(patch_ids=applied)
     assert 0 == patching_helper.wait_for_patch_states(applied, expected_states=PatchState.AVAILABLE)[0]
 
-    LOG.tc_step("Remove patch through orchestration: {}".format(applied))
-    run_patch_orchestration_strategy(alarm_restrictions='relaxed')
-    LOG.info("Apply/Remove through patch orchestration with alarm is completed")
-
     LOG.tc_step("Un-pause vm after test patch removal, and check vms are in good state.")
     vm_helper.unpause_vm(paused_vm)
     vm_helper.wait_for_vm_pingable_from_natbox(paused_vm)
@@ -402,10 +400,16 @@ def test_patch_orch_reject_with_alarms(patch_orchestration_setup, patch_function
 
 
 @fixture(scope='function')
-def del_test_patch_before_start():
+def failed_patch_setup(request, patch_function_check):
     LOG.fixture_step("Delete available test patches before start.")
     avail_patches = get_test_patches(state=PatchState.AVAILABLE)
     patching_helper.delete_patches(avail_patches)
+
+    def remove_failed():
+        remove_test_patches(failure_patch=True)
+    request.addfinalizer(remove_failed)
+
+    return patch_function_check
 
 
 @mark.parametrize('patch_type', [
@@ -413,7 +417,7 @@ def del_test_patch_before_start():
     '_PREINSTALL_FAILURE',
     '_POSTINSTALL_FAILURE'
 ])
-def test_patch_orch_failure(patch_orchestration_setup, del_test_patch_before_start, patch_function_check, patch_type):
+def test_patch_orch_failure(patch_orchestration_setup, failed_patch_setup, patch_type):
     """
     This test verifies the patch orchestration operation with invalid or failure test patches. The patches are
     expected to fail on applying the patch orchestration.
@@ -427,7 +431,7 @@ def test_patch_orch_failure(patch_orchestration_setup, del_test_patch_before_sta
     Returns:
 
     """
-    vms = patch_function_check
+    vms = failed_patch_setup
     downloaded_patches, controllers, computes, storages = patch_orchestration_setup
 
     patch_id = patching_helper.parse_test_patches(downloaded_patches, search_str=patch_type, failure_patch=True)[0]

@@ -1249,7 +1249,7 @@ def install_patches(async=False, remove=False, fail_ok=False, force_lock=False, 
             LOG.info("Unlock reboot required host {} and check it's patch states".format(host))
             host_helper.unlock_host(host, con_ssh=con_ssh)
             HostsToRecover.remove(host)
-            if host not in install_failed_hosts:
+            if remove or host not in install_failed_hosts:
                 LOG.info("Wait for {} to be 'patch-current: Yes' and 'rr: No' after unlock".format(host))
                 res, actual = wait_for_host_patch_states(host, expected_states={'patch-current': 'Yes', 'rr': False},
                                                          timeout=60)
@@ -1262,11 +1262,15 @@ def install_patches(async=False, remove=False, fail_ok=False, force_lock=False, 
                     else:
                         raise exceptions.PatchError(msg)
 
+    install_failed_hosts = list(set(install_failed_hosts))
     rtn_code = 1
     if not install_failed_hosts:
-        rtn_code = 0
         if installed_hosts:
             LOG.info("Hosts {} installed successfully".format(installed_hosts))
+            rtn_code = 0
+        else:
+            LOG.info("All hosts are patch-current and not reboot-required. Do nothing.")
+            rtn_code = -1
 
     return rtn_code, installed_hosts, install_failed_hosts
 
