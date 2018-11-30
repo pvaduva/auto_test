@@ -329,15 +329,16 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
     res_lock = res_unlock = True
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        res_lock = wait_for_hosts_states(hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
+        res_lock = wait_for_hosts_states(expt_online_hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
                                          con_ssh=con_ssh, auth_info=auth_info)
 
     if expt_avail_hosts:
-        hypervisors = list(set(get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)) & set(hosts))
-        controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) & set(hosts))
+        hypervisors = list(set(get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)) & set(expt_avail_hosts))
+        controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) &
+                           set(expt_avail_hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        res_unlock = wait_for_hosts_states(hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
+        res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
                                            con_ssh=con_ssh, auth_info=auth_info)
 
         if res_unlock:

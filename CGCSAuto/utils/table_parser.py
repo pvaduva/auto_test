@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 """Collection of utilities for parsing CLI clients output."""
 
 
-delimiter_line = re.compile('^\+\-[\+\-]+\-\+$')
+delimiter_line = re.compile('^\+-[+\-]+-\+$')
 
 
 def __details_multiple(output_lines, with_label=False):
@@ -177,9 +177,9 @@ def table(output_lines, combine_multiline_entry=False):
     rows = get_all_rows(table_)
     if not rows:
         if not table_['headers']:
-            LOG.info('No table returned')
+            LOG.debug('No table returned')
         else:
-            LOG.info("Empty table returned")
+            LOG.debug("Empty table returned")
         return table_
 
     line_count = len(rows)
@@ -320,7 +320,6 @@ def get_column(table_, header, merge_lines=False):
 
     """
     if not table_['headers']:
-        # LOG.info("Table is empty")
         return []
     rows = get_all_rows(table_)
     index = get_column_index(table_, header)
@@ -548,7 +547,6 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
                 break
     else:
         LOG.warning("Field {} is not found in table.".format(field))
-        LOG.debug("Field {} is not found in table: {}.".format(field, table_))
         val = ''
 
     # handle multi-line value
@@ -694,7 +692,8 @@ def compare_tables(table_one, table_two):
             table2_list = set(table_two[key])
 
         # map nested list into tuples for easy comparison with other table
-        if key == 'values':
+        else:
+            # key == 'values':
             table1_list = set(map(tuple, table_one[key]))
             table2_list = set(map(tuple, table_two[key]))
 

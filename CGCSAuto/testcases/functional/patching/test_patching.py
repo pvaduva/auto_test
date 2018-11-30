@@ -188,7 +188,7 @@ def test_patch_dependency(patching_setup, patch_function_check):
     'STORAGE',
     'LARGE'
 ])
-def test_patch_host_correlations(patching_setup, patch_type):
+def test_patch_host_correlations(patching_setup, patch_function_check, patch_type):
     """
     Test that compute patches only effect compute nodes, storage patches only effect storage nodes, etc...
 
@@ -208,6 +208,7 @@ def test_patch_host_correlations(patching_setup, patch_type):
         1   Delete patch files from patching system on the lab
     """
     downloaded_patches, controllers, computes, storages = patching_setup
+    vms = patch_function_check
 
     patch_ids = upload_test_patches(downloaded_patches=downloaded_patches, search_str=patch_type)
 
@@ -217,6 +218,9 @@ def test_patch_host_correlations(patching_setup, patch_type):
 
         LOG.tc_step("Remove patch {}".format(patch_id))
         remove_test_patches(delete=False)
+
+    LOG.tc_step("Check vms after apply and remove {} test patches".format(patch_type))
+    check_vms(vms)
 
 
 @mark.parametrize(('patch_type', 'install_type'), [
