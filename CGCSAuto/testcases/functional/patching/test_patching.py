@@ -31,17 +31,16 @@ def get_test_patches(state=None):
     return test_patches
 
 
-def remove_test_patches(delete=True):
+def remove_test_patches(delete=True, failure_patch=False):
     applied = get_test_patches(state=(PatchState.PARTIAL_APPLY, PatchState.APPLIED))
     if applied:
         LOG.info("Remove applied test patch {}".format(applied))
         patching_helper.remove_patches(patch_ids=applied)
 
     LOG.info("Install hosts to remove test patch if needed")
-    patching_helper.install_patches(remove=True)
+    code, installed, failed = patching_helper.install_patches(remove=True, fail_ok=True)
 
     unavail_patches = get_test_patches(state=(PatchState.PARTIAL_REMOVE, PatchState.PARTIAL_APPLY, PatchState.APPLIED))
-    assert not unavail_patches, "Some test patches still not available state: {}".format(unavail_patches)
 
     if delete:
         available_patches = get_test_patches(state=PatchState.AVAILABLE)
@@ -50,6 +49,12 @@ def remove_test_patches(delete=True):
             patching_helper.delete_patches(available_patches)
 
     patching_helper.wait_for_affecting_alarms_gone()
+
+    # Verify patch removal succeeded
+    if not failure_patch:
+        assert code <= 0, "Patches failed to install after removal: {}".format(failed)
+
+    assert not unavail_patches, "Patches not in available state: {}".format(unavail_patches)
 
 
 @fixture(scope='module', autouse=True)
