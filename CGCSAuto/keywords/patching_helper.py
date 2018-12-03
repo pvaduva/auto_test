@@ -1319,7 +1319,8 @@ def remove_patches(patch_ids, con_ssh=None, fail_ok=False):
             actual_state = output[patch]
             if actual_state == PatchState.PARTIAL_REMOVE and \
                     pre_patches_states[patch]['state'] == PatchState.PARTIAL_APPLY and \
-                    system_helper.get_alarms(alarm_id=EventLogID.PATCH_INSTALL_FAIL):
+                    (system_helper.get_alarms(alarm_id=EventLogID.PATCH_INSTALL_FAIL) or
+                     system_helper.get_alarms(alarm_id=EventLogID.PATCH_IN_PROGRESS)):
                 LOG.info("Patch install failure alarm present. Patch {} is in partial-remove state.".format(patch))
             else:
                 raise exceptions.PatchError('Patch:{} did not reach state: {} after remove. Actual state: {}'.

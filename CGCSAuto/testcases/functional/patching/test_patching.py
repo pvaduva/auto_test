@@ -3,7 +3,7 @@ from pytest import fixture, skip, mark
 from consts.proj_vars import ProjVar
 from consts.cgcs import PatchState, VMStatus
 from utils.tis_log import LOG
-from keywords import patching_helper, system_helper, vm_helper, cinder_helper, nova_helper
+from keywords import patching_helper, system_helper, vm_helper, cinder_helper, nova_helper, orchestration_helper
 
 PATCH_ALARM_ID = '900.001'
 PATCH_ALARM_REASON = 'Patching operation in progress'
@@ -61,6 +61,7 @@ def remove_test_patches(delete=True, failure_patch=False):
 def patching_setup():
 
     LOG.fixture_step("Remove test patches (if any) and check system health")
+    orchestration_helper.delete_strategy('patch')
     remove_test_patches()
     code, failed = patching_helper.check_system_health(fail_on_disallowed_failure=False)
     if code > 1:

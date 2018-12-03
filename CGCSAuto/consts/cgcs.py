@@ -327,6 +327,7 @@ class RouterStatus:
 
 class EventLogID:
     PATCH_INSTALL_FAIL = '900.002'
+    PATCH_IN_PROGRESS = '900.001'
     CINDER_IO_CONGEST = '800.101'
     STORAGE_LOR = '800.011'
     STORAGE_POOLQUOTA = '800.003'
@@ -532,6 +533,7 @@ class OrchStrategyKey:
     ABORT_REASON = 'abort-reason'
     BUILD_RESULT = 'build-result'
     BUILD_REASON = 'build-reason'
+    INPROGRESS = 'inprogress'
 
 
 class DevClassID:
