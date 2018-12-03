@@ -403,7 +403,7 @@ def get_auth_via_openrc(con_ssh):
 
 
 def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute_arg=None, storage_arg=None,
-                         lab_files_dir=None, build_server=None):
+                         lab_files_dir=None, bs=None):
     lab_dict = None
     if not lab_arg and not installconf_path:
         lab_dict = setup_consts.LAB
@@ -430,7 +430,7 @@ def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute
 
     if controller_arg:
         lab_dict = get_lab_from_install_args(lab_arg, controller_arg, compute_arg, storage_arg, lab_files_dir,
-                                             build_server)
+                                             bs=bs)
 
     if lab_dict is None:
         if lab_arg:
@@ -438,11 +438,11 @@ def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute
     return lab_dict
 
 
-def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_files_dir, build_server):
+def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_files_dir, bs):
     controller_nodes = [int(node) for node in controllers] if controllers else []
     compute_nodes = [int(node) for node in computes] if computes else []
     storage_nodes = [int(node) for node in storages] if storages else []
-    __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
+    __build_server = bs if bs and bs != "" else BuildServerPath.DEFAULT_BUILD_SERVER
     files_server = __build_server
     if lab_files_dir:
         files_dir = lab_files_dir
@@ -452,36 +452,37 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
     else:
         files_dir = None
     # Get lab info
-    lab_info = None
+    lab_info_ = None
     if lab_arg:
-        lab_info = get_lab_dict(lab_arg)
+        lab_info_ = get_lab_dict(lab_arg)
 
-    if controller_nodes and not lab_info:
+    if controller_nodes and not lab_info_:
         labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
         labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
         for lab in labs:
             if 'controller_nodes' in lab:
                 if controller_nodes == lab['controller_nodes']:
-                    lab_info = lab
+                    lab_info_ = lab
                     break
         # Add new entry
-        if not lab_info:
+        if not lab_info_:
             LOG.warning("no lab stored with the controller barcodes {}! Creating a new lab".format(controller_nodes))
-            lab_info = {}
+            lab_info_ = {}
             controller_attributes = vlm_helper.get_attributes_dict(controller_nodes, val="barcodes")
-            lab_info["controller_nodes"] = controller_nodes
+            lab_info_["controller_nodes"] = controller_nodes
             for i in range(0, len(controller_attributes)):
                 controller_name = "controller-{}".format(i)
-                lab_info["{} ip".format(controller_name)] = controller_attributes[i]["IP Address"]
+                lab_info_["{} ip".format(controller_name)] = controller_attributes[i]["IP Address"]
+            base_name = ''
             if files_dir and files_server:
-                lab_info.update(get_info_from_lab_files(files_server, files_dir))
-                lab_info["name"] = lab_info.pop("system_name") # rename system_name to name
+                lab_info_.update(get_info_from_lab_files(files_server, files_dir))
+                lab_info_["name"] = lab_info_.pop("system_name")    # rename system_name to name
             else:
                 barcodes = controller_nodes + compute_nodes + storage_nodes
                 aliases = vlm_helper.get_attributes_dict(barcodes, attr="alias", val="barcodes")
                 print("list of aliases: {}".format(aliases))
                 highest = "0"
-                lowest = "inf" # arbitrarily large number
+                lowest = "inf"  # arbitrarily large number
                 for alias_dict in aliases:
                     print("alias dictionary: {}".format(alias_dict))
                     alias = alias_dict["alias"]
@@ -493,26 +494,26 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
                     if float(node_num) < float(lowest):
                         lowest = node_num
                         base_name = alias
-                lab_info["name"] = base_name + "_{}".format(highest) if highest > lowest else base_name
+                lab_info_["name"] = base_name + "_{}".format(highest) if highest > lowest else base_name
+
             short_naming_dict = {"wildcat": "WCP", "ironpass": "IP", "wolfpass": "WP", "supermicro": "SM"}
             short_name_pattern = ".*-(\d+)(_\d+)?"
-            match = re.search(short_name_pattern, lab_info["name"])
+            match = re.search(short_name_pattern, lab_info_["name"])
             system_name = match.group(0)
             first_node_num = match.group(1)
             last_node_num = match.group(2) if match.group(2) else ""
             for server_type in short_naming_dict.keys():
                 if server_type in system_name:
-                    lab_info["short_name"] = short_naming_dict[server_type] + "_{}{}".format(first_node_num,
-                                                                                             last_node_num)
-            if not lab_info.get("short_name"):
-                lab_info["short_name"] = lab_info["name"].split("-")[2] + "_{}{}".format(first_node_num,
-                                                                                                 last_node_num)
-            lab_info = add_lab_entry(floating_ip=None, dict_name=lab_info["short_name"].upper(), **lab_info)
+                    lab_info_["short_name"] = short_naming_dict[server_type] + "_{}{}".\
+                        format(first_node_num, last_node_num)
+            if not lab_info_.get("short_name"):
+                lab_info_["short_name"] = lab_info_["name"].split("-")[2] + "_{}{}".\
+                    format(first_node_num, last_node_num)
 
-    if files_dir and files_server and not lab_info:
+    if files_dir and files_server and not lab_info_:
         try:
             conf_file_info = get_info_from_lab_files(files_server, files_dir)
-            lab_info = get_lab_dict(conf_file_info["system_name"])
+            lab_info_ = get_lab_dict(conf_file_info["system_name"])
         except ValueError:
             LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
                       "configuration and try again. ")
@@ -522,11 +523,12 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
             raise
     # Update lab info
     if compute_nodes:
-        lab_info["compute_nodes"] = compute_nodes
+        lab_info_["compute_nodes"] = compute_nodes
     if storage_nodes:
-        lab_info["storage_nodes"] = compute_nodes
-    lab_dict = update_lab(lab_dict_name=lab_info["short_name"].upper(), lab_name=lab_info["short_name"], floating_ip=None,
-                          **lab_info)
+        lab_info_["storage_nodes"] = compute_nodes
+    lab_dict = update_lab(lab_dict_name=lab_info_["short_name"].upper(), lab_name=lab_info_["short_name"],
+                          floating_ip=None,
+                          **lab_info_)
     LOG.warning("Discovered the following lab info: {}".format(lab_dict))
 
     return lab_dict
@@ -596,7 +598,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
-                       patch_dir=None, ovs=False, build_server=None, tis_builds_dir=None, tis_build_dir="latest_build",
+                       patch_dir=None, ovs=False, bs=None, tis_builds_dir=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
                        boot="pxe", iso_path=None, security="standard", low_latency=False, stop=99):
 
@@ -605,7 +607,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                          "has to be provided")
     elif not installconf_path:
         installconf_path = write_installconf(lab=lab, controller=None, tis_builds_dir=tis_builds_dir,
-                                             tis_build_dir=tis_build_dir, lab_files_dir=None, build_server=build_server,
+                                             tis_build_dir=tis_build_dir, lab_files_dir=None, bs=bs,
                                              compute=None, storage=None, license_path=None, guest_image=None,
                                              heat_templates=None, security=security, low_latency=low_latency, stop=stop,
                                              skip=skip, resume=resume, boot_server=boot_server, boot=boot,
@@ -616,7 +618,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     errors = []
     lab_to_install = lab
     drop = int(drop) if drop else None
-    build_server = None
+    bs = None
     host_build_dir = BuildServerPath.DEFAULT_HOST_BUILD_PATH
     guest_image = None
     files_server = None
@@ -694,7 +696,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         conf_iso_path = build_info["BUILD_ISO_PATH"]
         conf_patch_dir = build_info["PATCHES"]
         if conf_build_server:
-            build_server = conf_build_server
+            bs = conf_build_server
         if conf_host_build_dir:
             host_build_dir = conf_host_build_dir
         if conf_iso_path:
@@ -767,17 +769,17 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
             try:
                 files_dir = files_dir + '-lowlatency'
                 lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
-                               host_build_dir=host_build_dir)
+                                                        host_build_dir=host_build_dir)
             except:
                 files_dir = files_dir[:files_dir.find('-lowlatency')]
 
         lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
                                                 host_build_dir=host_build_dir)
-        lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items() if "system" in system_label))
+        lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items()
+                                   if "system" in system_label))
         multi_region_lab = lab_info_dict["multi_region"]
         dist_cloud_lab = lab_info_dict["dist_cloud"]
         lab_to_install.update(lab_info_dict)
-
 
     if 'system_mode' not in lab_to_install:
         if 'storage_nodes' in lab_to_install:
@@ -792,7 +794,6 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
 
     lab_to_install['system_mode'] = system_mode
     ProjVar.set_var(sys_type=system_mode)
-
 
     # add nodes dictionary
     lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
@@ -838,11 +839,10 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if resume is True:
         resume = fresh_install_helper.get_resume_step(lab_to_install)
 
-
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
                                  skips=skip,
                                  wipedisk=wipedisk,
-                                 build_server=build_server,
+                                 build_server=bs,
                                  boot_server=boot_server,
                                  host_build_dir=host_build_dir,
                                  guest_image=guest_image,
@@ -869,27 +869,38 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  )
 
 
-def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_dir, tis_build_dir, compute, storage, patch_dir,
-                      license_path, guest_image, heat_templates, boot, iso_path, low_latency, security, stop, ovs,
-                      boot_server, resume, skip):
+def write_installconf(lab, controller, lab_files_dir, bs, tis_builds_dir, tis_build_dir, compute, storage,
+                      patch_dir, license_path, guest_image, heat_templates, boot, iso_path, low_latency, security,
+                      stop, ovs, boot_server, resume, skip):
     """
     Writes a file in ini format of the fresh_install variables
     Args:
         lab: Str name of the lab to fresh_install
         controller: Str comma separated list of controller node barcodes
         lab_files_dir: Str path to the directory containing the lab files
-        build_server: Str name of a valid build server. Default is yow-cgts4-lx
+        bs: Str name of a valid build server. Default is yow-cgts4-lx
         tis_build_dir: Str path to the desired build directory. Default is the latest
         compute: Str comma separated list of compute node barcodes
         storage: Str comma separated list of storage node barcodes
         license_path: Str path to the license file
         guest_image: Str path to the guest image
         heat_templates: Str path to the python heat templates
+        patch_dir
+        tis_builds_dir
+        boot
+        iso_path
+        low_latency
+        security
+        stop
+        ovs
+        boot_server
+        resume
+        skip
 
     Returns: the path of the written file
 
     """
-    __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
+    __build_server = bs if bs and bs != "" else BuildServerPath.DEFAULT_BUILD_SERVER
     host_builds_dir_name = tis_builds_dir if tis_builds_dir else BuildServerPath.BldsDirNames.TITANIUM_R6_BUILD
     host_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
 
@@ -909,7 +920,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_d
     else:
         lab_dict = ProjVar.get_var("LAB")
     if not lab_dict:
-        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server)
+        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, bs)
 
     files_dir = "{}/yow/{}".format(install_helper.get_default_lab_config_files_path(host_builds_dir_name),
                                    install_helper.get_git_name(lab_dict['name'])) if not files_dir else files_dir
@@ -925,7 +936,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_d
             labconf_lab_dict[labconf_key] = lab_dict[lab_key]
             continue
         labconf_key = lab_key.replace(" ", "_")
-        labconf_key = labconf_key.replace("-","")
+        labconf_key = labconf_key.replace("-", "")
         labconf_key = labconf_key.upper()
         labconf_lab_dict[labconf_key] = lab_dict[lab_key]
     # TODO: temp fix for simplex labs
@@ -979,7 +990,6 @@ def write_installconf(lab, controller, lab_files_dir, build_server, tis_builds_d
     return install_config_path
 
 
-
 def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir=None):
     """
     retrieves information about the lab by parsing the lab files. If a specific server or directory isn't given
@@ -1005,13 +1015,17 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
                                                install_helper.get_git_name(lab_name))
     else:
         raise ValueError("Could not access lab files")
-    ssh_conn = install_helper.establish_ssh_connection(conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
-                                                       initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, '.*'))
-    assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
+    ssh_conn = install_helper.establish_ssh_connection(
+        conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+        initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, '.*'))
+    assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'.\
+        format(conf_server, lab_files_path)
 
     # check lab configuration for special cases (i.e. distributed cloud or multi region)
-    multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".format(multi_region_identifer, lab_files_path))[0] == 0
-    dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".format(dist_cloud_identifer, lab_files_path))[0] == 0
+    multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".
+                                     format(multi_region_identifer, lab_files_path))[0] == 0
+    dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".
+                                   format(dist_cloud_identifer, lab_files_path))[0] == 0
     lab_info_dict["multi_region"] = multi_region
     lab_info_dict["dist_cloud"] = dist_cloud
 
@@ -1019,16 +1033,16 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     configname = os.path.basename(os.path.normpath(conf_dir))
     settings_filepath = conf_dir + "/settings.ini"
     if ssh_conn.exec_cmd('test -f {}/settings.ini'.format(conf_dir))[0] == 0:
-        lab_info_dict["boot_device_dict"] = create_node_boot_dict(configname=configname, settings_filepath=settings_filepath,
-                                                             settings_server_conn=ssh_conn)
+        lab_info_dict["boot_device_dict"] = create_node_boot_dict(
+            configname=configname, settings_filepath=settings_filepath, settings_server_conn=ssh_conn)
     else:
         lab_info_dict["boot_device_dict"] = create_node_boot_dict(configname=configname)
 
     # collect SYSTEM info
     rc, output = ssh_conn.exec_cmd('grep -r --color=none {} {}'.format(info_prefix, lab_files_path), rm_date=False)
     assert rc == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
-    lab_info = output.replace(' ', '')
-    lab_info_list = lab_info.splitlines()
+    lab_info_ = output.replace(' ', '')
+    lab_info_list = lab_info_.splitlines()
     for line in lab_info_list:
         key = line[line.find(info_prefix):line.find('=')].lower()
         val = line[line.find('=') + 1:].lower()
@@ -1079,10 +1093,10 @@ def set_session(con_ssh):
             from utils.cgcs_reporter import upload_results
             sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
             build_id = ProjVar.get_var('BUILD_ID')
-            build_server = ProjVar.get_var('BUILD_SERVER')
+            bs_ = ProjVar.get_var('BUILD_SERVER')
             session_id = upload_results.upload_test_session(lab_name=ProjVar.get_var('LAB')['name'],
                                                             build_id=build_id,
-                                                            build_server=build_server,
+                                                            build_server=bs_,
                                                             sw_version=sw_version,
                                                             patches=patches,
                                                             log_dir=ProjVar.get_var('LOG_DIR'),
@@ -1390,4 +1404,3 @@ def initialize_server(server_hostname, prompt=None):
     server_dict = {"name": server_hostname, "prompt": prompt, "ssh_conn": server_conn}
 
     return build_server.Server(**server_dict)
-

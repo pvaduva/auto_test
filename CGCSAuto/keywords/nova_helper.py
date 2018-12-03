@@ -1853,7 +1853,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
         if remove:
             hosts = hosts_in_aggregate
         else:
-            hosts = host_helper.get_hosts()
+            hosts = host_helper.get_hypervisors()
 
     if isinstance(hosts, str):
         hosts = [hosts]

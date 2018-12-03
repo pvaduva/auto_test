@@ -217,9 +217,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
             if hosts_avail and (check_hypervisor_up or check_webservice_up):
 
-                all_nodes = system_helper._get_nodes(con_ssh)
-                computes = list(set(hosts_avail) & set(list(all_nodes['computes'])))
-                controllers = list(set(hosts_avail) & set(list(all_nodes['controllers'])))
+                all_nodes = system_helper.get_hostnames_per_personality(con_ssh=con_ssh)
+                computes = list(set(hosts_avail) & set(all_nodes['compute']))
+                controllers = list(set(hosts_avail) & set(all_nodes['controller']))
                 if system_helper.is_small_footprint(con_ssh):
                     computes += controllers
 
@@ -323,8 +323,10 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    expt_online_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.LOCKED, auth_info=auth_info)
-    expt_avail_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.UNLOCKED, auth_info=auth_info)
+    expt_online_hosts = system_helper.get_hostnames(hosts=hosts, administrative=HostAdminState.LOCKED,
+                                                    auth_info=auth_info, con_ssh=con_ssh)
+    expt_avail_hosts = system_helper.get_hostnames(hosts=hosts, administrative=HostAdminState.UNLOCKED,
+                                                   auth_info=auth_info, con_ssh=con_ssh)
 
     res_lock = res_unlock = True
     if expt_online_hosts:
@@ -778,7 +780,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         string_total = subfunc + personality
 
         is_controller = 'controller' in string_total
-        is_compute = 'compute' in string_total
+        is_compute = bool(re.search('compute|worker', string_total))
 
         if check_hypervisor_up and is_compute:
             if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
@@ -948,10 +950,10 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     if hosts_avail and (check_hypervisor_up or check_webservice_up):
 
-        all_nodes = system_helper._get_nodes(con_ssh=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
-                                             con_telnet=con_telnet)
-        computes = list(set(hosts_avail) & set(list(all_nodes['computes'])))
-        controllers = list(set(hosts_avail) & set(list(all_nodes['controllers'])))
+        all_nodes = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, use_telnet=use_telnet,
+                                                                auth_info=auth_info, con_telnet=con_telnet)
+        computes = list(set(hosts_avail) & set(all_nodes['compute']))
+        controllers = list(set(hosts_avail) & set(all_nodes['controller']))
         if system_helper.is_small_footprint(con_ssh, auth_info=auth_info):
             computes += controllers
 
@@ -1046,7 +1048,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
     if isinstance(fields, str):
         fields = [fields]
 
-    res_dict= {}
+    res_dict = {}
     res_list = []
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field, merge_lines=merge_lines)
@@ -1411,27 +1413,6 @@ def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTim
         return 6, "400.001 alarm is not cleared within timeout after swact"
 
     return 0, "Active controller is successfully swacted."
-
-
-def get_hosts(hosts=None, con_ssh=None, auth_info=Tenant.get('admin'), **states):
-    """
-    Filter out a list of hosts with specified states from given hosts.
-
-    Args:
-        hosts (list): list of hostnames to filter out from. If None, all hosts will be considered.
-        con_ssh:
-        auth_info
-        **states: fields that customized a host. for instance avaliability='available', personality='controller'
-        will make sure that a list of host that are available and controller to be returned by the function.
-
-    Returns (list):A list of host specificed by the **states
-
-    """
-    # get_hosts(availability='available', personality='controller')
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, auth_info=auth_info))
-    if hosts:
-        table_ = table_parser.filter_table(table_, hostname=hosts)
-    return table_parser.get_values(table_, 'hostname', **states)
 
 
 def get_nova_hosts(zone='nova', status='enabled', state='up', con_ssh=None, auth_info=Tenant.get('admin')):
@@ -4155,7 +4136,8 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, auth_info=Tenant.ge
     from keywords import nova_helper
     from testfixtures.recover_hosts import HostsToRecover
 
-    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh, auth_info=auth_info)
+    controllers, computes, storages = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, auth_info=auth_info,
+                                                                                  rtn_tuple=True)
     controllers = list(set(controllers) & set(hosts))
     computes_to_lock = list(set(computes) & set(hosts))
     storages = list(set(storages) & set(hosts))
@@ -4496,6 +4478,8 @@ def enable_disable_hosts_devices(hosts, devices, enable=True, con_ssh=None, auth
         hosts (str|list|tuple): hostname(s)
         devices (str|list|tuple): device(s) name or address via system host-device-list
         enable (bool): whether to enable or disable devices
+        con_ssh
+        auth_info
 
     Returns:
 

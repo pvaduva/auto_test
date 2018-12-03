@@ -14,10 +14,6 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-def get_hostname(con_ssh=None):
-    return _get_info_non_cli(r'cat /etc/hostname', con_ssh=con_ssh)
-
-
 def get_buildinfo(con_ssh=None, use_telnet=False, con_telnet=None):
     return _get_info_non_cli(r'cat /etc/build.info', con_ssh=con_ssh,  use_telnet=use_telnet,
                              con_telnet=con_telnet)
@@ -138,7 +134,7 @@ def is_small_footprint(controller_ssh=None, controller='controller-0', use_telne
                                            use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info))
     subfunc = table_parser.get_value_two_col_table(table_, 'subfunctions')
 
-    combined = 'controller' in subfunc and 'compute' in subfunc
+    combined = 'controller' in subfunc and re.search('compute|worker', subfunc)
 
     str_ = 'not ' if not combined else ''
 
@@ -206,7 +202,7 @@ def get_computes(administrative=None, operational=None, availability=None, con_s
 
 def get_hostnames(personality=None, administrative=None, operational=None, availability=None, name=None,
                   strict=True, exclude=False, con_ssh=None, use_telnet=False, con_telnet=None,
-                  auth_info=Tenant.get('admin')):
+                  auth_info=Tenant.get('admin'), hosts=None):
     """
     Get hostnames with given criteria
     Args:
@@ -221,6 +217,7 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
         use_telnet
         con_telnet
         auth_info
+        hosts (None|list): filter out these hosts only
 
     Returns (list): hostnames
 
@@ -229,80 +226,60 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
                                            con_telnet=con_telnet, auth_info=auth_info))
 
     table_ = table_parser.filter_table(table_, exclude=True, hostname='None')
+    if hosts:
+        table_ = table_parser.filter_table(table_, hostname=hosts)
+
+    if personality:
+        compute_personality = 'compute|worker'
+        if personality == 'compute':
+            personality = compute_personality
+        elif 'compute' in personality:
+            personality = list(personality)
+            compute_index = personality.index('compute')
+            personality[compute_index] = compute_personality
+
     filters = {'hostname': name,
                'personality': personality,
                'administrative': administrative,
                'operational': operational,
                'availability': availability}
-    hostnames = table_parser.get_values(table_, 'hostname', strict=strict, exclude=exclude, **filters)
+    hostnames = table_parser.get_values(table_, 'hostname', strict=strict, exclude=exclude, regex=True, **filters)
     LOG.debug("Filtered hostnames: {}".format(hostnames))
 
     return hostnames
 
 
-def get_hostnames_per_personality(availability=None, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_hostnames_per_personality(availability=None, con_ssh=None, auth_info=Tenant.get('admin'), source_rc=False,
+                                  use_telnet=False, con_telnet=None, rtn_tuple=False):
     """
     Args:
         availability
         con_ssh:
         auth_info
+        source_rc
+        use_telnet
+        con_telnet
+        rtn_tuple (bool): whether to return tuple instead of dict. i.e., <controllers>, <computes>, <storages>
 
-    Returns (dict):
+    Returns (dict|tuple):
     e.g., {'controller': ['controller-0', 'controller-1'], 'compute': ['compute-0', 'compute-1], 'storage': []}
 
     """
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, auth_info=auth_info,
+                                           source_openrc=source_rc, use_telnet=use_telnet, con_telnet=con_telnet))
     personalities = ('controller', 'compute', 'storage')
     res = {}
     for personality in personalities:
-        hosts = table_parser.get_values(table_, 'hostname', personality=personality, availability=availability)
+        personality_tmp = 'compute|worker' if personality == 'compute' else personality
+        hosts = table_parser.get_values(table_, 'hostname', personality=personality_tmp, availability=availability,
+                                        regex=True)
         hosts = [host for host in hosts if host.lower() != 'none']
         res[personality] = hosts
 
+    if rtn_tuple:
+        res = res['controller'], res['compute'], res['storage']
+
     return res
-
-
-def _get_nodes(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin')):
-    """
-
-    Args:
-        con_ssh:
-
-    Returns: (dict)
-        {'controllers':
-                {'controller-0': {'id' = id_, 'uuid' = uuid, 'mgmt_ip' = ip, 'mgmt_mac' = mac},
-                 'controller-1': {...}
-                 },
-         'computes':
-                {'compute-0': {...},
-                 'compute-1': {...}
-                 }.
-         'storages':
-                {'storage-0': {...},
-                 'storage-1': {...}
-                }
-        }
-
-    """
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
-                                           con_telnet=con_telnet))
-    nodes = {}
-
-    for personality in ['controller', 'compute', 'storage']:
-        nodes[personality+'s'] = {}
-        hostnames = table_parser.get_values(table_, 'hostname', personality=personality)
-        for hostname in hostnames:
-            host_table = table_parser.table(cli.system('host-show', hostname, auth_info=auth_info))
-            uuid = table_parser.get_values(host_table, 'Value', Property='uuid')[0]
-            id_ = table_parser.get_values(host_table, 'Value', Property='id')[0]
-            mgmt_ip = table_parser.get_values(host_table, 'Value', Property='mgmt_ip')[0]
-            mgmt_mac = table_parser.get_values(host_table, 'Value', Property='mgmt_mac')[0]
-            nodes[personality+'s'][hostname] = {'id': id_,
-                                                'uuid': uuid,
-                                                'mgmt_ip': mgmt_ip,
-                                                'mgmt_mac': mgmt_mac}
-
-    return nodes
 
 
 def get_active_controller_name(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin')):
@@ -2408,29 +2385,6 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
     return 0, "The {} service parameter was applied".format(service)
 
 
-def get_hosts_by_personality(con_ssh=None, source_admin=False, auth_info=Tenant.get('admin')):
-    """
-    get hosts by different personality
-    Args:
-        con_ssh (SSHClient):
-        source_admin (bool): whether to source to admin user when running commands. Normally used by
-            stand-alone utils without using pytest.
-        auth_info
-
-    Returns (tuple): (controllers_list, computes_list, storages_list)
-        Examples: for CPE with 2 controllers, returns:
-            ([controller-0, controller-1], [], [])
-
-    """
-    hosts_tab = table_parser.table(cli.system('host-list', ssh_client=con_ssh, source_openrc=source_admin,
-                                              auth_info=auth_info))
-    controllers = table_parser.get_values(hosts_tab, 'hostname', personality='controller')
-    computes = table_parser.get_values(hosts_tab, 'hostname', personality='compute')
-    storages = table_parser.get_values(hosts_tab, 'hostname', personality='storage')
-
-    return controllers, computes, storages
-
-
 def are_hosts_unlocked(con_ssh=None, auth_info=Tenant.get('admin')):
 
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, auth_info=auth_info))
@@ -2757,7 +2711,7 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
 
     info_dict = get_installed_build_info_dict(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     sw_version = info_dict.get('SW_VERSION')
-    if not sw_version in sw_versions:
+    if sw_version not in sw_versions:
         ProjVar.set_var(append=True, SW_VERSION=sw_version)
 
     return sw_version

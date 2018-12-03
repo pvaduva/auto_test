@@ -329,7 +329,7 @@ def pytest_configure(config):
                                       compute_arg=compute_arg,
                                       storage_arg=storage_arg,
                                       lab_files_dir=lab_file_dir,
-                                      build_server=build_server,)
+                                      bs=build_server)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
@@ -529,7 +529,6 @@ def pytest_addoption(parser):
     ##################################
     # Lab fresh_install or upgrade options #
     ##################################
-    LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
 
     # Install
     parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
@@ -570,7 +569,8 @@ def pytest_addoption(parser):
                      action='store', metavar='DIR',  help=tis_builds_dir_help)
 
     # install help
-    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
+    lab_files = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
+    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in lab_files)) +\
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
                     "Default is: <load_path>/lab/yow/<lab_name>"
     controller_help = "space-separated list of VLM barcodes for controllers"

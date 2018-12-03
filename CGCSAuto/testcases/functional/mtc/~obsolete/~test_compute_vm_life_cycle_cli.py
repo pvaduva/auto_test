@@ -58,7 +58,7 @@ def launch_instance_on_compute(network_name=None,
     host_helper.unlock_host(host_name)
     _lock_unlock_computes_except_one(host_name, action='lock')
 
-    assert host_name in host_helper.get_hosts(availability=[HostAvailState.AVAILABLE,
+    assert host_name in system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE,
                                                             HostAvailState.DEGRADED])
 
     lvm_hosts = host_helper.get_hosts_in_storage_aggregate('local_lvm')

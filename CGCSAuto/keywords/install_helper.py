@@ -629,7 +629,7 @@ def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
         if rc != 0 or "Configuration failed" in output:
             msg = "system host-bulk-add failed"
             return rc, None, msg
-        hosts = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
+        hosts = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, rtn_tuple=True)
         return 0, hosts, ''
 
 
@@ -2723,7 +2723,7 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
     time.sleep(30)
     for count in range(50):
         try:
-            hosts = host_helper.get_hosts()
+            hosts = host_helper.system_helper.get_hostnames()
             if hosts:
                 LOG.debug('hosts:{}'.format(hosts))
         except:

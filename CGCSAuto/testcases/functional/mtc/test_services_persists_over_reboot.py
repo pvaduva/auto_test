@@ -33,7 +33,7 @@ def test_system_persist_over_host_reboot(host_type):
 
         host = None
     else:
-        hosts = host_helper.get_hosts(personality='storage')
+        hosts = system_helper.get_hostnames(personality='storage')
         if not hosts:
             skip(msg="Lab has no storage nodes. Skip rebooting storage node.")
 

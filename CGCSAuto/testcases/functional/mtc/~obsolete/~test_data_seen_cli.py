@@ -15,7 +15,7 @@ def test_show_cpu_data():
         - Verify that the data is in a valid form
 
     """
-    hosts = host_helper.get_hosts()
+    hosts = system_helper.get_hostnames()
     for host in hosts:
         if host == 'None':
             continue
@@ -54,7 +54,7 @@ def test_show_mem_data():
         - Verify the memory data is in a valid form and that the different forms match
 
     """
-    hosts = host_helper.get_hosts()
+    hosts = system_helper.get_hostnames()
     for host in hosts:
         if host == 'None':
             continue

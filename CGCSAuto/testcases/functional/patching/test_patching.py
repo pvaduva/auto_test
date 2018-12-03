@@ -87,7 +87,7 @@ def patching_setup():
         vm_id = vm_helper.boot_vm(name='patch_{}'.format(source), source=source, cleanup='module')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    controllers, computes, storages = system_helper.get_hosts_by_personality()
+    controllers, computes, storages = system_helper.get_hostnames_per_personality(rtn_tuple=True)
     return patches, controllers, computes, storages
 
 

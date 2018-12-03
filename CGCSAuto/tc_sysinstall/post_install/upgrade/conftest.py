@@ -229,13 +229,10 @@ def upgrade_setup(pre_check_upgrade):
     if alarm_restrictions:
         LOG.info("Alarm restriction option: {}".format(alarm_restrictions))
 
-    system_nodes = system_helper.get_hostnames()
-    storage_nodes = [h for h in system_nodes if "storage" in h]
-    compute_nodes = [h for h in system_nodes if "storage" not in h and 'controller' not in h]
+    controller_ndoes, compute_nodes, storage_nodes = system_helper.get_hostnames_per_personality(rtn_tuple=True)
+    system_nodes = controller_ndoes + compute_nodes + storage_nodes
     orchestration_nodes = []
-    cpe = False
-    if len(compute_nodes) == 0:
-        cpe = True
+    cpe = False if (compute_nodes or storage_nodes) else True
 
     if not cpe and orchestration_after and (orchestration_after == 'default' or 'controller' in orchestration_after):
         orchestration_nodes.extend(system_nodes)

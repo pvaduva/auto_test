@@ -206,8 +206,8 @@ def test_storage_profile(personality, from_backing, to_backing):
     if personality == 'controller' and not system_helper.is_small_footprint():
         skip("Test does not apply to controller hosts without subtype compute")
 
-    hosts = host_helper.get_hosts(personality=personality)
-    if len(hosts) == 0:
+    hosts = system_helper.get_hostnames(personality=personality)
+    if not hosts:
         skip("No hosts of type {} available".format(personality))
 
     if (from_backing == "remote" or to_backing == "remote") and not system_helper.is_storage_system():
@@ -235,6 +235,7 @@ def test_storage_profile(personality, from_backing, to_backing):
 
     # Take the hardware compatible hosts and check if any of them already have
     # the backend that we want.  This will save us test time.
+    new_to_backing = None
     if personality == "compute":
         from_hosts = []
         to_hosts = []

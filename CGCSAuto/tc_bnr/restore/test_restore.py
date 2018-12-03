@@ -389,7 +389,8 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
     locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailState.OFFLINE}
 
     for tried in range(1, max_tries+1):
-        hosts = [h for h in host_helper.get_hosts(con_ssh=con_ssh, administrative='unlocked') if h != 'controller-0']
+        hosts = [h for h in system_helper.get_hostnames(con_ssh=con_ssh, administrative='unlocked') if
+                 h != 'controller-0']
         if not hosts:
             LOG.info('all hosts all locked except the controller-0 after tried:{}'.format(tried))
             break

@@ -689,7 +689,7 @@ def get_expected_hosts_states(action, patch_ids, pre_hosts_states, pre_patches_s
                 impacted_host_types += ['COMPUTE', 'CONTROLLER', 'STORAGE']
 
         impacted_host_types = list(set(impacted_host_types))
-        controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh)
+        controllers, computes, storages = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, rtn_tuple=True)
         hosts_per_types = {'CONTROLLER': controllers, 'COMPUTE': computes, 'STORAGE': storages}
 
         expected_states = {}
