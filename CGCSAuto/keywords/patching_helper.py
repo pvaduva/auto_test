@@ -1548,9 +1548,14 @@ def get_affecting_alarms():
     return affecting_alarms
 
 
-def wait_for_affecting_alarms_gone():
+def wait_for_affecting_alarms_gone(fail_ok=False):
     affecting_alarms = get_affecting_alarms()
+    res = True
     if affecting_alarms:
         LOG.info("Wait for mgmt affecting alarms to be gone: {}".format(affecting_alarms))
-        system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240, fail_ok=False)
-        time.sleep(30)
+        res, affecting_alarms = system_helper.wait_for_alarms_gone(alarms=affecting_alarms, timeout=240,
+                                                                   fail_ok=fail_ok)
+        if res:
+            time.sleep(30)
+
+    return res, affecting_alarms

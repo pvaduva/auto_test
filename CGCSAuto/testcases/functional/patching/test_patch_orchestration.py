@@ -162,7 +162,8 @@ def test_patch_orch_process(patch_orchestration_setup, patch_function_check, tes
     LOG.info("Patch {} uploaded".format(uploaded_ids))
 
     LOG.tc_step("Apply patch {}".format(uploaded_ids))
-    applied = patching_helper.apply_patches(apply_all=True)[1]
+    apply_all = False if 'A-C' in test_patch_type else True
+    applied = patching_helper.apply_patches(patch_ids=patches, apply_all=apply_all)[1]
     LOG.info("Patch {} applied".format(applied))
 
     compute_count = len(computes)

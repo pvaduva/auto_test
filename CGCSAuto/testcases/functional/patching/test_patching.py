@@ -3,10 +3,8 @@ from pytest import fixture, skip, mark
 from consts.proj_vars import ProjVar
 from consts.cgcs import PatchState, VMStatus
 from utils.tis_log import LOG
+from utils.exceptions import TiSError
 from keywords import patching_helper, system_helper, vm_helper, cinder_helper, nova_helper, orchestration_helper
-
-PATCH_ALARM_ID = '900.001'
-PATCH_ALARM_REASON = 'Patching operation in progress'
 
 
 @fixture(scope='function', autouse=True)
@@ -31,30 +29,39 @@ def get_test_patches(state=None):
     return test_patches
 
 
-def remove_test_patches(delete=True, failure_patch=False):
-    applied = get_test_patches(state=(PatchState.PARTIAL_APPLY, PatchState.APPLIED))
-    if applied:
-        LOG.info("Remove applied test patch {}".format(applied))
-        patching_helper.remove_patches(patch_ids=applied)
+def remove_test_patches(delete=True, failure_patch=False, fail_ok=False):
+    try:
+        applied = get_test_patches(state=(PatchState.PARTIAL_APPLY, PatchState.APPLIED))
+        if applied:
+            LOG.info("Remove applied test patch {}".format(applied))
+            patching_helper.remove_patches(patch_ids=applied)
 
-    LOG.info("Install hosts to remove test patch if needed")
-    code, installed, failed = patching_helper.install_patches(remove=True, fail_ok=True)
+        LOG.info("Install hosts to remove test patch if needed")
+        code, installed, failed = patching_helper.install_patches(remove=True, fail_ok=True)
 
-    unavail_patches = get_test_patches(state=(PatchState.PARTIAL_REMOVE, PatchState.PARTIAL_APPLY, PatchState.APPLIED))
+        unavail_patches = get_test_patches(state=(PatchState.PARTIAL_REMOVE, PatchState.PARTIAL_APPLY, PatchState.APPLIED))
 
-    if delete:
-        available_patches = get_test_patches(state=PatchState.AVAILABLE)
-        if available_patches:
-            LOG.info("Delete available test patches: {}".format(available_patches))
-            patching_helper.delete_patches(available_patches)
+        if delete:
+            available_patches = get_test_patches(state=PatchState.AVAILABLE)
+            if available_patches:
+                LOG.info("Delete available test patches: {}".format(available_patches))
+                patching_helper.delete_patches(available_patches)
 
-    patching_helper.wait_for_affecting_alarms_gone()
+        patching_helper.wait_for_affecting_alarms_gone()
 
-    # Verify patch removal succeeded
-    if not failure_patch:
-        assert code <= 0, "Patches failed to install after removal: {}".format(failed)
+        # Verify patch removal succeeded
+        if not failure_patch:
+            assert code <= 0, "Patches failed to install after removal: {}".format(failed)
 
-    assert not unavail_patches, "Patches not in available state: {}".format(unavail_patches)
+        assert not unavail_patches, "Patches not in available state: {}".format(unavail_patches)
+        return True
+
+    except TiSError as e:
+        if not fail_ok:
+            raise
+
+        LOG.info("Unable to cleanup test patches from system. Error: {}".format(e.__str__()))
+        return False
 
 
 @fixture(scope='module', autouse=True)
@@ -62,10 +69,12 @@ def patching_setup():
 
     LOG.fixture_step("Remove test patches (if any) and check system health")
     orchestration_helper.delete_strategy('patch')
-    remove_test_patches()
+    if not remove_test_patches(fail_ok=True):
+        skip('Unable to cleanup existing test patches from system. Skip patch test.')
+
     code, failed = patching_helper.check_system_health(fail_on_disallowed_failure=False)
     if code > 1:
-        skip('Patching cannot be run with failures: {}'.format(failed))
+        skip('Skip Patch test due to exiting failures: {}'.format(failed))
 
     LOG.fixture_step("Copy test patches from build server to system")
     patch_dir, patches = patching_helper.download_test_patches()
@@ -187,11 +196,11 @@ def test_patch_dependency(patching_setup, patch_function_check):
 
 
 @mark.parametrize('patch_type', [
-    'ALLNODES',
-    'CONTROLLER',
-    'NOVA',
-    'COMPUTE',
-    'STORAGE',
+    'INSVC_ALLNODES',
+    'INSVC_CONTROLLER',
+    'INSVC_NOVA',
+    'RR_COMPUTE',
+    'RR_STORAGE',
     'LARGE'
 ])
 def test_patch_host_correlations(patching_setup, patch_function_check, patch_type):
@@ -230,8 +239,8 @@ def test_patch_host_correlations(patching_setup, patch_function_check, patch_typ
 
 
 @mark.parametrize(('patch_type', 'install_type'), [
-    ('INSVC_', 'sync'),
-    ('RR_', 'async'),
+    ('INSVC', 'sync'),
+    ('RR', 'async'),
     ('LARGE', 'sync'),
 ])
 def test_patch_process(patching_setup, patch_function_check, patch_type, install_type):
@@ -256,7 +265,7 @@ def test_patch_process(patching_setup, patch_function_check, patch_type, install
 
     downloaded_patches, controllers, computes, storages = patching_setup
     vms = patch_function_check
-    patch_ids = upload_test_patches(downloaded_patches=downloaded_patches, search_str=patch_type)
+    patch_ids = upload_test_patches(downloaded_patches=downloaded_patches, search_str='_'+patch_type)
 
     LOG.tc_step("Apply patch(es): {}".format(patch_ids))
     patching_helper.apply_patches(patch_ids=patch_ids)
