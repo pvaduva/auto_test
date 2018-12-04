@@ -766,6 +766,9 @@ class Labs:
         'floating ip': 'unknow_fip',
         'controller-0 ip': 'unknown_con0_ip',
         'controller-1 ip': 'unknown_con1_ip',
+        'controller_nodes': [],
+        'compute_nodes': [],
+        'storage_nodes': []
     }
 
     # Distributed Cloud

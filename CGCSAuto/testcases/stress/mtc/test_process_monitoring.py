@@ -1038,7 +1038,7 @@ class MonitoredProcess:
     mark.p1('sysinv-inv'),    # sysinv-inv in SM
     mark.p1('sysinv-conductor'),
     mark.p1('mtc-agent'),
-    mark.p1('hbs-agent'),
+    # mark.p1('hbs-agent'),     # obsoleted
     mark.p1('hw-mon'),
     mark.p1('dnsmasq'),
     mark.p1('fm-mgr'),
