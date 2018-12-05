@@ -760,12 +760,13 @@ class Labs:
         'controller-0 ip': ''
     }
 
-    UNKNOWN = {
-        'short_name': 'unknown',
-        'name': 'unknown',
-        'floating ip': 'unknow_fip',
-        'controller-0 ip': 'unknown_con0_ip',
-        'controller-1 ip': 'unknown_con1_ip',
+    # Lab to select for auto install a custom system
+    CUSTOM = {
+        'short_name': 'custom',
+        'name': 'custom',
+        'floating ip': '',
+        'controller-0 ip': '',
+        'controller-1 ip': '',
         'controller_nodes': [],
         'compute_nodes': [],
         'storage_nodes': []
