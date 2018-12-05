@@ -599,6 +599,7 @@ def _check_status_after_killing_process(service, host, target_status, expecting=
         return (0 == code) == expecting
 
     total_wait = 120 if expecting else 30
+    time.sleep(1)
 
     found = host_helper.wait_for_host_values(host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True, **expected)
 

@@ -82,26 +82,42 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         else:
             source_openrc_file(ssh_client=ssh_client, auth_info=auth_info, rc_file=source_file, fail_ok=fail_ok,
                                remote_cli=use_remote_cli, force=force_source)
+        flags = ''
     else:
         if auth_info:
             auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {} "
                          "--os-user-domain-name Default --os-project-domain-name Default".
                          format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
 
-            if cmd in ('openstack', 'sw-manager'):
-                flags += ' --os-interface internal'
-            else:
-                flags += ' --os-endpoint-type internalURL'
-
-            if cmd != 'dcmanager':
-                region = auth_info['region']
-                if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
-                    syscon_cmds = ('system', 'fm')
-                    region = 'RegionOne' if cmd in syscon_cmds else 'SystemController'
-
-                flags += ' --os-region-name {}'.format(region)
+            # if cmd in ('openstack', 'sw-manager'):
+            #     flags += ' --os-interface internal'
+            # else:
+            #     flags += ' --os-endpoint-type internalURL'
+            #
+            # if cmd != 'dcmanager':
+            #     region = auth_info['region']
+            #     if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
+            #         syscon_cmds = ('system', 'fm')
+            #         region = 'RegionOne' if cmd in syscon_cmds else 'SystemController'
+            #
+            #     flags += ' --os-region-name {}'.format(region)
 
             flags = '{} {}'.format(auth_args.strip(), flags.strip())
+
+    sys_cmd = cmd if not use_telnet else ( cmd.split(';')[1].strip() if len(cmd.split(';')) > 1 else cmd.strip())
+
+    if sys_cmd in ('openstack', 'sw-manager'):
+        flags += ' --os-interface internal'
+    else:
+        flags += ' --os-endpoint-type internalURL'
+
+    if sys_cmd != 'dcmanager':
+        region = auth_info['region']
+        if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
+            syscon_cmds = ('system', 'fm')
+            region = 'RegionOne' if sys_cmd in syscon_cmds else 'SystemController'
+
+        flags += ' --os-region-name {}'.format(region)
 
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags.strip(), sub_cmd, positional_args]).strip()
 

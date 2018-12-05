@@ -1,12 +1,14 @@
 import pytest
 import os
+import re
 
 from keywords import install_helper, vlm_helper
 from keywords.network_helper import reset_telnet_port
 from utils.tis_log import LOG
+from consts.lab import get_lab_dict
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import TuxlabServerPath
-from setups import initialize_server, write_installconf, set_install_params
+from consts.filepaths import TuxlabServerPath, BuildServerPath
+from setups import initialize_server, write_installconf, set_install_params, get_lab_dict
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils import exceptions, local_host
 
@@ -45,10 +47,81 @@ def pytest_configure(config):
     patch_dir = config.getoption('patch_dir')
     ovs = config.getoption('ovs_config')
 
+    R6_VALID_BUIDS_DIR_NAMES = [BuildServerPath.BldsDirNames.STARLINGX_18_10,
+                                BuildServerPath.BldsDirNames.TITANIUM_R6_BUILD,
+                                BuildServerPath.BldsDirNames.STARLINGX_UPSTREAM_BUILD]
+    if lab_arg:
+        lab_dict = get_lab_dict(lab_arg)
+        lab_name = lab_dict['name']
+        if 'yow' in lab_name:
+                lab_name = lab_name[4:]
+        else:
+                lab_dict = None
+                lab_name = None
+    else:
+        raise ValueError("Lab name must be provided")
+
+    if resume_install is True:
+            resume_install = fresh_install_helper.get_resume_step(lab_dict)
+            LOG.info("Resume Install step at {}".format(resume_install))
+
+
+
     if not install_conf:
+
+        __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
+        default_build_path = BuildServerPath.STX_RELEASE_DIR + '/' + BuildServerPath.LATEST_BUILD
+
+        host_build_dir_path = None
+        if tis_builds_dir:
+            if  tis_build_dir and os.path.isabs(tis_build_dir):
+                LOG.warning("Full load path: {} is specified in command argument; the tis_build_dir: {}: is ignored "
+                            .format(tis_build_dir, tis_builds_dir))
+            elif tis_build_dir and re.search(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX, tis_builds_dir):
+                host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
+            elif re.search(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX, tis_builds_dir):
+                host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, BuildServerPath.LATEST_BUILD)
+            else:
+                raise ValueError("The specified tis_builds_dir {} is not one of {}. If this is custom R6 load "
+                                 "please provide full load path to --tis-build-dir otherwise use the old "
+                                 "auto-installer for older loads ".format(tis_builds_dir, R6_VALID_BUIDS_DIR_NAMES))
+
+        else:
+            if tis_build_dir and not os.path.isabs(tis_build_dir):
+                raise ValueError("The specified tis_build_dir {} is not full directory path. Please provide full path "
+                                 "to the intended build load ".format(tis_build_dir))
+            elif tis_build_dir:
+
+                host_build_dir_path = tis_build_dir
+            else:
+                host_build_dir_path = default_build_path
+
+        files_server = __build_server
+
+        if lab_arg:
+            lab_dict = get_lab_dict(lab_arg)
+            lab_name = lab_dict['name']
+            if 'yow' in lab_name:
+                lab_name = lab_name[4:]
+        else:
+            lab_dict = None
+            lab_name = None
+
+        if lab_file_dir:
+            if lab_file_dir.find(":/") != -1:
+                files_server = lab_file_dir[:lab_file_dir.find(":/")]
+                lab_file_dir = lab_file_dir[lab_file_dir.find(":") + 1:]
+        else:
+            lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
+
+        if not heat_templates or not os.path.isabs(heat_templates):
+            heat_templates = default_build_path + '/' + BuildServerPath.HEAT_TEMPLATES_NEW
+
+
         install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
                                          lab_files_dir=lab_file_dir, patch_dir=patch_dir,
-                                         tis_build_dir=tis_build_dir, tis_builds_dir=tis_builds_dir, bs=build_server,
+                                         tis_build_dir=host_build_dir_path, tis_builds_dir=tis_builds_dir,
+                                         build_server=__build_server, files_server = files_server,
                                          license_path=install_license, guest_image=guest_image,
                                          heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                          security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
@@ -59,27 +132,53 @@ def pytest_configure(config):
                               controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                               boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                               patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
+
     print(" Pre Configure Install vars:")
     install_vars = InstallVars.get_install_vars().items()
     for var, value in install_vars:
         print("{}: {}".format(var, value))
 
 
-
 @pytest.fixture(scope='session')
 def install_setup():
     lab = InstallVars.get_install_var("LAB")
-    lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
-    barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
+    subclouds = []
+    dist_cloud = InstallVars.get_install_var("DISTRIBUTED_CLOUD")
+    if dist_cloud:
+        subclouds.extend([k for k in lab if 'subcloud' in k])
+        central_lab = lab['central_region']
+        vlm_helper.get_hostnames_from_consts(central_lab)
+        lab['central_region']['hosts'] = vlm_helper.get_hostnames_from_consts(central_lab)
+        barcodes = vlm_helper.get_barcodes_from_hostnames(lab['central_region']["hosts"], lab=central_lab)
+
+        for subcloud in subclouds:
+            lab[subcloud]["hosts"] = vlm_helper.get_hostnames_from_consts(lab[subcloud])
+            barcodes.extend(vlm_helper.get_barcodes_from_hostnames(lab[subcloud]["hosts"], lab=lab[subcloud]))
+    else:
+        lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
+        barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
+
     skip_list = InstallVars.get_install_var("SKIP")
-    active_con = lab["controller-0"]
+    active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
     install_type = ProjVar.get_var('SYS_TYPE')
 
     LOG.tc_setup_start("{} install".format(install_type))
     LOG.fixture_step("Reserve hosts")
-    LOG.info("Unreservering {}".format(lab["hosts"]))
-    vlm_helper.force_unreserve_hosts(lab["hosts"])
-    LOG.info("Reservering {}".format(lab["hosts"]))
+
+    if dist_cloud:
+        hosts = {'central_region': lab['central_region']['hosts']}
+        for subcloud in subclouds:
+            hosts[subcloud] = lab[subcloud]["hosts"]
+    else:
+        hosts = lab["hosts"]
+    LOG.info("Unreservering {}".format(hosts))
+    if not dist_cloud:
+
+        vlm_helper.force_unreserve_hosts(hosts)
+    else:
+        vlm_helper.force_unreserve_hosts(barcodes, val="barcodes")
+
+    LOG.info("Reservering {}".format(hosts))
     for barcode in barcodes:
         local_host.reserve_vlm_console(barcode, "AUTO: lab installation")
     LOG.fixture_step("Attempt to reset port on controller-0")
@@ -155,22 +254,27 @@ def install_setup():
         LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
 
         if "burn" in boot["boot_type"]:
-            install_helper.burn_image_to_usb(iso_host_obj)
+            install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab if not dist_cloud else lab['central_region'])
 
         elif "iso" in boot["boot_type"]:
-            install_helper.rsync_image_to_boot_server(iso_host_obj)
-            install_helper.mount_boot_server_iso(lab)
+            install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab if not dist_cloud
+            else lab['central_region'])
+            install_helper.mount_boot_server_iso(lab_dict=lab if not dist_cloud else lab['central_region'])
 
         elif "feed" not in skip_list and "pxe" in boot["boot_type"]:
             load_path = directories["build"]
             skip_cfg = "pxe" in skip_list
-            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, skip_cfg=skip_cfg)
+            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path,
+                                                 lab=lab['central_region'] if dist_cloud else None, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
             LOG.fixture_step("Attempting to wipe disks")
             try:
                 active_con.telnet_conn.login()
-                install_helper.wipe_disk_hosts(lab["hosts"])
+                if dist_cloud:
+                    install_helper.wipe_disk_hosts(lab['central_region']["hosts"], lab=lab['central_region'])
+                else:
+                    install_helper.wipe_disk_hosts(lab["hosts"])
             except exceptions.TelnetException as e:
                 LOG.error("Failed to wipedisks because of telnet exception: {}".format(e.message))
 
@@ -184,11 +288,11 @@ def pytest_runtest_teardown(item):
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
-    lab = InstallVars.get_install_var("LAB")
+    dist_cloud = lab['dist_cloud']
 
     LOG.tc_teardown_start(item.nodeid)
     try:
-        controller0_node = lab["controller-0"]
+        controller0_node = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
         if controller0_node.telnet_conn is None:
             controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
@@ -197,9 +301,18 @@ def pytest_runtest_teardown(item):
     except Exception:
         pass
     LOG.fixture_step("unreserving hosts")
-    vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+    if dist_cloud:
+        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
+                                   lab=lab['central_region'])
+        subclouds = [k for k, v in lab.items() if 'subcloud' in k]
+        for subcloud in subclouds:
+            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
+                                       lab=lab[subcloud])
+    else:
+        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
-    install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py", "test_storage_install.py"]
+    install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py",
+                         "test_storage_install.py", "test_distributed_cloud_install.py"]
     for install_testcase in install_testcases:
         if install_testcase in item.nodeid:
             LOG.fixture_step("Writing install step to {}".format(progress_file_path))

@@ -8,6 +8,7 @@ from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.timeout import DCTimeout
 from consts.filepaths import SysLogPath
+from consts.cgcs import DC_SubcloudStatus
 from keywords import system_helper
 
 
@@ -384,3 +385,44 @@ def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=
         system_helper.wait_and_clear_config_out_of_date_alarms(host_type='controller', **func_kwargs)
 
     return res
+
+def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout=DCTimeout.SUBCLOUD_AUDIT, check_interval=30,
+                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, fail_ok=False):
+    """
+    Wait for subcloud status
+    Args:
+        subcloud:
+        avail:
+        sync:
+        mgmt:
+        auth_info:
+        con_ssh:
+
+    Returns:
+
+    """
+    if not subcloud:
+        raise ValueError("Subcloud name must be specified")
+    if not avail and not sync and not mgmt:
+        raise ValueError("At least one  expected status of the subcloud must be specified.")
+    if avail:
+        LOG.info("Wait for {} availability to be {}".format(subcloud, avail))
+
+        end_time = time.time() + timeout + check_interval
+        while time.time() < end_time:
+
+            LOG.info("Check availability status for {} ".format(subcloud))
+            status = get_subclouds(rtn_val='availability', name=subcloud).pop()
+            if status == avail:
+                return 0, status
+
+            time.sleep(check_interval)
+
+
+        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, avail)
+
+        if fail_ok:
+            LOG.info(msg)
+            return 1, status
+        else:
+            raise exceptions.DCError(msg)

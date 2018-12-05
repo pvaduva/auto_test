@@ -599,6 +599,7 @@ class SysType:
     STORAGE = 'Storage'
     REGULAR = 'Regular'
     MULTI_REGION = 'Multi-Region'
+    DISTRIBUTED_CLOUD = 'Distributed_Cloud'
 
 
 class HeatStackStatus:
@@ -727,3 +728,14 @@ class PatchPattern:
     ALREADY_UPLOADED = '(.*) is already imported'
     VALIDATE_FAILED = 'Patch validation failed for (.*):'
     FILE_NOT_EXIST = 'File does not exist: (.*)'
+
+
+class DC_SubcloudStatus:
+    AVAIL_ONLINE = "online"
+    AVAIL_OFFLINE = "offline"
+
+    MANAGEMENT_MANAGED = "managed"
+    MANAGEMENT_UNMANAGED = "unmanaged"
+
+    SYNC_IN_SYNC = 'in-sync'
+

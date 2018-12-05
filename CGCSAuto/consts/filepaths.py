@@ -111,7 +111,7 @@ class BuildServerPath:
         R3_VERSION_SEARCH_REGEX = r'(?:_16.10|CGCS_3.0)'
         R4_VERSION_SEARCH_REGEX =  r'(?:_17.06|CGCS_4.0)'
         R5_VERSION_SEARCH_REGEX = r'(?:_18.03|CGCS_5.0)'
-        R6_VERSION_SEARCH_REGEX = r'(?:_18.10|CGCS_6.0|_R6_)'
+        R6_VERSION_SEARCH_REGEX = r'(?:_18\.10|CGCS_6.0|_R6_)'
 
     LATEST_HOST_BUILD_PATHS = {'15.12': os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TS_15_12_HOST, LATEST_BUILD),
                                '16.10': os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TS_16_10_HOST, LATEST_BUILD),

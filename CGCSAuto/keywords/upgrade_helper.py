@@ -6,7 +6,7 @@ import time
 
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
-from consts.timeout import HostTimeout
+from consts.timeout import HostTimeout, InstallTimeout
 from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
@@ -16,7 +16,7 @@ from consts.kpi_vars import UpgradeActivate, UpgradeComplete, UpgradeStart, Upgr
     UpgradeController0
 
 
-def upgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
+def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
                  lock=False, unlock=False):
     """
     Upgrade given host

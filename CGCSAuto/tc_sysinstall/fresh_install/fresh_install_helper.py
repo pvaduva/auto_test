@@ -1,13 +1,14 @@
 import os
 import re
 from pytest import skip
-import threading
+import time
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
 from utils.tis_log import LOG
+from utils.node import Node
 from consts.auth import Tenant
-from consts.cgcs import SysType
-from consts.filepaths import BuildServerPath
+from consts.cgcs import SysType, DC_SubcloudStatus
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar, InstallVars
 
 lab_setup_count = 0
@@ -29,10 +30,10 @@ def set_completed_resume_step(val=False):
 
 
 def reset_global_vars():
-    lab_setup_count = set_lab_setup_count(0)
+    lab_setup_count_ = set_lab_setup_count(0)
     completed_resume_step = set_completed_resume_step(False)
 
-    return lab_setup_count, completed_resume_step
+    return lab_setup_count_, completed_resume_step
 
 
 def set_preinstall_projvars(build_dir, build_server):
@@ -135,17 +136,19 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
     test_step = "Install Controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        vlm_helper.power_off_hosts(lab["hosts"])
-        install_helper.boot_controller(lab, small_footprint=is_cpe, boot_usb=usb, security=security,
-                                       low_latency=low_latency, patch_dir_paths=patch_dir, bld_server_conn=patch_server_conn)
+        vlm_helper.power_off_hosts(lab["hosts"], lab=lab)
+        install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb, security=security,
+                                       low_latency=low_latency, patch_dir_paths=patch_dir,
+                                       bld_server_conn=patch_server_conn)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
 
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None, lab_files_dir=None,
-                       load_path=None, guest_path=None, license_path=None, lab=None, final_step=None):
+def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None,
+                       lab_files_dir=None, load_path=None, guest_path=None, license_path=None, lab=None,
+                       final_step=None):
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if lab_files_dir is None:
@@ -210,7 +213,6 @@ def set_load_path(build_server_conn, sys_version=None):
     if sys_version is None:
         sys_version = ProjVar.get_var('SW_VERSION')[0]
     host_build_path = install_helper.get_default_latest_build_path(version=sys_version)
-    #host_build_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[sys_version]
     load_path = host_build_path + "/"
 
     InstallVars.set_install_var(tis_build_dir=host_build_path)
@@ -237,20 +239,28 @@ def set_software_version_var(con_ssh=None, use_telnet=False, con_telnet=None):
     return system_version
 
 
-def configure_controller(controller0_node, final_step=None):
+def configure_controller(controller0_node, config_file='TiS_config.ini_centos', lab_setup='lab_setup',
+                         lab_setup_conf_file=None, lab=None, final_step=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        install_helper.controller_system_config(con_telnet=controller0_node.telnet_conn)
+
+        install_helper.controller_system_config(lab=lab, config_file=config_file,
+                                                con_telnet=controller0_node.telnet_conn)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
         LOG.info("running lab_setup.sh")
-        install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        install_helper.run_lab_setup(script=lab_setup, conf_file=lab_setup_conf_file, con_ssh=controller0_node.ssh_conn)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(controller0_node.name))
-            install_helper.unlock_controller(controller0_node.name, con_ssh=controller0_node.ssh_conn, available_only=False)
+            install_helper.unlock_controller(controller0_node.name, lab=lab, con_ssh=controller0_node.ssh_conn,
+                                             available_only=False)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -273,11 +283,13 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def boot_hosts(boot_device_dict=None, hostnames=None, final_step=None):
+def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Boot"
-    if hostnames is None:
+
+    if lab is None:
         lab = InstallVars.get_install_var('LAB')
+    if hostnames is None:
         hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
     if boot_device_dict is None:
         lab = InstallVars.get_install_var('LAB')
@@ -316,24 +328,25 @@ def boot_hosts(boot_device_dict=None, hostnames=None, final_step=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         for hostname in hostnames:
-            threads.append(install_helper.open_vlm_console_thread(hostname, boot_device_dict, wait_for_thread=False,
-                                                                  vlm_power_on=True, close_telnet_conn=True))
+            threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab, boot_interface=boot_device_dict,
+                                                                  wait_for_thread=False, vlm_power_on=True,
+                                                                  close_telnet_conn=True))
         for thread in threads:
             thread.join()
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def unlock_hosts(hostnames=None, con_ssh=None, final_step=None):
+def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Unlock"
-    if hostnames is None:
+    if lab is None:
         lab = InstallVars.get_install_var('LAB')
+    if hostnames is None:
         hostnames = lab['hosts'].remove("controller-0")
     if isinstance(hostnames, str):
         hostnames = [hostnames]
     if con_ssh is None:
-        lab = InstallVars.get_install_var('LAB')
         con_ssh = lab['controller-0'].ssh_conn
     controllers = []
     computes = []
@@ -378,17 +391,19 @@ def unlock_hosts(hostnames=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh, final_step=None, ovs=None):
+def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     ovs = InstallVars.get_install_var("OVS") if ovs is None else ovs
+    if conf_file is None:
+        conf_file = 'lab_setup'
     if ovs and lab_setup_count == 0:
         LOG.debug("setting up ovs lab_setup configuration")
-        con_ssh.exec_cmd("rm lab_setup.conf; mv lab_setup_ovs.conf lab_setup.conf")
+        con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("running lab_setup.sh")
-        install_helper.run_setup_script(con_ssh=con_ssh, fail_ok=False, config=True)
+        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, fail_ok=False, config=True)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -440,3 +455,165 @@ def get_resume_step(lab=None, install_progress_path=None):
         for line in lines:
             if "End step:" in line:
                 return int(line[line.find("End Step: "):].strip()) + 1
+
+
+def install_subcloud(subcloud, load_path, build_server, boot_server=None, files_path=None, lab=None, usb=None,
+                     patch_dir=None, patch_server_conn=None, final_step=None):
+
+    if not subcloud:
+        raise ValueError("The subcloud name must be provided")
+
+    if not lab:
+        dc_lab = InstallVars.get_install_var("LAB")
+        if not dc_lab:
+            raise ValueError("Distributed cloud lab dictionary not set")
+        lab = dc_lab[subcloud]
+
+    test_step = "Install subcloud {}".format(subcloud)
+    LOG.tc_step(test_step)
+    LOG.info("Setting network feed for subcloud={}".format(subcloud))
+    install_helper.set_network_boot_feed(build_server.ssh_conn, load_path, lab=lab)
+    LOG.info("Installing {} controller... ".format(subcloud))
+    install_controller(sys_type=SysType.REGULAR, lab=lab, usb=usb, patch_dir=patch_dir,
+                       patch_server_conn=patch_server_conn)
+
+    LOG.info("SCPing  config files from system controller to {} ... ".format(subcloud))
+    install_helper.copy_files_to_subcloud(subcloud)
+
+    system_version = install_helper.extract_software_version_from_string_path(load_path)
+    sys_type = lab['system_mode']
+    if sys_type == SysType.REGULAR:
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][0]
+    elif sys_type == SysType.AIO_DX:
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][1]
+    elif sys_type == SysType.AIO_SX:
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][2]
+    else:
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][0]
+
+    install_helper.download_license(lab, build_server, license_path=license_path, dest_name='license')
+
+    subcloud_controller0 = lab['controller-0']
+    if subcloud_controller0 and not subcloud_controller0.ssh_conn:
+        subcloud_controller0.ssh_conn = install_helper.establish_ssh_connection(subcloud_controller0.host_ip)
+
+    LOG.info("Running config for subcloud {} ... ".format(subcloud))
+    install_helper.run_config_subcloud(subcloud, con_ssh=subcloud_controller0.ssh_conn)
+    end_time = time.time() + 60
+    while time.time() < end_time:
+
+        if subcloud in dc_helper.get_subclouds(avail=DC_SubcloudStatus.AVAIL_ONLINE,
+                                               mgmt=DC_SubcloudStatus.MANAGEMENT_UNMANAGED):
+            break
+
+        time.sleep(20)
+
+    else:
+        assert False, "The subcloud availability did not reach {} status after config"\
+            .format(DC_SubcloudStatus.AVAIL_ONLINE)
+
+    LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, DC_SubcloudStatus.AVAIL_ONLINE,
+                                                            DC_SubcloudStatus.MANAGEMENT_UNMANAGED))
+    LOG.info("Managing subcloud {} ... ".format(subcloud))
+    dc_helper.manage_subcloud(subcloud=subcloud)
+
+    LOG.info("Running config for subcloud {} ... ".format(subcloud))
+    short_name = lab['short_name']
+
+    lab_setup_filename_ext = short_name.replace('_', '').lower() if len(short_name.split('_')) <= 1 else \
+        short_name.split('_')[0].lower() + short_name.split('_')[1]
+    lab_setup_filename = 'lab_setup_s{}_'.format(subcloud.split('-')[1]) + lab_setup_filename_ext + '.conf'
+
+    LOG.info("Running lab setup config file {} for subcloud {} ... ".format(lab_setup_filename, subcloud))
+
+    run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
+
+    LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
+    subcloud_license_path = WRSROOT_HOME + "license.lic"
+    system_helper.install_license(subcloud_license_path, con_ssh=subcloud_controller0.ssh_conn)
+
+    LOG.info("Unlocking  active controller for subcloud {} ... ".format(subcloud))
+    unlock_hosts(hostnames=['controller-0'], con_ssh=subcloud_controller0.ssh_conn)
+
+    subcloud_nodes = get_subcloud_nodes_from_lab_dict(lab)
+
+    LOG.info("Installing other {} hosts ... ".format(subcloud))
+
+    if not files_path:
+        files_path = load_path + '/' + BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[system_version]
+
+    install_helper.download_hosts_bulk_add_xml_file(lab, build_server, files_path)
+    install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=subcloud_controller0.ssh_conn)
+    boot_device = lab['boot_device_dict']
+    hostnames = [node.name for node in subcloud_nodes if node.name != 'controller-0']
+    boot_hosts(boot_device, hostnames=hostnames)
+    host_helper.wait_for_hosts_ready(hostnames,  con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
+
+    run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
+    run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
+
+    unlock_hosts(hostnames=hostnames, con_ssh=subcloud_controller0.ssh_conn)
+
+    run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
+
+    host_helper.wait_for_hosts_ready(hostnames, subcloud_controller0.name, con_ssh=subcloud_controller0.ssh_conn)
+
+    LOG.info("Subcloud {} installed successfully ... ".format(subcloud))
+
+
+def install_subclouds(subclouds, load_path, build_server, boot_server, lab=None, usb=None, ipv6=False, patch_dir=None,
+                      patch_server_conn=None, final_step=None):
+    """
+
+    Args:
+        subclouds:
+        load_path:
+        build_server:
+        boot_server:
+        lab:
+        usb:
+        ipv6:
+        patch_dir:
+        patch_server_conn:
+        final_step:
+
+    Returns:
+
+    """
+    if not subclouds:
+        raise ValueError("List of subcloud names must be provided")
+    if isinstance(subclouds, str):
+        subclouds = [subclouds]
+
+    added_subclouds = dc_helper.get_subclouds()
+    assert all(subcloud in added_subclouds for subcloud in subclouds), \
+        "One or more subclouds in {} are not in the system subclouds: {}".format(subclouds, added_subclouds)
+
+    dc_lab = lab
+    if not dc_lab:
+        dc_lab = InstallVars.get_install_var('LAB')
+
+    for subcloud in subclouds:
+
+        test_step = "Attempt to install {}".format(subcloud)
+        LOG.tc_step(test_step)
+        if do_step(test_step):
+            rc, msg = install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, usb=usb,
+                                       patch_server_conn=patch_server_conn, lab=dc_lab[subcloud], final_step=final_step)
+            LOG.info(msg)
+            assert rc >= 0, msg
+
+
+def get_subcloud_nodes_from_lab_dict(subcloud_lab):
+    """
+
+    Args:
+        subcloud_lab:
+
+    Returns:
+
+    """
+    if not isinstance(subcloud_lab, dict):
+        raise ValueError("The subcloud lab info dictionary must be provided")
+
+    return [v for k, v in subcloud_lab.items() if isinstance(v, Node)]

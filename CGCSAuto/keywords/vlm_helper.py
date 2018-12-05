@@ -37,7 +37,7 @@ def get_barcodes_dict(lab=None):
     return barcodes_dict
         
 
-def get_barcodes_from_hostnames(hostnames):
+def get_barcodes_from_hostnames(hostnames,  lab=None):
     """
     Convert hostname(s) to barcodes
     Args:
@@ -48,7 +48,7 @@ def get_barcodes_from_hostnames(hostnames):
     if isinstance(hostnames, str):
         hostnames = [hostnames]
         
-    barcodes_dict = get_barcodes_dict()
+    barcodes_dict = get_barcodes_dict(lab=lab)
     barcodes = []
     
     for host in hostnames:
@@ -57,7 +57,7 @@ def get_barcodes_from_hostnames(hostnames):
     return barcodes
     
 
-def unreserve_hosts(hosts):
+def unreserve_hosts(hosts, lab=None):
     """
     Unreserve given hosts from vlm
     Args:
@@ -67,7 +67,7 @@ def unreserve_hosts(hosts):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_UNRESERVE, reserve=False)
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_UNRESERVE, reserve=False, lab=lab)
 
 
 def force_unreserve_hosts(hosts, val='hostname'):
@@ -112,7 +112,7 @@ def reserve_hosts(hosts, val='hostname'):
             raise exceptions.VLMError(err_msg)
 
 
-def power_off_hosts(hosts, reserve=True):
+def power_off_hosts(hosts, lab=None, reserve=True):
     """
     Power off given hosts
     Args:
@@ -125,7 +125,7 @@ def power_off_hosts(hosts, reserve=True):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNOFF, reserve=reserve)
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNOFF, reserve=reserve, lab=lab)
 
 
 def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
@@ -166,16 +166,16 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
-def reboot_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
+def reboot_hosts(hosts, lab=None, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
                  hosts_to_check=None, con_ssh=None):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_REBOOT, reserve=reserve)
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_REBOOT, lab=lab, reserve=reserve)
 
     if post_check:
         if con_ssh is None:
-            con_ssh = ControllerClient.get_active_controller()
+            con_ssh = ControllerClient.get_active_controller(name=lab['short_name'] if lab else None)
 
         if reconnect:
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
@@ -189,11 +189,11 @@ def reboot_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect
         host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
-def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=True,):
+def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, reserve=True,):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    barcodes = get_barcodes_from_hostnames(hosts)
+    barcodes = get_barcodes_from_hostnames(hosts, lab=lab)
     for i in range(len(hosts)):
         host = hosts[i]
         barcode = barcodes[i]

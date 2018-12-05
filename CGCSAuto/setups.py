@@ -534,18 +534,24 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
     return lab_dict
 
 
-def is_vbox():
-    lab_name = ProjVar.get_var('LAB_NAME')
+def is_vbox(lab=None):
+    if not lab:
+        lab = ProjVar.get_var('LAB')
+    lab_name = lab['name']
+    #lab_name = ProjVar.get_var('LAB_NAME')
     nat_name = ProjVar.get_var('NATBOX').get('name')
 
     return 'vbox' in lab_name or nat_name == 'localhost' or nat_name.startswith('128.224.')
 
 
-def get_nodes_info():
-    if is_vbox():
+def get_nodes_info(lab=None):
+
+    if not lab:
+        lab =  ProjVar.get_var('LAB')
+
+    if is_vbox(lab=lab):
         return
 
-    lab = ProjVar.get_var('LAB')
     nodes_info = create_node_dict(lab['controller_nodes'], 'controller')
     nodes_info.update(create_node_dict(lab.get('compute_nodes', None), 'compute'))
     nodes_info.update(create_node_dict(lab.get('storage_nodes', None), 'storage'))
@@ -650,6 +656,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         # Parse lab info
         lab_info_ = installconf['LAB']
         lab_name = lab_info_['LAB_NAME']
+        dc_system = True if lab_info_.get('CENTRAL_REGION') else False
         vbox = True if 'vbox' in lab_name.lower() else False
         if vbox:
             LOG.info("The test lab is a VBOX TiS setup")
@@ -657,11 +664,19 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
             lab_to_install = get_lab_dict(lab_name)
 
         if lab_to_install:
-            con0_ip = lab_info_['CONTROLLER0_IP']
+            if dc_system and not 'central_region' in lab_to_install:
+                raise ValueError("Distributed cloud system value mismatch")
+
+            central_reg_info_ = eval(lab_info_.get('CENTRAL_REGION')) if dc_system else None
+
+            con0_ip = lab_info_.get('CONTROLLER0_IP') if not dc_system else \
+                (central_reg_info_['controller-0 ip'] if central_reg_info_ else None)
+
             if con0_ip:
                 lab_to_install['controller-0 ip'] = con0_ip
 
-            con1_ip = lab_info_['CONTROLLER1_IP']
+            con1_ip = lab_info_.get('CONTROLLER1_IP') if not dc_system else \
+                (central_reg_info_['controller-1 ip'] if central_reg_info_ else None)
             if con1_ip:
                 lab_to_install['controller-1 ip'] = con1_ip
 
@@ -686,7 +701,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                 barcodes = value_in_conf.split(sep=' ')
                 lab_to_install[constkey] = barcodes
 
-        if not lab_to_install['controller_nodes']:
+        if (not dc_system and  not lab_to_install['controller_nodes']) or \
+                (dc_system and  not lab_to_install['central_region']['controller_nodes']):
             errors.append("Nodes barcodes have to be provided for custom lab")
 
         # Parse build info
@@ -756,8 +772,10 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
 
     else:
         lab_to_install = get_lab_dict(lab)
+        dc_system = True if lab_to_install.get('central_region') else False
 
-    if not lab_to_install.get('controller-0 ip', None):
+    if (not dc_system and not lab_to_install.get('controller-0 ip', None)) or \
+            (dc_system and not lab_to_install['central_region'].get('controller-0 ip', None)):
         errors.append('Controller-0 ip has to be provided for custom lab')
 
     if errors:
@@ -781,60 +799,76 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         dist_cloud_lab = lab_info_dict["dist_cloud"]
         lab_to_install.update(lab_info_dict)
 
-    if 'system_mode' not in lab_to_install:
-        if 'storage_nodes' in lab_to_install:
-            system_mode = SysType.STORAGE
-        else:
-            system_mode = SysType.REGULAR
     else:
-        if "simplex" in lab_to_install['system_mode']:
-            system_mode = SysType.AIO_SX
-        else:
-            system_mode = SysType.AIO_DX
+        dist_cloud_lab = dc_system
+        lab_to_install['dist_cloud'] = dist_cloud_lab
 
-    lab_to_install['system_mode'] = system_mode
+    system_mode =  get_system_mode_from_lab_info(lab_to_install, multi_region_lab=multi_region_lab,
+                                                    dist_cloud_lab=dist_cloud_lab)
+
+    lab_to_install['system_mode'] = system_mode if system_mode else ''
     ProjVar.set_var(sys_type=system_mode)
 
-    # add nodes dictionary
-    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
-    if 'compute_nodes' in lab_to_install:
+    if system_mode and system_mode == SysType.DISTRIBUTED_CLOUD:
+        # add nodes dictionary to centeral and subclouds
+        if 'central_region' in lab_to_install:
 
-        lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
-    if 'storage_nodes' in lab_to_install:
-        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
-
-    if vbox:
-        lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
-    else:
-        if 'boot_device_dict' not in lab_to_install:
-            lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
-
-    if vbox:
-        # get the ip address of the local linux vm
-        cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
-        local_external_ip = os.popen(cmd).read().strip()
-        lab_to_install['local_ip'] = local_external_ip
-        vbox_gw = installconf['VBOX_GATEWAY']
-        external_ip = vbox_gw['EXTERNAL_IP']
-        if external_ip and external_ip != local_external_ip:
-            LOG.info("TiS VM external gwy IP is {}".format(external_ip))
-            lab_to_install['external_ip'] = external_ip
-            external_port = vbox_gw['EXTERNAL_PORT']
-            if external_port:
-                LOG.info("TiS VM external gwy port is {}".format(external_port))
-                lab_to_install['external_port'] = external_port
-            else:
-                raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
-                                              .format(external_ip))
-        username = local_host.getpass.getuser()
-        password = ''
-        if "svc-cgcsauto" in username:
-            password = SvcCgcsAuto.PASSWORD
+            central_reg_lab = lab_to_install['central_region']
+            if central_reg_lab:
+                central_reg_lab.update(get_nodes_info(lab=central_reg_lab))
+                central_reg_lab['boot_device_dict'] = create_node_boot_dict(central_reg_lab['name'])
+                central_reg_lab['system_mode'] = get_system_mode_from_lab_info(central_reg_lab)
         else:
-            password = local_host.getpass.getpass()
+            raise ValueError("Distributed cloud system lab dictionary does not contain central region system info")
 
-        lab_to_install['local_user'] = username
-        lab_to_install['local_password'] = password
+        subclouds = [k for k in lab_to_install if 'subcloud' in k]
+        for subcloud in subclouds:
+            lab_to_install[subcloud].update(get_nodes_info(lab=lab_to_install[subcloud]))
+            subcloud_lab = lab_to_install[subcloud]
+            #subcloud_lab['boot_device_dict'] = create_node_boot_dict(subcloud_lab['name'])
+            subcloud_lab['system_mode'] = get_system_mode_from_lab_info(subcloud_lab)
+
+    else:
+        # add nodes dictionary
+        lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
+        if 'compute_nodes' in lab_to_install:
+
+            lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
+        if 'storage_nodes' in lab_to_install:
+            lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
+
+        if vbox:
+            lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
+        else:
+            if 'boot_device_dict' not in lab_to_install:
+                lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+
+        if vbox:
+            # get the ip address of the local linux vm
+            cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
+            local_external_ip = os.popen(cmd).read().strip()
+            lab_to_install['local_ip'] = local_external_ip
+            vbox_gw = installconf['VBOX_GATEWAY']
+            external_ip = vbox_gw['EXTERNAL_IP']
+            if external_ip and external_ip != local_external_ip:
+                LOG.info("TiS VM external gwy IP is {}".format(external_ip))
+                lab_to_install['external_ip'] = external_ip
+                external_port = vbox_gw['EXTERNAL_PORT']
+                if external_port:
+                    LOG.info("TiS VM external gwy port is {}".format(external_port))
+                    lab_to_install['external_port'] = external_port
+                else:
+                    raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
+                                                  .format(external_ip))
+            username = local_host.getpass.getuser()
+            password = ''
+            if "svc-cgcsauto" in username:
+                password = SvcCgcsAuto.PASSWORD
+            else:
+                password = local_host.getpass.getpass()
+
+            lab_to_install['local_user'] = username
+            lab_to_install['local_password'] = password
 
     if resume is True:
         resume = fresh_install_helper.get_resume_step(lab_to_install)
@@ -869,9 +903,11 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  )
 
 
-def write_installconf(lab, controller, lab_files_dir, bs, tis_builds_dir, tis_build_dir, compute, storage,
-                      patch_dir, license_path, guest_image, heat_templates, boot, iso_path, low_latency, security,
-                      stop, ovs, boot_server, resume, skip):
+
+def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_builds_dir, tis_build_dir,
+                      compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
+                      low_latency, security, stop, ovs,  boot_server, resume, skip):
+
     """
     Writes a file in ini format of the fresh_install variables
     Args:
@@ -900,30 +936,14 @@ def write_installconf(lab, controller, lab_files_dir, bs, tis_builds_dir, tis_bu
     Returns: the path of the written file
 
     """
-    __build_server = bs if bs and bs != "" else BuildServerPath.DEFAULT_BUILD_SERVER
-    host_builds_dir_name = tis_builds_dir if tis_builds_dir else BuildServerPath.BldsDirNames.TITANIUM_R6_BUILD
-    host_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
-
-    host_build_dir_path = install_helper.get_default_latest_build_path(builds_dir_name=host_builds_dir_name) \
-        if host_build_dir == BuildServerPath.LATEST_BUILD else os.path.join(BuildServerPath.DEFAULT_WORK_SPACE,
-                                                                            host_builds_dir_name, host_build_dir)
-    files_server = __build_server
-    if lab_files_dir:
-        files_dir = lab_files_dir
-        if files_dir.find(":/") != -1:
-            files_server = files_dir[:files_dir.find(":/")]
-            files_dir = files_dir[files_dir.find(":") + 1:]
-    else:
-        files_dir = None
     if lab:
         lab_dict = get_lab_dict(lab)
     else:
         lab_dict = ProjVar.get_var("LAB")
     if not lab_dict:
-        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, bs)
+        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server)
 
-    files_dir = "{}/yow/{}".format(install_helper.get_default_lab_config_files_path(host_builds_dir_name),
-                                   install_helper.get_git_name(lab_dict['name'])) if not files_dir else files_dir
+    LOG.info("Lab info: {}\n\n".format(lab_dict))
     # Write .ini file
     config = configparser.ConfigParser(allow_no_value=True)
     config.optionxform = str
@@ -939,6 +959,7 @@ def write_installconf(lab, controller, lab_files_dir, bs, tis_builds_dir, tis_bu
         labconf_key = labconf_key.replace("-", "")
         labconf_key = labconf_key.upper()
         labconf_lab_dict[labconf_key] = lab_dict[lab_key]
+
     # TODO: temp fix for simplex labs
     if "CONTROLLER1_IP" not in labconf_lab_dict.keys():
         labconf_lab_dict["CONTROLLER1_IP"] = ""
@@ -949,16 +970,16 @@ def write_installconf(lab, controller, lab_files_dir, bs, tis_builds_dir, tis_bu
     node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
 
     # [BUILD] and [CONF_FILES] section
-    build_dict = {"BUILD_SERVER": __build_server,
-                  "TIS_BUILD_PATH": host_build_dir_path,
+    build_dict = {"BUILD_SERVER": build_server,
+                  "TIS_BUILD_PATH": tis_build_dir,
                   "BUILD_ISO_PATH": iso_path if iso_path else '',
                   "PATCHES": patch_dir if patch_dir else ''}
 
-    files_dict = {"FILES_SERVER": files_server, "FILES_DIR": files_dir if files_dir else '',
+    files_dict = {"FILES_SERVER": files_server, "FILES_DIR": lab_files_dir if lab_files_dir else '',
                   "LICENSE_PATH": license_path if license_path else '',
                   "GUEST_IMAGE_PATH": guest_image if guest_image else '',
                   "HEAT_TEMPLATES": heat_templates if heat_templates else '',
-                  "LAB_SETUP_CONF_PATH": files_dir,
+                  "LAB_SETUP_CONF_PATH": lab_files_dir,
                   "BOOT_IF_SETTINGS_PATH": '',
                   "HOST_BULK_ADD_PATH": '',
                   "OVS_CONFIG": str(ovs)}
@@ -1011,21 +1032,26 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     if conf_dir:
         lab_files_path = conf_dir
     elif lab_name is not None and host_build_dir is not None:
-        lab_files_path = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
+        version = install_helper.extract_software_version_from_string_path(host_build_dir)
+        lab_files_path = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[version],
                                                install_helper.get_git_name(lab_name))
     else:
         raise ValueError("Could not access lab files")
-    ssh_conn = install_helper.establish_ssh_connection(
-        conf_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
-        initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.format(SvcCgcsAuto.USER, '.*'))
-    assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'.\
-        format(conf_server, lab_files_path)
+
+    ssh_conn = install_helper.establish_ssh_connection(conf_server, user=SvcCgcsAuto.USER,
+                                                       password=SvcCgcsAuto.PASSWORD,
+                                                       initial_prompt=Prompt.BUILD_SERVER_PROMPT_BASE.
+                                                       format(SvcCgcsAuto.USER, '.*'))
+
+    assert ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0, 'Lab config path not found in {}:{}'\
+        .format(conf_server, lab_files_path)
 
     # check lab configuration for special cases (i.e. distributed cloud or multi region)
-    multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".
-                                     format(multi_region_identifer, lab_files_path))[0] == 0
-    dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos".
-                                   format(dist_cloud_identifer, lab_files_path))[0] == 0
+    multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos"
+                                     .format(multi_region_identifer, lab_files_path))[0] == 0
+    dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos*"
+                                   .format(dist_cloud_identifer, lab_files_path))[0] == 0
+
     lab_info_dict["multi_region"] = multi_region
     lab_info_dict["dist_cloud"] = dist_cloud
 
@@ -1076,6 +1102,45 @@ def get_version_and_patch_info():
 
     # LOG.info("SW Version and Patch info: {}".format(info))
     return info
+
+
+def get_system_mode_from_lab_info(lab, multi_region_lab=False, dist_cloud_lab=False):
+    """
+
+    Args:
+        lab:
+        multi_region_lab:
+        dist_cloud_lab:
+
+    Returns:
+
+    """
+
+    if multi_region_lab:
+        return SysType.MULTI_REGION
+    elif dist_cloud_lab:
+        return  SysType.DISTRIBUTED_CLOUD
+
+    elif 'system_mode' not in lab:
+        if 'storage_nodes' in lab:
+            return SysType.STORAGE
+        elif 'compute_nodes' in lab:
+            return SysType.REGULAR
+
+        elif len(lab['controller_nodes']) > 1:
+            return SysType.AIO_DX
+        else:
+            return SysType.AIO_SX
+
+    elif 'system_mode' in lab:
+        if "simplex" in lab['system_mode']:
+            return SysType.AIO_SX
+        else:
+            return SysType.AIO_DX
+    else:
+        LOG.warning("Can not determine the lab to install system type based on provided information. Lab info: {}"
+                         .format(lab))
+        return None
 
 
 def set_session(con_ssh):

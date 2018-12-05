@@ -2865,19 +2865,17 @@ def wait_for_delete_imported_load(load_id, timeout=120, check_interval=5, fail_o
             raise exceptions.TimeoutException(err_msg)
 
 
-def install_upgrade_license(license_path, timeout=30, con_ssh=None):
-    """
-    Installs upgrade license on controller-0
-    Args:
-        con_ssh (SSHClient): " SSH connection to controller-0"
-        license_path (str): " license full path in controller-0"
-        timeout (int);
+def install_license(license_path, timeout=30, con_ssh=None):
 
-    Returns (int): 0 - success; 1 - failure
-
-    """
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
+
+    cmd = "test -e {}".format(license_path)
+    rc = con_ssh.exec_cmd(cmd, fail_ok=True)[0]
+
+    if rc != 0:
+        msg = "The {} file missing from active controller".format(license_path)
+        return rc, msg
 
     cmd = "sudo license-install " + license_path
     con_ssh.send(cmd)
@@ -2897,6 +2895,11 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
             break
 
     return rc
+
+
+def install_upgrade_license(license_path, timeout=30, con_ssh=None):
+    return install_license(license_path, timeout=timeout, con_ssh=con_ssh)
+
 
 
 def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
