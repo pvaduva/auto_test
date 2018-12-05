@@ -353,7 +353,7 @@ def test_modify_drdb_swact_then_reboot():
     free_space = out.rstrip()
     free_space = out.lstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-    if float(free_space) <= 2:
+    if float(free_space) <= 10:
         skip("Not enough free space to complete test.")
 
     drbdfs_val = {} 
