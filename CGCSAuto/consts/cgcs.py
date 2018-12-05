@@ -286,6 +286,7 @@ class FlavorSpec:
     NUMA1_CACHE_CPUS = 'hw:cache_vcpus.1'
     NUMA0_L3_CACHE = 'hw:cache_l3.0'
     NUMA1_L3_CACHE = 'hw:cache_l3.1'
+    LIVE_MIG_TIME_OUT = 'hw:wrs:live_migration_timeout'
 
 
 class ImageMetadata:
