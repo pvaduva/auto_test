@@ -653,7 +653,7 @@ def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
 
 
 def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNLOCK, use_telnet=False,
-                                con_telnet=None, auth_info=Tenant.get('admin')):
+                                con_telnet=None, auth_info=Tenant.get('admin'), duplex_direct=False):
     time.sleep(30)
     if not use_telnet:
         if not con_ssh:
@@ -671,11 +671,13 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         con_telnet.login()
         con_telnet.exec_cmd("xterm")
 
+    if not duplex_direct:
     # Give it sometime before openstack cmds enables on after host
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
-                                   fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
-    time.sleep(10)
-    LOG.info("Re-connected via ssh and openstack CLI enabled")
+        _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                       auth_info=auth_info, fail_ok=False, timeout=timeout, check_interval=10,
+                                       reconnect=True)
+        time.sleep(10)
+        LOG.info("Re-connected via ssh and openstack CLI enabled")
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,

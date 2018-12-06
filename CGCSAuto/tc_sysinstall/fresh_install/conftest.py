@@ -54,18 +54,16 @@ def pytest_configure(config):
         lab_dict = get_lab_dict(lab_arg)
         lab_name = lab_dict['name']
         if 'yow' in lab_name:
-                lab_name = lab_name[4:]
+            lab_name = lab_name[4:]
         else:
-                lab_dict = None
-                lab_name = None
+            lab_dict = None
+            lab_name = None
     else:
         raise ValueError("Lab name must be provided")
 
     if resume_install is True:
-            resume_install = fresh_install_helper.get_resume_step(lab_dict)
-            LOG.info("Resume Install step at {}".format(resume_install))
-
-
+        resume_install = fresh_install_helper.get_resume_step(lab_dict)
+        LOG.info("Resume Install step at {}".format(resume_install))
 
     if not install_conf:
 
@@ -74,9 +72,10 @@ def pytest_configure(config):
 
         host_build_dir_path = None
         if tis_builds_dir:
-            if  tis_build_dir and os.path.isabs(tis_build_dir):
+            if tis_build_dir and os.path.isabs(tis_build_dir):
                 LOG.warning("Full load path: {} is specified in command argument; the tis_build_dir: {}: is ignored "
                             .format(tis_build_dir, tis_builds_dir))
+
             elif tis_build_dir and re.search(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX, tis_builds_dir):
                 host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
             elif re.search(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX, tis_builds_dir):
@@ -97,15 +96,6 @@ def pytest_configure(config):
                 host_build_dir_path = default_build_path
 
         files_server = __build_server
-
-        if lab_arg:
-            lab_dict = get_lab_dict(lab_arg)
-            lab_name = lab_dict['name']
-            if 'yow' in lab_name:
-                lab_name = lab_name[4:]
-        else:
-            lab_dict = None
-            lab_name = None
 
         if lab_file_dir:
             if lab_file_dir.find(":/") != -1:

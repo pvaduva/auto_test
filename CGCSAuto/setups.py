@@ -604,7 +604,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
-                       patch_dir=None, ovs=False, bs=None, tis_builds_dir=None, tis_build_dir="latest_build",
+                       patch_dir=None, ovs=False, build_server=None, tis_builds_dir=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
                        boot="pxe", iso_path=None, security="standard", low_latency=False, stop=99):
 
@@ -613,11 +613,12 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                          "has to be provided")
     elif not installconf_path:
         installconf_path = write_installconf(lab=lab, controller=None, tis_builds_dir=tis_builds_dir,
-                                             tis_build_dir=tis_build_dir, lab_files_dir=None, bs=bs,
-                                             compute=None, storage=None, license_path=None, guest_image=None,
-                                             heat_templates=None, security=security, low_latency=low_latency, stop=stop,
-                                             skip=skip, resume=resume, boot_server=boot_server, boot=boot,
-                                             iso_path=iso_path, ovs=ovs, patch_dir=patch_dir)
+                                             tis_build_dir=tis_build_dir, lab_files_dir=None, build_server=build_server,
+                                             files_server=None, compute=None, storage=None, license_path=None,
+                                             guest_image=None, heat_templates=None, security=security,
+                                             low_latency=low_latency, stop=stop, skip=skip, resume=resume,
+                                             boot_server=boot_server, boot=boot, iso_path=iso_path, ovs=ovs,
+                                             patch_dir=patch_dir)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -764,7 +765,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         conf_final_step = installer_steps["STOP_POINT"]
         conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
         if conf_resume_step:
-            resume = conf_resume_step
+            resume = eval(conf_resume_step)
         if conf_final_step:
             stop = conf_final_step
         if conf_skip_steps:
@@ -869,9 +870,6 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
 
             lab_to_install['local_user'] = username
             lab_to_install['local_password'] = password
-
-    if resume is True:
-        resume = fresh_install_helper.get_resume_step(lab_to_install)
 
     InstallVars.set_install_vars(lab=lab_to_install, resume=resume,
                                  skips=skip,

@@ -107,15 +107,16 @@ def do_step(step_name=None):
         in_skip_list = current_step_num in skip_list
     # if resume flag is given do_step if it's currently the specified resume step or a step after that point
     if resume_step:
-        on_resume_step = (resume_step == current_step_num or resume_step == step_name) and not completed_resume_step
+        on_resume_step = (int(resume_step) == int(current_step_num) or resume_step == step_name) and \
+                         not completed_resume_step
     else:
         on_resume_step = True
+
     do = (completed_resume_step or on_resume_step) and not in_skip_list
     if not do:
         LOG.info("Skipping step")
     elif not completed_resume_step:
         set_completed_resume_step(True)
-
     return do
 
 
@@ -397,8 +398,9 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
     if conf_file is None:
         conf_file = 'lab_setup'
     if ovs and lab_setup_count == 0:
-        LOG.debug("setting up ovs lab_setup configuration")
-        con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
+        if con_ssh.exec_cmd("test -f {}_ovs.conf".format(conf_file))[0] == 0:
+            LOG.debug("setting up ovs lab_setup configuration")
+            con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -454,7 +456,7 @@ def get_resume_step(lab=None, install_progress_path=None):
         lines = progress_file.readlines()
         for line in lines:
             if "End step:" in line:
-                return int(line[line.find("End Step: "):].strip()) + 1
+                return int(line.split("End step: ")[1].strip()) + 1
 
 
 def install_subcloud(subcloud, load_path, build_server, boot_server=None, files_path=None, lab=None, usb=None,

@@ -3483,6 +3483,9 @@ def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, ava
             LOG.info(message)
             return -1, message
 
+    sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=con_ssh, use_telnet=use_telnet,
+                                                      con_telnet=con_telnet, auth_info=auth_info)
+
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet,
                                   con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,
                                   timeout=60)
@@ -3493,7 +3496,8 @@ def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, ava
 
     if not len(lab['controller_nodes']) > 1:
         LOG.info("This is simplex lab; Waiting for controller reconnection after unlock")
-    host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+    host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                            duplex_direct=True if sys_mode == "duplex-direct" else False)
 
     if not host_helper.wait_for_hosts_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
@@ -3504,9 +3508,10 @@ def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, ava
                                 availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
         return 3, "Host state did not change to available or degraded within timeout"
 
-    if not host_helper.wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
-                                use_telnet=use_telnet, con_telnet=con_telnet, task=''):
-        return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
+    if sys_mode != 'duplex-direct':
+        if not host_helper.wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
+                                    use_telnet=use_telnet, con_telnet=con_telnet, task=''):
+            return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
     if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
                           con_telnet=con_telnet) == HostAvailState.DEGRADED:
