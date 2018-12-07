@@ -74,6 +74,10 @@ class TestLocalStorage:
         host = get_target_host
 
         def cleanup():
+
+            if not system_helper.is_storage_system():
+                skip("This test requires a storage system")
+
             profiles_created = self._pop_cleanup_list('profile')
             old_new_types = self._pop_cleanup_list('local_storage_type')
 
@@ -277,8 +281,8 @@ class TestLocalStorage:
         Notes:
                 will cover 3 test cases:
                     34.  Local Storage Create/Apply/Delete – Local Image
-                    35.  Local Storage Profile Create/Apply/Delete – Local LVM
-                    36.  Local Storage Profile Apply (Local Image ↔ Local LVM)
+                    35.  Local Storage Profile Create/Apply/Delete – Remote
+                    36.  Local Storage Profile Apply (Local Image ↔ Remote)
         """
         local_storage_type, compute_src = setup_local_storage
         LOG.tc_step('Create a storage-profile with the expected type of local-storage backing:{}'
@@ -365,7 +369,7 @@ class TestLocalStorage:
         Notes:
                 will cover 2 test cases:
                     37.  Local Storage Profile Negative Test (Insufficient Resources/Different Devices)
-                        – Local_LVM profile
+                        – Remote profile
                     38.  Local Storage Profile Negative Test (Different Devices) – Local_Image profile
         """
         local_storage_type, compute_src = setup_local_storage
@@ -608,7 +612,11 @@ class TestLocalStorage:
         Returns:
 
         """
+
         local_storage_type, compute_src = setup_local_storage
+        
+        if not system_helper.is_storage_system():
+            skip("This test requires a storage system")
 
         LOG.tc_step('Get the name of the profile and check if it is existing')
         local_file = self.get_local_storprfoile_file(local_storage_type=local_storage_type)
