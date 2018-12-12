@@ -1455,14 +1455,47 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
                           pre_opts=pre_opts, allow_fail=True)
 
     # Get licenses
-    if lab_type == "regular" or lab_type == "storage":
-        license = LICENSE_FILEPATH
-    elif lab_type == "cpe":
-        license = SFP_LICENSE_FILEPATH
-    elif lab_type == "simplex" and "R3" in load_path:
-        license = SFP_LICENSE_FILEPATH
+    if load_path.find(TS_15_12_WKSPCE) > -1:
+        if lab_type == "regular" or lab_type == "storage":
+            license = LICENSE_FILEPATH_R2
+        else:
+            license = SFP_LICENSE_FILEPATH_R2
+            
+    elif load_path.find(TS_16_10_WKSPCE) > -1:
+        if lab_type == "regular" or lab_type == "storage":
+            license = LICENSE_FILEPATH_R3
+        else:
+            license = SFP_LICENSE_FILEPATH_R3
+
+    elif load_path.find(TC_17_06_WKSPCE) > -1:
+        if lab_type == "regular" or lab_type == "storage":
+            license = LICENSE_FILEPATH_R4
+        elif lab_type == "cpe":
+            license = SFP_LICENSE_FILEPATH_R4
+        elif lab_type == "simplex" and "R3" in load_path:
+            license = SIMPLEX_LICENSE_FILEPATH_R4
+        else:
+            license = SFP_LICENSE_FILEPATH_R4
+
+    elif load_path.find(TC_18_03_WKSPCE) > -1:
+        if lab_type == "regular" or lab_type == "storage":
+            license = LICENSE_FILEPATH_R5
+        elif lab_type == "cpe":
+            license = SFP_LICENSE_FILEPATH_R5
+        elif lab_type == "simplex" and "R3" in load_path:
+            license = SFP_LICENSE_FILEPATH_R5
+        else:
+            license = SIMPLEX_LICENSE_FILEPATH_R5
+
     else:
-        license = SIMPLEX_LICENSE_FILEPATH
+        if lab_type == "regular" or lab_type == "storage":
+            license = LICENSE_FILEPATH
+        elif lab_type == "cpe":
+            license = SFP_LICENSE_FILEPATH
+        elif lab_type == "simplex" and "R3" in load_path:
+            license = SFP_LICENSE_FILEPATH
+        else:
+            license = SIMPLEX_LICENSE_FILEPATH
 
     bld_server_conn.rsync(license, WRSROOT_USERNAME,
                           controller0.host_ip,
