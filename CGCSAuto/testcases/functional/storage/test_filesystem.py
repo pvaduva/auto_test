@@ -393,6 +393,12 @@ def test_modify_drdb_swact_then_reboot():
     act_cont = system_helper.get_active_controller_name()
     host_helper.reboot_hosts(act_cont)
 
+    time.sleep(5)
+
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.HOST_RECOVERY_IN_PROGRESS,
+                                          entity_id="host={}".format(act_cont),
+                                          timeout=600)
+
 
 def test_increase_cinder():
     """
