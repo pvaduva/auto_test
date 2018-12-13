@@ -1472,7 +1472,7 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
             license = LICENSE_FILEPATH_R4
         elif lab_type == "cpe":
             license = SFP_LICENSE_FILEPATH_R4
-        elif lab_type == "simplex" and "R3" in load_path:
+        elif lab_type == "simplex":
             license = SIMPLEX_LICENSE_FILEPATH_R4
         else:
             license = SFP_LICENSE_FILEPATH_R4
@@ -1482,7 +1482,7 @@ def downloadLabConfigFiles(lab_type, bld_server_conn, lab_cfg_path, load_path,
             license = LICENSE_FILEPATH_R5
         elif lab_type == "cpe":
             license = SFP_LICENSE_FILEPATH_R5
-        elif lab_type == "simplex" and "R3" in load_path:
+        elif lab_type == "simplex":
             license = SFP_LICENSE_FILEPATH_R5
         else:
             license = SIMPLEX_LICENSE_FILEPATH_R5
