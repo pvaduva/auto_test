@@ -108,7 +108,7 @@ class InstallVars:
                          heat_templates=None,
                          license_path=None,
                          boot_server=None,
-                         boot_type='pxe',
+                         boot_type='feed',
                          iso_path=None,
                          controller0_ceph_mon_device=None,
                          controller1_ceph_mon_device=None,

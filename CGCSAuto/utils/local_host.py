@@ -100,9 +100,19 @@ def force_unreserve_vlm_console(barcode):
     action = VlmAction.VLM_FORCE_UNRESERVE
     force_unreserve_cmd = [VLM, action, "-L", SvcCgcsAuto.USER, "-P", SvcCgcsAuto.VLM_PASSWORD, "-t", str(barcode)]
 
-    reserve_note = vlm_getattr(barcode, 'reserve_note')[1]
-    reserved_by_user = "TARGET_NOT_RESERVED_BY_USER" not in vlm_getattr(barcode, 'port')[1]
-    if not reserve_note or reserved_by_user:
+    all_attr = vlm_getattr(barcode, 'all')[1]
+    attr_dict = {}
+    for attr in all_attr.splitlines():
+        k, v = attr.split(': ', maxsplit=1)
+        attr_dict[k.strip()] = v.strip()
+
+    reserved_by = attr_dict['Reserved By']
+    reserve_note = attr_dict['Reserve Note']
+    if not reserved_by:
+        msg = "target is not reserved. Do nothing"
+        LOG.info(msg)
+        return -1, msg
+    elif reserved_by == SvcCgcsAuto.USER or not reserve_note:
         print("Force unreserving target: {}".format(barcode))
         exec_cmd(force_unreserve_cmd)
         reserved = vlm_getattr(barcode, 'date')[1]
@@ -111,11 +121,11 @@ def force_unreserve_vlm_console(barcode):
             LOG.error(msg)
             return 1, msg
         else:
-            msg = "Barcode {} was succesfully unreserved".format(barcode)
+            msg = "Barcode {} was successfully unreserved".format(barcode)
             LOG.info(msg)
             return 0, msg
     else:
-        msg = "cannot unreserve {} as it has a reservation note: {}".format(barcode, reserve_note)
+        msg = "Did not unreserve {} as it has a reservation note: {}".format(barcode, reserve_note)
         LOG.error(msg)
         return 2, msg
 

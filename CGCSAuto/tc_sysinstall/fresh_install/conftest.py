@@ -107,7 +107,6 @@ def pytest_configure(config):
         if not heat_templates or not os.path.isabs(heat_templates):
             heat_templates = default_build_path + '/' + BuildServerPath.HEAT_TEMPLATES_NEW
 
-
         install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
                                          lab_files_dir=lab_file_dir, patch_dir=patch_dir,
                                          tis_build_dir=host_build_dir_path, tis_builds_dir=tis_builds_dir,
@@ -118,10 +117,10 @@ def pytest_configure(config):
                                          boot_server=boot_server, resume=resume_install, skip=skiplist)
 
     set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
-                              installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
-                              controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
-                              boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                              patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
+                       installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
+                       controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
+                       boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
+                       patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
 
     print(" Pre Configure Install vars:")
     install_vars = InstallVars.get_install_vars().items()
@@ -163,7 +162,6 @@ def install_setup():
         hosts = lab["hosts"]
     LOG.info("Unreservering {}".format(hosts))
     if not dist_cloud:
-
         vlm_helper.force_unreserve_hosts(hosts)
     else:
         vlm_helper.force_unreserve_hosts(barcodes, val="barcodes")
@@ -242,20 +240,19 @@ def install_setup():
 
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
         LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
+        lab_dict = lab if not dist_cloud else lab['central_region']
 
         if "burn" in boot["boot_type"]:
-            install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab if not dist_cloud else lab['central_region'])
+            install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)
 
-        elif "iso" in boot["boot_type"]:
-            install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab if not dist_cloud
-            else lab['central_region'])
-            install_helper.mount_boot_server_iso(lab_dict=lab if not dist_cloud else lab['central_region'])
+        elif "pxe_iso" in boot["boot_type"]:
+            install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab_dict)
+            install_helper.mount_boot_server_iso(lab_dict=lab_dict)
 
-        elif "feed" not in skip_list and "pxe" in boot["boot_type"]:
+        elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
             load_path = directories["build"]
-            skip_cfg = "pxe" in skip_list
-            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path,
-                                                 lab=lab['central_region'] if dist_cloud else None, skip_cfg=skip_cfg)
+            skip_cfg = "pxeboot" in skip_list
+            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
             LOG.fixture_step("Attempting to wipe disks")
@@ -271,9 +268,9 @@ def install_setup():
     return _install_setup
 
 
+# Try first so that the failed fixture_step can be written
 @pytest.mark.tryfirst
 def pytest_runtest_teardown(item):
-# Try first so that the failed fixture_step can be written
     final_step = LOG.test_step
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."

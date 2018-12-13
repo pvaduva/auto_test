@@ -27,9 +27,8 @@ def pytest_configure(config):
     build_server = config.getoption('build_server')
     tis_build_dir = config.getoption('tis_build_dir')
 
-
     setups.set_install_params(lab=lab, skip='feed' if skip_setup_feed else None, resume=None, installconf_path=None,
-                              drop=None, boot='usb' if use_usb else 'pxe', controller0_ceph_mon_device=None, iso_path=None,
+                              drop=None, boot='usb' if use_usb else 'feed', controller0_ceph_mon_device=None, iso_path=None,
                               controller1_ceph_mon_device=None, ceph_mon_gib=None,low_latency=low_latency, security='standard',
                               stop=99, wipedisk=False, ovs=False, patch_dir=None, boot_server=None)
 

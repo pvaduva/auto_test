@@ -406,12 +406,7 @@ def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute
                          lab_files_dir=None, bs=None):
     lab_dict = None
     if not lab_arg and not installconf_path:
-        lab_dict = setup_consts.LAB
-        # if lab_dict is None:
-        #    raise ValueError("No lab is specified via cmdline or setup_consts.py")
-        if lab_dict:
-            LOG.warning("lab is not specified via cmdline! Using lab from setup_consts file: {}".format(
-                lab_dict['short_name']))
+        raise ValueError("No lab is specified via cmdline or install_conf")
 
     if installconf_path:
         installconf = configparser.ConfigParser(allow_no_value=True)
@@ -439,9 +434,10 @@ def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute
 
 
 def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_files_dir, bs):
-    controller_nodes = [int(node) for node in controllers] if controllers else []
-    compute_nodes = [int(node) for node in computes] if computes else []
-    storage_nodes = [int(node) for node in storages] if storages else []
+    p = r'[,| ]+'
+    controller_nodes = [int(node) for node in re.split(p, controllers.strip())] if controllers else []
+    compute_nodes = [int(node) for node in re.split(p, computes.strip())] if computes else []
+    storage_nodes = [int(node) for node in re.split(p, storages.strip())] if storages else []
     __build_server = bs if bs and bs != "" else BuildServerPath.DEFAULT_BUILD_SERVER
     files_server = __build_server
     if lab_files_dir:
@@ -606,7 +602,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
                        patch_dir=None, ovs=False, build_server=None, tis_builds_dir=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
-                       boot="pxe", iso_path=None, security="standard", low_latency=False, stop=99):
+                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=99):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -901,7 +897,6 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  )
 
 
-
 def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_builds_dir, tis_build_dir,
                       compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
                       low_latency, security, stop, ovs,  boot_server, resume, skip):
@@ -912,7 +907,8 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
         lab: Str name of the lab to fresh_install
         controller: Str comma separated list of controller node barcodes
         lab_files_dir: Str path to the directory containing the lab files
-        bs: Str name of a valid build server. Default is yow-cgts4-lx
+        build_server: Str name of a valid build server. Default is yow-cgts4-lx
+        files_server
         tis_build_dir: Str path to the desired build directory. Default is the latest
         compute: Str comma separated list of compute node barcodes
         storage: Str comma separated list of storage node barcodes

@@ -79,7 +79,7 @@ def force_unreserve_hosts(hosts, val='hostname'):
     LOG.info("forecefully unreserving hosts {}: {}".format(hosts, barcodes))
     for barcode in barcodes:
         rc, output = local_host.force_unreserve_vlm_console(barcode)
-        if rc != 0:
+        if rc > 0:
             err_msg = "Failed to unreserve barcode {} in vlm: {}".format(barcode, output)
             raise exceptions.VLMError(err_msg)
 

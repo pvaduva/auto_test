@@ -50,7 +50,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     user = username if username else HostLinuxCreds.get_user()
     password = password if password else HostLinuxCreds.get_password()
     if not prompt:
-        prompt = '.*' + hostname + '\:~\$'
+        prompt = '.*' + hostname + r'\:~\$'
     original_host = con_ssh.get_hostname()
     if original_host != hostname:
         host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt,
@@ -117,7 +117,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     cmd = 'sudo reboot -f' if force_reboot else 'sudo reboot'
 
     for host in hostnames:
-        prompt = '.*' + host + '\:~\$'
+        prompt = '.*' + host + r'\:~\$'
         host_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, user=user, password=password, initial_prompt=prompt)
         host_ssh.connect()
         current_host = host_ssh.get_hostname()
@@ -672,7 +672,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         con_telnet.exec_cmd("xterm")
 
     if not duplex_direct:
-    # Give it sometime before openstack cmds enables on after host
+        # Give it sometime before openstack cmds enables on after host
         _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                        auth_info=auth_info, fail_ok=False, timeout=timeout, check_interval=10,
                                        reconnect=True)
@@ -1735,7 +1735,7 @@ def _get_actual_mems(host):
             raise exceptions.SysinvError('system host-memory-modify is not rejected when 2M pages exceeds mem_avail')
 
         # Processor 0:No available space for 2M huge page allocation, max 2M pages: 27464
-        actual_mem = int(re.findall('max 2M pages: (\d+)', output)[0]) * 2
+        actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
         actual_mems[proc] = (actual_mem, actual_1g)
 
     return actual_mems
@@ -1888,7 +1888,7 @@ def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail
 
     for proc, num in final_args.items():
         num = int(num)
-        proc_id = re.findall('\d+', proc)[0]
+        proc_id = re.findall(r'\d+', proc)[0]
         expt_cores = threads*num
         actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
         if expt_cores != actual_cores:
@@ -2260,7 +2260,7 @@ def get_host_threads_count(host, con_ssh=None):
     if code != 0:
         raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
 
-    pattern = "Threads/Core=(\d),"
+    pattern = r"Threads/Core=(\d),"
     return int(re.findall(pattern, output)[0])
 
 
@@ -2571,7 +2571,7 @@ def __parse_total_cpus(output):
     # Final resource view: name=controller-0 phys_ram=44518MB used_ram=0MB phys_disk=141GB used_disk=1GB
     # free_disk=133GB total_vcpus=31 used_vcpus=0.0 pci_stats=[PciDevicePool(count=1,numa_node=0,product_id='0522',
     # tags={class_id='030000',configured='1',dev_type='type-PCI'},vendor_id='102b')]
-    total = round(float(re.findall('used_vcpus=([\d|.]*) ', last_line)[0]), 4)
+    total = round(float(re.findall(r'used_vcpus=([\d|.]*) ', last_line)[0]), 4)
     return total
 
 
@@ -3763,14 +3763,14 @@ def get_host_co_processor_pci_list(hostname):
         dev_sets = output.split('--\n')
         for dev_set in dev_sets:
             pdev_line, vdev_line = dev_set.strip().splitlines()
-            class_id, vendor_id, device_id = re.findall('\[([0-9a-fA-F]{4})\]', pdev_line)[0:3]
-            vf_class_id, vf_vendor_id, vf_device_id = re.findall('\[([0-9a-fA-F]{4})\]', vdev_line)[0:3]
+            class_id, vendor_id, device_id = re.findall(r'\[([0-9a-fA-F]{4})\]', pdev_line)[0:3]
+            vf_class_id, vf_vendor_id, vf_device_id = re.findall(r'\[([0-9a-fA-F]{4})\]', vdev_line)[0:3]
             assert vf_class_id == class_id
             assert vf_vendor_id == vendor_id
             assert device_id != vf_device_id
 
-            vendor_name = re.findall('\"([^\"]+) \[{}\]'.format(vendor_id), pdev_line)[0]
-            pci_alias = re.findall('\"([^\"]+) \[{}\]'.format(device_id), pdev_line)[0]
+            vendor_name = re.findall(r'\"([^\"]+) \[{}\]'.format(vendor_id), pdev_line)[0]
+            pci_alias = re.findall(r'\"([^\"]+) \[{}\]'.format(device_id), pdev_line)[0]
             if pci_alias == 'Device':
                 pci_alias = None
             else:
@@ -4021,7 +4021,7 @@ def get_max_vms_supported(host, con_ssh=None):
     cpu_model = get_host_cpu_model(host=host, con_ssh=con_ssh)
     if ProjVar.get_var('IS_VBOX'):
         max_count = MaxVmsSupported.VBOX
-    elif re.search('Xeon.* CPU D-[\d]+', cpu_model):
+    elif re.search(r'Xeon.* CPU D-[\d]+', cpu_model):
         max_count = MaxVmsSupported.XEON_D
 
     LOG.info("Max number vms supported on {}: {}".format(host, max_count))
@@ -4565,7 +4565,7 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
         original_host = ssh_client.host
 
     if not prompt:
-        prompt = '.*' + host + '\:~\$'
+        prompt = '.*' + host + r'\:~\$'
 
     remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
     remote_ssh.connect()
