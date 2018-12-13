@@ -746,7 +746,12 @@ def test_state(node, attr_type, expected_state):
 
     global controller0
 
-    output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")[1]
+    rc, output = controller0.ssh_conn.exec_cmd("source /etc/nova/openrc; system host-list")
+    if rc != 0:
+        msg = "Failed to query hosts on system"
+        log.error(msg)
+        wr_exit()._exit(1, msg)
+
     output = "\n".join(output.splitlines()[3:-1])
     match = re.search("^.*{}.*{}.*$".format(node.name, expected_state), \
                       output, re.MULTILINE | re.IGNORECASE)
