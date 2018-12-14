@@ -1,13 +1,131 @@
-import multiprocessing as mp
-from multiprocessing import Process, Queue
+import re
+from multiprocessing import Process, Queue, Event
 
 from consts.proj_vars import InstallVars
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
+from consts.auth import SvcCgcsAuto
 from keywords import host_helper, system_helper
 from utils import exceptions, local_host
 from utils.clients.ssh import ControllerClient
+from utils.clients.local import LocalHostClient
 from utils.tis_log import LOG
+
+# VLM commands and options
+VLM = "/folk/vlm/commandline/vlmTool"
+VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_FORCE_UNRESERVE, VlmAction.VLM_TURNON,
+            VlmAction.VLM_TURNOFF, VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
+
+__local_client = None
+
+
+def local_client():
+    global __local_client
+    if not __local_client:
+        __local_client = LocalHostClient(connect=True)
+    
+    return __local_client
+
+
+def _reserve_vlm_console(barcode, note=None):
+    cmd = '{} {} -t {}'.format(VLM, VlmAction.VLM_RESERVE, barcode)
+    if note:
+        cmd += ' -n "{}"'.format(note)
+    print("This is cmd: %s" % cmd)
+
+    reserved_barcodes = local_client().exec_cmd(cmd)[1]
+    if barcode not in reserved_barcodes or "Error" in reserved_barcodes:
+        # check if node is already reserved by user
+        attr_dict = _get_attr_dict_for_vlm_console(barcode=barcode, attr='all')
+        reserved_by = attr_dict['Reserved By']
+        local_user = local_host.get_user()
+        if reserved_by != local_user:
+            msg = "Target {} is not reserved by {}".format(barcode, local_user)
+            LOG.error(msg)
+            return 1, msg
+        else:
+            msg = "Barcode {} already reserved".format(barcode)
+            LOG.info(msg)
+            return -1, msg
+    else:
+        msg = "Barcode {} reserved".format(barcode)
+        LOG.info(msg)
+        return 0, msg
+
+
+def _force_unreserve_vlm_console(barcode):
+    action = VlmAction.VLM_FORCE_UNRESERVE
+    cmd = '{} {} -L {} -P {} -t {}'.format(VLM, action, SvcCgcsAuto.USER, SvcCgcsAuto.VLM_PASSWORD, barcode)
+    attr_dict = _get_attr_dict_for_vlm_console(barcode=barcode, attr='all')
+    reserved_by = attr_dict['Reserved By']
+    reserve_note = attr_dict['Reserve Note']
+
+    if not reserved_by:
+        msg = "target is not reserved. Do nothing"
+        LOG.info(msg)
+        return -1, msg
+    elif reserved_by == local_host.get_user() or not reserve_note:
+        print("Force unreserving target: {}".format(barcode))
+        local_client().exec_cmd(cmd)
+        reserved = _vlm_getattr(barcode, 'date')[1]
+        if reserved:
+            msg = "Failed to force unreserve target!"
+            LOG.error(msg)
+            return 1, msg
+        else:
+            msg = "Barcode {} was successfully unreserved".format(barcode)
+            LOG.info(msg)
+            return 0, msg
+    else:
+        msg = "Did not unreserve {} as it has a reservation note: {}".format(barcode, reserve_note)
+        LOG.error(msg)
+        return 2, msg
+
+
+def _vlm_findmine():
+    output = local_client().exec_cmd('{} {}'.format(VLM, VlmAction.VLM_FINDMINE))[1]
+    if re.search(r"\d+", output):
+        reserved_targets = output.split(sep=' ')
+        msg = "Target(s) reserved by user: {}".format(str(reserved_targets))
+    else:
+        msg = "User has no reserved target(s)"
+        reserved_targets = []
+
+    reserved_targets = [int(barcode) for barcode in reserved_targets]
+    LOG.info(msg)
+
+    return reserved_targets
+
+
+def _vlm_getattr(barcode, attr='all'):
+    cmd = '{} getAttr -t {} {}'.format(VLM, barcode, attr)
+    return local_client().exec_cmd(cmd)
+
+
+def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False):
+    if action not in VLM_CMDS:
+        msg = '"{}" is an invalid action.'.format(action)
+        msg += " Valid actions: {}".format(str(VLM_CMDS))
+        raise ValueError(msg)
+
+    if reserve:
+        if int(barcode) not in _vlm_findmine():
+            # reserve barcode
+            if _reserve_vlm_console(barcode)[0] > 0:
+                msg = "Failed to reserve target {}".format(barcode)
+                if fail_ok:
+                    LOG.info(msg)
+                    return 1, msg
+                else:
+                    raise exceptions.VLMError(msg)
+
+    output = local_client().exec_cmd('{} {} -t {}'.format(VLM, action, barcode))[1]
+    if output != "1":
+        msg = 'Failed to execute "{}" on target {}. Output: {}'.format(action, barcode, output)
+        LOG.error(msg)
+        return 1, msg
+
+    return 0, None
 
 
 def get_lab_dict():
@@ -41,7 +159,8 @@ def get_barcodes_from_hostnames(hostnames,  lab=None):
     """
     Convert hostname(s) to barcodes
     Args:
-        hostnames (str|list): hostname(s) 
+        hostnames (str|list): hostname(s)
+        lab (dict|None)
 
     Returns (list): list of barcodes
     """
@@ -61,6 +180,7 @@ def unreserve_hosts(hosts, lab=None):
     """
     Unreserve given hosts from vlm
     Args:
+        lab (dict|None)
         hosts (str|list): hostname(s)
 
     """
@@ -70,15 +190,15 @@ def unreserve_hosts(hosts, lab=None):
     _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_UNRESERVE, reserve=False, lab=lab)
 
 
-def force_unreserve_hosts(hosts, val='hostname'):
+def force_unreserve_hosts(hosts, val='hostname', lab=None):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    barcodes = get_barcodes_from_hostnames(hosts) if val == 'hostname' else hosts
+    barcodes = get_barcodes_from_hostnames(hosts, lab=lab) if val == 'hostname' else hosts
 
     LOG.info("forecefully unreserving hosts {}: {}".format(hosts, barcodes))
     for barcode in barcodes:
-        rc, output = local_host.force_unreserve_vlm_console(barcode)
+        rc, output = _force_unreserve_vlm_console(barcode)
         if rc > 0:
             err_msg = "Failed to unreserve barcode {} in vlm: {}".format(barcode, output)
             raise exceptions.VLMError(err_msg)
@@ -88,13 +208,14 @@ def get_hostnames_from_consts(lab=None):
     return list(get_barcodes_dict(lab=lab).keys())
 
 
-def reserve_hosts(hosts, val='hostname'):
+def reserve_hosts(hosts, val='hostname', lab=None):
     """
     Reserve given host(s) or barcode(s) from vlm
 
     Args:
         hosts (str|list):
         val (str): 'hostname' or 'barcode'
+        lab (str|None)
 
     Returns:
 
@@ -102,12 +223,12 @@ def reserve_hosts(hosts, val='hostname'):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    barcodes = get_barcodes_from_hostnames(hosts) if val == 'hostname' else hosts
+    barcodes = get_barcodes_from_hostnames(hosts, lab=lab) if val == 'hostname' else hosts
 
     LOG.info("Reserving hosts {}: {}".format(hosts, barcodes))
     for barcode in barcodes:
-        rc, output = local_host.reserve_vlm_console(barcode)
-        if rc != 0:
+        rc, output = _reserve_vlm_console(barcode)
+        if rc > 0:
             err_msg = "Failed to reserve barcode {} in vlm: {}".format(barcode, output)
             raise exceptions.VLMError(err_msg)
 
@@ -117,6 +238,7 @@ def power_off_hosts(hosts, lab=None, reserve=True):
     Power off given hosts
     Args:
         hosts (str|list): hostname(s)
+        lab (str|None)
         reserve (bool): whether to reserve first
 
     Returns:
@@ -189,7 +311,7 @@ def reboot_hosts(hosts, lab=None, reserve=True, post_check=True, reconnect=True,
         host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
-def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, reserve=True,):
+def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, reserve=True, fail_ok=False):
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -199,12 +321,7 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, r
         barcode = barcodes[i]
 
         LOG.info("{} {} {}".format(action, host, barcode))
-        rc, output = local_host.vlm_exec_cmd(action, barcode, reserve=reserve)
-        if rc != 0:
-            err_msg = "Failed to {} node {} {}: {}".format(action, host, barcode, output)
-            # raise exceptions.VLMError(err_msg)
-
-        LOG.info("{} succeeded on {} {}".format(action, host, barcode))
+        _vlm_exec_cmd(action, barcode, reserve=reserve, fail_ok=fail_ok)
 
 
 def power_off_hosts_simultaneously(hosts=None):
@@ -219,7 +336,7 @@ def power_off_hosts_simultaneously(hosts=None):
     def _power_off(barcode_, power_off_event_, timeout_, output_queue):
 
         if power_off_event_.wait(timeout=timeout_):
-            rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False)
+            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False)
             rtn = (rc, output)
 
         else:
@@ -238,7 +355,7 @@ def power_off_hosts_simultaneously(hosts=None):
 
     barcodes = get_barcodes_from_hostnames(hosts)
     # Use event to send power off signal to all processes
-    power_off_event = mp.Event()
+    power_off_event = Event()
     new_ps = []
     # save results for each process
     out_q = Queue()
@@ -262,24 +379,27 @@ def power_off_hosts_simultaneously(hosts=None):
             raise exceptions.VLMError(res[1])
 
 
+def _get_attr_dict_for_vlm_console(barcode, attr='all'):
+    attribute_dict = {}
+    output = _vlm_getattr(barcode, attr)[1]
+    for line in output.splitlines():
+        if line:
+            if attr == "all":
+                key = line[:line.find(":")].strip()
+            else:
+                key = attr
+            val = line[line.find(":") + 1:].strip()
+            attribute_dict[key] = val
+    return attribute_dict
+
+
 def get_attributes_dict(hosts, attr="all", val='hostname'):
     if isinstance(hosts, str):
         hosts = [hosts]
 
     attributes = []
-
     barcodes = get_barcodes_from_hostnames(hosts) if val == 'hostname' else hosts
-
     for barcode in barcodes:
-        attribute_dict = {}
-        output = local_host.vlm_getattr(barcode, attr)[1]
-        for line in output.splitlines():
-            if line:
-                if attr == "all":
-                    key = line[:line.find(":")].strip()
-                else:
-                    key = attr
-                val = line[line.find(":") + 1:].strip()
-                attribute_dict[key] = val
+        attribute_dict = _get_attr_dict_for_vlm_console(barcode=barcode, attr=attr)
         attributes.append(attribute_dict)
     return attributes

@@ -17,9 +17,10 @@ from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
-from utils import telnet as telnetlib, exceptions, local_host, cli, table_parser, lab_info, multi_thread, menu
+from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
-from utils.clients.telnet import TelnetClient, TELNET_LOGIN_PROMPT
+from utils.clients.telnet import TelnetClient
+from utils.clients.local import LocalHostClient
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.tis_log import LOG
 
@@ -32,10 +33,19 @@ CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ", "compute-config in progress ...")
 
 lab_ini_info = {}
+__local_client = None
+
+
+def local_client():
+    global __local_client
+    if not __local_client:
+        __local_client = LocalHostClient(connect=True)
+
+    return __local_client
 
 
 def get_ssh_public_key():
-    return local_host.get_ssh_key()
+    return local_client().get_ssh_key()
 
 
 def get_current_system_version():
@@ -198,8 +208,8 @@ def open_vlm_console_thread(hostname, lab=None, boot_interface=None, upgrade=Fal
     LOG.info("Mgmt boot device for {} is {}".format(node.name, boot_device))
 
     LOG.info("Opening a vlm console for {}.....".format(hostname))
-    rc, output = local_host.reserve_vlm_console(node.barcode)
-    if rc != 0:
+    rc, output = vlm_helper._reserve_vlm_console(node.barcode)
+    if rc > 0:
         err_msg = "Failed to reserve vlm console for {}  barcode {}: {}"\
             .format(node.name, node.barcode, output)
         LOG.error(err_msg)
@@ -274,15 +284,6 @@ def get_non_controller_system_hosts():
 
 
 def open_telnet_session(node_obj):
-
-    # _telnet_conn = telnetlib.connect(node_obj.telnet_ip,
-    #                                   int(node_obj.telnet_port),
-    #                                   negotiate=node_obj.telnet_negotiate,
-    #                                   port_login=True if node_obj.telnet_login_prompt else False,
-    #                                   vt100query=node_obj.telnet_vt100query,
-    #                                   log_path=install_output_dir + "/" + log_file_prefix +  node_obj.name +\
-    #                                   ".telnet.log", debug=False)
-
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
     if node_obj.telnet_login_prompt:
         _telnet_conn.send("\r\n")
@@ -314,8 +315,8 @@ def wipe_disk_hosts(hosts, lab=None, close_telnet_conn=True):
         controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
     # Check if controller is online
-    if not local_host.ping_to_host(controller0_node.host_ip):
-        LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
+    if local_client().ping_server(controller0_node.host_ip, fail_ok=True)[0] == 100:
+        LOG.warning("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
         return
     #try:
     #    controller0_node.telnet_conn.send()
@@ -437,8 +438,8 @@ def power_off_host(hosts):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
-        rc, output = local_host.reserve_vlm_console(node.barcode)
-        if rc != 0:
+        rc, output = vlm_helper._reserve_vlm_console(node.barcode)
+        if rc > 0:
             err_msg = "Failed to reserve vlm console for {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
             LOG.error(err_msg)
@@ -447,7 +448,7 @@ def power_off_host(hosts):
         LOG.info("node.barcode:{}".format(node.barcode))
         LOG.info("node:{}".format(node))
 
-        rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
+        rc, output = vlm_helper._vlm_exec_cmd(VlmAction.VLM_TURNOFF, node.barcode)
 
         if rc != 0:
             err_msg = "Failed to power off node {}  barcode {}: {}"\
@@ -471,14 +472,14 @@ def power_on_host(hosts, lab=None, wait_for_hosts_state_=True):
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
-        rc, output = local_host.reserve_vlm_console(node.barcode)
-        if rc != 0:
+        rc, output = vlm_helper._reserve_vlm_console(node.barcode)
+        if rc > 0:
             err_msg = "Failed to reserve vlm console for {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
-        rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNON, node.barcode)
+        rc, output = vlm_helper._vlm_exec_cmd(VlmAction.VLM_TURNON, node.barcode)
         if rc != 0:
             err_msg = "Failed to power on node {}  barcode {}: {}"\
                 .format(node.name, node.barcode, output)
@@ -2006,8 +2007,8 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                     if dest_server.ssh_conn.exec_cmd("test -e  {}".format(backup_dest_path))[0] != 0:
                         dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
                 else:
-                    if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
-                        local_host.exec_cmd(["mkdir -p {}".format(backup_dest_path)])
+                    if local_client().exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
+                        local_client().exec_cmd("mkdir -p {}".format(backup_dest_path))
 
                 common.scp_from_active_controller_to_test_server(src_files,
                                                                  backup_dest_path,
@@ -2018,7 +2019,7 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                 if dest_server:
                     rc, output = dest_server.ssh_conn.exec_cmd("ls {}".format(backup_dest_path))
                 else:
-                    rc, output = local_host.exec_cmd(["ls {}".format(backup_dest_path)])
+                    rc, output = local_client().exec_cmd("ls {}".format(backup_dest_path))
 
                 if rc != 0:
                     err_msg = "Failed to scp cinder backup files {} to local destination: {}".format(backup_dest_path,
@@ -2146,8 +2147,8 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
             if dest_server.ssh_conn.exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
                 dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
         else:
-            if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
-                local_host.exec_cmd(["mkdir -p {}".format(backup_dest_path)])
+            if local_client().exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
+                local_client().exec_cmd("mkdir -p {}".format(backup_dest_path))
 
         src_files = "{} {}".format(backup_files[0].strip(), backup_files[1].strip())
         common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
@@ -2156,7 +2157,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
         if dest_server:
             rc, output = dest_server.ssh_conn.exec_cmd("ls {}/{}*.tgz".format(backup_dest_path, backup_file_name ))
         else:
-            rc, output = local_host.exec_cmd(["ls {}/{}*.tgz".format(backup_dest_path, backup_file_name)])
+            rc, output = local_client().exec_cmd("ls {}/{}*.tgz".format(backup_dest_path, backup_file_name))
 
         if rc != 0:
             err_msg = "Failed to scp system backup files {} to local destination: {}".format(backup_files, output)
@@ -2261,8 +2262,8 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
             if dest_server.ssh_conn.exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
                 dest_server.ssh_conn.exec_cmd("mkdir -p {}".format(backup_dest_path))
         else:
-            if local_host.exec_cmd(["test", '-e',  "{}".format(backup_dest_path)])[0] != 0:
-                local_host.exec_cmd("mkdir -p {}".format(backup_dest_path))
+            if local_client().exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
+                local_client().exec_cmd("mkdir -p {}".format(backup_dest_path))
 
         common.scp_from_active_controller_to_test_server(src_file, backup_dest_path, is_dir=False, multi_files=True)
 
@@ -2271,7 +2272,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
         if dest_server:
             rc, output = dest_server.ssh_conn.exec_cmd("ls {}/{}".format(backup_dest_path, base_name_src))
         else:
-            rc, output = local_host.exec_cmd("ls {}/{}".format(backup_dest_path, base_name_src))
+            rc, output = local_client().exec_cmd("ls {}/{}".format(backup_dest_path, base_name_src))
 
         if rc != 0:
             err_msg = "Failed to scp image backup files {} to local destination: {}".format(src_file, output)
@@ -2444,8 +2445,8 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
 
     boot_interfaces = lab['boot_device_dict']
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))
-    rc, output = local_host.reserve_vlm_console(controller0.barcode)
-    if rc != 0:
+    rc, output = vlm_helper._reserve_vlm_console(controller0.barcode)
+    if rc > 0:
         err_msg = "Failed to reserve vlm console for {}  barcode {}: {}"\
             .format(controller0.name, controller0.barcode, output)
         LOG.error(err_msg)
@@ -2461,32 +2462,8 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           lab=lab)
 
     LOG.info("Initial login and password set for " + controller0.name)
-    reset = True
-    if clone_install:
-        reset = False
+    controller0.telnet_conn.login(handle_init_login=True)
 
-    if reset:
-        controller0.telnet_conn.send('\r\n\r\n')
-        controller0.telnet_conn.expect(["ogin:"])
-        controller0.telnet_conn.send(HostLinuxCreds.get_user())
-        controller0.telnet_conn.expect(["assword:"])
-        controller0.telnet_conn.send(HostLinuxCreds.get_user())
-        controller0.telnet_conn.expect(["assword:"])
-        controller0.telnet_conn.send(HostLinuxCreds.get_user())
-        controller0.telnet_conn.expect(["assword:"])
-        controller0.telnet_conn.send(HostLinuxCreds.get_password())
-        controller0.telnet_conn.expect(["assword:"])
-        controller0.telnet_conn.send(HostLinuxCreds.get_password())
-        host_name_split = controller0.host_name.split("-")
-        host_name_split[-1] = "\d+"
-        host_name = '-'.join(host_name_split)
-        host_name_regex = "(" + host_name + "|localhost" + ")"
-        controller0.telnet_conn.hostname = host_name_regex
-        controller0.telnet_conn.set_prompt('{}:~\$ '.format(host_name_regex))
-        controller0.telnet_conn.expect()
-    else:
-        controller0.telnet_conn.login()
-    # controller0.telnet_conn.set_prompt(controller0.host_name + ':~\$ ')
     if boot_usb:
         setup_networking(controller0)
 
@@ -3083,7 +3060,7 @@ def update_oam_for_cloned_system( system_mode='duplex', fail_ok=False):
         ControllerClient.set_active_controller(ssh_conn)
 
 
-def update_system_info_for_cloned_system( system_mode='duplex', fail_ok=False):
+def update_system_info_for_cloned_system(system_mode='duplex', fail_ok=False):
 
     lab = InstallVars.get_install_var("LAB")
 
@@ -3197,7 +3174,6 @@ def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,
             result = 4
             LOG.info("Transfer of cloned image iso file to Lab {} not completed: {}".format(k, rc))
 
-
     return result, clone_install_ready_labs
 
 
@@ -3218,19 +3194,16 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
     if src_lab['short_name'] != dest_lab_name:
         LOG.info("Transferring cloned image iso file to lab: {}".format(dest_lab_name))
         clone_image_iso_dest_path = WRSROOT_HOME + os.path.basename(clone_image_iso_full_path)
-        if not local_host.ping_to_host(controller0_node.host_ip):
+        if local_client().ping_server(controller0_node.host_ip, fail_ok=True)[0] == 100:
             msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
             if boot_lab:
                 LOG.info("{} ; Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
                 boot_controller(lab=lab_dict)
-                if not local_host.ping_to_host(controller0_node.host_ip):
-
+                if local_client().ping_server(controller0_node.host_ip, fail_ok=fail_ok)[0] == 100:
                     err_msg = "Cannot ping destination lab {} controller-0 after install".format(dest_lab_name)
                     LOG.warn(err_msg)
-                    if fail_ok:
-                        return 1, err_msg
-                    else:
-                        raise exceptions.BackupSystem(err_msg)
+                    return 1, err_msg
+
                 LOG.info("Lab {}: controller-0  booted successfully".format(dest_lab_name))
             else:
                 LOG.warn(msg)
@@ -3675,19 +3648,16 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
     controller0_node = lab_dict['controller-0']
 
     LOG.info("Transferring boot image iso file to lab: {}".format(dest_lab_name))
-    if not local_host.ping_to_host(controller0_node.host_ip):
+    if local_client().ping_server(controller0_node.host_ip, fail_ok=True)[0] == 100:
         msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
         if boot_lab:
-            LOG.info("{} ; Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
+            LOG.info("{}. Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
             boot_controller(lab=lab_dict)
-            if not local_host.ping_to_host(controller0_node.host_ip):
-
-                err_msg = "Cannot ping destination lab {} controller-0".format(dest_lab_name)
+            if local_client().ping_server(controller0_node.host_ip, fail_ok=fail_ok)[0] == 100:
+                err_msg = "Cannot ping destination lab {} controller-0 after boot".format(dest_lab_name)
                 LOG.warn(err_msg)
-                if fail_ok:
-                    return 1, err_msg
-                else:
-                    raise exceptions.BackupSystem(err_msg)
+                return 1, err_msg
+
             LOG.info("Lab {}: controller-0  booted successfully".format(dest_lab_name))
         else:
             LOG.warn(msg)
@@ -3763,13 +3733,10 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
     tuxlab_conn.deploy_ssh_key()
 
     LOG.info("Transferring boot image iso file to boot server: {}".format(tuxlab_server))
-    if not local_host.ping_to_host(tuxlab_server):
+    if local_client().ping_server(tuxlab_server, fail_ok=fail_ok) == 100:
         msg = "{} is not reachable.".format(tuxlab_server)
         LOG.warn(msg)
-        if fail_ok:
-            return 1, msg
-        else:
-            raise exceptions.BackupSystem(msg)
+        return 1, msg
 
     cmd = "rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(barcode, barcode)
     tuxlab_conn.exec_sudo_cmd(cmd)

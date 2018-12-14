@@ -26,7 +26,7 @@ def telnet_logger(host):
 
 
 TELNET_REGEX = r'([\w]+-[\d]+)( login:|:~\$)'
-TELNET_LOGIN_PROMPT = Prompt.LOGIN_PROMPT
+TELNET_LOGIN_PROMPT = r'^(?![L|l]ast).*[L|l]ogin:[ ]?$'
 NEWPASSWORD_PROMPT = ''
 
 
@@ -43,14 +43,14 @@ class TelnetClient(Telnet):
             self.send('\r\n\r\n')
             index = self.expect(TELNET_REGEX, fail_ok=True)
             if index == 0:
-                print(str(self.cmd_output))
-                hostname = re.search(TELNET_REGEX, self.cmd_output).group(0)
+                hostname = re.search(TELNET_REGEX, self.cmd_output.splitlines()[-1]).group(1)
                 prompt = r'{}:~\$ '.format(hostname)
 
         elif not prompt:
             prompt = r'{}:~\$ '.format(hostname)
         elif not hostname:
-            hostname = re.search(TELNET_REGEX, prompt).group(0)
+            hostname = re.search(TELNET_REGEX, prompt).group(1)
+
         self.flush()
         self.logger = telnet_logger(hostname) if hostname else telnet_logger(host + ":" + str(port))
         self.hostname = hostname
@@ -90,46 +90,36 @@ class TelnetClient(Telnet):
     #             format(host, port, e.__str__())
     #         self.logger.warning(err_msg)
 
-    def login(self, expect_prompt_timeout=3, fail_ok=False):
+    def login(self, expect_prompt_timeout=3, fail_ok=False, handle_init_login=False):
         self.send()
-        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
+        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok,
+                            searchwindowsize=50)
         self.flush()
         code = 0
         if index == 0:
             self.send(self.user)
-            self.expect(PASSWORD_PROMPT)
+            self.expect(PASSWORD_PROMPT, searchwindowsize=50)
             self.send(self.password)
-            self.expect()
+            index = self.expect([self.prompt, TELNET_LOGIN_PROMPT], searchwindowsize=25)
+            if index == 1:
+                if not handle_init_login:
+                    raise exceptions.TelnetException('Unable to login to {} with credential {}/{}'.
+                                                     format(self.hostname, self.user, self.password))
+                self.send(self.user)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.send(self.user)    # in initial login, assume password=username
+                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.send(self.user)    # enter original password
+                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.send(self.password)    # enter new password
+                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.send(self.password)    # confirm new password
+                self.expect(searchwindowsize=50)
+
         elif index < 0:
             self.logger.warning("System is not in login page and default prompt is not found either")
             code = 1
         return code
-
-    def initial_login(self, new_password, expect_prompt_timeout=3, fail_ok=False):
-        self.send('\r\n\r\n')
-        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok)
-        self.flush()
-        expect_index = 0
-        if index == 0:
-            self.send(self.user)
-            self.expect(PASSWORD_PROMPT, fail_ok=fail_ok)
-            self.send(self.password)
-            self.expect(PASSWORD_PROMPT, fail_ok=fail_ok)
-            self.send(new_password)
-            self.expect(PASSWORD_PROMPT, fail_ok=fail_ok)
-            self.send(new_password)
-            expect_index = self.expect(fail_ok=fail_ok)
-        elif index < 0:
-            self.logger.warning("System is not in login page and default prompt is not found either")
-            return 1
-
-        if fail_ok and expect_index != 0:
-            self.logger.warning("System did not login in successfully")
-            return 1
-
-        self.password = new_password
-
-        return 0
 
     def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
         if reconnect:

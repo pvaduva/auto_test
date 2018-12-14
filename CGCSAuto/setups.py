@@ -857,12 +857,12 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                 else:
                     raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
                                                   .format(external_ip))
-            username = local_host.getpass.getuser()
+            username = local_host.get_user()
             password = ''
             if "svc-cgcsauto" in username:
                 password = SvcCgcsAuto.PASSWORD
             else:
-                password = local_host.getpass.getpass()
+                password = local_host.get_password()
 
             lab_to_install['local_user'] = username
             lab_to_install['local_password'] = password

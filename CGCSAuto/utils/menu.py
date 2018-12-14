@@ -124,24 +124,29 @@ class Menu(object):
 
 
 class BiosMenu(Menu):
+    menus = bios.BiosMenus
+    lab_menu_dict = {
+        'wolfpass|wildcat|grizzly': menus.American_Megatrends,
+        'hp': menus.HP,
+        'ironpass': menus.Ironpass,
+        'ml350': menus.ml350,
+        'r730|r430': menus.PowerEdge,
+        'r720': menus.Phoenix,
+    }
+
     def __init__(self, lab_name=None):
         if lab_name is None:
             lab = InstallVars.get_install_var("LAB")
             lab_name = lab["name"]
         lab_name = lab_name.lower()
         LOG.debug("Lab name: {}".format(lab_name))
-        if 'wolfpass' in lab_name or "wildcat" in lab_name or "grizzly" in lab_name:
-            bios_menu_dict = bios.BiosMenus.American_Megatrends
-        elif 'supermicro' in lab_name:
-            bios_menu_dict = bios.BiosMenus.Supermicro
-        elif 'ironpass' in lab_name:
-            bios_menu_dict = bios.BiosMenus.Ironpass
-        elif 'r730' in lab_name or 'r430' in lab_name:
-            bios_menu_dict = bios.BiosMenus.PowerEdge
-        elif 'ml350' in lab_name or 'hp' in lab_name:
-            bios_menu_dict = bios.BiosMenus.ml350
-        elif "r720" in lab_name:
-            bios_menu_dict = bios.BiosMenus.Phoenix
+
+        for k, v in self.lab_menu_dict.items():
+            if re.search(k, lab_name):
+                bios_menu_dict = v
+                break
+        else:
+            raise NotImplementedError('{} not handled'.format(lab_name))
 
         super().__init__(name=bios_menu_dict["name"], kwargs=bios_menu_dict)
 

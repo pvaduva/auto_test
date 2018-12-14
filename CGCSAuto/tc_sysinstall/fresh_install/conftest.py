@@ -10,11 +10,12 @@ from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import TuxlabServerPath, BuildServerPath
 from setups import initialize_server, write_installconf, set_install_params, get_lab_dict
 from tc_sysinstall.fresh_install import fresh_install_helper
-from utils import exceptions, local_host
+from utils import exceptions
 
 ########################
 # Command line options #
 ########################
+
 
 def pytest_configure(config):
 
@@ -122,10 +123,16 @@ def pytest_configure(config):
                        boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                        patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
 
-    print(" Pre Configure Install vars:")
-    install_vars = InstallVars.get_install_vars().items()
-    for var, value in install_vars:
-        print("{}: {}".format(var, value))
+    print("\n**********\nArguments:\n**********\n")
+    for var, value in InstallVars.get_install_vars().items():
+        if var == 'LAB':
+            new_value = {}
+            for k, v in dict(value).items():
+                if re.search('_nodes|name| ip', k):
+                    new_value[k] = v
+            value = new_value
+        print("{}:\t{}".format(var, value))
+    print('')
 
 
 @pytest.fixture(scope='session')
@@ -168,7 +175,8 @@ def install_setup():
 
     LOG.info("Reservering {}".format(hosts))
     for barcode in barcodes:
-        local_host.reserve_vlm_console(barcode, "AUTO: lab installation")
+        vlm_helper._reserve_vlm_console(barcode, "AUTO: lab installation")
+
     LOG.fixture_step("Attempt to reset port on controller-0")
     if active_con.telnet_conn is None:
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
