@@ -26,7 +26,7 @@ def telnet_logger(host):
 
 
 TELNET_REGEX = r'([\w]+-[\d]+)( login:|:~\$)'
-TELNET_LOGIN_PROMPT = r'^(?![L|l]ast).*[L|l]ogin:[ ]?$'
+TELNET_LOGIN_PROMPT = r'[^n](?![L|l]ast).*[L|l]ogin:[ ]?$'
 NEWPASSWORD_PROMPT = ''
 
 
