@@ -266,10 +266,10 @@ def bring_node_console_up(node, boot_device,
         power_on_host(node.name, lab=lab, wait_for_hosts_state_=False)
 
     install_node(node, boot_device,
-            low_latency=low_latency,
-            small_footprint=small_footprint,
-            security=security,
-            usb=boot_usb)
+                 low_latency=low_latency,
+                 small_footprint=small_footprint,
+                 security=security,
+                 usb=boot_usb)
     if close_telnet_conn:
         node.telnet_conn.close()
 
@@ -3506,11 +3506,13 @@ def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, ava
 def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
     if node_obj.telnet_conn is None and not expect_prompt:
         node_obj.telnet_conn = open_telnet_session(node_obj)
+
     if reboot:
         vlm_helper.power_off_hosts(node_obj.name)
         power_on_host(node_obj.name, wait_for_hosts_state_=False)
+
     if expect_prompt:
-        node_obj.telnet_conn.expect([re.compile(bios_option.name, re.IGNORECASE)], 360)
+        node_obj.telnet_conn.expect([re.compile(bios_option.name.encode(), re.IGNORECASE)], 360)
     for i in range(0, 5):
         bios_option.enter(node_obj.telnet_conn)
         time.sleep(1)
@@ -3582,7 +3584,8 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
     return 0
 
 
-def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None):
+def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None,
+                 pxe_host='controller-0'):
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()
@@ -3612,23 +3615,27 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if node_obj.telnet_conn is None:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
-    bios_option_pattern = re.compile(bios_option.name.encode(), re.IGNORECASE)
-    menu_prompts = [bios_option_pattern, boot_device_menu.prompt, kickstart_menu.prompt]
-    while len(menu_prompts) > 0:
-        index = node_obj.telnet_conn.expect(menu_prompts, 360, fail_ok=True)
-        if index < 0:
-            break
-        elif menu_prompts[index] == bios_option_pattern:
-            enter_bios_option(node_obj, bios_option, expect_prompt=False)
-        elif menu_prompts[index] == boot_device_menu.prompt:
-            select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
-            if node_obj.name != "controller-0":
-                break
-        elif menu_prompts[index] == kickstart_menu.prompt:
-            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-                                  security=security, usb=usb, expect_prompt=False)
-            break
-        menu_prompts.pop(index)
+    bios_boot_option = bios_option.name.encode()
+    telnet_conn = node_obj.telnet_conn
+    LOG.info('Waiting for BIOS boot option')
+    if 'hp' in InstallVars.get_install_var('LAB_NAME'):
+        telnet_conn.read_until(bios_boot_option, 120)
+        telnet_conn.read_until(bios_boot_option, 60)
+    else:
+        telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 180)
+    enter_bios_option(node_obj, bios_option, expect_prompt=False)
+    LOG.info('Entered BIOS boot device menu')
+
+    telnet_conn.expect([boot_device_menu.prompt], 60)
+    select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
+    LOG.info('Boot device selected')
+
+    if node_obj.name == pxe_host:
+        LOG.info('Waiting for kick start menu')
+        telnet_conn.expect(kickstart_menu.prompt, 120)
+        select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                              security=security, usb=usb, expect_prompt=False)
+        LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)

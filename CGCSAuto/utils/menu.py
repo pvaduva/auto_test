@@ -132,6 +132,7 @@ class BiosMenu(Menu):
         'ml350': menus.ml350,
         'r730|r430': menus.PowerEdge,
         'r720': menus.Phoenix,
+        'supermicro': menus.Supermicro,
     }
 
     def __init__(self, lab_name=None):
@@ -287,9 +288,9 @@ class Option(object):
 
     def enter(self, telnet_conn):
         key = [self.key] if isinstance(self.key, str) else self.key
-        cmd = ''
-        for input in key:
-            cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
+        cmd = '\r\r'
+        for input_ in key:
+            cmd += bios.TerminalKeys.Keys.get(input_.capitalize(), input_)
         LOG.info("entering {} to select {} option".format("+".join(key), self.name))
         telnet_conn.write(str.encode(cmd))
 

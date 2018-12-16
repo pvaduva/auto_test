@@ -69,7 +69,7 @@ def pytest_configure(config):
     if not install_conf:
 
         __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
-        default_build_path = BuildServerPath.STX_RELEASE_DIR + '/' + BuildServerPath.LATEST_BUILD
+        default_build_path = BuildServerPath.STX_HOST_BUILDS_DIR + '/' + BuildServerPath.LATEST_BUILD
 
         host_build_dir_path = None
         if tis_builds_dir:
@@ -192,7 +192,7 @@ def install_setup():
     iso_host = InstallVars.get_install_var("ISO_HOST")
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
-    servers = [file_server, iso_host, patch_server, guest_server]
+    servers = list({file_server, iso_host, patch_server, guest_server})
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     bld_server = initialize_server(build_server)

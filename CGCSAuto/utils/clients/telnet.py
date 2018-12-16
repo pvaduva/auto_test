@@ -91,7 +91,7 @@ class TelnetClient(Telnet):
     #         self.logger.warning(err_msg)
 
     def login(self, expect_prompt_timeout=3, fail_ok=False, handle_init_login=False):
-        self.send()
+        self.send('\r')
         index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok,
                             searchwindowsize=50)
         self.flush()
@@ -100,19 +100,19 @@ class TelnetClient(Telnet):
             self.send(self.user)
             self.expect(PASSWORD_PROMPT, searchwindowsize=50)
             self.send(self.password)
-            index = self.expect([self.prompt, TELNET_LOGIN_PROMPT], searchwindowsize=25)
+            index = self.expect([self.prompt, TELNET_LOGIN_PROMPT], searchwindowsize=50)
             if index == 1:
                 if not handle_init_login:
                     raise exceptions.TelnetException('Unable to login to {} with credential {}/{}'.
                                                      format(self.hostname, self.user, self.password))
                 self.send(self.user)
-                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
                 self.send(self.user)    # in initial login, assume password=username
-                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
                 self.send(self.user)    # enter original password
-                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
                 self.send(self.password)    # enter new password
-                self.expect(PASSWORD_PROMPT, searchwindowsize=25)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
                 self.send(self.password)    # confirm new password
                 self.expect(searchwindowsize=50)
 
