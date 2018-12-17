@@ -340,7 +340,7 @@ class SSHClient:
         kwargs = {}
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
-        elif blob_list == self.prompt:
+        elif blob_list == [self.prompt]:
             kwargs['searchwindowsize'] = 100
 
         try:
@@ -519,7 +519,7 @@ class SSHClient:
 
         if index == 1:
             self.send(dest_password)
-            self.expect(timeout=timeout)
+            self.expect(timeout=timeout, searchwindowsize=100)
 
         code, output = self._process_exec_result(cmd, rm_date=True)
         if code != 0 and not fail_ok:
