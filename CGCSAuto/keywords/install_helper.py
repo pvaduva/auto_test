@@ -3293,7 +3293,7 @@ def get_git_name(lab_name):
 
 
 def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
-                             banner=True, branding=True):
+                             banner=True, branding=True, kubernetes=False):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -3325,7 +3325,8 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
     rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
     if rc == 0:
-        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") else "config_controller --config-file"
+        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
+            else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')
         cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT)

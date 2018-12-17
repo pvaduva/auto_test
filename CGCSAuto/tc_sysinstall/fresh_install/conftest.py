@@ -47,6 +47,7 @@ def pytest_configure(config):
     drop_num = config.getoption('drop_num')
     patch_dir = config.getoption('patch_dir')
     ovs = config.getoption('ovs_config')
+    kubernetes = config.getoption('kubernetes_config')
 
     R6_VALID_BUIDS_DIR_NAMES = [BuildServerPath.BldsDirNames.STARLINGX_18_10,
                                 BuildServerPath.BldsDirNames.TITANIUM_R6_BUILD,
@@ -115,13 +116,14 @@ def pytest_configure(config):
                                          license_path=install_license, guest_image=guest_image,
                                          heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                          security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
-                                         boot_server=boot_server, resume=resume_install, skip=skiplist)
+                                         boot_server=boot_server, resume=resume_install, skip=skiplist,
+                                         kubernetes=kubernetes)
 
     set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
                        installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
                        controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                        boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                       patch_dir=patch_dir, ovs=ovs, boot_server=boot_server)
+                       patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, kubernetes=kubernetes )
 
     print("\n**********\nArguments:\n**********\n")
     for var, value in InstallVars.get_install_vars().items():

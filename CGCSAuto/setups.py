@@ -602,7 +602,8 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
                        patch_dir=None, ovs=False, build_server=None, tis_builds_dir=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
-                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=99):
+                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=99,
+                       kubernetes=False):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -614,7 +615,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                              guest_image=None, heat_templates=None, security=security,
                                              low_latency=low_latency, stop=stop, skip=skip, resume=resume,
                                              boot_server=boot_server, boot=boot, iso_path=iso_path, ovs=ovs,
-                                             patch_dir=patch_dir)
+                                             patch_dir=patch_dir, kubernetes=kubernetes)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -728,6 +729,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         conf_guest_image = conf_files['GUEST_IMAGE_PATH']
         conf_heat_templates = conf_files['HEAT_TEMPLATES']
         conf_ovs = eval(conf_files['OVS_CONFIG'])
+        conf_kuber = eval(conf_files['KUBERNETES_CONFIG'])
         if conf_files_server:
             files_server = conf_files_server
         if conf_license_path:
@@ -745,6 +747,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         if conf_heat_templates:
             heat_templates = conf_heat_templates
         ovs = conf_ovs
+        kubernetes = conf_kuber
 
         boot_info = installconf["BOOT"]
         conf_boot_server = boot_info["BOOT_SERVER"]
@@ -894,12 +897,13 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  multi_region=multi_region_lab,
                                  dist_cloud=dist_cloud_lab,
                                  ovs=ovs,
+                                 kubernetes=kubernetes,
                                  )
 
 
 def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_builds_dir, tis_build_dir,
                       compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
-                      low_latency, security, stop, ovs,  boot_server, resume, skip):
+                      low_latency, security, stop, ovs,  boot_server, resume, skip, kubernetes):
 
     """
     Writes a file in ini format of the fresh_install variables
@@ -976,7 +980,9 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
                   "LAB_SETUP_CONF_PATH": lab_files_dir,
                   "BOOT_IF_SETTINGS_PATH": '',
                   "HOST_BULK_ADD_PATH": '',
-                  "OVS_CONFIG": str(ovs)}
+                  "OVS_CONFIG": str(ovs),
+                  "KUBERNETES_CONFIG": str(kubernetes)}
+
     boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server if boot_server else '', "SECURITY_PROFILE": security,
                  "LOW_LATENCY_INSTALL": low_latency}
     control_dict = {"RESUME_POINT": resume if resume else '',

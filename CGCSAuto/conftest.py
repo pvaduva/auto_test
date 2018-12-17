@@ -485,6 +485,7 @@ def pytest_addoption(parser):
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
     no_console_log = 'Print minimal console logs'
+    kuber_help = 'Use kubernetes option in config_controller)'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -596,6 +597,8 @@ def pytest_addoption(parser):
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
     parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
+    parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
+
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################

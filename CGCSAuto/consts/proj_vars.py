@@ -119,7 +119,8 @@ class InstallVars:
                          patch_dir=None,
                          multi_region=False,
                          dist_cloud=False,
-                         ovs=False):
+                         ovs=False,
+                         kubernetes=False):
 
         __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
         __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.LATEST_HOST_BUILD_PATHS.get(
@@ -159,6 +160,7 @@ class InstallVars:
             'MULTI_REGION': multi_region,
             'DISTRIBUTED_CLOUD': dist_cloud,
             'OVS': ovs,
+            "KUBERNETES": kubernetes,
             # TIS BUILD info
             'BUILD_SERVER': __build_server,
             'TIS_BUILD_DIR': __host_build_dir,

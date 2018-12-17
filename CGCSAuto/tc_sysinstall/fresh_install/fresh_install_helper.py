@@ -245,6 +245,7 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
 
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
+    kubernetes = InstallVars.get_install_var("KUBERNETES")
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Configure controller"
@@ -252,7 +253,7 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     if do_step(test_step):
 
         install_helper.controller_system_config(lab=lab, config_file=config_file,
-                                                con_telnet=controller0_node.telnet_conn)
+                                                con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
