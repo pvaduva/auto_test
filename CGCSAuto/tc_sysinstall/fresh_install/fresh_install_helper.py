@@ -261,8 +261,11 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
         run_lab_setup( con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(controller0_node.name))
-            install_helper.unlock_controller(controller0_node.name, lab=lab, con_ssh=controller0_node.ssh_conn,
-                                             available_only=False)
+            # install_helper.unlock_controller(controller0_node.name, lab=lab, con_ssh=controller0_node.ssh_conn,
+            #                                  available_only=False)
+            host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=1800,
+                                    check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
+                                    check_first=False)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))

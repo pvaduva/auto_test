@@ -682,7 +682,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin'), check_hypervisor_up=True,
-                check_webservice_up=True, check_subfunc=True, check_first=True):
+                check_webservice_up=True, check_subfunc=True, check_first=True, con0_install=False):
     """
     Unlock given host
     Args:
@@ -742,7 +742,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if exitcode == 1:
         return 1, output
 
-    if is_simplex:
+    if is_simplex or con0_install:
         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
                                     timeout=HostTimeout.CONTROLLER_UNLOCK)
 

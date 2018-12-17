@@ -128,7 +128,7 @@ class BootMenus:
 
     Boot_Device = {
         "name": "boot device",
-        "prompt": "Please select boot device|Boot(\x1b\[\d+;\d+H)*(\s)*From",
+        "prompt": r"Please select boot device|Boot(\x1b\[\d+;\d+H)*(\s)*From",
         "wrap_around": True
     }
 

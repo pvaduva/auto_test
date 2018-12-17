@@ -3440,68 +3440,68 @@ def post_install(controller0_node=None):
     return rc, msg
 
 
-def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False, con_ssh=None,
-                use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_first=True):
+# def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False,
+#                       con_ssh=None, use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_first=True):
+#
+#     if check_first:
+#         if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
+#                               con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
+#             LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
+#             host_helper.wait_for_hosts_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
+#                                                      HostAvailState.DEGRADED], con_ssh=con_ssh,
+#                                  use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
+#
+#         if host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet=use_telnet,
+#                               con_telnet=con_telnet) == HostAdminState.UNLOCKED:
+#             message = "Host already unlocked. Do nothing"
+#             LOG.info(message)
+#             return -1, message
+#
+#     sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=con_ssh, use_telnet=use_telnet,
+#                                                       con_telnet=con_telnet, auth_info=auth_info)
 
-    if check_first:
-        if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
-                              con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
-            LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-            host_helper.wait_for_hosts_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
-                                                     HostAvailState.DEGRADED], con_ssh=con_ssh,
-                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
-
-        if host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet=use_telnet,
-                              con_telnet=con_telnet) == HostAdminState.UNLOCKED:
-            message = "Host already unlocked. Do nothing"
-            LOG.info(message)
-            return -1, message
-
-    sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=con_ssh, use_telnet=use_telnet,
-                                                      con_telnet=con_telnet, auth_info=auth_info)
-
-    exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet,
-                                  con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,
-                                  timeout=60)
-    if exitcode == 1:
-        return 1, output
-    if not lab:
-        lab = InstallVars.get_install_var('LAB')
-
-    if not len(lab['controller_nodes']) > 1:
-        LOG.info("This is simplex lab; Waiting for controller reconnection after unlock")
-    host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-                                            duplex_direct=True if sys_mode == "duplex-direct" else False)
-
-    if not host_helper.wait_for_hosts_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
-                                use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
-        return 2, "Host is not in unlocked state"
-
-    if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                use_telnet=use_telnet, con_telnet=con_telnet,
-                                availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
-        return 3, "Host state did not change to available or degraded within timeout"
-
-    if sys_mode != 'duplex-direct':
-        if not host_helper.wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
-                                    use_telnet=use_telnet, con_telnet=con_telnet, task=''):
-            return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
-
-    if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
-                          con_telnet=con_telnet) == HostAvailState.DEGRADED:
-        if not available_only:
-            LOG.warning("Host is in degraded state after unlocked.")
-            return 4, "Host is in degraded state after unlocked."
-        else:
-            if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                        use_telnet=use_telnet, con_telnet=con_telnet,
-                                        availability=HostAvailState.AVAILABLE):
-                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
-                LOG.warning(err_msg)
-                return 8, err_msg
-
-    LOG.info("Host {} is successfully unlocked and in available state".format(host))
-    return 0, "Host is unlocked and in available state."
+    # exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet,
+    #                               con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,
+    #                               timeout=60)
+    # if exitcode == 1:
+    #     return 1, output
+    # if not lab:
+    #     lab = InstallVars.get_install_var('LAB')
+    #
+    # if not len(lab['controller_nodes']) > 1:
+    #     LOG.info("This is simplex lab; Waiting for controller reconnection after unlock")
+    #     host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+    #                                             duplex_direct=True if sys_mode == "duplex-direct" else False)
+    #
+    # if not host_helper.wait_for_hosts_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
+    #                             use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
+    #     return 2, "Host is not in unlocked state"
+    #
+    # if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+    #                             use_telnet=use_telnet, con_telnet=con_telnet,
+    #                             availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
+    #     return 3, "Host state did not change to available or degraded within timeout"
+    #
+    # if sys_mode != 'duplex-direct':
+    #     if not host_helper.wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
+    #                                 use_telnet=use_telnet, con_telnet=con_telnet, task=''):
+    #         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
+    #
+    # if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
+    #                       con_telnet=con_telnet) == HostAvailState.DEGRADED:
+    #     if not available_only:
+    #         LOG.warning("Host is in degraded state after unlocked.")
+    #         return 4, "Host is in degraded state after unlocked."
+    #     else:
+    #         if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+    #                                     use_telnet=use_telnet, con_telnet=con_telnet,
+    #                                     availability=HostAvailState.AVAILABLE):
+    #             err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
+    #             LOG.warning(err_msg)
+    #             return 8, err_msg
+    #
+    # LOG.info("Host {} is successfully unlocked and in available state".format(host))
+    # return 0, "Host is unlocked and in available state."
 
 
 def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
@@ -3619,24 +3619,20 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     bios_boot_option = bios_option.name.encode()
     telnet_conn = node_obj.telnet_conn
     LOG.info('Waiting for BIOS boot option')
-    if 'hp' in InstallVars.get_install_var('LAB_NAME'):
-        telnet_conn.read_until(bios_boot_option, 120)
-        telnet_conn.read_until(bios_boot_option, 60)
-    else:
-        telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 180)
+    telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 180)
     enter_bios_option(node_obj, bios_option, expect_prompt=False)
     LOG.info('Entered BIOS boot device menu')
 
-    telnet_conn.expect([boot_device_menu.prompt], 60)
-    select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
-    LOG.info('Boot device selected')
-
     if node_obj.name == pxe_host:
         LOG.info('Waiting for kick start menu')
-        telnet_conn.expect(kickstart_menu.prompt, 120)
+        telnet_conn.expect([kickstart_menu.prompt, 'Boot Menu'], 360)
         select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                               security=security, usb=usb, expect_prompt=False)
         LOG.info('Kick start option selected')
+    else:
+        telnet_conn.expect([boot_device_menu.prompt], 60)
+        select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
+        LOG.info('Boot device selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)

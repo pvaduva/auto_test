@@ -34,7 +34,7 @@ def _reserve_vlm_console(barcode, note=None):
     print("This is cmd: %s" % cmd)
 
     reserved_barcodes = local_client().exec_cmd(cmd)[1]
-    if barcode not in reserved_barcodes or "Error" in reserved_barcodes:
+    if str(barcode) not in reserved_barcodes or "Error" in reserved_barcodes:
         # check if node is already reserved by user
         attr_dict = _get_attr_dict_for_vlm_console(barcode=barcode, attr='all')
         reserved_by = attr_dict['Reserved By']
@@ -77,7 +77,7 @@ def _force_unreserve_vlm_console(barcode):
             LOG.info(msg)
             return 0, msg
     else:
-        msg = "Did not unreserve {} as it has a reservation note: {}".format(barcode, reserve_note)
+        msg = "Did not unreserve {} as it has a reservation note by {}: {}".format(barcode, reserved_by, reserve_note)
         LOG.error(msg)
         return 2, msg
 

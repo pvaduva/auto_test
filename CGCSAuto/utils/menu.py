@@ -73,7 +73,7 @@ class Menu(object):
 
     def find_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
         telnet_conn.expect([end_of_menu], 60)
-        output = str.encode(telnet_conn.cmd_output)
+        output = telnet_conn.cmd_output.encode()
         options = re.split(newline, output)
         options = [option for option in options if re.search(option_identifier, option)]
         LOG.debug("{} options are: {}".format(self.name, options))
@@ -288,11 +288,11 @@ class Option(object):
 
     def enter(self, telnet_conn):
         key = [self.key] if isinstance(self.key, str) else self.key
-        cmd = '\r\r'
+        cmd = r'\n'
         for input_ in key:
             cmd += bios.TerminalKeys.Keys.get(input_.capitalize(), input_)
         LOG.info("entering {} to select {} option".format("+".join(key), self.name))
-        telnet_conn.write(str.encode(cmd))
+        telnet_conn.write(cmd.encode())
 
 
 class KickstartOption(Option):

@@ -121,6 +121,11 @@ class TelnetClient(Telnet):
             code = 1
         return code
 
+    def write(self, buffer, log=True):
+        if log:
+            self.logger.debug('Send: {}'.format(buffer.decode()))
+        super(TelnetClient, self).write(buffer=buffer)
+
     def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
         if reconnect:
             self.connect(timeout=reconnect_timeout)
@@ -129,20 +134,21 @@ class TelnetClient(Telnet):
 
         cmd_for_exitcode = (cmd == EXIT_CODE_CMD)
         is_read_only_cmd = (not cmd) or re.search('show|list|cat', cmd)
-        if cmd_for_exitcode or is_read_only_cmd:
-            self.logger.debug("Send: {}".format(cmd))
-        else:
-            self.logger.info("Send: {}".format(cmd))
 
         self.cmd_sent = cmd
         if not cmd.endswith('\n'):
             cmd = '{}\n'.format(cmd)
+
+        if cmd_for_exitcode or is_read_only_cmd:
+            self.logger.debug("Send: {}".format(cmd))
+        else:
+            self.logger.info("Send: {}".format(cmd))
         # self.set_debuglevel(2)
 
         # cmd.replace('\r\n', '\n')
         # cmd.replace('\n', '\r\n')
 
-        self.write(cmd.encode())
+        self.write(cmd.encode(), log=False)
 
     def send_control(self, char='c'):
         valid_chars = ["[", "\\", "]", "^", "_"]
