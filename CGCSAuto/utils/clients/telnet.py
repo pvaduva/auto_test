@@ -352,8 +352,8 @@ class TelnetClient(Telnet):
     def get_hostname(self):
         return self.exec_cmd('hostname')[1].splitlines()[0]
 
-    def close(self):
-        is_closed = False if self.sock else True
-        if not is_closed:
-            self.logger.info("Closing telnet socket")
-        super(TelnetClient, self).close()
+    # def close(self):
+    #     # is_closed = False if self.sock else True
+    #     # if not is_closed:
+    #     #     self.logger.info("Closing telnet socket")
+    #     super(TelnetClient, self).close()
