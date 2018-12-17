@@ -3514,7 +3514,8 @@ def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
 
     if expect_prompt:
         node_obj.telnet_conn.expect([re.compile(bios_option.name.encode(), re.IGNORECASE)], 360)
-    for i in range(0, 5):
+
+    for i in range(3):
         bios_option.enter(node_obj.telnet_conn)
         time.sleep(1)
 

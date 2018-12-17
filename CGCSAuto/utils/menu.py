@@ -288,10 +288,14 @@ class Option(object):
 
     def enter(self, telnet_conn):
         key = [self.key] if isinstance(self.key, str) else self.key
-        cmd = r'\n'
+        cmd = ''
         for input_ in key:
             cmd += bios.TerminalKeys.Keys.get(input_.capitalize(), input_)
-        LOG.info("entering {} to select {} option".format("+".join(key), self.name))
+
+        if not cmd:
+            cmd = '\n'
+        LOG.info("Entering {} to select {} option".format(cmd, self.name))
+
         telnet_conn.write(cmd.encode())
 
 
