@@ -124,25 +124,23 @@ class Menu(object):
 
 
 class BiosMenu(Menu):
-    menus = bios.BiosMenus
-    lab_menu_dict = {
-        'wolfpass|wildcat|grizzly': menus.American_Megatrends,
-        'hp': menus.HP,
-        'ironpass': menus.Ironpass,
-        'ml350': menus.ml350,
-        'r730|r430': menus.PowerEdge,
-        'r720': menus.Phoenix,
-        'supermicro': menus.Supermicro,
-    }
-
     def __init__(self, lab_name=None):
         if lab_name is None:
             lab = InstallVars.get_install_var("LAB")
             lab_name = lab["name"]
         lab_name = lab_name.lower()
         LOG.debug("Lab name: {}".format(lab_name))
-
-        for k, v in self.lab_menu_dict.items():
+        menus = bios.BiosMenus
+        lab_menu_dict = {
+            'wolfpass|wildcat|grizzly': menus.American_Megatrends,
+            'hp': menus.HP,
+            'ironpass': menus.Ironpass,
+            'ml350': menus.ml350,
+            'r730|r430': menus.PowerEdge,
+            'r720': menus.Phoenix,
+            'supermicro': menus.Supermicro,
+        }
+        for k, v in lab_menu_dict.items():
             if re.search(k, lab_name):
                 bios_menu_dict = v
                 break
@@ -226,7 +224,6 @@ class USBBootMenu(KickstartMenu):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
 
 
-
 class BootDeviceMenu(Menu):
     def __init__(self):
         super().__init__(name="boot device menu", kwargs=bios.BootMenus.Boot_Device)
@@ -267,7 +264,7 @@ class Option(object):
         option_name = self.name.lower()
 
         if key is None:
-            has_key = re.search("(press|use)\W*(\w+)", option_name, re.IGNORECASE)
+            has_key = re.search(r"(press|use)\W*(\w+)", option_name, re.IGNORECASE)
             if has_key:
                 match = has_key.group(2)
                 self.key = match.capitalize() if match.capitalize() in bios.TerminalKeys.Keys.keys() else match
@@ -294,7 +291,7 @@ class Option(object):
 
         if not cmd:
             cmd = '\n'
-        LOG.info("Entering {} to select {} option".format(cmd, self.name))
+        LOG.info("Entering {} to select {} option".format('+'.join(key), self.name))
 
         telnet_conn.write(cmd.encode())
 

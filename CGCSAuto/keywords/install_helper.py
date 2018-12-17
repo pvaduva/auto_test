@@ -265,6 +265,7 @@ def bring_node_console_up(node, boot_device,
         LOG.info("Powering on {}".format(node.name))
         power_on_host(node.name, lab=lab, wait_for_hosts_state_=False)
 
+    LOG.error('install node options: {} {}'.format(boot_device, node))
     install_node(node, boot_device,
                  low_latency=low_latency,
                  small_footprint=small_footprint,
@@ -3505,6 +3506,7 @@ def post_install(controller0_node=None):
 
 
 def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
+    LOG.error("heyyyy bios_option: {}".format(bios_option))
     if node_obj.telnet_conn is None and not expect_prompt:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
@@ -3588,6 +3590,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
 def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None,
                  pxe_host='controller-0'):
+    LOG.error('heyyyy host_name: {}'.format(node_obj.host_name))
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()
@@ -3622,18 +3625,27 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     LOG.info('Waiting for BIOS boot option')
     telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 180)
     enter_bios_option(node_obj, bios_option, expect_prompt=False)
-    LOG.info('Entered BIOS boot device menu')
+    LOG.info('BIOS option entered')
 
+    expt_prompts = [boot_device_menu.prompt]
     if node_obj.name == pxe_host:
-        LOG.info('Waiting for kick start menu')
-        telnet_conn.expect([kickstart_menu.prompt, 'Boot Menu'], 360)
+        expt_prompts.append(kickstart_menu.prompt)
+
+    index = telnet_conn.expect(expt_prompts, 360)
+    if index == 0:
+        LOG.info('In boot device menu')
+        select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
+        LOG.info('Boot device selected')
+
+        expt_prompts.pop(0)
+        if expt_prompts:
+            telnet_conn.expect(expt_prompts, 360)
+            index = 1
+    if index == 1:
+        LOG.info('In Kickstart menu')
         select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                               security=security, usb=usb, expect_prompt=False)
         LOG.info('Kick start option selected')
-    else:
-        telnet_conn.expect([boot_device_menu.prompt], 60)
-        select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
-        LOG.info('Boot device selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)

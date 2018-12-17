@@ -16,13 +16,9 @@ VLM = "/folk/vlm/commandline/vlmTool"
 VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_FORCE_UNRESERVE, VlmAction.VLM_TURNON,
             VlmAction.VLM_TURNOFF, VlmAction.VLM_FINDMINE, VlmAction.VLM_REBOOT]
 
-__local_client = None
-
 
 def local_client():
-    global __local_client
-    if not __local_client:
-        __local_client = LocalHostClient(connect=True)
+    __local_client = LocalHostClient(connect=True)
     
     return __local_client
 
@@ -102,7 +98,7 @@ def _vlm_getattr(barcode, attr='all'):
     return local_client().exec_cmd(cmd)
 
 
-def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False):
+def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False, client=None):
     if action not in VLM_CMDS:
         msg = '"{}" is an invalid action.'.format(action)
         msg += " Valid actions: {}".format(str(VLM_CMDS))
@@ -119,7 +115,9 @@ def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False):
                 else:
                     raise exceptions.VLMError(msg)
 
-    output = local_client().exec_cmd('{} {} -t {}'.format(VLM, action, barcode))[1]
+    if not client:
+        client = local_client()
+    output = client.exec_cmd('{} {} -t {}'.format(VLM, action, barcode))[1]
     if output != "1":
         msg = 'Failed to execute "{}" on target {}. Output: {}'.format(action, barcode, output)
         LOG.error(msg)
@@ -333,10 +331,10 @@ def power_off_hosts_simultaneously(hosts=None):
     Returns:
 
     """
-    def _power_off(barcode_, power_off_event_, timeout_, output_queue):
+    def _power_off(barcode_, power_off_event_, timeout_, client_, output_queue):
 
         if power_off_event_.wait(timeout=timeout_):
-            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False)
+            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False, client=client_)
             rtn = (rc, output)
 
         else:
@@ -360,7 +358,8 @@ def power_off_hosts_simultaneously(hosts=None):
     # save results for each process
     out_q = Queue()
     for barcode in barcodes:
-        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180, out_q))
+        client = local_client()
+        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180, client, out_q))
         new_ps.append(new_p)
         new_p.start()
 
