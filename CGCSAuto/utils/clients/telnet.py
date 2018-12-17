@@ -57,6 +57,7 @@ class TelnetClient(Telnet):
         self.prompt = prompt
         self.cmd_output = ''
         self.cmd_sent = ''
+        self.timeout = timeout
         self.user = user
         self.password = password
         self.logger.info('Telnet connection to {}:{} ({}) is established'.format(host, port, hostname))
@@ -98,23 +99,23 @@ class TelnetClient(Telnet):
         code = 0
         if index == 0:
             self.send(self.user)
-            self.expect(PASSWORD_PROMPT, searchwindowsize=50)
+            self.expect(PASSWORD_PROMPT, searchwindowsize=50, timeout=expect_prompt_timeout)
             self.send(self.password)
-            index = self.expect([self.prompt, TELNET_LOGIN_PROMPT], searchwindowsize=50)
+            index = self.expect([self.prompt, TELNET_LOGIN_PROMPT], searchwindowsize=50, timeout=expect_prompt_timeout)
             if index == 1:
                 if not handle_init_login:
                     raise exceptions.TelnetException('Unable to login to {} with credential {}/{}'.
                                                      format(self.hostname, self.user, self.password))
                 self.send(self.user)
-                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50, timeout=expect_prompt_timeout)
                 self.send(self.user)    # in initial login, assume password=username
-                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50, timeout=expect_prompt_timeout)
                 self.send(self.user)    # enter original password
-                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50, timeout=expect_prompt_timeout)
                 self.send(self.password)    # enter new password
-                self.expect(PASSWORD_PROMPT, searchwindowsize=50)
+                self.expect(PASSWORD_PROMPT, searchwindowsize=50, timeout=expect_prompt_timeout)
                 self.send(self.password)    # confirm new password
-                self.expect(searchwindowsize=50)
+                self.expect(searchwindowsize=50, timeout=expect_prompt_timeout)
 
         elif index < 0:
             self.logger.warning("System is not in login page and default prompt is not found either")

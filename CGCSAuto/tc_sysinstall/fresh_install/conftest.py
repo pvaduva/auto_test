@@ -138,7 +138,7 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope='session')
-def install_setup():
+def install_setup(request):
     lab = InstallVars.get_install_var("LAB")
     subclouds = []
     dist_cloud = InstallVars.get_install_var("DISTRIBUTED_CLOUD")
@@ -184,8 +184,29 @@ def install_setup():
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
         try:
             reset_telnet_port(active_con.telnet_conn)
-        except:
+        except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout):
             pass
+
+    def install_teardown():
+        try:
+            active_con.telnet_conn.login(handle_init_login=True)
+            output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
+            LOG.info(output)
+        except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
+            LOG.error(e_.__str__())
+
+        LOG.fixture_step("unreserving hosts")
+        if dist_cloud:
+            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
+                                       lab=lab['central_region'])
+            subclouds = [k for k, v in lab.items() if 'subcloud' in k]
+            for subcloud in subclouds:
+                vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
+                                           lab=lab[subcloud])
+        else:
+            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+    request.addfinalizer(install_teardown)
+
     build_server = InstallVars.get_install_var('BUILD_SERVER')
     build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
 
@@ -278,36 +299,13 @@ def install_setup():
     return _install_setup
 
 
-# Try first so that the failed fixture_step can be written
-@pytest.mark.tryfirst
 def pytest_runtest_teardown(item):
     final_step = LOG.test_step
     lab = InstallVars.get_install_var("LAB")
     progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
     progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
-    dist_cloud = lab['dist_cloud']
 
     LOG.tc_teardown_start(item.nodeid)
-    try:
-        controller0_node = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
-        if controller0_node.telnet_conn is None:
-            controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
-        controller0_node.telnet_conn.login()
-        rc, output = controller0_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)
-        LOG.info(output)
-    except Exception:
-        pass
-    LOG.fixture_step("unreserving hosts")
-    if dist_cloud:
-        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
-                                   lab=lab['central_region'])
-        subclouds = [k for k, v in lab.items() if 'subcloud' in k]
-        for subcloud in subclouds:
-            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
-                                       lab=lab[subcloud])
-    else:
-        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
-
     install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py",
                          "test_storage_install.py", "test_distributed_cloud_install.py"]
     for install_testcase in install_testcases:
@@ -316,7 +314,6 @@ def pytest_runtest_teardown(item):
             with open(progress_file_path, "w+") as progress_file:
                 progress_file.write(item.nodeid + "\n")
                 progress_file.write("End step: {}".format(str(final_step)))
-                progress_file.close()
+
             os.chmod(progress_file_path, 0o755)
             break
-    LOG.info("Fresh Install Completed")

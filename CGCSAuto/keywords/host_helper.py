@@ -667,7 +667,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
     else:
         if not con_telnet:
             raise ValueError("con_telnet has to be provided when use_telnet=True.")
-        con_telnet.get_read_until("ogin:", HostTimeout.CONTROLLER_UNLOCK)
+        con_telnet.expect(["ogin:"], HostTimeout.CONTROLLER_UNLOCK)
         con_telnet.login()
         con_telnet.exec_cmd("xterm")
 
@@ -675,7 +675,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         # Give it sometime before openstack cmds enables on after host
         _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                        auth_info=auth_info, fail_ok=False, timeout=timeout, check_interval=10,
-                                       reconnect=True)
+                                       reconnect=True, single_node=True)
         time.sleep(10)
         LOG.info("Re-connected via ssh and openstack CLI enabled")
 
@@ -699,6 +699,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
         check_subfunc (bool): whether to check subfunction_oper and subfunction_avail for CPE system
         check_first (bool): whether to check host state before unlock.
+        con0_install (bool)
 
     Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
@@ -1064,7 +1065,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
 
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=10,
-                                   reconnect=True, use_telnet=False,  con_telnet=None,
+                                   reconnect=True, use_telnet=False,  con_telnet=None, single_node=None,
                                    auth_info=Tenant.get('admin')):
     """
     Wait for 'system show' cli to work on active controller. Also wait for host task to clear and subfunction ready.
@@ -1091,7 +1092,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
                                                               con_telnet=con_telnet_, auth_info=auth_info)
 
-        if (system_helper.is_simplex() and
+        if ((single_node or (single_node is None and system_helper.is_simplex())) and
                 get_hostshow_value(host=active_con, field='administrative') == HostAdminState.LOCKED):
             LOG.info("Simplex system in locked state. Wait for task to clear only")
             wait_for_host_values(host=active_con, timeout=HostTimeout.LOCK, task='', con_ssh=con_ssh_,
