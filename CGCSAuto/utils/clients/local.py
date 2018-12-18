@@ -18,7 +18,7 @@ from utils.tis_log import LOG
 
 LOCAL_HOST = socket.gethostname()
 LOCAL_USER = getpass.getuser()
-LOCAL_PROMPT = re.escape('{}@{}$ '.format(LOCAL_USER, LOCAL_HOST))
+LOCAL_PROMPT = re.escape('{}@{}$ '.format(LOCAL_USER, LOCAL_HOST.split(sep='.wrs.com')[0])).replace(r'\$ ', r'.*\$')
 COUNT = 0
 
 

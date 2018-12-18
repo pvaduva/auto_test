@@ -3317,9 +3317,13 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             apply_banner(telnet_conn=con_telnet, fail_ok=True)
         if branding:
             apply_branding(telnet_conn=con_telnet, fail_ok=True)
+
         con_telnet.exec_cmd("unset TMOUT")
-        con_telnet.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
-        con_telnet.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
+        histime_format_cmd = 'export HISTTIMEFORMAT="%Y-%m-%d %T "'
+        bashrc_path = '{}/.bashrc'.format(WRSROOT_HOME)
+        if con_telnet.exec_cmd("grep '{}' {}".format(histime_format_cmd, bashrc_path))[0] == 1:
+            con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
+            con_telnet.exec_cmd("source {}".format(bashrc_path))
         con_telnet.exec_cmd("export USER=wrsroot")
 
         con_telnet.exec_cmd("test -f {}".format(config_file), fail_ok=False)
@@ -3327,7 +3331,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')
         cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
-        LOG.info("Send '{}'".format(cmd))
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
 
         if "failed" in output:
@@ -3498,7 +3501,6 @@ def post_install(controller0_node=None):
 
 
 def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
-    LOG.error("heyyyy bios_option: {}".format(bios_option))
     if node_obj.telnet_conn is None and not expect_prompt:
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
