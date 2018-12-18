@@ -107,7 +107,7 @@ def pytest_configure(config):
             lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
 
         if not heat_templates or not os.path.isabs(heat_templates):
-            heat_templates = default_build_path + '/' + BuildServerPath.HEAT_TEMPLATES_NEW
+            heat_templates = default_build_path + '/' + BuildServerPath.HEAT_TEMPLATES
 
         install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
                                          lab_files_dir=lab_file_dir, patch_dir=patch_dir,
@@ -125,15 +125,19 @@ def pytest_configure(config):
                        boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                        patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, kubernetes=kubernetes )
 
-    print("\n**********\nArguments:\n**********\n")
-    for var, value in InstallVars.get_install_vars().items():
-        if var == 'LAB':
-            new_value = {}
+    frame_str = '*'*len('Install Arguments:')
+    print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))
+    install_vars = InstallVars.get_install_vars()
+    bs = install_vars['BUILD_SERVER']
+    for var, value in install_vars.items():
+        if (not value and value != 0) or (value == bs and var != 'BUILD_SERVER'):
+            continue
+        elif var == 'LAB':
             for k, v in dict(value).items():
-                if re.search('_nodes|name| ip', k):
-                    new_value[k] = v
-            value = new_value
-        print("{}:\t{}".format(var, value))
+                if re.search('_nodes| ip', k):
+                    print("{:<20}: {}".format(k, v))
+        else:
+            print("{:<20}: {}".format(var, value))
     print('')
 
 
@@ -229,7 +233,7 @@ def install_setup(request):
         iso_host_obj = initialize_server(iso_host)
     if patch_server == bld_server.name:
         patch_server = bld_server
-    else:
+    elif patch_server:
         patch_server = initialize_server(patch_server)
     if guest_server == bld_server.name:
         guest_server_obj = bld_server
@@ -247,7 +251,7 @@ def install_setup(request):
 
     directories = {"build": build_dir,
                    "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
-                   "lab_files": InstallVars.get_install_var("LAB_FILES_DIR"),
+                   "lab_files": InstallVars.get_install_var("LAB_SETUP_PATH"),
                    "patches": InstallVars.get_install_var("PATCH_DIR")}
 
     paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),

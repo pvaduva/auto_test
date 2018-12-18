@@ -4,10 +4,10 @@ import pytest
 
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import Prompt, SUPPORTED_UPGRADES
+from consts.cgcs import Prompt, SUPPORTED_UPGRADES, BackupRestore
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar, InstallVars, UpgradeVars, BackupVars
-from keywords import install_helper,  patching_helper, upgrade_helper, common
+from keywords import install_helper,  patching_helper, upgrade_helper
 from testfixtures.pre_checks_and_configs import *
 from utils import table_parser, cli
 from utils.clients.ssh import SSHClient, ControllerClient
@@ -32,7 +32,12 @@ def pytest_configure(config):
     backup_dest_path = config.getoption('backup_path')
     delete_backups = not config.getoption('keep_backups')
 
-
+    build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+    if not tis_build_dir:
+        tis_build_dir = BuildServerPath.LATEST_HOST_BUILD_PATHS.get(upgrade_version,
+                                                                    BuildServerPath.DEFAULT_HOST_BUILD_PATH)
+    if not patch_dir:
+        patch_dir = BuildServerPath.PATCH_DIR_PATHS.get(upgrade_version, None)
     UpgradeVars.set_upgrade_vars(upgrade_version=upgrade_version,
                                  build_server=build_server,
                                  tis_build_dir=tis_build_dir,
@@ -45,8 +50,13 @@ def pytest_configure(config):
                                  alarm_restrictions=alarm_restrictions)
 
     backup_dest = 'USB' if use_usb else 'local'
+    if backup_dest.lower() == 'usb':
+        if not backup_dest_path or BackupRestore.USB_MOUNT_POINT not in backup_dest_path:
+            backup_dest_path = BackupRestore.USB_BACKUP_PATH
+    elif not backup_dest_path:
+        backup_dest_path = BackupRestore.LOCAL_BACKUP_PATH
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
-                           delete_backups=delete_backups)
+                               delete_backups=delete_backups)
     LOG.info("")
     LOG.info("Upgrade vars set: {}".format(UpgradeVars.get_upgrade_vars()))
 

@@ -73,23 +73,23 @@ class BuildServerPath:
     TITANIUM_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/Titanium_R6_build'
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
     STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
-    DEFAULT_HOST_BUILDS_DIR = TITANIUM_HOST_BUILDS_DIR
+    DEFAULT_HOST_BUILDS_DIR = STX_HOST_BUILDS_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     LATEST_BUILD = 'latest_build'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
     DEFAULT_PATCH_ENABLE_DEV_DIR = '/folk/cgts/tools/Enable_dev_certificate_patch/'
-    HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
-    HEAT_TEMPLATES_NEW = 'export/heat-templates'
-    CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
-    CONFIG_LAB_REL_PATH_NEW = "lab"
+    HEAT_TEMPLATES_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
+    HEAT_TEMPLATES = 'export/heat-templates'
+    LAB_CONF_DIR_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
+    LAB_CONF_DIR = "lab"
 
-    HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES, '17.06': HEAT_TEMPLATES, '18.03': HEAT_TEMPLATES,
-                           '18.10': HEAT_TEMPLATES_NEW}
+    HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
+                           '18.10': HEAT_TEMPLATES}
 
-    DEFAULT_LAB_CONFIG_PATH_EXTS = {'16.10': CONFIG_LAB_REL_PATH, '17.06': CONFIG_LAB_REL_PATH,
-                                    '18.03': CONFIG_LAB_REL_PATH, '18.10': CONFIG_LAB_REL_PATH_NEW}
+    DEFAULT_LAB_CONFIG_PATH_EXTS = {'16.10': LAB_CONF_DIR_PREV, '17.06': LAB_CONF_DIR_PREV,
+                                    '18.03': LAB_CONF_DIR_PREV, '18.10': LAB_CONF_DIR}
 
 
 
@@ -205,9 +205,9 @@ class TuxlabServerPath:
 
 
 class LogPath:
-    LAB_SETUP_PATH = '/home/wrsroot/lab_setup.group0.log'
-    HEAT_SETUP_PATH = '/home/wrsroot/launch_heat_stacks.log'
-    CONFIG_CONTROLLER_PATH = '/var/log/puppet/latest/puppet.log'
+    LAB_SETUP_LOG = '/home/wrsroot/lab_setup.group0.log'
+    HEAT_SETUP_LOG = '/home/wrsroot/launch_heat_stacks.log'
+    CONFIG_CONTROLLER_LOG = '/var/log/puppet/latest/puppet.log'
 
 
 class SysLogPath:

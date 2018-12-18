@@ -152,8 +152,6 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
                        final_step=None):
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
-    if lab_files_dir is None:
-        lab_files_dir = InstallVars.get_install_var('LAB_FILES_DIR')
     if load_path is None:
         load_path = set_load_path(build_server_conn=build_server.ssh_conn, sys_version=sys_version)
     if not load_path.endswith("/"):
@@ -181,7 +179,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         LOG.info("Copying license")
         install_helper.download_license(lab, build_server, license_path, dest_name="license")
         LOG.info("Downloading lab config files")
-        install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server)
+        install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server,
+                                                 lab_file_dir=lab_files_dir)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -257,13 +256,13 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
-        LOG.info("running lab_setup.sh")
+        LOG.info("Run lab_setup after config controller")
         run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(controller0_node.name))
             host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
-                                    check_first=False)
+                                    check_first=False, con0_install=True)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))

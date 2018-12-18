@@ -534,7 +534,7 @@ def pytest_addoption(parser):
     # Install
     parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
                      help=resumeinstall_help, const=True, nargs='?', default=False)
-    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default='99')
+    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=None)
     parser.addoption('--skip', dest='skiplist', action='store', nargs='*', help=skip_help)
     parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
     parser.addoption('--boot', dest='boot_list', action='store', default='feed', help=boot_help)
@@ -580,7 +580,7 @@ def pytest_addoption(parser):
     guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
-                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
+                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',

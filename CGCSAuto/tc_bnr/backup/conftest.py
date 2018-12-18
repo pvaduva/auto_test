@@ -4,6 +4,7 @@ import pytest
 import setups
 from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar, BackupVars, InstallVars
+from consts.cgcs import BackupRestore
 
 
 ########################
@@ -21,11 +22,17 @@ def pytest_configure(config):
     dest_labs = config.getoption('dest_labs')
     cinder_backup = config.getoption('cinder_backup')
 
-    backup_dest = 'USB' if use_usb else 'local'
+    backup_dest = 'usb' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None,
                               drop=None, boot='usb' if use_usb else 'feed', controller0_ceph_mon_device=None, iso_path=None,
                               controller1_ceph_mon_device=None, ceph_mon_gib=None,low_latency=False, security='standard',
-                              stop=99, wipedisk=False, ovs=False, patch_dir=None, boot_server=None)
+                              stop=None, wipedisk=False, ovs=False, patch_dir=None, boot_server=None)
+
+    if backup_dest == 'usb':
+        if not backup_dest_path or BackupRestore.USB_MOUNT_POINT not in backup_dest_path:
+            backup_dest_path = BackupRestore.USB_BACKUP_PATH
+    elif not backup_dest_path:
+        backup_dest_path = BackupRestore.LOCAL_BACKUP_PATH
     BackupVars.set_backup_vars(backup_dest=backup_dest, backup_dest_path=backup_dest_path,
                                delete_backups=delete_backups, dest_labs=dest_labs, cinder_backup=cinder_backup)
 

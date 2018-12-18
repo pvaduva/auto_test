@@ -57,7 +57,7 @@ def _force_unreserve_vlm_console(barcode):
     reserve_note = attr_dict['Reserve Note']
 
     if not reserved_by:
-        msg = "target is not reserved. Do nothing"
+        msg = "Target {} is not reserved. Do nothing".format(barcode)
         LOG.info(msg)
         return -1, msg
     elif reserved_by == local_host.get_user() or not reserve_note:

@@ -744,6 +744,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         return 1, output
 
     if is_simplex or con0_install:
+        time.sleep(120)
         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
                                     timeout=timeout)
 

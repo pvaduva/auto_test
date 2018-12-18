@@ -576,7 +576,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
     sys_version = extract_software_version_from_string_path(load_path)
     default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) \
-        if sys_version else load_path + BuildServerPath.CONFIG_LAB_REL_PATH
+        if sys_version else load_path + BuildServerPath.LAB_CONF_DIR_PREV
 
     if lab_config_path and 'yow' in lab_config_path.split('/'):
         if os.path.basename(lab_config_path) == 'yow':
@@ -617,7 +617,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
     if "yow" in lab_name:
         lab_name = lab_name[4:]
 
-    config_path = "{}{}/yow/{}/{}".format(load_path, BuildServerPath.CONFIG_LAB_REL_PATH , lab_name, config_file)
+    config_path = "{}{}/yow/{}/{}".format(load_path, BuildServerPath.LAB_CONF_DIR_PREV, lab_name, config_file)
 
     cmd = "test -e " + config_path
     assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
@@ -774,7 +774,7 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
-        scp_logs_to_log_dir([LogPath.LAB_SETUP_PATH, LogPath.HEAT_SETUP_PATH], con_ssh=con_ssh)
+        scp_logs_to_log_dir([LogPath.LAB_SETUP_LOG, LogPath.HEAT_SETUP_LOG], con_ssh=con_ssh)
         return rc, msg
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
@@ -2514,7 +2514,7 @@ def get_nic_from_config(conf_server=None, conf_dir=None, delete_server=False):
     if not conf_server:
         conf_server = setups.initialize_server(InstallVars.get_install_var("FILES_SERVER"))
         delete_server = True
-    conf_dir = conf_dir if conf_dir else InstallVars.get_install_var("LAB_FILES_DIR")
+    conf_dir = conf_dir if conf_dir else InstallVars.get_install_var("LAB_SETUP_PATH")
     oam_interface = None
     nic = None
     count = 0
@@ -3336,7 +3336,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         if "failed" in output:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
-            scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_PATH], con_ssh=con_telnet)
+            scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_LOG], con_ssh=con_telnet)
             raise exceptions.CLIRejected(err_msg)
 
         LOG.info("Controller configured")
