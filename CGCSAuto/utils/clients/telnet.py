@@ -25,7 +25,7 @@ def telnet_logger(host):
     return logger
 
 
-TELNET_REGEX = r'([\w]+-[\d]+)( login:|:~\$)'
+TELNET_REGEX = r'[^n](.*[\w]+-[\d]+)( login:|:~\$)'
 TELNET_LOGIN_PROMPT = r'[^n](?![L|l]ast).*[L|l]ogin:[ ]?$'
 NEWPASSWORD_PROMPT = ''
 
@@ -49,7 +49,9 @@ class TelnetClient(Telnet):
         elif not prompt:
             prompt = r'{}:~\$ '.format(hostname)
         elif not hostname:
-            hostname = re.search(TELNET_REGEX, prompt).group(1)
+            m = re.search(TELNET_REGEX, prompt)
+            if m:
+                hostname = m.group(1)
 
         self.flush()
         self.logger = telnet_logger(hostname) if hostname else telnet_logger(host + ":" + str(port))
@@ -336,9 +338,9 @@ class TelnetClient(Telnet):
         self.flush()
         self.send(EXIT_CODE_CMD)
         self.expect(timeout=10)
-        LOG.debug("echo output: {}".format(self.cmd_output))
+        # LOG.debug("echo output: {}".format(self.cmd_output))
         matches = re.findall("\n([-+]?[0-9]+)\n", self.cmd_output)
-        LOG.debug("matches: {}".format(matches))
+        # LOG.debug("matches: {}".format(matches))
         return int(matches[-1])
 
     def __force_end(self, force):

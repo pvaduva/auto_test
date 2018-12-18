@@ -81,7 +81,7 @@ class LocalHostClient(SSHClient):
 
                 # Set prompt for matching
                 self.set_prompt(prompt)
-                self.send("PS1={}".format(prompt))
+                self.send(r'export PS1="\u@\h\$ "')
                 self.expect()
                 LOG.debug("Connected to localhost!")
                 return

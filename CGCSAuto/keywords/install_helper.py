@@ -2442,7 +2442,6 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     controller0 = lab["controller-0"]
     if controller0.telnet_conn is None:
         controller0.telnet_conn = open_telnet_session(controller0)
-        controller0.telnet_conn.set_prompt(".*\$ ")
 
     boot_interfaces = lab['boot_device_dict']
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))
@@ -2463,6 +2462,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           lab=lab)
 
     LOG.info("Initial login and password set for " + controller0.name)
+    controller0.telnet_conn.set_prompt(".*\$ ")
     controller0.telnet_conn.login(handle_init_login=True)
 
     if boot_usb:
@@ -3305,55 +3305,47 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
     """
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
-    wrsroot_etc_profile = "/etc/profile.d/custom.sh"
+
     controller0 = lab["controller-0"]
     if con_telnet is None:
         con_telnet = open_telnet_session(controller0)
         con_telnet.login()
         close_telnet = True
 
-    if banner:
-        apply_banner(telnet_conn=con_telnet, fail_ok=True)
-    if branding:
-        apply_branding(telnet_conn=con_telnet, fail_ok=True)
-    con_telnet.exec_cmd("echo {} | sudo -S sed -i.bkp 's/TMOUT=900/TMOUT=0/g' ".format(HostLinuxCreds.get_password()) +
-                        wrsroot_etc_profile)
-    con_telnet.exec_cmd("unset TMOUT")
-    con_telnet.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
-    con_telnet.exec_cmd('echo \'export PROMPT_COMMAND="date; $PROMPT_COMMAND"\' >> {}/.bashrc'.format(WRSROOT_HOME))
-    con_telnet.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
-    con_telnet.exec_cmd("export USER=wrsroot")
+    try:
+        if banner:
+            apply_banner(telnet_conn=con_telnet, fail_ok=True)
+        if branding:
+            apply_branding(telnet_conn=con_telnet, fail_ok=True)
+        con_telnet.exec_cmd("unset TMOUT")
+        con_telnet.exec_cmd('echo \'export HISTTIMEFORMAT="%Y-%m-%d %T "\' >> {}/.bashrc'.format(WRSROOT_HOME))
+        con_telnet.exec_cmd("source {}/.bashrc".format(WRSROOT_HOME))
+        con_telnet.exec_cmd("export USER=wrsroot")
 
-    rc = con_telnet.exec_cmd("test -f {}".format(config_file))[0]
-    if rc == 0:
+        con_telnet.exec_cmd("test -f {}".format(config_file), fail_ok=False)
         config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
             else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')
         cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
-        rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT)
-        #con_telnet.set_prompt(Prompt.CONTROLLER_PROMPT)
+        LOG.info("Send '{}'".format(cmd))
+        rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
+
         if "failed" in output:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
             scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_PATH], con_ssh=con_telnet)
             raise exceptions.CLIRejected(err_msg)
-        else:
-            LOG.info("Controller configured")
-            if con_telnet.hostname:
-                admin_prompt = "\[wrsroot@{} ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
-            else:
-                admin_prompt = "\[wrsroot@.* ~\(keystone_admin\)\]\$ ".format(con_telnet.hostname)
-            con_telnet.set_prompt(admin_prompt)
-            host_helper.wait_for_hosts_states(controller0.name,
-                                              availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
-                                              use_telnet=True, con_telnet=con_telnet)
-    else:
-        err_msg = "{} could not be found {}:/home/wrsroot".format(config_file, controller0.name)
-        LOG.error(err_msg)
-        raise exceptions.CLIRejected(err_msg)
 
-    if close_telnet:
-        con_telnet.close()
+        LOG.info("Controller configured")
+        admin_prompt = r"\[.*\(keystone_admin\)\]\$ "
+        con_telnet.set_prompt(admin_prompt)
+        con_telnet.exec_cmd('source /etc/nova/openrc')
+        host_helper.wait_for_hosts_states(controller0.name,
+                                          availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
+                                          use_telnet=True, con_telnet=con_telnet)
+    finally:
+        if close_telnet:
+            con_telnet.close()
 
     return rc, output
 
@@ -3590,7 +3582,6 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
 def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None, usb=None,
                  pxe_host='controller-0'):
-    LOG.error('heyyyy host_name: {}'.format(node_obj.host_name))
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()

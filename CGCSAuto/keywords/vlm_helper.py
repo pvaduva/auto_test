@@ -1,4 +1,5 @@
 import re
+import time
 from multiprocessing import Process, Queue, Event
 
 from consts.proj_vars import InstallVars
@@ -18,9 +19,8 @@ VLM_CMDS = [VlmAction.VLM_RESERVE, VlmAction.VLM_UNRESERVE, VlmAction.VLM_FORCE_
 
 
 def local_client():
-    __local_client = LocalHostClient(connect=True)
-    
-    return __local_client
+    client_ = LocalHostClient(connect=True)
+    return client_
 
 
 def _reserve_vlm_console(barcode, note=None):
@@ -331,10 +331,11 @@ def power_off_hosts_simultaneously(hosts=None):
     Returns:
 
     """
-    def _power_off(barcode_, power_off_event_, timeout_, client_, output_queue):
+    def _power_off(barcode_, power_off_event_, timeout_, output_queue):
 
+        client = local_client()
         if power_off_event_.wait(timeout=timeout_):
-            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False, client=client_)
+            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False, client=client)
             rtn = (rc, output)
 
         else:
@@ -358,13 +359,13 @@ def power_off_hosts_simultaneously(hosts=None):
     # save results for each process
     out_q = Queue()
     for barcode in barcodes:
-        client = local_client()
-        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180, client, out_q))
+        new_p = Process(target=_power_off, args=(barcode, power_off_event, 180, out_q))
         new_ps.append(new_p)
         new_p.start()
 
     LOG.info("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))
     # send power-off signal
+    time.sleep(3)
     power_off_event.set()
 
     for p in new_ps:

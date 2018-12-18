@@ -199,7 +199,7 @@ class SSHClient:
                     raise
 
                 # print out error for more info before retrying
-                LOG.info("Login failed due to error: {}".format(e.__str__()))
+                LOG.debug("Login failed due to error: {}".format(e.__str__()))
 
                 if 'password refused' in e.__str__():
                     if self.searchwindowsize is None:
