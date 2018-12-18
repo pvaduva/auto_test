@@ -6,7 +6,6 @@ import time
 
 import pexpect
 
-import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS
 from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
@@ -15,7 +14,6 @@ from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
     install_helper, vlm_helper, dc_helper
-from tc_sysinstall.fresh_install import fresh_install_helper
 from utils import exceptions, lab_info
 from utils import local_host
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, SSHFromSSH
@@ -483,7 +481,7 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
                     print("alias dictionary: {}".format(alias_dict))
                     alias = alias_dict["alias"]
                     print("alias: {}".format(alias))
-                    node_num_pattern = "-(\d+)"
+                    node_num_pattern = r"-(\d+)"
                     node_num = re.search(node_num_pattern, alias).group(1)
                     if int(node_num) > int(highest):
                         highest = node_num
@@ -493,7 +491,7 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
                 lab_info_["name"] = base_name + "_{}".format(highest) if highest > lowest else base_name
 
             short_naming_dict = {"wildcat": "WCP", "ironpass": "IP", "wolfpass": "WP", "supermicro": "SM"}
-            short_name_pattern = ".*-(\d+)(_\d+)?"
+            short_name_pattern = r".*-(\d+)(_\d+)?"
             match = re.search(short_name_pattern, lab_info_["name"])
             system_name = match.group(0)
             first_node_num = match.group(1)
@@ -523,8 +521,7 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
     if storage_nodes:
         lab_info_["storage_nodes"] = compute_nodes
     lab_dict = update_lab(lab_dict_name=lab_info_["short_name"].upper(), lab_name=lab_info_["short_name"],
-                          floating_ip=None,
-                          **lab_info_)
+                          floating_ip=None, **lab_info_)
     LOG.warning("Discovered the following lab info: {}".format(lab_dict))
 
     return lab_dict
@@ -534,7 +531,6 @@ def is_vbox(lab=None):
     if not lab:
         lab = ProjVar.get_var('LAB')
     lab_name = lab['name']
-    #lab_name = ProjVar.get_var('LAB_NAME')
     nat_name = ProjVar.get_var('NATBOX').get('name')
 
     return 'vbox' in lab_name or nat_name == 'localhost' or nat_name.startswith('128.224.')
@@ -543,7 +539,7 @@ def is_vbox(lab=None):
 def get_nodes_info(lab=None):
 
     if not lab:
-        lab =  ProjVar.get_var('LAB')
+        lab = ProjVar.get_var('LAB')
 
     if is_vbox(lab=lab):
         return
@@ -559,7 +555,7 @@ def get_nodes_info(lab=None):
 def collect_telnet_logs_for_nodes(end_event):
     nodes_info = get_nodes_info()
     node_threads = []
-    kwargs = {'prompt': '{}|:~\$'.format(TELNET_LOGIN_PROMPT), 'end_event': end_event}
+    kwargs = {'prompt': r'{}|:~\$'.format(TELNET_LOGIN_PROMPT), 'end_event': end_event}
     for node_name in nodes_info:
         kwargs['hostname'] = node_name
         kwargs['telnet_ip'] = nodes_info[node_name].telnet_ip
@@ -648,7 +644,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         lab_to_install = get_lab_dict(lab_name)
     if not lab_to_install:
         raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf")
-    if dc_system and not 'central_region' in lab_to_install:
+    if dc_system and 'central_region' not in lab_to_install:
         raise ValueError("Distributed cloud system value mismatch")
 
     central_reg_info_ = eval(lab_info_.get('CENTRAL_REGION')) if dc_system else None
@@ -676,8 +672,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
             barcodes = value_in_conf.split(sep=' ')
             lab_to_install[constkey] = barcodes
 
-    if (not dc_system and  not lab_to_install['controller_nodes']) or \
-            (dc_system and  not lab_to_install['central_region']['controller_nodes']):
+    if (not dc_system and not lab_to_install['controller_nodes']) or \
+            (dc_system and not lab_to_install['central_region']['controller_nodes']):
         errors.append("Nodes barcodes have to be provided for custom lab")
 
     # Parse build info
@@ -1103,7 +1099,7 @@ def get_system_mode_from_lab_info(lab, multi_region_lab=False, dist_cloud_lab=Fa
     if multi_region_lab:
         return SysType.MULTI_REGION
     elif dist_cloud_lab:
-        return  SysType.DISTRIBUTED_CLOUD
+        return SysType.DISTRIBUTED_CLOUD
 
     elif 'system_mode' not in lab:
         if 'storage_nodes' in lab:
@@ -1123,7 +1119,7 @@ def get_system_mode_from_lab_info(lab, multi_region_lab=False, dist_cloud_lab=Fa
             return SysType.AIO_DX
     else:
         LOG.warning("Can not determine the lab to install system type based on provided information. Lab info: {}"
-                         .format(lab))
+                    .format(lab))
         return None
 
 

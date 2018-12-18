@@ -28,8 +28,8 @@ class HostTimeout:
     POST_INSTALL_SCRIPTS = 3600
     CONFIG_CONTROLLER_TIMEOUT = 1800
 
-class InstallTimeout:
 
+class InstallTimeout:
     CONTROLLER_UNLOCK = 9000   # Host reaches enabled/available state after system host-unlock returned
     CONFIG_CONTROLLER_TIMEOUT = 1800
     # REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
@@ -43,6 +43,7 @@ class InstallTimeout:
     INSTALL_CONTROLLER = 2400
     INSTALL_LOAD = 3600
     POST_INSTALL_SCRIPTS = 3600
+
 
 class VMTimeout:
     STATUS_CHANGE = 300

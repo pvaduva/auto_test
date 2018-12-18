@@ -189,8 +189,9 @@ def get_mgmt_boot_device(node):
     return boot_device
 
 
-def open_vlm_console_thread(hostname, lab=None, boot_interface=None, upgrade=False, vlm_power_on=False, close_telnet_conn=True,
-                            small_footprint=None, wait_for_thread=False, security=None, low_latency=None, boot_usb=None):
+def open_vlm_console_thread(hostname, lab=None, boot_interface=None, upgrade=False, vlm_power_on=False,
+                            close_telnet_conn=True, small_footprint=None, wait_for_thread=False, security=None,
+                            low_latency=None, boot_usb=None):
 
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -200,7 +201,6 @@ def open_vlm_console_thread(hostname, lab=None, boot_interface=None, upgrade=Fal
         LOG.error(err_msg)
         raise exceptions.InvalidStructure(err_msg)
 
-    output_dir = ProjVar.get_var('LOG_DIR')
     boot_device = boot_interface
     if boot_interface is None:
         boot_device = {hostname: get_mgmt_boot_device(node)}
@@ -225,9 +225,9 @@ def open_vlm_console_thread(hostname, lab=None, boot_interface=None, upgrade=Fal
     LOG.info("Starting thread for {}".format(node_thread.name))
     node_thread.start()
     if wait_for_thread:
-        node_thread.join(InstallTimeout.SYSTEM_RESTORE)
+        node_thread.join(InstallTimeout.INSTALL_LOAD)
         if node_thread.is_alive():
-            err_msg = "Host {} failed to install within the {} seconds".format(node.name, InstallTimeout.SYSTEM_RESTORE)
+            err_msg = "Host {} failed to install within the {} seconds".format(node.name, InstallTimeout.INSTALL_LOAD)
             LOG.error(err_msg)
             raise exceptions.InvalidStructure(err_msg)
 
@@ -245,13 +245,21 @@ def bring_node_console_up(node, boot_device,
                           lab=None,):
     """
     Initiate the boot and installation operation.
+
     Args:
-        node(Node object):
+        node:
         boot_device:
-        install_output_dir:
+        boot_usb:
+        low_latency:
+        upgrade:
+        vlm_power_on:
         close_telnet_conn:
+        small_footprint:
+        security:
+        lab:
 
     Returns:
+
     """
     LOG.info("Opening node vlm console for {}; vlm_power = {}, upgrade= {}".format(node.name, vlm_power_on, upgrade))
     if len(boot_device) == 0:
@@ -261,18 +269,16 @@ def bring_node_console_up(node, boot_device,
     if node.telnet_conn is None:
         node.telnet_conn = open_telnet_session(node)
 
-    if vlm_power_on:
-        LOG.info("Powering on {}".format(node.name))
-        power_on_host(node.name, lab=lab, wait_for_hosts_state_=False)
+    try:
+        if vlm_power_on:
+            LOG.info("Powering on {}".format(node.name))
+            power_on_host(node.name, lab=lab, wait_for_hosts_state_=False)
 
-    LOG.error('install node options: {} {}'.format(boot_device, node))
-    install_node(node, boot_device,
-                 low_latency=low_latency,
-                 small_footprint=small_footprint,
-                 security=security,
-                 usb=boot_usb)
-    if close_telnet_conn:
-        node.telnet_conn.close()
+        install_node(node, boot_device_dict=boot_device, low_latency=low_latency, small_footprint=small_footprint,
+                     security=security, usb=boot_usb)
+    finally:
+        if close_telnet_conn:
+            node.telnet_conn.close()
 
 
 def get_non_controller_system_hosts():
@@ -3616,7 +3622,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     bios_boot_option = bios_option.name.encode()
     telnet_conn = node_obj.telnet_conn
     LOG.info('Waiting for BIOS boot option')
-    telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 180)
+    telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 300)
     enter_bios_option(node_obj, bios_option, expect_prompt=False)
     LOG.info('BIOS option entered')
 

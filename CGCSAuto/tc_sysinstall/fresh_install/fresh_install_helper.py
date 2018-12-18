@@ -7,6 +7,7 @@ from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_
 from utils.tis_log import LOG
 from utils.node import Node
 from consts.auth import Tenant
+from consts.timeout import InstallTimeout
 from consts.cgcs import SysType, DC_SubcloudStatus
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar, InstallVars
@@ -334,7 +335,8 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None)
                                                                   wait_for_thread=False, vlm_power_on=True,
                                                                   close_telnet_conn=True))
         for thread in threads:
-            thread.join()
+            thread.join(timeout=InstallTimeout.INSTALL_LOAD)
+
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
