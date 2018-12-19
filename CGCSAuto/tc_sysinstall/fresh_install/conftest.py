@@ -197,7 +197,7 @@ def install_setup(request):
             active_con.telnet_conn.close()
             active_con.telnet_conn.connect(login=False)
             active_con.telnet_conn.login(handle_init_login=True)
-            output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
+            output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True, get_exit_code=False)[1]
             LOG.info(output)
         except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
             LOG.error(e_.__str__())

@@ -2455,8 +2455,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     if rc > 0:
         err_msg = "Failed to reserve vlm console for {}  barcode {}: {}"\
             .format(controller0.name, controller0.barcode, output)
-        LOG.error(err_msg)
-        raise exceptions.InvalidStructure(err_msg)
+        raise exceptions.VLMError(err_msg)
 
     bring_node_console_up(controller0, boot_interfaces,
                           boot_usb=boot_usb,
@@ -2468,7 +2467,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           lab=lab)
 
     LOG.info("Initial login and password set for " + controller0.name)
-    controller0.telnet_conn.set_prompt(".*\$ ")
+    controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
     controller0.telnet_conn.login(handle_init_login=True)
 
     if boot_usb:
