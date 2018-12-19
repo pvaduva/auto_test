@@ -138,6 +138,7 @@ def pytest_configure(config):
                     print("{:<20}: {}".format(k, v))
         else:
             print("{:<20}: {}".format(var, value))
+    print("{:<20}: {}".format('LOG_DIR', ProjVar.get_var('LOG_DIR')))
     print('')
 
 
@@ -193,13 +194,15 @@ def install_setup(request):
 
     def install_teardown():
         try:
+            active_con.telnet_conn.close()
+            active_con.telnet_conn.connect(login=False)
             active_con.telnet_conn.login(handle_init_login=True)
             output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
             LOG.info(output)
         except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
             LOG.error(e_.__str__())
 
-        LOG.fixture_step("unreserving hosts")
+        LOG.fixture_step("Unreserving hosts")
         if dist_cloud:
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
                                        lab=lab['central_region'])
@@ -304,17 +307,16 @@ def install_setup(request):
 
 
 def pytest_runtest_teardown(item):
-    final_step = LOG.test_step
-    lab = InstallVars.get_install_var("LAB")
-    progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
-    progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
-
-    LOG.tc_teardown_start(item.nodeid)
     install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py",
                          "test_storage_install.py", "test_distributed_cloud_install.py"]
     for install_testcase in install_testcases:
         if install_testcase in item.nodeid:
-            LOG.fixture_step("Writing install step to {}".format(progress_file_path))
+            final_step = LOG.test_step
+            lab = InstallVars.get_install_var("LAB")
+            progress_dir = ProjVar.get_var("LOG_DIR") + "/.."
+            progress_file_path = progress_dir + "/{}_install_progress.txt".format(lab["short_name"])
+
+            LOG.info("Writing install step to {}".format(progress_file_path))
             with open(progress_file_path, "w+") as progress_file:
                 progress_file.write(item.nodeid + "\n")
                 progress_file.write("End step: {}".format(str(final_step)))

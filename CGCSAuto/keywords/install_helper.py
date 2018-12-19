@@ -291,7 +291,7 @@ def get_non_controller_system_hosts():
 
 
 def open_telnet_session(node_obj):
-    _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port))
+    _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port), hostname=node_obj.name)
     if node_obj.telnet_login_prompt:
         _telnet_conn.send("\r\n")
 
@@ -2402,11 +2402,11 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, skip_cfg=False):
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
     bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path,
-                                       dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
-                                       extra_opts=["--delete", "--force", "-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
-                                       timeout=InstallTimeout.INSTALL_LOAD)
+                          dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
+                          extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          timeout=InstallTimeout.INSTALL_LOAD)
     bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path, dest_user=SvcCgcsAuto.USER,
-                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["-v", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          dest_password=SvcCgcsAuto.PASSWORD, extra_opts=["--chmod=Du=rwx"], pre_opts=pre_opts,
                           timeout=InstallTimeout.INSTALL_LOAD)
     LOG.info("Create new symlink to {}".format(feed_path))
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:

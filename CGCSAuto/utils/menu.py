@@ -1,6 +1,8 @@
 import time
 import re
+
 from utils.tis_log import LOG
+from utils.exceptions import TelnetException
 from consts.proj_vars import InstallVars, ProjVar
 from consts import bios
 from consts.cgcs import SysType
@@ -34,13 +36,18 @@ class Menu(object):
             self.wrap_around = wrap_around
             self.sub_menus = [] if sub_menus is None else sub_menus
 
-    def select(self, telnet_conn, index=None, pattern=None, tag=None):
+    def select(self, telnet_conn=None, index=None, pattern=None, tag=None):
         if not self.options:
             try:
                 self.find_options(telnet_conn)
             except TypeError:
                 LOG.error("{} has no options".format(self.name))
                 raise
+
+        if index is pattern is tag is None:
+            raise ValueError("index, pattern or tag has to be provided to determin the option to select")
+
+        option = None
         if index is not None:
             option = self.options[index]
         elif pattern is not None:
@@ -53,14 +60,17 @@ class Menu(object):
                     if pattern in item.name:
                         option = item
                         break
-        elif tag is not None:
+
+        if not option and tag is not None:
             for item in self.options:
                 if item.tag is not None:
                     if tag == item.tag:
                         option = item
                         break
-        else:
-            LOG.error("Either name of the option, index, or tag must be given in order to select")
+
+        if not option:
+            raise TelnetException("Unable to determine option to select")
+
         LOG.info("Selecting {} option {}".format(self.name, option.name))
         if option.key == "Enter" or option.key == "Return":
             while self.index != option.index:
@@ -71,7 +81,7 @@ class Menu(object):
         option.enter(telnet_conn)
         self.index = 0
 
-    def find_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
+    def find_options(self, telnet_conn, end_of_menu=None, option_identifier=None, newline=b"\n"):
         telnet_conn.expect([end_of_menu], 60)
         output = telnet_conn.cmd_output.encode()
         options = re.split(newline, output)
@@ -111,7 +121,7 @@ class Menu(object):
     def order_options(self):
         self.options.sort(key=lambda option: option.index)
 
-    def get_current_option(self):
+    def get_current_option(self, telnet_conn=None):
         for option in self.options:
             if option.index == self.index:
                 return option
@@ -165,7 +175,7 @@ class KickstartMenu(Menu):
         super().__init__(name=name, options=options, index=index, prompt=prompt, wrap_around=wrap_around, sub_menus=sub_menus,
                          kwargs=kwargs)
 
-    def get_current_option(self, telnet_conn):
+    def get_current_option(self, telnet_conn=None):
         highlight_code = "\x1b[0;7;37;40m" if "PXE" in self.name else "\x1b[0m\x1b[37m\x1b[40m"
         if not self.options:
             self.find_options(telnet_conn)
@@ -174,8 +184,8 @@ class KickstartMenu(Menu):
                 self.index = self.options[i].index
         return super().get_current_option()
 
-    def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
-                     option_identifier=b"(\dm?\))|([\w]+)\s+> ", newline=b'(\x1b\[\d+;\d+H)+'):
+    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+                     option_identifier=r"(\dm?\))|([\w]+)\s+> ".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
@@ -187,7 +197,7 @@ class KickstartMenu(Menu):
         current_option = self.get_current_option(telnet_conn)
         self.index = current_option.index
 
-    def select(self, telnet_conn, index=None, pattern=None, tag=None):
+    def select(self, telnet_conn=None, index=None, pattern=None, tag=None):
         if isinstance(tag, str):
             tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
 
@@ -205,7 +215,7 @@ class KickstartMenu(Menu):
                 tag_dict["type"] = tag
             tag = tag_dict
 
-        super().select(telnet_conn, index, pattern, tag)
+        super().select(telnet_conn=telnet_conn,  index=index, pattern=pattern, tag=tag)
 
 
 class USBBootMenu(KickstartMenu):
@@ -219,8 +229,8 @@ class USBBootMenu(KickstartMenu):
             Menu.__init__(self=sub_menu, name=sub_menu_dict["name"], kwargs=sub_menu_dict)
             self.sub_menus.append(sub_menu)
 
-    def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
-                     option_identifier=b"[A-Z][A-Za-z]", newline=b'(\x1b\[\d+;\d+H)+'):
+    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+                     option_identifier=r"[A-Z][A-Za-z]".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
 
 

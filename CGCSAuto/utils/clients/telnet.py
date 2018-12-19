@@ -1,6 +1,5 @@
 import os
 import re
-import socket
 from telnetlib import Telnet
 
 from consts.auth import HostLinuxCreds
@@ -25,9 +24,10 @@ def telnet_logger(host):
     return logger
 
 
-TELNET_REGEX = r'[^n](.*[\w]+-[\d]+)( login:|:~\$)'
-TELNET_LOGIN_PROMPT = r'[^n](?![L|l]ast).*[L|l]ogin:[ ]?$'
+LOGIN_REGEX = re.compile(r'^(.*[\w]+-[\d]+)( login:|:~\$)'.encode(), re.MULTILINE)
+TELNET_LOGIN_PROMPT = re.compile(r'^(?![L|l]ast).*[L|l]ogin:[ ]?$'.encode(), re.MULTILINE)
 NEWPASSWORD_PROMPT = ''
+LOGGED_IN_REGEX = re.compile(r'^(.*-[\d]+):~\$ '.encode(), re.MULTILINE)
 
 
 class TelnetClient(Telnet):
@@ -38,20 +38,15 @@ class TelnetClient(Telnet):
         self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
 
-        if not prompt and not hostname:
-            prompt = r':~\$ '
+        if not hostname:
             self.send('\r\n\r\n')
-            index = self.expect(TELNET_REGEX, fail_ok=True)
-            if index == 0:
-                hostname = re.search(TELNET_REGEX, self.cmd_output.splitlines()[-1]).group(1)
-                prompt = r'{}:~\$ '.format(hostname)
+            prompts = [LOGIN_REGEX, LOGGED_IN_REGEX]
+            index, re_obj, matched_text = super().expect(prompts, timeout=10)
+            if index in (0, 1):
+                hostname = prompts[index].search(matched_text).group(1).decode()
 
-        elif not prompt:
-            prompt = r'{}:~\$ '.format(hostname)
-        elif not hostname:
-            m = re.search(TELNET_REGEX, prompt)
-            if m:
-                hostname = m.group(1)
+        if not prompt:
+            prompt = r':~\$ '
 
         self.flush()
         self.logger = telnet_logger(hostname) if hostname else telnet_logger(host + ":" + str(port))
@@ -74,24 +69,6 @@ class TelnetClient(Telnet):
             self.login(fail_ok=fail_ok, expect_prompt_timeout=login_timeout)
 
         return self.sock
-
-    # def open(self, host, port=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
-    #     super(TelnetClient, self).open(host=host, port=port, timeout=timeout)
-    #     try:
-    #         self.send('\r\n\r\n')
-    #         index = self.expect(['Login:', TELNET_REGEX])
-    #         self.flush()
-    #         if index == 0:
-    #             self.send('\r\n\r\n')
-    #             self.expect(TELNET_REGEX)
-    #             self.flush()
-    #         msg = "Telnet connection to {}:{} is opened and in login or prompt screen".format(host, port)
-    #         self.logger.info(msg)
-    #
-    #     except Exception as e:
-    #         err_msg = 'Telnet connection to {}:{} is opened, but host is in unknown state. Details: {}'.\
-    #             format(host, port, e.__str__())
-    #         self.logger.warning(err_msg)
 
     def login(self, expect_prompt_timeout=3, fail_ok=False, handle_init_login=False):
         self.send('\r')
