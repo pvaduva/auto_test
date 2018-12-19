@@ -50,6 +50,11 @@ class LaunchInstanceForm(forms.TabbedFormRegion):
     class AvailableTable(tables.TableRegion):
         _rows_locator = (by.By.CSS_SELECTOR, 'tbody>tr[class="ng-scope"]')
 
+#   server group's available table contains a inner table so use a different column names locator
+    class ServerGrpAvailableTable(tables.TableRegion):
+        _rows_locator = (by.By.CSS_SELECTOR, 'tbody>tr[class="ng-scope"]')
+        _columns_names_locator = (by.By.CSS_SELECTOR, 'thead > tr:nth-child(2) > th')
+
     @property
     def allocated_table(self):
         return self.AllocatedTable(self.driver, self.contained_tables[0])
@@ -58,9 +63,16 @@ class LaunchInstanceForm(forms.TabbedFormRegion):
     def available_table(self):
         return self.AvailableTable(self.driver, self.contained_tables[1])
 
+    @property
+    def server_grp_available_table(self):
+        return self.ServerGrpAvailableTable(self.driver, self.contained_tables[1])
+
     def __init__(self, driver):
         super(LaunchInstanceForm, self).__init__(
             driver, field_mappings=())
+
+    def addservergrp(self, column_name, name):
+        self.server_grp_available_table.get_row(column_name, name).add()
 
     def addelement(self, column_name, name):
         self.available_table.get_row(column_name, name).add()
@@ -206,7 +218,7 @@ class InstancesPage(basepage.BasePage):
     def create_instance(self, instance_name, availability_zone=None, count=None,
                         boot_source_type='Image', create_new_volume=False,
                         delete_volume_on_instance_delete=None, volume_size=None,
-                        source_name=None, flavor_name=None, network_names=None):
+                        source_name=None, flavor_name=None, network_names=None, server_group_name=None):
         instance_form = self.instances_table.launch_instance()
         instance_form.fields['name'].text = instance_name
         if availability_zone is not None:
@@ -233,6 +245,9 @@ class InstancesPage(basepage.BasePage):
         instance_form.addelement('Name', flavor_name)
         instance_form.switch_to(3)
         instance_form.addelements('Network', network_names)
+        if server_group_name is not None:
+            instance_form.switch_to(8)
+            instance_form.addservergrp('Name', server_group_name)
         instance_form.submit()
 
     def delete_instance_by_row(self, name):
