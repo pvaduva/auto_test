@@ -15,7 +15,7 @@ from utils.tis_log import LOG
 
 
 def get_buildinfo(con_ssh=None, use_telnet=False, con_telnet=None):
-    return _get_info_non_cli(r'cat /etc/build.info', con_ssh=con_ssh,  use_telnet=use_telnet,
+    return _get_info_non_cli('cat /etc/build.info', con_ssh=con_ssh,  use_telnet=use_telnet,
                              con_telnet=con_telnet)
 
 
@@ -2899,7 +2899,6 @@ def install_license(license_path, timeout=30, con_ssh=None):
 
 def install_upgrade_license(license_path, timeout=30, con_ssh=None):
     return install_license(license_path, timeout=timeout, con_ssh=con_ssh)
-
 
 
 def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
