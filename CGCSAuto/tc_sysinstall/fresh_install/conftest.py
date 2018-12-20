@@ -170,15 +170,6 @@ def install_setup(request):
             pass
 
     def install_teardown():
-        try:
-            active_con.telnet_conn.close()
-            active_con.telnet_conn.connect(login=False)
-            active_con.telnet_conn.login(handle_init_login=True)
-            output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True, get_exit_code=False)[1]
-            LOG.info(output)
-        except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
-            LOG.error(e_.__str__())
-
         LOG.fixture_step("Unreserving hosts")
         if dist_cloud:
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
@@ -189,6 +180,14 @@ def install_setup(request):
                                            lab=lab[subcloud_])
         else:
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+
+        try:
+            active_con.telnet_conn.flush()
+            active_con.telnet_conn.login(handle_init_login=True)
+            output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True, get_exit_code=False)[1]
+            LOG.info(output)
+        except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
+            LOG.error(e_.__str__())
     request.addfinalizer(install_teardown)
 
     build_server = InstallVars.get_install_var('BUILD_SERVER')

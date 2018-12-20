@@ -3701,7 +3701,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
             current_vms = nova_helper.get_vms(strict=False, name=vm_name)
             current_count = len(current_vms)
             if current_count == expt_max:
-                wait_for_vm_status(vm_id=current_vms[-1])
+                wait_for_vm_status(vm_id=current_vms[-1], auth_info=None)
                 if func_second_vm:
                     if not second_vm:
                         second_vm = list(set(current_vms) - set(vm_ids))[0]
@@ -3718,7 +3718,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
 
                 vm_ids = current_vms
                 for vm_id in new_vms:
-                    wait_for_vm_status(vm_id=vm_id)
+                    wait_for_vm_status(vm_id=vm_id, auth_info=None)
                     wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
 
                     dd_event = Events('dd started in {}'.format(vm_id))
