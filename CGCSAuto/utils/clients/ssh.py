@@ -300,7 +300,6 @@ class SSHClient:
 
         """
         self.expect(fail_ok=True, timeout=timeout)
-
         LOG.debug("Buffer is flushed by reading out the rest of the output")
 
     def expect(self, blob_list=None, timeout=60, fail_ok=False, rm_date=False, searchwindowsize=None):

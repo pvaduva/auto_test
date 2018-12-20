@@ -3638,7 +3638,8 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
             while time.time() < end_time:
                 if end_event.is_set():
                     LOG.info("End event set, kill dd processes in vm")
-                    vm_ssh.exec_cmd(kill_dd)
+                    vm_ssh.flush()
+                    vm_ssh.exec_cmd(kill_dd, get_exit_code=False)
                     return
 
                 for event in new_dd_events:
