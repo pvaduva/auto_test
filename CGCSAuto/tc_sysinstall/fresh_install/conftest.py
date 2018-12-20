@@ -166,11 +166,22 @@ def install_setup(request):
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
         try:
             reset_telnet_port(active_con.telnet_conn)
-        except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout):
+        except (exceptions.TelnetError, ConnectionError):
             pass
 
     def install_teardown():
         LOG.fixture_step("Unreserving hosts")
+        try:
+            telnet_con = active_con.telnet_conn
+            if not telnet_con:
+                telnet_con = install_helper.open_telnet_session(active_con)
+            telnet_con.flush()
+            telnet_con.login(handle_init_login=True)
+            output = telnet_con.exec_cmd("cat /etc/build.info", fail_ok=True, get_exit_code=False)[1]
+            LOG.info(output)
+        except (exceptions.TelnetError, ConnectionError) as e_:
+            LOG.error(e_.__str__())
+
         if dist_cloud:
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
                                        lab=lab['central_region'])
@@ -180,14 +191,6 @@ def install_setup(request):
                                            lab=lab[subcloud_])
         else:
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
-
-        try:
-            active_con.telnet_conn.flush()
-            active_con.telnet_conn.login(handle_init_login=True)
-            output = active_con.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True, get_exit_code=False)[1]
-            LOG.info(output)
-        except (exceptions.TelnetException, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
-            LOG.error(e_.__str__())
     request.addfinalizer(install_teardown)
 
     build_server = InstallVars.get_install_var('BUILD_SERVER')
@@ -199,7 +202,7 @@ def install_setup(request):
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
     servers = list({file_server, iso_host, patch_server, guest_server})
-    LOG.fixture_step("Establish connection to {}".format(servers))
+    LOG.fixture_step("Establish ssh connection to {}".format(servers))
 
     bld_server = initialize_server(build_server)
     if file_server == bld_server.name:
@@ -276,7 +279,7 @@ def install_setup(request):
                     install_helper.wipe_disk_hosts(lab['central_region']["hosts"], lab=lab['central_region'])
                 else:
                     install_helper.wipe_disk_hosts(lab["hosts"])
-            except exceptions.TelnetException as e:
+            except exceptions.TelnetError as e:
                 LOG.error("Failed to wipedisks because of telnet exception: {}".format(e.message))
 
     return _install_setup

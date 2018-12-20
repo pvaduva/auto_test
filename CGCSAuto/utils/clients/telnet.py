@@ -72,7 +72,7 @@ class TelnetClient(Telnet):
         return self.sock
 
     def login(self, expect_prompt_timeout=3, fail_ok=False, handle_init_login=False):
-        self.send('\n\n')
+        self.write('\r\n')
         index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok,
                             searchwindowsize=50)
         self.flush()
@@ -84,8 +84,8 @@ class TelnetClient(Telnet):
             index = self.expect([self.prompt, TELNET_LOGIN_PROMPT], searchwindowsize=50, timeout=expect_prompt_timeout)
             if index == 1:
                 if not handle_init_login:
-                    raise exceptions.TelnetException('Unable to login to {} with credential {}/{}'.
-                                                     format(self.hostname, self.user, self.password))
+                    raise exceptions.TelnetError('Unable to login to {} with credential {}/{}'.
+                                                 format(self.hostname, self.user, self.password))
                 self.send(self.user)
                 self.expect(PASSWORD_PROMPT, searchwindowsize=50, timeout=expect_prompt_timeout)
                 self.send(self.user)    # in initial login, assume password=username
@@ -201,7 +201,7 @@ class TelnetClient(Telnet):
         elif index == -2:
             raise exceptions.TelnetTimeout(err_msg)
         else:
-            raise exceptions.TelnetException("Unknown error! Please update telnet expect method")
+            raise exceptions.TelnetError("Unknown error! Please update telnet expect method")
 
     def flush(self, timeout=3):
         time.sleep(timeout)   # Wait for given time before reading.
@@ -283,7 +283,7 @@ class TelnetClient(Telnet):
 
         code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
-            raise exceptions.TelnetException("Non-zero return code for sudo cmd: {}. Output: {}".format(cmd, output))
+            raise exceptions.TelnetError("Non-zero return code for sudo cmd: {}. Output: {}".format(cmd, output))
 
         return code, output
 

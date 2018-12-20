@@ -292,8 +292,8 @@ def get_non_controller_system_hosts():
 
 def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port), hostname=node_obj.name)
-    if node_obj.telnet_login_prompt:
-        _telnet_conn.send("\r\n")
+    # if node_obj.telnet_login_prompt:
+    #     _telnet_conn.write(b"\r\n")
 
     return _telnet_conn
 
@@ -325,10 +325,10 @@ def wipe_disk_hosts(hosts, lab=None, close_telnet_conn=True):
     if local_client().ping_server(controller0_node.host_ip, fail_ok=True)[0] == 100:
         LOG.warning("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
         return
-    #try:
+    # try:
     #    controller0_node.telnet_conn.send()
     #    controller0_node.telnet_conn.expect(timeout=3)
-    #except exceptions.TelnetTimeout:
+    # except exceptions.TelnetTimeout:
     #    LOG.info("Host controller-0 is not reachable, cannot wipedisk for hosts {}".format(hosts))
     #    return
 
@@ -2772,7 +2772,7 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
                 if rc == 0 and output.strip():
                     LOG.info('System is ready, {} status: {}'.format(controller0, output))
                     break
-        except exceptions.TelnetException as e:
+        except exceptions.TelnetError as e:
             LOG.warn('got error:{}'.format(e))
 
         LOG.info('{} is not ready yet, failed to source /etc/nova/openrc, continue to wait'.format(controller0))
@@ -3539,7 +3539,7 @@ def select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=None, f
         if fail_ok:
             return False
         else:
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
     LOG.info("Boot device is: " + str(boot_device_regex))
 
     if expect_prompt:

@@ -762,7 +762,7 @@ class Telnet:
             self.write(str.encode(text + "\n"))
         except OSError:
             msg = "Failed to write to Telnet socket (connection could be closed): {}:{}".format(self.host, self.port)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
     def get_read_until(self, expected, timeout=TELNET_EXPECT_TIMEOUT):
         """Wrapper for read_until().
@@ -776,13 +776,13 @@ class Telnet:
             msg = "Connection closed: Reached EOF and no data was read in Telnet session: {}:{}.".format(self.host,
                                                                                                          self.port)
 
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         output = output.decode('utf-8', 'ignore')
         if expected not in output:
             msg = 'Timeout occurred: Failed to find \"{}\" in output. Output:\n{}'.format(expected, output)
             LOG.error(msg)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         lines = output.splitlines()
         # Remove command
@@ -809,7 +809,7 @@ class Telnet:
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
 
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
         if index != 0:
             msg = "Timeout occurred: Failed to find prompt"
             LOG.error(msg)
@@ -840,7 +840,7 @@ class Telnet:
             LOG.debug('index:{}, output:{}, expected:{}'.format(index, output, expected))
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if extra_expects and 0 <= index < len(extra_expects):
             LOG.info('found expected:{}'.format(extra_expects))
@@ -858,7 +858,7 @@ class Telnet:
             index, match = self.expect([str.encode(RETURN_CODE_REGEX)], TELNET_EXPECT_TIMEOUT)[:2]
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if index == 0:
             rc = (match.group(0).decode('utf-8', 'ignore')).translate({ord('['): '', ord(']'): ''})
@@ -866,7 +866,7 @@ class Telnet:
         else:
             msg = "Timeout occurred: Failed to find return code, index={}".format(index)
             LOG.error(msg)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if not alt_prompt:
             # LOG.info('wait for special prompt:{}'.format(alt_prompt))
@@ -889,7 +889,7 @@ class Telnet:
             index, matched, output = self.expect(expected, timeout=timeout)
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if index == 0:
             LOG.info("Found passord prompt. enter passowrd {}".format(password))
@@ -899,7 +899,7 @@ class Telnet:
                 index, matched, output = self.expect(expected, timeout=timeout)
             except EOFError:
                 msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
 
         output = '\n'.join(output.decode('utf-8', 'ignore').splitlines())
         LOG.info("Index: {}, Matched: {}, Output: {}".format(index, matched, output))
@@ -916,7 +916,7 @@ class Telnet:
             index, match = self.expect([str.encode(RETURN_CODE_REGEX)], TELNET_EXPECT_TIMEOUT)[:2]
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if index == 0:
             rc = (match.group(0).decode('utf-8', 'ignore')).translate({ord('['): '', ord(']'): ''})
@@ -924,7 +924,7 @@ class Telnet:
         else:
             msg = "Timeout occurred: Failed to find return code"
             LOG.error(msg)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if alt_prompt:
             LOG.info('wait for special prompt:{}'.format(alt_prompt))
@@ -959,7 +959,7 @@ class Telnet:
                     index = (self.expect([b"ogin:", str.encode(PROMPT)], 30))[0]
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-                    raise exceptions.TelnetException(msg)
+                    raise exceptions.TelnetError(msg)
 
                 if index == 0:
                     LOG.info("Found login prompt. Login as {}".format(username))
@@ -985,7 +985,7 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find login or prompt"
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
 
     # TODO: The regular expression passed into re.compile(...) to search through
     #      the boot menu for each BIOS type should perhaps be set as constants
@@ -1036,7 +1036,7 @@ class Telnet:
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
             LOG.info("Boot device is: " + str(boot_device_regex))
             if usb:
                 LOG.info("Boot device is: USB")
@@ -1100,7 +1100,7 @@ class Telnet:
                     LOG.info("wildcat/supermicro: index: {} match: {} ".format(index, match))
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-                    raise exceptions.TelnetException(msg)
+                    raise exceptions.TelnetError(msg)
 
                 if index == 0:
                     LOG.info('match.group(0)={}'.format(match.group(0)))
@@ -1123,7 +1123,7 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
 
             LOG.info("Waiting for ESC to exit")
             if node.name == CONTROLLER0 and not upgrade:
@@ -1203,7 +1203,7 @@ class Telnet:
             index, match = self.expect(BIOS_TYPES, BIOS_TYPE_TIMEOUT)[:2]
         except EOFError:
             msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         if 0 <= index <= len(BIOS_TYPES)-1:
             bios_key = BIOS_TYPE_FN_KEY_ESC_CODES[index]
@@ -1216,7 +1216,7 @@ class Telnet:
         else:
             msg = "Timeout occurred: Failed to find BIOS type {} while booting {}".format(str(BIOS_TYPES), node.name)
             LOG.error(msg)
-            raise exceptions.TelnetException(msg)
+            raise exceptions.TelnetError(msg)
 
         # American Megatrends BIOS, e.g. IronPass
         if bios_type == BIOS_TYPES[0]:
@@ -1225,7 +1225,7 @@ class Telnet:
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
             if usb:
                 LOG.info("Boot device is: USB")
             else:
@@ -1259,7 +1259,7 @@ class Telnet:
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
 
-                    raise exceptions.TelnetException(msg)
+                    raise exceptions.TelnetError(msg)
                 if index == 0:
                     match = match.group(1).decode('utf-8', 'ignore')
                     LOG.info("Matched: " + match)
@@ -1278,7 +1278,7 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
 
             if node.name == CONTROLLER0 and not upgrade:
                 # booting device = USB tested only for Ironpass-31_32
@@ -1366,7 +1366,7 @@ class Telnet:
             if boot_device_regex is None:
                 msg = "Failed to determine boot device for: " + node.name
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
 
             if usb:
                 LOG.info("Boot device is: USB")
@@ -1395,7 +1395,7 @@ class Telnet:
                 except EOFError:
                     msg = "Connection closed: Reached EOF in Telnet session: {}:{}.".format(self.host, self.port)
 
-                    raise exceptions.TelnetException(msg)
+                    raise exceptions.TelnetError(msg)
 
                 if index == 0:
                     match = match.group(1).decode('utf-8', 'ignore')
@@ -1415,7 +1415,7 @@ class Telnet:
             if count == MAX_SEARCH_ATTEMPTS:
                 msg = "Timeout occurred: Failed to find boot device {} in menu".format(boot_device_regex)
                 LOG.error(msg)
-                raise exceptions.TelnetException(msg)
+                raise exceptions.TelnetError(msg)
         
             if node.name == CONTROLLER0:
                 # self.get_read_until("Kickstart Boot Menu", 300)
@@ -1477,11 +1477,11 @@ def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False,
     except ConnectionRefusedError:
         msg = "Connection refused: Telnet session already open: {} {}".format(ip_addr, port)
 
-        raise exceptions.TelnetException(msg)
+        raise exceptions.TelnetError(msg)
     except TimeoutError:
         msg = "Timeout occurred: Failed to create Telnet session: {} {}".format(ip_addr, port)
 
-        raise exceptions.TelnetException(msg)
+        raise exceptions.TelnetError(msg)
 
     return conn
 

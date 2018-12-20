@@ -2,7 +2,7 @@ import time
 import re
 
 from utils.tis_log import LOG
-from utils.exceptions import TelnetException
+from utils.exceptions import TelnetError
 from consts.proj_vars import InstallVars, ProjVar
 from consts import bios
 from consts.cgcs import SysType
@@ -69,7 +69,7 @@ class Menu(object):
                         break
 
         if not option:
-            raise TelnetException("Unable to determine option to select")
+            raise TelnetError("Unable to determine option to select")
 
         LOG.info("Attempt to select {} option {}".format(self.name, option.name))
         if option.key == "Enter" or option.key == "Return":
