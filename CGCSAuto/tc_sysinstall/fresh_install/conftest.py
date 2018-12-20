@@ -83,8 +83,10 @@ def pytest_configure(config):
         else:
             lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
 
-        if not heat_templates or not os.path.isabs(heat_templates):
-            heat_templates = os.path.join(BuildServerPath.DEFAULT_HOST_BUILD_PATH, BuildServerPath.HEAT_TEMPLATES)
+        if not heat_templates:
+            heat_templates = os.path.join(host_build_dir_path, BuildServerPath.HEAT_TEMPLATES)
+        elif not os.path.isabs(heat_templates):
+            heat_templates = os.path.join(host_build_dir_path, heat_templates)
 
         install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
                                          lab_files_dir=lab_file_dir, patch_dir=patch_dir,
