@@ -2095,7 +2095,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         retry (bool): whether or not to retry if fails to connect
         retry_timeout (int): max time to retry
         close_ssh
-        auth_info (dict)
+        auth_info (dict|None)
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -3627,7 +3627,7 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
         dd_cmd = 'dd if=/dev/zero of=/dev/null &'
         kill_dd = 'pkill -ex dd'
 
-        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, timeout=120) as vm_ssh:
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, timeout=120, auth_info=None) as vm_ssh:
             LOG.info("Start first 2 dd processes in vm")
             vm_ssh.exec_cmd(cmd=dd_cmd)
             vm_ssh.exec_cmd(cmd=dd_cmd)
@@ -3804,8 +3804,9 @@ def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=120
 
         events = new_dd_events + [end_event]
         while time.time() < scale_up_end_time:
+            time.sleep(10)
             current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus',
-                                                                  con_ssh=con_ssh))[1]
+                                                                  con_ssh=con_ssh, auth_info=None))[1]
             if current_now > current_:
                 for x in range(current_now - current_):
                     event_ = events.pop(0)

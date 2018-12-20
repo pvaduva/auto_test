@@ -509,7 +509,7 @@ class SSHClient:
         if ssh_port:
             ssh_opts += ' -p {}'.format(ssh_port)
 
-        cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
+        cmd = "{} rsync -are \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
 
         LOG.info("Rsyncing file(s) from {} to {}: {}".format(self.host, dest_server, cmd))
