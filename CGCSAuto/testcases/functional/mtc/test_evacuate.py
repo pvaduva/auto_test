@@ -123,6 +123,25 @@ class TestVariousGuests:
         'ge_edge',
     ])
     def test_evacuate_vm(self, guest_os, boot_source):
+        """
+        Test evacuate VM with specified guest and boot source
+        Args:
+            guest_os (str): guest OS name
+            boot_source (str): volume or image
+
+        Setup:
+            - Ensure sufficient space on system to create the required guest. Skip otherwise.
+
+        Test Steps:
+            - Boot a VM with given guest OS from specified boot source
+            - Ensure VM is reachable from NatBox
+            - 'sudo reboot -f' on vm host to evacuated it
+            - Check vm is successfully evacuated - active state and reachable from NatBox
+
+        Teardown:
+            - Delete created vm, volume if any, and glance image
+
+        """
         img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
         source_id = img_id if boot_source == 'image' else None

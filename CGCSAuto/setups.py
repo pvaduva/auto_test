@@ -596,7 +596,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
-                       patch_dir=None, ovs=False, build_server=None, tis_builds_dir=None, tis_build_dir="latest_build",
+                       patch_dir=None, ovs=False, build_server=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
                        boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
                        kubernetes=False):
@@ -606,7 +606,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                          "has to be provided")
 
     if not installconf_path:
-        installconf_path = write_installconf(lab=lab, controller=None, tis_builds_dir=tis_builds_dir,
+        installconf_path = write_installconf(lab=lab, controller=None,
                                              tis_build_dir=tis_build_dir, lab_files_dir=None, build_server=build_server,
                                              files_server=None, compute=None, storage=None, license_path=None,
                                              guest_image=None, heat_templates=None, security=security,
@@ -885,7 +885,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  )
 
 
-def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_builds_dir, tis_build_dir,
+def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_build_dir,
                       compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
                       low_latency, security, stop, ovs,  boot_server, resume, skip, kubernetes):
 
@@ -904,7 +904,6 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
         guest_image: Str path to the guest image
         heat_templates: Str path to the python heat templates
         patch_dir
-        tis_builds_dir
         boot
         iso_path
         low_latency
@@ -952,6 +951,9 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
     node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
 
     # [BUILD] and [CONF_FILES] section
+    if not ovs and 'starlingx' in tis_build_dir.lower():
+        ovs = True
+
     build_dict = {"BUILD_SERVER": build_server,
                   "TIS_BUILD_PATH": tis_build_dir,
                   "BUILD_ISO_PATH": iso_path if iso_path else '',

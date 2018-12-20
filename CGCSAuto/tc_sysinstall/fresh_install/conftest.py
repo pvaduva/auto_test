@@ -49,9 +49,6 @@ def pytest_configure(config):
     ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
 
-    R6_VALID_BUIDS_DIR_NAMES = [BuildServerPath.BldsDirNames.STARLINGX_18_10,
-                                BuildServerPath.BldsDirNames.TITANIUM_R6_BUILD,
-                                BuildServerPath.BldsDirNames.STARLINGX_UPSTREAM_BUILD]
     if lab_arg:
         lab_dict = get_lab_dict(lab_arg)
         lab_name = lab_dict['name']
@@ -68,37 +65,17 @@ def pytest_configure(config):
         LOG.info("Resume Install step at {}".format(resume_install))
 
     if not install_conf:
-
-        __build_server = build_server if build_server and build_server != "" else BuildServerPath.DEFAULT_BUILD_SERVER
-        default_build_path = BuildServerPath.STX_HOST_BUILDS_DIR + '/' + BuildServerPath.LATEST_BUILD
-
-        host_build_dir_path = None
-        if tis_builds_dir:
-            if tis_build_dir and os.path.isabs(tis_build_dir):
-                LOG.warning("Full load path: {} is specified in command argument; the tis_build_dir: {}: is ignored "
-                            .format(tis_build_dir, tis_builds_dir))
-
-            elif tis_build_dir and re.search(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX, tis_builds_dir):
-                host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
-            elif re.search(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX, tis_builds_dir):
-                host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, BuildServerPath.LATEST_BUILD)
-            else:
-                raise ValueError("The specified tis_builds_dir {} is not one of {}. If this is custom R6 load "
-                                 "please provide full load path to --tis-build-dir otherwise use the old "
-                                 "auto-installer for older loads ".format(tis_builds_dir, R6_VALID_BUIDS_DIR_NAMES))
-
+        build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+        if not tis_builds_dir and not tis_build_dir:
+            host_build_dir_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
+        elif tis_build_dir and os.path.isabs(tis_build_dir):
+            host_build_dir_path = tis_build_dir
         else:
-            if tis_build_dir and not os.path.isabs(tis_build_dir):
-                raise ValueError("The specified tis_build_dir {} is not full directory path. Please provide full path "
-                                 "to the intended build load ".format(tis_build_dir))
-            elif tis_build_dir:
+            tis_builds_dir = tis_builds_dir if tis_builds_dir else ''
+            tis_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
+            host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
 
-                host_build_dir_path = tis_build_dir
-            else:
-                host_build_dir_path = default_build_path
-
-        files_server = __build_server
-
+        files_server = build_server
         if lab_file_dir:
             if lab_file_dir.find(":/") != -1:
                 files_server = lab_file_dir[:lab_file_dir.find(":/")]
@@ -107,12 +84,12 @@ def pytest_configure(config):
             lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
 
         if not heat_templates or not os.path.isabs(heat_templates):
-            heat_templates = default_build_path + '/' + BuildServerPath.HEAT_TEMPLATES
+            heat_templates = os.path.join(BuildServerPath.DEFAULT_HOST_BUILD_PATH, BuildServerPath.HEAT_TEMPLATES)
 
         install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
                                          lab_files_dir=lab_file_dir, patch_dir=patch_dir,
-                                         tis_build_dir=host_build_dir_path, tis_builds_dir=tis_builds_dir,
-                                         build_server=__build_server, files_server = files_server,
+                                         tis_build_dir=host_build_dir_path,
+                                         build_server=build_server, files_server=files_server,
                                          license_path=install_license, guest_image=guest_image,
                                          heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                          security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
@@ -123,7 +100,7 @@ def pytest_configure(config):
                        installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
                        controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                        boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                       patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, kubernetes=kubernetes )
+                       patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, kubernetes=kubernetes)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))
@@ -184,7 +161,7 @@ def install_setup(request):
     for barcode in barcodes:
         vlm_helper._reserve_vlm_console(barcode, "AUTO: lab installation")
 
-    LOG.fixture_step("Attempt to reset port on controller-0")
+    LOG.info("Attempt to reset port on controller-0")
     if active_con.telnet_conn is None:
         active_con.telnet_conn = install_helper.open_telnet_session(active_con)
         try:
@@ -207,9 +184,9 @@ def install_setup(request):
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
                                        lab=lab['central_region'])
             subclouds = [k for k, v in lab.items() if 'subcloud' in k]
-            for subcloud in subclouds:
-                vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
-                                           lab=lab[subcloud])
+            for subcloud_ in subclouds:
+                vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud_]),
+                                           lab=lab[subcloud_])
         else:
             vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
     request.addfinalizer(install_teardown)
@@ -223,7 +200,7 @@ def install_setup(request):
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
     servers = list({file_server, iso_host, patch_server, guest_server})
-    LOG.fixture_step("Establishing connection to {}".format(servers))
+    LOG.fixture_step("Establish connection to {}".format(servers))
 
     bld_server = initialize_server(build_server)
     if file_server == bld_server.name:
@@ -277,7 +254,7 @@ def install_setup(request):
                       "active_controller": active_con}
 
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
-        LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
+        LOG.fixture_step("Set up {} boot".format(boot["boot_type"]))
         lab_dict = lab if not dist_cloud else lab['central_region']
 
         if "burn" in boot["boot_type"]:
@@ -293,7 +270,7 @@ def install_setup(request):
             install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
-            LOG.fixture_step("Attempting to wipe disks")
+            LOG.fixture_step("Attempt to wipe disks")
             try:
                 active_con.telnet_conn.login()
                 if dist_cloud:

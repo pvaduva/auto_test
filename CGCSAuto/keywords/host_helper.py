@@ -307,7 +307,8 @@ def recover_simplex(con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
         wait_for_hosts_ready(host, fail_ok=fail_ok, check_task_affinity=False, con_ssh=con_ssh, auth_info=auth_info)
 
 
-def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None, auth_info=Tenant.get('admin'),
+                         timeout=None):
     """
     Wait for hosts to be in online state if locked, and available and hypervisor/webservice up if unlocked
     Args:
@@ -316,6 +317,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
         check_task_affinity
         con_ssh:
         auth_info
+        timeout
 
     Returns:
 
@@ -329,10 +331,11 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
                                                    auth_info=auth_info, con_ssh=con_ssh)
 
     res_lock = res_unlock = True
+    timeout_args = {'timeout': timeout} if timeout else {}
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
         res_lock = wait_for_hosts_states(expt_online_hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
-                                         con_ssh=con_ssh, auth_info=auth_info)
+                                         con_ssh=con_ssh, auth_info=auth_info, **timeout_args)
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)) & set(expt_avail_hosts))
@@ -341,7 +344,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
         res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
-                                           con_ssh=con_ssh, auth_info=auth_info)
+                                           con_ssh=con_ssh, auth_info=auth_info, **timeout_args)
 
         if res_unlock:
             res_1 = wait_for_task_clear_and_subfunction_ready(hosts, fail_ok=fail_ok, auth_info=auth_info,

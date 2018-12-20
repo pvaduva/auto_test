@@ -26,7 +26,7 @@ def skip_for_one_proc():
 @fixture(scope='function')
 def skip_for_ovs():
     """
-    Skip test for OVS system, if test name contains avs_pattern
+    Skip test for OVS system, if test name contains certain pattern
     """
     test_name = ProjVar.get_var('TEST_NAME')
     avs_pattern = 'avp|avr|avs|dpdk|e1000'

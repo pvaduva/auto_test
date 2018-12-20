@@ -390,7 +390,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only)
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
-        host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh)
+        host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 

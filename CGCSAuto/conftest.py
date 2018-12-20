@@ -949,33 +949,11 @@ def pytest_collection_modifyitems(items):
 
 
 def pytest_generate_tests(metafunc):
-    # Modify the order of the fixtures to delete resources before revert host
-    # config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
-    # metafunc.fixturenames = list(set(list(metafunc.fixturenames)))
-    # for key, config_fixture in config_host_fixtures.items():
-    #     delete_res_fixture = 'delete_resources_{}'.format(key)
-    #
-    #     if config_fixture in metafunc.fixturenames and delete_res_fixture in metafunc.fixturenames:
-    #         index = list(metafunc.fixturenames).index(delete_res_fixture)
-    #         index = max([0, index-1])
-    #         metafunc.fixturenames.remove(config_fixture)
-    #         metafunc.fixturenames.insert(index, config_fixture)
-
-    # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
-    # Stress fixture
-    # global count
-    # if count > 0:
-    #     # Add autorepeat fixture and parametrize the fixture
-    #     param_name = 'autorepeat'
-    #     metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
-    #
-    # print(str(count))
-    # print("{}".format(metafunc.fixturenames))
 
     # Prefix 'remote_cli' to test names so they are reported as a different testcase
     if ProjVar.get_var('REMOTE_CLI'):
         metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
-
+    # Append compliance suite to test name
     elif ComplianceVar.get_var('REFSTACK_SUITE'):
         suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
         metafunc.parametrize('compliance_suite', [suite])

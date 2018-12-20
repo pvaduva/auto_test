@@ -71,7 +71,7 @@ class Menu(object):
         if not option:
             raise TelnetException("Unable to determine option to select")
 
-        LOG.info("Selecting {} option {}".format(self.name, option.name))
+        LOG.info("Attempt to select {} option {}".format(self.name, option.name))
         if option.key == "Enter" or option.key == "Return":
             while self.index != option.index:
                 if option.index > self.index:
@@ -98,7 +98,7 @@ class Menu(object):
 
     def move_down(self, telnet_conn):
         current_index = self.index
-        LOG.info("Entering: Down")
+        LOG.info("Press: Down")
         telnet_conn.write(str.encode(bios.TerminalKeys.Keys["Down"]))
         if current_index < (len(self.options) - 1):
             self.index += 1
@@ -109,7 +109,7 @@ class Menu(object):
 
     def move_up(self, telnet_conn):
         current_index = self.index
-        LOG.info("Entering: Up")
+        LOG.info("Press: Up")
         telnet_conn.write(str.encode(bios.TerminalKeys.Keys["Up"]))
         if current_index > 0:
             self.index -= 1
@@ -301,7 +301,7 @@ class Option(object):
 
         if not cmd:
             cmd = '\n'
-        LOG.info("Entering {} to select {} option".format('+'.join(key), self.name))
+        LOG.info("Press {} to select {} option".format('+'.join(key), self.name))
 
         telnet_conn.write(cmd.encode())
 
