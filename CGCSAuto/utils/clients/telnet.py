@@ -44,7 +44,7 @@ class TelnetClient(Telnet):
             prompts = [LOGIN_REGEX, LOGGED_IN_REGEX]
             index, re_obj, matched_text = super().expect(prompts, timeout=10)
             if index in (0, 1):
-                hostname = prompts[index].search(matched_text).group(1).decode()
+                hostname = prompts[index].search(matched_text).group(1).decode(errors='ignore')
 
         if not prompt:
             prompt = r':~\$ '
@@ -105,7 +105,7 @@ class TelnetClient(Telnet):
 
     def write(self, buffer, log=True):
         if log:
-            self.logger.debug('Write: {}'.format(buffer.decode()))
+            self.logger.debug('Write: {}'.format(buffer.decode(errors='ignore')))
         super(TelnetClient, self).write(buffer=buffer)
 
     def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
@@ -142,7 +142,7 @@ class TelnetClient(Telnet):
     def _process_output(self, output, rm_date=False):
         output_list = output.splitlines()
         if isinstance(output, bytes):
-            output_list = [line.decode() for line in output_list]
+            output_list = [line.decode(errors='ignore') for line in output_list]
 
         if self.cmd_sent != '':
             output_list[0] = ''  # do not display the sent command
