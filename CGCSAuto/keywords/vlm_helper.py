@@ -27,7 +27,6 @@ def _reserve_vlm_console(barcode, note=None):
     cmd = '{} {} -t {}'.format(VLM, VlmAction.VLM_RESERVE, barcode)
     if note:
         cmd += ' -n "{}"'.format(note)
-    print("This is cmd: %s" % cmd)
 
     reserved_barcodes = local_client().exec_cmd(cmd)[1]
     if str(barcode) not in reserved_barcodes or "Error" in reserved_barcodes:

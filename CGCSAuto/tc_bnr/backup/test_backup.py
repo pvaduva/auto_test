@@ -59,8 +59,6 @@ def pre_system_backup():
 
     Returns:
     """
-
-    LOG.tc_func_start("BACKUP_TEST")
     lab = InstallVars.get_install_var('LAB')
 
     LOG.info("Preparing lab for system backup....")
@@ -84,7 +82,7 @@ def pre_system_backup():
             active_controller_name = system_helper.get_active_controller_name()
             assert active_controller_name == 'controller-0', msg
 
-        LOG.tc_step("Checking if  a USB flash drive is plugged in controller-0 node... ")
+        LOG.fixture_step("Checking if  a USB flash drive is plugged in controller-0 node... ")
         usb_device = install_helper.get_usb_device_name()
         assert usb_device, "No USB found in controller-0"
         parts_info = install_helper.get_usb_device_partition_info(usb_device=usb_device)

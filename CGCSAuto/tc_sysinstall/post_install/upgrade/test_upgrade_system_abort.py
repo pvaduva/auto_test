@@ -143,8 +143,6 @@ def check_for_upgrade_abort():
 
 def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upgrade):
 
-    LOG.tc_func_start("UPGRADE_TEST")
-
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']

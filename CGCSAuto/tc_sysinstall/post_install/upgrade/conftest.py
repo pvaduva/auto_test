@@ -113,13 +113,8 @@ def pre_check_upgrade():
                                                       "--backup_path=< >"
 
 
-
-
-
 @pytest.fixture(scope='session')
 def upgrade_setup(pre_check_upgrade):
-
-    LOG.tc_func_start("UPGRADE_TEST")
     lab = InstallVars.get_install_var('LAB')
     col_kpi = ProjVar.get_var('COLLECT_KPI')
     collect_kpi_path = None
@@ -168,13 +163,13 @@ def upgrade_setup(pre_check_upgrade):
                                                                           license_path, upgrade_version))
     install_helper.download_upgrade_license(lab, bld_server_obj, license_path)
 
-    LOG.tc_step("Checking if target release license is downloaded......")
+    LOG.fixture_step("Checking if target release license is downloaded......")
     cmd = "test -e " + os.path.join(WRSROOT_HOME, "upgrade_license.lic")
     assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade license file not present in Controller-0"
     LOG.info("Upgrade  license {} download complete".format(license_path))
 
     # Install the license file for release
-    LOG.tc_step("Installing the target release {} license file".format(upgrade_version))
+    LOG.fixture_step("Installing the target release {} license file".format(upgrade_version))
     rc = system_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
                                                con_ssh=controller0_conn)
     assert rc == 0, "Unable to install upgrade license file in Controller-0"
@@ -183,7 +178,7 @@ def upgrade_setup(pre_check_upgrade):
     # Check load already imported if not  get upgrade load iso file
     # Run the load_import command to import the new release iso image build
     if not system_helper.get_imported_load_version():
-        LOG.tc_step("Downloading the {} target release  load iso image file {}:{}"
+        LOG.fixture_step("Downloading the {} target release  load iso image file {}:{}"
                     .format(upgrade_version, bld_server_obj.name, load_path))
         install_helper.download_upgrade_load(lab, bld_server_obj, load_path, upgrade_ver=upgrade_version)
         upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
@@ -192,12 +187,12 @@ def upgrade_setup(pre_check_upgrade):
         assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present in Controller-0"\
             .format(upgrade_load_path)
         LOG.info("Target release load {} download complete.".format(upgrade_load_path))
-        LOG.tc_step("Importing Target release  load iso file from".format(upgrade_load_path))
+        LOG.fixture_step("Importing Target release  load iso file from".format(upgrade_load_path))
         system_helper.import_load(upgrade_load_path,upgrade_ver=upgrade_version)
 
         # download and apply patches if patches are available in patch directory
         if patch_dir and upgrade_version < "18.07":
-            LOG.tc_step("Applying  {} patches, if present".format(upgrade_version))
+            LOG.fixture_step("Applying  {} patches, if present".format(upgrade_version))
             apply_patches(lab, bld_server_obj, patch_dir)
 
     # check disk space
@@ -302,8 +297,7 @@ def upgrade_setup(pre_check_upgrade):
 @pytest.fixture(scope='function')
 def check_system_health_query_upgrade():
     # Check system health for upgrade
-    LOG.tc_func_start("UPGRADE_TEST")
-    LOG.tc_step("Checking if system health is OK to start upgrade......")
+    LOG.fixture_step("Checking if system health is OK to start upgrade......")
     #rc, health = upgrade_helper.get_system_health_query_upgrade()
     rc, health, actions = upgrade_helper.get_system_health_query_upgrade_2()
     print("HEALTH: {}, {} Action: {}".format(rc, health, actions))

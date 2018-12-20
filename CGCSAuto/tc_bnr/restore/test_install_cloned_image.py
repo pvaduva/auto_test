@@ -17,8 +17,6 @@ from utils.tis_log import LOG
 
 @pytest.fixture(scope='session')
 def install_clone_setup():
-
-    LOG.tc_func_start("CLONE_INSTALL_TEST")
     lab = InstallVars.get_install_var('LAB')
     LOG.info("Lab info; {}".format(lab))
     install_cloned_info = {'usb_verified': False,

@@ -142,11 +142,8 @@ def install_setup(request):
 
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
-    install_type = ProjVar.get_var('SYS_TYPE')
 
-    LOG.tc_setup_start("{} install".format(install_type))
     LOG.fixture_step("Reserve hosts")
-
     if dist_cloud:
         hosts = {'central_region': lab['central_region']['hosts']}
         for subcloud in subclouds:
