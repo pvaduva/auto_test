@@ -131,12 +131,12 @@ class SSHClient:
             timeout = self.timeout
 
         # Connect to host
+        LOG.info("Attempt to connect to host - {}".format(self.host))
         end_time = time.time() + retry_timeout
         while time.time() < end_time:
             # LOG into remote host
             # print(str(self.searchwindowsize))
             try:
-                LOG.info("Attempt to connect to host - {}".format(self.host))
                 self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
 
                 # set to ignore ssh host fingerprinting
@@ -771,7 +771,7 @@ class SSHClient:
 
     def close(self):
         self._session.close(True)
-        LOG.info("connection closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))
+        LOG.debug("connection closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))
 
     def set_session_timeout(self, timeout=0):
         self.send('TMOUT={}'.format(timeout))

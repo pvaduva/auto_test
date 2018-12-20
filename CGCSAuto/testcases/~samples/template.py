@@ -9,10 +9,9 @@ def check_testparam(param):
     LOG.info('Test passed')
 
 
-# @mark.skipif(skip_condition_met, reason="reason for skipping the test function")
+# @mark.skipif(1==1, reason="reason for skipping the test function")
 @mark.usefixtures('check_alarms')
-@mark.parametrize([
-    ('test_param1', 'test_param2'),
+@mark.parametrize(('test_param1', 'test_param2'), [
     ('param1_value1', 'param2_value1'),
     ('param1_value2', 'param2_value2'),
     ('param1_value3', 'param2_value3'),
@@ -20,16 +19,20 @@ def check_testparam(param):
 ])
 def test_func(test_param1, test_param2):
     """
-    Summary of test func
+    Sample tests:
+        test 1: skip
+        test 2: fails at assert in test function
+        test 3: fails inside a helper function
+        test 4: pass
 
     Args:
         test_param1:
         test_param2:
 
-    =====
-    Prerequisites:
-
     Test Steps:
+        - I'm a test step
+        - I'm another test step
+        - I'm the last step
 
     """
 
@@ -44,4 +47,3 @@ def test_func(test_param1, test_param2):
 
     LOG.tc_step("I'm the last step")
     check_testparam(test_param2)
-
