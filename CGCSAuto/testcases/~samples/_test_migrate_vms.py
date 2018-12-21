@@ -124,7 +124,7 @@ def prepare_hosts(request):
         Restore hosts to original state
     """
     expected_storage_backing = request.param
-    avail_hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=expected_storage_backing)
+    avail_hosts = host_helper.get_hosts_in_storage_backing(storage_backing=expected_storage_backing)
     all_hosts = host_helper.get_hypervisors()
     modified_hosts = {}
     locked_hosts = []

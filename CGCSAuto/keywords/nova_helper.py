@@ -138,7 +138,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     selected_backing = prefer
     checked_len = 0
     for backing in valid_backings:
-        hosts_with_backing = host_helper.get_hosts_in_storage_aggregate(backing, con_ssh=con_ssh, up_only=False)
+        hosts_with_backing = host_helper.get_hosts_in_storage_backing(backing, con_ssh=con_ssh, up_only=False)
         hosts_by_backing[backing] = hosts_with_backing
         checked_len += len(hosts_with_backing)
         if len(hosts_with_backing) >= math.ceil(hosts_len / 2):

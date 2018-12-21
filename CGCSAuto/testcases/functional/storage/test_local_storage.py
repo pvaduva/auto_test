@@ -322,7 +322,7 @@ class TestLocalStorage:
         con_ssh = ControllerClient.get_active_controller()
 
         # Change storage backing if needed
-        if compute_dest in host_helper.get_hosts_in_storage_aggregate(local_storage_type, con_ssh=con_ssh, up_only=False):
+        if compute_dest in host_helper.get_hosts_in_storage_backing(local_storage_type, con_ssh=con_ssh, up_only=False):
             backends = ['image', 'remote']
             backends.remove(local_storage_type)
             host_helper.modify_host_lvg(compute_dest, inst_backing=backends[0])

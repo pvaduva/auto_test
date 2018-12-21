@@ -20,6 +20,12 @@ def update_quotas(add_admin_role_module):
         cinder_helper.update_quotas(volumes=20)
 
 
+@fixture(scope='module')
+def hosts_per_backing():
+    hosts_per_backend = host_helper.get_hosts_per_storage_backing()
+    return hosts_per_backend
+
+
 def touch_files_under_vm_disks(vm_id, ephemeral, swap, vm_type, disks):
 
     expt_len = 1 + int(bool(ephemeral)) + int(bool(swap)) + (1 if 'with_vol' in vm_type else 0)
@@ -80,7 +86,7 @@ class TestDefaultGuest:
         'local_image',
         'remote',
     ])
-    def test_evacuate_vms_with_inst_backing(self, storage_backing):
+    def test_evacuate_vms_with_inst_backing(self, hosts_per_backing, storage_backing):
         """
         Test evacuate vms with various vm storage configs and host instance backing configs
 
@@ -111,7 +117,7 @@ class TestDefaultGuest:
             - Remove admin role from primary tenant (module)
 
         """
-        hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
+        hosts = hosts_per_backing[storage_backing]
         if len(hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 

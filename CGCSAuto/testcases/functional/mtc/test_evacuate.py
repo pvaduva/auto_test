@@ -164,7 +164,7 @@ class TestEvacKPI:
 
     @fixture(scope='class')
     def get_hosts(self, ixia_supported, skip_test_if_less_than_two_hosts):
-        hosts = host_helper.get_hosts_in_storage_aggregate()
+        hosts = host_helper.get_hosts_in_storage_backing()
         if len(hosts) < 2:
             skip("Lab not suitable for this test. Too many or too few hosts with local_image backing")
 

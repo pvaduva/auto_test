@@ -1555,14 +1555,15 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None, auth_info=Tenant.get('admin'
     return hosts
 
 
-def get_hosts_in_storage_aggregate(storage_backing='local_image', up_only=True, con_ssh=None,
-                                   auth_info=Tenant.get('admin')):
+def get_hosts_in_storage_backing(storage_backing='local_image', up_only=True, hosts=None, con_ssh=None,
+                                 auth_info=Tenant.get('admin')):
     """
     Return a list of hosts that supports the given storage backing.
 
     System: Regular, Small footprint
 
     Args:
+        hosts (None|list|tuple): hosts to check
         storage_backing (str): 'local_image', or 'remote'
         up_only (bool): whether to return only up hypervisors
         con_ssh (SSHClient):
@@ -1575,21 +1576,16 @@ def get_hosts_in_storage_aggregate(storage_backing='local_image', up_only=True, 
     """
     storage_backing = storage_backing.strip().lower()
     if 'image' in storage_backing:
-        aggregate = 'local_storage_image_hosts'
+        storage_backing = 'local_image'
     elif 'remote' in storage_backing:
-        aggregate = 'remote_storage_hosts'
+        storage_backing = 'remote'
     else:
         raise ValueError("Invalid storage backing provided. "
                          "Please use one of these: 'local_image', 'remote'")
 
-    hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh, auth_info=auth_info)
-
-    if up_only:
-        up_hypervisors = get_up_hypervisors(con_ssh=con_ssh, auth_info=auth_info)
-        hosts = list(set(hosts) & set(up_hypervisors))
-        LOG.info("Up hypervisors with {} backing: {}".format(storage_backing, hosts))
-
-    return hosts
+    hosts_per_backing = get_hosts_per_storage_backing(up_only=up_only, con_ssh=con_ssh, auth_info=auth_info,
+                                                      hosts=hosts)
+    return hosts_per_backing[storage_backing]
 
 
 def get_nova_host_with_min_or_max_vms(rtn_max=True, hosts=None, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -2343,7 +2339,7 @@ def get_expected_vswitch_port_engine_map(host_ssh):
     return expt_map
 
 
-def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False):
+def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False, auth_info=Tenant.get('admin')):
     """
     Get values for given fields in system host-lvg-show table
     Args:
@@ -2351,12 +2347,14 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, stric
         fields (str|list|tuple):
         lvg (str): e.g., nova-local (compute nodes), cgts-vg (controller/storage nodes)
         con_ssh (SSHClient):
+        auth_info
         strict (bool)
 
     Returns:
 
     """
-    table_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvg), ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvg), ssh_client=con_ssh,
+                                           auth_info=Tenant.get('admin')))
     if isinstance(fields, str):
         fields = [fields]
 
@@ -2373,8 +2371,9 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, stric
     return vals
 
 
-def get_host_instance_backing(host, con_ssh=None):
-    params = get_host_lvg_show_values(host=host, fields='parameters', lvg='nova-local', con_ssh=con_ssh)[0]
+def get_host_instance_backing(host, con_ssh=None, auth_info=Tenant.get('admin')):
+    params = get_host_lvg_show_values(host=host, fields='parameters', lvg='nova-local', con_ssh=con_ssh,
+                                      auth_info=auth_info)[0]
     return params['instance_backing']
 
 
@@ -2412,14 +2411,14 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
     if inst_backing is not None:
         if 'image' in inst_backing:
             inst_backing = 'image'
-        elif 'lvm' in inst_backing:
-            inst_backing = 'lvm'
-            if inst_lv_size is None and lvg == 'nova-local':
-                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
-                                                       strict=False)[0]
-                inst_lv_size = min(50, int(int(lvm_vg_size)/2))    # half of the nova-local size up to 50g
-                if inst_lv_size < 5:        # use default value if lvm_vg_size is less than 10g
-                    inst_lv_size = None
+        # elif 'lvm' in inst_backing:
+        #     inst_backing = 'lvm'
+        #     if inst_lv_size is None and lvg == 'nova-local':
+        #         lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+        #                                                strict=False)[0]
+        #         inst_lv_size = min(50, int(int(lvm_vg_size)/2))    # half of the nova-local size up to 50g
+        #         if inst_lv_size < 5:        # use default value if lvm_vg_size is less than 10g
+        #             inst_lv_size = None
         elif 'remote' in inst_backing:
             inst_backing = 'remote'
         else:
@@ -2538,7 +2537,7 @@ def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, un
         return code, output
 
     if wait_for_host_aggregate:
-        res = wait_for_host_in_aggregate(host=host, storage_backing=inst_backing, fail_ok=fail_ok)
+        res = wait_for_host_in_instance_backing(host=host, storage_backing=inst_backing, fail_ok=fail_ok)
         if not res:
             err = "Host {} did not appear in {} host-aggregate within timeout".format(host, inst_backing)
             return 4, err
@@ -2546,14 +2545,14 @@ def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, un
     return 0, "{} storage backing is successfully set to {}".format(host, inst_backing)
 
 
-def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interval=3, fail_ok=False, con_ssh=None):
+def wait_for_host_in_instance_backing(host, storage_backing, timeout=120, check_interval=3, fail_ok=False, con_ssh=None):
 
     endtime = time.time() + timeout
     while time.time() < endtime:
-        hosts_with_backing = get_hosts_in_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh,
-                                                            up_only=False)
-        if host in hosts_with_backing:
-            LOG.info("{} appeared in host-aggregate for {} backing".format(host, storage_backing))
+        host_backing = get_host_instance_backing(host=host, con_ssh=con_ssh)
+        if host_backing in storage_backing:
+            LOG.info("{} is configured with {} backing".format(host, storage_backing))
+            time.sleep(30)
             return True
 
         time.sleep(check_interval)
@@ -2906,27 +2905,35 @@ def get_vcpu_pins_for_instance_via_virsh(host_ssh, instance_name):
     return vcpu_pins
 
 
-def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
+def get_hosts_per_storage_backing(up_only=True, con_ssh=None, auth_info=Tenant.get('admin'), hosts=None):
     """
     Get hosts for each possible storage backing
     Args:
         up_only (bool): whether to return up hypervisor only
+        auth_info
         con_ssh:
+        hosts (None|list|tuple): hosts to check
 
     Returns (dict): {'local_image': <cow hosts list>,
                     'remote': <remote hosts list>
                     }
     """
+    if not hosts:
+        host_func = get_up_hypervisors if up_only else get_hypervisors
+        hosts = host_func(con_ssh=con_ssh, auth_info=auth_info)
 
-    hosts = {'local_image': get_hosts_in_storage_aggregate('local_image', up_only=False, con_ssh=con_ssh),
-             'remote': get_hosts_in_storage_aggregate('remote', up_only=False, con_ssh=con_ssh)}
+    hosts_per_backing = {'local_image': [], 'remote': []}
+    for host in hosts:
+        backing = get_host_instance_backing(host=host, con_ssh=con_ssh, auth_info=auth_info)
+        if backing == 'image':
+            hosts_per_backing['local_image'].append(host)
+        elif backing == 'remote':
+            hosts_per_backing['remote'].append(host)
+        else:
+            raise NotImplementedError('Unknown instance backing for {}: {}'.format(host, backing))
 
-    if up_only:
-        up_hosts = get_up_hypervisors(con_ssh=con_ssh)
-        for backing, hosts_with_backing in hosts.items():
-            hosts[backing] = list(set(hosts_with_backing) & set(up_hosts))
-
-    return hosts
+    LOG.info("Hosts per storage backing: {}".format(hosts_per_backing))
+    return hosts_per_backing
 
 
 def get_coredumps_and_crashreports(move=True):
@@ -4057,9 +4064,8 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
         candidate_hosts = hypervisors
 
     if candidate_hosts and storage_backing:
-        hosts_with_backing = get_hosts_in_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh,
-                                                            up_only=False)
-        candidate_hosts = list(set(candidate_hosts) & set(hosts_with_backing))
+        candidate_hosts = get_hosts_in_storage_backing(storage_backing=storage_backing, con_ssh=con_ssh,
+                                                       hosts=candidate_hosts)
 
     if hyperthreaded is not None and candidate_hosts:
         ht_hosts = []

@@ -211,7 +211,7 @@ def test_ntfs(host_type="controller"):
     if not host:
         skip("No USB hardware found on {} host type".format(host_type))
 
-    hosts_with_image_backing = host_helper.get_hosts_in_aggregate('image')
+    hosts_with_image_backing = host_helper.get_hosts_in_storage_backing(storage_backing='image')
     if len(hosts_with_image_backing) == 0:
         skip("No hosts with image backing present")
 

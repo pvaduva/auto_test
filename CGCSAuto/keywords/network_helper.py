@@ -1396,7 +1396,8 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), 
 def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.get('admin'),
                          rtn_dict=False, use_fip=False, exclude_nets=None):
 
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
+    args = '--all-tenants' if auth_info and auth_info.get('user') == 'admin' else ''
+    table_ = table_parser.table(cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info))
     if vms:
         table_ = table_parser.filter_table(table_, ID=vms)
     elif vms is not None:

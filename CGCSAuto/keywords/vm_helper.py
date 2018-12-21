@@ -1117,7 +1117,7 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     current_host = vm_info.get_host_name()
     if not vm_storage_backing:
         vm_storage_backing = host_helper.get_host_instance_backing(host=current_host, con_ssh=con_ssh)
-    candidate_hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=vm_storage_backing, con_ssh=con_ssh)
+    candidate_hosts = host_helper.get_hosts_in_storage_backing(storage_backing=vm_storage_backing, con_ssh=con_ssh)
 
     hosts_table_ = table_parser.table(cli.system('host-list'))
     for host in candidate_hosts:
@@ -1170,7 +1170,7 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
         if not vm_storage_backing:
             vm_storage_backing = host_helper.get_host_instance_backing(before_host, con_ssh=con_ssh)
 
-        if len(host_helper.get_hosts_in_storage_aggregate(vm_storage_backing, con_ssh=con_ssh)) < 2:
+        if len(host_helper.get_hosts_in_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
                      "migrate to.".format(vm_id))
             return 1, output
@@ -2443,14 +2443,15 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
     vms_to_check = list(vms)
     vms_deleted = []
     end_time = time.time() + timeout
+    args = '--all-tenants' if auth_info and auth_info.get('user') == 'admin' else ''
     while time.time() < end_time:
         try:
-            output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+            output = cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info)
         except exceptions.CLIRejected as e:
             if 'The resource could not be found' in e.__str__():
                 LOG.error("'nova list' failed post vm deletion. Workaround is being applied.")
                 time.sleep(3)
-                output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+                output = cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info)
             else:
                 raise
 

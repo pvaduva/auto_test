@@ -61,8 +61,8 @@ def launch_instance_on_compute(network_name=None,
     assert host_name in system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE,
                                                             HostAvailState.DEGRADED])
 
-    lvm_hosts = host_helper.get_hosts_in_storage_aggregate('local_lvm')
-    remote_hosts = host_helper.get_hosts_in_storage_aggregate('remote')
+    lvm_hosts = host_helper.get_hosts_in_storage_backing('local_lvm')
+    remote_hosts = host_helper.get_hosts_in_storage_backing('remote')
     backing = 'local_image'
     if host_name in lvm_hosts:
         backing = 'local_lvm'
