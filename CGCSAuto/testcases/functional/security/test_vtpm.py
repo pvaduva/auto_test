@@ -742,6 +742,7 @@ def reuse_existing_vms(vm_operation, extra_specs):
     return True
 
 
+# US129306
 @mark.parametrize(('vm_operation', 'extra_specs'), [
     ('create', 'vtpm'),
     ('create', 'autorc'),
@@ -793,7 +794,7 @@ def reuse_existing_vms(vm_operation, extra_specs):
 
     ('resize_to_non_vtpm', 'vtpm'),
 ])
-def test_vtpm(vm_operation, extra_specs):
+def _test_vtpm(vm_operation, extra_specs):
     global g_vms, g_reusable
 
     LOG.tc_step('Verify vTPM is functioning on VMs right after they are: {}'.format(vm_operation))

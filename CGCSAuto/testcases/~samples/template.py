@@ -28,12 +28,6 @@ def test_func(test_param1, test_param2):
     Args:
         test_param1:
         test_param2:
-
-    Test Steps:
-        - I'm a test step
-        - I'm another test step
-        - I'm the last step
-
     """
 
     if test_param1 == 'param1_value1':
