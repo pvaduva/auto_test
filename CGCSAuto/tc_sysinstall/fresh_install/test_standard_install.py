@@ -1,14 +1,11 @@
 from pytest import skip
-import threading
 
 from consts.cgcs import SysType, Prompt
-from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars
-from keywords import host_helper, system_helper, install_helper, vlm_helper
-from tc_sysinstall.fresh_install import fresh_install_helper
-from utils.clients.ssh import SSHClient
+from keywords import host_helper, install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
+from tc_sysinstall.fresh_install import fresh_install_helper
 
 
 def test_standard_install(install_setup):
@@ -75,7 +72,7 @@ def test_standard_install(install_setup):
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],
-                             con_ssh=controller0_node.ssh_conn)
+                                      con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 

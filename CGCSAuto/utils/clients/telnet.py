@@ -71,7 +71,7 @@ class TelnetClient(Telnet):
 
         return self.sock
 
-    def login(self, expect_prompt_timeout=3, fail_ok=False, handle_init_login=False):
+    def login(self, expect_prompt_timeout=10, fail_ok=False, handle_init_login=False):
         self.write(b'\r\n')
         index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok,
                             searchwindowsize=50)
