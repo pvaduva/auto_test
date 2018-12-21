@@ -12,7 +12,7 @@ from testfixtures.horizon import admin_home_pg
 @fixture()
 def storage_precheck():
     if not system_helper.is_storage_system():
-        skip('This test only applies to storage nodes')
+        skip('This test only applies to storage systems')
 
 
 @fixture()
@@ -44,19 +44,24 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
     storage_overview_pg.go_to_services_tab()
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step('Check storage cluster UUID, ceph health and storage usage display')
-    cli_ceph_info = []
+    cli_storage_service_info = []
 
     uuid = system_helper.get_cluster_values(header='cluster_uuid')[0]
-    cli_ceph_info.append(uuid)
+    cli_storage_service_info.append(uuid)
 
-    health_status = con_ssh.exec_cmd('ceph health')[1]
-    cli_ceph_info.append(health_status)
+#   'ceph health' cmd output sample:
+#   HEALTH_ERR 1728 pgs are stuck inactive for more than 300 seconds; 1728 pgs stuck inactive; 1728 pgs stuck unclean;\
+#   1 mons down, quorum 0,1 controller-0,controller-1
+    health_details = con_ssh.exec_cmd('ceph health')[1]
+    health_status = health_details.split(' ')[0]
+    cli_storage_service_info.append(health_status)
 
-    health_details = con_ssh.exec_cmd('ceph health detail')[1]
-    cli_ceph_info.append(health_details)
+    if health_status =='HEALTH_ERR':
+        health_details = health_details.split('HEALTH_ERR ')[1]
+    cli_storage_service_info.append(health_details)
 
-    horizon_ceph_info = storage_overview_pg.get_horizon_ceph_info_dict()
-    for info in cli_ceph_info:
+    horizon_ceph_info = storage_overview_pg.storage_service_info.get_content()
+    for info in cli_storage_service_info:
         assert info in horizon_ceph_info.values(), 'Horizon storage cluster info does not match to cli info'
     LOG.tc_step('Storage service details display correct')
 
@@ -90,7 +95,7 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
             if not storage_helper.is_osd_up(osd_id, con_ssh):
                 expt_horizon['Status'] = 'down'
             horizon_val = storage_overview_pg.get_storage_overview_osd_info(osd_name, header)
-            assert expt_horizon[header] == horizon_val, '{}{} display incorrectly'.format(osd_name, header)
+            assert expt_horizon[header] == horizon_val, '{}{} display incorrect'.format(osd_name, header)
     LOG.info('Osd table display correct')
     horizon.test_result = True
 

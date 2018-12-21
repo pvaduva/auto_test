@@ -1,14 +1,10 @@
+from selenium.webdriver.common import by
 from utils.horizon.pages import basepage
-from utils.horizon.regions import tables, fluidinfo
+from utils.horizon.regions import tables, forms
 
 
-class HealthFluidInfoDetail(fluidinfo.FluidInfo):
-    name = "health"
-
-
-class StorageFluidInfoDetail(fluidinfo.FluidInfo):
-    name = "storage"
-
+class StorageSeviceDescription(forms.ItemTextDescription):
+    _separator_locator = (by.By.CSS_SELECTOR, 'div#storageservice')
 
 class MonitorsTable(tables.TableRegion):
     name = "monitors"
@@ -40,12 +36,8 @@ class StorageOverviewPage(basepage.BasePage):
     }
 
     @property
-    def health_info(self):
-        return HealthFluidInfoDetail(self.driver)
-
-    @property
-    def storage_info(self):
-        return StorageFluidInfoDetail(self.driver)
+    def storage_service_info(self):
+        return StorageSeviceDescription(self.driver)
 
     @property
     def monitors_table(self):
@@ -89,14 +81,3 @@ class StorageOverviewPage(basepage.BasePage):
     def go_to_usage_tab(self):
         self.go_to_tab(self.USAGE_TAB_INDEX)
 
-    def get_horizon_ceph_info_dict(self):
-        health_headers = self.health_info.header_list
-        storage_info_headers = self.storage_info.header_list
-        health_vals = self.health_info.value_list
-        storage_info_vals = self.storage_info.value_list
-
-        header_list = health_headers + storage_info_headers
-        detail_vals = health_vals + storage_info_vals
-        ceph_info = dict(zip(header_list, detail_vals))
-
-        return ceph_info
