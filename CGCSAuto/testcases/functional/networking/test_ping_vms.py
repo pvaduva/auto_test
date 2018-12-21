@@ -1,12 +1,8 @@
-import time
 from pytest import mark
 
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-
 from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper, check_helper
-
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):
@@ -48,7 +44,7 @@ def _append_nics(vifs, net_ids, nics):
 ], ids=id_gen)
 def test_ping_between_two_vms(guest_os, vifs, skip_for_ovs):
     """
-    Ping between two vms with virtio and avp vif models
+    Ping between two vms with given vif models and pci addresses
 
     Test Steps:
         - Create a favor with dedicated cpu policy and proper root disk size
@@ -56,7 +52,7 @@ def test_ping_between_two_vms(guest_os, vifs, skip_for_ovs):
         - Boot a vm with vif model avp for data and internal networks from above volume with above flavor
         - Ping VM from NatBox
         - Repeat previous 3 steps with vif model virtio
-        - Ping betweem two vms via management, data and internal networks
+        - Ping between two vms via management, data and internal networks
 
     Test Teardown:
         - Delete vms, volumes, flavor created
@@ -66,16 +62,13 @@ def test_ping_between_two_vms(guest_os, vifs, skip_for_ovs):
     image_id = glance_helper.get_guest_image(guest_os, cleanup=cleanup)
 
     LOG.tc_step("Create a favor dedicated cpu policy")
-    flavor_id = nova_helper.create_flavor(name='dedicated', guest_os=guest_os)[1]
-    ResourceCleanup.add('flavor', flavor_id, scope='module')
-
+    flavor_id = nova_helper.create_flavor(name='dedicated', guest_os=guest_os, cleanup='function')[1]
     nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    # vif_models = ['avp', 'virtio'] if guest_os == 'cgcs-guest' else ['virtio', 'virtio']
     vms = []
     vms_nics = []
     for i in range(2):
@@ -83,8 +76,8 @@ def test_ping_between_two_vms(guest_os, vifs, skip_for_ovs):
         nics = _append_nics(vifs, [tenant_net_id, internal_net_id], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}])
 
         LOG.tc_step("Create a volume from {} image".format(guest_os))
-        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, guest_image=guest_os)[1]
-        ResourceCleanup.add('volume', vol_id)
+        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, guest_image=guest_os,
+                                             cleanup='function')[1]
 
         LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs))
         vm_id = vm_helper.boot_vm('{}_vifs'.format(guest_os), flavor=flavor_id, cleanup='function',
@@ -93,7 +86,6 @@ def test_ping_between_two_vms(guest_os, vifs, skip_for_ovs):
         LOG.tc_step("Ping VM {} from NatBox(external network)".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
-        # vm_helper.ping_vms_from_vm(vm_id, vm_id, net_types=['data', 'internal'])
         vms.append(vm_id)
         vms_nics.append(nics)
 

@@ -229,9 +229,13 @@ def get_events(event_type, limit=None, header='message_id', con_ssh=None, auth_i
     args = ''
     if limit:
         args = '--limit {}'.format(limit)
-    args += ' --filter event_type={}'.format(event_type)
-    for key, val in filters.items():
-        args += ';{}={}'.format(key, val)
+
+    if event_type or filters:
+        if event_type:
+            filters['event_type'] = event_type
+
+        extra_args = ['{}={}'.format(k, v) for k, v in filters.items()]
+        args += ' --filter {}'.format(';'.join(extra_args))
 
     table_ = table_parser.table(cli.openstack('event list', args, ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, header)

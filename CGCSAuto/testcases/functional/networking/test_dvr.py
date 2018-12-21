@@ -158,11 +158,10 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         ResourceCleanup.add(resource_type='volume', resource_id=vol)
         vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics, cleanup='function',
                                   hint={'group': srv_grp_id})[1]
-        # ResourceCleanup.add(resource_type='vm', resource_id=vm_id)
         vms.append(vm_id)
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     from_vm = vms[0]
-    LOG.tc_step("Ping vms' over management and data networks from vm {}, and verify ping successful.".format(from_vm))
+    LOG.tc_step("Ping vms over management and data networks from vm {}, and verify ping successful.".format(from_vm))
     vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt', 'internal'], fail_ok=False)

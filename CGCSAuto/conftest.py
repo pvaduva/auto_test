@@ -103,7 +103,7 @@ def _write_results(res_in_tests, test_name):
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
                                                   traceback=tracebacks, parse_name=True, search_forward=search_forward)
-            except Exception:
+            except:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
 
             finally:
@@ -116,7 +116,7 @@ def _write_results(res_in_tests, test_name):
             if not upload_res:
                 with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                     f.write('\tUPLOAD_UNSUCC')
-        except Exception:
+        except:
             LOG.exception("Unable to upload test result to mongoDB! Test case: {}".format(test_name))
 
     tc_start_time = None
@@ -329,7 +329,7 @@ def pytest_configure(config):
                                       compute_arg=compute_arg,
                                       storage_arg=storage_arg,
                                       lab_files_dir=lab_file_dir,
-                                      build_server=build_server,)
+                                      bs=build_server)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
@@ -462,7 +462,7 @@ def pytest_addoption(parser):
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,pxeboot,feed \n" \
+    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,config_controller \n" \
                 "labsetup: Do not run lab_setup post lab install \n" \
                 "pxeboot: Don't modify pxeboot.cfg \n" \
                 "feed: skip setup of network feed"
@@ -471,10 +471,10 @@ def pytest_addoption(parser):
     resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed or from a given step'
     wipedisk_help = 'Wipe the disk(s) on the hosts'
     boot_help = 'Select how to boot the lab. Default is pxe. Options are: \n' \
-                'pxe: boot from the network using pxeboot \n' \
-                'burn: burn the USB using iso-path and boot from it \n' \
-                'usb: Boot from load existing on USB \n' \
-                'iso: iso install flag'
+                'feed: boot from the network using pxeboot \n' \
+                'usb_burn: burn the USB using iso-path and boot from it \n' \
+                'usb_boot: Boot from load existing on USB \n' \
+                'pxe_iso: iso install flag'
     iso_path_help = 'Full path to ISO file. Default is <build-dir'
     ovs_help = 'Run using lab_setup_ovs.conf rather than lab_setup.conf (for StarlingX install)'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
@@ -485,6 +485,7 @@ def pytest_addoption(parser):
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
     no_console_log = 'Print minimal console logs'
+    kuber_help = 'Use kubernetes option in config_controller)'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -529,15 +530,14 @@ def pytest_addoption(parser):
     ##################################
     # Lab fresh_install or upgrade options #
     ##################################
-    LAB_FILES = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
 
     # Install
     parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
                      help=resumeinstall_help, const=True, nargs='?', default=False)
-    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default='99')
+    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=None)
     parser.addoption('--skip', dest='skiplist', action='store', nargs='*', help=skip_help)
     parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
-    parser.addoption('--boot', dest='boot_list', action='store', default='pxe', help=boot_help)
+    parser.addoption('--boot', dest='boot_list', action='store', default='feed', help=boot_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
     parser.addoption('--security', dest='security', action='store', default='standard')
@@ -570,7 +570,8 @@ def pytest_addoption(parser):
                      action='store', metavar='DIR',  help=tis_builds_dir_help)
 
     # install help
-    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in LAB_FILES)) + \
+    lab_files = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
+    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in lab_files)) +\
                     "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
                     "Default is: <load_path>/lab/yow/<lab_name>"
     controller_help = "space-separated list of VLM barcodes for controllers"
@@ -579,14 +580,14 @@ def pytest_addoption(parser):
     guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
-                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES)
+                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
                      help=file_dir_help)
-    parser.addoption('--controller', dest='controller', action='store', nargs='*', help=controller_help)
-    parser.addoption('--compute', dest='compute', action='store', nargs='*', help=compute_help)
-    parser.addoption('--storage', dest='storage', action='store', nargs='*', help=storage_help)
+    parser.addoption('--controller', dest='controller', action='store', help=controller_help)
+    parser.addoption('--compute', dest='compute', action='store', help=compute_help)
+    parser.addoption('--storage', dest='storage', action='store', help=storage_help)
     parser.addoption('--guest_image', '--guest-image', '--guest_image_path', '--guest-image-path',
                      dest='guest_image_path', action='store', metavar='guest image full path',
                      default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
@@ -596,6 +597,8 @@ def pytest_addoption(parser):
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
     parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
+    parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
+
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
@@ -606,9 +609,9 @@ def pytest_addoption(parser):
                            "Valid options are: {}".format(' '.join(v[1] for v in cgcs.SUPPORTED_UPGRADES))
 
     upgrade_build_dir_path_help = "The path to the upgrade software release build directory in build server." \
-                             " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
-                             " Otherwise the default  build dir path for the upgrade software " \
-                             "version will be used"
+                                  " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
+                                  " Otherwise the default  build dir path for the upgrade software " \
+                                  "version will be used"
 
     license_help = "The full path to the new release software license file in build-server. " \
                    "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
@@ -667,20 +670,16 @@ def pytest_addoption(parser):
                           "Applicable only for upgrades from R3."
     max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
                                 " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
+    alarm_restriction_help = """Indicates how to handle alarm restrictions based on the management affecting statuses
+                                of any existing alarms.
+                                relaxed - orchestration is allowed to proceed if no management affecting alarms present
+                                strict - orchestration is not allowed if alarms are present"""
+    instance_action_help = """Indicates how to VMs are moved from compute hosts when apply reboot-required patches. 
+                              There are two possible values for moving the VMs off the compute hosts: 
+                              start-stop -  This is typically used for VMs that do not support migration. 
+                              migrate -  instances are either live migrated or cold migrated  before compute host is 
+                              patched."""
 
-    instance_action_help = """Inidcates how to VMs are moved from compute hosts when apply reboot-required patches. There
-                             are two possible values for moving the VMs off the compute hosts:
-                                 start-stop -  instances are stopped before a compute host is patched. This is typically
-                                 used for VMs that do not support migration.
-                                 migrate -  instances are either live migrated or cold migrated  before compute host is
-                                 patched.
-                             """
     parser.addoption('--controller-apply-type', '--controller_apply_type', '--ctra',  dest='controller_strategy',
                      action='store',  help=apply_strategy_help)
 
@@ -727,13 +726,12 @@ def pytest_addoption(parser):
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
 
     parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
-                     action='store_true', help="Reuse the existing feed on the pxeboot server (tuxlab1/2) instead of "
-                                          "setup feed from scratch")
+                     action='store_true', help="Use existing feed on tuxlab (tuxlab1/2)")
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
     parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
-                     action='store_true', help="Using upstream cinder-backup CLIs")
+                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
     parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
                      dest='low_latency', action='store_true', help="Restore a low-latency lab")
 
@@ -951,33 +949,11 @@ def pytest_collection_modifyitems(items):
 
 
 def pytest_generate_tests(metafunc):
-    # Modify the order of the fixtures to delete resources before revert host
-    # config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
-    # metafunc.fixturenames = list(set(list(metafunc.fixturenames)))
-    # for key, config_fixture in config_host_fixtures.items():
-    #     delete_res_fixture = 'delete_resources_{}'.format(key)
-    #
-    #     if config_fixture in metafunc.fixturenames and delete_res_fixture in metafunc.fixturenames:
-    #         index = list(metafunc.fixturenames).index(delete_res_fixture)
-    #         index = max([0, index-1])
-    #         metafunc.fixturenames.remove(config_fixture)
-    #         metafunc.fixturenames.insert(index, config_fixture)
-
-    # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
-    # Stress fixture
-    # global count
-    # if count > 0:
-    #     # Add autorepeat fixture and parametrize the fixture
-    #     param_name = 'autorepeat'
-    #     metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
-    #
-    # print(str(count))
-    # print("{}".format(metafunc.fixturenames))
 
     # Prefix 'remote_cli' to test names so they are reported as a different testcase
     if ProjVar.get_var('REMOTE_CLI'):
         metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
-
+    # Append compliance suite to test name
     elif ComplianceVar.get_var('REFSTACK_SUITE'):
         suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
         metafunc.parametrize('compliance_suite', [suite])

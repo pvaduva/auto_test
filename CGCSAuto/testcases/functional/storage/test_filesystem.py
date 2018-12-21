@@ -353,7 +353,7 @@ def test_modify_drdb_swact_then_reboot():
     free_space = out.rstrip()
     free_space = out.lstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-    if float(free_space) <= 2:
+    if float(free_space) <= 10:
         skip("Not enough free space to complete test.")
 
     drbdfs_val = {} 
@@ -392,6 +392,12 @@ def test_modify_drdb_swact_then_reboot():
 
     act_cont = system_helper.get_active_controller_name()
     host_helper.reboot_hosts(act_cont)
+
+    time.sleep(5)
+
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.HOST_RECOVERY_IN_PROGRESS,
+                                          entity_id="host={}".format(act_cont),
+                                          timeout=600)
 
 
 def test_increase_cinder():

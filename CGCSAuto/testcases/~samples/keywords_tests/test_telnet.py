@@ -1,6 +1,7 @@
 import time
 
 from utils.clients.telnet import TelnetClient
+from keywords import system_helper
 
 
 def check_alarms():
@@ -33,3 +34,16 @@ def test_telnet():
 
     finally:
         telnet.close()
+
+
+def test_get_build_info():
+    telnet = TelnetClient(host='128.224.148.169', port=2015, hostname='controller-0', timeout=10)
+    telnet.connect(login=False)
+    telnet.login()
+    telnet.logger.debug('Sending')
+    telnet.send('\n\n')
+    telnet.logger.debug('Sent,flusing')
+    telnet.flush()
+    telnet.logger.debug('flushed')
+    telnet.exec_cmd('cat /etc/build.info', fail_ok=False)
+    telnet.exec_cmd('pwd')

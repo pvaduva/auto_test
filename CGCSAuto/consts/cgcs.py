@@ -286,6 +286,7 @@ class FlavorSpec:
     NUMA1_CACHE_CPUS = 'hw:cache_vcpus.1'
     NUMA0_L3_CACHE = 'hw:cache_l3.0'
     NUMA1_L3_CACHE = 'hw:cache_l3.1'
+    LIVE_MIG_TIME_OUT = 'hw:wrs:live_migration_timeout'
 
 
 class ImageMetadata:
@@ -326,6 +327,8 @@ class RouterStatus:
 
 
 class EventLogID:
+    PATCH_INSTALL_FAIL = '900.002'
+    PATCH_IN_PROGRESS = '900.001'
     CINDER_IO_CONGEST = '800.101'
     STORAGE_LOR = '800.011'
     STORAGE_POOLQUOTA = '800.003'
@@ -531,6 +534,7 @@ class OrchStrategyKey:
     ABORT_REASON = 'abort-reason'
     BUILD_RESULT = 'build-result'
     BUILD_REASON = 'build-reason'
+    INPROGRESS = 'inprogress'
 
 
 class DevClassID:
@@ -595,6 +599,7 @@ class SysType:
     STORAGE = 'Storage'
     REGULAR = 'Regular'
     MULTI_REGION = 'Multi-Region'
+    DISTRIBUTED_CLOUD = 'Distributed_Cloud'
 
 
 class HeatStackStatus:
@@ -708,3 +713,29 @@ class TrafficControl:
         'storage': (0.99*0.5, 0.99),
         'migration': (0.99*0.3, 0.99),
         'drbd': (0.99*0.8, 0.99)}
+
+
+class PatchState:
+    APPLIED = 'Applied'
+    PARTIAL_APPLY = 'Partial-Apply'
+    PARTIAL_REMOVE = 'Partial-Remove'
+    AVAILABLE = 'Available'
+
+
+class PatchPattern:
+    # msg returned when upload patch(es)
+    UPLOADED = '(.*) is now available'
+    ALREADY_UPLOADED = '(.*) is already imported'
+    VALIDATE_FAILED = 'Patch validation failed for (.*):'
+    FILE_NOT_EXIST = 'File does not exist: (.*)'
+
+
+class DC_SubcloudStatus:
+    AVAIL_ONLINE = "online"
+    AVAIL_OFFLINE = "offline"
+
+    MANAGEMENT_MANAGED = "managed"
+    MANAGEMENT_UNMANAGED = "unmanaged"
+
+    SYNC_IN_SYNC = 'in-sync'
+

@@ -36,7 +36,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         auth_info (dict): This is set to Admin by default. Can be set to other tenant for negative test.
         con_ssh (SSHClient):
         storage_backing (str): storage backing in extra flavor. Auto set storage backing based on system config if None.
-            Valid values: 'local_image', 'local_lvm', 'remote'
+            Valid values: 'local_image', 'remote'
         check_storage_backing (bool): whether to check the system storage backing configuration to auto determine the
             local_storage extra spec if storage_backing param is set to None.
         rtn_id (bool): return id or name
@@ -110,14 +110,14 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     """
     Get storage backing that has the most hypervisors
     Args:
-        prefer (str): preferred storage_backing. If unset, local_image > local_lvm > remote
+        prefer (str): preferred storage_backing. If unset, local_image > remote
         rtn_down_hosts (bool): whether to return down hosts if no up hosts available
         con_ssh (SSHClient):
 
     Returns (tuple): (<storage_backing>(str), <hosts>(list))
         Examples:
             Regular/Storage system: ('local_image',['compute-1', 'compute-3'])
-            AIO: ('local_lvm', ['controller-0', 'controller-1'])
+            AIO: ('local_image', ['controller-0', 'controller-1'])
 
     """
     up_hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
@@ -129,7 +129,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
         LOG.warning("No up hypervisors. Check all hypervisors")
     hosts_len = len(hosts)
 
-    valid_backings = ['local_image', 'local_lvm', 'remote']
+    valid_backings = ['local_image', 'remote']
     valid_backings.remove(prefer)
     valid_backings.insert(0, prefer)
 
@@ -138,7 +138,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     selected_backing = prefer
     checked_len = 0
     for backing in valid_backings:
-        hosts_with_backing = host_helper.get_hosts_in_storage_aggregate(backing, con_ssh=con_ssh, up_only=False)
+        hosts_with_backing = host_helper.get_hosts_in_storage_backing(backing, con_ssh=con_ssh, up_only=False)
         hosts_by_backing[backing] = hosts_with_backing
         checked_len += len(hosts_with_backing)
         if len(hosts_with_backing) >= math.ceil(hosts_len / 2):
@@ -908,7 +908,7 @@ def get_vm_storage_type(vm_id, con_ssh=None):
         vm_id (str):
         con_ssh (SSHClient):
 
-    Returns (str): storage extra spec value. Possible return values: 'local_image', 'local_lvm', or 'remote'
+    Returns (str): storage extra spec value. Possible return values: 'local_image' or 'remote'
 
     """
     # TODO: Update to get it from nova show directly
@@ -916,7 +916,11 @@ def get_vm_storage_type(vm_id, con_ssh=None):
 
     table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=con_ssh, auth_info=Tenant.get('admin')))
     extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
-    return extra_specs['aggregate_instance_extra_specs:storage']
+
+    # No idea how to find out vm backend if vm is in error state.
+    storage_backing = extra_specs.get(FlavorSpec.STORAGE_BACKING, None)
+
+    return storage_backing
 
 
 def get_vms(vms=None, return_val='ID', con_ssh=None, auth_info=None, all_vms=True, strict=True, regex=False, **kwargs):
@@ -1849,7 +1853,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
         if remove:
             hosts = hosts_in_aggregate
         else:
-            hosts = host_helper.get_hosts()
+            hosts = host_helper.get_hypervisors()
 
     if isinstance(hosts, str):
         hosts = [hosts]

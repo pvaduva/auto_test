@@ -1,10 +1,12 @@
 import pytest
+
 import setups
 from consts.auth import CliAuth, Tenant
 from consts import build_server as build_server_consts
 from consts.proj_vars import PatchingVars
 from consts.proj_vars import ProjVar
 from utils.clients.ssh import SSHClient
+from keywords import system_helper
 
 
 def pytest_configure(config):
@@ -43,6 +45,17 @@ def setup_test_session():
 
     """
     print("Syspatch test session ...")
+    patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
+    if not patch_dir:
+        patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
+        build_id = system_helper.get_system_build_id()
+        if build_id:
+            patch_dir = patch_base_dir + '/' + build_id
+        else:
+            patch_dir = patch_base_dir + '/latest_build'
+
+        PatchingVars.set_patching_var(PATCH_DIR=patch_dir)
+
     ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.copy_test_files()

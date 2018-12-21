@@ -7,13 +7,14 @@ from utils.tis_log import LOG
 
 con_ssh = ControllerClient.get_active_controller()
 
+
 def test_scp_files():
-    con_ssh = ssh_to_controller0()
-    con_ssh.scp_files_to_local_host('/home/wrsroot/instances/*', dest_password='test_pwd')
+    con0_ssh = ssh_to_controller0()
+    con0_ssh.scp_files_to_local_host('/home/wrsroot/instances/*', dest_password='test_pwd')
 
     host_helper.swact_host()
-    con_ssh = ssh_to_controller0()
-    con_ssh.scp_files_to_local_host('/home/wrsroot/instances/*', dest_password='test_pwd')
+    con0_ssh = ssh_to_controller0()
+    con0_ssh.scp_files_to_local_host('/home/wrsroot/instances/*', dest_password='test_pwd')
 
 
 def test_sudo_cmd():
@@ -38,7 +39,7 @@ def test_cmd_timeout():
     try:
         code, output = con_ssh.exec_cmd('ping -c 3 128.223.122.21')
         LOG.info(code, output)
-        assert(0, "should have thrown timeout exception")
+        assert 0, "should have thrown timeout exception"
     except pexpect.TIMEOUT:
         LOG.info("tc1 passed")
 
@@ -46,21 +47,21 @@ def test_cmd_timeout():
     try:
         code, output = con_ssh.exec_cmd('ping -c 3 128.223.122.21')
         LOG.info(code, output)
-        assert(0, "should have thrown timeout exception")
+        assert 0, "should have thrown timeout exception"
     except pexpect.TIMEOUT:
         LOG.info("tc1.2 passed")
 
     LOG.tc_step("tc2")
     try:
         with host_helper.ssh_to_host('compute-200'):
-            assert (0, "should not appear 2")
+            assert 0, "should not appear 2"
     except exceptions.SSHException:
         LOG.info("tc2 passed")
 
     LOG.tc_step("tc3")
     try:
         with host_helper.ssh_to_host('128.223.122.21'):
-            assert (0, "should not appear 3")
+            assert 0, "should not appear 3"
     except pexpect.TIMEOUT:
         print("tc3 passed")
 

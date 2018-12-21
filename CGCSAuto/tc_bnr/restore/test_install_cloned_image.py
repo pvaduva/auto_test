@@ -9,15 +9,14 @@ from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from keywords import install_helper, host_helper, system_helper
-from utils import node, local_host
+from utils import node
 from utils.clients.ssh import ControllerClient
+from utils.clients.local import LocalHostClient
 from utils.tis_log import LOG
 
 
 @pytest.fixture(scope='session')
 def install_clone_setup():
-
-    LOG.tc_func_start("CLONE_INSTALL_TEST")
     lab = InstallVars.get_install_var('LAB')
     LOG.info("Lab info; {}".format(lab))
     install_cloned_info = {'usb_verified': False,
@@ -29,12 +28,13 @@ def install_clone_setup():
     controller_node = lab['controller-0']
     controller_conn = None
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
-    if local_host.ping_to_host(controller_node.host_ip):
+    local_client = LocalHostClient(connect=True)
+    if local_client.ping_server(controller_node.host_ip, fail_ok=True)[0] == 100:
         try:
-            controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
-                                                              initial_prompt=extra_controller_prompt,  fail_ok=True)
+            controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip, fail_ok=True,
+                                                                      initial_prompt=extra_controller_prompt)
         except:
-            LOG.info("SSH connection to {} not yet avaiable yet ..".format(controller_node.name))
+            LOG.info("SSH connection to {} not yet available yet ..".format(controller_node.name))
 
     if controller_conn:
         LOG.info("Connection established with controller-0 ....")

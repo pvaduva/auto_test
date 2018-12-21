@@ -2,18 +2,17 @@ import time
 from pytest import mark
 
 from utils.tis_log import LOG
-from utils import local_host
 from consts.timeout import HostTimeout, VMTimeout
 from consts.cgcs import EventLogID
 from consts.vlm import VlmAction
-from keywords import system_helper, vlm_helper, host_helper, vm_helper, network_helper
+from keywords import system_helper, vlm_helper, host_helper, vm_helper
 from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
 def power_off_and_on(barcode, power_off_event, timeout):
 
     if power_off_event.wait(timeout=timeout):
-        rc, output = local_host.vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False)
+        rc, output = vlm_helper._vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False)
         assert 0 == rc, "Failed to turn off target"
         LOG.info("{} powered off successfully".format(barcode))
         return

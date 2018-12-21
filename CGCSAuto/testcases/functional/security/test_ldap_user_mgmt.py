@@ -423,16 +423,7 @@ def test_telnet_ldap_admin_access(user_name):
                           user=user_name, password=password, timeout=10)
     try:
         LOG.tc_step("Telnet to lab as {} user with password {}".format(user_name, password))
-        code = telnet.initial_login(new_password, fail_ok=True)
-
-        if code == 1:
-            # if initial_login failed which means password is already set
-            # TODO: this section need to be redone once new telnet.login() is updated for first time login
-            LOG.tc_step("Telnet to lab as {} user with password {}".format(user_name, new_password))
-            telnet.send(user_name)
-            telnet.expect(Prompt.PASSWORD_PROMPT)
-            telnet.send(new_password)
-            telnet.expect()
+        telnet.login(new_password, handle_init_login=True)
 
         code, output = telnet.exec_cmd('ls {}'.format(WRSROOT_HOME), fail_ok=False)
         LOG.info('output from test {}'.format(output))

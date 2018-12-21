@@ -36,7 +36,7 @@ def test_flavor_default_specs():
 
 
 @mark.parametrize(('extra_spec_name', 'values'), [
-    mark.p3((FlavorSpec.STORAGE_BACKING, ['local_lvm', 'remote', 'local_image'])),
+    mark.p3((FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'])),
     mark.p3((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
     mark.p3((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
     mark.p3((FlavorSpec.NUMA_NODES, [1])),

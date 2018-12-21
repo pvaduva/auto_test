@@ -11,13 +11,14 @@ import pexpect
 from consts.auth import SvcCgcsAuto
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar
+from consts.cgcs import PING_LOSS_RATE
 from utils import exceptions
 from utils.clients.ssh import SSHClient
 from utils.tis_log import LOG
 
 LOCAL_HOST = socket.gethostname()
 LOCAL_USER = getpass.getuser()
-LOCAL_PROMPT = re.escape('{}@{}$ '.format(LOCAL_USER, LOCAL_HOST))
+LOCAL_PROMPT = re.escape('{}@{}$ '.format(LOCAL_USER, LOCAL_HOST.split(sep='.wrs.com')[0])).replace(r'\$ ', r'.*\$')
 COUNT = 0
 
 
@@ -28,7 +29,7 @@ def get_unique_name(name_str):
 
 
 class LocalHostClient(SSHClient):
-    def __init__(self, initial_prompt=None, timeout=60, session=None, searchwindowsisze=None, name=None):
+    def __init__(self, initial_prompt=None, timeout=60, session=None, searchwindowsisze=None, name=None, connect=False):
         """
 
         Args:
@@ -36,6 +37,7 @@ class LocalHostClient(SSHClient):
             timeout
             session
             searchwindowsisze
+            connect (bool)
 
         Returns:
 
@@ -48,6 +50,9 @@ class LocalHostClient(SSHClient):
         super(LocalHostClient, self).__init__(host=LOCAL_HOST, user=LOCAL_USER, password=None, force_password=False,
                                               initial_prompt=initial_prompt, timeout=timeout, session=session,
                                               searchwindownsize=searchwindowsisze)
+
+        if connect:
+            self.connect()
 
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
                 use_current=True, timeout=None):
@@ -67,7 +72,7 @@ class LocalHostClient(SSHClient):
         end_time = time.time() + retry_timeout
         while time.time() < end_time:
             try:
-                LOG.info("Attempt to connect to host - {}".format(self.host))
+                LOG.debug("Attempt to connect to localhost - {}".format(self.host))
                 self._session = pexpect.spawnu(command='bash', timeout=timeout, maxread=100000)
 
                 self.logpath = self._get_logpath()
@@ -76,9 +81,9 @@ class LocalHostClient(SSHClient):
 
                 # Set prompt for matching
                 self.set_prompt(prompt)
-                self.send("PS1={}".format(prompt))
+                self.send(r'export PS1="\u@\h\$ "')
                 self.expect()
-                LOG.info("Login successful!")
+                LOG.debug("Connected to localhost!")
                 return
 
             except (OSError, pexpect.TIMEOUT, pexpect.EOF):
@@ -165,7 +170,7 @@ class LocalHostClient(SSHClient):
         LOG.info("Activating virtualenv {}/{}".format(venv_dir, venv_name))
         code = self.exec_cmd('cd {}; source {}/bin/activate'.format(venv_dir, venv_name), fail_ok=fail_ok)[0]
         if code == 0:
-            new_prompt = '\({}\) {}'.format(venv_name, self.get_prompt())
+            new_prompt = r'\({}\) {}'.format(venv_name, self.get_prompt())
             self.set_prompt(prompt=new_prompt)
             LOG.info('virtualenv {} activated successfully'.format(venv_name))
 
@@ -191,6 +196,65 @@ class LocalHostClient(SSHClient):
             LOG.info('virtualenv {} deactivated successfully'.format(venv_name))
         else:
             raise exceptions.LocalHostError("Unable to deactivate venv. Output: {}".format(output))
+
+    def get_ssh_key(self, ssh_key_path=None):
+        if not ssh_key_path:
+            ssh_key_path = os.path.expanduser('~/.ssh/id_rsa')
+        # KNOWN_HOSTS_PATH = SSH_DIR + "/known_hosts"
+        # REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
+        if not os.path.isfile(ssh_key_path):
+            self.exec_cmd("ssh-keygen -f {} -t rsa -N ''".format(ssh_key_path), fail_ok=False)
+
+        ssh_key = self.exec_cmd("ssh-keygen -y -f {}".format(ssh_key_path), fail_ok=False)[1]
+        return ssh_key
+
+    def ping_server(self, server, ping_count=5, timeout=60, fail_ok=False, retry=0):
+        """
+
+        Args:
+            server (str): server ip to ping
+            ping_count (int):
+            timeout (int): max time to wait for ping response in seconds
+            fail_ok (bool): whether to raise exception if packet loss rate is 100%
+            retry (int):
+
+        Returns (int): packet loss percentile, such as 100, 0, 25
+
+        """
+        output = packet_loss_rate = None
+        for i in range(max(retry+1, 1)):
+            cmd = 'ping -c {} {}'.format(ping_count, server)
+            code, output = self.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+            if code != 0:
+                packet_loss_rate = 100
+            else:
+                packet_loss_rate = re.findall(PING_LOSS_RATE, output)[-1]
+
+            packet_loss_rate = int(packet_loss_rate)
+            if packet_loss_rate < 100:
+                if packet_loss_rate > 0:
+                    LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
+                                format(self.host, server, packet_loss_rate))
+                else:
+                    LOG.info("All packets received by {}".format(server))
+                break
+
+            LOG.info("retry in 3 seconds")
+            time.sleep(3)
+        else:
+            msg = "Ping from {} to {} failed.".format(self.host, server)
+            if not fail_ok:
+                raise exceptions.LocalHostError(msg)
+            else:
+                LOG.warning(msg)
+
+        untransmitted_packets = re.findall(r"(\d+) packets transmitted,", output)
+        if untransmitted_packets:
+            untransmitted_packets = int(ping_count) - int(untransmitted_packets[0])
+        else:
+            untransmitted_packets = ping_count
+
+        return packet_loss_rate, untransmitted_packets
 
 
 def _get_virtualenv_dir(venv_dir=None):

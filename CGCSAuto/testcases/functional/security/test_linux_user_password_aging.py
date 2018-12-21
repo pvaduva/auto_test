@@ -214,11 +214,11 @@ def login_as_linux_user(user, password, host, cmd='whoami', expecting_fail=False
         # LOG.info('Caught exception:\n{}\n'.format(e))
         msg = 'Expecting to login but failed with exception:{}'.format(e)
         assert expecting_fail, msg
-        assert 'Permission denied,' in str(e), msg
-        assert '{}@{}'.format(user, host) in str(e), msg
-
-        LOG.info('Failed to login as expected on host:{}, user:{}, password:{}, for "Permission denied"'.format(
-            host, user, password))
+        if not 'Permission denied,' in str(e):
+            LOG.warning('Login as {}/{} failed without Permission denied error.'.format(user, password))
+        else:
+            LOG.info('Failed to login as expected on host:{}, user:{}, password:{}, for "Permission denied"'.
+                     format(host, user, password))
 
         return False, str(e)
 
@@ -262,7 +262,7 @@ def test_non_wrsroot_not_propagating(user, password, host):
         skip('User name "wrsroot" is dedicated to the special Local Linux Account used by Administrator.')
         return
 
-    hosts = host_helper.get_hosts(availability=[HostAvailState.AVAILABLE])
+    hosts = system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE])
     if len(hosts) < 2:
         LOG.info('Only 1 host: {}\n'.format(hosts))
         skip('Only 1 host: {}, needs 2+ hosts to test\n'.format(hosts))
@@ -359,7 +359,7 @@ def test_wrsroot_password_propagation():
 
     LOG.tc_step('Verify the new password populated to other hosts by logging to them')
     LOG.info('Select another host to login')
-    hosts = [ch for ch in host_helper.get_hosts(availability=[HostAvailState.AVAILABLE]) if current_host != ch]
+    hosts = [ch for ch in system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE]) if current_host != ch]
 
     if len(hosts) < 1:
         skip('No other host can test wrsroot with new password')

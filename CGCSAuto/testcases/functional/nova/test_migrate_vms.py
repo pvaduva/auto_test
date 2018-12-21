@@ -1,16 +1,12 @@
-import time
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 
 from consts.cgcs import FlavorSpec, EventLogID
-from consts.proj_vars import ProjVar
-from consts.auth import Tenant
 from consts.kpi_vars import LiveMigrate
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper, \
-    ixia_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -54,8 +50,6 @@ def touch_files_under_vm_disks(vm_id, ephemeral=0, swap=0, vm_type='volume', dis
     ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
     ('local_image', 1, 512, 'dedicated', 2, 'image_with_vol', True),
     ('local_image', 1, 512, 'dedicated', 1, 'image_with_vol', False),
-    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
     mark.p1(('remote', 1, 0, 'dedicated', 1, 'volume', False)),
     mark.domain_sanity(('remote', 1, 512, None, 1, 'image', False)),
@@ -115,17 +109,6 @@ def test_live_migrate_vm_positive(hosts_per_stor_backing, storage_backing, ephem
     # mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),     # newton change
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
-    mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 512, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 512, 'volume', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 1, 0, 'volume', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 1, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 0, 'image', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 512, 'image', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('remote', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 0, 512, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
@@ -191,11 +174,6 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     mark.domain_sanity(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
     mark.domain_sanity(('local_image', 0, 512, 'dedicated', 1, 'image', 'confirm')),
     mark.domain_sanity(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
-    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', 'confirm')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'image', 'confirm')),
-    mark.domain_sanity(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
-    mark.p1(('local_lvm', 0, 512, None, 2, 'volume', 'confirm')),
-    mark.domain_sanity(('local_lvm', 1, 512, 'dedicated', 2, 'volume', 'confirm')),
     mark.p1(('remote', 0, 0, None, 2, 'volume', 'confirm')),
     mark.p1(('remote', 1, 0, None, 1, 'volume', 'confirm')),
     mark.domain_sanity(('remote', 1, 512, None, 1, 'image', 'confirm')),
@@ -205,11 +183,6 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'revert')),
     mark.p1(('local_image', 0, 512, 'dedicated', 1, 'image', 'revert')),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'image_with_vol', 'revert')),
-    mark.p1(('local_lvm', 0, 0, None, 2, 'volume', 'revert')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'volume', 'revert')),
-    mark.p1(('local_lvm', 0, 512, None, 1, 'volume', 'revert')),
-    mark.p1(('local_lvm', 1, 0, 'dedicated', 2, 'image', 'revert')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'revert')),
     mark.p1(('remote', 0, 0, None, 2, 'volume', 'revert')),
     mark.p1(('remote', 1, 512, None, 1, 'volume', 'revert')),
     mark.p1(('remote', 0, 0, None, 1, 'image', 'revert')),
@@ -280,10 +253,6 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
     ('local_image', 1, 0, 'volume'),
     ('local_image', 1, 512, 'volume'),
     ('local_image', 0, 512, 'image'),
-    ('local_lvm', 0, 0, 'image'),
-    ('local_lvm', 1, 0, 'volume'),
-    ('local_lvm', 0, 512, 'volume'),
-    ('local_lvm', 1, 512, 'image'),
     ('remote', 0, 0, 'image'),
     ('remote', 1, 0, 'volume'),
     ('remote', 0, 512, 'image'),

@@ -160,7 +160,9 @@ def get_suitable_hypervisors():
     hypervisors = host_helper.get_hypervisors()
 
     for hypervisor in hypervisors:
-        personalities = patching_helper.get_personality(hypervisor)
+        personality, subfunc = host_helper.get_hostshow_values(hypervisor, ('personality', 'subfunctions'),
+                                                               rtn_list=True)
+        personalities = subfunc + personality
         if not personalities or 'lowlatency' not in personalities:
             continue
 

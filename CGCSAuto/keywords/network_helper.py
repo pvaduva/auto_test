@@ -74,6 +74,7 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
         fail_ok (bool):
         auth_info (dict): run 'openstack network create' cli using these authorization info
         con_ssh (SSHClient):
+        cleanup (str|None): function, module, class, session or None
 
     Returns (tuple): (rnt_code (int), net_id (str), message (str))
 
@@ -1395,7 +1396,8 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), 
 def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.get('admin'),
                          rtn_dict=False, use_fip=False, exclude_nets=None):
 
-    table_ = table_parser.table(cli.nova('list', '--all-tenants', ssh_client=con_ssh, auth_info=auth_info))
+    args = '--all-tenants' if auth_info and auth_info.get('user') == 'admin' else ''
+    table_ = table_parser.table(cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info))
     if vms:
         table_ = table_parser.filter_table(table_, ID=vms)
     elif vms is not None:
@@ -5238,6 +5240,5 @@ def reset_telnet_port(telnet_conn):
     telnet_conn.send_control("\\")
     telnet_conn.expect(["anonymous:.+:PortCommand> "], timeout=5)
     telnet_conn.send("resetport")
-    #telnet_conn.send("\r\n")
     telnet_conn.login()
 

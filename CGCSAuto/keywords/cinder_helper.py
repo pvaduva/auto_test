@@ -1449,7 +1449,7 @@ def export_busy_volume_using_cinder_backup(vol_id=None,
     if not name:
         name = 'inuse_vol_backup_' + vol_id[-4:]
     snp_id = create_volume_snapshot('snp_' + name, volume=vol_id, con_ssh=con_ssh, fail_ok=fail_ok,
-                                    auth_info=auth_info)[1]
+                                    force=True, auth_info=auth_info)[1]
     arg = '--container {} --name {} --snapshot-id {} {}'.format(container, name, snp_id, vol_id)
     output = table_parser.table(cli.cinder('backup-create', arg, fail_ok=fail_ok, auth_info=auth_info))
 

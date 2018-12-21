@@ -4,6 +4,7 @@ import time
 from pytest import fixture
 
 from consts.proj_vars import ProjVar
+from consts.cgcs import FlavorSpec
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, WRSROOT_HOME
 from keywords import vm_helper, nova_helper, common, heat_helper, network_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -120,6 +121,10 @@ def test_migration_auto_converge(no_simplex):
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=3)[1]
     ResourceCleanup.add('flavor', flavor_id)
+
+    # add migration timout
+    extra_specs = {FlavorSpec.LIVE_MIG_TIME_OUT: 300}
+    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Get the heat file name to use")
     heat_template = _get_stress_ng_heat()

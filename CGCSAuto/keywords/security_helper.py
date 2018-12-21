@@ -1003,7 +1003,7 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
                 search_dir = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE,
                                           ProjVar.get_var('JOB'),
                                           ProjVar.get_var('BUILD_ID'),
-                                          BuildServerPath.CONFIG_LAB_REL_PATH,
+                                          BuildServerPath.LAB_CONF_DIR_PREV,
                                           'yow')
             if not bs_ssh.file_exists(search_dir):
                 LOG.warning('{} does not exist on {}'.format(search_dir, bld_server))

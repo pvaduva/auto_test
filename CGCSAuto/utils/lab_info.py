@@ -166,7 +166,8 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
         close = True
         con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
-    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh, source_admin=True)
+    controllers, computes, storages = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, source_rc=True,
+                                                                                  rtn_tuple=True)
 
     sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
 

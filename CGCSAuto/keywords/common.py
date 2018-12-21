@@ -625,3 +625,78 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
             raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
 
     return args
+
+
+def get_symlink(ssh_client, file_path):
+    code, output = ssh_client.exec_cmd('ls -l {} | grep --color=never ""'.format(file_path))
+    if code != 0:
+        LOG.warning('{} not found!'.format(file_path))
+        return None
+
+    res = re.findall('> (.*)', output)
+    if not res:
+        LOG.warning('No symlink found for {}'.format(file_path))
+        return None
+
+    link = res[0].strip()
+    return link
+
+
+def is_file(filename, ssh_client):
+    code = ssh_client.exec_cmd('test -f {}'.format(filename), fail_ok=True)[0]
+    return 0 == code
+
+
+def is_dir(dirname, ssh_client):
+    code = ssh_client.exec_cmd('test -d {}'.format(dirname), fail_ok=True)[0]
+    return 0 == code
+
+
+def lab_time_now(con_ssh=None, date_format='%Y-%m-%dT%H:%M:%S'):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    date_cmd_format = date_format + '.%N'
+    timestamp = get_date_in_format(ssh_client=con_ssh, date_format=date_cmd_format)
+    with_milliseconds = timestamp.split('.')[0] + '.{}'.format(int(int(timestamp.split('.')[1]) / 1000))
+    format1 = date_format + '.%f'
+    parsed = datetime.strptime(with_milliseconds, format1)
+
+    return with_milliseconds.split('.')[0], parsed
+
+
+def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=True, top_down=False, sudo=False,
+               start_time=None):
+
+    prefix_space = False
+    if 'bash' in file_path:
+        ssh_client.exec_cmd('HISTCONTROL=ignorespace')
+        prefix_space = True
+        sudo = True
+
+    # Reformat the timestamp to add or remove T based on the actual format in specified log
+    if start_time:
+        tmp_cmd = """zgrep -m 1 "" {} | awk '{{print $1}}'""".format(file_path)
+        if sudo:
+            tmp_time = ssh_client.exec_sudo_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
+        else:
+            tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
+
+        if re.search('\dT\d', tmp_time):
+            start_time = start_time.strip().replace(' ', 'T')
+        else:
+            start_time = start_time.strip().replace('T', ' ')
+
+    # Compose the zgrep cmd to search the log
+    init_filter = """| awk '$0 > "{}"'""".format(start_time) if start_time else ''
+    count = '' if get_all else '|grep --color=never -m 1 ""'
+    extended_regex = '-E ' if extended_regex else ''
+    base_cmd = '' if top_down else '|tac'
+    cmd = 'zgrep --color=never {}"{}" {}|grep -v grep{}{}{}'.format(extended_regex, pattern, file_path, init_filter,
+                                                                    base_cmd, count)
+    if sudo:
+        out = ssh_client.exec_sudo_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
+    else:
+        out = ssh_client.exec_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
+
+    return out

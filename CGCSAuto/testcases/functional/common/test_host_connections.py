@@ -31,7 +31,7 @@ def test_ping_hosts():
 @mark.cpe_sanity
 @mark.sx_sanity
 def test_ssh_to_hosts():
-    hosts_to_ssh = host_helper.get_hosts(availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE])
+    hosts_to_ssh = system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE])
     failed_list = []
     for hostname in hosts_to_ssh:
         LOG.tc_step("Attempt SSH to {}".format(hostname))

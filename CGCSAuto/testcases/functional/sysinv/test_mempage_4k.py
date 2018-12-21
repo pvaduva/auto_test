@@ -25,7 +25,7 @@ def skip_for_ovs():
         skip("4k vm unsupported by OVS-dpdk")
 
 
-@fixture(scope='module', params=['local_image', 'local_lvm', 'remote'])
+@fixture(scope='module', params=['local_image', 'remote'])
 def ensure_sufficient_4k_pages(request):
     """
     Check if there is enough 4k pages on any compute node on any processors is a bit hassle
@@ -36,7 +36,7 @@ def ensure_sufficient_4k_pages(request):
     # check if any 4k pages greater than 600000 means more than 2G(~536871 4k pages) total.
 
     storage_backing = request.param
-    hypervisors = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
+    hypervisors = host_helper.get_hosts_in_storage_backing(storage_backing=storage_backing)
     if len(hypervisors) < 2:
         skip("Less than two hypersvisors with {} instance backing".format(storage_backing))
 
@@ -108,7 +108,7 @@ def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure
         ensure_sufficient_4k_pages (tuple): module test fixture to configure 4k pages
 
     Setups:
-        - Select at least 2 hosts with specified storage backing. e.g., local_image, local_lvm, or remote
+        - Select at least 2 hosts with specified storage backing. e.g., local_image, or remote
         - Ensure 2 hosts are in nova zone (move rest to cgcsauto zone if more than 2)
         - Configure the 2 hosts with large amount of 4k pages
 

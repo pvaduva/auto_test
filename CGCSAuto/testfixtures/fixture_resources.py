@@ -67,6 +67,42 @@ class ResourceCleanup:
         for res_id in resource_id:
             cls.__resources_to_cleanup[scope][key].append(res_id)
 
+    @classmethod
+    def remove(cls, resource_type, resource_id, scope='function', del_vm_vols=True):
+        """
+        Add resource to cleanup list.
+
+        Args:
+            resource_type (str): one of these: 'vm', 'volume', 'flavor
+            resource_id (str|list): id(s) of the resource to add to cleanup list
+            scope (str): when the cleanup should be done. Valid value is one of these: 'function', 'class', 'module'
+            del_vm_vols (bool): whether to delete attached volume(s) if given resource is vm.
+
+        """
+        if scope is None:
+            return
+
+        _check_values(scope)
+        _check_values(resource_type, val_type='resource_type', valid_vals=_RESOURCE_TYPES)
+
+        if resource_type == 'vm':
+            if del_vm_vols:
+                key = 'vms_with_vols'
+            else:
+                key = 'vms_no_vols'
+        elif resource_type == 'qos':
+            key = 'qos_ids'
+        else:
+            key = resource_type + 's'
+
+        if not isinstance(resource_id, (list, tuple)):
+            resource_id = [resource_id]
+
+        existing_list = cls.__resources_to_cleanup[scope][key]
+        for res_id in resource_id:
+            if res_id in existing_list:
+                existing_list.remove(res_id)
+
 
 class VlmHostsReserved:
     __hosts_reserved_dict = {key: [] for key in VALID_SCOPES}

@@ -375,7 +375,7 @@ def test_lock_stor_check_osds_down(host):
     con_ssh = ControllerClient.get_active_controller()
 
     if host == 'any':
-        storage_nodes = host_helper.get_hosts(personality='storage')
+        storage_nodes = system_helper.get_hostnames(personality='storage')
         LOG.info('System has {} storage nodes:'.format(storage_nodes))
         storage_nodes.remove('storage-0')
         node_id = random.randint(0, len(storage_nodes) - 1)
@@ -605,9 +605,7 @@ def test_storgroup_semantic_checks():
 
     table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
     capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
-    replication = ast.literal_eval(capabilities)
-    replication_factor = replication['replication']
-    storage_nodes = host_helper.get_hosts(personality='storage')
+    replication_factor = capabilities[1]
     LOG.info("The replication factor is: {}".format(replication_factor))
 
     # We want to test storage-0 since it is a ceph monitor

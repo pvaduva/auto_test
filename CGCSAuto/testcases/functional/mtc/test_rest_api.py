@@ -4,7 +4,7 @@ from consts.timeout import HostTimeout
 from consts.cgcs import HTTPPort, HostAdminState
 from pytest import fixture, skip
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import html_helper, host_helper
+from keywords import html_helper, host_helper, system_helper
 from utils.tis_log import LOG
 
 
@@ -30,9 +30,10 @@ def prepare_modify_cpu(request):
     Returns (tuple): (name of the host, uuid of the host, uuid of the new cpu profile)
 
     """
-    computes = host_helper.get_hosts(personality='compute', administrative='unlocked')
+    computes = system_helper.get_computes(administrative=HostAdminState.UNLOCKED)
     if not computes:
         skip("There were no unlocked compute nodes.")
+
     host = computes[0]
     uuid = host_helper.get_hostshow_value(host=host, field='uuid')
     headers = get_headers()
@@ -252,7 +253,7 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     LOG.tc_step("Applying cpu profile")
     data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},
             {"path": "/action", "value": "apply-profile", "op": "replace"}]
-    resp = html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
+    html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
 
     res, out = host_helper.compare_host_to_cpuprofile(hostname, iprofile_uuid)
     assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"

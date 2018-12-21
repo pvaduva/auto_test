@@ -131,12 +131,12 @@ class SSHClient:
             timeout = self.timeout
 
         # Connect to host
+        LOG.info("Attempt to connect to host - {}".format(self.host))
         end_time = time.time() + retry_timeout
         while time.time() < end_time:
             # LOG into remote host
             # print(str(self.searchwindowsize))
             try:
-                LOG.info("Attempt to connect to host - {}".format(self.host))
                 self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
 
                 # set to ignore ssh host fingerprinting
@@ -199,7 +199,7 @@ class SSHClient:
                     raise
 
                 # print out error for more info before retrying
-                LOG.info("Login failed due to error: {}".format(e.__str__()))
+                LOG.debug("Login failed due to error: {}".format(e.__str__()))
 
                 if 'password refused' in e.__str__():
                     if self.searchwindowsize is None:
@@ -300,7 +300,6 @@ class SSHClient:
 
         """
         self.expect(fail_ok=True, timeout=timeout)
-
         LOG.debug("Buffer is flushed by reading out the rest of the output")
 
     def expect(self, blob_list=None, timeout=60, fail_ok=False, rm_date=False, searchwindowsize=None):
@@ -340,7 +339,7 @@ class SSHClient:
         kwargs = {}
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
-        elif blob_list == self.prompt:
+        elif blob_list == [self.prompt]:
             kwargs['searchwindowsize'] = 100
 
         try:
@@ -494,7 +493,7 @@ class SSHClient:
         return self.exec_cmd('hostname', get_exit_code=False)[1].splitlines()[0]
 
     def rsync(self, source, dest_server, dest, dest_user=None, dest_password=None, ssh_port=None, extra_opts=None,
-              pre_opts=None, timeout=60, fail_ok=False):
+              pre_opts=None, timeout=120, fail_ok=False):
 
         dest_user = dest_user or HostLinuxCreds.get_user()
         dest_password = dest_password or HostLinuxCreds.get_password()
@@ -510,7 +509,7 @@ class SSHClient:
         if ssh_port:
             ssh_opts += ' -p {}'.format(ssh_port)
 
-        cmd = "{} rsync -avre \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
+        cmd = "{} rsync -are \"{}\" {} {} ".format(pre_opts, ssh_opts, extra_opts_str, source)
         cmd += "{}@{}:{}".format(dest_user, dest_server, dest)
 
         LOG.info("Rsyncing file(s) from {} to {}: {}".format(self.host, dest_server, cmd))
@@ -519,7 +518,7 @@ class SSHClient:
 
         if index == 1:
             self.send(dest_password)
-            self.expect(timeout=timeout)
+            self.expect(timeout=timeout, searchwindowsize=100)
 
         code, output = self._process_exec_result(cmd, rm_date=True)
         if code != 0 and not fail_ok:
@@ -772,7 +771,7 @@ class SSHClient:
 
     def close(self):
         self._session.close(True)
-        LOG.info("connection closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))
+        LOG.debug("connection closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))
 
     def set_session_timeout(self, timeout=0):
         self.send('TMOUT={}'.format(timeout))

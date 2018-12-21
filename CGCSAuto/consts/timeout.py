@@ -29,6 +29,22 @@ class HostTimeout:
     CONFIG_CONTROLLER_TIMEOUT = 1800
 
 
+class InstallTimeout:
+    CONTROLLER_UNLOCK = 9000   # Host reaches enabled/available state after system host-unlock returned
+    CONFIG_CONTROLLER_TIMEOUT = 1800
+    # REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
+    UPGRADE = 7200
+    WIPE_DISK_TIMEOUT = 30
+    SYSTEM_RESTORE = 3600   # System restore complete
+    SYSTEM_BACKUP = 1800    # system backup complete
+    BACKUP_COPY_USB = 600
+    INSTALL_CLONE = 3600
+    INSTALL_CLONE_STATUS = 60
+    INSTALL_CONTROLLER = 2400
+    INSTALL_LOAD = 3600
+    POST_INSTALL_SCRIPTS = 3600
+
+
 class VMTimeout:
     STATUS_CHANGE = 300
     STATUS_VERIFY_RESIZE = 30

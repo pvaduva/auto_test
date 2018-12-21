@@ -1,10 +1,8 @@
 from pytest import skip
 
 from consts.cgcs import SysType, Prompt
-from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars
-from keywords import host_helper, install_helper, vlm_helper, system_helper
-from utils.clients.ssh import SSHClient
+from keywords import host_helper, install_helper
 from setups import setup_tis_ssh
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils.tis_log import LOG

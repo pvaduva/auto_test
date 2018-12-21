@@ -50,7 +50,7 @@ def ssh_to_host(hostname, username=None, password=None, prompt=None, con_ssh=Non
     user = username if username else HostLinuxCreds.get_user()
     password = password if password else HostLinuxCreds.get_password()
     if not prompt:
-        prompt = '.*' + hostname + '\:~\$'
+        prompt = '.*' + hostname + r'\:~\$'
     original_host = con_ssh.get_hostname()
     if original_host != hostname:
         host_ssh = SSHFromSSH(ssh_client=con_ssh, host=hostname, user=user, password=password, initial_prompt=prompt,
@@ -117,7 +117,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     cmd = 'sudo reboot -f' if force_reboot else 'sudo reboot'
 
     for host in hostnames:
-        prompt = '.*' + host + '\:~\$'
+        prompt = '.*' + host + r'\:~\$'
         host_ssh = SSHFromSSH(ssh_client=con_ssh, host=host, user=user, password=password, initial_prompt=prompt)
         host_ssh.connect()
         current_host = host_ssh.get_hostname()
@@ -217,9 +217,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
 
             if hosts_avail and (check_hypervisor_up or check_webservice_up):
 
-                all_nodes = system_helper._get_nodes(con_ssh)
-                computes = list(set(hosts_avail) & set(list(all_nodes['computes'])))
-                controllers = list(set(hosts_avail) & set(list(all_nodes['controllers'])))
+                all_nodes = system_helper.get_hostnames_per_personality(con_ssh=con_ssh)
+                computes = list(set(hosts_avail) & set(all_nodes['compute']))
+                controllers = list(set(hosts_avail) & set(all_nodes['controller']))
                 if system_helper.is_small_footprint(con_ssh):
                     computes += controllers
 
@@ -307,7 +307,8 @@ def recover_simplex(con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
         wait_for_hosts_ready(host, fail_ok=fail_ok, check_task_affinity=False, con_ssh=con_ssh, auth_info=auth_info)
 
 
-def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None, auth_info=Tenant.get('admin'),
+                         timeout=None):
     """
     Wait for hosts to be in online state if locked, and available and hypervisor/webservice up if unlocked
     Args:
@@ -316,6 +317,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
         check_task_affinity
         con_ssh:
         auth_info
+        timeout
 
     Returns:
 
@@ -323,22 +325,26 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    expt_online_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.LOCKED, auth_info=auth_info)
-    expt_avail_hosts = get_hosts(hosts, con_ssh=con_ssh, administrative=HostAdminState.UNLOCKED, auth_info=auth_info)
+    expt_online_hosts = system_helper.get_hostnames(hosts=hosts, administrative=HostAdminState.LOCKED,
+                                                    auth_info=auth_info, con_ssh=con_ssh)
+    expt_avail_hosts = system_helper.get_hostnames(hosts=hosts, administrative=HostAdminState.UNLOCKED,
+                                                   auth_info=auth_info, con_ssh=con_ssh)
 
     res_lock = res_unlock = True
+    timeout_args = {'timeout': timeout} if timeout else {}
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
-        res_lock = wait_for_hosts_states(hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
-                                         con_ssh=con_ssh, auth_info=auth_info)
+        res_lock = wait_for_hosts_states(expt_online_hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
+                                         con_ssh=con_ssh, auth_info=auth_info, **timeout_args)
 
     if expt_avail_hosts:
-        hypervisors = list(set(get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)) & set(hosts))
-        controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) & set(hosts))
+        hypervisors = list(set(get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)) & set(expt_avail_hosts))
+        controllers = list(set(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) &
+                           set(expt_avail_hosts))
 
         LOG.info("Wait for hosts to be available: {}".format(hosts))
-        res_unlock = wait_for_hosts_states(hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
-                                           con_ssh=con_ssh, auth_info=auth_info)
+        res_unlock = wait_for_hosts_states(expt_avail_hosts, availability=HostAvailState.AVAILABLE, fail_ok=fail_ok,
+                                           con_ssh=con_ssh, auth_info=auth_info, **timeout_args)
 
         if res_unlock:
             res_1 = wait_for_task_clear_and_subfunction_ready(hosts, fail_ok=fail_ok, auth_info=auth_info,
@@ -650,7 +656,7 @@ def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
 
 
 def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNLOCK, use_telnet=False,
-                                con_telnet=None, auth_info=Tenant.get('admin')):
+                                con_telnet=None, auth_info=Tenant.get('admin'), duplex_direct=False):
     time.sleep(30)
     if not use_telnet:
         if not con_ssh:
@@ -664,20 +670,22 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
     else:
         if not con_telnet:
             raise ValueError("con_telnet has to be provided when use_telnet=True.")
-        con_telnet.get_read_until("ogin:", HostTimeout.CONTROLLER_UNLOCK)
+        con_telnet.expect(["ogin:"], HostTimeout.CONTROLLER_UNLOCK)
         con_telnet.login()
         con_telnet.exec_cmd("xterm")
 
-    # Give it sometime before openstack cmds enables on after host
-    _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
-                                   fail_ok=False, timeout=timeout, check_interval=10, reconnect=True)
-    time.sleep(10)
-    LOG.info("Re-connected via ssh and openstack CLI enabled")
+    if not duplex_direct:
+        # Give it sometime before openstack cmds enables on after host
+        _wait_for_openstack_cli_enable(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                       auth_info=auth_info, fail_ok=False, timeout=timeout, check_interval=10,
+                                       reconnect=True, single_node=True)
+        time.sleep(10)
+        LOG.info("Re-connected via ssh and openstack CLI enabled")
 
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin'), check_hypervisor_up=True,
-                check_webservice_up=True, check_subfunc=True, check_first=True):
+                check_webservice_up=True, check_subfunc=True, check_first=True, con0_install=False):
     """
     Unlock given host
     Args:
@@ -694,6 +702,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
         check_subfunc (bool): whether to check subfunction_oper and subfunction_avail for CPE system
         check_first (bool): whether to check host state before unlock.
+        con0_install (bool)
 
     Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
@@ -737,9 +746,10 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     if exitcode == 1:
         return 1, output
 
-    if is_simplex:
+    if is_simplex or con0_install:
+        time.sleep(120)
         _wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
-                                    timeout=HostTimeout.CONTROLLER_UNLOCK)
+                                    timeout=timeout)
 
     if not wait_for_host_values(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
                                 use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok, auth_info=auth_info):
@@ -777,7 +787,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         string_total = subfunc + personality
 
         is_controller = 'controller' in string_total
-        is_compute = 'compute' in string_total
+        is_compute = bool(re.search('compute|worker', string_total))
 
         if check_hypervisor_up and is_compute:
             if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
@@ -947,10 +957,10 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     if hosts_avail and (check_hypervisor_up or check_webservice_up):
 
-        all_nodes = system_helper._get_nodes(con_ssh=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
-                                             con_telnet=con_telnet)
-        computes = list(set(hosts_avail) & set(list(all_nodes['computes'])))
-        controllers = list(set(hosts_avail) & set(list(all_nodes['controllers'])))
+        all_nodes = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, use_telnet=use_telnet,
+                                                                auth_info=auth_info, con_telnet=con_telnet)
+        computes = list(set(hosts_avail) & set(all_nodes['compute']))
+        controllers = list(set(hosts_avail) & set(all_nodes['controller']))
         if system_helper.is_small_footprint(con_ssh, auth_info=auth_info):
             computes += controllers
 
@@ -1031,6 +1041,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
         use_telnet
         con_telnet
         auth_info
+        rtn_list
 
     Returns (dict): {field1: value1, field2: value2, ...}
 
@@ -1044,7 +1055,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
     if isinstance(fields, str):
         fields = [fields]
 
-    res_dict= {}
+    res_dict = {}
     res_list = []
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field, merge_lines=merge_lines)
@@ -1058,7 +1069,7 @@ def get_hostshow_values(host, fields, merge_lines=False, con_ssh=None, use_telne
 
 
 def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail_ok=False, check_interval=10,
-                                   reconnect=True, use_telnet=False,  con_telnet=None,
+                                   reconnect=True, use_telnet=False,  con_telnet=None, single_node=None,
                                    auth_info=Tenant.get('admin')):
     """
     Wait for 'system show' cli to work on active controller. Also wait for host task to clear and subfunction ready.
@@ -1085,7 +1096,7 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
                                                               con_telnet=con_telnet_, auth_info=auth_info)
 
-        if (system_helper.is_simplex() and
+        if ((single_node or (single_node is None and system_helper.is_simplex())) and
                 get_hostshow_value(host=active_con, field='administrative') == HostAdminState.LOCKED):
             LOG.info("Simplex system in locked state. Wait for task to clear only")
             wait_for_host_values(host=active_con, timeout=HostTimeout.LOCK, task='', con_ssh=con_ssh_,
@@ -1411,27 +1422,6 @@ def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTim
     return 0, "Active controller is successfully swacted."
 
 
-def get_hosts(hosts=None, con_ssh=None, auth_info=Tenant.get('admin'), **states):
-    """
-    Filter out a list of hosts with specified states from given hosts.
-
-    Args:
-        hosts (list): list of hostnames to filter out from. If None, all hosts will be considered.
-        con_ssh:
-        auth_info
-        **states: fields that customized a host. for instance avaliability='available', personality='controller'
-        will make sure that a list of host that are available and controller to be returned by the function.
-
-    Returns (list):A list of host specificed by the **states
-
-    """
-    # get_hosts(availability='available', personality='controller')
-    table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, auth_info=auth_info))
-    if hosts:
-        table_ = table_parser.filter_table(table_, hostname=hosts)
-    return table_parser.get_values(table_, 'hostname', **states)
-
-
 def get_nova_hosts(zone='nova', status='enabled', state='up', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get nova hosts listed in nova host-list.
@@ -1542,8 +1532,6 @@ def wait_for_webservice_up(hosts, timeout=HostTimeout.WEB_SERVICE_UP, check_inte
 def get_hosts_in_aggregate(aggregate, con_ssh=None, auth_info=Tenant.get('admin')):
     if 'image' in aggregate:
         aggregate = 'local_storage_image_hosts'
-    elif 'lvm' in aggregate:
-        aggregate = 'local_storage_lvm_hosts'
     elif 'remote' in aggregate:
         aggregate = 'remote_storage_hosts'
     else:
@@ -1567,15 +1555,16 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None, auth_info=Tenant.get('admin'
     return hosts
 
 
-def get_hosts_in_storage_aggregate(storage_backing='local_image', up_only=True, con_ssh=None,
-                                   auth_info=Tenant.get('admin')):
+def get_hosts_in_storage_backing(storage_backing='local_image', up_only=True, hosts=None, con_ssh=None,
+                                 auth_info=Tenant.get('admin')):
     """
     Return a list of hosts that supports the given storage backing.
 
     System: Regular, Small footprint
 
     Args:
-        storage_backing (str): 'local_image', 'local_lvm', or 'remote'
+        hosts (None|list|tuple): hosts to check
+        storage_backing (str): 'local_image', or 'remote'
         up_only (bool): whether to return only up hypervisors
         con_ssh (SSHClient):
         auth_info
@@ -1587,23 +1576,16 @@ def get_hosts_in_storage_aggregate(storage_backing='local_image', up_only=True, 
     """
     storage_backing = storage_backing.strip().lower()
     if 'image' in storage_backing:
-        aggregate = 'local_storage_image_hosts'
-    elif 'lvm' in storage_backing:
-        aggregate = 'local_storage_lvm_hosts'
+        storage_backing = 'local_image'
     elif 'remote' in storage_backing:
-        aggregate = 'remote_storage_hosts'
+        storage_backing = 'remote'
     else:
         raise ValueError("Invalid storage backing provided. "
-                         "Please use one of these: 'local_image', 'local_lvm', 'remote'")
+                         "Please use one of these: 'local_image', 'remote'")
 
-    hosts = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh, auth_info=auth_info)
-
-    if up_only:
-        up_hypervisors = get_up_hypervisors(con_ssh=con_ssh, auth_info=auth_info)
-        hosts = list(set(hosts) & set(up_hypervisors))
-        LOG.info("Up hypervisors with {} backing: {}".format(storage_backing, hosts))
-
-    return hosts
+    hosts_per_backing = get_hosts_per_storage_backing(up_only=up_only, con_ssh=con_ssh, auth_info=auth_info,
+                                                      hosts=hosts)
+    return hosts_per_backing[storage_backing]
 
 
 def get_nova_host_with_min_or_max_vms(rtn_max=True, hosts=None, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -1754,7 +1736,7 @@ def _get_actual_mems(host):
             raise exceptions.SysinvError('system host-memory-modify is not rejected when 2M pages exceeds mem_avail')
 
         # Processor 0:No available space for 2M huge page allocation, max 2M pages: 27464
-        actual_mem = int(re.findall('max 2M pages: (\d+)', output)[0]) * 2
+        actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
         actual_mems[proc] = (actual_mem, actual_1g)
 
     return actual_mems
@@ -1907,7 +1889,7 @@ def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail
 
     for proc, num in final_args.items():
         num = int(num)
-        proc_id = re.findall('\d+', proc)[0]
+        proc_id = re.findall(r'\d+', proc)[0]
         expt_cores = threads*num
         actual_cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
         if expt_cores != actual_cores:
@@ -2279,7 +2261,7 @@ def get_host_threads_count(host, con_ssh=None):
     if code != 0:
         raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
 
-    pattern = "Threads/Core=(\d),"
+    pattern = r"Threads/Core=(\d),"
     return int(re.findall(pattern, output)[0])
 
 
@@ -2357,7 +2339,7 @@ def get_expected_vswitch_port_engine_map(host_ssh):
     return expt_map
 
 
-def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False):
+def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, strict=False, auth_info=Tenant.get('admin')):
     """
     Get values for given fields in system host-lvg-show table
     Args:
@@ -2365,12 +2347,14 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, stric
         fields (str|list|tuple):
         lvg (str): e.g., nova-local (compute nodes), cgts-vg (controller/storage nodes)
         con_ssh (SSHClient):
+        auth_info
         strict (bool)
 
     Returns:
 
     """
-    table_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvg), ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvg), ssh_client=con_ssh,
+                                           auth_info=Tenant.get('admin')))
     if isinstance(fields, str):
         fields = [fields]
 
@@ -2387,8 +2371,9 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, stric
     return vals
 
 
-def get_host_instance_backing(host, con_ssh=None):
-    params = get_host_lvg_show_values(host=host, fields='parameters', lvg='nova-local', con_ssh=con_ssh)[0]
+def get_host_instance_backing(host, con_ssh=None, auth_info=Tenant.get('admin')):
+    params = get_host_lvg_show_values(host=host, fields='parameters', lvg='nova-local', con_ssh=con_ssh,
+                                      auth_info=auth_info)[0]
     return params['instance_backing']
 
 
@@ -2426,14 +2411,14 @@ def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None
     if inst_backing is not None:
         if 'image' in inst_backing:
             inst_backing = 'image'
-        elif 'lvm' in inst_backing:
-            inst_backing = 'lvm'
-            if inst_lv_size is None and lvg == 'nova-local':
-                lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
-                                                       strict=False)[0]
-                inst_lv_size = min(50, int(int(lvm_vg_size)/2))    # half of the nova-local size up to 50g
-                if inst_lv_size < 5:        # use default value if lvm_vg_size is less than 10g
-                    inst_lv_size = None
+        # elif 'lvm' in inst_backing:
+        #     inst_backing = 'lvm'
+        #     if inst_lv_size is None and lvg == 'nova-local':
+        #         lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+        #                                                strict=False)[0]
+        #         inst_lv_size = min(50, int(int(lvm_vg_size)/2))    # half of the nova-local size up to 50g
+        #         if inst_lv_size < 5:        # use default value if lvm_vg_size is less than 10g
+        #             inst_lv_size = None
         elif 'remote' in inst_backing:
             inst_backing = 'remote'
         else:
@@ -2552,7 +2537,7 @@ def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, un
         return code, output
 
     if wait_for_host_aggregate:
-        res = wait_for_host_in_aggregate(host=host, storage_backing=inst_backing, fail_ok=fail_ok)
+        res = wait_for_host_in_instance_backing(host=host, storage_backing=inst_backing, fail_ok=fail_ok)
         if not res:
             err = "Host {} did not appear in {} host-aggregate within timeout".format(host, inst_backing)
             return 4, err
@@ -2560,14 +2545,14 @@ def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, un
     return 0, "{} storage backing is successfully set to {}".format(host, inst_backing)
 
 
-def wait_for_host_in_aggregate(host, storage_backing, timeout=120, check_interval=3, fail_ok=False, con_ssh=None):
+def wait_for_host_in_instance_backing(host, storage_backing, timeout=120, check_interval=3, fail_ok=False, con_ssh=None):
 
     endtime = time.time() + timeout
     while time.time() < endtime:
-        hosts_with_backing = get_hosts_in_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh,
-                                                            up_only=False)
-        if host in hosts_with_backing:
-            LOG.info("{} appeared in host-aggregate for {} backing".format(host, storage_backing))
+        host_backing = get_host_instance_backing(host=host, con_ssh=con_ssh)
+        if host_backing in storage_backing:
+            LOG.info("{} is configured with {} backing".format(host, storage_backing))
+            time.sleep(30)
             return True
 
         time.sleep(check_interval)
@@ -2584,17 +2569,13 @@ def is_host_local_image_backing(host, con_ssh=None):
     return is_host_with_instance_backing(host, storage_type='image', con_ssh=con_ssh)
 
 
-def is_host_local_lvm_backing(host, con_ssh=None):
-    return is_host_with_instance_backing(host, storage_type='lvm', con_ssh=con_ssh)
-
-
 def __parse_total_cpus(output):
     last_line = output.splitlines()[-1]
     print(last_line)
     # Final resource view: name=controller-0 phys_ram=44518MB used_ram=0MB phys_disk=141GB used_disk=1GB
     # free_disk=133GB total_vcpus=31 used_vcpus=0.0 pci_stats=[PciDevicePool(count=1,numa_node=0,product_id='0522',
     # tags={class_id='030000',configured='1',dev_type='type-PCI'},vendor_id='102b')]
-    total = round(float(re.findall('used_vcpus=([\d|.]*) ', last_line)[0]), 4)
+    total = round(float(re.findall(r'used_vcpus=([\d|.]*) ', last_line)[0]), 4)
     return total
 
 
@@ -2924,29 +2905,35 @@ def get_vcpu_pins_for_instance_via_virsh(host_ssh, instance_name):
     return vcpu_pins
 
 
-def get_hosts_per_storage_backing(up_only=True, con_ssh=None):
+def get_hosts_per_storage_backing(up_only=True, con_ssh=None, auth_info=Tenant.get('admin'), hosts=None):
     """
     Get hosts for each possible storage backing
     Args:
         up_only (bool): whether to return up hypervisor only
+        auth_info
         con_ssh:
+        hosts (None|list|tuple): hosts to check
 
     Returns (dict): {'local_image': <cow hosts list>,
-                    'local_lvm': <lvm hosts list>,
                     'remote': <remote hosts list>
                     }
     """
+    if not hosts:
+        host_func = get_up_hypervisors if up_only else get_hypervisors
+        hosts = host_func(con_ssh=con_ssh, auth_info=auth_info)
 
-    hosts = {'local_image': get_hosts_in_storage_aggregate('local_image', up_only=False, con_ssh=con_ssh),
-             'local_lvm': get_hosts_in_storage_aggregate('local_lvm', up_only=False, con_ssh=con_ssh),
-             'remote': get_hosts_in_storage_aggregate('remote', up_only=False, con_ssh=con_ssh)}
+    hosts_per_backing = {'local_image': [], 'remote': []}
+    for host in hosts:
+        backing = get_host_instance_backing(host=host, con_ssh=con_ssh, auth_info=auth_info)
+        if backing == 'image':
+            hosts_per_backing['local_image'].append(host)
+        elif backing == 'remote':
+            hosts_per_backing['remote'].append(host)
+        else:
+            raise NotImplementedError('Unknown instance backing for {}: {}'.format(host, backing))
 
-    if up_only:
-        up_hosts = get_up_hypervisors(con_ssh=con_ssh)
-        for backing, hosts_with_backing in hosts.items():
-            hosts[backing] = list(set(hosts_with_backing) & set(up_hosts))
-
-    return hosts
+    LOG.info("Hosts per storage backing: {}".format(hosts_per_backing))
+    return hosts_per_backing
 
 
 def get_coredumps_and_crashreports(move=True):
@@ -3788,14 +3775,14 @@ def get_host_co_processor_pci_list(hostname):
         dev_sets = output.split('--\n')
         for dev_set in dev_sets:
             pdev_line, vdev_line = dev_set.strip().splitlines()
-            class_id, vendor_id, device_id = re.findall('\[([0-9a-fA-F]{4})\]', pdev_line)[0:3]
-            vf_class_id, vf_vendor_id, vf_device_id = re.findall('\[([0-9a-fA-F]{4})\]', vdev_line)[0:3]
+            class_id, vendor_id, device_id = re.findall(r'\[([0-9a-fA-F]{4})\]', pdev_line)[0:3]
+            vf_class_id, vf_vendor_id, vf_device_id = re.findall(r'\[([0-9a-fA-F]{4})\]', vdev_line)[0:3]
             assert vf_class_id == class_id
             assert vf_vendor_id == vendor_id
             assert device_id != vf_device_id
 
-            vendor_name = re.findall('\"([^\"]+) \[{}\]'.format(vendor_id), pdev_line)[0]
-            pci_alias = re.findall('\"([^\"]+) \[{}\]'.format(device_id), pdev_line)[0]
+            vendor_name = re.findall(r'\"([^\"]+) \[{}\]'.format(vendor_id), pdev_line)[0]
+            pci_alias = re.findall(r'\"([^\"]+) \[{}\]'.format(device_id), pdev_line)[0]
             if pci_alias == 'Device':
                 pci_alias = None
             else:
@@ -4000,7 +3987,7 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
     msg = ntp_alarms = None
     if not con_ssh:
         con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
-        con_ssh = ControllerClient.get_active_controller(name=region)
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     while time.time() < end_time:
         ntp_alarms = system_helper.get_alarms(alarm_id=EventLogID.NTP_ALARM, entity_id=host, strict=False,
@@ -4046,7 +4033,7 @@ def get_max_vms_supported(host, con_ssh=None):
     cpu_model = get_host_cpu_model(host=host, con_ssh=con_ssh)
     if ProjVar.get_var('IS_VBOX'):
         max_count = MaxVmsSupported.VBOX
-    elif re.search('Xeon.* CPU D-[\d]+', cpu_model):
+    elif re.search(r'Xeon.* CPU D-[\d]+', cpu_model):
         max_count = MaxVmsSupported.XEON_D
 
     LOG.info("Max number vms supported on {}: {}".format(host, max_count))
@@ -4077,9 +4064,8 @@ def get_hypersvisors_with_config(hosts=None, up_only=True, hyperthreaded=None, s
         candidate_hosts = hypervisors
 
     if candidate_hosts and storage_backing:
-        hosts_with_backing = get_hosts_in_storage_aggregate(storage_backing=storage_backing, con_ssh=con_ssh,
-                                                            up_only=False)
-        candidate_hosts = list(set(candidate_hosts) & set(hosts_with_backing))
+        candidate_hosts = get_hosts_in_storage_backing(storage_backing=storage_backing, con_ssh=con_ssh,
+                                                       hosts=candidate_hosts)
 
     if hyperthreaded is not None and candidate_hosts:
         ht_hosts = []
@@ -4163,7 +4149,8 @@ def lock_unlock_hosts(hosts, force_lock=False, con_ssh=None, auth_info=Tenant.ge
     from keywords import nova_helper
     from testfixtures.recover_hosts import HostsToRecover
 
-    controllers, computes, storages = system_helper.get_hosts_by_personality(con_ssh=con_ssh, auth_info=auth_info)
+    controllers, computes, storages = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, auth_info=auth_info,
+                                                                                  rtn_tuple=True)
     controllers = list(set(controllers) & set(hosts))
     computes_to_lock = list(set(computes) & set(hosts))
     storages = list(set(storages) & set(hosts))
@@ -4504,6 +4491,8 @@ def enable_disable_hosts_devices(hosts, devices, enable=True, con_ssh=None, auth
         hosts (str|list|tuple): hostname(s)
         devices (str|list|tuple): device(s) name or address via system host-device-list
         enable (bool): whether to enable or disable devices
+        con_ssh
+        auth_info
 
     Returns:
 
@@ -4587,7 +4576,7 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
         original_host = ssh_client.host
 
     if not prompt:
-        prompt = '.*' + host + '\:~\$'
+        prompt = '.*' + host + r'\:~\$'
 
     remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
     remote_ssh.connect()

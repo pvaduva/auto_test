@@ -1,6 +1,4 @@
-import os
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.cgcs import DROPS
+from consts.filepaths import WRSROOT_HOME
 
 
 class ProjVar:
@@ -92,62 +90,37 @@ class InstallVars:
 
     @classmethod
     def set_install_vars(cls, lab,
-                         resume=False,
-                         wipedisk=False,
-                         skips=None,
-                         build_server=None,
-                         host_build_dir=None,
-                         drop_num=None,
-                         guest_image=None,
-                         files_server=None,
-                         files_dir=None,
-                         hosts_bulk_add=None,
-                         boot_if_settings=None,
-                         tis_config=None,
-                         lab_setup=None,
-                         heat_templates=None,
-                         license_path=None,
-                         boot_server=None,
-                         boot_type='pxe',
-                         iso_path=None,
-                         controller0_ceph_mon_device=None,
-                         controller1_ceph_mon_device=None,
+                         build_server,
+                         host_build_dir,
+                         guest_image,
+                         guest_server,
+                         files_server,
+                         hosts_bulk_add,
+                         boot_if_settings,
+                         tis_config,
+                         lab_setup,
+                         heat_templates,
+                         license_path,
+                         boot_server,
+                         iso_path,
+                         iso_server,
+                         controller0_ceph_mon_device,
+                         controller1_ceph_mon_device,
+                         boot_type='feed',
                          ceph_mon_gib=None,
                          low_latency=False,
                          security="standard",
-                         stop=99,
+                         stop=None,
+                         patch_server=None,
                          patch_dir=None,
                          multi_region=False,
                          dist_cloud=False,
-                         ovs=False):
-
-        __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
-        __host_build_dir = host_build_dir if host_build_dir else BuildServerPath.LATEST_HOST_BUILD_PATHS.get(
-            DROPS.get(drop_num), BuildServerPath.DEFAULT_HOST_BUILD_PATH)
-        __files_server = files_server if files_server else __build_server
-
-        from keywords import install_helper
-        __files_dir = files_dir if files_dir else \
-            "{}/{}/{}".format(__host_build_dir, BuildServerPath.CONFIG_LAB_REL_PATH,
-                              install_helper.get_git_name(lab['name']))
-        __iso_path = iso_path if iso_path else __host_build_dir + '/export/bootimage.iso'
-        iso_server = __build_server
-        if __iso_path.find(":/") != -1:
-            iso_server = __iso_path[:__iso_path.find(":")]
-            __iso_path = __iso_path[__iso_path.find("/"):]
-        patch_server = __build_server
-        if patch_dir and patch_dir.find(":/") != -1:
-            patch_server = patch_dir[:iso_path.find(":")]
-            patch_dir = patch_dir[iso_path.find("/"):]
-        guest_server = __build_server
-        if guest_image:
-            if guest_image.find(":/") != -1:
-                guest_server = guest_image[:guest_image.find(":")]
-                guest_image_path = guest_image[guest_image.find("/"):]
-            else:
-                guest_image_path = guest_image
-        else:
-            guest_image_path = BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop_num), BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+                         ovs=False,
+                         kubernetes=False,
+                         resume=False,
+                         wipedisk=False,
+                         skips=None,
+                         ):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -159,20 +132,20 @@ class InstallVars:
             'MULTI_REGION': multi_region,
             'DISTRIBUTED_CLOUD': dist_cloud,
             'OVS': ovs,
+            "KUBERNETES": kubernetes,
             # TIS BUILD info
-            'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR': __host_build_dir,
+            'BUILD_SERVER': build_server,
+            'TIS_BUILD_DIR': host_build_dir,
 
             # Files paths
-            'FILES_SERVER': __files_server,
-            'LAB_FILES_DIR': __files_dir,
-            'ISO_PATH': __iso_path,
+            'FILES_SERVER': files_server,
+            'ISO_PATH': iso_path,
             'ISO_HOST': iso_server,
             'PATCH_DIR': patch_dir,
             'PATCH_SERVER': patch_server,
             # Default tuxlab for boot
-            'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
-            'BOOT_TYPE': boot_type.lower().strip(),
+            'BOOT_SERVER':  boot_server,
+            'BOOT_TYPE': boot_type,
             'LOW_LATENCY': low_latency,
             'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
@@ -184,8 +157,8 @@ class InstallVars:
             'LAB_SETUP_PATH': lab_setup,
 
             # Generic
-            'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
-            'GUEST_IMAGE': guest_image_path,
+            'LICENSE': license_path,
+            'GUEST_IMAGE': guest_image,
             'GUEST_SERVER': guest_server,
             'HEAT_TEMPLATES': heat_templates,
             'BUILD_ID': None,
@@ -231,35 +204,23 @@ class UpgradeVars:
     __upgrade_steps = {}
 
     @classmethod
-    def set_upgrade_vars(cls, build_server=None,
-                         tis_build_dir=None,
-                         upgrade_version=None,
-                         upgrade_license_path=None,
-                         patch_dir=None,
+    def set_upgrade_vars(cls, build_server,
+                         tis_build_dir,
+                         upgrade_version,
+                         patch_dir,
+                         upgrade_license_path,
                          orchestration_after=None,
                          storage_apply_strategy=None,
                          compute_apply_strategy=None,
                          max_parallel_computes=None,
                          alarm_restrictions=None):
 
-        __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
-
         cls.__var_dict = {
-
             'UPGRADE_VERSION': upgrade_version,
             # TIS BUILD info
-            'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR':
-                tis_build_dir if tis_build_dir
-                else (BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version]
-                      if upgrade_version in BuildServerPath.LATEST_HOST_BUILD_PATHS
-                      else BuildServerPath.DEFAULT_HOST_BUILD_PATH),
-
-            'PATCH_DIR':
-                patch_dir if patch_dir
-                else (BuildServerPath.PATCH_DIR_PATHS[upgrade_version]
-                      if upgrade_version in BuildServerPath.PATCH_DIR_PATHS else None),
-
+            'BUILD_SERVER': build_server,
+            'TIS_BUILD_DIR': tis_build_dir,
+            'PATCH_DIR': patch_dir,
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
             # Orchestration -  the orchestration starting point after certain number of nodes upgraded normally
@@ -311,24 +272,18 @@ class UpgradeVars:
 
 class PatchingVars:
     __var_dict = {
-        'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        #'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
-        'DEF_PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_6.0_Test_Patch_Build',
-        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/',
-        'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
+        # Common patch vars
         'PATCH_DIR': None,
-        'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
-        'PASSWORD': ')OKM0okm',  # getpass.getpass()
-        'PATCH_BASE_DIR': None,
-        # Patch orchestration
+        'PATCH_BUILD_SERVER': None,
+
+        # Formal release patch vars
+        'PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/TC_18.03_Patch_Formal_Build',
         'CONTROLLER_APPLY_TYPE': "serial",
         'STORAGE_APPLY_TYPE': "serial",
         'COMPUTE_APPLY_TYPE': "serial",
         'MAX_PARALLEL_COMPUTES': 2,
         'INSTANCE_ACTION': "stop-start",
         'ALARM_RESTRICTIONS': "strict",
-
     }
 
     @classmethod
@@ -349,12 +304,6 @@ class PatchingVars:
         cls.__var_dict.update(**kwargs)
 
 
-class BackupRestore:
-    USB_MOUNT_POINT = '/media/wrsroot'
-    USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
-    LOCAL_BACKUP_PATH = '/sandbox/backups'
-
-
 class RestoreVars:
 
     __var_dict = {}
@@ -367,22 +316,11 @@ class RestoreVars:
                          backup_builds_dir=None,
                          cinder_backup=False):
 
-        if backup_src.lower() == 'usb':
-            if backup_src_path is None or \
-                    (backup_src_path is not None and BackupRestore.USB_MOUNT_POINT not in backup_src_path):
-                backup_src_path = BackupRestore.USB_BACKUP_PATH
-
-        elif backup_src.lower() == 'local':
-            if backup_src_path is None:
-                backup_src_path = BackupRestore.LOCAL_BACKUP_PATH
-
         cls.__var_dict = {
-            'BACKUP_SRC': backup_src if backup_src else "USB",
+            'BACKUP_SRC': backup_src,
             'BACKUP_SRC_PATH': backup_src_path,
             'BACKUP_BUILD_ID': backup_build_id if backup_build_id else None,
-
-            'BACKUP_BUILDS_DIR': backup_builds_dir if backup_builds_dir
-            else os.path.basename(BuildServerPath.DEFAULT_HOST_BUILDS_DIR),
+            'BACKUP_BUILDS_DIR': backup_builds_dir,
             'BACKUP_SRC_SERVER': None,
             'SKIP_SETUP_FEED': False,
             'SKIP_REINSTALL': False,
@@ -416,19 +354,11 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None, cinder_backup=False):
-
-        if backup_dest.lower() == 'usb':
-            if backup_dest_path is None or \
-                    (backup_dest_path is not None and BackupRestore.USB_MOUNT_POINT not in backup_dest_path):
-                backup_dest_path = BackupRestore.USB_BACKUP_PATH
-
-        elif backup_dest.lower() == 'local':
-            if backup_dest_path is None:
-                backup_dest_path = BackupRestore.LOCAL_BACKUP_PATH
+    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None,
+                        cinder_backup=False):
 
         cls.__var_dict = {
-            'BACKUP_DEST': backup_dest.lower() if backup_dest else "usb",
+            'BACKUP_DEST': backup_dest,
             'BACKUP_DEST_PATH': backup_dest_path,
             'DELETE_BUCKUPS': delete_backups,
             'DEST_LABS': dest_labs.split(',') if dest_labs else None,

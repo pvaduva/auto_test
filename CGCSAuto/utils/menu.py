@@ -1,6 +1,8 @@
 import time
 import re
+
 from utils.tis_log import LOG
+from utils.exceptions import TelnetError
 from consts.proj_vars import InstallVars, ProjVar
 from consts import bios
 from consts.cgcs import SysType
@@ -34,13 +36,18 @@ class Menu(object):
             self.wrap_around = wrap_around
             self.sub_menus = [] if sub_menus is None else sub_menus
 
-    def select(self, telnet_conn, index=None, pattern=None, tag=None):
+    def select(self, telnet_conn=None, index=None, pattern=None, tag=None):
         if not self.options:
             try:
                 self.find_options(telnet_conn)
             except TypeError:
                 LOG.error("{} has no options".format(self.name))
                 raise
+
+        if index is pattern is tag is None:
+            raise ValueError("index, pattern or tag has to be provided to determin the option to select")
+
+        option = None
         if index is not None:
             option = self.options[index]
         elif pattern is not None:
@@ -53,15 +60,18 @@ class Menu(object):
                     if pattern in item.name:
                         option = item
                         break
-        elif tag is not None:
+
+        if not option and tag is not None:
             for item in self.options:
                 if item.tag is not None:
                     if tag == item.tag:
                         option = item
                         break
-        else:
-            LOG.error("Either name of the option, index, or tag must be given in order to select")
-        LOG.info("Selecting {} option {}".format(self.name, option.name))
+
+        if not option:
+            raise TelnetError("Unable to determine option to select")
+
+        LOG.info("Attempt to select {} option {}".format(self.name, option.name))
         if option.key == "Enter" or option.key == "Return":
             while self.index != option.index:
                 if option.index > self.index:
@@ -71,9 +81,9 @@ class Menu(object):
         option.enter(telnet_conn)
         self.index = 0
 
-    def find_options(self, telnet_conn, end_of_menu, option_identifier, newline=b"\n"):
+    def find_options(self, telnet_conn, end_of_menu=None, option_identifier=None, newline=b"\n"):
         telnet_conn.expect([end_of_menu], 60)
-        output = str.encode(telnet_conn.cmd_output)
+        output = telnet_conn.cmd_output.encode()
         options = re.split(newline, output)
         options = [option for option in options if re.search(option_identifier, option)]
         LOG.debug("{} options are: {}".format(self.name, options))
@@ -88,7 +98,7 @@ class Menu(object):
 
     def move_down(self, telnet_conn):
         current_index = self.index
-        LOG.info("Entering: Down")
+        LOG.info("Press: Down")
         telnet_conn.write(str.encode(bios.TerminalKeys.Keys["Down"]))
         if current_index < (len(self.options) - 1):
             self.index += 1
@@ -99,7 +109,7 @@ class Menu(object):
 
     def move_up(self, telnet_conn):
         current_index = self.index
-        LOG.info("Entering: Up")
+        LOG.info("Press: Up")
         telnet_conn.write(str.encode(bios.TerminalKeys.Keys["Up"]))
         if current_index > 0:
             self.index -= 1
@@ -111,7 +121,7 @@ class Menu(object):
     def order_options(self):
         self.options.sort(key=lambda option: option.index)
 
-    def get_current_option(self):
+    def get_current_option(self, telnet_conn=None):
         for option in self.options:
             if option.index == self.index:
                 return option
@@ -130,18 +140,22 @@ class BiosMenu(Menu):
             lab_name = lab["name"]
         lab_name = lab_name.lower()
         LOG.debug("Lab name: {}".format(lab_name))
-        if 'wolfpass' in lab_name or "wildcat" in lab_name or "grizzly" in lab_name:
-            bios_menu_dict = bios.BiosMenus.American_Megatrends
-        elif 'supermicro' in lab_name:
-            bios_menu_dict = bios.BiosMenus.Supermicro
-        elif 'ironpass' in lab_name:
-            bios_menu_dict = bios.BiosMenus.Ironpass
-        elif 'r730' in lab_name or 'r430' in lab_name:
-            bios_menu_dict = bios.BiosMenus.PowerEdge
-        elif 'ml350' in lab_name or 'hp' in lab_name:
-            bios_menu_dict = bios.BiosMenus.ml350
-        elif "r720" in lab_name:
-            bios_menu_dict = bios.BiosMenus.Phoenix
+        menus = bios.BiosMenus
+        lab_menu_dict = {
+            'wolfpass|wildcat|grizzly': menus.American_Megatrends,
+            'hp': menus.HP,
+            'ironpass': menus.Ironpass,
+            'ml350': menus.ml350,
+            'r730|r430': menus.PowerEdge,
+            'r720': menus.Phoenix,
+            'supermicro': menus.Supermicro,
+        }
+        for k, v in lab_menu_dict.items():
+            if re.search(k, lab_name):
+                bios_menu_dict = v
+                break
+        else:
+            raise NotImplementedError('{} not handled'.format(lab_name))
 
         super().__init__(name=bios_menu_dict["name"], kwargs=bios_menu_dict)
 
@@ -161,7 +175,7 @@ class KickstartMenu(Menu):
         super().__init__(name=name, options=options, index=index, prompt=prompt, wrap_around=wrap_around, sub_menus=sub_menus,
                          kwargs=kwargs)
 
-    def get_current_option(self, telnet_conn):
+    def get_current_option(self, telnet_conn=None):
         highlight_code = "\x1b[0;7;37;40m" if "PXE" in self.name else "\x1b[0m\x1b[37m\x1b[40m"
         if not self.options:
             self.find_options(telnet_conn)
@@ -170,8 +184,8 @@ class KickstartMenu(Menu):
                 self.index = self.options[i].index
         return super().get_current_option()
 
-    def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
-                     option_identifier=b"(\dm?\))|([\w]+)\s+> ", newline=b'(\x1b\[\d+;\d+H)+'):
+    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+                     option_identifier=r"(\dm?\))|([\w]+)\s+> ".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
@@ -183,7 +197,7 @@ class KickstartMenu(Menu):
         current_option = self.get_current_option(telnet_conn)
         self.index = current_option.index
 
-    def select(self, telnet_conn, index=None, pattern=None, tag=None):
+    def select(self, telnet_conn=None, index=None, pattern=None, tag=None):
         if isinstance(tag, str):
             tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
 
@@ -201,7 +215,7 @@ class KickstartMenu(Menu):
                 tag_dict["type"] = tag
             tag = tag_dict
 
-        super().select(telnet_conn, index, pattern, tag)
+        super().select(telnet_conn=telnet_conn,  index=index, pattern=pattern, tag=tag)
 
 
 class USBBootMenu(KickstartMenu):
@@ -215,10 +229,9 @@ class USBBootMenu(KickstartMenu):
             Menu.__init__(self=sub_menu, name=sub_menu_dict["name"], kwargs=sub_menu_dict)
             self.sub_menus.append(sub_menu)
 
-    def find_options(self, telnet_conn, end_of_menu=b"utomatic(ally)?( boot)? in|Press \[Tab\] to edit",
-                     option_identifier=b"[A-Z][A-Za-z]", newline=b'(\x1b\[\d+;\d+H)+'):
+    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+                     option_identifier=r"[A-Z][A-Za-z]".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
-
 
 
 class BootDeviceMenu(Menu):
@@ -261,7 +274,7 @@ class Option(object):
         option_name = self.name.lower()
 
         if key is None:
-            has_key = re.search("(press|use)\W*(\w+)", option_name, re.IGNORECASE)
+            has_key = re.search(r"(press|use)\W*(\w+)", option_name, re.IGNORECASE)
             if has_key:
                 match = has_key.group(2)
                 self.key = match.capitalize() if match.capitalize() in bios.TerminalKeys.Keys.keys() else match
@@ -283,10 +296,14 @@ class Option(object):
     def enter(self, telnet_conn):
         key = [self.key] if isinstance(self.key, str) else self.key
         cmd = ''
-        for input in key:
-            cmd += bios.TerminalKeys.Keys.get(input.capitalize(), input)
-        LOG.info("entering {} to select {} option".format("+".join(key), self.name))
-        telnet_conn.write(str.encode(cmd))
+        for input_ in key:
+            cmd += bios.TerminalKeys.Keys.get(input_.capitalize(), input_)
+
+        if not cmd:
+            cmd = '\n'
+        LOG.info("Press {} to select {} option".format('+'.join(key), self.name))
+
+        telnet_conn.write(cmd.encode())
 
 
 class KickstartOption(Option):

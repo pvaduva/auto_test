@@ -195,8 +195,6 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     storage_backing = host_helper.get_host_instance_backing(host=target_host)
     if 'image' in storage_backing:
         storage_backing = 'local_image'
-    elif 'lvm' in storage_backing:
-        storage_backing = 'local_lvm'
     elif 'remote' in storage_backing:
         storage_backing = 'remote'
 

@@ -1055,7 +1055,7 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
 
     if before_host == after_host:
         LOG.warning("Live migration of vm {} failed. Checking if this is expected failure...".format(vm_id))
-        if _is_live_migration_allowed(vm_id, block_migrate=block_migrate) and \
+        if _is_live_migration_allowed(vm_id, vm_host=before_host, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
                 return 2, "Unknown live migration failure"
@@ -1069,9 +1069,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
     return 0, "Live migration is successful."
 
 
-def _is_live_migration_allowed(vm_id, con_ssh=None, block_migrate=None):
+def _is_live_migration_allowed(vm_id, vm_host, con_ssh=None, block_migrate=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     storage_backing = vm_info.get_storage_type()
+    if not storage_backing:
+        storage_backing = host_helper.get_host_instance_backing(host=vm_host, con_ssh=con_ssh)
+
     vm_boot_from = vm_info.boot_info['type']
 
     if storage_backing == 'local_image':
@@ -1112,7 +1115,9 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
     vm_info = VMInfo.get_vm_info(vm_id, con_ssh=con_ssh)
     vm_storage_backing = vm_info.get_storage_type()
     current_host = vm_info.get_host_name()
-    candidate_hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=vm_storage_backing, con_ssh=con_ssh)
+    if not vm_storage_backing:
+        vm_storage_backing = host_helper.get_host_instance_backing(host=current_host, con_ssh=con_ssh)
+    candidate_hosts = host_helper.get_hosts_in_storage_backing(storage_backing=vm_storage_backing, con_ssh=con_ssh)
 
     hosts_table_ = table_parser.table(cli.system('host-list'))
     for host in candidate_hosts:
@@ -1128,7 +1133,7 @@ def get_dest_host_for_live_migrate(vm_id, con_ssh=None):
 
 def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
-
+    Cold migrate a vm and confirm/revert
     Args:
         vm_id (str): vm to cold migrate
         revert (bool): False to confirm resize, True to revert
@@ -1162,7 +1167,10 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     if exitcode == 1:
         vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if len(host_helper.get_hosts_in_storage_aggregate(vm_storage_backing, con_ssh=con_ssh)) < 2:
+        if not vm_storage_backing:
+            vm_storage_backing = host_helper.get_host_instance_backing(before_host, con_ssh=con_ssh)
+
+        if len(host_helper.get_hosts_in_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
             LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
                      "migrate to.".format(vm_id))
             return 1, output
@@ -2087,7 +2095,7 @@ def ssh_to_vm_from_natbox(vm_id, vm_image_name=None, username=None, password=Non
         retry (bool): whether or not to retry if fails to connect
         retry_timeout (int): max time to retry
         close_ssh
-        auth_info (dict)
+        auth_info (dict|None)
 
     Yields (VMSSHClient):
         ssh client of the vm
@@ -2265,7 +2273,7 @@ class VMInfo:
         table_ = table_parser.table(cli.nova('flavor-show', flavor_id, ssh_client=self.con_ssh,
                                              auth_info=Tenant.get('admin')))
         extra_specs = eval(table_parser.get_value_two_col_table(table_, 'extra_specs'))
-        return extra_specs['aggregate_instance_extra_specs:storage']
+        return extra_specs.get(FlavorSpec.STORAGE_BACKING, None)
 
     def has_local_disks(self):
         if self.boot_info['type'] == 'image':
@@ -2300,7 +2308,7 @@ class VMInfo:
 
 
 def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeout.DELETE, fail_ok=False,
-               stop_first=True, con_ssh=None, auth_info=Tenant.get('admin')):
+               stop_first=True, con_ssh=None, auth_info=Tenant.get('admin'), remove_cleanup=None):
     """
     Delete given vm(s) (and attached volume(s)). If None vms given, all vms on the system will be deleted.
 
@@ -2313,6 +2321,7 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
         stop_first (bool): whether to stop active vm(s) first before deleting. Best effort only
         con_ssh (SSHClient):
         auth_info (dict):
+        remove_cleanup (None|str): remove from vm cleanup list if deleted successfully
 
     Returns (tuple): (rtn_code(int), msg(str))  # rtn_code 1,2,3 only returns when fail_ok=True
         (-1, 'No vm(s) to delete.')     # "Empty vm list/string provided and no vm exist on system.
@@ -2379,7 +2388,9 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
 
     # Delete volumes results will not be returned. Best effort only.
     if delete_volumes:
-        cinder_helper.delete_volumes(vols_to_del, fail_ok=True, auth_info=auth_info, con_ssh=con_ssh)
+        res = cinder_helper.delete_volumes(vols_to_del, fail_ok=True, auth_info=auth_info, con_ssh=con_ssh)[0]
+        if res == 0 and remove_cleanup:
+            ResourceCleanup.remove('volume', vols_to_del, scope=remove_cleanup)
 
     # Process returns
     if code == 1:
@@ -2401,6 +2412,9 @@ def delete_vms(vms=None, delete_volumes=True, check_first=True, timeout=VMTimeou
             LOG.warning(msg)
             return 2, msg
         raise exceptions.VMPostCheckFailed(msg)
+
+    if remove_cleanup:
+        ResourceCleanup.remove('vm', vms_to_del, scope=remove_cleanup, del_vm_vols=False)
 
     LOG.info("VM(s) deleted successfully: {}".format(vms_to_del))
     return 0, "VM(s) deleted successfully."
@@ -2429,14 +2443,15 @@ def _wait_for_vms_deleted(vms, header='ID', timeout=VMTimeout.DELETE, fail_ok=Tr
     vms_to_check = list(vms)
     vms_deleted = []
     end_time = time.time() + timeout
+    args = '--all-tenants' if auth_info and auth_info.get('user') == 'admin' else ''
     while time.time() < end_time:
         try:
-            output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+            output = cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info)
         except exceptions.CLIRejected as e:
             if 'The resource could not be found' in e.__str__():
                 LOG.error("'nova list' failed post vm deletion. Workaround is being applied.")
                 time.sleep(3)
-                output = cli.nova('list --all-tenants', ssh_client=con_ssh, auth_info=auth_info)
+                output = cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info)
             else:
                 raise
 
@@ -3613,7 +3628,7 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
         dd_cmd = 'dd if=/dev/zero of=/dev/null &'
         kill_dd = 'pkill -ex dd'
 
-        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, timeout=120) as vm_ssh:
+        with ssh_to_vm_from_natbox(vm_id, con_ssh=con_ssh, timeout=120, auth_info=None) as vm_ssh:
             LOG.info("Start first 2 dd processes in vm")
             vm_ssh.exec_cmd(cmd=dd_cmd)
             vm_ssh.exec_cmd(cmd=dd_cmd)
@@ -3624,7 +3639,8 @@ def boost_vm_cpu_usage(vm_id, end_event, new_dd_events=None, dd_event=None, time
             while time.time() < end_time:
                 if end_event.is_set():
                     LOG.info("End event set, kill dd processes in vm")
-                    vm_ssh.exec_cmd(kill_dd)
+                    vm_ssh.flush()
+                    vm_ssh.exec_cmd(kill_dd, get_exit_code=False)
                     return
 
                 for event in new_dd_events:
@@ -3687,7 +3703,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
             current_vms = nova_helper.get_vms(strict=False, name=vm_name)
             current_count = len(current_vms)
             if current_count == expt_max:
-                wait_for_vm_status(vm_id=current_vms[-1])
+                wait_for_vm_status(vm_id=current_vms[-1], auth_info=None)
                 if func_second_vm:
                     if not second_vm:
                         second_vm = list(set(current_vms) - set(vm_ids))[0]
@@ -3704,7 +3720,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
 
                 vm_ids = current_vms
                 for vm_id in new_vms:
-                    wait_for_vm_status(vm_id=vm_id)
+                    wait_for_vm_status(vm_id=vm_id, auth_info=None)
                     wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=240)
 
                     dd_event = Events('dd started in {}'.format(vm_id))
@@ -3789,8 +3805,9 @@ def wait_for_auto_cpu_scale(vm_id, scale_up_timeout=1200, scale_down_timeout=120
 
         events = new_dd_events + [end_event]
         while time.time() < scale_up_end_time:
+            time.sleep(10)
             current_now = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus',
-                                                                  con_ssh=con_ssh))[1]
+                                                                  con_ssh=con_ssh, auth_info=None))[1]
             if current_now > current_:
                 for x in range(current_now - current_):
                     event_ = events.pop(0)
