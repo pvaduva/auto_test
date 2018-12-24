@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 from utils.node import Node
 from consts.auth import Tenant
 from consts.timeout import InstallTimeout
-from consts.cgcs import SysType, DC_SubcloudStatus
+from consts.cgcs import SysType, SubcloudStatus
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import ProjVar, InstallVars
 
@@ -507,18 +507,18 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, files_
     end_time = time.time() + 60
     while time.time() < end_time:
 
-        if subcloud in dc_helper.get_subclouds(avail=DC_SubcloudStatus.AVAIL_ONLINE,
-                                               mgmt=DC_SubcloudStatus.MANAGEMENT_UNMANAGED):
+        if subcloud in dc_helper.get_subclouds(avail=SubcloudStatus.AVAIL_ONLINE,
+                                               mgmt=SubcloudStatus.MGMT_UNMANAGED):
             break
 
         time.sleep(20)
 
     else:
         assert False, "The subcloud availability did not reach {} status after config"\
-            .format(DC_SubcloudStatus.AVAIL_ONLINE)
+            .format(SubcloudStatus.AVAIL_ONLINE)
 
-    LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, DC_SubcloudStatus.AVAIL_ONLINE,
-                                                            DC_SubcloudStatus.MANAGEMENT_UNMANAGED))
+    LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
+                                                            SubcloudStatus.MGMT_UNMANAGED))
     LOG.info("Managing subcloud {} ... ".format(subcloud))
     dc_helper.manage_subcloud(subcloud=subcloud)
 

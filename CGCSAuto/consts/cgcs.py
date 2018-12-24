@@ -730,12 +730,16 @@ class PatchPattern:
     FILE_NOT_EXIST = 'File does not exist: (.*)'
 
 
-class DC_SubcloudStatus:
+class SubcloudStatus:
     AVAIL_ONLINE = "online"
     AVAIL_OFFLINE = "offline"
+    MGMT_MANAGED = "managed"
+    MGMT_UNMANAGED = "unmanaged"
+    SYNCED = 'in-sync'
+    UNSYNCED = 'out-of-sync'
 
-    MANAGEMENT_MANAGED = "managed"
-    MANAGEMENT_UNMANAGED = "unmanaged"
 
-    SYNC_IN_SYNC = 'in-sync'
-
+class PodStatus:
+    RUNNING = 'Running'
+    COMPLETED = 'Completed'
+    CRASH = 'CrashLoopBackOff'

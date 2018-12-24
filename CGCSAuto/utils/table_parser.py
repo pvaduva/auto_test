@@ -6,6 +6,7 @@ from utils.tis_log import LOG
 
 
 delimiter_line = re.compile('^\+-[+\-]+-\+$')
+kute_sep = re.compile('\s\s[^\s]')
 
 
 def __details_multiple(output_lines, with_label=False):
@@ -936,3 +937,53 @@ def get_columns(table_, headers):
         results.append([row[i] for i in selected_column_positions])
 
     return results
+
+
+def table_kube(output_lines):
+    """Parse single table from kubectl output.
+    Return dict with list of column names in 'headers' key and
+    rows in 'values' key.
+    """
+    table_ = {'headers': [], 'values': []}
+
+    if not isinstance(output_lines, list):
+        output_lines = output_lines.split('\n')
+
+    if not output_lines:
+        return table_
+
+    if not output_lines[-1]:
+        # skip last line if empty (just newline at the end)
+        output_lines = output_lines[:-1]
+    if not output_lines[0]:
+        output_lines = output_lines[1:]
+
+    if not output_lines:
+        return table_
+
+    header_row = output_lines[0]
+    table_['headers'] = re.split(r'\s[\s]+', header_row)
+
+    m = re.finditer(kute_sep, header_row)
+    starts = [0] + [sep.start()+2 for sep in m]
+    col_count = len(starts)
+    for line in output_lines[1:]:
+        row = []
+        indices = list(starts) + [len(line)]
+        for i in range(col_count):
+            row.append(line[indices[i]:indices[i+1]].strip())
+        table_['values'].append(row)
+
+    if table_['values'] and len(table_['values'][0]) != len(table_['headers']):
+        raise exceptions.CommonError('Unable to parse given lines: \n{}'.format(output_lines))
+
+    return table_
+
+
+def tables_kube(output_lines):
+    output_lines_list = output_lines.split('\n\n')
+    tables_ = []
+    for output_lines_ in output_lines_list:
+        tables_.append(table_kube(output_lines_))
+
+    return tables_

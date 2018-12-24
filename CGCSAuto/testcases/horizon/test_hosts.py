@@ -5,7 +5,7 @@ from utils.horizon.regions import messages
 from utils.horizon.pages.admin.platform import hostinventorypage
 from utils.tis_log import LOG
 from consts import horizon
-from keywords import host_helper
+from keywords import host_helper, system_helper
 from testfixtures.horizon import admin_home_pg, driver
 
 
@@ -118,11 +118,11 @@ def test_horizon_host_inventory_display(host_inventory_pg):
     """
     LOG.tc_step('Test host inventory display')
     host_inventory_pg.go_to_hosts_tab()
-    host_list = host_helper.get_hosts()
+    host_list = system_helper.get_hostnames()
     for host_name in host_list:
 
-        cli_fields = list(host_inventory_pg.hosts_table(host_name).HOST_TABLE_HEADERS_MAP.keys())
-        expt_values = host_helper.get_hostshow_values(host_name, cli_fields)
+        fields = list(host_inventory_pg.hosts_table(host_name).HOST_TABLE_HEADERS_MAP.keys())
+        expt_values = host_helper.get_hostshow_values(host_name, fields)
         expt_values['uptime'] = format_uptime(expt_values['uptime'])
         if expt_values.get('peers') is not None:
             expt_values['peers'] = eval(expt_values.get('peers')).get('name')

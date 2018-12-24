@@ -8,7 +8,7 @@ from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.timeout import DCTimeout
 from consts.filepaths import SysLogPath
-from consts.cgcs import DC_SubcloudStatus
+from consts.cgcs import SubcloudStatus
 from keywords import system_helper
 
 
