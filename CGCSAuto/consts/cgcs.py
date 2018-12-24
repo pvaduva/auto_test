@@ -733,12 +733,12 @@ class PatchPattern:
     FILE_NOT_EXIST = 'File does not exist: (.*)'
 
 
-class DC_SubcloudStatus:
+class SubcloudStatus:
     AVAIL_ONLINE = "online"
     AVAIL_OFFLINE = "offline"
 
-    MANAGEMENT_MANAGED = "managed"
-    MANAGEMENT_UNMANAGED = "unmanaged"
+    MGMT_MANAGED = "managed"
+    MGMT_UNMANAGED = "unmanaged"
 
-    SYNC_IN_SYNC = 'in-sync'
-
+    SYNCED = 'in-sync'
+    UNSYNCED = 'out-if-sync'
