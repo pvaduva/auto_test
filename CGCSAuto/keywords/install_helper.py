@@ -19,7 +19,7 @@ from keywords import system_helper, host_helper, vm_helper, patching_helper, cin
     vlm_helper
 from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
-from utils.clients.telnet import TelnetClient
+from utils.clients.telnet import TelnetClient, LOGIN_REGEX
 from utils.clients.local import LocalHostClient
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.tis_log import LOG
@@ -292,8 +292,16 @@ def get_non_controller_system_hosts():
 
 def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port), hostname=node_obj.name)
-    # if node_obj.telnet_login_prompt:
-    #     _telnet_conn.write(b"\r\n")
+    #if node_obj.telnet_login_prompt:
+    _telnet_conn.write(b"\r\n")
+    try:
+        index = _telnet_conn.expect(["Login:", LOGIN_REGEX], timeout=5)
+        if index == 0:
+            _telnet_conn.write(b"\r\n")
+        elif index == 1:
+            _telnet_conn.login()
+    except exceptions.TelnetTimeout as e:
+        pass
 
     return _telnet_conn
 
@@ -2334,7 +2342,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     return 0, None
 
 
-def set_network_boot_feed(bld_server_conn, load_path, lab=None, skip_cfg=False):
+def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None, skip_cfg=False):
     """
     Sets the network feed for controller-0 in default taxlab
     Args:
@@ -2371,7 +2379,11 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, skip_cfg=False):
     if not lab:
         lab = InstallVars.get_install_var("LAB")
 
-    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    if not boot_server:
+        tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    else:
+        tuxlab_server = boot_server
+
     controller0 = lab["controller-0"]
     LOG.info("Set feed for {} network boot".format(controller0.barcode))
     tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(load_path)
@@ -2448,6 +2460,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     controller0 = lab["controller-0"]
     if controller0.telnet_conn is None:
         controller0.telnet_conn = open_telnet_session(controller0)
+
 
     boot_interfaces = lab['boot_device_dict']
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))
@@ -3594,6 +3607,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     boot_device_menu = menu.BootDeviceMenu()
     boot_device_regex = next((value for key, value in boot_device_dict.items()
                               if key == node_obj.name or key == node_obj.personality), None)
+
     if boot_device_regex:
         uefi = "UEFI" in boot_device_regex or re.search("r\d+", node_obj.host_name)
     else:
@@ -3620,7 +3634,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
     bios_boot_option = bios_option.name.encode()
     telnet_conn = node_obj.telnet_conn
-    LOG.info('Waiting for BIOS boot option')
+    LOG.info('Waiting for BIOS boot option: {}'.format(bios_boot_option))
     telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 300)
     enter_bios_option(node_obj, bios_option, expect_prompt=False)
     LOG.info('BIOS option entered')

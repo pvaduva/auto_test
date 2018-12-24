@@ -72,7 +72,7 @@ class BuildServerPath:
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
     TITANIUM_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/Titanium_R6_build'
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
-    STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
+    STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
     DEFAULT_HOST_BUILDS_DIR = STX_HOST_BUILDS_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     LATEST_BUILD = 'latest_build'
@@ -86,10 +86,10 @@ class BuildServerPath:
     LAB_CONF_DIR = "lab"
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
-                           '18.10': HEAT_TEMPLATES}
+                           '18.10': HEAT_TEMPLATES, '19.01': HEAT_TEMPLATES,}
 
     DEFAULT_LAB_CONFIG_PATH_EXTS = {'16.10': LAB_CONF_DIR_PREV, '17.06': LAB_CONF_DIR_PREV,
-                                    '18.03': LAB_CONF_DIR_PREV, '18.10': LAB_CONF_DIR}
+                                    '18.03': LAB_CONF_DIR_PREV, '18.10': LAB_CONF_DIR, '19.01': LAB_CONF_DIR,}
 
 
 
@@ -125,7 +125,11 @@ class BuildServerPath:
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD, LATEST_BUILD),
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST,
-                                                      LATEST_BUILD)]
+                                                      LATEST_BUILD)],
+                               '19.01': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD, LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)]
                                }
 
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
@@ -140,6 +144,9 @@ class BuildServerPath:
                                    '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
                          '18.10': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
                                    '/folk/cgts/lab/R6-AIO-SX-full.lic'],
+                         '19.01': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
+                                   '/folk/cgts/lab/R6-AIO-SX-full.lic'],
+
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
@@ -169,6 +176,8 @@ class BuildServerPath:
                          '18.07':
                              '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img',
                          '18.10':
+                             '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
+                         '19.01':
                              '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
                          }
 

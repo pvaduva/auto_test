@@ -1,14 +1,46 @@
-from pytest import skip
-import threading
+import pytest
 
 from consts.cgcs import SysType, Prompt
-from consts.filepaths import BuildServerPath
-from consts.proj_vars import InstallVars
-from keywords import host_helper, system_helper, install_helper, vlm_helper
+from consts.proj_vars import InstallVars, ProjVar
+from keywords import host_helper, install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
-from utils.clients.ssh import SSHClient
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
+
+
+@pytest.fixture(scope='function')
+def install_setup(request):
+    lab = InstallVars.get_install_var("LAB")
+    install_type = ProjVar.get_var('SYS_TYPE')
+    if install_type != SysType.STORAGE:
+        pytest.skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
+                    .format(SysType.STORAGE, install_type))
+
+    lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
+    barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
+    active_con = lab["controller-0"]
+
+    LOG.tc_setup_start("{} install".format(install_type))
+
+    LOG.fixture_step("Reserve hosts")
+    hosts = lab["hosts"]
+    LOG.info("Unreserve {}".format(hosts))
+    vlm_helper.force_unreserve_hosts(hosts)
+    LOG.info("Reserving {}".format(hosts))
+    for barcode in barcodes:
+        vlm_helper._reserve_vlm_console(barcode, "AUTO: lab installation")
+
+    LOG.fixture_step("Attempt to reset port on controller-0")
+    fresh_install_helper.reset_controller_telnet_port(active_con)
+
+    def install_cleanup():
+        fresh_install_helper.install_teardown(lab, active_con)
+
+    request.addfinalizer(install_cleanup)
+
+    _install_setup = fresh_install_helper.setup_fresh_install(lab)
+
+    return _install_setup
 
 
 def test_storage_install(install_setup):
@@ -19,7 +51,7 @@ def test_storage_install(install_setup):
              - pxeboot has been setup.
          Test Setups:
              - Retrieve dictionary containing lab information
-             - Retrive required paths to directories, images, and licenses
+             - Retrieve required paths to directories, images, and licenses
              - Determine active controller
              - Initialize build server and boot server objects
              - Retrieve what steps to be skipped
@@ -39,7 +71,7 @@ def test_storage_install(install_setup):
     guest_server = install_setup["servers"]["guest"]
 
     if final_step == '0' or final_step == "setup":
-        skip("stopping at install step: {}".format(LOG.test_step))
+        pytest.skip("stopping at install step: {}".format(LOG.test_step))
 
     fresh_install_helper.install_controller(sys_type=SysType.STORAGE, patch_dir=patch_dir,
                                             patch_server_conn=patch_server.ssh_conn)
@@ -74,7 +106,7 @@ def test_storage_install(install_setup):
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.unlock_hosts([storage_host for storage_host in hosts if "storage" in storage_host],
-                                       con_ssh=controller0_node.ssh_conn)
+                                      con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 

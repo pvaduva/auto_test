@@ -1,11 +1,12 @@
 import pytest
 
+
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import host_helper, install_helper, vlm_helper
+from keywords import host_helper, install_helper,  dc_helper, vlm_helper, network_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
-from utils.tis_log import LOG
+from utils.tis_log import LOG, exceptions
 
 
 @pytest.fixture(scope='session')
@@ -19,34 +20,34 @@ def install_setup(request):
     subclouds.extend([k for k in lab if 'subcloud' in k])
     central_lab = lab['central_region']
 
-    lab['central_region']['hosts'] = vlm_helper.get_hostnames_from_consts(central_lab)
-    barcodes = vlm_helper.get_barcodes_from_hostnames(lab['central_region']["hosts"], lab=central_lab)
+    install_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
+    if not  install_subcloud:
+        raise ValueError("Subcloud name must be specified with --subcloud <subcloud> option")
 
-    for subcloud in subclouds:
-        lab[subcloud]["hosts"] = vlm_helper.get_hostnames_from_consts(lab[subcloud])
-        barcodes.extend(vlm_helper.get_barcodes_from_hostnames(lab[subcloud]["hosts"], lab=lab[subcloud]))
+    LOG.info("Subcloud Install: {}".format(install_subcloud))
+    if install_subcloud not in subclouds:
+        pytest.skip("The subcloud {} is not member of the distribued cloud:{}"
+                    .format(install_subcloud, lab['short_name']))
+    if not fresh_install_helper.is_dcloud_system_controller_healthy(central_lab):
+        pytest.skip("The distribued cloud system controller {}  is not healthy; Cannot install subcloud {}"
+                    .format(central_lab['short_name'], install_subcloud))
 
-    subcloud_boots = fresh_install_helper.parse_subcloud_boot_info(InstallVars.get_install_var("SUBCLOUD_BOOT"))
-    LOG.info("Subcloud boot info: {}".format(subcloud_boots))
+    lab[install_subcloud]["hosts"] = vlm_helper.get_hostnames_from_consts(lab[install_subcloud])
+    barcodes = vlm_helper.get_barcodes_from_hostnames(lab[install_subcloud]["hosts"], lab=lab[install_subcloud])
 
-    active_con = central_lab["controller-0"]
+    active_con = lab[install_subcloud]["controller-0"]
     install_type = ProjVar.get_var('SYS_TYPE')
 
     LOG.tc_setup_start("{} install".format(install_type))
     LOG.fixture_step("Reserve hosts")
 
-    LOG.tc_setup_start("{} install".format(install_type))
-    LOG.fixture_step("Reserve hosts")
+    hosts = {install_subcloud: lab[install_subcloud]["hosts"]}
 
-    hosts = {'central_region': central_lab['hosts']}
-    for subcloud in subclouds:
-        hosts[subcloud] = lab[subcloud]["hosts"]
-
-    LOG.info("Un-reserving {}".format(hosts))
+    LOG.info("Unreservering {}".format(hosts))
 
     vlm_helper.force_unreserve_hosts(barcodes, val="barcodes")
 
-    LOG.info("Reserving {}".format(hosts))
+    LOG.info("Reservering {}".format(hosts))
     for barcode in barcodes:
         vlm_helper._reserve_vlm_console(barcode, "AUTO: lab installation")
 
@@ -54,17 +55,15 @@ def install_setup(request):
     fresh_install_helper.reset_controller_telnet_port(active_con)
 
     def install_cleanup():
-        fresh_install_helper.install_teardown(lab, active_con, central_lab)
-
+       fresh_install_helper.install_teardown(lab, active_con, lab[install_subcloud])
     request.addfinalizer(install_cleanup)
 
-    _install_setup = fresh_install_helper.setup_fresh_install(lab, dist_cloud)
-    _install_setup["subcloud_boots"] = subcloud_boots
-
+    _install_setup = fresh_install_helper.setup_fresh_install(lab,dist_cloud)
+    _install_setup['install_subcloud'] = install_subcloud
     return _install_setup
 
 
-def test_distributed_cloud_install(install_setup):
+def test_sub_cloud_install(install_setup):
     """
          Configure the active controller
 
@@ -88,11 +87,13 @@ def test_distributed_cloud_install(install_setup):
              - Setup heat resources and clear any install related alarms
          """
     dc_lab = install_setup["lab"]
-    central_region_lab = dc_lab['central_region']
 
-    hosts = dc_lab['central_region']["hosts"]
-    boot_device = central_region_lab['boot_device_dict']
-    controller0_node = central_region_lab["controller-0"]
+    install_subcloud = install_setup['install_subcloud']
+    subcloud_lab = dc_lab[install_subcloud]
+
+    hosts = subcloud_lab["hosts"]
+    boot_device = subcloud_lab['boot_device_dict']
+    controller0_node = subcloud_lab["controller-0"]
     final_step = install_setup["control"]["stop"]
     patch_dir = install_setup["directories"]["patches"]
     patch_server = install_setup["servers"]["patches"]
@@ -101,7 +102,7 @@ def test_distributed_cloud_install(install_setup):
     if final_step == '0' or final_step == "setup":
         pytest.skip("stopping at install step: {}".format(LOG.test_step))
 
-    fresh_install_helper.install_controller(lab=central_region_lab, sys_type=SysType.DISTRIBUTED_CLOUD,
+    fresh_install_helper.install_controller(lab=subcloud_lab, sys_type=SysType.DISTRIBUTED_CLOUD,
                                             patch_dir=patch_dir, patch_server_conn=patch_server.ssh_conn)
     controller0_node.telnet_conn.login()
     controller0_node.telnet_conn.flush()
@@ -111,27 +112,27 @@ def test_distributed_cloud_install(install_setup):
     build_server = install_setup["servers"]["build"]
     load_path = InstallVars.get_install_var("TIS_BUILD_DIR")
 
-    fresh_install_helper.download_lab_files(lab=central_region_lab, lab_files_server=lab_files_server,
+    fresh_install_helper.download_lab_files(lab=subcloud_lab, lab_files_server=lab_files_server,
                                             build_server=build_server,
                                             guest_server=guest_server,
                                             load_path=load_path,
                                             license_path=InstallVars.get_install_var("LICENSE"),
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
-    config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
+    config_file_ext = ''.join(subcloud_lab['short_name'].split('_')[0:2])
     config_file = 'TiS_config.ini_centos_{}_SysCont'.format(config_file_ext)
     lab_setup_config_file = 'lab_setup_system_controller'
     fresh_install_helper.configure_controller(controller0_node, config_file=config_file,
-                                              lab_setup_conf_file=lab_setup_config_file,  lab=central_region_lab)
+                                              lab_setup_conf_file=lab_setup_config_file,  lab=subcloud_lab)
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    file_path = load_path + "/lab/yow/{}".format(central_region_lab['name'].replace('yow-', ''))
+    file_path = load_path + "/lab/yow/{}".format(subcloud_lab['name'].replace('yow-', ''))
     LOG.info("Downloading central region's hosts bulk add xml file from path: {}".format(file_path))
 
-    install_helper.download_hosts_bulk_add_xml_file(central_region_lab, build_server, file_path)
+    install_helper.download_hosts_bulk_add_xml_file(subcloud_lab, build_server, file_path)
 
     LOG.info("Adding  standby controller host xml data ...")
     fresh_install_helper.bulk_add_hosts(lab=dc_lab, con_ssh=controller0_node.ssh_conn)
@@ -139,7 +140,7 @@ def test_distributed_cloud_install(install_setup):
     LOG.info("Booting standby controller host...")
 
     # TODO: get controller-1 hostname
-    fresh_install_helper.boot_hosts(boot_device, hostnames=['controller-1'], lab=central_region_lab)
+    fresh_install_helper.boot_hosts(boot_device, hostnames=['controller-1'], lab=subcloud_lab)
     host_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
                                      con_ssh=controller0_node.ssh_conn)
 
@@ -152,7 +153,7 @@ def test_distributed_cloud_install(install_setup):
 
     LOG.info("Unlocking controller-1 ...")
     fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],
-                                      lab=central_region_lab, con_ssh=controller0_node.ssh_conn)
+                                      lab=subcloud_lab, con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Running lab setup script ...")
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
@@ -163,17 +164,10 @@ def test_distributed_cloud_install(install_setup):
 
     host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
 
-    LOG.info("Adding subcloud info ...")
-    subclouds = fresh_install_helper.add_subclouds(controller0_node)
+    subclouds = dc_helper.get_subclouds()
 
-    LOG.info("DC subclouds added are:{}".format(subclouds))
+    LOG.info("DC subcloudes added are:{}".format(subclouds))
 
-    fresh_install_helper.attempt_to_run_post_install_scripts()
-    subcloud_boots = install_setup['subcloud_boots']
-
-    if len(subcloud_boots.keys()) > 0:
-        LOG.info("Installing subclouds {}  ...".format(subcloud_boots.keys()))
-        fresh_install_helper.install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=dc_lab,
-                                               patch_dir=patch_dir, patch_server_conn=patch_server.ssh_conn)
+    fresh_install_helper.attempt_to_run_post_install_scripts(controller0_node=controller0_node)
 
     fresh_install_helper.reset_global_vars()

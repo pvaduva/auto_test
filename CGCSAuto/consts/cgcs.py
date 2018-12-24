@@ -133,6 +133,9 @@ class Networks:
     }
     INFRA_NETWORK_CIDR = "192.168.205.0/24"
 
+    IP_VER4 = 'ipv4'
+    IP_VER6 = 'ipv6'
+
     @classmethod
     def mgmt_net_name_pattern(cls):
         from consts.proj_vars import ProjVar
