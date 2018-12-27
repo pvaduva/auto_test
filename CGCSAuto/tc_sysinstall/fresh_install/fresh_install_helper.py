@@ -1,16 +1,18 @@
 import os
 import re
-from pytest import skip
 import time
+from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
-from utils.tis_log import LOG
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, network_helper
+from utils.tis_log import LOG, exceptions
 from utils.node import Node
+from setups import initialize_server
 from consts.auth import Tenant
 from consts.timeout import InstallTimeout
 from consts.cgcs import SysType, SubcloudStatus
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
+
 
 lab_setup_count = 0
 completed_resume_step = False
@@ -32,9 +34,9 @@ def set_completed_resume_step(val=False):
 
 def reset_global_vars():
     lab_setup_count_ = set_lab_setup_count(0)
-    completed_resume_step = set_completed_resume_step(False)
+    completed_resume_step_ = set_completed_resume_step(False)
 
-    return lab_setup_count_, completed_resume_step
+    return lab_setup_count_, completed_resume_step_
 
 
 def set_preinstall_projvars(build_dir, build_server):
@@ -45,7 +47,7 @@ def set_preinstall_projvars(build_dir, build_server):
 
 
 def set_build_job(build_dir):
-    job_regex = "(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
+    job_regex = r"(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
     match = re.search(job_regex, build_dir)
     if match:
         job = match.group(0)
@@ -59,7 +61,7 @@ def set_build_job(build_dir):
 
 
 def set_build_id(build_dir, build_server_conn=None):
-    id_regex = '\d+-\d+-\d+_\d+-\d+-\d+'
+    id_regex = r'\d+-\d+-\d+_\d+-\d+-\d+'
 
     if build_dir.endswith("/"):
         build_dir = build_dir[:-1]
@@ -439,11 +441,11 @@ def clear_post_install_alarms(con_ssh=None):
         assert rc == 0, msg
 
 
-def attempt_to_run_post_install_scripts():
+def attempt_to_run_post_install_scripts(controller0_node=None):
     test_step = "Attempt to run post install scripts"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        rc, msg = install_helper.post_install()
+        rc, msg = install_helper.post_install(controller0_node=controller0_node)
         LOG.info(msg)
         assert rc >= 0, msg
     reset_global_vars()
@@ -462,7 +464,7 @@ def get_resume_step(lab=None, install_progress_path=None):
                 return int(line.split("End step: ")[1].strip()) + 1
 
 
-def install_subcloud(subcloud, load_path, build_server, boot_server=None, files_path=None, lab=None, usb=None,
+def install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
                      patch_dir=None, patch_server_conn=None, final_step=None):
 
     if not subcloud:
@@ -477,7 +479,28 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, files_
     test_step = "Install subcloud {}".format(subcloud)
     LOG.tc_step(test_step)
     LOG.info("Setting network feed for subcloud={}".format(subcloud))
-    install_helper.set_network_boot_feed(build_server.ssh_conn, load_path, lab=lab)
+    usb = False
+    if "burn" in boot_type:
+        install_helper.burn_image_to_usb(build_server, lab_dict=lab)
+        usb = True
+    elif "boot-usb" in boot_type:
+        usb = True
+
+    elif "iso" in boot_type:
+        install_helper.rsync_image_to_boot_server(build_server, lab_dict=lab)
+        install_helper.mount_boot_server_iso(lab_dict=lab)
+
+    else:
+        install_helper.set_network_boot_feed(build_server.ssh_conn, load_path, lab=lab, boot_server=boot_server)
+
+    if InstallVars.get_install_var("WIPEDISK"):
+        LOG.fixture_step("Attempting to wipe disks")
+        try:
+            install_helper.wipe_disk_hosts(lab["hosts"], lab=lab)
+
+        except exceptions.TelnetError as e:
+            LOG.error("Failed to wipedisks because of telnet exception: {}".format(e.message))
+
     LOG.info("Installing {} controller... ".format(subcloud))
     install_controller(sys_type=SysType.REGULAR, lab=lab, usb=usb, patch_dir=patch_dir,
                        patch_server_conn=patch_server_conn)
@@ -566,18 +589,63 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, files_
     LOG.info("Subcloud {} installed successfully ... ".format(subcloud))
 
 
-def install_subclouds(subclouds, load_path, build_server, boot_server, lab=None, usb=None, ipv6=False, patch_dir=None,
+def add_subclouds(controller0_node, ip_ver=4):
+    """
+
+    Args:
+        controller0_node:
+        ip_ver:
+
+    Returns:
+
+    """
+
+    if controller0_node is None:
+        raise ValueError("The distributed cloud system controller node object must be provided")
+    if ip_ver not in [4, 6]:
+        raise ValueError("The distributed cloud IP version must be either ipv4 or ipv6;  currently set to {}"
+                         .format("ipv" + str(ip_ver)))
+
+    if not controller0_node.ssh_conn._is_connected():
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
+
+    if controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subclouds_file))[0] == 0:
+        controller0_node.ssh_conn.exec_cmd("chmod 777 {}{}".format(WRSROOT_HOME, subclouds_file))
+    else:
+        assert False, "The subclouds text file {} is missing in system controller {}"\
+            .format(subclouds_file, controller0_node.name)
+
+    LOG.info("Generating subclouds config info from {}".format(subclouds_file))
+    controller0_node.ssh_conn.exec_cmd("cd; ./{}".format(subclouds_file))
+    LOG.info("Checking if subclouds are added and config files are generated.....")
+    subclouds = dc_helper.get_subclouds()
+
+    for subcloud in subclouds:
+        if re.match(r'subcloud-\d{1,2}', subcloud):
+            subcloud_config = subcloud.replace('-', '') + ".config"
+        else:
+            subcloud_config = subcloud + ".config"
+
+        assert controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subcloud_config))[0] == 0, \
+            "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
+
+    LOG.info("Subclouds added and config files generated successfully; subclouds: {}".format(subclouds))
+
+    return subclouds
+
+
+def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=None, patch_dir=None,
                       patch_server_conn=None, final_step=None):
     """
 
     Args:
         subclouds:
+        subcloud_boots:
         load_path:
         build_server:
-        boot_server:
         lab:
-        usb:
-        ipv6:
         patch_dir:
         patch_server_conn:
         final_step:
@@ -585,6 +653,7 @@ def install_subclouds(subclouds, load_path, build_server, boot_server, lab=None,
     Returns:
 
     """
+
     if not subclouds:
         raise ValueError("List of subcloud names must be provided")
     if isinstance(subclouds, str):
@@ -598,15 +667,20 @@ def install_subclouds(subclouds, load_path, build_server, boot_server, lab=None,
     if not dc_lab:
         dc_lab = InstallVars.get_install_var('LAB')
 
+    LOG.info("Subcloud boot info: {}".format(subcloud_boots))
+
     for subcloud in subclouds:
 
         test_step = "Attempt to install {}".format(subcloud)
         LOG.tc_step(test_step)
         if do_step(test_step):
-            rc, msg = install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, usb=usb,
-                                       patch_server_conn=patch_server_conn, lab=dc_lab[subcloud], final_step=final_step)
-            LOG.info(msg)
-            assert rc >= 0, msg
+            if subcloud in subcloud_boots.keys():
+                boot_type = subcloud_boots.get(subcloud, 'pxe')
+                rc, msg = install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, boot_type=boot_type,
+                                           patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
+                                           final_step=final_step)
+                LOG.info(msg)
+                assert rc >= 0, msg
 
 
 def get_subcloud_nodes_from_lab_dict(subcloud_lab):
@@ -622,3 +696,194 @@ def get_subcloud_nodes_from_lab_dict(subcloud_lab):
         raise ValueError("The subcloud lab info dictionary must be provided")
 
     return [v for k, v in subcloud_lab.items() if isinstance(v, Node)]
+
+
+def parse_subcloud_boot_info(subcloud_boot_info):
+
+    subcloud_boots = {}
+    for subcloud_boot in subcloud_boot_info:
+        if len(subcloud_boot) == 0:
+            continue
+        if len(subcloud_boot) == 1:
+            subcloud_boots[subcloud_boot[0]] = {'boot': 'pxe', 'boot_server': 'yow-tuxlab2'}
+        elif len(subcloud_boot) == 2:
+            subcloud_boots[subcloud_boot[0]] = {'boot': subcloud_boot[1], 'boot_server': 'yow-tuxlab2'}
+        else:
+            subcloud_boots[subcloud_boot[0]] = {'boot': subcloud_boot[1], 'boot_server': subcloud_boot[2]}
+
+    return subcloud_boots
+
+
+def is_dcloud_system_controller_healthy(system_controller_lab):
+    """
+
+    Args:
+        system_controller_lab:
+
+    Returns:
+
+    """
+    if system_controller_lab is None:
+        raise ValueError("The distributed cloud system controller lab dictionary must be provided")
+
+    controller0_node = system_controller_lab['controller-0']
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    if controller0_node.ssh_conn._is_connected():
+        rc, health = system_helper.get_system_health_query(controller0_node.ssh_conn)
+        if rc == 0:
+            LOG.info("System controller {} is healthy".format(system_controller_lab['name']))
+            return True
+        else:
+            LOG.warning("System controller is not healthy: {}".format(health))
+            return False
+    else:
+        LOG.warning("System controller not reachable: {}")
+        return False
+
+
+def reset_controller_telnet_port(controller_node):
+
+    if not controller_node:
+        raise ValueError("Controller node object must be specified")
+
+    LOG.info("Attempting to reset port on {}".format(controller_node.name))
+
+    if controller_node.telnet_conn is None:
+        controller_node.telnet_conn = install_helper.open_telnet_session(controller_node)
+        try:
+            network_helper.reset_telnet_port(controller_node.telnet_conn)
+        except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout):
+            pass
+
+
+def install_teardown(lab, active_controller_node, dist_cloud=False):
+    """
+
+    Args:
+        lab:
+        active_controller_node:
+        dist_cloud:
+
+    Returns:
+
+    """
+
+    try:
+        active_controller_node.telnet_conn.login(handle_init_login=True)
+        output = active_controller_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
+        LOG.info(output)
+    except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
+        LOG.error(e_.__str__())
+
+    LOG.fixture_step("unreserving hosts")
+    if dist_cloud:
+        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
+                                   lab=lab['central_region'])
+        subclouds = [k for k, v in lab.items() if 'subcloud' in k]
+        for subcloud in subclouds:
+            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
+                                       lab=lab[subcloud])
+    else:
+        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+
+
+def setup_fresh_install(lab, dist_cloud=False):
+
+    skip_list = InstallVars.get_install_var("SKIP")
+    active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
+    install_type = ProjVar.get_var('SYS_TYPE')
+
+    build_server = InstallVars.get_install_var('BUILD_SERVER')
+    build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
+    boot_server = InstallVars.get_install_var('BOOT_SERVER')
+
+    # Initialise server objects
+    file_server = InstallVars.get_install_var("FILES_SERVER")
+    iso_host = InstallVars.get_install_var("ISO_HOST")
+    patch_server = InstallVars.get_install_var("PATCH_SERVER")
+    guest_server = InstallVars.get_install_var("GUEST_SERVER")
+    servers = list({file_server, iso_host, patch_server, guest_server})
+    LOG.fixture_step("Establishing connection to {}".format(servers))
+
+    bld_server = initialize_server(build_server)
+    if file_server == bld_server.name:
+        file_server_obj = bld_server
+    else:
+        file_server_obj = initialize_server(file_server)
+    if iso_host == bld_server.name:
+        iso_host_obj = bld_server
+    else:
+        iso_host_obj = initialize_server(iso_host)
+    if patch_server == bld_server.name:
+        patch_server = bld_server
+    else:
+        patch_server = initialize_server(patch_server)
+    if guest_server == bld_server.name:
+        guest_server_obj = bld_server
+    else:
+        guest_server_obj = initialize_server(guest_server)
+
+    set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
+
+    servers = {
+               "build": bld_server,
+               "lab_files": file_server_obj,
+               "patches": patch_server,
+               "guest": guest_server_obj
+               }
+
+    directories = {"build": build_dir,
+                   "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
+                   "lab_files": InstallVars.get_install_var("LAB_SETUP_PATH"),
+                   "patches": InstallVars.get_install_var("PATCH_DIR")}
+
+    paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),
+             "license": InstallVars.get_install_var("LICENSE")}
+
+    boot = {"boot_type": InstallVars.get_install_var("BOOT_TYPE"),
+            "security": InstallVars.get_install_var("SECURITY"),
+            "low_latency": InstallVars.get_install_var("LOW_LATENCY")}
+
+    control = {"resume": InstallVars.get_install_var("RESUME"),
+               "stop": InstallVars.get_install_var("STOP")}
+
+    _install_setup = {"lab": lab,
+                      "servers": servers,
+                      "directories": directories,
+                      "paths": paths,
+                      "boot": boot,
+                      "control": control,
+                      "skips": skip_list,
+                      "active_controller": active_con}
+
+    if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
+        LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
+        lab_dict = lab if not dist_cloud else lab['central_region']
+
+        if "burn" in boot["boot_type"]:
+            install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)
+
+        elif "pxe_iso" in boot["boot_type"]:
+            install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab_dict)
+            install_helper.mount_boot_server_iso(lab_dict=lab_dict)
+
+        elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
+            load_path = directories["build"]
+            skip_cfg = "pxeboot" in skip_list
+            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
+
+        if InstallVars.get_install_var("WIPEDISK"):
+            LOG.fixture_step("Attempting to wipe disks")
+            try:
+                active_con.telnet_conn.login()
+                if dist_cloud:
+                    install_helper.wipe_disk_hosts(lab['central_region']["hosts"], lab=lab['central_region'])
+                else:
+                    install_helper.wipe_disk_hosts(lab["hosts"])
+            except exceptions.TelnetError as e:
+                LOG.error("Failed to wipedisks because of telnet exception: {}".format(e.message))
+
+    return _install_setup
+

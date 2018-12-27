@@ -1,16 +1,11 @@
-import pytest
 import os
 import re
 
-from keywords import install_helper, vlm_helper
-from keywords.network_helper import reset_telnet_port
 from utils.tis_log import LOG
-from consts.lab import get_lab_dict
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import TuxlabServerPath, BuildServerPath
-from setups import initialize_server, write_installconf, set_install_params, get_lab_dict
+from consts.filepaths import BuildServerPath
+from setups import write_installconf, set_install_params, get_lab_dict
 from tc_sysinstall.fresh_install import fresh_install_helper
-from utils import exceptions
 
 ########################
 # Command line options #
@@ -48,6 +43,7 @@ def pytest_configure(config):
     patch_dir = config.getoption('patch_dir')
     ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
+    subcloud_boot_list = config.getoption("subcloud_boot_list")
 
     if lab_arg:
         lab_dict = get_lab_dict(lab_arg)
@@ -96,192 +92,25 @@ def pytest_configure(config):
                                          heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                          security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
                                          boot_server=boot_server, resume=resume_install, skip=skiplist,
-                                         kubernetes=kubernetes)
+                                         kubernetes=kubernetes, subcloud_boot=subcloud_boot_list)
 
-    set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
-                       installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
-                       controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
-                       boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                       patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, kubernetes=kubernetes)
+        set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
+                           installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
+                           controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
+                           boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
+                           patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, subcloud_boot=subcloud_boot_list,
+                           kubernetes=kubernetes)
 
-    frame_str = '*'*len('Install Arguments:')
-    print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))
-    install_vars = InstallVars.get_install_vars()
-    bs = install_vars['BUILD_SERVER']
-    for var, value in install_vars.items():
-        if (not value and value != 0) or (value == bs and var != 'BUILD_SERVER'):
-            continue
-        elif var == 'LAB':
+    print("\n**********\nArguments:\n**********\n")
+    for var, value in InstallVars.get_install_vars().items():
+        if var == 'LAB':
+            new_value = {}
             for k, v in dict(value).items():
-                if re.search('_nodes| ip', k):
-                    print("{:<20}: {}".format(k, v))
-        else:
-            print("{:<20}: {}".format(var, value))
-    print("{:<20}: {}".format('LOG_DIR', ProjVar.get_var('LOG_DIR')))
+                if re.search('_nodes|name| ip', k):
+                    new_value[k] = v
+            value = new_value
+            print("{}:\t{}".format(var, value))
     print('')
-
-
-@pytest.fixture(scope='session')
-def install_setup(request):
-    lab = InstallVars.get_install_var("LAB")
-    subclouds = []
-    dist_cloud = InstallVars.get_install_var("DISTRIBUTED_CLOUD")
-    if dist_cloud:
-        subclouds.extend([k for k in lab if 'subcloud' in k])
-        central_lab = lab['central_region']
-        vlm_helper.get_hostnames_from_consts(central_lab)
-        lab['central_region']['hosts'] = vlm_helper.get_hostnames_from_consts(central_lab)
-        barcodes = vlm_helper.get_barcodes_from_hostnames(lab['central_region']["hosts"], lab=central_lab)
-
-        for subcloud in subclouds:
-            lab[subcloud]["hosts"] = vlm_helper.get_hostnames_from_consts(lab[subcloud])
-            barcodes.extend(vlm_helper.get_barcodes_from_hostnames(lab[subcloud]["hosts"], lab=lab[subcloud]))
-    else:
-        lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
-        barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
-
-    skip_list = InstallVars.get_install_var("SKIP")
-    active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
-
-    LOG.fixture_step("Reserve hosts")
-    if dist_cloud:
-        hosts = {'central_region': lab['central_region']['hosts']}
-        for subcloud in subclouds:
-            hosts[subcloud] = lab[subcloud]["hosts"]
-    else:
-        hosts = lab["hosts"]
-    LOG.info("Unreservering {}".format(hosts))
-    if not dist_cloud:
-        vlm_helper.force_unreserve_hosts(hosts)
-    else:
-        vlm_helper.force_unreserve_hosts(barcodes, val="barcodes")
-
-    LOG.info("Reservering {}".format(hosts))
-    for barcode in barcodes:
-        vlm_helper._reserve_vlm_console(barcode, "AUTO: lab installation")
-
-    LOG.info("Attempt to reset port on controller-0")
-    if active_con.telnet_conn is None:
-        active_con.telnet_conn = install_helper.open_telnet_session(active_con)
-        try:
-            reset_telnet_port(active_con.telnet_conn)
-        except (exceptions.TelnetError, ConnectionError):
-            pass
-
-    def install_teardown():
-        LOG.fixture_step("Unreserving hosts")
-        try:
-            telnet_con = active_con.telnet_conn
-            if not telnet_con:
-                telnet_con = install_helper.open_telnet_session(active_con)
-            telnet_con.flush()
-            telnet_con.login(handle_init_login=True)
-            output = telnet_con.exec_cmd("cat /etc/build.info", fail_ok=True, get_exit_code=False)[1]
-            LOG.info(output)
-        except (exceptions.TelnetError, ConnectionError) as e_:
-            LOG.error(e_.__str__())
-
-        if dist_cloud:
-            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
-                                       lab=lab['central_region'])
-            subclouds = [k for k, v in lab.items() if 'subcloud' in k]
-            for subcloud_ in subclouds:
-                vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud_]),
-                                           lab=lab[subcloud_])
-        else:
-            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
-    request.addfinalizer(install_teardown)
-
-    build_server = InstallVars.get_install_var('BUILD_SERVER')
-    build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
-
-    # Initialise server objects
-    file_server = InstallVars.get_install_var("FILES_SERVER")
-    iso_host = InstallVars.get_install_var("ISO_HOST")
-    patch_server = InstallVars.get_install_var("PATCH_SERVER")
-    guest_server = InstallVars.get_install_var("GUEST_SERVER")
-    servers = list({file_server, iso_host, patch_server, guest_server})
-    LOG.fixture_step("Establish ssh connection to {}".format(servers))
-
-    bld_server = initialize_server(build_server)
-    if file_server == bld_server.name:
-        file_server_obj = bld_server
-    else:
-        file_server_obj = initialize_server(file_server)
-    if iso_host == bld_server.name:
-        iso_host_obj = bld_server
-    else:
-        iso_host_obj = initialize_server(iso_host)
-    if patch_server == bld_server.name:
-        patch_server = bld_server
-    elif patch_server:
-        patch_server = initialize_server(patch_server)
-    if guest_server == bld_server.name:
-        guest_server_obj = bld_server
-    else:
-        guest_server_obj = initialize_server(guest_server)
-
-    fresh_install_helper.set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
-
-    servers = {
-               "build": bld_server,
-               "lab_files": file_server_obj,
-               "patches": patch_server,
-               "guest": guest_server_obj
-               }
-
-    directories = {"build": build_dir,
-                   "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
-                   "lab_files": InstallVars.get_install_var("LAB_SETUP_PATH"),
-                   "patches": InstallVars.get_install_var("PATCH_DIR")}
-
-    paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),
-             "license": InstallVars.get_install_var("LICENSE")}
-
-    boot = {"boot_type": InstallVars.get_install_var("BOOT_TYPE"),
-            "security": InstallVars.get_install_var("SECURITY"),
-            "low_latency": InstallVars.get_install_var("LOW_LATENCY")}
-
-    control = {"resume": InstallVars.get_install_var("RESUME"),
-               "stop": InstallVars.get_install_var("STOP")}
-
-    _install_setup = {"lab": lab,
-                      "servers": servers,
-                      "directories": directories,
-                      "paths": paths,
-                      "boot": boot,
-                      "control": control,
-                      "skips": skip_list,
-                      "active_controller": active_con}
-
-    if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
-        LOG.fixture_step("Set up {} boot".format(boot["boot_type"]))
-        lab_dict = lab if not dist_cloud else lab['central_region']
-
-        if "burn" in boot["boot_type"]:
-            install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)
-
-        elif "pxe_iso" in boot["boot_type"]:
-            install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab_dict)
-            install_helper.mount_boot_server_iso(lab_dict=lab_dict)
-
-        elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
-            load_path = directories["build"]
-            skip_cfg = "pxeboot" in skip_list
-            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
-
-        if InstallVars.get_install_var("WIPEDISK"):
-            LOG.fixture_step("Attempt to wipe disks")
-            try:
-                active_con.telnet_conn.login()
-                if dist_cloud:
-                    install_helper.wipe_disk_hosts(lab['central_region']["hosts"], lab=lab['central_region'])
-                else:
-                    install_helper.wipe_disk_hosts(lab["hosts"])
-            except exceptions.TelnetError as e:
-                LOG.error("Failed to wipedisks because of telnet exception: {}".format(e.message))
-
-    return _install_setup
 
 
 def pytest_runtest_teardown(item):
@@ -301,3 +130,4 @@ def pytest_runtest_teardown(item):
 
             os.chmod(progress_file_path, 0o755)
             break
+

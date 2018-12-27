@@ -6,7 +6,7 @@ from utils.horizon.pages.admin.platform import hostinventorypage
 from utils.tis_log import LOG
 from consts import horizon
 from keywords import host_helper, system_helper
-from testfixtures.horizon import admin_home_pg, driver
+from testfixtures.horizon import admin_home_pg, driver      # Test fixture. Do not remove.
 
 
 @fixture(scope='function')

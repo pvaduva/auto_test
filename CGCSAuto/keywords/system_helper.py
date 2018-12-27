@@ -2493,7 +2493,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
 def get_system_health_query(con_ssh=None):
 
-    output = (cli.system('health-query', ssh_client=con_ssh, fail_ok=False)).splitlines()
+    output = (cli.system('health-query', ssh_client=con_ssh, source_openrc=True, fail_ok=False)).splitlines()
     failed = []
     for line in output:
         if "[Fail]" in line:

@@ -5238,7 +5238,10 @@ def vconsole(ssh_client):
 
 def reset_telnet_port(telnet_conn):
     telnet_conn.send_control("\\")
-    telnet_conn.expect(["anonymous:.+:PortCommand> "], timeout=5)
+    index = telnet_conn.expect(["anonymous:.+:PortCommand> ", "Login:"], timeout=5)
+    if index == 1:
+        telnet_conn.write(b"\r\n")
+
     telnet_conn.send("resetport")
     telnet_conn.login()
 
