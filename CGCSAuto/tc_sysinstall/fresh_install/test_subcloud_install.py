@@ -1,36 +1,34 @@
-import pytest
-
+from pytest import skip, fixture
 
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import host_helper, install_helper,  dc_helper, vlm_helper, network_helper
+from keywords import host_helper, install_helper,  dc_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
-from utils.tis_log import LOG, exceptions
+from utils.tis_log import LOG
 
 
-@pytest.fixture(scope='session')
+@fixture(scope='session')
 def install_setup(request):
     lab = InstallVars.get_install_var("LAB")
     subclouds = []
     dist_cloud = InstallVars.get_install_var("DISTRIBUTED_CLOUD")
     if not dist_cloud:
-        pytest.skip("The specified lab {} is not a distributed cloud system".format(lab['short_name']))
+        skip("The specified lab {} is not a distributed cloud system".format(lab['short_name']))
 
     subclouds.extend([k for k in lab if 'subcloud' in k])
     central_lab = lab['central_region']
 
     install_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
-    if not  install_subcloud:
+    if not install_subcloud:
         raise ValueError("Subcloud name must be specified with --subcloud <subcloud> option")
 
     LOG.info("Subcloud Install: {}".format(install_subcloud))
     if install_subcloud not in subclouds:
-        pytest.skip("The subcloud {} is not member of the distribued cloud:{}"
-                    .format(install_subcloud, lab['short_name']))
+        skip("The subcloud {} is not member of the distribued cloud:{}".format(install_subcloud, lab['short_name']))
     if not fresh_install_helper.is_dcloud_system_controller_healthy(central_lab):
-        pytest.skip("The distribued cloud system controller {}  is not healthy; Cannot install subcloud {}"
-                    .format(central_lab['short_name'], install_subcloud))
+        skip("The distribued cloud system controller {}  is not healthy; Cannot install subcloud {}".
+             format(central_lab['short_name'], install_subcloud))
 
     lab[install_subcloud]["hosts"] = vlm_helper.get_hostnames_from_consts(lab[install_subcloud])
     barcodes = vlm_helper.get_barcodes_from_hostnames(lab[install_subcloud]["hosts"], lab=lab[install_subcloud])
@@ -55,10 +53,10 @@ def install_setup(request):
     fresh_install_helper.reset_controller_telnet_port(active_con)
 
     def install_cleanup():
-       fresh_install_helper.install_teardown(lab, active_con, lab[install_subcloud])
+        fresh_install_helper.install_teardown(lab, active_con, lab[install_subcloud])
     request.addfinalizer(install_cleanup)
 
-    _install_setup = fresh_install_helper.setup_fresh_install(lab,dist_cloud)
+    _install_setup = fresh_install_helper.setup_fresh_install(lab, dist_cloud)
     _install_setup['install_subcloud'] = install_subcloud
     return _install_setup
 
@@ -100,7 +98,7 @@ def test_sub_cloud_install(install_setup):
     guest_server = install_setup["servers"]["guest"]
 
     if final_step == '0' or final_step == "setup":
-        pytest.skip("stopping at install step: {}".format(LOG.test_step))
+        skip("stopping at install step: {}".format(LOG.test_step))
 
     fresh_install_helper.install_controller(lab=subcloud_lab, sys_type=SysType.DISTRIBUTED_CLOUD,
                                             patch_dir=patch_dir, patch_server_conn=patch_server.ssh_conn)
@@ -124,7 +122,7 @@ def test_sub_cloud_install(install_setup):
     lab_setup_config_file = 'lab_setup_system_controller'
     fresh_install_helper.configure_controller(controller0_node, config_file=config_file,
                                               lab_setup_conf_file=lab_setup_config_file,  lab=subcloud_lab)
-    controller0_node.telnet_conn.hostname = "controller\-[01]"
+    controller0_node.telnet_conn.hostname = r"controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
