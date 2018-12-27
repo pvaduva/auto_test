@@ -72,7 +72,7 @@ class BuildServerPath:
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
     TITANIUM_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/Titanium_R6_build'
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
-    STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
+    STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
     DEFAULT_HOST_BUILDS_DIR = STX_HOST_BUILDS_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     LATEST_BUILD = 'latest_build'
@@ -91,8 +91,6 @@ class BuildServerPath:
     DEFAULT_LAB_CONFIG_PATH_EXTS = {'16.10': LAB_CONF_DIR_PREV, '17.06': LAB_CONF_DIR_PREV,
                                     '18.03': LAB_CONF_DIR_PREV, '18.10': LAB_CONF_DIR, '19.01': LAB_CONF_DIR,}
 
-
-
     class BldsDirNames:
         TS_15_12_HOST = 'TS_15.12_Host'
         TS_16_10_HOST =  'TS_16.10_Host'
@@ -109,7 +107,7 @@ class BuildServerPath:
 
         R2_VERSION_SEARCH_REGEX = r'(?:15.12|CGTS_2.0)'
         R3_VERSION_SEARCH_REGEX = r'(?:_16.10|CGCS_3.0)'
-        R4_VERSION_SEARCH_REGEX =  r'(?:_17.06|CGCS_4.0)'
+        R4_VERSION_SEARCH_REGEX = r'(?:_17.06|CGCS_4.0)'
         R5_VERSION_SEARCH_REGEX = r'(?:_18.03|CGCS_5.0)'
         R6_VERSION_SEARCH_REGEX = r'(?:CGCS_6.0|_R6_|StarlingX)'
 
@@ -123,12 +121,13 @@ class BuildServerPath:
                                                       LATEST_BUILD)],
                                '18.10': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST,
-                                                      LATEST_BUILD)],
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD,
+                                                      LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)],
                                '19.01': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD, LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD,
+                                                      LATEST_BUILD),
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)]
                                }
 
@@ -191,6 +190,7 @@ class SecurityPath:
     DEFAULT_CERT_PATH = '/home/wrsroot/server-with-key.pem'
     ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'
     CA_CERT_PATH = '/home/wrsroot/ca-cert.pem'
+
 
 class IxiaPath:
     CFG_500FPS = "D:/CGCS/IxNetwork/cgcsauto/pair_at_500fps.ixncfg"

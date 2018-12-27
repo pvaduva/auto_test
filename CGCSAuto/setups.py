@@ -598,7 +598,7 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
                        patch_dir=None, ovs=False, build_server=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
-                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=99,
+                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
                        kubernetes=False, subcloud_boot=None):
 
     if not lab and not installconf_path:
@@ -631,138 +631,119 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
-    installconf = None
-    if installconf_path:
+    # Parse install conf file
+    installconf = configparser.ConfigParser()
+    installconf.read(installconf_path)
+    # Parse lab info
+    lab_info_ = installconf['LAB']
+    lab_name = lab_info_['LAB_NAME']
+    dc_system = True if lab_info_.get('CENTRAL_REGION') else False
+    vbox = True if 'vbox' in lab_name.lower() else False
 
-        installconf = configparser.ConfigParser()
-        installconf.read(installconf_path)
+    if lab_name:
+        lab_to_install = get_lab_dict(lab_name)
+    if not lab_to_install:
+        raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf")
+    if dc_system and 'central_region' not in lab_to_install:
+        raise ValueError("Distributed cloud system value mismatch")
 
-        # Parse lab info
-        lab_info_ = installconf['LAB']
-        lab_name = lab_info_['LAB_NAME']
-        dc_system = True if lab_info_.get('CENTRAL_REGION') else False
-        vbox = True if 'vbox' in lab_name.lower() else False
-        if vbox:
-            LOG.info("The test lab is a VBOX TiS setup")
-        if lab_name:
-            lab_to_install = get_lab_dict(lab_name)
+    central_reg_info_ = eval(lab_info_.get('CENTRAL_REGION')) if dc_system else None
+    con0_ip = lab_info_.get('CONTROLLER0_IP') if not dc_system else \
+        (central_reg_info_['controller-0 ip'] if central_reg_info_ else None)
+    if con0_ip:
+        lab_to_install['controller-0 ip'] = con0_ip
+    con1_ip = lab_info_.get('CONTROLLER1_IP') if not dc_system else \
+        (central_reg_info_['controller-1 ip'] if central_reg_info_ else None)
+    if con1_ip:
+        lab_to_install['controller-1 ip'] = con1_ip
+    float_ip = lab_info_['FLOATING_IP']
+    if float_ip:
+        lab_to_install['floating ip'] = float_ip
 
-        if lab_to_install:
-            if dc_system and not 'central_region' in lab_to_install:
-                raise ValueError("Distributed cloud system value mismatch")
+    # Parse nodes info
+    nodes_info = installconf['NODES']
+    naming_map = {'CONTROLLERS': 'controller_nodes',
+                  'COMPUTES': 'compute_nodes',
+                  'STORAGES': 'storage_nodes'}
 
-            central_reg_info_ = eval(lab_info_.get('CENTRAL_REGION')) if dc_system else None
+    for confkey, constkey in naming_map.items():
+        value_in_conf = nodes_info[confkey] if confkey in nodes_info.keys() else None
+        if value_in_conf:
+            barcodes = value_in_conf.split(sep=' ')
+            lab_to_install[constkey] = barcodes
 
-            con0_ip = lab_info_.get('CONTROLLER0_IP') if not dc_system else \
-                (central_reg_info_['controller-0 ip'] if central_reg_info_ else None)
+    if (not dc_system and not lab_to_install['controller_nodes']) or \
+            (dc_system and not lab_to_install['central_region']['controller_nodes']):
+        errors.append("Nodes barcodes have to be provided for custom lab")
 
-            if con0_ip:
-                lab_to_install['controller-0 ip'] = con0_ip
+    # Parse build info
+    build_info = installconf['BUILD']
+    conf_build_server = build_info['BUILD_SERVER']
+    conf_host_build_dir = build_info['TIS_BUILD_PATH']
+    conf_iso_path = build_info["BUILD_ISO_PATH"]
+    conf_patch_dir = build_info["PATCHES"]
+    if conf_build_server:
+        bs = conf_build_server
+    if conf_host_build_dir:
+        host_build_dir = conf_host_build_dir
+    if conf_iso_path:
+        iso_path = conf_iso_path
+    if conf_patch_dir:
+        patch_dir = conf_patch_dir
 
-            con1_ip = lab_info_.get('CONTROLLER1_IP') if not dc_system else \
-                (central_reg_info_['controller-1 ip'] if central_reg_info_ else None)
-            if con1_ip:
-                lab_to_install['controller-1 ip'] = con1_ip
+    # Parse files info
+    conf_files = installconf['CONF_FILES']
+    conf_files_server = conf_files['FILES_SERVER']
+    conf_license_path = conf_files['LICENSE_PATH']
+    conf_tis_config = conf_files['FILES_DIR']
+    conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
+    conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
+    conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
+    conf_guest_image = conf_files['GUEST_IMAGE_PATH']
+    conf_heat_templates = conf_files['HEAT_TEMPLATES']
+    conf_ovs = eval(conf_files['OVS_CONFIG'])
+    conf_kuber = eval(conf_files['KUBERNETES_CONFIG'])
+    if conf_files_server:
+        files_server = conf_files_server
+    if conf_license_path:
+        license_path = conf_license_path
+    if conf_tis_config:
+        tis_config = conf_tis_config
+    if conf_boot_if_settings:
+        boot_if_settings = conf_boot_if_settings
+    if conf_hosts_bulk_add:
+        hosts_bulk_add = conf_hosts_bulk_add
+    if conf_labsetup:
+        lab_setup = conf_labsetup
+    if conf_guest_image:
+        guest_image = conf_guest_image
+    if conf_heat_templates:
+        heat_templates = conf_heat_templates
+    ovs = conf_ovs
+    kubernetes = conf_kuber
 
-            float_ip = lab_info_['FLOATING_IP']
-            if float_ip:
-                lab_to_install['floating ip'] = float_ip
+    boot_info = installconf["BOOT"]
+    conf_boot_server = boot_info["BOOT_SERVER"]
+    conf_low_latency = eval(boot_info["LOW_LATENCY_INSTALL"])
+    conf_boot_type = boot_info["BOOT_TYPE"]
+    if conf_boot_server:
+        boot_server = conf_boot_server
+    low_latency = conf_low_latency
+    if conf_boot_type:
+        boot = conf_boot_type
 
-        else:
-            raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf "
-                             "file")
+    installer_steps = installconf["CONTROL"]
+    conf_resume_step = installer_steps["RESUME_POINT"]
+    conf_final_step = installer_steps["STOP_POINT"]
+    conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
+    if conf_resume_step:
+        resume = eval(conf_resume_step)
+    if conf_final_step:
+        stop = conf_final_step
+    if conf_skip_steps:
+        skip = eval(conf_skip_steps)
 
-        # Parse nodes info
-        nodes_info = installconf['NODES']
-        naming_map = {'CONTROLLERS': 'controller_nodes',
-                      'COMPUTES': 'compute_nodes',
-                      'STORAGES': 'storage_nodes'}
-
-        for confkey, constkey in naming_map.items():
-
-            value_in_conf = nodes_info[confkey] if confkey in nodes_info.keys() else None
-            if value_in_conf:
-                barcodes = value_in_conf.split(sep=' ')
-                lab_to_install[constkey] = barcodes
-
-        if (not dc_system and  not lab_to_install['controller_nodes']) or \
-                (dc_system and  not lab_to_install['central_region']['controller_nodes']):
-            errors.append("Nodes barcodes have to be provided for custom lab")
-
-        # Parse build info
-        build_info = installconf['BUILD']
-        conf_build_server = build_info['BUILD_SERVER']
-        conf_host_build_dir = build_info['TIS_BUILD_PATH']
-        conf_iso_path = build_info["BUILD_ISO_PATH"]
-        conf_patch_dir = build_info["PATCHES"]
-        if conf_build_server:
-            bs = conf_build_server
-        if conf_host_build_dir:
-            host_build_dir = conf_host_build_dir
-        if conf_iso_path:
-            iso_path = conf_iso_path
-        if conf_patch_dir:
-            patch_dir = conf_patch_dir
-
-        # Parse files info
-        conf_files = installconf['CONF_FILES']
-        conf_files_server = conf_files['FILES_SERVER']
-        conf_license_path = conf_files['LICENSE_PATH']
-        conf_tis_config = conf_files['FILES_DIR']
-        conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
-        conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
-        conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
-        conf_guest_image = conf_files['GUEST_IMAGE_PATH']
-        conf_heat_templates = conf_files['HEAT_TEMPLATES']
-        conf_ovs = eval(conf_files['OVS_CONFIG'])
-        conf_kuber = eval(conf_files['KUBERNETES_CONFIG'])
-        if conf_files_server:
-            files_server = conf_files_server
-        if conf_license_path:
-            license_path = conf_license_path
-        if conf_tis_config:
-            tis_config = conf_tis_config
-        if conf_boot_if_settings:
-            boot_if_settings = conf_boot_if_settings
-        if conf_hosts_bulk_add:
-            hosts_bulk_add = conf_hosts_bulk_add
-        if conf_labsetup:
-            lab_setup = conf_labsetup
-        if conf_guest_image:
-            guest_image = conf_guest_image
-        if conf_heat_templates:
-            heat_templates = conf_heat_templates
-        ovs = conf_ovs
-        kubernetes = conf_kuber
-
-        boot_info = installconf["BOOT"]
-        conf_boot_server = boot_info["BOOT_SERVER"]
-        conf_low_latency = eval(boot_info["LOW_LATENCY_INSTALL"])
-        conf_boot_type = boot_info["BOOT_TYPE"]
-        conf_subcloud_boot = boot_info["SUBCLOUD_BOOT"]
-        if conf_boot_server:
-            boot_server = conf_boot_server
-        low_latency = conf_low_latency
-        if conf_boot_type:
-            boot = conf_boot_type
-        if conf_subcloud_boot:
-            subcloud_boot = conf_subcloud_boot
-
-        installer_steps = installconf["CONTROL"]
-        conf_resume_step = installer_steps["RESUME_POINT"]
-        conf_final_step = installer_steps["STOP_POINT"]
-        conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
-        if conf_resume_step:
-            resume = eval(conf_resume_step)
-        if conf_final_step:
-            stop = conf_final_step
-        if conf_skip_steps:
-            skip = eval(conf_skip_steps)
-
-    else:
-        lab_to_install = get_lab_dict(lab)
-        dc_system = True if lab_to_install.get('central_region') else False
-
+    # install conf file parsing ended. Check for errors.
     if (not dc_system and not lab_to_install.get('controller-0 ip', None)) or \
             (dc_system and not lab_to_install['central_region'].get('controller-0 ip', None)):
         errors.append('Controller-0 ip has to be provided for custom lab')
@@ -1033,8 +1014,8 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
     """
     lab_info_dict = {}
     info_prefix = "SYSTEM_"
-    multi_region_identifer = "\[REGION2_PXEBOOT_NETWORK\]"
-    dist_cloud_identifer = "DISTRIBUTED_CLOUD_ROLE"
+    multi_region_identifer = r"\[REGION2_PXEBOOT_NETWORK\]"
+    dist_cloud_identifer = r"DISTRIBUTED_CLOUD_ROLE"
     if conf_dir:
         lab_files_path = conf_dir
     elif lab_name is not None and host_build_dir is not None:

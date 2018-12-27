@@ -292,7 +292,7 @@ def get_non_controller_system_hosts():
 
 def open_telnet_session(node_obj):
     _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port), hostname=node_obj.name)
-    #if node_obj.telnet_login_prompt:
+    # if node_obj.telnet_login_prompt:
     _telnet_conn.write(b"\r\n")
     try:
         index = _telnet_conn.expect(["Login:", LOGIN_REGEX], timeout=5)
@@ -300,7 +300,7 @@ def open_telnet_session(node_obj):
             _telnet_conn.write(b"\r\n")
         elif index == 1:
             _telnet_conn.login()
-    except exceptions.TelnetTimeout as e:
+    except exceptions.TelnetTimeout:
         pass
 
     return _telnet_conn
@@ -2379,11 +2379,7 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
     if not lab:
         lab = InstallVars.get_install_var("LAB")
 
-    if not boot_server:
-        tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
-    else:
-        tuxlab_server = boot_server
-
+    tuxlab_server = boot_server if boot_server else InstallVars.get_install_var("BOOT_SERVER")
     controller0 = lab["controller-0"]
     LOG.info("Set feed for {} network boot".format(controller0.barcode))
     tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(load_path)
@@ -2460,7 +2456,6 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
     controller0 = lab["controller-0"]
     if controller0.telnet_conn is None:
         controller0.telnet_conn = open_telnet_session(controller0)
-
 
     boot_interfaces = lab['boot_device_dict']
     LOG.info("Opening a vlm console for {}.....".format(controller0.name))

@@ -1,4 +1,4 @@
-import pytest
+from pytest import skip, fixture
 
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
@@ -8,12 +8,12 @@ from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
 
 
-@pytest.fixture(scope='function')
+@fixture(scope='function')
 def install_setup(request):
     lab = InstallVars.get_install_var("LAB")
     install_type = ProjVar.get_var('SYS_TYPE')
     if install_type != SysType.STORAGE:
-        pytest.skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
+        skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
                     .format(SysType.STORAGE, install_type))
 
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
@@ -71,7 +71,7 @@ def test_storage_install(install_setup):
     guest_server = install_setup["servers"]["guest"]
 
     if final_step == '0' or final_step == "setup":
-        pytest.skip("stopping at install step: {}".format(LOG.test_step))
+        skip("stopping at install step: {}".format(LOG.test_step))
 
     fresh_install_helper.install_controller(sys_type=SysType.STORAGE, patch_dir=patch_dir,
                                             patch_server_conn=patch_server.ssh_conn)

@@ -1,6 +1,4 @@
-
-import pytest
-
+from pytest import skip, fixture
 
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
@@ -8,15 +6,14 @@ from keywords import host_helper, install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
-from tc_sysinstall.fresh_install import fresh_install_helper
 
 
-@pytest.fixture(scope='function')
+@fixture(scope='function')
 def install_setup(request):
     lab = InstallVars.get_install_var("LAB")
     install_type = ProjVar.get_var('SYS_TYPE')
     if install_type != SysType.REGULAR:
-        pytest.skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
+        skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
                     .format(SysType.REGULAR, install_type))
 
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
@@ -79,7 +76,7 @@ def test_standard_install(install_setup):
     guest_server = install_setup["servers"]["guest"]
 
     if final_step == '0' or final_step == "setup":
-        pytest.skip("stopping at install step: {}".format(LOG.test_step))
+        skip("stopping at install step: {}".format(LOG.test_step))
 
     fresh_install_helper.install_controller(sys_type=SysType.REGULAR, patch_dir=patch_dir,
                                             patch_server_conn=patch_server.ssh_conn)

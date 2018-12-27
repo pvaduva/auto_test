@@ -101,15 +101,20 @@ def pytest_configure(config):
                            patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, subcloud_boot=subcloud_boot_list,
                            kubernetes=kubernetes)
 
-    print("\n**********\nArguments:\n**********\n")
-    for var, value in InstallVars.get_install_vars().items():
-        if var == 'LAB':
-            new_value = {}
+    frame_str = '*'*len('Install Arguments:')
+    print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))
+    install_vars = InstallVars.get_install_vars()
+    bs = install_vars['BUILD_SERVER']
+    for var, value in install_vars.items():
+        if (not value and value != 0) or (value == bs and var != 'BUILD_SERVER'):
+            continue
+        elif var == 'LAB':
             for k, v in dict(value).items():
-                if re.search('_nodes|name| ip', k):
-                    new_value[k] = v
-            value = new_value
-            print("{}:\t{}".format(var, value))
+                if re.search('_nodes| ip', k):
+                    print("{:<20}: {}".format(k, v))
+        else:
+            print("{:<20}: {}".format(var, value))
+    print("{:<20}: {}".format('LOG_DIR', ProjVar.get_var('LOG_DIR')))
     print('')
 
 
@@ -130,4 +135,3 @@ def pytest_runtest_teardown(item):
 
             os.chmod(progress_file_path, 0o755)
             break
-

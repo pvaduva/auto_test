@@ -122,7 +122,6 @@ class InstallVars:
                          skips=None,
                          subcloud_boot=None):
 
-
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
