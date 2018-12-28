@@ -7,7 +7,7 @@ EXT_IP = '8.8.8.8'
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
 
 # vshell ping loss rate pattern. 3 packets transmitted, 0 received, 0 total, 100.00%% loss
-VSHELL_PING_LOSS_RATE = '\, (\d{1,3}).\d{1,2}[%]% loss'
+VSHELL_PING_LOSS_RATE = r'\, (\d{1,3}).\d{1,2}[%]% loss'
 
 # Matches 8-4-4-4-12 hexadecimal digits. Lower case only
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -34,11 +34,11 @@ MELLANOX4 = 'MT.*ConnectX-4'
 
 PREFIX_BACKUP_FILE = 'titanium_backup_'
 TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + r'(\.\w)*.+_(.*)_(system|images)\.tgz'
-IMAGE_BACKUP_FILE_PATTERN = 'image_' + UUID + '(.*)\.tgz'
-CINDER_VOLUME_BACKUP_FILE_PATTERN = 'volume\-' + UUID + '(.*)\.tgz'
+IMAGE_BACKUP_FILE_PATTERN = r'image_{}(.*)\.tgz'.format(UUID)
+CINDER_VOLUME_BACKUP_FILE_PATTERN = r'volume\-{}(.*)\.tgz'.format(UUID)
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
-TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
+TIMESTAMP_PATTERN = r'\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
@@ -124,7 +124,7 @@ class Networks:
     DATA_IP = r'172.\d{1,3}.\d{1,3}.\d{1,3}'
     # internal-net ip pattern such as 10.1.1.44
     INTERNAL_IP = r'10.\d{1,3}.\d{1,3}.\d{1,3}'
-    IPV4_IP = '\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}'
+    IPV4_IP = r'\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}'
     IP_PATTERN = {
         'data': DATA_IP,
         'mgmt': MGMT_IP,
@@ -140,13 +140,13 @@ class Networks:
     def mgmt_net_name_pattern(cls):
         from consts.proj_vars import ProjVar
         region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
-        return 'tenant\d{}-mgmt-net'.format(region)
+        return r'tenant\d{}-mgmt-net'.format(region)
 
     @classmethod
     def data_net_name_pattern(cls):
         from consts.proj_vars import ProjVar
         region = MULTI_REGION_MAP.get(ProjVar.get_var('REGION'), '')
-        return 'tenant\d{}-net'.format(region)
+        return r'tenant\d{}-net'.format(region)
 
 
 class SystemType:
@@ -211,31 +211,31 @@ class HostTask:
 
 
 class Prompt:
-    CONTROLLER_0 = '.*controller\-0[:| ].*\$ '
-    CONTROLLER_1 = '.*controller\-1[:| ].*\$ '
-    CONTROLLER_PROMPT = '.*controller\-[01][:| ].*\$ '
+    CONTROLLER_0 = r'.*controller\-0[:| ].*\$ '
+    CONTROLLER_1 = r'.*controller\-1[:| ].*\$ '
+    CONTROLLER_PROMPT = r'.*controller\-[01][:| ].*\$ '
 
     VXWORKS_PROMPT = '-> '
 
-    ADMIN_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ '
-    # ADMIN_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
-    TENANT1_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_tenant1\)\]\$ '
-    TENANT2_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_tenant2\)\]\$ '
-    TENANT_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_{}\)\]\$ '   # general prompt. Need to fill in tenant name
-    REMOTE_CLI_PROMPT = '\(keystone_{}\)\]\$ '     # remote cli prompt
+    ADMIN_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ '
+    # ADMIN_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
+    TENANT1_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_tenant1\)\]\$ '
+    TENANT2_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_tenant2\)\]\$ '
+    TENANT_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_{}\)\]\$ '   # general prompt. Need to fill in tenant name
+    REMOTE_CLI_PROMPT = r'\(keystone_{}\)\]\$ '     # remote cli prompt
 
-    COMPUTE_PROMPT = '.*compute\-([0-9]){1,}\:~\$'
-    STORAGE_PROMPT = '.*storage\-([0-9]){1,}\:~\$'
-    PASSWORD_PROMPT = '.*assword\:[ ]?$|assword for .*:[ ]?$'
+    COMPUTE_PROMPT = r'.*compute\-([0-9]){1,}\:~\$'
+    STORAGE_PROMPT = r'.*storage\-([0-9]){1,}\:~\$'
+    PASSWORD_PROMPT = r'.*assword\:[ ]?$|assword for .*:[ ]?$'
     LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
-    BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
-    TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
-    TIS_NODE_PROMPT_BASE = '{}\:~\$ '
-    ADD_HOST = '.*\(yes/no\).*'
+    BUILD_SERVER_PROMPT_BASE = r'{}@{}\:~.*'
+    TEST_SERVER_PROMPT_BASE = r'\[{}@.*\]\$ '
+    TIS_NODE_PROMPT_BASE = r'{}\:~\$ '
+    ADD_HOST = r'.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
-    Y_N_PROMPT = '.*\(y/n\)\?.*'
-    YES_N_PROMPT = '.*\[yes/N\]\: ?'
+    Y_N_PROMPT = r'.*\(y/n\)\?.*'
+    YES_N_PROMPT = r'.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
 
 
@@ -314,14 +314,14 @@ class ServerGroupMetadata:
 
 
 class InstanceTopology:
-    NODE = 'node:(\d),'
-    PGSIZE = 'pgsize:(\d{1,3}),'
-    VCPUS = 'vcpus:(\d{1,2}),'
-    PCPUS = 'pcpus:(\d{1,2}),\s'     # find a string separated by ',' if multiple numa nodes
+    NODE = r'node:(\d),'
+    PGSIZE = r'pgsize:(\d{1,3}),'
+    VCPUS = r'vcpus:(\d{1,2}),'
+    PCPUS = r'pcpus:(\d{1,2}),\s'     # find a string separated by ',' if multiple numa nodes
     CPU_POLICY = 'pol:(.*),'
     SIBLINGS = 'siblings:(.*),'
     THREAD_POLICY = 'thr:(.*)$|thr:(.*),'
-    TOPOLOGY = '\d{1,2}s,\d{1,2}c,\d{1,2}t'
+    TOPOLOGY = r'\d{1,2}s,\d{1,2}c,\d{1,2}t'
 
 
 class RouterStatus:
@@ -400,8 +400,7 @@ class LocalStorage:
 
 class VMNetwork:
     NET_IF = r"auto {}\niface {} inet dhcp\n"
-    IFCFG_DHCP = \
-"""
+    IFCFG_DHCP = """
 DEVICE={}
 BOOTPROTO=dhcp
 ONBOOT=yes
@@ -412,8 +411,7 @@ IPV6INIT={}
 PERSISTENT_DHCLIENT=1
 """
 
-    IFCFG_STATIC = \
-"""
+    IFCFG_STATIC = """
 DEVICE={}
 BOOTPROTO=static
 ONBOOT=yes
@@ -649,9 +647,9 @@ class TrafficControl:
     CLASSES = {'1:40': 'default', '1:1': 'root', '1:10': 'hiprio', '1:20': 'storage', '1:30': 'migration',
                '1:50': 'drbd'}
 
-    RATE_PATTERN_ROOT = 'class htb 1:1 root rate (\d+)([GMK])bit ceil (\d+)([GMK])bit burst \d+b cburst \d+b'
-    RATE_PATTERN = 'class htb (1:\d+) parent 1:1 leaf \d+: prio \d+ rate (\d+)([GMK])bit ceil (\d+)([GMK])bit ' \
-                   'burst \d+b cburst \d+b'
+    RATE_PATTERN_ROOT = r'class htb 1:1 root rate (\d+)([GMK])bit ceil (\d+)([GMK])bit burst \d+b cburst \d+b'
+    RATE_PATTERN = r'class htb (1:\d+) parent 1:1 leaf \d+: prio \d+ rate (\d+)([GMK])bit ceil (\d+)([GMK])bit ' \
+                   r'burst \d+b cburst \d+b'
 
     # no infra
     MGMT_NO_INFRA = {

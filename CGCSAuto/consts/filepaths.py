@@ -47,6 +47,7 @@ class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
     TEST_SCRIPT = '/home/svc-cgcsauto/test_scripts/'
     CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
+    CUSTOM_APPS = '/sandbox/custom_apps/'
 
 
 class PrivKeyPath:

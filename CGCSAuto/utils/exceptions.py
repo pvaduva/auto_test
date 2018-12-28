@@ -231,3 +231,12 @@ class DCError(TiSError):
 
 class PatchError(TiSError):
     message = 'Patch error.'
+
+
+class KubeError(TiSError):
+    message = 'Kubernetes error.'
+
+
+class KubeCmdError(KubeError):
+    message = 'Kubernetes cmd failed.'
+

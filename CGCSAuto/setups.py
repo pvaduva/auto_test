@@ -83,8 +83,8 @@ def copy_keyfiles(nat_ssh, con_ssh):
         nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
         _copy_privkey_to_natbox(nat_ssh=nat_ssh, con_ssh=con_ssh)
         _copy_pubkey(con_ssh=con_ssh)
-    except Exception as e:
-        LOG.error('Copy private/public key failed. Continue test session. \n{}'.format(e.__str__()))
+    except Exception:
+        LOG.error('Copy private/public key failed. Continue test session.')
 
 
 def _copy_pubkey(con_ssh):

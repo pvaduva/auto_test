@@ -949,7 +949,7 @@ def table_kube(output_lines):
     if not isinstance(output_lines, list):
         output_lines = output_lines.split('\n')
 
-    if not output_lines:
+    if not output_lines or len(output_lines) < 2:
         return table_
 
     if not output_lines[-1]:
@@ -961,13 +961,23 @@ def table_kube(output_lines):
     if not output_lines:
         return table_
 
-    header_row = output_lines[0]
+    for i in range(len(output_lines)):
+        line = output_lines[i]
+        if '  ' not in line:
+            LOG.debug('Invalid kube table line: {}'.format(line))
+        else:
+            header_row = line
+            output_lines = output_lines[i+1:]
+            break
+    else:
+        return table_
+
     table_['headers'] = re.split(r'\s[\s]+', header_row)
 
     m = re.finditer(kute_sep, header_row)
     starts = [0] + [sep.start()+2 for sep in m]
     col_count = len(starts)
-    for line in output_lines[1:]:
+    for line in output_lines:
         row = []
         indices = list(starts) + [len(line)]
         for i in range(col_count):
