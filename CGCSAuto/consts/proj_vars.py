@@ -120,7 +120,8 @@ class InstallVars:
                          resume=False,
                          wipedisk=False,
                          skips=None,
-                         subcloud_boot=None):
+                         dc_float_ip=None,
+                         install_subcloud=None):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -147,7 +148,8 @@ class InstallVars:
             'BOOT_SERVER':  boot_server,
             'BOOT_TYPE': boot_type,
             'LOW_LATENCY': low_latency,
-            'SUBCLOUD_BOOT': subcloud_boot if subcloud_boot else [],
+            'DC_FLOAT_IP': dc_float_ip,
+            'INSTALL_SUBCLOUD': install_subcloud,
             'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.

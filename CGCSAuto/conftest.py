@@ -581,20 +581,7 @@ def pytest_addoption(parser):
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
-
-    subcloud_boot_help = "Boot information for each subcloud in distributed cloud system. Each option specifies space" \
-                    "separated subcloud name, boot type and boot server " \
-                          "system. \n" \
-                          "Usage  --subcloud <subcloud1 name> <boot type> <boot server>  ... \n" \
-                          "<boot> options are: \n" \
-                            "pxe: boot from the network using pxeboot \n" \
-                            "burn: burn the USB using iso-path and boot from it \n" \
-                            "usb: Boot from load existing on USB \n" \
-                            "iso: iso install flag" \
-                            "labsetup: Do not run lab_setup post lab install \n" \
-                            "pxeboot: Don't modify pxeboot.cfg \n" \
-                            "feed: skip setup of network feed \n" \
-                          "<boot server> options are yow-tuxlab2 or yow-cgcstux-lx"
+    dcfloatip_help = " The distributed cloud central region floating ip if subcloud is specified."
 
                 # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
@@ -612,8 +599,9 @@ def pytest_addoption(parser):
                      help=iso_path_help)
     parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
     parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
-    parser.addoption('--subcloud-boot',  action='append', nargs='*', dest='subcloud_boot_list',
-                     metavar=('subcloud-name', 'boot-type', 'boot-server'), default=[], help=subcloud_boot_help)
+    parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
+                     help=dcfloatip_help)
+
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################

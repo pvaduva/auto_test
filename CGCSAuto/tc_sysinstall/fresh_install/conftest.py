@@ -2,9 +2,10 @@ import os
 import re
 
 from utils.tis_log import LOG
+from utils.node import Node
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import BuildServerPath
-from setups import write_installconf, set_install_params, get_lab_dict
+from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from setups import write_installconf, set_install_params, get_lab_dict, is_lab_subcloud
 from tc_sysinstall.fresh_install import fresh_install_helper
 
 ########################
@@ -43,7 +44,6 @@ def pytest_configure(config):
     patch_dir = config.getoption('patch_dir')
     ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
-    subcloud_boot_list = config.getoption("subcloud_boot_list")
 
     if lab_arg:
         lab_dict = get_lab_dict(lab_arg)
@@ -55,6 +55,8 @@ def pytest_configure(config):
             lab_name = None
     else:
         raise ValueError("Lab name must be provided")
+
+    is_subcloud, sublcoud_name, dc_float_ip = is_lab_subcloud(lab_dict)
 
     if resume_install is True:
         resume_install = fresh_install_helper.get_resume_step(lab_dict)
@@ -72,6 +74,11 @@ def pytest_configure(config):
             host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
 
         files_server = build_server
+
+        if sublcoud_name and not lab_file_dir:
+            lab_file_dir = "{}:{}{}".format(dc_float_ip, WRSROOT_HOME, sublcoud_name)
+            files_server = Node(host_ip=dc_float_ip, host_name='controller-0')
+
         if lab_file_dir:
             if lab_file_dir.find(":/") != -1:
                 files_server = lab_file_dir[:lab_file_dir.find(":/")]
@@ -92,14 +99,14 @@ def pytest_configure(config):
                                          heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                          security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
                                          boot_server=boot_server, resume=resume_install, skip=skiplist,
-                                         kubernetes=kubernetes, subcloud_boot=subcloud_boot_list)
+                                         kubernetes=kubernetes)
 
         set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
                            installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
                            controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                           patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, subcloud_boot=subcloud_boot_list,
-                           kubernetes=kubernetes)
+                           patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
+                           install_subcloud=sublcoud_name, kubernetes=kubernetes)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

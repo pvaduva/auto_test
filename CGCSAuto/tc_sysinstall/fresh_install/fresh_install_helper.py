@@ -6,8 +6,9 @@ from pytest import skip
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, network_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
+from utils.clients.ssh import ControllerClient
 from setups import initialize_server
-from consts.auth import Tenant
+from consts.auth import Tenant, CliAuth
 from consts.timeout import InstallTimeout
 from consts.cgcs import SysType, SubcloudStatus
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
@@ -253,12 +254,12 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-
         install_helper.controller_system_config(lab=lab, config_file=config_file,
                                                 con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+
         LOG.info("Run lab_setup after config controller")
         run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
         if do_step("unlock_active_controller"):
@@ -266,6 +267,63 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
             host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
                                     check_first=False, con0_install=True)
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        reset_global_vars()
+        skip("stopping at install step: {}".format(LOG.test_step))
+
+
+def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1', lab=None, final_step=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Configure subcloud"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+
+        subcloud_config = subcloud.replace('-', '') + '.config'
+
+        install_helper.controller_system_config(lab=lab, config_file=subcloud_config,
+                                                con_telnet=subcloud_controller0_node.telnet_conn,
+                                                subcloud=True)
+
+        #install_helper.update_auth_url(ssh_con=None, use_telnet=True, con_telnet=subcloud_controller0_node.telnet_conn)
+        if subcloud_controller0_node.ssh_conn is None:
+            subcloud_controller0_node.ssh_conn = install_helper.establish_ssh_connection(subcloud_controller0_node.host_ip)
+
+        ControllerClient.set_active_controller(subcloud_controller0_node.ssh_conn)
+        #install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
+        LOG.info("Auto_info before update: {}".format(Tenant.get('admin', 'RegionOne')))
+        if not main_cloud_node.ssh_conn:
+            main_cloud_node.ssh_conn = install_helper.establish_ssh_connection(main_cloud_node.host_ip)
+        install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
+        LOG.info("Auto_info after update: {}".format(Tenant.get('admin', 'RegionOne')))
+        dc_helper.wait_for_subcloud_status(subcloud,avail=SubcloudStatus.AVAIL_ONLINE,
+                                           mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
+
+        LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
+                                                                SubcloudStatus.MGMT_UNMANAGED))
+        LOG.info("Managing subcloud {} ... ".format(subcloud))
+        LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+        dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn)
+
+        LOG.info("Running config for subcloud {} ... ".format(subcloud))
+        short_name = lab['short_name']
+        install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
+        LOG.info("Run lab_setup after config controller")
+
+        run_lab_setup(con_ssh=subcloud_controller0_node.ssh_conn)
+        if do_step("unlock_active_controller"):
+            LOG.info("unlocking {}".format(subcloud_controller0_node.name))
+            host_helper.unlock_host(host=subcloud_controller0_node.name, con_ssh=subcloud_controller0_node.ssh_conn,
+                                    timeout=2400, check_hypervisor_up=False, check_webservice_up=False,
+                                    check_subfunc=True, check_first=False, con0_install=True)
+
+        LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
+        subcloud_license_path = WRSROOT_HOME + "license.lic"
+        system_helper.install_license(subcloud_license_path, con_ssh=subcloud_controller0_node.ssh_conn)
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -736,8 +794,16 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
             LOG.info("System controller {} is healthy".format(system_controller_lab['name']))
             return True
         else:
-            LOG.warning("System controller is not healthy: {}".format(health))
-            return False
+            if len(health) == 1:
+                if 'No alarms' in health:
+                    # alarm_ids = system_helper.get_alarms(combine_entries=False)
+                    # if all([alarm for alarm in alarm_ids if 'subcloud-' in alarm[1]]):
+                    LOG.info("System controller {} report alarms; ignoring the alarm".
+                             format(system_controller_lab['name']))
+                    return True
+
+            LOG.info("System controller {} not  healthy: {}".format(system_controller_lab['name'], health))
+
     else:
         LOG.warning("System controller not reachable: {}")
         return False
@@ -777,6 +843,12 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
     except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
         LOG.error(e_.__str__())
 
+    try:
+        active_controller_node.ssh_conn.connect(retry=True, retry_interval=3, retry_timeout=300)
+        active_controller_node.ssh_conn.flush()
+    except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) as e_:
+        LOG.error(e_.__str__())
+
     LOG.fixture_step("unreserving hosts")
     if dist_cloud:
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
@@ -789,7 +861,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
 
-def setup_fresh_install(lab, dist_cloud=False):
+def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
@@ -808,10 +880,19 @@ def setup_fresh_install(lab, dist_cloud=False):
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     bld_server = initialize_server(build_server)
-    if file_server == bld_server.name:
-        file_server_obj = bld_server
+    dc_float_ip = None
+    install_subcloud = None
+    if subcloud:
+        dc_float_ip = InstallVars.get_install_var("DC_FLOAT_IP")
+        install_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD")
+        file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
+        file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
     else:
-        file_server_obj = initialize_server(file_server)
+        if file_server == bld_server.name:
+            file_server_obj = bld_server
+        else:
+            file_server_obj = initialize_server(file_server)
+
     if iso_host == bld_server.name:
         iso_host_obj = bld_server
     else:
@@ -824,6 +905,7 @@ def setup_fresh_install(lab, dist_cloud=False):
         guest_server_obj = bld_server
     else:
         guest_server_obj = initialize_server(guest_server)
+
 
     set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 
@@ -842,7 +924,8 @@ def setup_fresh_install(lab, dist_cloud=False):
     paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),
              "license": InstallVars.get_install_var("LICENSE")}
 
-    boot = {"boot_type": InstallVars.get_install_var("BOOT_TYPE"),
+    boot = {"boot_server": boot_server,
+            "boot_type": InstallVars.get_install_var("BOOT_TYPE"),
             "security": InstallVars.get_install_var("SECURITY"),
             "low_latency": InstallVars.get_install_var("LOW_LATENCY")}
 
@@ -858,9 +941,14 @@ def setup_fresh_install(lab, dist_cloud=False):
                       "skips": skip_list,
                       "active_controller": active_con}
 
+    if subcloud and install_subcloud:
+        _install_setup['install_subcloud'] = install_subcloud
+        _install_setup['dc_float_ip'] = dc_float_ip
+
+
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
         LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
-        lab_dict = lab if not dist_cloud else lab['central_region']
+        lab_dict = lab if not dist_cloud else (lab['central_region'] if not subcloud else lab[subcloud])
 
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)

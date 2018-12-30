@@ -26,9 +26,6 @@ def install_setup(request):
         lab[subcloud]["hosts"] = vlm_helper.get_hostnames_from_consts(lab[subcloud])
         barcodes.extend(vlm_helper.get_barcodes_from_hostnames(lab[subcloud]["hosts"], lab=lab[subcloud]))
 
-    subcloud_boots = fresh_install_helper.parse_subcloud_boot_info(InstallVars.get_install_var("SUBCLOUD_BOOT"))
-    LOG.info("Subcloud boot info: {}".format(subcloud_boots))
-
     active_con = central_lab["controller-0"]
     install_type = ProjVar.get_var('SYS_TYPE')
 
@@ -59,7 +56,6 @@ def install_setup(request):
     request.addfinalizer(install_cleanup)
 
     _install_setup = fresh_install_helper.setup_fresh_install(lab, dist_cloud)
-    _install_setup["subcloud_boots"] = subcloud_boots
 
     return _install_setup
 
@@ -169,11 +165,5 @@ def test_distributed_cloud_install(install_setup):
     LOG.info("DC subclouds added are:{}".format(subclouds))
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
-    subcloud_boots = install_setup['subcloud_boots']
-
-    if len(subcloud_boots.keys()) > 0:
-        LOG.info("Installing subclouds {}  ...".format(subcloud_boots.keys()))
-        fresh_install_helper.install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=dc_lab,
-                                               patch_dir=patch_dir, patch_server_conn=patch_server.ssh_conn)
 
     fresh_install_helper.reset_global_vars()

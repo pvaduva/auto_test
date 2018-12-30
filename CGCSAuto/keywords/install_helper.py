@@ -23,6 +23,7 @@ from utils.clients.telnet import TelnetClient, LOGIN_REGEX
 from utils.clients.local import LocalHostClient
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.tis_log import LOG
+from utils.node import Node
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 UPGRADE_LOAD_SIG_FILE = "bootimage.sig"
@@ -302,6 +303,10 @@ def open_telnet_session(node_obj):
             _telnet_conn.login()
     except exceptions.TelnetTimeout:
         pass
+    except exceptions.TelnetError as e:
+        if "Unable to login to {} credential {}/{}".format(node_obj.name, HostLinuxCreds.get_user(),
+                                                           HostLinuxCreds.get_password()) in e.message:
+            _telnet_conn.login(reset=True)
 
     return _telnet_conn
 
@@ -588,6 +593,8 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if not conf_server:
         conf_server = server
 
+    conf_server_name = conf_server.host_name if isinstance(conf_server, Node) else conf_server.name
+
     sys_version = extract_software_version_from_string_path(load_path)
     default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) \
         if sys_version else load_path + BuildServerPath.LAB_CONF_DIR_PREV
@@ -599,7 +606,6 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if not lab_config_path or lab_config_path == '':
         lab_config_path = default_lab_config_path + "/yow/{}".format(lab['name'])
 
-
     config_path = lab_config_path
     script_path = os.path.join(default_lab_config_path, "scripts")
 
@@ -608,16 +614,16 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     cmd = "test -e " + config_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
-            server.name, config_path)
+    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+            conf_server_name, config_path)
     conf_server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
     cmd = "test -e " + script_path
-    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            conf_server.name, script_path)
-    conf_server.ssh_conn.rsync(script_path + "/*",
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
+    server.ssh_conn.rsync(script_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
@@ -2688,7 +2694,7 @@ def wipedisk_via_helper(ssh_con):
         LOG.info("wipedisk_via_helper files are not on the load, will not do wipedisk_via_helper")
 
 
-def update_auth_url(ssh_con, region=None, fail_ok=True):
+def update_auth_url(ssh_con, region=None, use_telnet=False, con_telnet=None, fail_ok=True):
     """
 
     Args:
@@ -2702,7 +2708,7 @@ def update_auth_url(ssh_con, region=None, fail_ok=True):
 
     LOG.info('Attempt to update OS_AUTH_URL from openrc')
 
-    CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
+    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh=ssh_con, use_telnet=use_telnet, con_telnet=con_telnet ))
     Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
@@ -3307,7 +3313,7 @@ def get_git_name(lab_name):
 
 
 def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
-                             banner=True, branding=True, kubernetes=False):
+                             banner=True, branding=True, kubernetes=False, subcloud=False):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -3338,10 +3344,10 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
             con_telnet.exec_cmd("source {}".format(bashrc_path))
         con_telnet.exec_cmd("export USER=wrsroot")
-
         con_telnet.exec_cmd("test -f {}".format(config_file), fail_ok=False)
         config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
-            else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')
+            else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '') if not subcloud \
+            else "config_subcloud"
         cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
@@ -3356,6 +3362,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         admin_prompt = r"\[.*\(keystone_admin\)\]\$ "
         con_telnet.set_prompt(admin_prompt)
         con_telnet.exec_cmd('source /etc/nova/openrc')
+        update_auth_url(ssh_con=None, use_telnet=True, con_telnet=con_telnet)
         host_helper.wait_for_hosts_states(controller0.name,
                                           availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                           use_telnet=True, con_telnet=con_telnet)
@@ -3637,6 +3644,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     expt_prompts = [boot_device_menu.prompt]
     if node_obj.name == pxe_host:
         expt_prompts.append(kickstart_menu.prompt)
+        expt_prompts.append("Boot from hard drive")
 
     index = telnet_conn.expect(expt_prompts, 360)
     if index == 0:
@@ -3648,8 +3656,8 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         if expt_prompts:
             telnet_conn.expect(expt_prompts, 360)
             index = 1
-    if index == 1:
-        LOG.info('In Kickstart menu')
+    if index == 1 or index == 2:
+        LOG.info('In Kickstart menu index = {}'.format(index))
         select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                               security=security, usb=usb, expect_prompt=False)
         LOG.info('Kick start option selected')
@@ -3952,13 +3960,15 @@ def copy_files_to_subcloud(subcloud):
 
 
 
-def run_config_subcloud(subcloud, con_ssh=None, timeout=1800, fail_ok=True):
+def run_config_subcloud(subcloud, con_ssh=None, lab=None, fail_ok=True):
 
-    dc_lab = InstallVars.get_install_var("LAB")
-    lab = dc_lab[subcloud]
-    subcloud_controller_node = lab['controller-0']
+
+    if not lab:
+        lab = InstallVars.get_install_var("LAB")
+
     if not con_ssh:
-        if  subcloud_controller_node.ssh_conn:
+        subcloud_controller_node = lab['controller-0']
+        if subcloud_controller_node.ssh_conn:
             con_ssh = subcloud_controller_node.ssh_conn
         else:
             subcloud_controller_node.ssh_conn = establish_ssh_connection(subcloud_controller_node.host_ip)
@@ -3973,7 +3983,7 @@ def run_config_subcloud(subcloud, con_ssh=None, timeout=1800, fail_ok=True):
         return rc, msg
 
     cmd = "config_subcloud {}".format(subcloud_config)
-    rc, msg = con_ssh.exec_sudo_cmd(cmd)
+    rc, msg = con_ssh.exec_sudo_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT)
     if rc != 0:
         msg = " {} run failed: {}".format(subcloud_config, msg)
         LOG.warning(msg)

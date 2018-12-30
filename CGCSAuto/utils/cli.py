@@ -184,7 +184,6 @@ def source_openrc_file(ssh_client, auth_info, rc_file, fail_ok=False, remote_cli
     """
     exit_code, cmd_output = -1, None
     user = auth_info['user']
-
     if force or 'keystone_{}'.format(user) not in ssh_client.prompt:
         tenant = auth_info['tenant']
         password = auth_info['password']
@@ -363,4 +362,4 @@ def dcmanager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False,
         ssh_client = ControllerClient.get_active_controller('RegionOne')
     return exec_cli('dcmanager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=False)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=None)
