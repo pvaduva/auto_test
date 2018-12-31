@@ -166,6 +166,37 @@ def __table_columns(first_table_row):
 TWO_COLUMN_TABLE_HEADERS = [['Field', 'Value'], ['Property', 'Value']]
 
 
+def __convert_multilines_values(values, merge_lines=False):
+    line_count = len(values)
+    if line_count == 1:
+        return values
+
+    entries = []
+    start_index = 0  # start_index for first entry
+    for i in range(line_count):  # line_count > 1 if code can get here.
+        # if first value for the NEXT row is not empty string, then next row is the start of a new entry,
+        # and the current row is the last row of current entry
+        if i == line_count - 1 or values[i + 1][0]:
+            end_index = i
+            if start_index == end_index:  # single-line entry
+                entry = values[start_index]
+            else:  # multi-line entry
+                entry_lines = [values[index] for index in range(start_index, end_index + 1)]
+                # each column value is a list
+                entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
+                if merge_lines:
+                    entry = [' '.join(item) for item in entry_combined]
+                else:
+                    # convert column value to string if list len is 1
+                    entry = [item if len(item) > 1 else ' '.join(item) for item in entry_combined]
+                LOG.debug("Multi-row entry found: {}".format(entry))
+
+            entries.append(entry)
+            start_index = i + 1  # start_index for next entry
+
+    return entries
+
+
 def table(output_lines, combine_multiline_entry=False):
     """
     Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
@@ -183,35 +214,9 @@ def table(output_lines, combine_multiline_entry=False):
             LOG.debug("Empty table returned")
         return table_
 
-    line_count = len(rows)
-    # no need to check for multiple line entry if it's a one line table.
-    if line_count == 1:
-        return table_
+    values = __convert_multilines_values(values=rows, merge_lines=combine_multiline_entry)
 
-    entries = []
-    start_index = 0  # start_index for first entry
-    for i in range(line_count):      # line_count > 1 if code can get here.
-        # if first value for the NEXT row is not empty string, then next row is the start of a new entry,
-        # and the current row is the last row of current entry
-        if i == line_count-1 or rows[i+1][0]:
-            end_index = i
-            if start_index == end_index:   # single-line entry
-                entry = rows[start_index]
-            else:       # multi-line entry
-                entry_lines = [rows[index] for index in range(start_index, end_index+1)]
-                # each column value is a list
-                entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
-                if combine_multiline_entry:
-                    entry = [' '.join(item) for item in entry_combined]
-                else:
-                    # convert column value to string if list len is 1
-                    entry = [item if len(item) > 1 else ' '.join(item) for item in entry_combined]
-                LOG.debug("Multi-row entry found: {}".format(entry))
-
-            entries.append(entry)
-            start_index = i + 1  # start_index for next entry
-
-    table_['values'] = entries
+    table_['values'] = values
     return table_
 
 
@@ -939,8 +944,14 @@ def get_columns(table_, headers):
     return results
 
 
-def table_kube(output_lines):
-    """Parse single table from kubectl output.
+def table_kube(output_lines, merge_lines=False):
+    """
+    Parse single table from kubectl output.
+
+    Args:
+        output_lines (str|list): output of kubectl cmd
+        merge_lines (bool): if a value spans on multiple lines, whether to join them or return as list
+
     Return dict with list of column names in 'headers' key and
     rows in 'values' key.
     """
@@ -987,13 +998,15 @@ def table_kube(output_lines):
     if table_['values'] and len(table_['values'][0]) != len(table_['headers']):
         raise exceptions.CommonError('Unable to parse given lines: \n{}'.format(output_lines))
 
+    table_['values'] = __convert_multilines_values(table_['values'], merge_lines=merge_lines)
+
     return table_
 
 
-def tables_kube(output_lines):
+def tables_kube(output_lines, merge_lines=False):
     output_lines_list = output_lines.split('\n\n')
     tables_ = []
     for output_lines_ in output_lines_list:
-        tables_.append(table_kube(output_lines_))
+        tables_.append(table_kube(output_lines_, merge_lines=merge_lines))
 
     return tables_

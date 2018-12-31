@@ -1070,9 +1070,9 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
 def is_https(con_ssh):
     return keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=True)
 
-
-def list_migration_history(con_ssh):
-    nova_helper.get_migration_list_table(con_ssh=con_ssh)
+#
+# def list_migration_history(con_ssh):
+#     nova_helper.get_migration_list_table(con_ssh=con_ssh)
 
 
 def get_version_and_patch_info():

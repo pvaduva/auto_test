@@ -161,6 +161,10 @@ class SysinvError(TiSError):
     message = 'Sysinv error.'
 
 
+class ContainerError(SysinvError):
+    message = 'Container error.'
+
+
 class CinderError(TiSError):
     message = 'Cinder error.'
 

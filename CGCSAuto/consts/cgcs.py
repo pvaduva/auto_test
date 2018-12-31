@@ -744,3 +744,13 @@ class PodStatus:
     RUNNING = 'Running'
     COMPLETED = 'Completed'
     CRASH = 'CrashLoopBackOff'
+
+
+class AppStatus:
+    UPLOADING = 'uploading'
+    UPLOADED = 'uploaded'
+    UPLOAD_FAILED = 'upload-failed'
+    APPLIED = 'applied'
+    APPLY_FAILED = 'apply-failed'
+    REMOVE_FAILED = 'remove-failed'
+    DELETE_FAILED = 'delete-failed'

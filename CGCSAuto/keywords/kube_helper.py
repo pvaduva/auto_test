@@ -1,5 +1,7 @@
 import time
 
+import yaml
+
 from utils import table_parser, exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
@@ -12,8 +14,11 @@ def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False):
         con_ssh = ControllerClient.get_active_controller()
     cmd = 'kubectl {} {}'.format(sub_cmd.strip(), args.strip() if args else '').strip()
 
-    code, out = con_ssh.exec_cmd(cmd, fail_ok=True)
-    if code == 0:
+    get_exit_code = True
+    if cmd.endswith(';echo'):
+        get_exit_code = False
+    code, out = con_ssh.exec_cmd(cmd, fail_ok=True, get_exit_code=get_exit_code)
+    if code <= 0:
         return 0, out
 
     if fail_ok:
@@ -41,13 +46,14 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False):
     return code, tables
 
 
-def get_pods_info(namespace=None, types='pods', keep_name_prefix=True, con_ssh=None, fail_ok=False, rtn_list=False):
+def get_pods_info(namespace=None, type_names='pods', keep_type_prefix=False, con_ssh=None, fail_ok=False,
+                  rtn_list=False):
     """
 
     Args:
         namespace (None|str): e.g., kube-system, openstack, default. If set to 'all', use --all-namespaces.
-        types (None|list|tuple|str): e.g., ("services", "deployments.apps")
-        keep_name_prefix (bool): e.g., whether to use 'service/cinder' or 'cinder' as value for 'NAME' key for each row
+        type_names (None|list|tuple|str): e.g., ("deployments.apps", "services/calico-typha")
+        keep_type_prefix (bool): e.g., whether to use 'service/cinder' or 'cinder' as value for 'NAME' key for each row
         con_ssh:
         fail_ok:
         rtn_list (bool)
@@ -58,7 +64,7 @@ def get_pods_info(namespace=None, types='pods', keep_name_prefix=True, con_ssh=N
             e.g., [{'name': 'cinder-api', 'age': '4d19h', ... },  ...]
 
     """
-    code, out = __get_kube_tables(namespace=namespace, types=types, con_ssh=con_ssh, fail_ok=fail_ok)
+    code, out = __get_kube_tables(namespace=namespace, types=type_names, con_ssh=con_ssh, fail_ok=fail_ok)
     if code > 0:
         return {}
 
@@ -69,7 +75,7 @@ def get_pods_info(namespace=None, types='pods', keep_name_prefix=True, con_ssh=N
             name_prefix = name.split('/', maxsplit=1)[0]
             dict_table = table_parser.row_dict_table(table_, key_header='name')
             rows = list(dict_table.values())
-            if not keep_name_prefix and name_prefix != name:
+            if not keep_type_prefix and name_prefix != name:
                 start_index = len(name_prefix) + 1
                 for row_dict in rows:
                     row_dict['name'] = row_dict.pop('name')[start_index:]
@@ -130,7 +136,7 @@ def wait_for_pods(pod_names, status=PodStatus.RUNNING, namespace=None, timeout=1
     names_to_check = list(pod_names)
     actual_pods_info = {pod_name: None for pod_name in pod_names}
     while time.time() < end_time:
-        pods_list = get_pods_info(namespace=namespace, types='pods', keep_name_prefix=False, con_ssh=con_ssh,
+        pods_list = get_pods_info(namespace=namespace, type_names='pods', keep_type_prefix=False, con_ssh=con_ssh,
                                   fail_ok=True, rtn_list=True)
 
         for pod_dict in pods_list:
@@ -163,7 +169,7 @@ def wait_for_pods_gone(pod_names, types='pods', namespace=None, timeout=120, che
     end_time = time.time() + timeout
     pods_info = remaining_pod = None
     while time.time() < end_time:
-        pods_info = get_pods_info(namespace=namespace, types=types, keep_name_prefix=False, con_ssh=con_ssh,
+        pods_info = get_pods_info(namespace=namespace, type_names=types, keep_type_prefix=False, con_ssh=con_ssh,
                                   fail_ok=True)
 
         current_names = []
@@ -233,3 +239,62 @@ def delete_pods(pod_names=None, select_all=None, pods_types='pods', namespace=No
 
     LOG.info("{} are successfully removed.".format(pod_names))
     return 0, None
+
+
+def get_pods_info_yaml(type_names='pods', namespace=None, con_ssh=None, fail_ok=False):
+    """
+    pods info parsed from yaml output of kubectl get cmd
+    Args:
+        namespace (None|str): e.g., kube-system, openstack, default. If set to 'all', use --all-namespaces.
+        type_names (None|list|tuple|str): e.g., ("deployments.apps", "services/calico-typha")
+        con_ssh:
+        fail_ok:
+
+    Returns (list): each item is a pod info dictionary
+
+    """
+    if isinstance(type_names, (list, tuple)):
+        type_names = ','.join(type_names)
+    args = type_names
+
+    if namespace == 'all':
+        args += ' --all-namespaces'
+    elif namespace:
+        args += ' --namespace={}'.format(namespace)
+
+    args += ' -o yaml'
+
+    code, out = exec_kube_cmd(sub_cmd='get', args=args, con_ssh=con_ssh, fail_ok=fail_ok)
+    if code > 0:
+        return []
+
+    try:
+        pods_info = yaml.load(out)
+    except yaml.YAMLError:
+        LOG.warning('Output is not yaml')
+        return []
+
+    pods_info = pods_info.get('items', [pods_info])
+
+    return pods_info
+
+
+def get_pod_value_jsonpath(type_name, jsonpath, namespace=None, con_ssh=None):
+    """
+    Get value for specified pod with jsonpath
+    Args:
+        type_name (str): e.g., 'service/kubernetes'
+        jsonpath (str): e.g., '{.spec.ports[0].targetPort}'
+        namespace (str|None): e.g.,  'kube-system'
+        con_ssh:
+
+    Returns (str):
+
+    """
+    args = '{} -o jsonpath="{}"'.format(type_name, jsonpath)
+    if namespace:
+        args += ' --namespace {}'.format(namespace)
+
+    args += ';echo'
+    value = exec_kube_cmd('get', args, con_ssh=con_ssh)[1]
+    return value

@@ -891,10 +891,10 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
 
-    try:
-        setups.list_migration_history(con_ssh=con_ssh)
-    except:
-        LOG.warning("Failed to run nova migration-list")
+    # try:
+    #     setups.list_migration_history(con_ssh=con_ssh)
+    # except:
+    #     LOG.warning("Failed to run nova migration-list")
 
     if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure
