@@ -189,6 +189,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
+    if not InstallVars.get_install_var("OPENSTACK_INSTALL"):
+         controller0_node = lab['controller-0']
+         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
+
 
 def set_license_var(sys_version=None, sys_type=None):
     if sys_version is None:

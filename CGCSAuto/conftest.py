@@ -582,7 +582,8 @@ def pytest_addoption(parser):
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
     dcfloatip_help = " The distributed cloud central region floating ip if subcloud is specified."
-
+    openstack_install_help = 'flag for openstack install or not; default is false;' \
+                             ''
                 # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
                      help=file_dir_help)
@@ -601,7 +602,8 @@ def pytest_addoption(parser):
     parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
     parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
                      help=dcfloatip_help)
-
+    parser.addoption('--openstack-install',  dest='openstack_install', action='store_true', default=False,
+                     help=openstack_install_help)
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
