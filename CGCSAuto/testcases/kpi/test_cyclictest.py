@@ -26,7 +26,8 @@ RESULT_FILE = 'result'
 RUN_LOG = 'runlog'
 INCLUDING_RATIO = 0.999999
 
-RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest-rt/CGCS_5.0_RT_Guest/latest_tis-centos-guest-rt.img'
+# RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest-rt/CGCS_5.0_RT_Guest/latest_tis-centos-guest-rt.img'
+RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_RT_Guest/latest_tis-centos-guest-rt.img'
 BUILD_SERVER = DEFAULT_BUILD_SERVER['ip']
 
 # ./cyclictest -S -p99 -n -m -d0 -H 20 -D 3600
