@@ -1,19 +1,19 @@
 from pytest import fixture, skip
+
+from consts import horizon
+from consts.auth import Tenant
+from keywords import network_helper
 from utils.tis_log import LOG
+from utils.horizon import helper
 from utils.horizon.regions import messages
 from utils.horizon.pages.project.network import networkspage as pro_networkspage
 from utils.horizon.pages.admin.network import networkspage as adm_networkspage
-from utils.horizon import helper
-from keywords import network_helper
-from consts import horizon
-from consts import auth
-from testfixtures.horizon import tenant_home_pg, admin_home_pg, driver    #Do not remove
 
 
 @fixture(scope='function')
-def project_networks_pg(tenant_home_pg, request):
+def project_networks_pg(tenant_home_pg_container, request):
     LOG.fixture_step('Go to Project > Network > Networks')
-    networks_pg = pro_networkspage.NetworksPage(tenant_home_pg.driver)
+    networks_pg = pro_networkspage.NetworksPage(tenant_home_pg_container.driver, port=tenant_home_pg_container.port)
     networks_pg.go_to_target_page()
 
     def teardown():
@@ -77,9 +77,9 @@ def get_pnet():
 
 
 @fixture(scope='function')
-def admin_networks_pg(admin_home_pg, request):
+def admin_networks_pg(admin_home_pg_container, request):
     LOG.fixture_step('Go to Admin > Network > Networks')
-    networks_pg = adm_networkspage.NetworksPage(admin_home_pg.driver)
+    networks_pg = adm_networkspage.NetworksPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     networks_pg.go_to_target_page()
 
     def teardown():
@@ -115,7 +115,7 @@ def test_network_subnet_create_admin(get_pnet, admin_networks_pg):
 
     LOG.tc_step('Create new network {}.'.format(network_name))
     admin_networks_pg.create_network(network_name,
-                                     project=auth.Tenant.TENANT1['tenant'],
+                                     project=Tenant.get_primary()['tenant'],
                                      provider_network_type=pnet_type,
                                      physical_network=pnet_name,
                                      subnet_name=subnet_name,

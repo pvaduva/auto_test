@@ -12,6 +12,9 @@ class TiSPath:
     HEAT = '/home/wrsroot/heat/'
     BACKUPS = '/opt/backups'
     CUSTOM_HEAT_TEMPLATES = '/home/wrsroot/custom_heat_templates/'
+    HELM_CHARTS_DIR = '/www/pages/helm_charts/'
+    DOCKER_CONF = '/etc/docker-distribution/registry/config.yml'
+    DOCKER_REPO = '/var/lib/docker-distribution/docker/registry/v2/repositories'
 
 
 class VMPath:

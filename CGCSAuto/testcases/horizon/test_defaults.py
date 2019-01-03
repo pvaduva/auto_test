@@ -1,17 +1,18 @@
 import random
-from utils.horizon.regions import messages
-from time import sleep
-from utils.horizon.pages.admin.system import defaultspage
+import time
+
 from pytest import fixture
-from testfixtures.horizon import admin_home_pg      # DO NOT remove
-from utils.tis_log import LOG
+
 from consts import horizon
+from utils.horizon.regions import messages
+from utils.horizon.pages.admin.system import defaultspage
+from utils.tis_log import LOG
 
 
 @fixture(scope='function')
-def defaults_pg(admin_home_pg, request):
+def defaults_pg(admin_home_pg_container, request):
     LOG.fixture_step('Go to Admin > System > Defaults')
-    default_pg = defaultspage.DefaultsPage(admin_home_pg.driver)
+    default_pg = defaultspage.DefaultsPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     default_pg.go_to_target_page()
 
     def teardown():
@@ -55,6 +56,6 @@ def test_update_defaults(defaults_pg):
                                             default_quota_values[quota_name]
                                             + add_up)
     LOG.tc_step('Updates default Quotas back to original status')
-    sleep(1)
+    time.sleep(1)
     defaults_pg.update_defaults(-add_up)
     horizon.test_result = True

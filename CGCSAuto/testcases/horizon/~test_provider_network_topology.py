@@ -1,18 +1,17 @@
 from pytest import fixture
 
-from utils.horizon.pages.admin.platform import providernetworkstopology
+from consts.auth import Tenant
+from keywords import network_helper
+
 from utils import table_parser, cli
 from utils.tis_log import LOG
-from consts.auth import Tenant
-from consts import horizon
-from keywords import network_helper
-from testfixtures.horizon import admin_home_pg, driver
+from utils.horizon.pages.admin.platform import providernetworkstopology
 
 
 @fixture(scope='function')
-def pnet_topology_pg(admin_home_pg):
+def pnet_topology_pg(admin_home_pg_container):
     LOG.fixture_step('Go to Admin > Platform > Provider Network Topology')
-    provider_networks_topology_pg = providernetworkstopology.ProviderNetworkTopologyPage(admin_home_pg.driver)
+    provider_networks_topology_pg = providernetworkstopology.ProviderNetworkTopologyPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     provider_networks_topology_pg.go_to_target_page()
 
     return provider_networks_topology_pg

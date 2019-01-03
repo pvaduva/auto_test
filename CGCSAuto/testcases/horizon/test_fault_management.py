@@ -1,9 +1,9 @@
+from pytest import fixture, mark
+
+from consts import horizon
 from utils.horizon.regions import messages
 from utils.horizon.pages.admin.platform import faultmanagementpage
-from pytest import fixture, mark
-from testfixtures.horizon import admin_home_pg, driver
 from utils.tis_log import LOG
-from consts import horizon
 
 
 @fixture(scope='function')

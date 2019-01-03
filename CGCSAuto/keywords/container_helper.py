@@ -1,9 +1,98 @@
+import os
 import time
 
 from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
-from consts.cgcs import AppStatus
+from consts.cgcs import AppStatus, Prompt
+from consts.filepaths import TiSPath
+from keywords import system_helper, host_helper
+
+
+def exec_helm_upload_cmd(sub_cmd, timeout=120, con_ssh=None, fail_ok=False):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = 'helm-upload {}'.format(sub_cmd)
+    con_ssh.send(cmd)
+    pw_prompt = Prompt.PASSWORD_PROMPT
+    prompts = [con_ssh.prompt, pw_prompt]
+
+    index = con_ssh.expect(prompts, timeout=timeout, searchwindowsize=100, fail_ok=fail_ok)
+    if index == 1:
+        con_ssh.send(con_ssh.password)
+        prompts.remove(pw_prompt)
+        con_ssh.expect(prompts, timeout=timeout, searchwindowsize=100, fail_ok=fail_ok)
+
+    code, output = con_ssh._process_exec_result(cmd, rm_date=True, get_exit_code=True)
+    if code != 0 and not fail_ok:
+        raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}. Output: {}".
+                                              format(cmd, output))
+
+    return code, output
+
+
+def exec_docker_cmd(sub_cmd, args, timeout=120, con_ssh=None, fail_ok=False):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = 'docker {} {}'.format(sub_cmd, args)
+    code, output = con_ssh.exec_sudo_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
+
+    return code, output
+
+
+def upload_helm_charts(tar_file, delete_first=False, check_both_controllers=True, con_ssh=None, timeout=120,
+                       fail_ok=False):
+    """
+    Upload helm charts via helm-upload cmd
+    Args:
+        tar_file:
+        delete_first:
+        check_both_controllers:
+        con_ssh:
+        timeout:
+        fail_ok:
+
+    Returns (tuple):
+        (0, <path_to_charts>)
+        (1, <std_err>)
+        (2, <hostname for host that does not have helm charts in expected dir>)
+
+    """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    abs_dir = os.path.abspath(TiSPath.HELM_CHARTS_DIR)
+    file_path = os.path.join(abs_dir, os.path.basename(tar_file))
+    hosts_to_check = [con_ssh.get_hostname()]
+    if check_both_controllers and not system_helper.is_simplex(con_ssh=con_ssh):
+        con_name = 'controller-1' if hosts_to_check[0] == 'controller-0' else 'controller-0'
+        hosts_to_check.append(con_name)
+
+    if delete_first:
+        for host in hosts_to_check:
+            with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+                if host_ssh.file_exists(file_path):
+                    host_ssh.exec_sudo_cmd('rm -f {}'.format(file_path))
+
+    code, output = exec_helm_upload_cmd(sub_cmd=tar_file, timeout=timeout, con_ssh=con_ssh, fail_ok=fail_ok)
+    if code != 0:
+        return 1, output
+
+    for host in hosts_to_check:
+        with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
+            file_exist = host_ssh.file_exists(file_path)
+
+        if not file_exist:
+            if fail_ok:
+                return 2, host
+            else:
+                raise exceptions.ContainerError("{} not found on {}".format(file_path, host))
+
+    LOG.info("Helm charts {} uploaded successfully".format(file_path))
+    return 0, file_path
 
 
 def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_timeout=300, con_ssh=None,
@@ -30,6 +119,7 @@ def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_tim
     args = '{} {}'.format(app_name, tar_file)
     code, output = cli.system('application-upload', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                               rtn_list=True)
+
     if code > 0:
         return 1, output
 
@@ -65,7 +155,7 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
 
     table_ = table_parser.table(cli.system('application-list', ssh_client=con_ssh, auth_info=auth_info))
     if not table_['values']:
-        return {app:None for app in apps} if rtn_dict else [None]*len(apps)
+        return {app: None for app in apps} if rtn_dict else [None]*len(apps)
 
     table_ = table_parser.row_dict_table(table_, key_header='application', lower_case=False)
     apps_vals = []
@@ -208,3 +298,116 @@ def remove_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
     msg = '{} removed successfully'.format(app_name)
     LOG.info(msg)
     return 0, msg
+
+
+def get_docker_reg_addr(con_ssh=None):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    output = con_ssh.exec_cmd('grep --color=never "addr: " {}'.format(TiSPath.DOCKER_CONF), fail_ok=False)[1]
+    reg_addr = output.split('addr: ')[1].strip()
+    return reg_addr
+
+
+def pull_docker_image(name, tag=None, digest=None, con_ssh=None, timeout=300, fail_ok=False):
+
+    args = '{}'.format(name.strip())
+    if tag:
+        args += ':{}'.format(tag)
+    elif digest:
+        args += '@{}'.format(digest)
+
+    LOG.info("Pull docker image {}".format(args))
+    code, out = exec_docker_cmd('image pull', args, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh)
+    if code != 0:
+        return 1, out
+
+    image_id = get_docker_image_values(repo=name, tag=tag, rtn_vals='IMAGE ID', con_ssh=con_ssh, fail_ok=False)[0]
+    LOG.info('docker image {} successfully pulled. ID: {}'.format(args, image_id))
+
+    return 0, image_id
+
+
+def push_docker_image(name, tag=None, con_ssh=None, timeout=300, fail_ok=False):
+    args = '{}'.format(name.strip())
+    if tag:
+        args += ':{}'.format(tag)
+
+    LOG.info("Push docker image {}".format(args))
+    code, out = exec_docker_cmd('image push', args, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh)
+    if code != 0:
+        return 1, out
+
+    LOG.info('docker image {} successfully pushed.'.format(args))
+    return 0, args
+
+
+def tag_docker_image(source_image, target_name, source_tag=None, target_tag=None, con_ssh=None, timeout=300,
+                     fail_ok=False):
+    source_args = source_image.strip()
+    if source_tag:
+        source_args += ':{}'.format(source_tag)
+
+    target_args = target_name.strip()
+    if target_tag:
+        target_args += ':{}'.format(target_tag)
+
+    LOG.info("Tag docker image {} as {}".format(source_args, target_args))
+    args = '{} {}'.format(source_args, target_args)
+    code, out = exec_docker_cmd('image tag', args, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh)
+    if code != 0:
+        return 1, out
+
+    get_docker_image_values(repo=target_name, tag=target_tag, con_ssh=con_ssh, fail_ok=False)
+    LOG.info('docker image {} successfully tagged as {}.'.format(source_args, target_args))
+    return 0, target_args
+
+
+def remove_docker_images(images, force=False, con_ssh=None, timeout=300, fail_ok=False):
+    if isinstance(images, str):
+        images = (images, )
+
+    LOG.info("Remove docker images: {}".format(images))
+    args = ' '.join(images)
+    if force:
+        args = '--force {}'.format(args)
+
+    code, out = exec_docker_cmd('image rm', args, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh)
+    return code, out
+
+
+def get_docker_image_values(repo, tag=None, rtn_vals=('IMAGE ID',), con_ssh=None, fail_ok=False):
+    """
+    get values for given docker image via 'docker image ls <repo>'
+    Args:
+        repo (str):
+        tag (str|None):
+        rtn_vals:
+        con_ssh:
+        fail_ok
+
+    Returns (list):
+
+    """
+    args = repo
+    if tag:
+        args += ':{}'.format(tag)
+    code, output = exec_docker_cmd(sub_cmd='image ls', args=args, fail_ok=fail_ok, con_ssh=con_ssh)
+    if code != 0:
+        return None
+
+    table_ = table_parser.table_kube(output)
+    if not table_['values']:
+        if fail_ok:
+            return None
+        else:
+            raise exceptions.ContainerError("docker image {} does not exist".format(args))
+
+    if isinstance(rtn_vals, str):
+        rtn_vals = (rtn_vals, )
+
+    values = []
+    for header in rtn_vals:
+        values.append(table_parser.get_column(table_, header)[0])
+
+    return values

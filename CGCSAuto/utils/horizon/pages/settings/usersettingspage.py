@@ -25,8 +25,8 @@ class UsersettingsPage(basepage.BasePage):
     _change_password_tab_locator = (by.By.CSS_SELECTOR,
                                     'a[href*="/settings/password/"]')
 
-    def __init__(self, driver):
-        super(UsersettingsPage, self).__init__(driver)
+    def __init__(self, driver, port=None):
+        super(UsersettingsPage, self).__init__(driver, port=port)
         self._page_title = "User Settings"
 
     @property

@@ -5,15 +5,17 @@ from consts.cgcs import PodStatus, HostAvailState
 from utils.tis_log import LOG
 
 
+@mark.platform
 @mark.parametrize('controller', [
     'active',
     'standby'
 ])
-def test_kube_platform_pods(controller):
+def test_kube_system_services(controller):
     """
     Test kube-system pods are deployed and running
 
     Test Steps:
+        - ssh to given controller
         - Check all kube-system pods are running
         - Check kube-system services displayed: 'calico-typha', 'kube-dns', 'tiller-deploy'
         - Check kube-system deployments displayed: 'calico-typha', 'coredns', 'tiller-deploy'

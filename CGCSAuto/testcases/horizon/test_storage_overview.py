@@ -1,12 +1,11 @@
 from pytest import fixture, skip, mark
 
+from consts import horizon
+from keywords import system_helper, storage_helper
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from utils.horizon.pages.admin.platform import storageoverviewpage
-from consts import horizon
-from keywords import system_helper, storage_helper
-from testfixtures.horizon import admin_home_pg
 
 
 @fixture()
@@ -56,7 +55,7 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
     health_status = health_details.split(' ')[0]
     cli_storage_service_info.append(health_status)
 
-    if health_status =='HEALTH_ERR':
+    if health_status == 'HEALTH_ERR':
         health_details = health_details.split('HEALTH_ERR ')[1]
     cli_storage_service_info.append(health_details)
 

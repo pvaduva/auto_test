@@ -1,21 +1,21 @@
+from pytest import fixture
+
+from consts import horizon
+from utils.tis_log import LOG
+from utils.horizon import helper
 from utils.horizon.regions import messages
 from utils.horizon.pages.identity import rolespage
-from pytest import fixture
-from utils.horizon import helper
-from utils.tis_log import LOG
-# from testfixtures.horizon import admin_home_pg, driver     # DO NOT remove
-from consts import horizon
 
 
 ROLE_NAME = None
 
 
 @fixture(scope='function')
-def roles_pg(admin_home_pg, request):
+def roles_pg(admin_home_pg_container, request):
     LOG.fixture_step('Go to Identity > Roles')
     global ROLE_NAME
     ROLE_NAME = helper.gen_resource_name('roles')
-    roles_pg = rolespage.RolesPage(admin_home_pg.driver)
+    roles_pg = rolespage.RolesPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     roles_pg.go_to_target_page()
 
     def teardown():
