@@ -56,6 +56,7 @@ def format_uptime(uptime):
         return '{} month'.format(uptime_months, uptime_weeks)
 
 
+@mark.platform
 def test_horizon_host_inventory_display(host_inventory_pg):
     """
     Test the hosts inventory display:
@@ -100,7 +101,7 @@ def test_horizon_host_inventory_display(host_inventory_pg):
                     '{} display incorrectly, expect: {} actual: {}'.format(horizon_header, expt_val, horizon_val)
 
 
-@mark.platform
+
 @mark.parametrize('host_name', [
     'controller-0'
 ])
@@ -148,7 +149,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     host_details_pg.go_to_processor_tab()
     cpu_table = table_parser.table(cli.system('host-cpu-list {}'.format(host_name)))
     expt_cpu_info = {
-        'Processor Model:': table_parser.get_values(cpu_table, 'processor_model'),
+        'Processor Model:': table_parser.get_values(cpu_table, 'processor_model')[0],
         'Processors:': str(len(set(table_parser.get_values(cpu_table, 'processor'))))}
 
     horizon_cpu_info = host_details_pg.inventory_details_processor_info.get_content()
