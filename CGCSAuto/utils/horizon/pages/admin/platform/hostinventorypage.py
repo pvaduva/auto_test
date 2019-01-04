@@ -28,7 +28,6 @@ class HostsTable(tables.TableRegion):
 
     @tables.bind_row_anchor_column('Host Name')
     def go_to_host_detail_page(self, row_link, row):
-        print(row_link.get_attribute('href'))
         row_link.click()
 
     @tables.bind_row_anchor_column('Host Name')

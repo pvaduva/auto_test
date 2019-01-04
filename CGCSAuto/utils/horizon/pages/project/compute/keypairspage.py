@@ -50,8 +50,8 @@ class KeypairsPage(basepage.BasePage):
     KEY_PAIRS_TABLE_ROW_ACTION = "delete"
     KEY_PAIRS_TABLE_NAME_COLUMN = 'Key Pair Name'
 
-    def __init__(self, driver):
-        super(KeypairsPage, self).__init__(driver)
+    def __init__(self, driver, port=None):
+        super(KeypairsPage, self).__init__(driver, port=port)
         self._page_title = "Access & Security"
 
     def _get_row_with_keypair_name(self, name):

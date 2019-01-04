@@ -5,9 +5,9 @@ from utils.horizon.pages import loginpage
 
 
 @mark.parametrize(('username', 'service'), [
-        ('admin', 'platform'),
-        ('tenant1', 'container')
-    ])
+    ('admin', 'platform'),
+    ('tenant1', 'container')
+])
 def test_login(driver, username, service):
     """
     Test the login functionality:

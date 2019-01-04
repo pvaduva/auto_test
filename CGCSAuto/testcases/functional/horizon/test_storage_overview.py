@@ -8,14 +8,14 @@ from utils.clients.ssh import ControllerClient
 from utils.horizon.pages.admin.platform import storageoverviewpage
 
 
-@fixture()
+@fixture(scope='module')
 def storage_precheck():
     if not system_helper.is_storage_system():
         skip('This test only applies to storage systems')
 
 
 @fixture()
-def storage_overview_pg(admin_home_pg):
+def storage_overview_pg(storage_precheck, admin_home_pg):
     LOG.fixture_step('Go to Admin > Platform > Storage Overview')
     storage_overview_pg = storageoverviewpage.StorageOverviewPage(admin_home_pg.driver)
     storage_overview_pg.go_to_target_page()

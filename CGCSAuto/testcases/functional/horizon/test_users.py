@@ -36,7 +36,6 @@ def test_dashboard_help_redirection(admin_home_pg_container):
 NEW_PASSWORD1 = "Li96nux*"
 NEW_PASSWORD2 = "LI69nux*"
 TEST_PASSWORD = "Li69nux*"
-username = None
 
 
 @fixture(scope='function')

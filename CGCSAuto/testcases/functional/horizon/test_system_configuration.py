@@ -9,14 +9,14 @@ from utils.horizon import helper
 from utils.horizon.pages.admin.platform import systemconfigurationpage
 
 
-@fixture()
+@fixture(scope='module')
 def storage_precheck():
     if not system_helper.is_storage_system():
         skip("This test only applies to storage nodes")
 
 
 @fixture()
-def sys_config_pg(admin_home_pg):
+def sys_config_pg(storage_precheck, admin_home_pg):
     LOG.fixture_step('Go to Admin > Platform > System Configuration')
     system_configuration_pg = systemconfigurationpage.SystemConfigurationPage(admin_home_pg.driver)
     system_configuration_pg.go_to_target_page()
