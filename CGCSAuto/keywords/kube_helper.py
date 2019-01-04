@@ -46,7 +46,7 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False):
     return code, tables
 
 
-def get_pods_info(namespace=None, type_names='pods', keep_type_prefix=False, con_ssh=None, fail_ok=False,
+def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_ssh=None, fail_ok=False,
                   rtn_list=False):
     """
 
@@ -80,6 +80,9 @@ def get_pods_info(namespace=None, type_names='pods', keep_type_prefix=False, con
                 for row_dict in rows:
                     row_dict['name'] = row_dict.pop('name')[start_index:]
 
+            if name_prefix == name:
+                # assume only one table returned with only 1 type_names specified
+                name_prefix = type_names if isinstance(type_names, str) else type_names[0]
             kube_info[name_prefix] = rows
 
     LOG.debug('kubernetes info for namespace {}: {}'.format(namespace, kube_info))
@@ -298,3 +301,54 @@ def get_pod_value_jsonpath(type_name, jsonpath, namespace=None, con_ssh=None):
     args += ';echo'
     value = exec_kube_cmd('get', args, con_ssh=con_ssh)[1]
     return value
+
+
+def get_nodes_values(hosts=None, status=None, rtn_val='STATUS', exclude=False, con_ssh=None, fail_ok=False):
+    """
+    Get nodes values via 'kubectl get nodes'
+    Args:
+        hosts (None|str|list|tuple): table filter
+        status (None|str|list|tuple): table filter
+        rtn_val (str): any header of the nodes table
+        exclude (bool): whether to exclude rows with given criteria
+        con_ssh:
+        fail_ok:
+
+    Returns (None|list): None if cmd failed.
+
+    """
+    code, output = exec_kube_cmd('get', args='nodes', con_ssh=con_ssh, fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table_kube(output)
+    if hosts or status:
+        table_ = table_parser.filter_table(table_, exclude=exclude, **{'NAME': hosts, 'STATUS': status})
+
+    return table_parser.get_column(table_, rtn_val)
+
+
+def get_nodes_in_status(hosts=None, status='Ready', exclude=False, con_ssh=None, fail_ok=False):
+    return get_nodes_values(hosts=hosts, status=status, rtn_val='NAME', exclude=exclude, con_ssh=con_ssh,
+                            fail_ok=fail_ok)
+
+
+def wait_for_nodes_ready(hosts=None, timeout=120, check_interval=5, con_ssh=None, fail_ok=False):
+    end_time = time.time() + timeout
+    nodes_not_ready = None
+    while time.time() < end_time:
+        nodes_not_ready = get_nodes_in_status(hosts=hosts, status='Ready', exclude=True, con_ssh=con_ssh, fail_ok=True)
+        if nodes_not_ready is []:
+            LOG.info("All nodes are ready{}".format(': {}'.format(hosts) if hosts else ''))
+            return True, None
+        elif nodes_not_ready:
+            LOG.info('{} not ready yet'.format(nodes_not_ready))
+
+        time.sleep(check_interval)
+
+    msg = '{} are not ready within {}s'.format(nodes_not_ready, timeout)
+    LOG.warning(msg)
+    if fail_ok:
+        return False, nodes_not_ready
+    else:
+        raise exceptions.KubeError(msg)

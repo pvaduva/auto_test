@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.reasons import SkipSysType
 from consts.kpi_vars import Swact, SwactUncontrolled, KPI_DATE_FORMAT
-from keywords import host_helper, system_helper, vm_helper, network_helper, common
+from keywords import host_helper, system_helper, vm_helper, network_helper, common, kube_helper
 
 
 @mark.sanity
@@ -27,8 +27,7 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
 
     LOG.tc_step('retrieve active and available controllers')
-    pre_active_controller = system_helper.get_active_controller_name()
-    pre_standby_controller = system_helper.get_standby_controller_name()
+    pre_active_controller, pre_standby_controller = system_helper.get_active_standby_controllers()
     assert pre_standby_controller, "No standby controller available"
 
     pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
@@ -70,6 +69,9 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         format(post_msg_sys, pre_msg_sys)
     assert post_res_neutron, "\nPost evac neutron agents stats: {}\nPre-evac neutron agents stats: {}". \
         format(pre_msg_neutron, post_msg_neutron)
+
+    LOG.tc_step("Check hosts are Ready in kubectl get nodes after swact")
+    kube_helper.wait_for_nodes_ready(hosts=(pre_active_controller, pre_standby_controller), timeout=30)
 
 
 @mark.kpi

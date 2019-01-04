@@ -101,7 +101,9 @@ def test_horizon_host_inventory_display(host_inventory_pg):
 
 
 @mark.platform
-@mark.parametrize('host_name', ['controller-0'])
+@mark.parametrize('host_name', [
+    'controller-0'
+])
 def test_horizon_host_details_display(host_inventory_pg, host_name):
     """
     Test the host details display:

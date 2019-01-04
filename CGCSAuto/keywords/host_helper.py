@@ -198,6 +198,10 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     if len(locked_hosts) > 0:
         locked_hosts_in_states = wait_for_hosts_states(locked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
                                                        duration=8, con_ssh=con_ssh, availability=['online'])
+        if locked_hosts_in_states:
+            hosts_not_ready = wait_for_nodes_ready(locked_hosts_in_states, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[1]
+            if hosts_not_ready:
+                locked_hosts_in_states = list(set(locked_hosts_in_states) - set(hosts_not_ready))
 
     if len(unlocked_hosts) > 0:
         unlocked_hosts_in_states = wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
@@ -256,21 +260,25 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                         raise exceptions.HostPostCheckFailed(err_msg)
 
     states_vals = {}
-    task_unfinished_msg = ''
+    failure_msg = ''
     for host in hostnames:
         vals = get_hostshow_values(host, fields=['task', 'availability'])
         if not vals['task'] == '':
-            task_unfinished_msg = ' '.join([task_unfinished_msg, "{} still in task: {}.".format(host, vals['task'])])
+            failure_msg += " {} still in task: {}.".format(host, vals['task'])
         states_vals[host] = vals
+    from keywords.kube_helper import wait_for_nodes_ready
+    hosts_not_ready = wait_for_nodes_ready(hostnames, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[1]
+    if hosts_not_ready:
+        failure_msg += " {} not ready in kubectl get ndoes".format(hosts_not_ready)
 
     message = "Host(s) state(s) - {}.".format(states_vals)
 
-    if locked_hosts_in_states and unlocked_hosts_in_states and task_unfinished_msg == '':
+    if locked_hosts_in_states and unlocked_hosts_in_states and failure_msg == '':
         succ_msg = "Hosts {} rebooted successfully".format(hostnames)
         LOG.info(succ_msg)
         return 0, succ_msg
 
-    err_msg = "Host(s) not in expected states or task unfinished. " + message + task_unfinished_msg
+    err_msg = "Host(s) not in expected states or task unfinished. " + message + failure_msg
     if fail_ok:
         LOG.warning(err_msg)
         return 1, err_msg
@@ -332,10 +340,14 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
 
     res_lock = res_unlock = True
     timeout_args = {'timeout': timeout} if timeout else {}
+    from keywords.kube_helper import wait_for_nodes_ready
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))
         res_lock = wait_for_hosts_states(expt_online_hosts, availability=HostAvailState.ONLINE, fail_ok=fail_ok,
                                          con_ssh=con_ssh, auth_info=auth_info, **timeout_args)
+
+        res_kube = wait_for_nodes_ready(hosts=expt_online_hosts, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[0]
+        res_lock = res_lock and res_kube
 
     if expt_avail_hosts:
         hypervisors = list(set(get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)) & set(expt_avail_hosts))
@@ -366,6 +378,9 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
                 for host in hypervisors:
                     res_4 = wait_for_tasks_affined(host=host, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh)
                     res_unlock = res_unlock and res_4
+
+        res_kube = wait_for_nodes_ready(hosts=expt_avail_hosts, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[0]
+        res_unlock = res_unlock and res_kube
 
     return res_lock and res_unlock
 
@@ -717,6 +732,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         (8, "Failed to wait for host to reach Available state after unlocked to Degraded state")
                 # only applicable if fail_ok and available_only are True
         (9, "Host subfunctions operational and availability are not enable and available system host-show") # CPE only
+        (10, "<host> is not ready in kubectl get nodes after unlock")
 
     """
     LOG.info("Unlocking {}...".format(host))
@@ -827,6 +843,11 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 LOG.warning(err_msg)
                 return 8, err_msg
 
+    from keywords.kube_helper import wait_for_nodes_ready
+    if not use_telnet and not wait_for_nodes_ready(hosts=host, timeout=20, con_ssh=con_ssh, fail_ok=fail_ok)[0]:
+        err_msg = "{} is not ready in kubectl get nodes after unlock".format(host)
+        return 10, err_msg
+
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
 
@@ -883,6 +904,8 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         (4, "Host is in degraded state after unlocked.")
         (5, "Host is not up in nova hypervisor-list")   # Host with compute function only
         (6, "Host web-services is not active in system servicegroup-list") # controllers only
+        (7, "Host platform tasks affining incomplete")
+        (8, "Host status not ready in kubectl get nodes")
 
     """
     if not hosts:
@@ -986,6 +1009,14 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
                 hosts_affine_incomplete.append(host)
                 res[host] = 7, "Host platform tasks affining incomplete"
         hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
+
+    if hosts_avail and not use_telnet:
+        from keywords.kube_helper import wait_for_nodes_ready
+        hosts_not_ready = wait_for_nodes_ready(hosts=hosts_avail, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[1]
+        if hosts_not_ready:
+            hosts_avail = list(set(hosts_avail) - set(hosts_not_ready))
+            for host in hosts_not_ready:
+                res[host] = 8, "Host status not ready in kubectl get nodes"
 
     for host in hosts_avail:
         res[host] = 0, "Host is unlocked and in available state."

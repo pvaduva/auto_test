@@ -1,8 +1,20 @@
-from pytest import mark, skip
+from pytest import mark, skip, fixture
 
 from keywords import kube_helper, system_helper, host_helper
 from consts.cgcs import PodStatus, HostAvailState
 from utils.tis_log import LOG
+
+
+def check_host(controller):
+    host = system_helper.get_active_controller_name()
+    if controller == 'standby':
+        controllers = system_helper.get_controllers(availability=(HostAvailState.AVAILABLE, HostAvailState.DEGRADED,
+                                                                  HostAvailState.ONLINE))
+        controllers.remove(host)
+        if not controllers:
+            skip('Standby controller does not exist or not in good state')
+        host = controllers[0]
+    return host
 
 
 @mark.platform
@@ -21,14 +33,7 @@ def test_kube_system_services(controller):
         - Check kube-system deployments displayed: 'calico-typha', 'coredns', 'tiller-deploy'
 
     """
-    host = system_helper.get_active_controller_name()
-    if controller == 'standby':
-        controllers = system_helper.get_controllers(availability=(HostAvailState.AVAILABLE, HostAvailState.DEGRADED,
-                                                                  HostAvailState.ONLINE))
-        controllers.remove(host)
-        if not controllers:
-            skip('Standby controller does not exist or not in good state')
-        host = controllers[0]
+    host = check_host(controller=controller)
 
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
         kube_system_info = kube_helper.get_pods_info(namespace='kube-system', con_ssh=con_ssh,
@@ -52,3 +57,19 @@ def test_kube_system_services(controller):
         existing_deployments = [deployment['name'] for deployment in existing_deployments]
         for deployment in deployments:
             assert deployment in existing_deployments, "{} not in kube-system deployment.apps table".format(deployment)
+
+
+@mark.sanity
+@mark.parametrize('controller', [
+    'active',
+    'standby'
+])
+def test_kube_openstack_services(controller):
+    host = check_host(controller=controller)
+    with host_helper.ssh_to_host(hostname=host) as con_ssh:
+        kube_openstack_info = kube_helper.get_pods_info(namespace='openstack', con_ssh=con_ssh,
+                                                        type_names='pod', keep_type_prefix=True)['pod']
+        LOG.tc_step("Check openstack pods status on {}".format(controller))
+        for pod_info in kube_openstack_info:
+            expt_status = [PodStatus.RUNNING] if 'api' in pod_info['name'] else [PodStatus.RUNNING, PodStatus.COMPLETED]
+            assert pod_info['status'] in expt_status, "Pod {} status is {}".format(pod_info['name'], pod_info['status'])

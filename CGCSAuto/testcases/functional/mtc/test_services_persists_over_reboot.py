@@ -1,3 +1,4 @@
+import time
 from pytest import mark, skip
 
 from utils.tis_log import LOG
@@ -67,4 +68,5 @@ def test_system_persist_over_host_reboot(host_type):
     if host in up_hypervisors:
         LOG.tc_step("Check {} can still host vm after reboot".format(host))
         if not nova_helper.get_vm_host(vm_id) == host:
+            time.sleep(30)
             vm_helper.live_migrate_vm(vm_id, destination_host=host)

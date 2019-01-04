@@ -1,5 +1,6 @@
 import os
 import time
+import yaml
 
 from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
@@ -411,3 +412,85 @@ def get_docker_image_values(repo, tag=None, rtn_vals=('IMAGE ID',), con_ssh=None
         values.append(table_parser.get_column(table_, header)[0])
 
     return values
+
+
+def get_helm_overrides(header='overrides namespaces', charts=None, auth_info=Tenant.get('admin'), con_ssh=None):
+    table_ = table_parser.table(cli.system('helm-override-list', ssh_client=con_ssh, auth_info=auth_info))
+
+    if charts:
+        table_ = table_parser.filter_table(table_, **{'chart name': charts})
+
+    vals = table_parser.get_column(table_, header)
+    if header == 'overrides namespaces':
+        vals = [eval(val) for val in vals]
+
+    return vals
+
+
+def get_helm_override_info(chart, namespace, fields=('combined_overrides', ), auth_info=Tenant.get('admin'),
+                           con_ssh=None):
+    args = '{} {}'.format(chart, namespace)
+    table_ = table_parser.table(cli.system('helm-override-show', args, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(fields, str):
+        fields = (fields, )
+
+    values = []
+    for field in fields:
+        value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
+        values.append(yaml.load(value))
+
+    return values
+
+
+def __convert_kv(k, v):
+    if '.' not in k:
+        return {k: v}
+    new_key, new_val = k.rsplit('.', maxsplit=1)
+    return __convert_kv(new_key, {new_val: v})
+
+
+def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_vals=False, reuse_vals=False,
+                         auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+    """
+    Update helm_override values for given chart
+    Args:
+        chart:
+        namespace:
+        yaml_file:
+        kv_pairs:
+        reset_vals:
+        reuse_vals:
+        fail_ok
+        con_ssh
+        auth_info
+
+    Returns (tuple):
+        (0, <overrides>(str|list|dict))     # cmd accepted.
+        (1, <std_err>)  #  system helm-override-update cmd rejected
+
+    """
+    args = '{} {}'.format(chart, namespace)
+    if reset_vals:
+        args = '--reset-values {}'.format(args)
+    if reuse_vals:
+        args = '--reuse-values {}'.format(args)
+    if yaml_file:
+        args = '--values {} {}'.format(yaml_file, args)
+    if kv_pairs:
+        cmd_overrides = ','.join(['{}={}'.format(k, v) for k, v in kv_pairs.items()])
+        args = '--set {} {}'.format(cmd_overrides, args)
+
+    code, output = cli.system('helm-override-update', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                              fail_ok=fail_ok)
+    if code != 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    overrides = table_parser.get_value_two_col_table(table_, 'user_overrides')
+    overrides = yaml.load(overrides)
+    # yaml.load converts str to bool, int, float; but does not convert None type.
+    # Updates are not verified here since it is rather complicated to verify properly.
+    LOG.info("Helm-override updated : {}".format(overrides))
+
+    return 0, overrides

@@ -333,10 +333,10 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
 @mark.parametrize(('guest_os', 'mig_type', 'cpu_pol'), [
     mark.sanity(('ubuntu_14', 'live', 'dedicated')),
-    mark.sanity(('ubuntu_14', 'cold', 'dedicated')),
+    # mark.sanity(('ubuntu_14', 'cold', 'dedicated')),  # FIXME temp remove due to feature not ready
     # mark.sanity(('cgcs-guest', 'live', None)),
     mark.sanity(('tis-centos-guest', 'live', None)),
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),
+    # mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),  # FIXME temp remove due to feature not ready
 ])
 def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
     LOG.tc_step("Create a flavor with 1 vcpu")
