@@ -152,6 +152,20 @@ class BootMenus:
             "wrap_around": True
         }
 
+        Controller_Configuration = {
+            "name": "Controller Configuration",
+            "prompt":  r'(\x1b\[\d+;\d+H.*){5,}(\x1b\[01;00H)+',
+            "wrap_around": True
+        }
+
+        Console = {
+            "name": "Console",
+            "prompt": r"\sSecurity\sProfile\sEnabled\s\(default\ssetting\)",
+            "wrap_around": True
+        }
+
+
+
     class USB:
 
         Kernel = {

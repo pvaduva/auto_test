@@ -389,6 +389,7 @@ def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=
 
     return res
 
+
 def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout=DCTimeout.SUBCLOUD_AUDIT, check_interval=30,
                   auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, source_openrc=None, fail_ok=False):
     """
@@ -421,8 +422,7 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
 
             time.sleep(check_interval)
 
-
-        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, avail)
+        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, avail, timeout)
 
         if fail_ok:
             LOG.info(msg)

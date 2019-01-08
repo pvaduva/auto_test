@@ -682,20 +682,30 @@ def add_subclouds(controller0_node, ip_ver=4):
     LOG.info("Generating subclouds config info from {}".format(subclouds_file))
     controller0_node.ssh_conn.exec_cmd("cd; ./{}".format(subclouds_file))
     LOG.info("Checking if subclouds are added and config files are generated.....")
-    subclouds = dc_helper.get_subclouds()
+    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
 
+    config_generated = []
     for subcloud in subclouds:
         if re.match(r'subcloud-\d{1,2}', subcloud):
             subcloud_config = subcloud.replace('-', '') + ".config"
         else:
             subcloud_config = subcloud + ".config"
 
-        assert controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subcloud_config))[0] == 0, \
-            "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
+        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subcloud_config))[0]
+        if rc == 0:
+            config_generated.append(subcloud_config)
+            config_path = WRSROOT_HOME + subcloud
+            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(WRSROOT_HOME, subcloud_config, config_path))
+        else:
+            LOG.warning("Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config))
 
-    LOG.info("Subclouds added and config files generated successfully; subclouds: {}".format(subclouds))
+    if len(subclouds) == len(config_generated):
+        LOG.info("Subclouds added and config files generated successfully; subclouds: {}"
+                 .format(list(zip(subclouds,config_generated))))
+    else:
+        LOG.info("One or more subcloud config are missing, please try to generate the missing configs manually")
 
-    return subclouds
+    return subclouds, config_generated
 
 
 def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=None, patch_dir=None,
@@ -848,8 +858,9 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
         LOG.error(e_.__str__())
 
     try:
-        active_controller_node.ssh_conn.connect(retry=True, retry_interval=3, retry_timeout=300)
-        active_controller_node.ssh_conn.flush()
+        if active_controller_node.ssh_conn:
+            active_controller_node.ssh_conn.connect(retry=True, retry_interval=3, retry_timeout=300)
+            active_controller_node.ssh_conn.flush()
     except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) as e_:
         LOG.error(e_.__str__())
 

@@ -86,7 +86,6 @@ class Menu(object):
         output = telnet_conn.cmd_output.encode()
         options = re.split(newline, output)
         options = [option for option in options if re.search(option_identifier, option)]
-        LOG.debug("{} options are: {}".format(self.name, options))
         for i in range(0, len(options)):
             self.options.append(Option(name=options[i].decode(), index=i))
 
@@ -184,17 +183,81 @@ class KickstartMenu(Menu):
                 self.index = self.options[i].index
         return super().get_current_option()
 
-    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
-                     option_identifier=r"(\dm?\))|([\w]+)\s+> ".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
-        super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
+    def find_options(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+                     option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
+                     newline=r'(\x1b\[\d+;\d+H)+'.encode()):
+        super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier,
+                             newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
+
         for option in self.options:
             # TODO: would like to make this more general, but it's impossible to determine the prompt
+            matches = re.search(r"\s([A-Za-z\-\(\)]{2,}\s)+\s", option.name)
+            if matches:
+                option_name = matches.group(0).strip()
+                LOG.info("Kickstart option: {}".format(option_name))
+            else:
+                LOG.info("Kickstart option: {}".format(option.name))
             if "security" in option.name.lower() and ("  >" in option.name.lower() or "options" in option.name.lower()):
                 security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
                 self.sub_menus.append(security_menu)
+
+            if "controller configuration" in option.name.lower() and "  >" in option.name.lower():
+                if not self.get_sub_menu("Controller Configuration"):
+
+                    controller_sub_menu = KickstartMenu(name="Controller Configuration",
+                                                        prompt=bios.BootMenus.Kickstart.Controller_Configuration['prompt'])
+
+                    self.sub_menus.append(controller_sub_menu)
+
+                if not self.get_sub_menu("Console"):
+                    console_sub_menu = KickstartMenu(name="Console",
+                                                     prompt=bios.BootMenus.Kickstart.Console['prompt'])
+                    self.sub_menus.append(console_sub_menu)
+
         current_option = self.get_current_option(telnet_conn)
+        LOG.info("Kickstart current option: {}; index {}".format(current_option.name, current_option.index))
+        self.index = current_option.index
+
+    def find_options_(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+                     option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
+                     newline=r'(\x1b\[\d+;\d+H)+'.encode()):
+        super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier,
+                             newline=newline)
+        # TODO: this is a wasteful way to initialize the Options.
+        self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
+
+        for option in self.options:
+            # TODO: would like to make this more general, but it's impossible to determine the prompt
+            matches = re.search(r"([A-Za-z\-]{2,}\s)+\s", option.name)
+            if matches:
+                option_name = matches.group(0).strip()
+            else:
+                option_name = option.name
+
+            LOG.info("Kickstart option: {}".format(option.name))
+            if "  >" in option.name.lower() or "options" in option.name.lower():
+                if "controller configuration" in option.name.lower():
+                    kwargs = getattr(bios.BootMenus.Kickstart, 'Controller_Configuration')
+                elif "console" in option.name.lower():
+                    kwargs = getattr(bios.BootMenus.Kickstart, 'Console')
+                else:
+                    if hasattr(bios.BootMenus.Kickstart, option_name):
+                        kwargs = getattr(bios.BootMenus.Kickstart, option_name)
+                    elif any([attr for attr in dir(bios.BootMenus.Kickstart) if attr in option_name]):
+                        kwargs = getattr(bios.BootMenus.Kickstart, [attr for attr in dir(bios.BootMenus.Kickstart)
+                                                                    if attr in option_name].pop())
+                    else:
+                        LOG.warning("The option {} has submenu but attributes are not define Kickstart menu dictionary"
+                                    .format(option_name))
+                        kwargs = None
+                sub_menu = KickstartMenu(name=option_name, kwargs=kwargs)
+                LOG.info("Option {} sub_menu {}".format(option_name, sub_menu.name))
+                option.sub_menu = sub_menu
+
+        current_option = self.get_current_option(telnet_conn)
+        LOG.info("Kickstart current option: {}; index {}".format(current_option.name, current_option.index))
         self.index = current_option.index
 
     def select(self, telnet_conn=None, index=None, pattern=None, tag=None):
@@ -268,9 +331,10 @@ class BootDeviceMenu(Menu):
 
 
 class Option(object):
-    def __init__(self, name, index, key=None, tag=None):
+    def __init__(self, name, index, key=None, tag=None, sub_menu=None):
         self.name = name
         self.index = index
+        self.sub_menu = sub_menu
         option_name = self.name.lower()
 
         if key is None:
@@ -311,7 +375,6 @@ class KickstartOption(Option):
         tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
         super().__init__(name, index, key)
         option_name = self.name.lower()
-
         if tag is None:
             if "wrl" in option_name or "wrlinux" in option_name:
                 tag_dict["os"] = "wrl"
@@ -345,5 +408,5 @@ class KickstartOption(Option):
             tag_dict = tag
 
         self.tag = tag_dict
-        LOG.debug("Kickstart menu option {} tags are: {}".format(self.name, tag_dict))
+        LOG.debug("Kickstart menu option {} tags are: {}".format(self.name, self.tag))
 

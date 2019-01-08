@@ -160,10 +160,10 @@ def test_distributed_cloud_install(install_setup):
     host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Adding subcloud info ...")
-    subclouds = fresh_install_helper.add_subclouds(controller0_node)
+    subclouds, subcloud_configs = fresh_install_helper.add_subclouds(controller0_node)
 
     LOG.info("DC subclouds added are:{}".format(subclouds))
-
+    LOG.info("DC subclouds configs are:{}".format(subcloud_configs))
     fresh_install_helper.attempt_to_run_post_install_scripts()
 
     fresh_install_helper.reset_global_vars()

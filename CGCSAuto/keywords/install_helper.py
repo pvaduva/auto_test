@@ -15,6 +15,7 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
+from consts.bios import TerminalKeys
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
 from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
@@ -2481,7 +2482,11 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           lab=lab)
 
     LOG.info("Initial login and password set for " + controller0.name)
-    controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
+    if boot_usb:
+        controller0.telnet_conn.set_prompt(r'(-[\d]+)|(localhost):~\$ ')
+    else:
+        controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
+
     controller0.telnet_conn.login(handle_init_login=True)
 
     if boot_usb:
@@ -3578,13 +3583,23 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
         try:
             sub_menus_navigated = 0
+
             while len(sub_menu_prompts) > 0:
                 prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 if sub_menu.name == "Controller Configuration":
+
+                    sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'([\w]+\s)+\s+> ',
+                                                        end_of_menu=b'(\x1b\[01;00H){2,}',
+                                                        newline=b'(\x1b\[\d+;\d+H)+')
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
-                elif sub_menu.name == "Serial Console":
+
+                elif sub_menu.name == "Console":
+
+                    sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'([\w]+\s)+\s+',
+                                          end_of_menu=b"Standard Security Profile Enabled (default setting)",
+                                          newline=b'(\x1b\[\d+;\d+H)+')
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
                 else:
@@ -3598,6 +3613,41 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
             LOG.error("Not enough indexes were given for the menu. {} indexes was given for {} amount of menus".format(
                 str(len(index)), str(len(boot_menu.sub_menus + 1))))
             raise
+
+
+    # if index:
+    #     index = None
+    # pattern = None
+    # while option.sub_menu is not None:
+    #     sub_menu_prompt = option.sub_menu.prompt
+    #     LOG.info("Submenu prompt: {} sub_menu {}".format(sub_menu_prompt, option.sub_menu.name))
+    #
+    #     try:
+    #
+    #         node_obj.telnet_conn.expect(sub_menu_prompt.encode(), 60)
+    #         if 'Console' in option.sub_menu.name:
+    #             LOG.info("Console sub menu output: {}".format(node_obj.telnet_conn.cmd_output.encode()))
+    #         option.sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'([\w]+\s)+\s+> ',
+    #                                      end_of_menu=b'(\x1b\[01;00H){1,}',
+    #                                      newline=b'(\x1b\[\d+;\d+H)+')
+    #         LOG.info("Submenu Options : {}".format(option.sub_menu.options))
+    #         if "Controller Configuration" in option.sub_menu.name:
+    #             pattern = "erial"
+    #             LOG.info("Controller configuration On submenu {}".format(option.sub_menu.name))
+    #         elif "Console" in option.sub_menu.name:
+    #             LOG.info("Console On submenu {}".format(option.sub_menu.name))
+    #             pattern = security
+    #         else:
+    #             index = 0
+    #             LOG.info("Unlknwon On submenu {}".format(option.sub_menu.name))
+    #         option = option.sub_menu.select(node_obj.telnet_conn, index=index, pattern=pattern)
+    #
+    #     except exceptions.TelnetTimeout:
+    #         pass
+    #     except IndexError:
+    #         LOG.error("Invalid index {} or pattern {} was given for the options sub menu {} "
+    #                   .format(index, pattern,option.sub_menu.name))
+    #         raise
 
     return 0
 
@@ -3644,7 +3694,6 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     expt_prompts = [boot_device_menu.prompt]
     if node_obj.name == pxe_host:
         expt_prompts.append(kickstart_menu.prompt)
-        expt_prompts.append("Boot from hard drive")
 
     index = telnet_conn.expect(expt_prompts, 360)
     if index == 0:
@@ -3653,14 +3702,14 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         LOG.info('Boot device selected')
 
         expt_prompts.pop(0)
-        if expt_prompts:
+        if node_obj.name == pxe_host:
+            expt_prompts.append("\x1b\[0;1;36;44m\s{45,60}")
+        if len(expt_prompts) > 0:
             telnet_conn.expect(expt_prompts, 360)
-            index = 1
-    if index == 1 or index == 2:
-        LOG.info('In Kickstart menu index = {}'.format(index))
-        select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-                              security=security, usb=usb, expect_prompt=False)
-        LOG.info('Kick start option selected')
+            LOG.info('In Kickstart menu index = {}'.format(index))
+            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                                  security=security, usb=usb, expect_prompt=False)
+    LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
@@ -3714,7 +3763,8 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
         LOG.info("Burning the system cloned image iso file to usb flash drive {}".format(usb_device))
 
         iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
-                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
+                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
+                                timeout=180,)
 
         # Write the ISO to USB
         cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
