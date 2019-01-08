@@ -4,13 +4,20 @@ import time
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailState
+from consts.cgcs import EventLogID, HostAvailState, AppStatus
 from consts.filepaths import HeatTemplate
 from consts.proj_vars import ProjVar, PatchingVars
 from consts.reasons import SkipSysType
-from keywords import system_helper, host_helper, keystone_helper, security_helper, common
+from keywords import system_helper, host_helper, keystone_helper, security_helper, container_helper, common
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+
+
+@fixture(scope='module')
+def skip_for_no_openstack():
+    status = container_helper.get_apps_values(apps=('stx-openstack',), rtn_dict=False)[0][0]
+    if status != AppStatus.APPLIED:
+        skip('stx-openstack application is not applied')
 
 
 @fixture(scope='session')

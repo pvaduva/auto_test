@@ -59,17 +59,3 @@ def test_kube_system_services(controller):
             assert deployment in existing_deployments, "{} not in kube-system deployment.apps table".format(deployment)
 
 
-@mark.sanity
-@mark.parametrize('controller', [
-    'active',
-    'standby'
-])
-def test_kube_openstack_services(controller):
-    host = check_host(controller=controller)
-    with host_helper.ssh_to_host(hostname=host) as con_ssh:
-        kube_openstack_info = kube_helper.get_pods_info(namespace='openstack', con_ssh=con_ssh,
-                                                        type_names='pod', keep_type_prefix=True)['pod']
-        LOG.tc_step("Check openstack pods status on {}".format(controller))
-        for pod_info in kube_openstack_info:
-            expt_status = [PodStatus.RUNNING] if 'api' in pod_info['name'] else [PodStatus.RUNNING, PodStatus.COMPLETED]
-            assert pod_info['status'] in expt_status, "Pod {} status is {}".format(pod_info['name'], pod_info['status'])

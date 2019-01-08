@@ -98,7 +98,7 @@ def tables(output_lines, combine_multiline_entry=False):
     return tables_
 
 
-def __table(output_lines):
+def __table(output_lines, rstrip_value=False):
     """Parse single table from cli output.
     Return dict with list of column names in 'headers' key and
     rows in 'values' key.
@@ -125,7 +125,9 @@ def __table(output_lines):
             continue
         row = []
         for col in columns:
-            row.append(line[col[0]:col[1]].strip())
+            raw_row = line[col[0]:col[1]]
+            stripped_row = raw_row.rstrip() if rstrip_value else raw_row.strip()
+            row.append(stripped_row)
         if table_['values']:
             table_['values'].append(row)
         else:
@@ -197,7 +199,7 @@ def __convert_multilines_values(values, merge_lines=False):
     return entries
 
 
-def table(output_lines, combine_multiline_entry=False):
+def table(output_lines, combine_multiline_entry=False, rstrip_value=False):
     """
     Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
     a net has multiple subnets, then tempest table will create multiple entries in table_['values']
@@ -205,7 +207,7 @@ def table(output_lines, combine_multiline_entry=False):
     return: Dictionary of a table with.multi-line entry taken into account.table_['values'] is list of entries. If
     multi-line entry, then this entry itself is a list.
     """
-    table_ = __table(output_lines)
+    table_ = __table(output_lines, rstrip_value=rstrip_value)
     rows = get_all_rows(table_)
     if not rows:
         if not table_['headers']:

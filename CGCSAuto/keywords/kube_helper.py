@@ -9,7 +9,21 @@ from keywords import common, system_helper, host_helper
 from consts.cgcs import PodStatus
 
 
-def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False):
+def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False, grep=None):
+    """
+    Execute an kubectl cmd on given ssh client. i.e., 'kubectl <sub_cmd> <args>'
+    Args:
+        sub_cmd (str):
+        args (None|str):
+        con_ssh:
+        fail_ok:
+        grep (None|str|tuple|list)
+
+    Returns (tuple):
+        (0, <std_out>)
+        (1, <std_err>)
+
+    """
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
     cmd = 'kubectl {} {}'.format(sub_cmd.strip(), args.strip() if args else '').strip()
@@ -17,17 +31,22 @@ def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False):
     get_exit_code = True
     if cmd.endswith(';echo'):
         get_exit_code = False
+    if grep:
+        if not isinstance(grep, str):
+            grep = '|'.join(grep)
+        cmd += '| grep -E -i --color=never "{}"'.format(grep)
+
     code, out = con_ssh.exec_cmd(cmd, fail_ok=True, get_exit_code=get_exit_code)
     if code <= 0:
         return 0, out
 
     if fail_ok:
         return 1, out
+    else:
+        raise exceptions.KubeCmdError('CMD: {} Output: {}'.format(cmd, out))
 
-    raise exceptions.KubeCmdError('CMD: {} Output: {}'.format(cmd, out))
 
-
-def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False):
+def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False, grep=None):
 
     if isinstance(types, (list, tuple)):
         types = ','.join(types)
@@ -38,7 +57,7 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False):
     elif namespace:
         args += ' --namespace {}'.format(namespace)
 
-    code, out = exec_kube_cmd(sub_cmd='get', args=args, con_ssh=con_ssh, fail_ok=fail_ok)
+    code, out = exec_kube_cmd(sub_cmd='get', args=args, con_ssh=con_ssh, fail_ok=fail_ok, grep=grep)
     if code > 0:
         return code, out
 
@@ -47,9 +66,9 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False):
 
 
 def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_ssh=None, fail_ok=False,
-                  rtn_list=False):
+                  rtn_list=False, grep=None):
     """
-
+    Get pods info via kubectl get
     Args:
         namespace (None|str): e.g., kube-system, openstack, default. If set to 'all', use --all-namespaces.
         type_names (None|list|tuple|str): e.g., ("deployments.apps", "services/calico-typha")
@@ -57,14 +76,15 @@ def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_
         con_ssh:
         fail_ok:
         rtn_list (bool)
+        grep (str|list|tuple|None)
 
-    Returns (dict):
+    Returns (dict|list):
         key is the name prefix, e.g., service, default, deployment.apps, replicaset.apps
         value is a list. Each item is a dict rep for a row with lowercase keys.
             e.g., [{'name': 'cinder-api', 'age': '4d19h', ... },  ...]
 
     """
-    code, out = __get_kube_tables(namespace=namespace, types=type_names, con_ssh=con_ssh, fail_ok=fail_ok)
+    code, out = __get_kube_tables(namespace=namespace, types=type_names, con_ssh=con_ssh, fail_ok=fail_ok, grep=grep)
     if code > 0:
         return {}
 
@@ -97,7 +117,26 @@ def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_
 
 def apply_pod(file_path, pod_name, namespace=None, recursive=None, select_all=None, selectors=None, con_ssh=None,
               fail_ok=False, check_both_controllers=True):
+    """
+    Apply a pod from given file via kubectl apply
+    Args:
+        file_path (str):
+        pod_name (str):
+        namespace (None|str):
+        recursive (None|bool):
+        select_all (None|bool):
+        selectors (dict): key value pairs
+        con_ssh:
+        fail_ok:
+        check_both_controllers (bool):
 
+    Returns (tuple):
+        (0, <pod_info>(dict))
+        (1, <std_err>)
+        (2, <pod_info>)    # pod is not running after apply
+        (3, <pod_info>)    # pod if not running on the other controller after apply
+
+    """
     arg_dict = {
         '--all': select_all,
         '-l': selectors,
@@ -132,6 +171,23 @@ def apply_pod(file_path, pod_name, namespace=None, recursive=None, select_all=No
 
 def wait_for_pods(pod_names, status=PodStatus.RUNNING, namespace=None, timeout=120, check_interval=3, con_ssh=None,
                   fail_ok=False, strict=False):
+    """
+    Wait for pod(s) to reach given status via kubectl get
+    Args:
+        pod_names (str|list|tuple):
+        status (str):
+        namespace (None|str):
+        timeout:
+        check_interval:
+        con_ssh:
+        fail_ok:
+        strict (bool):
+
+    Returns (tuple):
+        (True, <actual_pods_info>)  # actual_pods_info is a dict with pod_name as key, and pod_info(dict) as value
+        (False, <actual_pods_info>)
+
+    """
     if isinstance(pod_names, str):
         pod_names = [pod_names]
 
@@ -139,15 +195,15 @@ def wait_for_pods(pod_names, status=PodStatus.RUNNING, namespace=None, timeout=1
     names_to_check = list(pod_names)
     actual_pods_info = {pod_name: None for pod_name in pod_names}
     while time.time() < end_time:
-        pods_list = get_pods_info(namespace=namespace, type_names='pods', keep_type_prefix=False, con_ssh=con_ssh,
+        pods_list = get_pods_info(namespace=namespace, type_names='pod', keep_type_prefix=False, con_ssh=con_ssh,
                                   fail_ok=True, rtn_list=True)
 
         for pod_dict in pods_list:
-            pod_name = pod_dict['name']
+            pod_name = pod_dict.get('name')
             if (strict and pod_name in names_to_check) or \
                     (not strict and any([pod_name in name for name in names_to_check])):
                 actual_pods_info[pod_name] = pod_dict
-                if not status or status == pod_dict['status']:
+                if not status or status == pod_dict.get('status'):
                     names_to_check.remove(pod_name)
                     if not names_to_check:
                         return True, actual_pods_info
@@ -164,8 +220,25 @@ def wait_for_pods(pod_names, status=PodStatus.RUNNING, namespace=None, timeout=1
     raise exceptions.KubeError(msg)
 
 
-def wait_for_pods_gone(pod_names, types='pods', namespace=None, timeout=120, check_interval=3,
-                       con_ssh=None, fail_ok=False, strict=True):
+def wait_for_pods_gone(pod_names, types='pod', namespace=None, timeout=120, check_interval=3, con_ssh=None,
+                       fail_ok=False, strict=True):
+    """
+        Wait for pod(s) to be gone from kubectl get
+        Args:
+            pod_names (str|list|tuple):
+            types (str):
+            namespace (None|str):
+            timeout:
+            check_interval:
+            con_ssh:
+            fail_ok:
+            strict (bool): check no pods with given name exist if strict; else check no pods contains any given name
+
+        Returns (tuple):
+            (True, None)
+            (False, <actual_pods_info>)   # actual_pods_info is a dict with pod_name as key, and pod_info(dict) as value
+
+        """
     if isinstance(pod_names, str):
         pod_names = [pod_names]
 
@@ -200,8 +273,28 @@ def wait_for_pods_gone(pod_names, types='pods', namespace=None, timeout=120, che
     raise exceptions.KubeError(msg)
 
 
-def delete_pods(pod_names=None, select_all=None, pods_types='pods', namespace=None, recursive=None, selectors=None,
+def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=None, recursive=None, selectors=None,
                 con_ssh=None, fail_ok=False, check_both_controllers=True):
+    """
+    Delete pods via kubectl delete
+    Args:
+        pod_names (None|str|list|tuple):
+        select_all (None|bool):
+        pods_types (str|list|tuple):
+        namespace (None|str):
+        recursive (bool):
+        selectors (None|dict):
+        con_ssh:
+        fail_ok:
+        check_both_controllers (bool):
+
+    Returns (tuple):
+        (0, None)   # pods successfully deleted
+        (1, <std_err>)
+        (2, <undeleted_pods_info>(list of dict))    # pod(s) still exist in kubectl after deletion
+        (3, <undeleted_pods_info_on_other_controller>(list of dict))    # pod(s) still exist on the other controller
+
+    """
     arg_dict = {
         '--all': select_all,
         '-l': selectors,
@@ -329,11 +422,37 @@ def get_nodes_values(hosts=None, status=None, rtn_val='STATUS', exclude=False, c
 
 
 def get_nodes_in_status(hosts=None, status='Ready', exclude=False, con_ssh=None, fail_ok=False):
+    """
+    Get hosts in given status via kubectl get nodes
+    Args:
+        hosts (None|list|str|tuple): If specified, check given hosts only
+        status:
+        exclude:
+        con_ssh:
+        fail_ok:
+
+    Returns (list):
+
+    """
     return get_nodes_values(hosts=hosts, status=status, rtn_val='NAME', exclude=exclude, con_ssh=con_ssh,
                             fail_ok=fail_ok)
 
 
 def wait_for_nodes_ready(hosts=None, timeout=120, check_interval=5, con_ssh=None, fail_ok=False):
+    """
+    Wait for hosts in ready state via kubectl get nodes
+    Args:
+        hosts (None|list|str|tuple): Wait for all hosts ready if None is specified
+        timeout:
+        check_interval:
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple):
+        (True, None)
+        (False, <nodes_not_ready>(list))
+
+    """
     end_time = time.time() + timeout
     nodes_not_ready = None
     while time.time() < end_time:
@@ -352,3 +471,68 @@ def wait_for_nodes_ready(hosts=None, timeout=120, check_interval=5, con_ssh=None
         return False, nodes_not_ready
     else:
         raise exceptions.KubeError(msg)
+
+
+def exec_cmd_in_container(cmd, pod, namespace=None, container_name=None, stdin=None, tty=None, con_ssh=None, fail_ok=False):
+    """
+    Execute given cmd in given pod via kubectl exec
+    Args:
+        cmd:
+        pod:
+        namespace:
+        container_name:
+        stdin:
+        tty:
+        con_ssh:
+        fail_ok:
+
+    Returns (tuple):
+        (0, <std_out>)
+        (1, <std_err>)
+
+    """
+    args = pod
+    if namespace:
+        args += ' -n {}'.format(namespace)
+    if container_name:
+        args += ' -c {}'.format(container_name)
+    if stdin:
+        args += ' -i'
+    if tty:
+        args += ' -t'
+    args += ' -- {}'.format(cmd)
+
+    code, output = exec_kube_cmd(sub_cmd='exec', args=args, con_ssh=con_ssh, fail_ok=fail_ok)
+    return code, output
+
+
+def get_openstack_pods_info(pod_names, strict=False, con_ssh=None):
+    """
+    Get openstack pods info for given pods.
+    Args:
+        pod_names (str|list|tuple): e.g, 'nova', ('nova-api', 'nova-compute', 'neutron')
+        strict (bool): whether to do strict match for given name
+        con_ssh:
+
+    Returns (list of list): each item in list is a list of pods info dict per pod_name. e.g.,
+        if pod_names = ('nova-compute', 'glance-bootstrap'), returns will be:
+        [[<nova-compute-compute-0 pod info>(dict), ...], [<glance-bootstrap pod info>(dict)]]
+
+    """
+    if isinstance(pod_names, str):
+        pod_names = (pod_names,)
+
+    grep= '|'.join(pod_names)
+    grep += '|NAME'
+
+    openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep)
+    filtered_pods = []
+    for pod_name in pod_names:
+        pods_info_per_name = []
+        for openstack_pod_info in openstack_pods:
+            openstack_pod_name = openstack_pod_info.get('name')
+            if strict and openstack_pod_name == pod_name or (not strict and pod_name in openstack_pod_name):
+                pods_info_per_name.append(openstack_pod_info)
+        filtered_pods.append(pods_info_per_name)
+
+    return filtered_pods

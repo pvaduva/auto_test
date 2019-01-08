@@ -6,7 +6,7 @@ from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
-from consts.cgcs import AppStatus, Prompt
+from consts.cgcs import AppStatus, Prompt, EventLogID
 from consts.filepaths import TiSPath
 from keywords import system_helper, host_helper
 
@@ -99,7 +99,7 @@ def upload_helm_charts(tar_file, delete_first=False, check_both_controllers=True
 def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_timeout=300, con_ssh=None,
                auth_info=Tenant.get('admin')):
     """
-
+    Upload an application via 'system application-upload'
     Args:
         app_name:
         tar_file:
@@ -138,7 +138,7 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
     """
     Get applications values for give apps and fields via system application-list
     Args:
-        apps:
+        apps (str|list|tuple):
         rtn_vals (str|list|tuple):
         con_ssh:
         auth_info:
@@ -158,11 +158,11 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
     if not table_['values']:
         return {app: None for app in apps} if rtn_dict else [None]*len(apps)
 
-    table_ = table_parser.row_dict_table(table_, key_header='application', lower_case=False)
+    table_ = table_parser.row_dict_table(table_, key_header='application', lower_case=True)
     apps_vals = []
     for app in apps:
-        vals_dict = table_.get(app, None)
-        vals = [vals_dict[header] for header in rtn_vals] if vals_dict else None
+        vals_dict = table_.get(app.lower(), None)
+        vals = [vals_dict[header.lower()] for header in rtn_vals] if vals_dict else None
         apps_vals.append(vals)
 
     if rtn_dict:
@@ -172,6 +172,17 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
 
 
 def get_app_show_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get values from system application-show
+    Args:
+        app_name:
+        fields:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
     if isinstance(fields, str):
         fields = [fields]
 
@@ -181,8 +192,22 @@ def get_app_show_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('ad
     return values
 
 
-def wait_for_apps_status(apps, status, timeout=300, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=False, con_ssh=None,
+                         auth_info=Tenant.get('admin')):
+    """
+    Wait for applications to reach expected status via system application-list
+    Args:
+        apps:
+        status:
+        timeout:
+        check_interval:
+        fail_ok:
+        con_ssh:
+        auth_info:
 
+    Returns:
+
+    """
     if isinstance(apps, str):
         apps = [apps]
     apps_to_check = list(apps)
@@ -216,7 +241,7 @@ def wait_for_apps_status(apps, status, timeout=300, fail_ok=False, con_ssh=None,
 
             return True, None
 
-        time.sleep(5)
+        time.sleep(check_interval)
 
     check_failed += apps_to_check
     msg = '{} did not reach status {} within {}s'.format(check_failed, status, timeout)
@@ -226,9 +251,27 @@ def wait_for_apps_status(apps, status, timeout=300, fail_ok=False, con_ssh=None,
     raise exceptions.ContainerError(msg)
 
 
-def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, con_ssh=None,
-              auth_info=Tenant.get('admin')):
+def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, check_interval=10,
+              wait_for_alarm_gone=True, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Apply/Re-apply application via system application-apply. Check for status reaches 'applied'.
+    Args:
+        app_name (str):
+        check_first:
+        fail_ok:
+        applied_timeout:
+        check_interval:
+        con_ssh:
+        wait_for_alarm_gone (bool):
+        auth_info:
 
+    Returns (tuple):
+        (-1, "<app_name> is already applied. Do nothing.")     # only returns if check_first=True.
+        (0, "<app_name> (re)applied successfully")
+        (1, <std_err>)  # cli rejected
+        (2, "<app_name> failed to apply")   # did not reach applied status after apply.
+
+    """
     if check_first:
         app_vals = get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]
         if app_vals and app_vals[0] == AppStatus.APPLIED:
@@ -242,9 +285,16 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
         return 1, output
 
     res = wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=applied_timeout,
-                               con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)[0]
+                               check_interval=check_interval, con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)[0]
     if not res:
         return 2, "{} failed to apply".format(app_name)
+
+    if wait_for_alarm_gone:
+        alarm_id = EventLogID.CONFIG_OUT_OF_DATE
+        if system_helper.wait_for_alarm(alarm_id=alarm_id, entity_id='controller', timeout=15, fail_ok=True,
+                                        auth_info=auth_info, con_ssh=con_ssh)[0]:
+            system_helper.wait_for_alarm_gone(alarm_id=alarm_id, entity_id='controller', timeout=120,
+                                              check_interval=10, con_ssh=con_ssh, auth_info=auth_info)
 
     msg = '{} (re)applied successfully'.format(app_name)
     LOG.info(msg)
@@ -253,6 +303,23 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
 
 def delete_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, con_ssh=None,
                auth_info=Tenant.get('admin')):
+    """
+    Delete an application via system application-delete. Verify application no longer listed.
+    Args:
+        app_name:
+        check_first:
+        fail_ok:
+        applied_timeout:
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (-1, "<app_name> does not exist. Do nothing.")
+        (0, "<app_name> deleted successfully")
+        (1, <std_err>)
+        (2, "<app_name> failed to delete")
+
+    """
 
     if check_first:
         app_vals = get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]
@@ -278,6 +345,23 @@ def delete_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
 
 def remove_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, con_ssh=None,
                auth_info=Tenant.get('admin')):
+    """
+    Remove applied application via system application-remove. Verify it is in 'uploaded' status.
+    Args:
+        app_name (str):
+        check_first:
+        fail_ok:
+        applied_timeout:
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (-1, "<app_name> is not applied. Do nothing.")
+        (0, "<app_name> removed successfully")
+        (1, <std_err>)
+        (2, "<app_name> failed to remove")  # Did not reach uploaded status
+
+    """
 
     if check_first:
         app_vals = get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]
@@ -302,6 +386,14 @@ def remove_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
 
 
 def get_docker_reg_addr(con_ssh=None):
+    """
+    Get local docker registry ip address in docker conf file.
+    Args:
+        con_ssh:
+
+    Returns (str):
+
+    """
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -311,6 +403,21 @@ def get_docker_reg_addr(con_ssh=None):
 
 
 def pull_docker_image(name, tag=None, digest=None, con_ssh=None, timeout=300, fail_ok=False):
+    """
+    Pull docker image via docker image pull. Verify image is listed in docker image list.
+    Args:
+        name:
+        tag:
+        digest:
+        con_ssh:
+        timeout:
+        fail_ok:
+
+    Returns (tuple):
+        (0, <docker image ID>)
+        (1, <std_err>)
+
+    """
 
     args = '{}'.format(name.strip())
     if tag:
@@ -330,6 +437,20 @@ def pull_docker_image(name, tag=None, digest=None, con_ssh=None, timeout=300, fa
 
 
 def push_docker_image(name, tag=None, con_ssh=None, timeout=300, fail_ok=False):
+    """
+    Push docker image via docker image push.
+    Args:
+        name:
+        tag:
+        con_ssh:
+        timeout:
+        fail_ok:
+
+    Returns (tuple):
+        (0, <args_used>)
+        (1, <std_err>)
+
+    """
     args = '{}'.format(name.strip())
     if tag:
         args += ':{}'.format(tag)
@@ -345,6 +466,22 @@ def push_docker_image(name, tag=None, con_ssh=None, timeout=300, fail_ok=False):
 
 def tag_docker_image(source_image, target_name, source_tag=None, target_tag=None, con_ssh=None, timeout=300,
                      fail_ok=False):
+    """
+    Tag docker image via docker image tag. Verify image is tagged via docker image list.
+    Args:
+        source_image:
+        target_name:
+        source_tag:
+        target_tag:
+        con_ssh:
+        timeout:
+        fail_ok:
+
+    Returns:
+        (0, <target_args>)
+        (1, <std_err>)
+
+    """
     source_args = source_image.strip()
     if source_tag:
         source_args += ':{}'.format(source_tag)
@@ -365,6 +502,20 @@ def tag_docker_image(source_image, target_name, source_tag=None, target_tag=None
 
 
 def remove_docker_images(images, force=False, con_ssh=None, timeout=300, fail_ok=False):
+    """
+    Remove docker image(s) via docker image rm
+    Args:
+        images (str|tuple|list):
+        force (bool):
+        con_ssh:
+        timeout:
+        fail_ok:
+
+    Returns (tuple):
+        (0, <std_out>)
+        (1, <std_err>)
+
+    """
     if isinstance(images, str):
         images = (images, )
 
@@ -415,6 +566,17 @@ def get_docker_image_values(repo, tag=None, rtn_vals=('IMAGE ID',), con_ssh=None
 
 
 def get_helm_overrides(header='overrides namespaces', charts=None, auth_info=Tenant.get('admin'), con_ssh=None):
+    """
+    Get helm overrides values via system helm-override-list
+    Args:
+        header (str):
+        charts (None|str|list|tuple):
+        auth_info:
+        con_ssh:
+
+    Returns (list):
+
+    """
     table_ = table_parser.table(cli.system('helm-override-list', ssh_client=con_ssh, auth_info=auth_info))
 
     if charts:
@@ -429,8 +591,21 @@ def get_helm_overrides(header='overrides namespaces', charts=None, auth_info=Ten
 
 def get_helm_override_info(chart, namespace, fields=('combined_overrides', ), auth_info=Tenant.get('admin'),
                            con_ssh=None):
+    """
+    Get helm-override values for given chart via system helm-override-show
+    Args:
+        chart (str):
+        namespace (str):
+        fields (str|tuple|list):
+        auth_info:
+        con_ssh:
+
+    Returns (list): list of parsed yaml formatted output. e.g., list of dict, list of list, list of str
+
+    """
     args = '{} {}'.format(chart, namespace)
-    table_ = table_parser.table(cli.system('helm-override-show', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('helm-override-show', args, ssh_client=con_ssh, auth_info=auth_info),
+                                rstrip_value=True)
 
     if isinstance(fields, str):
         fields = (fields, )
@@ -438,7 +613,7 @@ def get_helm_override_info(chart, namespace, fields=('combined_overrides', ), au
     values = []
     for field in fields:
         value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
-        values.append(yaml.load(value))
+        values.append(yaml.load('\n'.join(value)))
 
     return values
 
@@ -486,9 +661,9 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
     if code != 0:
         return 1, output
 
-    table_ = table_parser.table(output)
+    table_ = table_parser.table(output, rstrip_value=True)
     overrides = table_parser.get_value_two_col_table(table_, 'user_overrides')
-    overrides = yaml.load(overrides)
+    overrides = yaml.load('\n'.join(overrides))
     # yaml.load converts str to bool, int, float; but does not convert None type.
     # Updates are not verified here since it is rather complicated to verify properly.
     LOG.info("Helm-override updated : {}".format(overrides))
