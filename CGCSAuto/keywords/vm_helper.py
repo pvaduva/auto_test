@@ -683,7 +683,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     if poll:
         args_ += ' --poll'
 
-
     if block_device:
         if isinstance(block_device, dict):
             block_device = [block_device]
@@ -872,7 +871,7 @@ def get_vm_apps_limit(vm_type='avp', con_ssh=None):
         vm_limit = host_ssh.exec_cmd("grep --color='never' -r {} lab_setup.conf | cut -d = -f2".
                                      format(VifMapping.VIF_MAP[vm_type]))[1]
     vm_limit = vm_limit.split(sep='|')[0]
-    vm_limit = re.findall('(\d+)', vm_limit)
+    vm_limit = re.findall(r'(\d+)', vm_limit)
 
     return int(vm_limit[0]) if vm_limit else 0
 
@@ -1584,6 +1583,8 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
         vm_ips (str|list): ips for specific vifs. Only works if vifs are up with ips assigned
         vnics (list of dict): vnics to configure.
         vm_prompt (None|str)
+        restart_service
+        reboot
 
     Returns:
 
@@ -1620,7 +1621,7 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
             kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
             cidr_dict = {}
             for line in kernel_routes.splitlines():
-                found = re.findall('^(.*/\d+)\sdev\s(.*)\sproto kernel.*\ssrc\s(.*)$', line)
+                found = re.findall(r'^(.*/\d+)\sdev\s(.*)\sproto kernel.*\ssrc\s(.*)$', line)
                 cidr, dev_name, dev_ip = found[0]
                 if cidr not in cidr_dict:
                     cidr_dict[cidr] = []
@@ -1643,7 +1644,7 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
                 vifs_to_conf[dev_name] = (cidr_, dev_ip, 'cgcsauto_{}'.format(dev_name))
 
         used_tables = vm_ssh.exec_cmd('grep --color=never -E "^[0-9]" {}'.format(VMPath.RT_TABLES))[1]
-        used_tables = [int(re.split('[\s\t]', line_)[0].strip()) for line_ in used_tables.splitlines()]
+        used_tables = [int(re.split(r'[\s\t]', line_)[0].strip()) for line_ in used_tables.splitlines()]
 
         start_range = 110
         for eth_name, eth_info in vifs_to_conf.items():
@@ -1684,6 +1685,8 @@ def cleanup_routes_for_vifs(vm_id, vm_ips, rm_ifcfg=True, restart_service=True, 
         vm_id:
         vm_ips:
         rm_ifcfg
+        restart_service
+        reboot
 
     Returns:
 
@@ -3741,7 +3744,7 @@ def wait_for_auto_vm_scale_out(vm_name, expt_max, scale_out_timeout=1200, con_ss
     finally:
         end_event.set()
         for thread in vms_threads:
-            thread.wait_for_thread_end(timeout=30)
+            thread.wait_for_thread_end(timeout=90)
 
     LOG.info("{} VMs successfully scaled up to {} vms.".format(vm_name, expt_max))
     return second_vm
@@ -4012,6 +4015,7 @@ def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no
         static_ips (None|str|list):
         ipv6:
         reboot:
+        vm_prompt
         **extra_configs:
 
     Returns:
@@ -4052,7 +4056,7 @@ def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no
 
             script_path = VMPath.ETH_PATH_CENTOS.format(eth)
             vm_ssh.exec_sudo_cmd('touch {}'.format(script_path))
-            vm_ssh.exec_sudo_cmd("cat > {} << 'EOT'\n{}\nEOT".format(script_path, script_content), fail_ok = False)
+            vm_ssh.exec_sudo_cmd("cat > {} << 'EOT'\n{}\nEOT".format(script_path, script_content), fail_ok=False)
 
     if reboot:
         reboot_vm(vm_id=vm_id)
@@ -4143,6 +4147,7 @@ def check_devs_detached(vm_id, mac_addrs, con_ssh=None):
                 vm_err += 'Interface with mac address {} still exists in vm\n'.format(mac_addr)
 
     assert not vm_err, vm_err
+
 
 def evacuate_vms(host, vms_to_check, con_ssh=None, timeout=600, wait_for_host_up=False, fail_ok=False, post_host=None,
                  vlm=False, force=True, ping_vms=False):
@@ -5447,8 +5452,7 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None,
     return vm_test, vm_observer
 
 
-def launch_vm_with_both_providernets(vm_type,
-                                     cidr_tenant1="172.168.33.0/24", cidr_tenant2="172.186.33.0/24",
+def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.168.33.0/24", cidr_tenant2="172.186.33.0/24",
                                      skip_routing=False, cleanup='function'):
     """
     Launch a VM connected with both provider nets (data0, data1)
@@ -5480,7 +5484,6 @@ def launch_vm_with_both_providernets(vm_type,
                                  tenant_name=Tenant.TENANT1['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
     network_helper.create_subnet(nw_secondary, cidr=cidr_tenant2, dhcp=True, no_gateway=True,
                                  tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
-
 
     if vm_type in ('virtio', 'vhost'):
         vif_model = 'virtio'
