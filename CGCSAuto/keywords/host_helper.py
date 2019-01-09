@@ -1241,11 +1241,11 @@ def wait_for_host_values(host, timeout=HostTimeout.REBOOT, check_interval=3, str
                     last_vals[field] = actual_val_lower
                 break
         else:
-            LOG.info("{} is in states: {}".format(host, kwargs))
+            LOG.info("{} is in state(s): {}".format(host, kwargs))
             return True
         time.sleep(check_interval)
     else:
-        msg = "{} did not reach states - {}".format(host, kwargs)
+        msg = "{} did not reach state(s) - {}".format(host, kwargs)
         if fail_ok:
             LOG.warning(msg)
             return False
