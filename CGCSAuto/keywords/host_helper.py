@@ -2149,7 +2149,7 @@ def compare_host_to_cpuprofile(host, profile_uuid):
             if not check_range(shared_cores, i):
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
-        elif functions[i] == 'VMs':
+        elif functions[i] == 'Applications':
             if not check_range(vm_cores, i):
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
@@ -2236,6 +2236,7 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch', core_type='log_cor
     for proc in procs:
         funcs_cores = []
         for func_ in func:
+            func_ = 'Applications' if func_.lower() == 'vms' else func_
             cores = table_parser.get_values(table_, core_type, processor=proc, assigned_function=func_, thread=thread)
             funcs_cores.append(sorted([int(item) for item in cores]))
 
