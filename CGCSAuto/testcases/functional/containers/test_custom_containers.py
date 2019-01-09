@@ -44,7 +44,7 @@ def delete_test_pod():
     kube_helper.delete_pods(pod_names=POD_NAME, fail_ok=True)
 
 
-@mark.platform
+@mark.platform_sanity
 @mark.parametrize('controller', [
     'active',
     'standby'
@@ -88,7 +88,7 @@ def cleanup_app():
         container_helper.delete_app(app_name=HELM_APP_NAME)
 
 
-@mark.platform
+@mark.platform_sanity
 def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
     """
     Test upload, apply, remove, delete custom app via system cmd
@@ -147,7 +147,7 @@ def remove_cache_and_pull(con_ssh, name, fail_ok=False):
     container_helper.pull_docker_image(name=name, con_ssh=con_ssh)
 
 
-@mark.platform
+@mark.platform_sanity
 @mark.parametrize('controller', [
     'active',
     'standby'
@@ -212,7 +212,7 @@ def test_push_docker_image_to_local_registry(controller):
         con_ssh.exec_sudo_cmd('rm -rf {}/{}'.format(TiSPath.DOCKER_REPO, TEST_IMAGE))
 
 
-@mark.platform
+@mark.platform_sanity
 @mark.parametrize('controller', [
     'active',
     'standby'

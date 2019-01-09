@@ -74,6 +74,35 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
     kube_helper.wait_for_nodes_ready(hosts=(pre_active_controller, pre_standby_controller), timeout=30)
 
 
+@mark.platform_sanity
+def test_swact_controller_platform(wait_for_con_drbd_sync_complete):
+    """
+    Verify swact active controller
+
+    Test Steps:
+        - Boot a vm on system and check ping works
+        - Swact active controller
+        - Verify standby controller and active controller are swapped
+        - Verify nodes are ready in kubectl get nodes
+
+    """
+    if system_helper.is_simplex():
+        skip("Simplex system detected")
+
+    if not wait_for_con_drbd_sync_complete:
+        skip(SkipSysType.LESS_THAN_TWO_CONTROLLERS)
+
+    LOG.tc_step('retrieve active and available controllers')
+    pre_active_controller, pre_standby_controller = system_helper.get_active_standby_controllers()
+    assert pre_standby_controller, "No standby controller available"
+
+    LOG.tc_step("Swact active controller and ensure active controller is changed")
+    host_helper.swact_host(hostname=pre_active_controller)
+
+    LOG.tc_step("Check hosts are Ready in kubectl get nodes after swact")
+    kube_helper.wait_for_nodes_ready(hosts=(pre_active_controller, pre_standby_controller), timeout=30)
+
+
 @mark.kpi
 def test_swact_controlled_kpi(collect_kpi):
     if not collect_kpi:

@@ -506,13 +506,14 @@ def exec_cmd_in_container(cmd, pod, namespace=None, container_name=None, stdin=N
     return code, output
 
 
-def get_openstack_pods_info(pod_names, strict=False, con_ssh=None):
+def get_openstack_pods_info(pod_names, strict=False, con_ssh=None, fail_ok=False):
     """
     Get openstack pods info for given pods.
     Args:
         pod_names (str|list|tuple): e.g, 'nova', ('nova-api', 'nova-compute', 'neutron')
         strict (bool): whether to do strict match for given name
         con_ssh:
+        fail_ok
 
     Returns (list of list): each item in list is a list of pods info dict per pod_name. e.g.,
         if pod_names = ('nova-compute', 'glance-bootstrap'), returns will be:
@@ -525,7 +526,8 @@ def get_openstack_pods_info(pod_names, strict=False, con_ssh=None):
     grep= '|'.join(pod_names)
     grep += '|NAME'
 
-    openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep)
+    openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep,
+                                   fail_ok=fail_ok)
     filtered_pods = []
     for pod_name in pod_names:
         pods_info_per_name = []

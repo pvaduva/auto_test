@@ -549,6 +549,13 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         (6, "Task is not cleared within 180 seconds after host goes online")
 
     """
+    # FIXME temp workaround
+    if 'controller' in host and not fail_ok and not use_telnet \
+            and not system_helper.is_simplex(con_ssh=con_ssh, auth_info=auth_info):
+        from keywords.kube_helper import get_openstack_pods_info
+        if get_openstack_pods_info(pod_names='mariadb', fail_ok=True, con_ssh=con_ssh):
+            assert 0, "mariadb issue. Fail without testing for now."
+
     host_avail, host_admin = get_hostshow_values(host, ('availability', 'administrative'), rtn_list=True,
                                                  con_ssh=con_ssh, auth_info=auth_info,
                                                  use_telnet=use_telnet, con_telnet=con_telnet)

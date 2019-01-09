@@ -17,7 +17,7 @@ def check_host(controller):
     return host
 
 
-@mark.platform
+@mark.platform_sanity
 @mark.parametrize('controller', [
     'active',
     'standby'
