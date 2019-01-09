@@ -1012,6 +1012,9 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
     config["BOOT"] = boot_dict
     config["CONTROL"] = control_dict
 
+    for k in config:
+       config[k] = {kv: vv if vv else '' for kv, vv in config[k].items()}
+
     install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
     install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name
     try:
