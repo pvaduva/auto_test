@@ -1,12 +1,10 @@
 from pytest import fixture, mark
 
-from utils import table_parser, cli
-from utils.horizon.regions import messages
-from utils.horizon.pages.admin.platform import hostinventorypage
-from utils.tis_log import LOG
 from consts import horizon
-from keywords import host_helper
-from testfixtures.horizon import admin_home_pg, driver
+from keywords import host_helper, system_helper
+from utils import table_parser, cli
+from utils.tis_log import LOG
+from utils.horizon.pages.admin.platform import hostinventorypage
 
 
 @fixture(scope='function')
@@ -21,48 +19,6 @@ def host_inventory_pg(admin_home_pg, request):
 
     request.addfinalizer(teardown)
     return host_inventory_pg
-
-
-@mark.parametrize('host_name', [
-    # 'controller-1', 'compute-2'
-])
-def _test_host_lock_unlock(host_inventory_pg, host_name):
-
-    """
-    Test the host lock and unlock functionality:
-
-    Setups:
-        - Login as Admin
-        - Go to Admin > Platform > Host Inventory
-
-    Test Steps:
-        - Lock a host
-        - Verify the host is locked
-        - Unlock the host
-        - Verify the host is available
-
-    Teardown:
-        - Back to Host Inventory page
-        - Logout
-
-    """
-
-    LOG.tc_step('Lock the host {}'.format(host_name))
-    host_inventory_pg.lock_host(host_name)
-    assert host_inventory_pg.find_message_and_dismiss(messages.SUCCESS)
-    assert not host_inventory_pg.find_message_and_dismiss(messages.ERROR)
-
-    LOG.tc_step('Verify the host is locked')
-    assert host_inventory_pg.is_host_admin_state(host_name, 'Locked')
-
-    LOG.tc_step('Unlock the host')
-    host_inventory_pg.unlock_host(host_name)
-    assert host_inventory_pg.find_message_and_dismiss(messages.SUCCESS)
-    assert not host_inventory_pg.find_message_and_dismiss(messages.ERROR)
-
-    LOG.tc_step('Verify the host is available')
-    assert host_inventory_pg.is_host_availability_state(host_name, 'Available')
-    horizon.test_result = True
 
 
 def format_uptime(uptime):
@@ -118,11 +74,11 @@ def test_horizon_host_inventory_display(host_inventory_pg):
     """
     LOG.tc_step('Test host inventory display')
     host_inventory_pg.go_to_hosts_tab()
-    host_list = host_helper.get_hosts()
+    host_list = system_helper.get_hostnames()
     for host_name in host_list:
 
-        cli_fields = list(host_inventory_pg.hosts_table(host_name).HOST_TABLE_HEADERS_MAP.keys())
-        expt_values = host_helper.get_hostshow_values(host_name, cli_fields)
+        fields = list(host_inventory_pg.hosts_table(host_name).HOST_TABLE_HEADERS_MAP.keys())
+        expt_values = host_helper.get_hostshow_values(host_name, fields)
         expt_values['uptime'] = format_uptime(expt_values['uptime'])
         if expt_values.get('peers') is not None:
             expt_values['peers'] = eval(expt_values.get('peers')).get('name')
@@ -142,12 +98,12 @@ def test_horizon_host_inventory_display(host_inventory_pg):
             else:
                 assert expt_val.upper() in horizon_val.upper(),\
                     '{} display incorrectly, expect: {} actual: {}'.format(horizon_header, expt_val, horizon_val)
+    horizon.test_result = True
 
 
-horizon.test_result = True
-
-
-@mark.parametrize('host_name', ['controller-0'])
+@mark.parametrize('host_name', [
+    'controller-0'
+])
 def test_horizon_host_details_display(host_inventory_pg, host_name):
     """
     Test the host details display:
@@ -169,7 +125,8 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     """
     host_table = host_inventory_pg.hosts_table(host_name)
     host_details_pg = host_inventory_pg.go_to_host_detail_page(host_name)
-#   --------------------------------------OVERVIEW TAB------------------------------------------------------------------
+
+    # OVERVIEW TAB
     LOG.tc_step('Test host: {} overview display'.format(host_name))
     host_details_pg.go_to_overview_tab()
     horizon_vals = host_details_pg.host_detail_overview(host_table.driver).get_content()
@@ -186,18 +143,19 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
             assert cli_host_val.upper() in horizon_val.upper(), '{} display incorrectly'.format(horizon_header)
     LOG.info('Host: {} overview display correct'.format(host_name))
 
-#   --------------------------------------PROCESSOR TAB-----------------------------------------------------------------
+    # PROCESSOR TAB
     LOG.tc_step('Test host {} processor display'.format(host_name))
     host_details_pg.go_to_processor_tab()
     cpu_table = table_parser.table(cli.system('host-cpu-list {}'.format(host_name)))
-    expt_cpu_info = {}
-    expt_cpu_info['Processor Model:'] = table_parser.get_values(cpu_table, 'processor_model')[0]
-    expt_cpu_info['Processors:'] = str(len(set(table_parser.get_values(cpu_table, 'processor'))))
+    expt_cpu_info = {
+        'Processor Model:': table_parser.get_values(cpu_table, 'processor_model')[0],
+        'Processors:': str(len(set(table_parser.get_values(cpu_table, 'processor'))))}
+
     horizon_cpu_info = host_details_pg.inventory_details_processor_info.get_content()
     assert horizon_cpu_info['Processor Model:'] == expt_cpu_info['Processor Model:']
     assert horizon_cpu_info['Processors:'] == expt_cpu_info['Processors:']
 
-#   --------------------------------------MEMORY TABLE------------------------------------------------------------------
+    # MEMORY TABLE
     LOG.tc_step('Test host {} memory display'.format(host_name))
     checking_list = ['mem_total(MiB)', 'mem_avail(MiB)']
 
@@ -216,14 +174,14 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
             for field in checking_list:
                 assert cli_memory_table_dict[processor][field] in horizon_memory_val, 'Memory {} display incorrectly'
 
-#   --------------------------------------STORAGE TABLE-----------------------------------------------------------------
-#   This test will loop each table and test their display
-#   Test may fail in following case:
-#   1. disk table's Size header eg. Size(GiB) used different unit such as Size (MiB), Size (TiB)
-#   2. lvg table may display different:
-#       Case 1: Name | State | Access | Size (GiB) | Avail Size(GiB) | Current Physical Volume - Current Logical Volumes
-#       Case 2: Name | State | Access | Size                         | Current Physical Volume - Current Logical Volumes
-#   Case 2 Size values in horizon are rounded by 2 digits but in CLI not rounded
+    # STORAGE TABLE
+    #   This test will loop each table and test their display
+    #   Test may fail in following case:
+    #   1. disk table's Size header eg. Size(GiB) used different unit such as Size (MiB), Size (TiB)
+    #   2. lvg table may display different:
+    #   Case 1: Name | State | Access | Size (GiB) | Avail Size(GiB) | Current Physical Volume - Current Logical Volumes
+    #   Case 2: Name | State | Access | Size                         | Current Physical Volume - Current Logical Volumes
+    #   Case 2 Size values in horizon are rounded by 2 digits but in CLI not rounded
 
     LOG.tc_step('Test host {} storage display'.format(host_name))
     host_details_pg.go_to_storage_tab()
@@ -262,7 +220,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
                     'In {}: disk: {} {} display incorrectly'.format(table_names[i], key_header, horizon_header)
         LOG.info('{} display correct'.format(table_names[i]))
 
-#   --------------------------------------PORT TABLE--------------------------------------------------------------------
+    # PORT TABLE
     LOG.tc_step('Test host {} port display'.format(host_name))
     host_details_pg.go_to_ports_tab()
     horizon_port_table = host_details_pg.ports_table()
@@ -282,7 +240,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
                 cli_val = ''.join(cli_val)
             assert cli_val in horizon_val, '{} display incorrectly'.format(horizon_header)
 
-#   --------------------------------------LLDP TABLE--------------------------------------------------------------------
+    # LLDP TABLE
     LOG.tc_step('Test host {} lldp display'.format(host_name))
     host_details_pg.go_to_lldp_tab()
     lldp_list_table = table_parser.table(cli.system('host-lldp-neighbor-list {}'.format(host_name)))
