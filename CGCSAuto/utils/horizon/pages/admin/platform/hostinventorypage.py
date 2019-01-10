@@ -1,4 +1,7 @@
+import re
+
 from selenium.webdriver.common import by
+
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms, tables
 from utils.horizon.helper import HorizonDriver
@@ -25,7 +28,6 @@ class HostsTable(tables.TableRegion):
 
     @tables.bind_row_anchor_column('Host Name')
     def go_to_host_detail_page(self, row_link, row):
-        print(row_link.get_attribute('href'))
         row_link.click()
 
     @tables.bind_row_anchor_column('Host Name')
@@ -83,7 +85,7 @@ class StorageHostsTable(HostsTable):
 
 
 class ComputeHostsTable(HostsTable):
-    name = 'hostscompute'
+    name = 'hostsworker'
     HOST_TABLE_HEADERS_MAP = {
         'hostname': 'Host Name',
         'personality': 'Personality',
@@ -122,7 +124,7 @@ class HostInventoryPage(basepage.BasePage):
             return ControllerHostsTable(self.driver)
         elif 'storage' in name:
             return StorageHostsTable(self.driver)
-        elif 'compute' in name:
+        elif re.search('compute|worker', name):
             return ComputeHostsTable(self.driver)
 
     def edit_host(self, name):
