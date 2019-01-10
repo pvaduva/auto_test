@@ -198,10 +198,6 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     if len(locked_hosts) > 0:
         locked_hosts_in_states = wait_for_hosts_states(locked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
                                                        duration=8, con_ssh=con_ssh, availability=['online'])
-        if locked_hosts_in_states:
-            hosts_not_ready = wait_for_nodes_ready(locked_hosts_in_states, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[1]
-            if hosts_not_ready:
-                locked_hosts_in_states = list(set(locked_hosts_in_states) - set(hosts_not_ready))
 
     if len(unlocked_hosts) > 0:
         unlocked_hosts_in_states = wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,

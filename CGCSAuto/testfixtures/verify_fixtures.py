@@ -32,20 +32,8 @@ def check_alarms_module(request):
     __verify_alarms(request=request, scope='module')
 
 
-# @fixture(scope='session', autouse=True)
-def check_alarms_session(request):
-    """
-    Check system alarms before and after test session.
-
-    Args:
-        request: caller of this fixture. i.e., test func.
-    """
-    __verify_alarms(request=request, scope='session')
-
-
 def __verify_alarms(request, scope):
-    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
-    before_alarms = system_helper.get_alarms()
+    before_alarms = __get_alarms(scope=scope)
 
     def verify_alarms():
         LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
