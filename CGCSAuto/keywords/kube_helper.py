@@ -86,7 +86,7 @@ def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_
     """
     code, out = __get_kube_tables(namespace=namespace, types=type_names, con_ssh=con_ssh, fail_ok=fail_ok, grep=grep)
     if code > 0:
-        return {}
+        return [] if rtn_list else {}
 
     kube_info = {}
     for table_ in out:
@@ -506,7 +506,7 @@ def exec_cmd_in_container(cmd, pod, namespace=None, container_name=None, stdin=N
     return code, output
 
 
-def get_openstack_pods_info(pod_names, strict=False, con_ssh=None, fail_ok=False):
+def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=False):
     """
     Get openstack pods info for given pods.
     Args:
@@ -520,14 +520,19 @@ def get_openstack_pods_info(pod_names, strict=False, con_ssh=None, fail_ok=False
         [[<nova-compute-compute-0 pod info>(dict), ...], [<glance-bootstrap pod info>(dict)]]
 
     """
-    if isinstance(pod_names, str):
-        pod_names = (pod_names,)
+    grep = None
+    if pod_names:
+        if isinstance(pod_names, str):
+            pod_names = (pod_names,)
 
-    grep= '|'.join(pod_names)
-    grep += '|NAME'
+        grep= '|'.join(pod_names)
+        grep += '|NAME'
 
     openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep,
                                    fail_ok=fail_ok)
+    if not pod_names:
+        return [openstack_pods]
+
     filtered_pods = []
     for pod_name in pod_names:
         pods_info_per_name = []
@@ -538,3 +543,61 @@ def get_openstack_pods_info(pod_names, strict=False, con_ssh=None, fail_ok=False
         filtered_pods.append(pods_info_per_name)
 
     return filtered_pods
+
+
+def wait_for_openstack_pods_ready(pod_names=None, con_ssh=None, timeout=60, check_interval=5, fail_ok=False):
+    """
+    Wait for openstack pods to be in Completed or Running state
+    Args:
+        pod_names:
+        con_ssh:
+        timeout:
+        check_interval:
+        fail_ok:
+
+    Returns:
+
+    """
+    end_time = time.time() + timeout
+
+    bad_pods = None
+    while time.time() < end_time:
+        res, bad_pods = is_openstack_pods_healthy(pod_names=pod_names, con_ssh=con_ssh)
+        if res:
+            LOG.info("Openstack pods are in expected status".format(' {}'.format(pod_names) if pod_names else ''))
+            return True, []
+
+        time.sleep(check_interval)
+
+    msg = "Some openstack pod(s) not in expected status: {}".format(bad_pods)
+    LOG.info(msg)
+    if fail_ok:
+        return False, bad_pods
+    else:
+        raise exceptions.KubeError(msg)
+
+
+def is_openstack_pods_healthy(pod_names=None, con_ssh=None):
+    if isinstance(pod_names, str):
+        pod_names = (pod_names,)
+
+    pods_info_set = get_openstack_pods_info(pod_names=pod_names, con_ssh=con_ssh, fail_ok=True)
+    bad_pods = []
+    for i in range(len(pods_info_set)):
+        pods_info = pods_info_set[i]
+        if not pods_info:
+            k = pod_names[i] if pod_names else 'all'
+            bad_pods.append({k: None})
+
+        for pod_info in pods_info:
+            pod_name = pod_info.get('name')
+            pod_status = pod_info.get('status')
+            expt_status = [PodStatus.RUNNING] if 'api' in pod_name else \
+                [PodStatus.RUNNING, PodStatus.COMPLETED]
+            if pod_status not in expt_status:
+                bad_pods.append({pod_name: pod_status})
+                msg = "Pod {} status is {}. Expect: {}".format(pod_name, pod_status, expt_status)
+                LOG.info(msg)
+
+    res = False if bad_pods else True
+    return res, bad_pods

@@ -11,14 +11,9 @@ def get_valid_controllers():
     return controllers
 
 
-def check_openstack_pods_healthy(host):
+def check_openstack_pods_healthy(host, timeout):
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
-        kube_openstack_info = kube_helper.get_pods_info(namespace='openstack', con_ssh=con_ssh,
-                                                        type_names='pod', keep_type_prefix=True)['pod']
-        LOG.tc_step("Check openstack pods status on {}".format(host))
-        for pod_info in kube_openstack_info:
-            expt_status = [PodStatus.RUNNING] if 'api' in pod_info['name'] else [PodStatus.RUNNING, PodStatus.COMPLETED]
-            assert pod_info['status'] in expt_status, "Pod {} status is {}".format(pod_info['name'], pod_info['status'])
+        kube_helper.wait_for_openstack_pods_ready(con_ssh=con_ssh, timeout=timeout)
 
 
 @mark.sanity
@@ -41,7 +36,7 @@ def test_openstack_services_healthy():
     LOG.tc_step("Check openstack pods are in running or completed status via kubectl get on all controllers")
     controllers = get_valid_controllers()
     for host in controllers:
-        check_openstack_pods_healthy(host=host)
+        check_openstack_pods_healthy(host=host, timeout=5)
 
 
 @mark.sanity
@@ -63,14 +58,14 @@ def test_reapply_stx_openstack(skip_for_no_openstack):
 
     LOG.tc_step("Check openstack pods in good state on all controllers after stx-openstack re-applied")
     for host in get_valid_controllers():
-        check_openstack_pods_healthy(host=host)
+        check_openstack_pods_healthy(host=host, timeout=120)
 
 
 NEW_NOVA_COMPUTE_PODS = None
 
 
 @fixture()
-def reset_if_modified(request):
+def reset_if_modified(request, check_openstack_pods):
     valid_hosts = get_valid_controllers()
     conf_path = '/etc/nova/nova.conf'
 

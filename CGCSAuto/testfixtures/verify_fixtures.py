@@ -2,7 +2,8 @@ from pytest import fixture, skip
 
 from consts.auth import Tenant
 from consts.cgcs import SysType
-from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper
+from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper, \
+    kube_helper
 from utils.tis_log import LOG
 
 
@@ -179,3 +180,26 @@ def ceph_precheck():
 
     LOG.info('Query storage usage info')
     storage_helper.get_storage_usage()
+
+
+@fixture()
+def check_openstack_pods(request):
+    __verify_openstack_pods(request=request, scope='function')
+
+
+@fixture()
+def check_openstack_pods_module(request):
+    __verify_openstack_pods(request=request, scope='module')
+
+
+def __verify_openstack_pods(request, scope):
+    prev_bad_pods = kube_helper.is_openstack_pods_healthy()[1]
+
+    def verify():
+        LOG.fixture_step("({}) Verifying openstack pod status after test {} ended...".format(scope, scope))
+        post_bad_pods = kube_helper.is_openstack_pods_healthy()[1]
+        new_bad_pods = [{k, post_bad_pods[k]} for k in post_bad_pods if k not in prev_bad_pods]
+        assert not new_bad_pods, "Some openstack pod(s) in unexpected status: {}".format(new_bad_pods)
+    request.addfinalizer(verify)
+
+    return
