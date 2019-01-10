@@ -134,7 +134,8 @@ def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_tim
     return 0, msg
 
 
-def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False):
+def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False,
+                    use_telnet=False, con_telnet=None):
     """
     Get applications values for give apps and fields via system application-list
     Args:
@@ -143,6 +144,8 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
         con_ssh:
         auth_info:
         rtn_dict:
+        use_telnet
+        con_telnet
 
     Returns (list|dict):
         list of list, or
@@ -154,7 +157,8 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
     if isinstance(apps, str):
         apps = [apps]
 
-    table_ = table_parser.table(cli.system('application-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('application-list', ssh_client=con_ssh, auth_info=auth_info,
+                                           use_telnet=use_telnet, con_telnet=con_telnet))
     if not table_['values']:
         return {app: None for app in apps} if rtn_dict else [None]*len(apps)
 
@@ -669,3 +673,9 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
     LOG.info("Helm-override updated : {}".format(overrides))
 
     return 0, overrides
+
+
+def is_stx_openstack_applied(con_ssh=None, auth_info=Tenant.get('admin'), use_telnet=False, con_telnet=None):
+    openstack_status = get_apps_values(apps='stx-openstack', con_ssh=con_ssh, auth_info=auth_info,
+                                       use_telnet=use_telnet, con_telnet=con_telnet)[0]
+    return openstack_status and 'appl' in openstack_status[0].lower()

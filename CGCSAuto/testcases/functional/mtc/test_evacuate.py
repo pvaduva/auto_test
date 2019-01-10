@@ -16,7 +16,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
-def skip_test_if_less_than_two_hosts():
+def skip_test_if_less_than_two_hosts(no_simplex):
     hypervisors = host_helper.get_up_hypervisors()
     if len(hypervisors) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)

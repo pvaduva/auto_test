@@ -1124,46 +1124,58 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
     Returns (bool):
 
     """
-    cli_enable_end_time = time.time() + timeout
-
-    def check_sysinv_cli(con_ssh_, use_telnet_, con_telnet_):
-
-        cli.system('show', ssh_client=con_ssh_, use_telnet=use_telnet_, con_telnet=con_telnet_, timeout=timeout,
-                   auth_info=auth_info)
-        time.sleep(10)
-        active_con = system_helper.get_active_controller_name(con_ssh=con_ssh_, use_telnet=use_telnet_,
-                                                              con_telnet=con_telnet_, auth_info=auth_info)
-
-        if ((single_node or (single_node is None and system_helper.is_simplex())) and
-                get_hostshow_value(host=active_con, field='administrative') == HostAdminState.LOCKED):
-            LOG.info("Simplex system in locked state. Wait for task to clear only")
-            wait_for_host_values(host=active_con, timeout=HostTimeout.LOCK, task='', con_ssh=con_ssh_,
-                                 use_telnet=use_telnet_, con_telnet=con_telnet_, auth_info=auth_info)
-        else:
-            wait_for_task_clear_and_subfunction_ready(hosts=active_con, con_ssh=con_ssh_, use_telnet=use_telnet_,
-                                                      con_telnet=con_telnet_, auth_info=auth_info)
-        LOG.info("'system cli enabled")
+    from keywords import container_helper
 
     if not use_telnet and not con_ssh:
         con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
+    def check_sysinv_cli():
+
+        cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                   timeout=timeout, auth_info=auth_info)
+        time.sleep(10)
+        active_con = system_helper.get_active_controller_name(con_ssh=con_ssh, use_telnet=use_telnet,
+                                                              con_telnet=con_telnet, auth_info=auth_info)
+
+        if ((single_node or (single_node is None and system_helper.is_simplex())) and
+                get_hostshow_value(host=active_con, field='administrative') == HostAdminState.LOCKED):
+            LOG.info("Simplex system in locked state. Wait for task to clear only")
+            wait_for_host_values(host=active_con, timeout=HostTimeout.LOCK, task='', con_ssh=con_ssh,
+                                 use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info)
+        else:
+            wait_for_task_clear_and_subfunction_ready(hosts=active_con, con_ssh=con_ssh, use_telnet=use_telnet,
+                                                      con_telnet=con_telnet, auth_info=auth_info)
+        is_openstack_applied = container_helper.is_stx_openstack_applied(con_ssh=con_ssh, auth_info=auth_info,
+                                                                   use_telnet=use_telnet, con_telnet=con_telnet)
+        LOG.info("system cli and subfunction enabled")
+        return is_openstack_applied
+
+    def check_nova_cli():
+        cli.nova('list', ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_ssh, timeout=timeout)
+        LOG.info("nova cli enabled")
+
+    cli_enable_end_time = time.time() + timeout
+    LOG.info("Waiting for system cli and subfunctions to be ready and nova cli (if stx-openstack applied) to be "
+             "enabled on active controller")
+    check_nova = None
     while time.time() < cli_enable_end_time:
         try:
-            LOG.info("Wait for system cli to be enabled and subfunctions ready (if any) on active controller")
-            check_sysinv_cli(con_ssh_=con_ssh, use_telnet_=use_telnet, con_telnet_=con_telnet)
+            if check_nova is None:
+                check_nova = check_sysinv_cli()
+            if check_nova:
+                check_nova_cli()
             return True
         except:
-            if not use_telnet:
-                if not con_ssh._is_connected():
-                    if reconnect:
-                        LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
-                        con_ssh.connect(retry_timeout=timeout, retry=True)
-                    else:
-                        LOG.error("system disconnected")
-                        if fail_ok:
-                            return False
-                        raise
+            if not use_telnet and not con_ssh._is_connected():
+                if reconnect:
+                    LOG.info("con_ssh connection lost while waiting for system to recover. Attempt to reconnect...")
+                    con_ssh.connect(retry_timeout=timeout, retry=True)
+                else:
+                    LOG.error("system disconnected")
+                    if fail_ok:
+                        return False
+                    raise
 
             time.sleep(check_interval)
 
@@ -1500,6 +1512,7 @@ def wait_for_hypervisors_up(hosts, timeout=HostTimeout.HYPERVISOR_UP, check_inte
     """
     if isinstance(hosts, str):
         hosts = [hosts]
+
     hypervisors = get_hypervisors(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info)
 
     if not set(hosts) <= set(hypervisors):
