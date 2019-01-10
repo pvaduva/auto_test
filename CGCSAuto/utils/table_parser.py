@@ -368,7 +368,7 @@ def __get_row_indexes_string(table_, header, value, strict=False, exclude=False)
         if is_valid is not exclude:
             row_index.append(i)
 
-    LOG.debug("row index list for {}: {}: {}".format(header, value, row_index))
+    # LOG.debug("row index list for {}: {}: {}".format(header, value, row_index))
     return row_index
 
 

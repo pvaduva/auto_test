@@ -545,11 +545,13 @@ def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=
     return filtered_pods
 
 
-def wait_for_openstack_pods_ready(pod_names=None, con_ssh=None, timeout=60, check_interval=5, fail_ok=False):
+def wait_for_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None, timeout=60, check_interval=5,
+                                      fail_ok=False):
     """
     Wait for openstack pods to be in Completed or Running state
     Args:
-        pod_names:
+        pod_names (str|tuple|list|None):
+        status (str|tuple|list|None):
         con_ssh:
         timeout:
         check_interval:
@@ -562,9 +564,10 @@ def wait_for_openstack_pods_ready(pod_names=None, con_ssh=None, timeout=60, chec
 
     bad_pods = None
     while time.time() < end_time:
-        res, bad_pods = is_openstack_pods_healthy(pod_names=pod_names, con_ssh=con_ssh)
+        res, bad_pods = is_openstack_pods_in_status(pod_names=pod_names, con_ssh=con_ssh, status=status)
         if res:
-            LOG.info("Openstack pods are in expected status".format(' {}'.format(pod_names) if pod_names else ''))
+            LOG.info("Openstack pods{} are in expected status{}".format(' {}'.format(pod_names) if pod_names else '',
+                                                                        ': {}'.format(status) if status else '.'))
             return True, []
 
         time.sleep(check_interval)
@@ -577,7 +580,7 @@ def wait_for_openstack_pods_ready(pod_names=None, con_ssh=None, timeout=60, chec
         raise exceptions.KubeError(msg)
 
 
-def is_openstack_pods_healthy(pod_names=None, con_ssh=None):
+def is_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None):
     if isinstance(pod_names, str):
         pod_names = (pod_names,)
 
@@ -592,11 +595,15 @@ def is_openstack_pods_healthy(pod_names=None, con_ssh=None):
         for pod_info in pods_info:
             pod_name = pod_info.get('name')
             pod_status = pod_info.get('status')
-            expt_status = [PodStatus.RUNNING] if 'api' in pod_name else \
-                [PodStatus.RUNNING, PodStatus.COMPLETED]
-            if pod_status not in expt_status:
+            if not status:
+                status = [PodStatus.RUNNING] if 'api' in pod_name else \
+                    [PodStatus.RUNNING, PodStatus.COMPLETED]
+            elif isinstance(status, str):
+                status = [status]
+
+            if pod_status not in status:
                 bad_pods.append({pod_name: pod_status})
-                msg = "Pod {} status is {}. Expect: {}".format(pod_name, pod_status, expt_status)
+                msg = "Pod {} status is {}. Expect: {}".format(pod_name, pod_status, status)
                 LOG.info(msg)
 
     res = False if bad_pods else True

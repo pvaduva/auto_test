@@ -193,11 +193,11 @@ def check_openstack_pods_module(request):
 
 
 def __verify_openstack_pods(request, scope):
-    prev_bad_pods = kube_helper.is_openstack_pods_healthy()[1]
+    prev_bad_pods = kube_helper.is_openstack_pods_in_status()[1]
 
     def verify():
         LOG.fixture_step("({}) Verifying openstack pod status after test {} ended...".format(scope, scope))
-        post_bad_pods = kube_helper.is_openstack_pods_healthy()[1]
+        post_bad_pods = kube_helper.is_openstack_pods_in_status()[1]
         new_bad_pods = [{k, post_bad_pods[k]} for k in post_bad_pods if k not in prev_bad_pods]
         assert not new_bad_pods, "Some openstack pod(s) in unexpected status: {}".format(new_bad_pods)
     request.addfinalizer(verify)

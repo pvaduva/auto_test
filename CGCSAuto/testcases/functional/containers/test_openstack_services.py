@@ -13,10 +13,12 @@ def get_valid_controllers():
 
 def check_openstack_pods_healthy(host, timeout):
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
-        kube_helper.wait_for_openstack_pods_ready(con_ssh=con_ssh, timeout=timeout)
+        kube_helper.wait_for_openstack_pods_in_status(con_ssh=con_ssh, timeout=timeout)
 
 
 @mark.sanity
+@mark.sx_sanity
+@mark.cpe_sanity
 def test_openstack_services_healthy():
     """
     Pre-requisite:
@@ -40,6 +42,8 @@ def test_openstack_services_healthy():
 
 
 @mark.sanity
+@mark.sx_sanity
+@mark.cpe_sanity
 def test_reapply_stx_openstack(skip_for_no_openstack):
     """
     Args:
@@ -66,6 +70,9 @@ NEW_NOVA_COMPUTE_PODS = None
 
 @fixture()
 def reset_if_modified(request, check_openstack_pods):
+    if not container_helper.is_stx_openstack_applied(applied_only=True):
+        skip('stx-openstack application is not in Applied status. Skip test.')
+
     valid_hosts = get_valid_controllers()
     conf_path = '/etc/nova/nova.conf'
 
@@ -90,7 +97,8 @@ def reset_if_modified(request, check_openstack_pods):
         for host in valid_hosts:
             with host_helper.ssh_to_host(host) as host_ssh:
                 LOG.info("Wait for nova-cell-setup completed on {}".format(host))
-                kube_helper.wait_for_pods(pod_names='nova-cell-setup', status=PodStatus.COMPLETED, con_ssh=host_ssh)
+                kube_helper.wait_for_openstack_pods_in_status(pod_names='nova-cell-setup', con_ssh=host_ssh,
+                                                              status=PodStatus.COMPLETED)
 
                 LOG.info("Check new release generated for nova compute pods on {}".format(host))
                 nova_compute_pods = kube_helper.get_openstack_pods_info(pod_names='nova-compute', con_ssh=host_ssh)[0]
@@ -110,6 +118,8 @@ def reset_if_modified(request, check_openstack_pods):
 
 
 @mark.sanity
+@mark.sx_sanity
+@mark.cpe_sanity
 def test_stx_openstack_helm_override_update_and_reset(skip_for_no_openstack, reset_if_modified):
     """
     Test helm override for openstack nova chart and reset
@@ -164,8 +174,8 @@ def test_stx_openstack_helm_override_update_and_reset(skip_for_no_openstack, res
     post_names = None
     for host in valid_hosts:
         with host_helper.ssh_to_host(hostname=host) as host_ssh:
-            LOG.tc_setp("Wait for all nova-cell-setup pods reach completed status on {}".format(host))
-            kube_helper.wait_for_pods(pod_names='nova-cell-setup', status=PodStatus.COMPLETED)
+            LOG.tc_step("Wait for all nova-cell-setup pods reach completed status on {}".format(host))
+            kube_helper.wait_for_openstack_pods_in_status(pod_names='nova-cell-setup', status=PodStatus.COMPLETED)
 
             LOG.tc_step("Check nova compute pods names are changed in kubectl get on {}".format(host))
             post_nova_cell_setup_pods, post_nova_compute_pods = \
