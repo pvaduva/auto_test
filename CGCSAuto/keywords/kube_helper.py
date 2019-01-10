@@ -457,11 +457,11 @@ def wait_for_nodes_ready(hosts=None, timeout=120, check_interval=5, con_ssh=None
     nodes_not_ready = None
     while time.time() < end_time:
         nodes_not_ready = get_nodes_in_status(hosts=hosts, status='Ready', exclude=True, con_ssh=con_ssh, fail_ok=True)
-        if nodes_not_ready is []:
+        if nodes_not_ready:
+            LOG.info('{} not ready yet'.format(nodes_not_ready))
+        elif nodes_not_ready is not None:
             LOG.info("All nodes are ready{}".format(': {}'.format(hosts) if hosts else ''))
             return True, None
-        elif nodes_not_ready:
-            LOG.info('{} not ready yet'.format(nodes_not_ready))
 
         time.sleep(check_interval)
 

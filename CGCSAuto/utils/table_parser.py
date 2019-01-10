@@ -1,12 +1,13 @@
-import re, copy
+import re
+import copy
 
 from utils import exceptions
 from utils.tis_log import LOG
 """Collection of utilities for parsing CLI clients output."""
 
 
-delimiter_line = re.compile('^\+-[+\-]+-\+$')
-kute_sep = re.compile('\s\s[^\s]')
+delimiter_line = re.compile(r'^\+-[+\-]+-\+$')
+kute_sep = re.compile(r'\s\s[^\s]')
 
 
 def __details_multiple(output_lines, with_label=False):
@@ -342,7 +343,7 @@ def get_column(table_, header, merge_lines=False):
 
 
 def __get_row_indexes_string(table_, header, value, strict=False, exclude=False):
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         value = ''.join(value)
 
     if not isinstance(value, str):
@@ -359,15 +360,8 @@ def __get_row_indexes_string(table_, header, value, strict=False, exclude=False)
         if isinstance(actual_val, list):
             actual_val = ''.join(actual_val)
         actual_val = actual_val.strip().lower()
-
         if strict:
             is_valid = actual_val == value
-        # elif isinstance(value, list):
-        #     is_valid = True
-        #     for v in value:
-        #         if v not in actual_val:
-        #             is_valid = False
-        #             break
         else:
             is_valid = value in actual_val
 
@@ -640,6 +634,7 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
 
     """
     table_ = table_.copy()
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
     if not kwargs:
         LOG.debug("No kwargs specified. Skip filtering")
         return table_
@@ -723,9 +718,9 @@ def compare_tables(table_one, table_two):
     return 0, "Both Table contain same headers and values"
 
 
-__sm_delimeter_line = re.compile('^-.*[\-]{3,}$')
-__sm_category_line = re.compile('^-([A-Z].*[a-z])[\-]{3,}$')
-__sm_item_line = re.compile('([a-z-]+)[\t\s$]')
+__sm_delimeter_line = re.compile(r'^-.*[\-]{3,}$')
+__sm_category_line = re.compile(r'^-([A-Z].*[a-z])[\-]{3,}$')
+__sm_item_line = re.compile(r'([a-z-]+)[\t\s$]')
 
 
 def sm_dump_table(output_lines):
