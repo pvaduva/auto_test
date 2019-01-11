@@ -3,6 +3,7 @@ import re
 import time
 import random
 import configparser
+import pexpect.exceptions
 
 from pytest import fixture, skip
 
@@ -43,7 +44,9 @@ def collect_logs(msg):
         LOG.info('collecting logs: ' + msg)
         active_controller = ControllerClient.get_active_controller()
         collect_tis_logs(active_controller)
-    except:
+    except pexpect.exceptions.TIMEOUT:
+        active_controller.flush()
+        active_controller.exec_cmd('cat /etc/buid.info')
         pass
 
 
@@ -288,9 +291,10 @@ def test_backup(pre_system_backup):
     backup_info['con_ssh'] = con_ssh
 
     is_ceph = backup_info.get('is_storage_lab', False)
+    LOG.debug('This is a {} lab'.format('Storage/Ceph' if is_ceph else 'Non-Storage/Ceph'))
 
     if is_ceph:
-        # con_ssh.exec_sudo_cmd('touch /etc/ceph/ceph.client.None.keyring')
+        con_ssh.exec_sudo_cmd('touch /etc/ceph/ceph.client.None.keyring')
         pre_backup_test(backup_info, con_ssh)
 
     lab = InstallVars.get_install_var('LAB')
