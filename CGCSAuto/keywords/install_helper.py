@@ -1428,7 +1428,10 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
                                                                              system_backup)
     os.environ["TERM"] = "xterm"
 
-    rc, output = connection.exec_cmd(cmd, blob=[outputs_restore_system_conf, connection.prompt],
+    blob = list(outputs_restore_system_conf)
+    blob.append(connection.prompt)
+
+    rc, output = connection.exec_cmd(cmd, blob=blob,
                                      expect_timeout=InstallTimeout.SYSTEM_RESTORE)
     compute_configured = False
     if rc == 0:
@@ -4075,3 +4078,4 @@ def get_host_install_uuid(host, host_ssh, lab=None):
     install_uuid = install_uuid_line[0].split("=")[1].strip()
     LOG.info("The install uuid from host {} is {}".format(host, install_uuid))
     return install_uuid
+
