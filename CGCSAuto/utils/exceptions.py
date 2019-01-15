@@ -231,3 +231,7 @@ class DCError(TiSError):
 
 class PatchError(TiSError):
     message = 'Patch error.'
+
+
+class InstallError(TiSError):
+    message = 'Install error'

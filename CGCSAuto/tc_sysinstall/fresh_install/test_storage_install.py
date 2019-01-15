@@ -130,3 +130,4 @@ def test_storage_install(install_setup):
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
     fresh_install_helper.reset_global_vars()
+    fresh_install_helper.verify_install_uuid(lab)

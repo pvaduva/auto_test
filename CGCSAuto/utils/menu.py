@@ -207,17 +207,25 @@ class KickstartMenu(Menu):
                 if not self.get_sub_menu("Controller Configuration"):
 
                     controller_sub_menu = KickstartMenu(name="Controller Configuration",
-                                                        prompt=bios.BootMenus.Kickstart.Controller_Configuration['prompt'])
+                                                        prompt=bios.BootMenus.Kickstart.Controller_Configuration['prompt'].encode())
+                    controller_sub_menu.options = [KickstartOption(name="Serial Console", index=0, key="Enter"),
+                                                   KickstartOption(name="Graphical Console", index=1, key="Enter")]
+
 
                     self.sub_menus.append(controller_sub_menu)
+                    LOG.info("Kickstart sub menu added to menu {}: {}".format(self.name, controller_sub_menu.name))
 
                 if not self.get_sub_menu("Console"):
                     console_sub_menu = KickstartMenu(name="Console",
-                                                     prompt=bios.BootMenus.Kickstart.Console['prompt'])
+                                                     prompt=bios.BootMenus.Kickstart.Console['prompt'].encode())
+
+                    console_sub_menu.options = [KickstartOption(name="STANDARD Security", index=0, key="Enter"),
+                                                   KickstartOption(name="EXTENDED Security", index=1, key="Enter")]
+
                     self.sub_menus.append(console_sub_menu)
+                    LOG.info("Kickstart sub menu added: {}".format( console_sub_menu.name))
 
         current_option = self.get_current_option(telnet_conn)
-        LOG.info("Kickstart current option: {}; index {}".format(current_option.name, current_option.index))
         self.index = current_option.index
 
     def find_options_(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
@@ -284,13 +292,30 @@ class KickstartMenu(Menu):
 class USBBootMenu(KickstartMenu):
     def __init__(self):
         super().__init__(name="USB boot menu", kwargs=bios.BootMenus.USB.Kernel)
-        public_sub_menu_vars = [getattr(bios.BootMenus.USB, var) for var in vars(bios.BootMenus.USB) if not var.startswith('__')]
-        sub_menu_dicts = [public_var for public_var in public_sub_menu_vars if isinstance(public_var, dict)
-                          and public_var['name'] != "kernel options"]
-        for sub_menu_dict in sub_menu_dicts:
-            sub_menu = super().__new__(USBBootMenu)
-            Menu.__init__(self=sub_menu, name=sub_menu_dict["name"], kwargs=sub_menu_dict)
-            self.sub_menus.append(sub_menu)
+        # public_sub_menu_vars = [getattr(bios.BootMenus.USB, var) for var in vars(bios.BootMenus.USB) if not var.startswith('__')]
+        # sub_menu_dicts = [public_var for public_var in public_sub_menu_vars if isinstance(public_var, dict)
+        #                   and public_var['name'] != "kernel options"]
+        # # for sub_menu_dict in sub_menu_dicts:
+        #     sub_menu = super().__new__(USBBootMenu)
+        #     Menu.__init__(self=sub_menu, name=sub_menu_dict["name"], kwargs=sub_menu_dict)
+        #     self.sub_menus.append(sub_menu)
+        #
+        controller_sub_menu = KickstartMenu(name="Controller Configuration",
+                                            prompt=bios.BootMenus.USB.Controller_Configuration['prompt'].encode())
+        controller_sub_menu.options = [KickstartOption(name="Serial Console", index=0, key="Enter"),
+                                       KickstartOption(name="Graphical Console", index=1, key="Enter")]
+
+
+        self.sub_menus.append(controller_sub_menu)
+
+        console_sub_menu = KickstartMenu(name="Serial Console",
+                                         prompt=bios.BootMenus.USB.Serial_Console['prompt'].encode())
+
+        console_sub_menu.options = [KickstartOption(name="STANDARD Security", index=0, key="Enter"),
+                                    KickstartOption(name="EXTENDED Security", index=1, key="Enter")]
+
+        self.sub_menus.append(console_sub_menu)
+        LOG.info("USB sub menu added: {}".format( console_sub_menu.name))
 
     def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
                      option_identifier=r"[A-Z][A-Za-z]".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
@@ -365,7 +390,7 @@ class Option(object):
 
         if not cmd:
             cmd = '\n'
-        LOG.info("Press {} to select {} option".format('+'.join(key), self.name))
+        LOG.info("Press {} ({})to select {} option".format('+'.join(key), cmd, self.name))
 
         telnet_conn.write(cmd.encode())
 

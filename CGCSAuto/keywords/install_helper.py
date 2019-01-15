@@ -10,7 +10,7 @@ from consts.auth import Tenant, CliAuth
 # from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN,\
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE
+    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
@@ -3578,28 +3578,39 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
+
     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None, tag=tag if not index else None)
+    time.sleep(2)
+
+
     if boot_menu.sub_menus:
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
+        LOG.info("submenu prompt = {}".format(sub_menu_prompts))
         try:
             sub_menus_navigated = 0
 
             while len(sub_menu_prompts) > 0:
                 prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                LOG.info("submenu index = {}".format(prompt_index))
+
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 if sub_menu.name == "Controller Configuration":
 
-                    sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'([\w]+\s)+\s+> ',
-                                                        end_of_menu=b'(\x1b\[01;00H){2,}',
-                                                        newline=b'(\x1b\[\d+;\d+H)+')
+                    # sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+> ',
+                    #                                     end_of_menu=b'(\x1b\[01;00H){2,}|\x1b.*\sGraphical Console\s+>(\x1b\[\d+;\d+H)+',
+                    #                                     newline=b'(\x1b\[\d+;\d+H)+')
+                    # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'Console',
+                    #                       end_of_menu=b'.*(\x1b\[\d+;\d+H)+',
+                    #                       newline=b'(\x1b\[\d+;\d+H)')
+
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
-
+                    time.sleep(2)
                 elif sub_menu.name == "Console":
 
-                    sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'([\w]+\s)+\s+',
-                                          end_of_menu=b"Standard Security Profile Enabled (default setting)",
-                                          newline=b'(\x1b\[\d+;\d+H)+')
+                    # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
+                    #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
+                    #                       newline=b'(\x1b\[\d+;\d+H)+')
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
                 else:
@@ -3703,7 +3714,8 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
         expt_prompts.pop(0)
         if node_obj.name == pxe_host:
-            expt_prompts.append("\x1b\[0;1;36;44m\s{45,60}")
+            expt_prompts.append("(\x1b\[0;1;36;44m\s{45,60})")
+            expt_prompts.append("\x1b.*\*{56,60}")
         if len(expt_prompts) > 0:
             telnet_conn.expect(expt_prompts, 360)
             LOG.info('In Kickstart menu index = {}'.format(index))
@@ -4040,3 +4052,26 @@ def run_config_subcloud(subcloud, con_ssh=None, lab=None, fail_ok=True):
         return rc, msg
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(subcloud_config)
+
+
+def get_host_install_uuid(host, host_ssh, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var('LAB')
+    if host_ssh is None:
+        raise ValueError("Host ssh client connection must be provided")
+
+    if host_ssh.exec_cmd("test -f {}".format(PLATFORM_CONF_PATH))[0] != 0:
+        msg = "The {} file is missing in host {}".format(PLATFORM_CONF_PATH, host)
+        raise exceptions.InstallError(msg)
+    cmd = 'cat {}'.format(PLATFORM_CONF_PATH)
+    exitcode, output = host_ssh.exec_cmd(cmd, rm_date=True)
+    if exitcode != 0:
+        raise exceptions.SSHExecCommandFailed("Command {} failed to execute.".format(cmd))
+
+    install_uuid_line = [l for l in output.splitlines() if "INSTALL_UUID" in l]
+    if len(install_uuid_line) == 0:
+        raise exceptions.InstallError("The install uuid does not exist in {} file: {}"
+                                      .format(PLATFORM_CONF_PATH, output))
+    install_uuid = install_uuid_line[0].split("=")[1].strip()
+    LOG.info("The install uuid from host {} is {}".format(host, install_uuid))
+    return install_uuid

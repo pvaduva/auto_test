@@ -8,7 +8,7 @@ from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
 from setups import initialize_server
-from consts.auth import Tenant, CliAuth
+from consts.auth import Tenant
 from consts.timeout import InstallTimeout
 from consts.cgcs import SysType, SubcloudStatus
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
@@ -312,6 +312,10 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
         dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn)
 
+        dc_helper.wait_for_subcloud_status(subcloud,avail=SubcloudStatus.AVAIL_ONLINE,
+                                           mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
+                                           con_ssh=main_cloud_node.ssh_conn)
+
         LOG.info("Running config for subcloud {} ... ".format(subcloud))
         short_name = lab['short_name']
         install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
@@ -451,7 +455,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         if len(hostnames) == 1:
-            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only)
+            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400)
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
         host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
@@ -651,7 +655,7 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_t
     LOG.info("Subcloud {} installed successfully ... ".format(subcloud))
 
 
-def add_subclouds(controller0_node, ip_ver=4):
+def add_subclouds(controller0_node, name=None, ip_ver=4):
     """
 
     Args:
@@ -667,25 +671,44 @@ def add_subclouds(controller0_node, ip_ver=4):
     if ip_ver not in [4, 6]:
         raise ValueError("The distributed cloud IP version must be either ipv4 or ipv6;  currently set to {}"
                          .format("ipv" + str(ip_ver)))
+    if name is None:
+        name = 'subcloud'
 
     if not controller0_node.ssh_conn._is_connected():
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
 
-    if controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subclouds_file))[0] == 0:
-        controller0_node.ssh_conn.exec_cmd("chmod 777 {}{}".format(WRSROOT_HOME, subclouds_file))
+    existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
+    if name and 'subcloud' in name and name in existing_subclouds:
+        LOG.info("Subcloud {} already exits; do nothing".format(name))
+        return 0, [name]
+
+
+
+    if name is not None and name is not '':
+        subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
+        subclouds_file_path = WRSROOT_HOME + name + '/' + subclouds_file
+    else:
+        subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
+        subclouds_file_path = WRSROOT_HOME + subclouds_file
+
+    cmd = "test -f {}".format(subclouds_file_path)
+    cmd2 = "chmod 777 {}".format(subclouds_file_path)
+
+    if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
+        controller0_node.ssh_conn.exec_cmd(cmd2)
     else:
         assert False, "The subclouds text file {} is missing in system controller {}"\
-            .format(subclouds_file, controller0_node.name)
+            .format(subclouds_file, controller0_node.host_name)
 
     LOG.info("Generating subclouds config info from {}".format(subclouds_file))
-    controller0_node.ssh_conn.exec_cmd("cd; ./{}".format(subclouds_file))
+    controller0_node.ssh_conn.exec_cmd("{}".format(subclouds_file_path))
     LOG.info("Checking if subclouds are added and config files are generated.....")
-    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
+    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
+    added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
 
     config_generated = []
-    for subcloud in subclouds:
+    for subcloud in added_subclouds:
         if re.match(r'subcloud-\d{1,2}', subcloud):
             subcloud_config = subcloud.replace('-', '') + ".config"
         else:
@@ -697,15 +720,18 @@ def add_subclouds(controller0_node, ip_ver=4):
             config_path = WRSROOT_HOME + subcloud
             controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(WRSROOT_HOME, subcloud_config, config_path))
         else:
-            LOG.warning("Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config))
+            msg = "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
+            LOG.warning(msg)
+            assert False, msg
 
-    if len(subclouds) == len(config_generated):
+    if len(added_subclouds) == len(config_generated):
         LOG.info("Subclouds added and config files generated successfully; subclouds: {}"
-                 .format(list(zip(subclouds,config_generated))))
+                 .format(list(zip(added_subclouds,config_generated))))
     else:
         LOG.info("One or more subcloud config are missing, please try to generate the missing configs manually")
 
-    return subclouds, config_generated
+    return 0, added_subclouds
+
 
 
 def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=None, patch_dir=None,
@@ -902,6 +928,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         install_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD")
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
+        add_subclouds(file_server_obj, name=install_subcloud)
     else:
         if file_server == bld_server.name:
             file_server_obj = bld_server
@@ -990,3 +1017,30 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     return _install_setup
 
+
+def verify_install_uuid(lab=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    LOG.info("Getting the install uuid from controller-0")
+    install_uuid = install_helper.get_host_install_uuid(controller0_node.name, controller0_node.ssh_conn)
+    LOG.info("The install uuid from controller-0 = {}".format(install_uuid))
+
+    LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))
+    hosts = lab['hosts']
+    hosts.remove('controller-0')
+    for host in hosts:
+        with host_helper.ssh_to_host(host) as host_ssh:
+            host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
+            assert host_install_uuid == install_uuid, "The host {} install uuid {} is not same with controller-0 " \
+                                                      "uuid {}".format(host, host_install_uuid, install_uuid)
+            LOG.info("Host {} install uuid verified".format(host))
+    LOG.info("Installation UUID {} verified in all lab hosts".format(install_uuid))
+
+    return True

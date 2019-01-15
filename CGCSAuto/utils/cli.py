@@ -357,9 +357,9 @@ def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=No
 
 def dcmanager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
               auth_info=Tenant.get('admin', dc_region='RegionOne'), err_only=False, timeout=CLI_TIMEOUT,
-              rtn_list=False):
+              rtn_list=False, source_openrc=None):
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller('RegionOne')
     return exec_cli('dcmanager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=None)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_openrc)

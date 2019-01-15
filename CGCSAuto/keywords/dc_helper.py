@@ -13,7 +13,7 @@ from keywords import system_helper
 
 
 def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
-                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None):
+                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, source_openrc=None):
     """
 
     Args:
@@ -30,7 +30,8 @@ def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
     """
     # auth_info = Tenant.get('admin', 'SystemController')
     LOG.info("Auth_info: {}".format(auth_info))
-    table_ = table_parser.table(cli.dcmanager('subcloud list', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.dcmanager('subcloud list', auth_info=auth_info, ssh_client=con_ssh,
+                                              source_openrc=source_openrc))
     arg_dict = {'name': name, 'availability': avail, 'sync': sync, 'management': mgmt}
     kwargs = {key: val for key, val in arg_dict.items() if val is not None}
     subclouds = table_parser.get_values(table_, target_header=rtn_val, **kwargs)
@@ -416,16 +417,17 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
         while time.time() < end_time:
 
             LOG.info("Check availability status for {} ".format(subcloud))
-            status = get_subclouds(rtn_val='availability', name=subcloud, con_ssh=con_ssh).pop()
-            if status == avail:
-                return 0, status
+            subclouds = get_subclouds(rtn_val='name', name=subcloud, avail=avail, sync=sync, mgmt=mgmt, con_ssh=con_ssh)
+            if subcloud in subclouds:
+                return 0, subcloud
 
             time.sleep(check_interval)
-
-        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, avail, timeout)
+        exp_status = "avail = {}; sync = {}; mgmt = {}".format(avail if avail else "n/a", sync if sync else "n/a",
+                                                           mgmt if mgmt else "n/a")
+        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, exp_status, timeout)
 
         if fail_ok:
             LOG.info(msg)
-            return 1, status
+            return 1, msg
         else:
             raise exceptions.DCError(msg)

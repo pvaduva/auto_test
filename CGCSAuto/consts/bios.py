@@ -154,13 +154,15 @@ class BootMenus:
 
         Controller_Configuration = {
             "name": "Controller Configuration",
-            "prompt":  r'(\x1b\[\d+;\d+H.*){5,}(\x1b\[01;00H)+',
+            #"prompt":  r'\x1b.*\sController Configuration\s+\*|(\x1b\[\d+;\d+H.*){5,}(\x1b\[01;00H)+',
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)',
             "wrap_around": True
         }
 
         Console = {
             "name": "Console",
-            "prompt": r"\sSecurity\sProfile\sEnabled\s\(default\ssetting\)",
+            #"prompt": r"\sSecurity\sProfile\sEnabled\s\(default\ssetting\)",
+            "prompt": r'\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?',
             "wrap_around": True
         }
 
@@ -176,11 +178,13 @@ class BootMenus:
 
         Controller_Configuration = {
             "name": "Controller Configuration",
-            "prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
+            #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)',
             "wrap_around": True
         }
 
         Serial_Console = {
             "name": "Serial Console",
+            "prompt": r'\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?',
             "wrap_around": True
         }
