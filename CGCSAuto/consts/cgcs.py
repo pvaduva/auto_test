@@ -42,7 +42,6 @@ TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
-PLATFORM_CONF_PATH = '/etc/platform/platform.conf'
 
 MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
 SUBCLOUD_PATTERN = 'subcloud'
@@ -212,13 +211,13 @@ class HostTask:
 
 
 class Prompt:
-    CONTROLLER_0 = '.*controller\-0[:| ].*\$ '
-    CONTROLLER_1 = '.*controller\-1[:| ].*\$ '
+    CONTROLLER_0 = '.*controller\-0[:| ].*\$'
+    CONTROLLER_1 = '.*controller\-1[:| ].*\$'
     CONTROLLER_PROMPT = '.*controller\-[01][:| ].*\$ '
 
     VXWORKS_PROMPT = '-> '
 
-    ADMIN_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ '
+    ADMIN_PROMPT = '\[wrsroot@controller\-[01].*\(keystone_admin\)\]\$'
     # ADMIN_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = '\[wrsroot@controller\-[01] .*\(keystone_tenant2\)\]\$ '
@@ -232,7 +231,8 @@ class Prompt:
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = '{}@{}\:~.*'
     TEST_SERVER_PROMPT_BASE = '\[{}@.*\]\$ '
-    TIS_NODE_PROMPT_BASE = '{}\:~\$ '
+    # TIS_NODE_PROMPT_BASE = '{}\:~\$ '
+    TIS_NODE_PROMPT_BASE = r'{}[: ]?~.*$'
     ADD_HOST = '.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = '.*\(y/n\)\?.*'
