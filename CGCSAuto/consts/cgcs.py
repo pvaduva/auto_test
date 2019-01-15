@@ -42,6 +42,7 @@ TIMESTAMP_PATTERN = '\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
+PLATFORM_CONF_PATH = '/etc/platform/platform.conf'
 
 MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
 SUBCLOUD_PATTERN = 'subcloud'
