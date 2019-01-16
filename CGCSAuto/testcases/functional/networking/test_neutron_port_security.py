@@ -89,9 +89,9 @@ def test_neutron_port_security():
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
 
-    mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
-    internal_nic = {'net-id': internal_net_id, 'vif-model': 'virtio'}
-    tenant_nic = {'net-id': tenant_net_id, 'vif-model': 'virtio'}
+    mgmt_nic = {'net-id': mgmt_net_id}
+    internal_nic = {'net-id': internal_net_id}
+    tenant_nic = {'net-id': tenant_net_id}
     nics = [mgmt_nic, tenant_nic, internal_nic]
 
     vm_ids = []
@@ -140,7 +140,8 @@ def test_neutron_port_security():
 
     LOG.tc_step("Generate new mac address")
     new_mac_addr = _gen_mac_addr()
-    mac_addr, eth_name = _find_mac_address(vm_under_test)
+    mac_addr = network_helper.get_ports(server=vm_under_test, network=internal_net_id, rtn_val='MAC Address')[0]
+    eth_name = _find_eth_for_mac(vm_under_test, mac_addr)
 
     LOG.tc_step("Change mac addr to random {}".format(new_mac_addr))
     _change_mac_address(vm_under_test, new_mac_addr, eth_name)
@@ -155,20 +156,18 @@ def test_neutron_port_security():
     _ping_server(base_vm_id, vm_under_test, ip_addr, False)
 
 
-def _find_mac_address(vm_id):
+def _find_eth_for_mac(vm_id, mac_addr):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
         vm_id (str):
+        mac_addr (str)
     """
-    vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        vnic = vm_nics[-1]
-        mac_addr = vnic['mac_address']
         eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
         LOG.info("mac addr {}, eth_name {}".format(mac_addr, eth_name))
         assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-    return mac_addr, eth_name
+    return eth_name
 
 
 def _change_mac_address(vm_id, mac_addr, eth_name):

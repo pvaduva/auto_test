@@ -24,8 +24,8 @@ def test_qos_update(setup_qos):
 
     internal_net_id, mgmt_net_id, qos_new = setup_qos
     LOG.tc_step("Booting first vm.")
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    nics = [{'net-id': mgmt_net_id},
+            {'net-id': internal_net_id}]
 
     vm1 = vm_helper.boot_vm(name='vm1', nics=nics, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm1)

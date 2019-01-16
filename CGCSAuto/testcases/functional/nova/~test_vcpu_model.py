@@ -1,3 +1,8 @@
+###################################
+# vcpu model deprecated. US130346 #
+###################################
+
+
 import re
 from pytest import mark, skip, fixture
 

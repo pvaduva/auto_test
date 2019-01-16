@@ -1,16 +1,13 @@
 import re
 import time
+
 from pytest import fixture, mark, skip
 
-from utils import cli
-from utils import table_parser
 from utils.tis_log import LOG
-
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, VMStatus, DevClassID
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', params=['pci-passthrough', 'pci-sriov'])
@@ -65,28 +62,24 @@ def vif_model_check(request):
     pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
     pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
 
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': pci_net_id, 'vif-model': 'virtio'}]
-
+    nics = [{'net-id': mgmt_net_id}, {'net-id': pci_net_id}]
     if extra_pcipt_net:
-        nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
+        nics.append({'net-id': extra_pcipt_net})
 
     base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='module')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
     vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types=['mgmt', net_type], vlan_zero_only=True)
 
     if vif_model == 'pci-passthrough':
-
         LOG.fixture_step("Get seg_id for {} to prepare for vlan tagging on pci-passthough device later".format(pci_net))
         seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
                                              auto_info=Tenant.get('admin'))
         assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net)
-
     else:
         seg_id = None
 
-    nics_to_test = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                   {'net-id': pci_net_id, 'vif-model': vif_model}]
+    nics_to_test = [{'net-id': mgmt_net_id},
+                    {'net-id': pci_net_id, 'vif-model': vif_model}]
     if extra_pcipt_net:
         nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
         extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id', strict=False,
@@ -231,44 +224,6 @@ def test_pci_resource_usage(vif_model_check):
         pre_resource_value = resource_val
 
 
-def get_vm_details_from_nova(vm_id, con_ssh=None, auth_info=None):
-    table_ = table_parser.table(cli.nova('show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
-
-    details = {str(k).strip(): v for k, v in table_['values']}
-
-    return details
-
-
-def check_vm_boot(obj):
-    if obj.pci_numa_affinity is not None:
-        nic = obj.get_pci_nic()
-        assert nic is not None and len(nic) > 0, \
-            'Error, PCI device for {} is not created'.format(obj.net_type)
-
-    assert obj.check_numa_affinity(msg_prefx='boot'), \
-        'Error, VM CPU/Mem numa: {} is different from PCI device:{}'.format(obj.numa, obj.pci_numa)
-
-
-def check_vm_pause_unpause(obj):
-    obj.check_numa_affinity(msg_prefx='pause_unpause')
-
-
-def check_vm_suspend_resume(obj):
-    obj.check_numa_affinity(msg_prefx='suspend_resume')
-
-
-def check_vm_cold_migrate(obj):
-    obj.check_numa_affinity(msg_prefx='cold-migrate')
-
-
-def check_vm_set_error_recover(obj):
-    obj.check_numa_affinity('set_error_recover')
-
-
-def check_vm_hard_reboot(obj):
-    obj.check_numa_affinity(msg_prefx='hard_reboot')
-
-
 def _convert_irqmask_pcialias(irq_mask, pci_alias):
     if irq_mask is not None:
         irq_mask = irq_mask.split('irqmask_')[-1]
@@ -289,7 +244,8 @@ class TestVmPCIOperations:
         # Get number of hosts that has pcipt/sriov interface on same numa node as pci device
         numa_match = 0
         for host_ in hosts:
-            LOG.info('\n\nPCI_NUMA_{}: {}; PCIIF_PROCS_{}: {}'.format(host_, hosts_pci_numa[host_], host_, hosts_pciif_procs[host_]))
+            LOG.info('\n\nPCI_NUMA_{}: {}; PCIIF_PROCS_{}: {}'.format(host_, hosts_pci_numa[host_], host_,
+                                                                      hosts_pciif_procs[host_]))
             if set(hosts_pci_numa[host_]).intersection(set(hosts_pciif_procs[host_])):
                 numa_match += 1
                 if numa_match == 2:
@@ -300,34 +256,10 @@ class TestVmPCIOperations:
     NIC_PCI_TYPES = ['pci-passthrough', 'pci-sriov']
     PCI_NUMA_AFFINITY_VALUES = ['strict', 'prefer']
 
-    CHECKERS = {'boot': check_vm_boot,
-                'pause/unpause': check_vm_pause_unpause,
-                'suspend/resume': check_vm_suspend_resume,
-                'cold-migrate': check_vm_cold_migrate,
-                'set-error-state-recover': check_vm_set_error_recover,
-                'hard-reboot': check_vm_hard_reboot,
-                }
-
-    def get_pci_nic(self):
-        nics = self.vm_details_from_nova['wrs-if:nics']
-
-        self.pci_nic = None
-        for nic in nics:
-            nic_details = list(eval(nic).values())[0]
-            if 'vif_model' in nic_details and nic_details['vif_model'] == self.vif_model and \
-                            nic_details['network'] != self.extra_pcipt_net_name:
-                self.pci_nic = nic_details
-                LOG.info('pci_nic:{}'.format(self.pci_nic))
-                return self.pci_nic
-
-        return None
-
     def get_numa_node(self):
-        topology = self.vm_details_from_nova['wrs-res:topology']
+        topology = self.vm_topology
         found = re.match(r'\s*node:(\d+)\s*', topology)
-        assert found, \
-            'Error, no numa node info from nova show for VM:{}, nova show:{}'.format(self.vm_id, self.vm_details_from_nova)
-
+        assert found, 'Error, no numa node info from nova show for VM:{}, vm-topology:{}'.format(self.vm_id, topology)
         self.numa_node = int(found.group(1))
 
         return self.numa_node
@@ -434,21 +366,12 @@ class TestVmPCIOperations:
             LOG.info('after {}: pci_irq_affinity_mask checking passed after retries:{}\n'.format(msg_prefx, count))
 
         LOG.info('OK, after {}: check_numa_affinity passed'.format(msg_prefx))
-
         return True
 
     def wait_check_vm_states(self, step='boot'):
         LOG.info('Check VM states after {}'.format(step))
-
         vm_helper.wait_for_vm_pingable_from_natbox(self.vm_id, fail_ok=False)
-
-        self.vm_details_save = getattr(self, 'vm_details_from_nova', None)
-        self.vm_details_from_nova = get_vm_details_from_nova(self.vm_id)
-        # LOG.info('details from nova show:{}'.format(self.vm_details_from_nova))
-
-        assert step in self.CHECKERS, 'Unknown step {} found in wait_check_vm_states()'.format(step)
-
-        self.CHECKERS[step](self)
+        self.check_numa_affinity(msg_prefx=step)
 
     def create_flavor_for_pci(self, vcpus=4, ram=1024):
         self.vcpus = vcpus
@@ -498,7 +421,6 @@ class TestVmPCIOperations:
             skip('Not enough PCI alias devices exit, only {} supported'.format(min_vfs))
 
         self.pci_alias_names = list(nova_pci_devices.keys())
-
 
     @mark.nics
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
@@ -587,6 +509,11 @@ class TestVmPCIOperations:
         vm_helper.ping_vms_from_vm(
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
 
+        self.vm_topology = nova_helper.get_vm_nova_show_value(vm_id=self.vm_id, field='wrs-res:topology')
+        vnic_type = 'direct' if self.vif_model == 'pci-sriov' else 'direct-physical'
+        self.pci_nics = vm_helper.get_vm_nics_info(vm_id=self.vm_id, vnic_type=vnic_type)
+        assert self.pci_nics
+
         self.wait_check_vm_states(step='boot')
 
         LOG.tc_step("Check {} usage is incremented by 1".format(resource_param))
@@ -599,7 +526,6 @@ class TestVmPCIOperations:
         vm_helper.pause_vm(self.vm_id)
         vm_helper.unpause_vm(self.vm_id)
         LOG.tc_step("Check vm still pingable over mgmt and {} nets after pause/unpause".format(self.net_type))
-
         self.wait_check_vm_states(step='pause/unpause')
 
         LOG.tc_step('Suspend/Resume {} vm'.format(self.vif_model))
@@ -620,7 +546,6 @@ class TestVmPCIOperations:
         if migrate_forbidden:
             assert code > 0, "Expect migrate fail due to no other host has pcipt/sriov and pci-alias on same numa. " \
                              "Actual: {}".format(msg)
-
         self.wait_check_vm_states(step='cold-migrate')
 
         if 'pci-passthrough' == self.vif_model:

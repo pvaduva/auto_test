@@ -3,7 +3,7 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, network_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
@@ -35,9 +35,9 @@ def set_completed_resume_step(val=False):
 
 def reset_global_vars():
     lab_setup_count_ = set_lab_setup_count(0)
-    completed_resume_step = set_completed_resume_step(False)
+    complete_resume_step = set_completed_resume_step(False)
 
-    return lab_setup_count_, completed_resume_step
+    return lab_setup_count_, complete_resume_step
 
 
 def set_preinstall_projvars(build_dir, build_server):
@@ -48,7 +48,7 @@ def set_preinstall_projvars(build_dir, build_server):
 
 
 def set_build_job(build_dir):
-    job_regex = "(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
+    job_regex = r"(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
     match = re.search(job_regex, build_dir)
     if match:
         job = match.group(0)
@@ -62,7 +62,7 @@ def set_build_job(build_dir):
 
 
 def set_build_id(build_dir, build_server_conn=None):
-    id_regex = '\d+-\d+-\d+_\d+-\d+-\d+'
+    id_regex = r'\d+-\d+-\d+_\d+-\d+-\d+'
 
     if build_dir.endswith("/"):
         build_dir = build_dir[:-1]
@@ -190,8 +190,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         skip("stopping at install step: {}".format(LOG.test_step))
 
     if not InstallVars.get_install_var("OPENSTACK_INSTALL"):
-         controller0_node = lab['controller-0']
-         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
+        controller0_node = lab['controller-0']
+        controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
 
 
 def set_license_var(sys_version=None, sys_type=None):
@@ -292,18 +292,18 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
                                                 con_telnet=subcloud_controller0_node.telnet_conn,
                                                 subcloud=True)
 
-        #install_helper.update_auth_url(ssh_con=None, use_telnet=True, con_telnet=subcloud_controller0_node.telnet_conn)
         if subcloud_controller0_node.ssh_conn is None:
-            subcloud_controller0_node.ssh_conn = install_helper.establish_ssh_connection(subcloud_controller0_node.host_ip)
+            subcloud_controller0_node.ssh_conn = install_helper.establish_ssh_connection(
+                subcloud_controller0_node.host_ip)
 
         ControllerClient.set_active_controller(subcloud_controller0_node.ssh_conn)
-        #install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
+        # install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
         LOG.info("Auto_info before update: {}".format(Tenant.get('admin', 'RegionOne')))
         if not main_cloud_node.ssh_conn:
             main_cloud_node.ssh_conn = install_helper.establish_ssh_connection(main_cloud_node.host_ip)
         install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
         LOG.info("Auto_info after update: {}".format(Tenant.get('admin', 'RegionOne')))
-        dc_helper.wait_for_subcloud_status(subcloud,avail=SubcloudStatus.AVAIL_ONLINE,
+        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
 
         LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
@@ -312,12 +312,11 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
         dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn)
 
-        dc_helper.wait_for_subcloud_status(subcloud,avail=SubcloudStatus.AVAIL_ONLINE,
+        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
                                            con_ssh=main_cloud_node.ssh_conn)
 
         LOG.info("Running config for subcloud {} ... ".format(subcloud))
-        short_name = lab['short_name']
         install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
         LOG.info("Run lab_setup after config controller")
 
@@ -639,7 +638,7 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_t
     install_helper.download_hosts_bulk_add_xml_file(lab, build_server, files_path)
     install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=subcloud_controller0.ssh_conn)
     boot_device = lab['boot_device_dict']
-    hostnames = [node.name for node in subcloud_nodes if node.name != 'controller-0']
+    hostnames = [node.host_name for node in subcloud_nodes if node.host_name != 'controller-0']
     boot_hosts(boot_device, hostnames=hostnames)
     host_helper.wait_for_hosts_ready(hostnames,  con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
 
@@ -660,6 +659,7 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
 
     Args:
         controller0_node:
+        name
         ip_ver:
 
     Returns:
@@ -677,13 +677,10 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     if not controller0_node.ssh_conn._is_connected():
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-
     existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
     if name and 'subcloud' in name and name in existing_subclouds:
         LOG.info("Subcloud {} already exits; do nothing".format(name))
         return 0, [name]
-
-
 
     if name is not None and name is not '':
         subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
@@ -726,12 +723,11 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
 
     if len(added_subclouds) == len(config_generated):
         LOG.info("Subclouds added and config files generated successfully; subclouds: {}"
-                 .format(list(zip(added_subclouds,config_generated))))
+                 .format(list(zip(added_subclouds, config_generated))))
     else:
         LOG.info("One or more subcloud config are missing, please try to generate the missing configs manually")
 
     return 0, added_subclouds
-
 
 
 def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=None, patch_dir=None,
@@ -787,13 +783,13 @@ def get_subcloud_nodes_from_lab_dict(subcloud_lab):
     Args:
         subcloud_lab:
 
-    Returns:
+    Returns (list of Node):
 
     """
     if not isinstance(subcloud_lab, dict):
         raise ValueError("The subcloud lab info dictionary must be provided")
 
-    return [v for k, v in subcloud_lab.items() if isinstance(v, Node)]
+    return [v for v in subcloud_lab.values() if isinstance(v, Node)]
 
 
 def parse_subcloud_boot_info(subcloud_boot_info):
@@ -859,7 +855,7 @@ def reset_controller_telnet_port(controller_node):
     if controller_node.telnet_conn is None:
         controller_node.telnet_conn = install_helper.open_telnet_session(controller_node)
         try:
-            network_helper.reset_telnet_port(controller_node.telnet_conn)
+            install_helper.reset_telnet_port(controller_node.telnet_conn)
         except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout):
             pass
 
@@ -906,7 +902,6 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
-    install_type = ProjVar.get_var('SYS_TYPE')
 
     build_server = InstallVars.get_install_var('BUILD_SERVER')
     build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
@@ -922,13 +917,12 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     bld_server = initialize_server(build_server)
     dc_float_ip = None
-    install_subcloud = None
     if subcloud:
         dc_float_ip = InstallVars.get_install_var("DC_FLOAT_IP")
-        install_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD")
+        install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
-        add_subclouds(file_server_obj, name=install_subcloud)
+        add_subclouds(file_server_obj, name=install_sub)
     else:
         if file_server == bld_server.name:
             file_server_obj = bld_server
@@ -947,7 +941,6 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         guest_server_obj = bld_server
     else:
         guest_server_obj = initialize_server(guest_server)
-
 
     set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 
@@ -986,7 +979,6 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     if subcloud and install_subcloud:
         _install_setup['install_subcloud'] = install_subcloud
         _install_setup['dc_float_ip'] = dc_float_ip
-
 
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
         LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))

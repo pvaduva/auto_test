@@ -4079,3 +4079,12 @@ def get_host_install_uuid(host, host_ssh, lab=None):
     LOG.info("The install uuid from host {} is {}".format(host, install_uuid))
     return install_uuid
 
+
+def reset_telnet_port(telnet_conn):
+    telnet_conn.send_control("\\")
+    index = telnet_conn.expect(["anonymous:.+:PortCommand> ", "Login:"], timeout=5)
+    if index == 1:
+        telnet_conn.write(b"\r\n")
+
+    telnet_conn.send("resetport")
+    telnet_conn.login()

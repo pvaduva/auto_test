@@ -1,6 +1,5 @@
 import os
 import re
-import copy
 import threading
 import time
 from contextlib import contextmanager
@@ -386,7 +385,6 @@ class SSHClient:
         #     extra_str = " matching '{}'".format(blob_list[index])
 
         LOG.debug("Output{}: {}".format(extra_str, output))
-
         return index
 
     def __force_end(self, force):
@@ -1045,7 +1043,7 @@ class SSHFromSSH(SSHClient):
             self.send(self.ssh_cmd)
             try:
                 res_index = self.expect([prompt, PASSWORD_PROMPT, Prompt.ADD_HOST, self.parent.get_prompt()],
-                                        timeout=timeout, fail_ok=False)
+                                        timeout=timeout, fail_ok=False, searchwindowsize=100)
                 if res_index == 3:
                     raise exceptions.SSHException(
                             "Unable to login to {}. \nOutput: {}".format(self.host, self.cmd_output))
@@ -1069,7 +1067,7 @@ class SSHFromSSH(SSHClient):
                 return
 
             except (OSError, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh, exceptions.SSHException) as e:
-                LOG.info("Exception caught when attempt to ssh to {}: {}".format(self.host, e))
+                LOG.info("Unable to ssh to {}".format(self.host))
                 if isinstance(e, pexpect.TIMEOUT):
                     # LOG.debug("Reset _session.after for {} session".format(self.host))
                     # self._session.after = ''

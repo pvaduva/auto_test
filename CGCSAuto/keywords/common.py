@@ -591,36 +591,44 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
     Returns (str):
 
     """
+    def convert_val_dict(key__, vals_dict, repeat_key):
+        vals_ = []
+        for k, v in vals_dict.items():
+            if ' ' in v:
+                v = '"{}"'.format(v)
+            vals_.append('{}={}'.format(k, v))
+        if repeat_key:
+            args_str = ' ' + ' '.join(['{} {}'.format(key__, v_) for v_ in vals_])
+        else:
+            args_str = ' {} {}'.format(key__, vals_sep.join(vals_))
+        return args_str
+
     args = ''
     for key, val in args_dict.items():
         if val is None:
             continue
 
+        key = key if key.startswith('-') else '--{}'.format(key)
         if isinstance(val, str):
             if ' ' in val:
                 val = '"{}"'.format(val)
-            args += ' --{}={}'.format(key, val)
+            args += ' {}={}'.format(key, val)
         elif isinstance(val, bool):
             if val:
-                args += ' --{}'.format(key)
+                args += ' {}'.format(key)
         elif isinstance(val, (int, float)):
-            args += ' --{}={}'.format(key, val)
+            args += ' {}={}'.format(key, val)
         elif isinstance(val, dict):
-            vals = []
-            for key_, val_ in val.items():
-                if ' ' in val_:
-                    val_ = '"{}"'.format(val_)
-                vals.append('{}={}'.format(key_, val_))
-            if repeat_arg:
-                args += ' ' + ' '.join(['--{} {}'.format(key, val_) for val_ in vals])
-            else:
-                args += ' --{} {}'.format(key, vals_sep.join(vals))
+            args += convert_val_dict(key__=key, vals_dict=val, repeat_key=repeat_arg)
         elif isinstance(val, (list, tuple)):
             if repeat_arg:
                 for val_ in val:
-                    args += ' --{}={}'.format(key, val_)
+                    if isinstance(val_, dict):
+                        args += convert_val_dict(key__=key, vals_dict=val_, repeat_key=False)
+                    else:
+                        args += ' {}={}'.format(key, val_)
             else:
-                args += ' --{}={}'.format(key, vals_sep.join(val))
+                args += ' {}={}'.format(key, vals_sep.join(val))
         else:
             raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
 

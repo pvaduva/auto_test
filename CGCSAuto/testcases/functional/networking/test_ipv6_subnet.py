@@ -2,7 +2,7 @@ import time
 import re
 from pytest import fixture, mark
 from utils.tis_log import LOG
-from keywords import vm_helper, network_helper
+from keywords import vm_helper, network_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import PING_LOSS_RATE
 
@@ -135,11 +135,15 @@ def test_ipv6_subnet(vif_model, skip_for_ovs):
 
     LOG.tc_step("Boot a VM with mgmt net and Network with IPV6 subnet")
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': net_ids[0], 'vif-model': vif_model}]
 
+    image = None
+    if vif_model == 'e1000':
+        image = glance_helper.create_image(name=vif_model, hw_vif_model=vif_model, cleanup='function')[1]
+
     LOG.tc_step("Boot a vm with created nets")
-    vm_id = vm_helper.boot_vm(name='vm-with-ipv6-nic', nics=nics, cleanup='function')[1]
+    vm_id = vm_helper.boot_vm(name='vm-with-ipv6-nic', nics=nics, image_id=image, cleanup='function')[1]
     LOG.tc_step("Setup interface script inside guest and restart network")
     _bring_up_interface(vm_id)
 

@@ -1571,74 +1571,75 @@ def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_con
     return tuple(rtn_vals)
 
 
-def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
-                           net_id=None, net_name=None, auth_info=Tenant.get('admin'), con_ssh=None):
-    """
-    Get vm interface info for given nic from nova show
-    Args:
-        vm_id (str): id of the vm to get interface info for
-        nic_names (str|list): nic name such as nic1, nic2, etc
-        vif_model (str): such as virtio, pci-sriov
-        mac_addr (str):
-        pci_addr (str):
-        net_id (str): network id to filter out the vm nic
-        net_name (str): network name. This is only used if net_id is None.
-        auth_info (dict):
-        con_ssh (SSHClient):
-
-    Returns (list): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
-        "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}]
-
-    """
-    if not vm_id and vm_id not in ['0', 0]:
-        raise ValueError("VM ID is not provided.")
-    if nic_names is not None:
-        if isinstance(nic_names, str):
-            nic_names = [nic_names]
-        for nic in nic_names:
-            if "nic" not in nic:
-                raise ValueError("Invalid nic(s) provided: {}. Should be in the form of: e.g., nic4".format(nic_names))
-
-    if net_id:
-        nets_tab = table_parser.table(cli.neutron('net-list', auth_info=auth_info, ssh_client=con_ssh))
-        net_name = table_parser.get_values(nets_tab, 'name', id=net_id)[0]
-
-    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
-    all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
-    if isinstance(all_nics, str):
-        all_nics = [all_nics]
-    all_nics = [eval(nic_) for nic_ in all_nics]
-
-    # Sort the nics from nic1, nic2 ... nicN
-    all_nics = sorted(all_nics, key=lambda nic_: int((list(nic_.keys())[0]).split(sep='nic')[-1]))
-    LOG.debug("All nics: {}".format(all_nics))
-
-    nics_to_rtn = list(all_nics)
-    if not nics_to_rtn:
-        LOG.warning("No nics attached to vm {}".format(vm_id))
-        return []
-    elif vif_model or nic_names or mac_addr or pci_addr or net_name:
-        for item in all_nics:
-            nic_info = list(item.values())[0]
-            if (vif_model and vif_model != nic_info['vif_model']) or \
-                    (mac_addr and mac_addr != nic_info['mac_address']) or \
-                    (pci_addr and pci_addr != nic_info['vif_pci_address']) or \
-                    (net_name and net_name != nic_info['network']):
-                nics_to_rtn.remove(item)
-
-            if nic_names:
-                for nic_name in nic_names:
-                    if nic_name not in item:
-                        nics_to_rtn.remove(item)
-            LOG.debug("nics_to_rtn: {}".format(nics_to_rtn))
-
-        if not nics_to_rtn:
-            LOG.warning("Cannot find nic info with given criteria")
-            return []
-
-    nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]
-    LOG.info("nics with nic_names {} and vif_model {}: {}".format(nic_names, vif_model, nics_to_rtn))
-    return nics_to_rtn
+# Deprecated. Please use vm_helper.get_vm_nics_info()
+# def get_vm_interfaces_info(vm_id, nic_names=None, vif_model=None, mac_addr=None, pci_addr=None,
+#                            net_id=None, net_name=None, auth_info=Tenant.get('admin'), con_ssh=None):
+#     """
+#     Get vm interface info for given nic from nova show
+#     Args:
+#         vm_id (str): id of the vm to get interface info for
+#         nic_names (str|list): nic name such as nic1, nic2, etc
+#         vif_model (str): such as virtio, pci-sriov
+#         mac_addr (str):
+#         pci_addr (str):
+#         net_id (str): network id to filter out the vm nic
+#         net_name (str): network name. This is only used if net_id is None.
+#         auth_info (dict):
+#         con_ssh (SSHClient):
+#
+#     Returns (list): such as [{"vif_model": "pci-passthrough", "network": "internal0-net1", "port_id":
+#         "33990477-dce6-4447-b153-4dee596fe3f4", "mtu": 9000, "mac_address": "90:e2:ba:60:c8:08", "vif_pci_address": ""}]
+#
+#     """
+#     if not vm_id and vm_id not in ['0', 0]:
+#         raise ValueError("VM ID is not provided.")
+#     if nic_names is not None:
+#         if isinstance(nic_names, str):
+#             nic_names = [nic_names]
+#         for nic in nic_names:
+#             if "nic" not in nic:
+#                 raise ValueError("Invalid nic(s) provided: {}. Should be in the form of: e.g., nic4".format(nic_names))
+#
+#     if net_id:
+#         nets_tab = table_parser.table(cli.neutron('net-list', auth_info=auth_info, ssh_client=con_ssh))
+#         net_name = table_parser.get_values(nets_tab, 'name', id=net_id)[0]
+#
+#     table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
+#     all_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
+#     if isinstance(all_nics, str):
+#         all_nics = [all_nics]
+#     all_nics = [eval(nic_) for nic_ in all_nics]
+#
+#     # Sort the nics from nic1, nic2 ... nicN
+#     all_nics = sorted(all_nics, key=lambda nic_: int((list(nic_.keys())[0]).split(sep='nic')[-1]))
+#     LOG.debug("All nics: {}".format(all_nics))
+#
+#     nics_to_rtn = list(all_nics)
+#     if not nics_to_rtn:
+#         LOG.warning("No nics attached to vm {}".format(vm_id))
+#         return []
+#     elif vif_model or nic_names or mac_addr or pci_addr or net_name:
+#         for item in all_nics:
+#             nic_info = list(item.values())[0]
+#             if (vif_model and vif_model != nic_info['vif_model']) or \
+#                     (mac_addr and mac_addr != nic_info['mac_address']) or \
+#                     (pci_addr and pci_addr != nic_info['vif_pci_address']) or \
+#                     (net_name and net_name != nic_info['network']):
+#                 nics_to_rtn.remove(item)
+#
+#             if nic_names:
+#                 for nic_name in nic_names:
+#                     if nic_name not in item:
+#                         nics_to_rtn.remove(item)
+#             LOG.debug("nics_to_rtn: {}".format(nics_to_rtn))
+#
+#         if not nics_to_rtn:
+#             LOG.warning("Cannot find nic info with given criteria")
+#             return []
+#
+#     nics_to_rtn = [list(nic_.values())[0] for nic_ in nics_to_rtn]
+#     LOG.info("nics with nic_names {} and vif_model {}: {}".format(nic_names, vif_model, nics_to_rtn))
+#     return nics_to_rtn
 
 
 def get_vm_instance_name(vm_id, con_ssh=None):

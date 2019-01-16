@@ -24,7 +24,7 @@ def add_route_for_vm_access(compliance_client):
     LOG.fixture_step("Add routes to access VM from compliance server if not already done")
     cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True,
                                        rtn_val='cidr', auth_info=Tenant.get('admin'))
-    cidrs_to_add = [r'{}.0/24'.format(re.findall('(.*).\d+/\d+', item)[0]) for item in cidrs]
+    cidrs_to_add = [r'{}.0/24'.format(re.findall(r'(.*).\d+/\d+', item)[0]) for item in cidrs]
     for cidr in cidrs_to_add:
         if compliance_client.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
             compliance_client.exec_sudo_cmd('ip route add {} via {}'.format(cidr, VM_ROUTE_VIA))
@@ -78,7 +78,7 @@ def ssh_to_compliance_server(server=None, user=None, password=None, prompt=None)
 
     set_ps1 = False
     if prompt is None:
-        prompt = '.*{}@.*:.*\$ '.format(user)
+        prompt = r'.*{}@.*:.*\$ '.format(user)
         set_ps1 = True
     server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
     server_conn.connect()
@@ -130,32 +130,43 @@ def update_dovetail_mgmt_interface():
         cumulus_auth = CumulusCreds.TENANT_TIS_LAB
         vm_id = nova_helper.get_vm_id_from_name(vm_name='dovetail', fail_ok=False, con_ssh=cumulus_con,
                                                 auth_info=cumulus_auth)
-        dovetail_nics = network_helper.get_vm_nics(vm_id=vm_id, con_ssh=cumulus_con, auth_info=cumulus_auth)
-        mgmt_nic = [nic for nic in dovetail_nics if 'nic2' in nic][0]['nic2']
-        mgmt_net_name = mgmt_nic['network']
-        if mgmt_net_name == expt_mgmt_net:
-            LOG.info("{} interface already attached to Dovetail vm".format(mgmt_net_name))
+
+        dovetail_networks = nova_helper.get_vms(vms=vm_id, return_val='Networks', con_ssh=cumulus_con,
+                                                auth_info=cumulus_auth)[0]
+        if expt_mgmt_net in dovetail_networks:
+            LOG.info("{} interface already attached to Dovetail vm".format(expt_mgmt_net))
             return
+
+        prev_mgmt_net = None
+        actual_nets = dovetail_networks.split(sep=';')
+        for net in actual_nets:
+            net_name, net_ip = net.split('=')
+            if '-MGMT-net' in net_name:
+                prev_mgmt_net = net_name
 
         mgmt_net_id = network_helper.get_net_id_from_name(net_name=expt_mgmt_net, con_ssh=cumulus_con,
                                                           auth_info=cumulus_auth)
         LOG.info("Attach {} from dovetail vm".format(expt_mgmt_net))
-        vm_helper.attach_interface(vm_id=vm_id, net_id=mgmt_net_id, vif_model='virtio', auth_info=cumulus_auth,
+        vm_helper.attach_interface(vm_id=vm_id, net_id=mgmt_net_id, auth_info=cumulus_auth,
                                    con_ssh=cumulus_con)
 
-        LOG.info("Detach {} for lab under test".format(mgmt_net_name))
-        vm_helper.detach_interface(vm_id=vm_id, port_id=mgmt_nic['port_id'], con_ssh=cumulus_con,
-                                   auth_info=cumulus_auth)
+        if prev_mgmt_net:
+            prev_net_id = network_helper.get_net_id_from_name(net_name=prev_mgmt_net, con_ssh=cumulus_con,
+                                                              auth_info=cumulus_auth)
+            vm_port = network_helper.get_ports(server=vm_id, con_ssh=cumulus_con, auth_info=cumulus_auth,
+                                               network=prev_net_id)[0]
+            LOG.info("Detach {} for lab under test".format(expt_mgmt_net))
+            vm_helper.detach_interface(vm_id=vm_id, port_id=vm_port, con_ssh=cumulus_con,
+                                       auth_info=cumulus_auth)
 
-        dovetail_nics = network_helper.get_vm_nics(vm_id=vm_id, con_ssh=cumulus_con, auth_info=cumulus_auth)
-        mgmt_nic = [nic for nic in dovetail_nics if 'nic2' in nic][0]['nic2']
-        assert expt_mgmt_net == mgmt_nic['network']
+        mgmt_mac = network_helper.get_ports(rtn_val='MAC Address', server=vm_id, con_ssh=cumulus_con,
+                                            auth_info=cumulus_auth, network=mgmt_net_id)[0]
 
     ComplianceCreds.set_host(Dovetail.TEST_NODE)
     ComplianceCreds.set_user(Dovetail.USERNAME)
     ComplianceCreds.set_password(Dovetail.PASSWORD)
     with ssh_to_compliance_server() as dovetail_ssh:
-        eth_name = network_helper.get_eth_for_mac(dovetail_ssh, mac_addr=mgmt_nic['mac_address'])
+        eth_name = network_helper.get_eth_for_mac(dovetail_ssh, mac_addr=mgmt_mac)
         dovetail_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
         dovetail_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name), expect_timeout=180)
         dovetail_ssh.exec_cmd('ip addr')

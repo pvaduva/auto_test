@@ -12,7 +12,7 @@ def test_boot_vms():
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': tenant_net_id},
             {'net-id': internal_net_id}]
 

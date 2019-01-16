@@ -73,9 +73,9 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    nics = [{'net-id': mgmt_net_id},
+            {'net-id': tenant_net_id},
+            {'net-id': internal_net_id}]
 
     vm_id = vm_helper.boot_vm(boot_from, flavor=flavor, source=boot_source, nics=nics, cleanup='function')[1]
 
@@ -93,9 +93,9 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
 
         mgmt_net_observer = network_helper.get_mgmt_net_id(auth_info=Tenant.get_secondary())
         tenant_net_observer = network_helper.get_tenant_net_id(auth_info=Tenant.get_secondary())
-        nics_observer = [{'net-id': mgmt_net_observer, 'vif-model': 'virtio'},
-                         {'net-id': tenant_net_observer, 'vif-model': 'virtio'},
-                         {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+        nics_observer = [{'net-id': mgmt_net_observer},
+                         {'net-id': tenant_net_observer},
+                         {'net-id': internal_net_id}]
         vm_observer = vm_helper.boot_vm('observer', flavor=flavor, source=boot_source,
                                         nics=nics_observer, cleanup='function', auth_info=Tenant.get_secondary())[1]
 

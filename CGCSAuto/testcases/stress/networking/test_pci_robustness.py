@@ -75,7 +75,7 @@ def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_t
 
 def get_pci_vm_nics(vif_model, pci_net_id, other_pci_net_id=None):
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': pci_net_id, 'vif-model': vif_model}]
     if other_pci_net_id:
         nics.append({'net-id': other_pci_net_id, 'vif-model': vif_model})
@@ -211,7 +211,8 @@ class TestSriov:
         for i in range(vm_num):
             sriov_nics = nics.copy()
             sriov_nic2 = sriov_nics[-1].copy()
-            sriov_nic2['port-id'] = network_helper.create_port(net_id=sriov_nic2.pop('net-id'), vnic_type='direct')[1]
+            sriov_nic2['port-id'] = network_helper.create_port(net_id=sriov_nic2.pop('net-id'), vnic_type='direct',
+                                                               name='sriov_port')[1]
             sriov_nics.append(sriov_nic2)
             LOG.info("Booting vm{}...".format(i + 1))
             vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=sriov_nics, cleanup='function',

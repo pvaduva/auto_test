@@ -394,10 +394,9 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, no_sim
         # TC5069
         LOG.tc_step("Check via vshell that all vNICs are associated with the host NUMA node that guest numa0 maps to")
         host = nova_helper.get_vm_host(vm_id)
-        actual_nics = network_helper.get_vm_nics(vm_id)
+        actual_ports = network_helper.get_ports(vm_id)
         with host_helper.ssh_to_host(host) as compute_ssh:
-            for nic in actual_nics:
-                port_id = list(nic.values())[0]['port_id']
+            for port_id in actual_ports:
                 ports_tab = table_parser.table(compute_ssh.exec_cmd("vshell port-show {}".format(port_id),
                                                                     fail_ok=False)[1])
                 socket_id = int(table_parser.get_value_two_col_table(ports_tab, field='socket-id'))

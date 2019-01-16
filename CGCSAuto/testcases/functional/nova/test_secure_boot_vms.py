@@ -86,7 +86,7 @@ def test_vm_actions_secure_boot_vm():
     volume_ids = []
     for guest_os, disk_format in zip(guests_os, disk_format):
         image_ids.append(create_image_with_metadata(guest_os=guest_os,
-                                                    property_key=ImageMetadata.HW_FIRMWARE_TYPE, values=['uefi'],
+                                                    property_key=ImageMetadata.FIRMWARE_TYPE, values=['uefi'],
                                                     disk_format=disk_format, container_format='bare'))
     # create a flavor
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=5)[1]
@@ -131,7 +131,7 @@ def test_lock_unlock_secure_boot_vm():
     volume_ids = []
     for guest_os, disk_format in zip(guests_os, disk_format):
         image_ids.append(create_image_with_metadata(guest_os=guest_os,
-                                                    property_key=ImageMetadata.HW_FIRMWARE_TYPE, values=['uefi'],
+                                                    property_key=ImageMetadata.FIRMWARE_TYPE, values=['uefi'],
                                                     disk_format=disk_format, container_format='bare'))
     # create a flavor
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=5)[1]
@@ -171,7 +171,7 @@ def test_host_reboot_secure_boot_vm():
     volume_ids = []
     for guest_os, disk_format in zip(guests_os, disk_format):
         image_ids.append(create_image_with_metadata(guest_os=guest_os,
-                                                    property_key=ImageMetadata.HW_FIRMWARE_TYPE, values=['uefi'],
+                                                    property_key=ImageMetadata.FIRMWARE_TYPE, values=['uefi'],
                                                     disk_format=disk_format, container_format='bare'))
     # create a flavor
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=5)[1]

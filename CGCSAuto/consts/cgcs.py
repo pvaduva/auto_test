@@ -303,7 +303,7 @@ class ImageMetadata:
     CPU_RT_MASK = 'hw_cpu_realtime_mask'
     CPU_RT = 'hw_cpu_realtime'
     CPU_MODEL = 'hw_cpu_model'
-    HW_FIRMWARE_TYPE = 'hw_firmware_type'
+    FIRMWARE_TYPE = 'hw_firmware_type'
 
 
 class VMMetaData:

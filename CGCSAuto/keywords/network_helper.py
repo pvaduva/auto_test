@@ -63,6 +63,7 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
         tenant_name: such as tenant1, tenant2.
         network_type (str): The physical mechanism by which the virtual network is implemented
         segmentation_id (None|str): w VLAN ID for VLAN networks
+        qos
         physical_network (str): Name of the physical network over which the virtual
                         network is implemented
         vlan_transparent(None|bool): Create a VLAN transparent network
@@ -163,6 +164,7 @@ def create_subnet(net_id, name=None, cidr=None, gateway=None, dhcp=None, no_gate
         fail_ok (bool):
         auth_info (dict): run the neutron subnet-create cli using these authorization info
         con_ssh (SSHClient):
+        cleanup (str|None)
 
     Returns (tuple): (rnt_code (int), subnet_id (str), message (str))
 
@@ -425,7 +427,8 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
         '--share': (True if share is True else None, {'shared': 'True'}),
         '--no-share': (True if share is False else None, {'shared': 'False'}),
         '--enable-port-security': (True if enable_port_security is True else None, {'port_security_enabled': 'True'}),
-        '--disable-port-security': (True if enable_port_security is False else None, {'port_security_enabled': 'False'}),
+        '--disable-port-security': (True if enable_port_security is False else None,
+                                    {'port_security_enabled': 'False'}),
         '--external': (True if external is True else None, {'router:external': 'External'}),
         '--internal': (True if external is False else None, {'router:external': 'Internal'}),
         '--default': (True if default is True else None, {'is_default': 'True'}),
@@ -461,14 +464,14 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
     if not args_str:
         raise ValueError("Nothing to update. Please specify at least one None value")
 
-    LOG.info("Attempt to update network {} with following args: {}".format(net_id, args_str))
+    LOG.info("Updating network {} with: {}".format(net_id, args_str))
     code, out = cli.openstack('network set', '{} {}'.format(args_str, net_id), ssh_client=con_ssh, rtn_list=True,
                               fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, out
 
     if checks:
-        LOG.info("Check the values are updated to following in network show: {}".format(checks))
+        LOG.info("Check network {} is updated with: {}".format(net_id, checks))
         actual_res = get_net_show_values(net_id, fields=list(checks.keys()), rtn_dict=True, auth_info=auth_info)
         failed = {}
         for field in checks:
@@ -498,6 +501,7 @@ def create_security_group(name, project=None, description=None, auth_info=None, 
     Create a security group
     Args:
         name (str):
+        project
         description (str):
         auth_info (dict):
             create under this project
@@ -542,6 +546,7 @@ def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.get('admin')
     Delete a security group
     Args:
         group_id (str): security group to be deleted
+        fail_ok
         auth_info (dict):
 
     Returns (tuple): (code, msg)
@@ -728,7 +733,8 @@ def delete_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.get('admin'),
 
     """
     if fip_val == 'ip':
-        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'), con_ssh=con_ssh)
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'),
+                                                con_ssh=con_ssh)
     args = floating_ip
 
     code, output = cli.neutron('floatingip-delete', positional_args=args, ssh_client=con_ssh, auth_info=auth_info,
@@ -842,7 +848,8 @@ def disassociate_floating_ip(floating_ip, fip_val='ip', auth_info=Tenant.get('ad
 
     """
     if fip_val == 'ip':
-        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'), con_ssh=con_ssh)[0]
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'),
+                                                con_ssh=con_ssh)[0]
     args = floating_ip
     code, output = cli.neutron('floatingip-disassociate', args, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True)
@@ -892,7 +899,8 @@ def associate_floating_ip(floating_ip, vm_id, fip_val='ip', vm_ip=None, auth_inf
     fip_ip = None
     if fip_val == 'ip':
         fip_ip = floating_ip
-        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'), con_ssh=con_ssh)[0]
+        floating_ip = get_floating_ids_from_ips(floating_ips=floating_ip, auth_info=Tenant.get('admin'),
+                                                con_ssh=con_ssh)[0]
     args += ' ' + floating_ip
 
     port = get_vm_port(vm=vm_ip, vm_val='ip', con_ssh=con_ssh)
@@ -1394,7 +1402,7 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), 
 
 
 def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, auth_info=Tenant.get('admin'),
-                         rtn_dict=False, use_fip=False, exclude_nets=None):
+                         rtn_dict=False, use_fip=False, exclude_nets=None, fail_ok=False):
 
     args = '--all-tenants' if auth_info and auth_info.get('user') == 'admin' else ''
     table_ = table_parser.table(cli.nova('list', args, ssh_client=con_ssh, auth_info=auth_info))
@@ -1456,6 +1464,8 @@ def _get_net_ips_for_vms(netname_pattern, ip_pattern, vms=None, con_ssh=None, au
         all_ips += ips_for_vm
 
     if not all_ips:
+        if fail_ok:
+            return all_ips_dict if rtn_dict else all_ips
         raise ValueError("No ip found for any of these vms {} with pattern: {}".format(vm_ids, ip_pattern))
 
     LOG.info("IPs dict: {}".format(all_ips_dict))
@@ -1645,7 +1655,7 @@ def get_router_subnets(router_id, rtn_val='subnet_id', mgmt_only=True, auth_info
     return subnets
 
 
-def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None):
+def get_next_subnet_cidr(net_id, ip_pattern=r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', con_ssh=None):
     LOG.info("Creating subnet of tenant-mgmt-net to add interface to router.")
 
     nets_tab = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
@@ -1653,7 +1663,7 @@ def get_next_subnet_cidr(net_id, ip_pattern='\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
     existing_subnets = ','.join(existing_subnets)
 
     # TODO: add ipv6 support
-    mask = re.findall(ip_pattern + '/(\d{1,3})', existing_subnets)[0]
+    mask = re.findall(ip_pattern + r'/(\d{1,3})', existing_subnets)[0]
     increment = int(math.pow(2, math.ceil(math.log2(int(mask)))))
 
     ips = re.findall(ip_pattern, existing_subnets)
@@ -1672,7 +1682,7 @@ def create_mgmt_subnet(net_id=None, name=None, cidr=None, gateway=None, dhcp=Non
         net_id = get_mgmt_net_id(con_ssh=con_ssh, auth_info=tenant_auth_info)
 
     if cidr is None:
-        cidr = get_next_subnet_cidr(net_id=net_id, ip_pattern="192.168\.\d{1,3}\.\d{1,3}", con_ssh=con_ssh)
+        cidr = get_next_subnet_cidr(net_id=net_id, ip_pattern=r"192.168\.\d{1,3}\.\d{1,3}", con_ssh=con_ssh)
 
     tenant_name = common.get_tenant_name(tenant_auth_info)
     return create_subnet(net_id, name=name, cidr=cidr, gateway=gateway, dhcp=dhcp, dns_servers=dns_servers,
@@ -1964,7 +1974,8 @@ def __set_router_openstack(name=None, admin_state_up=None, distributed=None, no_
 
 
 def _update_router(name=None, admin_state_up=None, distributed=None, no_routes=None, routes=None,
-                   external_gateway_info=None, router_id=None, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+                   external_gateway_info=None, router_id=None, fail_ok=False, con_ssh=None,
+                   auth_info=Tenant.get('admin')):
     """
 
     Args:
@@ -2103,7 +2114,8 @@ def update_router_ext_gateway_snat(router_id=None, ext_net_id=None, enable_snat=
 
 
 def update_router_distributed(router_id=None, distributed=True, pre_admin_down=True, post_admin_up=True,
-                              post_admin_up_on_failure=True, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
+                              post_admin_up_on_failure=True, fail_ok=False, auth_info=Tenant.get('admin'),
+                              con_ssh=None):
     """
     Update router to distributed or centralized
 
@@ -2416,8 +2428,8 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD, vshell=False
 
 
 def create_providernet_range(providernet, range_min, range_max, rtn_val='id', range_name=None, shared=True,
-                             tenant_id=None, group=None, port=None, ttl=None, auth_info=Tenant.get('admin'), con_ssh=None,
-                             fail_ok=False):
+                             tenant_id=None, group=None, port=None, ttl=None, auth_info=Tenant.get('admin'),
+                             con_ssh=None, fail_ok=False):
     """
     Create a provider net range for given providernet with specified min and max range values
     Args:
@@ -2492,7 +2504,8 @@ def create_providernet_range(providernet, range_min, range_max, rtn_val='id', ra
         return 0, range_name
 
 
-def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
+def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, auth_info=Tenant.get('admin'),
+                             fail_ok=False):
     """
     Delete providernet range
     Args:
@@ -2534,31 +2547,6 @@ def delete_providernet_range(providernet_range, range_val='name', con_ssh=None, 
 def get_providernet_range_name_from_id(range_id, auth_info=Tenant.get('admin'), con_ssh=None):
     table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
     return table_parser.get_values(table_, 'name', id=range_id)[0]
-
-
-def get_vm_nics(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get nics of vm as a list of dictionaries.
-
-    Args:
-        vm_id (str):
-        con_ssh (SSHClient):
-        auth_info (dict):
-
-    Returns (list): list of dictionaries. Such as:
-        [{'nic1': {"vif_model": "virtio", "network": "external-net0", "port_id": "ba23cd33-b0c5-4e37-b331-013dfc12560b",
-            "mtu": 1500, "mac_address": "fa:16:3e:72:d4:24", "vif_pci_address": ""}},
-        {'nic2': {"vif_model": "virtio", "network": "internal0-net0", "port_id": "2ccec5e9-bbd5-4007-9c28-9116da15d925",
-            "mtu": 9000, "mac_address": "fa:16:3e:0d:5a:5e", "vif_pci_address": ""}}]
-
-    """
-    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=auth_info, ssh_client=con_ssh))
-    nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
-    if isinstance(nics, str):
-        nics = [nics]
-    nics = [eval(nic_) for nic_ in nics]
-
-    return nics
 
 
 def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
@@ -2885,7 +2873,8 @@ def _get_preferred_nets(nets, net_name=None, strict=False):
 
 
 def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, outside_port=None, protocol='tcp',
-                                tenant=None, description=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
+                                tenant=None, description=None, fail_ok=False, auth_info=Tenant.get('admin'),
+                                con_ssh=None):
     """
 
     Args:
@@ -3188,38 +3177,38 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
-def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, device_owner=None, port_security=None,
-                admin_state_down=None, mac_addr=None, vnic_type=None, security_groups=None, no_security_groups=None,
-                extra_dhcp_opts=None, qos_pol=None, allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None,
-                wrs_vif=None, fail_ok=False, auth_info=None, con_ssh=None):
+def create_port(net_id, name, project=None, fixed_ips=None, device_id=None, device_owner=None, port_security=None,
+                enable_port=None, mac_addr=None, vnic_type=None, security_groups=None, no_security_groups=None,
+                qos_pol=None, allowed_addr_pairs=None, dns_name=None, tag=None, no_tag=None,
+                host_id=None, wrs_vif=None, fail_ok=False, auth_info=None, con_ssh=None, cleanup='function'):
     """
     Create a port on given network
 
     Args:
         net_id (str): network id to create port for
         name (str): name of the new port
-        tenant (str): tenant name. such as tenant1, tenant2
-        fixed_ips (str|list): e.g., ["subnet_id=SUBNET_1,ip_address=IP_ADDR_1",
-                                    "subnet_id=SUBNET_2,ip_address=IP_ADDR_2]
+        project (str): tenant name. such as tenant1, tenant2
+        fixed_ips (list|tuple|dict|None): e.g., [{"subnet_id": <SUBNET_1>,"ip-address"=<IP_1>}, {"ip-address": <IP_2>}
         device_id (str): device id of this port
         device_owner (str): Device owner of this port
         port_security (None|bool):
-        admin_state_down (bool): Set admin state up to false
+        enable_port (bool|None):
         mac_addr (str):  MAC address of this port
         vnic_type: one of the: <direct | direct-physical | macvtap | normal | baremetal>
         security_groups (str|list): Security group(s) associated with the port
         no_security_groups (bool): Associate no security groups with the port
-        extra_dhcp_opts (str|list): Extra dhcp options to be assigned to this port:
-                e.g., "opt_name=<dhcp_option_name>,opt_value=<value>,ip_version={4,6}"
         qos_pol (str):  Attach QoS policy ID or name to the resource
         allowed_addr_pairs (str|list):  Allowed address pair associated with the port.
                 e.g., "ip_address=IP_ADDR[,mac_address=MAC_ADDR]"
-        no_allowed_addr_pairs (bool): Associate no allowed address pairs with the port
         dns_name (str):  Assign DNS name to the port (requires DNS integration extension)
+        host_id (str)
+        tag (str|None)
+        no_tag (str|None)
         wrs_vif
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
+        cleanup (None|str)
 
     Returns (tuple): (<rtn_code>, <err_msg|port_id>)
         (0, <port_id>)  - port created successfully
@@ -3230,62 +3219,46 @@ def create_port(net_id, name=None, tenant=None, fixed_ips=None, device_id=None, 
     LOG.info("Creating port on network {}".format(net_id))
     if not net_id:
         raise ValueError("network id is required")
-    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant, con_ssh=con_ssh)[0] if tenant else None
+    tenant_id = keystone_helper.get_tenant_ids(tenant_name=project, con_ssh=con_ssh)[0] if project else None
 
-    args = '--network {}'.format(net_id)
     args_dict = {
-        '--admin-state-down': admin_state_down,
         '--no-security-groups': no_security_groups,
-        '--no-allowed-address-pairs': no_allowed_addr_pairs,
         '--enable-port-security': True if port_security else None,
         '--disable-port-security': True if port_security is False else None,
-    }
-
-    for key, val in args_dict.items():
-        if val:
-            args += ' {}'.format(key)
-
-    kwargs_dict = {
         '--tenant-id': tenant_id,
         '--device-id': device_id,
         '--device-owner': device_owner,
         '--mac-address': mac_addr,
         '--vnic-type': vnic_type,
+        '--host': host_id,
         # '--binding-profile':
+        '--enable': True if port_security else None,
+        '--disable': True if enable_port is False else None,
         '--qos-policy': qos_pol,
         '--dns-name': dns_name,
         '--wrs-binding:vif_model': wrs_vif,
-    }
-
-    for key, val in kwargs_dict.items():
-        if val is not None:
-            args += ' {} {}'.format(key, val)
-
-    repeatable_dict = {
-        '--extra-dhcp-opt': extra_dhcp_opts,
         '--fixed-ip': fixed_ips,
         '--allowed-address-pair': allowed_addr_pairs,
         '--security-group': security_groups,
+        '--tag': tag,
+        '--no-tag': no_tag
     }
 
-    for key, vals in repeatable_dict.items():
-        if vals:
-            if isinstance(vals, str):
-                vals = [vals]
-            for val in vals:
-                args += ' {} {}'.format(key, val)
-
-    args += ' {}'.format(name)
+    args = common.parse_args(args_dict=args_dict, repeat_arg=True, vals_sep=',')
+    args = '--network={} {} {}'.format(net_id, args, name)
 
     code, output = cli.openstack('port create', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                                  auth_info=auth_info)
 
-    if code == 1:
-        return code, output
-
     port_tab = table_parser.table(output)
     port_net_id = table_parser.get_value_two_col_table(port_tab, 'network_id')
     port_id = table_parser.get_value_two_col_table(port_tab, 'id')
+    if port_id and cleanup:
+        ResourceCleanup.add('port', port_id)
+
+    if code == 1:
+        return code, output
+
     if not net_id == port_net_id:
         err_msg = "Network ID for created port is not as specified. Expt:{}; Actual: {}".format(net_id, port_net_id)
         if fail_ok:
@@ -3337,44 +3310,146 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=N
     return 0, succ_msg
 
 
-def get_ports(rtn_val='id', port_id=None, port_name=None, port_mac=None, ip_addr=None, subnet_id=None, strict=False,
-              auth_info=Tenant.get('admin'), con_ssh=None, merge_lines=True):
+def set_port(port_id, name=None, fixed_ips=None, no_fixed_ip=None, device_id=None, device_owner=None,
+             port_security=None, enable_port=None, mac_addr=None, vnic_type=None,
+             security_groups=None, no_security_groups=None, qos_pol=None, host_id=None,
+             allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None, description=None,
+             tag=None, no_tag=None, fail_ok=False, auth_info=None, con_ssh=None):
+
+    args_dict = {
+        '--description': description,
+        '--device': device_id,
+        '--mac-address': mac_addr,
+        '--device-owner': device_owner,
+        '--vnic-type': vnic_type,
+        '--host': host_id,
+        '--dns-name': dns_name,
+        '--enable': enable_port,
+        '--disable': True if enable_port is False else None,
+        '--enable-port-security': port_security,
+        '--disable-port-security': True if port_security is False else None,
+        '--name': name,
+        '--fixed-ip': fixed_ips,
+        '--no-fixed-ip': no_fixed_ip,
+        '--qos-policy': qos_pol,
+        '--security-group': security_groups,
+        '--no-security-group': no_security_groups,
+        '--allowed-address': allowed_addr_pairs,
+        '--no-allowed-address': no_allowed_addr_pairs,
+        '--tag': tag,
+        '--no-tag': no_tag,
+    }
+    args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), port_id)
+    code, out = cli.openstack('port set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    if code != 0:
+        return code, out
+
+    msg = "Port {} is updated.".format(port_id)
+    LOG.info(msg)
+    return code, msg
+
+
+def __convert_ip_subnet(line):
+    if 'ip_address' in line:
+        ip_addr = re.findall("ip_address='(.*)',", line)[0]
+        subnet = re.findall("subnet_id='(.*)'", line)[0]
+    else:
+        ip_addr = None
+        subnet = None
+    return {'ip_address': ip_addr, 'subnet_id': subnet}
+
+
+def get_ports(rtn_val='id', network=None, router=None, server=None, project=None, fixed_ips=None, long=False, mac=None,
+              port_id=None, port_name=None, auth_info=Tenant.get('admin'), con_ssh=None, merge_lines=True,
+              strict=False):
     """
     Get a list of ports with given arguments
     Args:
-        rtn_val (str): any valid header of neutron port-list table. 'id', 'name', 'mac_address', or 'fixed_ips'
+        rtn_val (str|list|tuple): openstack port list table header(s). 'ID', 'NAME', 'MAC Address', 'Fixed IP Addresses'
+        network (str|None)
+        router (str|None)
+        server (str|None)
+        project (str|None)
+        mac (str|None)
+        fixed_ips (list|tuple|dict|None) e.g., ({'subnet': <subnet1>, 'ip-address': <ip1>}, {'ip-address': <ip2>})
+        long (bool):
         port_id (str): id of the port
         port_name (str): name of the port
-        port_mac (str): mac address of the port
-        ip_addr (str): ip of the port
-        subnet_id (str): subnet of the port
         strict (bool):
         auth_info (dict):
         con_ssh (SSHClient):
+        merge_lines (bool)
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.neutron('port-list', ssh_client=con_ssh, auth_info=auth_info))
-    fixed_ips = ''
-    if subnet_id:
-        fixed_ips += subnet_id
-    if ip_addr:
-        fixed_ips += ".*{}".format(ip_addr)
-
-    args_dict = {
-        'id': port_id,
-        'fixed_ips': fixed_ips,
-        'name': port_name,
-        'mac_address': port_mac,
+    optional_args = {
+        '--fixed-ip': fixed_ips,
+        '--project': project,
+        '--network': network,
+        '--router': router,
+        '--server': server,
+        '--mac-address': mac,
+        '--long': long,
     }
-    kwargs = {}
-    for key, value in args_dict.items():
-        if value:
-            kwargs[key] = value
+    args_str = common.parse_args(args_dict=optional_args, repeat_arg=True, vals_sep=',')
+    table_ = table_parser.table(cli.openstack('port list', args_str, ssh_client=con_ssh, auth_info=auth_info))
 
-    ports = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=merge_lines, **kwargs)
-    return ports
+    filters = {}
+    if port_id:
+        filters['id'] = port_id
+    elif port_name:
+        filters['name'] = port_name
+
+    convert = False
+    if isinstance(rtn_val, str):
+        convert = True
+        rtn_val = (rtn_val, )
+
+    res = []
+    for header in rtn_val:
+        ports_info = table_parser.get_values(table_, header, strict=strict, merge_lines=merge_lines, **filters)
+        if header.lower() == 'fixed ip addresses':
+            vals = []
+            for port_info in ports_info:
+                if isinstance(port_info, str):
+                    port_info = [port_info]
+
+                for port_line in port_info:
+                    ip_subnet_dict = __convert_ip_subnet(port_line)
+                    vals.append(ip_subnet_dict)
+            ports_info = vals
+        res.append(ports_info)
+
+    if convert:
+        res = res[0]
+    return res
+
+
+def get_port_values(port, fields=('binding_vnic_type', 'mac_address'), con_ssh=None, auth_info=None):
+    """
+    Get port info via openstack port show
+    Args:
+        port (str):
+        fields (str|list|tuple):
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list):
+
+    """
+    if isinstance(fields, str):
+        fields = (fields,)
+
+    table_ = table_parser.table(cli.openstack('port show', port, ssh_client=con_ssh, auth_info=auth_info))
+    values = []
+    for field in fields:
+        value = table_parser.get_value_two_col_table(table_, field)
+        if field == 'fixed_ips':
+            value = __convert_ip_subnet(value)
+        values.append(value)
+
+    return values
 
 
 def get_pci_device_configured_vfs_value(device_id, con_ssh=None, auth_info=None):
@@ -3576,6 +3651,7 @@ def collect_vswitch_info_on_host(host, vswitch_type, collect_extra_ovs=False):
     Args:
         host (str):
         vswitch_type (str): avs or ovs
+        collect_extra_ovs
 
     Returns:
 
@@ -3905,13 +3981,14 @@ def remove_trunk_subports(trunk_id, tenant_name=None, sub_ports=None, fail_ok=Fa
     return 0, msg
 
 
-def get_networks(name=None, cidr=None, strict=True, regex=False, auth_info=None, con_ssh=None):
+def get_networks(rtn_val='ID', name=None, subnets=None, strict=False, regex=False, auth_info=None, con_ssh=None):
     """
     Get networks ids based on given criteria.
 
     Args:
+        rtn_val (str|tuple|list)
         name (str): name of the network
-        cidr (str): cidr of the network
+        subnets (str|list\tuple)
         strict (bool): whether to perform strict search on given name and cidr
         regex (bool): whether to use regext to search
         auth_info (dict):
@@ -3920,13 +3997,31 @@ def get_networks(name=None, cidr=None, strict=True, regex=False, auth_info=None,
     Returns (list): a list of network ids
 
     """
-    table_ = table_parser.table(cli.neutron('net-list', ssh_client=con_ssh, auth_info=auth_info))
-    if name is not None:
-        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
-    if cidr is not None:
-        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, cidr=cidr)
+    table_ = table_parser.table(cli.openstack('network list', ssh_client=con_ssh, auth_info=auth_info))
 
-    return table_parser.get_column(table_, 'id')
+    filters = {}
+    if name is not None:
+        filters['name'] = name
+    if subnets:
+        filters['subnets'] = subnets
+    if filters:
+        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, **filters)
+
+    convert = False
+    if isinstance(rtn_val, str):
+        rtn_val = (rtn_val, )
+        convert = True
+
+    res = []
+    for header in rtn_val:
+        vals = table_parser.get_column(table_, header)
+        if header.lower() == 'subnets':
+            vals = [val.split(sep=', ') for val in vals]
+        res.append(vals)
+    if convert:
+        res = res[0]
+
+    return res
 
 
 def delete_network(network_id, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
@@ -4140,9 +4235,9 @@ def schedule_providernet_connectivity_test(seg_id=None, host=None, pnet=None, wa
             else:
                 if fail_ok:
                     return 1, "Failed to find results with scheduled UUID"
-                raise exceptions.NeutronError("Providernet-connectivity-test with audit uuid {} is not listed within {} "
-                                              "seconds after running 'neutron providernet-connectivity-test-schedule'".
-                                              format(audit_id, timeout))
+                raise exceptions.NeutronError(
+                    "Providernet-connectivity-test with audit uuid {} is not listed within {} seconds after running "
+                    "'neutron providernet-connectivity-test-schedule'".format(audit_id, timeout))
 
     else:
         return -1, audit_id
@@ -4275,7 +4370,7 @@ def get_ping_failure_duration(server, ssh_client, end_event, timeout=600, ipv6=F
 
 
 def _parse_ping_timestamp(output):
-    timestamp = math.ceil(float(re.findall('\[(.*)\]', output)[0]) * 1000)
+    timestamp = math.ceil(float(re.findall(r'\[(.*)\]', output)[0]) * 1000)
     return timestamp
 
 
@@ -4906,8 +5001,6 @@ def update_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None, 
     for key, val in verify.items():
         actual_val = table_parser.get_value_two_col_table(table_, key)
         actual_val = eval(actual_val)
-
-
         # if isinstance(actual_val, str):
         #     actual_val = eval(actual_val)
 
@@ -5234,14 +5327,3 @@ def vconsole(ssh_client):
     LOG.info("Exiting vconsole")
     ssh_client.set_prompt(original_prompt)
     ssh_client.exec_cmd("quit")
-
-
-def reset_telnet_port(telnet_conn):
-    telnet_conn.send_control("\\")
-    index = telnet_conn.expect(["anonymous:.+:PortCommand> ", "Login:"], timeout=5)
-    if index == 1:
-        telnet_conn.write(b"\r\n")
-
-    telnet_conn.send("resetport")
-    telnet_conn.login()
-

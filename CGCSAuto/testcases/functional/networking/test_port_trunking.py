@@ -57,7 +57,7 @@ def test_port_trunking():
         - Delete vms, ports, subnets, and networks created
 
     """
-    vif_model = 'avp' if system_helper.is_avs() else 'virtio'
+    vif_model = 'avp' if system_helper.is_avs() else None
     network_names = ['network11', 'network12', 'network13']
     net_ids = []
     sub_nets = ["30.0.0.0/24", "30.0.1.0/24", "30.0.2.0/24"]
@@ -87,20 +87,17 @@ def test_port_trunking():
 
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
-    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port, wrs_vif=vif_model)[1]
-    ResourceCleanup.add('port', t1_parent_port_id)
-
-    t1_parent_port_mac = network_helper.get_ports(rtn_val='mac_address', port_name=trunk1_parent_port)[0]
+    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port, wrs_vif=vif_model,
+                                                   cleanup='function')[1]
+    t1_parent_port_mac = network_helper.get_ports(rtn_val='mac address', port_name=trunk1_parent_port)[0]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
     t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1, mac_addr=t1_parent_port_mac,
-                                                 wrs_vif=vif_model)[1]
-    ResourceCleanup.add('port', t1_sub_port1_id)
+                                                 wrs_vif=vif_model, cleanup='function')[1]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
     t1_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk1_subport_2, mac_addr=t1_parent_port_mac,
-                                                 wrs_vif=vif_model)[1]
-    ResourceCleanup.add('port', t1_sub_port2_id)
+                                                 wrs_vif=vif_model, cleanup='function')[1]
 
     t1_sub_ports = [{'port': t1_sub_port1_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1},
                     {'port': t1_sub_port2_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_2}]
@@ -111,25 +108,25 @@ def test_port_trunking():
 
     LOG.tc_step("Boot a VM with mgmt net and trunk port")
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}, {'port-id': t1_parent_port_id}]
+    nics = [{'net-id': mgmt_net_id}, {'port-id': t1_parent_port_id}]
 
     LOG.tc_step("Boot a vm with created ports")
     vm_id = vm_helper.boot_vm(name='vm-with-trunk1-port', nics=nics, cleanup='function')[1]
-    LOG.tc_step("Setup Vlan interfaces inside guest")
+    LOG.tc_step("Setup vlan interfaces inside guest")
     _bring_up_vlan_interface(vm_id, 'eth1', [segment_1])
 
     # Create second trunk port  with out the subports and vm
     LOG.tc_step("Create Parent port for trunk 2")
-    t2_parent_port_id = network_helper.create_port(net_ids[0], trunk2_parent_port, wrs_vif=vif_model)[1]
-    ResourceCleanup.add('port', t2_parent_port_id)
-    t2_parent_port_mac = network_helper.get_ports(rtn_val='mac_address', port_name=trunk2_parent_port)[0]
+    t2_parent_port_id = network_helper.create_port(net_ids[0], trunk2_parent_port, wrs_vif=vif_model,
+                                                   cleanup='function')[1]
+    t2_parent_port_mac = network_helper.get_ports(rtn_val='mac address', port_name=trunk2_parent_port)[0]
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
     t2_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk2_subport_1, mac_addr=t2_parent_port_mac,
-                                                 wrs_vif=vif_model)[1]
+                                                 wrs_vif=vif_model, cleanup='function')[1]
     ResourceCleanup.add('port', t2_sub_port1_id)
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
     t2_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk2_subport_2, mac_addr=t2_parent_port_mac,
-                                                 wrs_vif=vif_model)[1]
+                                                 wrs_vif=vif_model, cleanup='function')[1]
     ResourceCleanup.add('port', t2_sub_port2_id)
 
     t2_sub_ports = [{'port': t2_sub_port1_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1},
@@ -141,7 +138,7 @@ def test_port_trunking():
 
     LOG.tc_step("Boot a VM with mgmt net and trunk port")
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    nics_2 = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}, {'port-id': t2_parent_port_id}]
+    nics_2 = [{'net-id': mgmt_net_id}, {'port-id': t2_parent_port_id}]
 
     LOG.tc_step("Boot a vm with created ports")
     vm2_id = vm_helper.boot_vm(name='vm-with-trunk2-port', nics=nics_2, cleanup='function')[1]
@@ -149,7 +146,7 @@ def test_port_trunking():
     LOG.tc_step("Add the sub ports to the second truck")
     network_helper.add_trunk_subports(trunk2_id, sub_ports=t2_sub_ports)
 
-    LOG.tc_step("Setup Vlan interfaces inside guest")
+    LOG.tc_step("Setup VLAN interfaces inside guest")
     _bring_up_vlan_interface(vm2_id, 'eth1', [segment_1])
 
     # ping b/w 2 vms using the vlan interfaces
@@ -164,7 +161,7 @@ def test_port_trunking():
             network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
     # unset the subport on trunk_1 and try the ping (it will fail)
-    LOG.tc_step(" Removing a subport from trunk and ping on vlan interface inside guest")
+    LOG.tc_step("Removing a subport from trunk and ping on vlan interface inside guest")
     ret_code_10 = network_helper.remove_trunk_subports(trunk1_id, sub_ports=[t1_sub_port1_id])[0]
     assert ret_code_10 == 0, "Subports not removed as expected."
 
@@ -197,7 +194,7 @@ def test_port_trunking():
         vm_helper.ping_vms_from_vm(to_vms=vm_id, from_vm=vm2_id, net_types=['mgmt'])
 
         if vm_actions[0] == 'cold_migrate':
-            LOG.tc_step("Setup Vlan interfaces inside guest")
+            LOG.tc_step("Setup VLAN interfaces inside guest")
             _bring_up_vlan_interface(vm2_id, 'eth1', [segment_1])
 
         with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
@@ -212,7 +209,7 @@ def test_port_trunking():
     vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm2_id, ping_vms=True)
 
     for vm_id_on_target_host in vm_on_target_host:
-        LOG.tc_step("Setup Vlan interfaces inside guest")
+        LOG.tc_step("Setup VLAN interfaces inside guest")
         _bring_up_vlan_interface(vm_id_on_target_host, 'eth1', [segment_1])
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
@@ -271,22 +268,19 @@ def test_port_trunking_basic():
 
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
-    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port)[1]
-    ResourceCleanup.add('port', t1_parent_port_id)
-
-    t1_parent_port_mac = network_helper.get_ports(rtn_val='mac_address', port_name=trunk1_parent_port)[0]
+    t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port, cleanup='function')[1]
+    t1_parent_port_mac = network_helper.get_ports(rtn_val='mac address', port_name=trunk1_parent_port)[0]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1, mac_addr=t1_parent_port_mac)[1]
-    ResourceCleanup.add('port', t1_sub_port1_id)
+    t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1, mac_addr=t1_parent_port_mac,
+                                                 cleanup='function')[1]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk1_subport_2, mac_addr=t1_parent_port_mac)[1]
-    ResourceCleanup.add('port', t1_sub_port2_id)
+    t1_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk1_subport_2, mac_addr=t1_parent_port_mac,
+                                                 cleanup='function')[1]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
-    t1_sub_port3_id = network_helper.create_port(net_ids[2], name=trunk1_subport_3)[1]
-    ResourceCleanup.add('port', t1_sub_port3_id)
+    t1_sub_port3_id = network_helper.create_port(net_ids[2], name=trunk1_subport_3, cleanup='function')[1]
 
     t1_sub_ports = [{'port': t1_sub_port1_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1},
                     {'port': t1_sub_port2_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_2}]
