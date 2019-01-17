@@ -3,13 +3,14 @@ from contextlib import contextmanager
 
 from pytest import skip
 
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.clients.ssh import ContainerClient, SSHClient
 from consts.compliance import VM_ROUTE_VIA, Dovetail, USER_PASSWORD
 from consts.auth import Tenant, ComplianceCreds, CumulusCreds
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar
-from keywords import network_helper, vm_helper, nova_helper, keystone_helper, cinder_helper
+from keywords import network_helper, nova_helper, keystone_helper, cinder_helper
 
 
 def add_route_for_vm_access(compliance_client):
@@ -122,6 +123,13 @@ def get_expt_mgmt_net():
 
 
 def update_dovetail_mgmt_interface():
+    """
+    Update dovetail vm mgmt interface on cumulus system.
+    Since cumulus system is on different version. This helper function requires use cli matches the cumulus tis.
+
+    Returns:
+
+    """
     expt_mgmt_net = get_expt_mgmt_net()
     if not expt_mgmt_net:
         skip('{} mgmt net is not found in Cumulus tis-lab project'.format(ProjVar.get_var('LAB')['name']))
@@ -133,39 +141,50 @@ def update_dovetail_mgmt_interface():
 
         dovetail_networks = nova_helper.get_vms(vms=vm_id, return_val='Networks', con_ssh=cumulus_con,
                                                 auth_info=cumulus_auth)[0]
-        if expt_mgmt_net in dovetail_networks:
-            LOG.info("{} interface already attached to Dovetail vm".format(expt_mgmt_net))
-            return
 
-        prev_mgmt_net = None
         actual_nets = dovetail_networks.split(sep=';')
+        prev_mgmt_nets = []
         for net in actual_nets:
             net_name, net_ip = net.split('=')
             if '-MGMT-net' in net_name:
-                prev_mgmt_net = net_name
+                prev_mgmt_nets.append(net_name)
+
+        attach = True
+        if expt_mgmt_net in prev_mgmt_nets:
+            attach = False
+            prev_mgmt_nets.remove(expt_mgmt_net)
+            LOG.info("{} interface already attached to Dovetail vm".format(expt_mgmt_net))
+
+        if prev_mgmt_nets:
+            LOG.info("Detach interface(s) {} from dovetail vm".format(prev_mgmt_nets))
+            vm_ports_table = table_parser.table(cli.nova('interface-list', vm_id, ssh_client=cumulus_con,
+                                                         auth_info=cumulus_auth))
+            for prev_mgmt_net in prev_mgmt_nets:
+                prev_net_id = network_helper.get_net_id_from_name(net_name=prev_mgmt_net, con_ssh=cumulus_con,
+                                                                  auth_info=cumulus_auth)
+
+                prev_port = table_parser.get_values(vm_ports_table, 'Port ID', **{'Net ID': prev_net_id})[0]
+                detach_arg = '{} {}'.format(vm_id, prev_port)
+                cli.nova('interface-detach', detach_arg, ssh_client=cumulus_con, auth_info=cumulus_auth)
 
         mgmt_net_id = network_helper.get_net_id_from_name(net_name=expt_mgmt_net, con_ssh=cumulus_con,
                                                           auth_info=cumulus_auth)
-        LOG.info("Attach {} from dovetail vm".format(expt_mgmt_net))
-        vm_helper.attach_interface(vm_id=vm_id, net_id=mgmt_net_id, auth_info=cumulus_auth,
-                                   con_ssh=cumulus_con)
+        if attach:
+            LOG.info("Attach {} to dovetail vm".format(expt_mgmt_net))
+            args = '--net-id {} {}'.format(mgmt_net_id, vm_id)
+            cli.nova('interface-attach', args, ssh_client=cumulus_con, auth_info=cumulus_auth)
 
-        if prev_mgmt_net:
-            prev_net_id = network_helper.get_net_id_from_name(net_name=prev_mgmt_net, con_ssh=cumulus_con,
-                                                              auth_info=cumulus_auth)
-            vm_port = network_helper.get_ports(server=vm_id, con_ssh=cumulus_con, auth_info=cumulus_auth,
-                                               network=prev_net_id)[0]
-            LOG.info("Detach {} for lab under test".format(expt_mgmt_net))
-            vm_helper.detach_interface(vm_id=vm_id, port_id=vm_port, con_ssh=cumulus_con,
-                                       auth_info=cumulus_auth)
-
-        mgmt_mac = network_helper.get_ports(rtn_val='MAC Address', server=vm_id, con_ssh=cumulus_con,
-                                            auth_info=cumulus_auth, network=mgmt_net_id)[0]
+        vm_ports_table = table_parser.table(cli.nova('interface-list', vm_id, ssh_client=cumulus_con,
+                                                     auth_info=cumulus_auth))
+        mgmt_mac = table_parser.get_values(vm_ports_table, 'MAC Addr', **{'Net ID': mgmt_net_id})[0]
 
     ComplianceCreds.set_host(Dovetail.TEST_NODE)
     ComplianceCreds.set_user(Dovetail.USERNAME)
     ComplianceCreds.set_password(Dovetail.PASSWORD)
     with ssh_to_compliance_server() as dovetail_ssh:
+        if not attach and network_helper.ping_server('192.168.204.3', ssh_client=dovetail_ssh, fail_ok=True)[0] == 0:
+            return
+        LOG.info("Bring up dovetail mgmt interface and assign ip")
         eth_name = network_helper.get_eth_for_mac(dovetail_ssh, mac_addr=mgmt_mac)
         dovetail_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
         dovetail_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name), expect_timeout=180)

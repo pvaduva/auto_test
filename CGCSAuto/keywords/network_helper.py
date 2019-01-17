@@ -2584,7 +2584,7 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60,
         retry (int):
         net_type (str): 'data', 'mgmt', or 'internal', only used for vshell=True and interface=None
 
-    Returns (int): packet loss percentile, such as 100, 0, 25
+    Returns (tuple): (<packet_loss_rate (0-100)> (int), <transmitted_packet_count>(int))
 
     """
     LOG.info('Ping {} from host {}'.format(server, ssh_client.host))
