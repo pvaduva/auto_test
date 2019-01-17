@@ -729,17 +729,20 @@ def pytest_addoption(parser):
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
+    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
+                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
 
+    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
+                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
+
+    parser.addoption('--reinstall-storage', '--reinstall-storage',  dest='reinstall_storage',
+                     action='store_true', default=False, help="Whether to reinstall storage nodes or not. "
+                                                              "By default, do not reinstall them.")
     parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
                      action='store_true', help="Use existing feed on tuxlab (tuxlab1/2)")
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
-    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
-                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
-    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
-                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
-
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "
