@@ -2587,6 +2587,7 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60,
     Returns (int): packet loss percentile, such as 100, 0, 25
 
     """
+    LOG.info('Ping {} from host {}'.format(server, ssh_client.host))
     output = packet_loss_rate = None
     for i in range(max(retry + 1, 0)):
         if not vshell:
@@ -2622,10 +2623,9 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60,
         time.sleep(3)
     else:
         msg = "Ping from {} to {} failed.".format(ssh_client.host, server)
+        LOG.warning(msg)
         if not fail_ok:
             raise exceptions.VMNetworkError(msg)
-        else:
-            LOG.warning(msg)
 
     untransmitted_packets = re.findall("(\d+) packets transmitted,", output)
     if untransmitted_packets:
