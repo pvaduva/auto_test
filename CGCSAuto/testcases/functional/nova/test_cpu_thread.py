@@ -733,7 +733,7 @@ class TestHTEnabled:
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is booted on vswitch numa nodes, when vswitch numa affinity set to strict")
-            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         vm_host = nova_helper.get_vm_host(vm_id)
         if cpu_thr_pol == 'require':
@@ -770,7 +770,7 @@ class TestHTEnabled:
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
-            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         LOG.tc_step("Check VM still pingable from NatBox after Nova action(s)")
         vm_helper.ping_vms_from_natbox(vm_id)
@@ -788,7 +788,7 @@ class TestHTEnabled:
 
             if vs_numa_affinity == 'strict':
                 LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
-                check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+                check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
             LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
             vm_helper.ping_vms_from_natbox(vm_id)
@@ -864,7 +864,7 @@ class TestHTEnabled:
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is booted on vswitch numa node, when vswitch numa affinity set to strict")
-            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         prev_cpus = pre_hosts_cpus[vm_host]
 
@@ -900,7 +900,7 @@ class TestHTEnabled:
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
-            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
     @fixture(scope='class')
     def _add_hosts_to_cgcsauto(self, request, ht_hosts_, add_cgcsauto_zone):
@@ -1019,7 +1019,7 @@ class TestHTEnabled:
 
         if vs_numa_affinity == 'strict':
             LOG.tc_step("Check VM is booted on vswitch numa nodes, when vswitch numa affinity set to strict")
-            check_helper.check_vm_numa_nodes(vm_id, on_vswitch_nodes=True)
+            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         prev_cpus = pre_hosts_cpus[vm_host]
 

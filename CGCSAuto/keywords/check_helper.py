@@ -521,10 +521,12 @@ def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=N
     assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)
 
 
-def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
+def check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True):
     vm_host, vm_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
     vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(vm_host, func='vSwitch')
     vswitch_procs = [proc for proc in vswitch_cores_dict if vswitch_cores_dict[proc]]
+    if not vswitch_procs:
+        return
 
     if on_vswitch_nodes:
         assert set(vm_numa_nodes) <= set(vswitch_procs), "VM {} is on numa nodes {} instead of vswitch numa nodes {}" \
