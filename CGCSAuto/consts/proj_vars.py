@@ -305,7 +305,8 @@ class PatchingVars:
         return cls.__var_dict[var_name]
 
     @classmethod
-    def set_patching_var(cls, **kwargs):
+    def set_patching_var(cls, *, patch_dir=None, **kwargs):
+        cls.__var_dict.update(patch_dir=patch_dir)
         kwargs = {k.upper(): v for k, v in kwargs.items()}
         cls.__var_dict.update(**kwargs)
 
@@ -315,24 +316,20 @@ class RestoreVars:
     __var_dict = {}
 
     @classmethod
-    def set_restore_vars(cls, backup_src=None,
-                         build_server=None,
-                         backup_src_path=None,
-                         backup_build_id=None,
-                         backup_builds_dir=None,
-                         cinder_backup=False):
-
+    def set_restore_vars(cls, *, backup_src='local', **kwargs):
+        kwargs = kwargs if kwargs else {}
         cls.__var_dict = {
             'BACKUP_SRC': backup_src,
-            'BACKUP_SRC_PATH': backup_src_path,
-            'BACKUP_BUILD_ID': backup_build_id if backup_build_id else None,
-            'BACKUP_BUILDS_DIR': backup_builds_dir,
-            'BACKUP_SRC_SERVER': None,
-            'SKIP_SETUP_FEED': False,
-            'SKIP_REINSTALL': False,
-            'LOW_LATENCY': False,
-            'BUILD_SERVER': build_server,
-            'CINDER_BACKUP': cinder_backup,
+            'BACKUP_SRC_PATH': kwargs.pop('backup_src_path', ''),
+            'BACKUP_BUILD_ID': kwargs.pop('backup_build_id', None),
+            'BACKUP_BUILDS_DIR': kwargs.pop('backup_builds_dir', None),
+            'BACKUP_SRC_SERVER': kwargs.pop('backup_src_server', None),
+            'SKIP_SETUP_FEED': kwargs.pop('skip_setup_feed', False),
+            'SKIP_REINSTALL': kwargs.pop('skip_reinstall', False),
+            'LOW_LATENCY': kwargs.pop('low_latency', False),
+            'BUILD_SERVER': kwargs.pop('build_server', ''),
+            'CINDER_BACKUP': kwargs.pop('cinder_backup', True),
+            'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
         }
 
     @classmethod
@@ -360,16 +357,16 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None,
-                        cinder_backup=False):
-
+    def set_backup_vars(cls, backup_dest=None, *, **kwargs):
+        kwargs = kwargs if kwargs else {}
         cls.__var_dict = {
             'BACKUP_DEST': backup_dest,
-            'BACKUP_DEST_PATH': backup_dest_path,
-            'DELETE_BUCKUPS': delete_backups,
-            'DEST_LABS': dest_labs.split(',') if dest_labs else None,
-            'BACKUP_DEST_SERVER': None,
-            'CINDER_BACKUP': cinder_backup,
+            'BACKUP_DEST_PATH': kwargs.pop('backup_dest_path', ''),
+            'DELETE_BUCKUPS': kwargs.pop('delete_backups', True),
+            'DEST_LABS': kwargs.pop('dest_labs', '').split() if kwargs.get('dest_labs', '') else '',
+            'BACKUP_DEST_SERVER': kwargs.pop('backup_dest_server', None),
+            'CINDER_BACKUP': kwargs.pop('cinder_backup', True),
+            'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
         }
 
     @classmethod
