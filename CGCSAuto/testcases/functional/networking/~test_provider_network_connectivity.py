@@ -22,7 +22,7 @@ def get_vlan_providernet():
 
     LOG.fixture_step("Get data interface with at least two provider networks on {}".format(hypervisor))
     table_ = system_helper.get_host_interfaces_table(hypervisor)
-    kwargs = {'type': 'ethernet', 'class': 'data', 'provider networks': ','}
+    kwargs = {'type': 'ethernet', 'class': 'data', 'data networks': ','}
     interface_ids = table_parser.get_values(table_, 'uuid', strict=False, **kwargs)
 
     if len(interface_ids) < 1:
@@ -31,7 +31,7 @@ def get_vlan_providernet():
 
     LOG.fixture_step("Get provider network with the greatest max segmentation range")
     kwargs = {'uuid': '{}'.format(target_interface_id)}
-    providernets = table_parser.get_values(table_, 'provider networks', **kwargs)[0].split(",")
+    providernets = table_parser.get_values(table_, 'data networks', **kwargs)[0].split(",")
 
     cmd = cli.neutron("providernet-range-list --nowrap", auth_info=Tenant.get('admin'))
     table_ = table_parser.table(cmd)

@@ -4097,7 +4097,6 @@ def add_ifcfg_scripts(vm_id, mac_addrs, static_ips=None, ipv6='no', reboot=True,
 
     Args:
         vm_id:
-        vm_eths (str|list):
         mac_addrs (list of str):
         static_ips (None|str|list):
         ipv6:
