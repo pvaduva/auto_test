@@ -232,8 +232,9 @@ class TestDefaultGuest:
         target_host = acceptable_hosts[0]
         return target_host
 
+    # numa pinning is deprecated.
     # TC6500
-    def test_evacuate_numa_setting(self, check_hosts):
+    def _test_evacuate_numa_setting(self, check_hosts):
         """
             Test evacuate vms with various vm numa node settings
 

@@ -563,6 +563,7 @@ class TestHTEnabled:
         assert "No valid host was found" in fault_msg
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4) in fault_msg
 
+    # Deprecated. cpu scaling removed.
     @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
         mark.p2((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
         mark.p2((6, 'isolate', 3, 0)),
@@ -571,7 +572,7 @@ class TestHTEnabled:
         mark.p2((5, 'isolate', 2, None)),
         mark.p2((5, 'prefer', 1, None)),
     ])
-    def test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_, check_numa_num):
+    def _test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_, check_numa_num):
         if numa_0 == 1 and check_numa_num < 2:
             skip('Require at least 2 processors on compute host for numa_0=1')
 
@@ -673,6 +674,7 @@ class TestHTEnabled:
         if min_vcpus:
             GuestLogs.remove(vm_id)
 
+    # Deprecated - numa pinning. Rest is covered by test_cpu_thread_vm_topology_nova_actions
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
         mark.p1((1, 'dedicated', 'isolate', None, None, None, 'volume', 'live_migrate', None)),
         mark.p1((2, 'dedicated', 'isolate', 1, None, None, 'image', 'live_migrate', None)),
@@ -690,8 +692,8 @@ class TestHTEnabled:
         # mark.skipif(True, reason="Evacuation JIRA CGTS-4917")
         mark.domain_sanity((3, 'dedicated', 'isolate', None, None, 'strict', 'volume', ['cold_migrate', 'live_migrate'], 'evacuate')),
     ], ids=id_gen)
-    def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, min_vcpus, numa_0,
-                                                 vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts_):
+    def _test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, min_vcpus, numa_0,
+                                                  vs_numa_affinity, boot_source, nova_actions, host_action, ht_hosts_):
         ht_hosts, non_ht_hosts = ht_hosts_
 
         if 'mig' in nova_actions or 'evacuate' == host_action:
@@ -793,25 +795,25 @@ class TestHTEnabled:
             LOG.tc_step("Check VMs are pingable from NatBox after evacuation")
             vm_helper.ping_vms_from_natbox(vm_id)
 
-    @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'cpu_thr_in_flv'), [
-        mark.priorities('domain_sanity', 'nightly')((2, 'dedicated', 'isolate', None, 'volume', 'live_migrate', False)),
-        mark.domain_sanity((4, 'dedicated', 'require', 'strict', 'image', 'live_migrate', False)),
-        mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', 'live_migrate', False)),
-        mark.p1((4, 'dedicated', 'prefer', 'strict', 'image', 'live_migrate', False)),
-        mark.p1((1, 'dedicated', 'isolate', 'strict', 'volume', 'live_migrate', True)),
-        mark.p1((3, 'dedicated', 'prefer', None, 'volume', 'live_migrate', True)),
-        mark.p1((3, 'dedicated', 'require', None, 'volume', 'live_migrate', True)),
-        mark.domain_sanity((3, 'dedicated', 'isolate', None, 'volume', 'cold_migrate', False)),
-        mark.domain_sanity((2, 'dedicated', 'require', None, 'volume', 'cold_migrate', False)),
-        mark.p1((2, 'dedicated', 'require', None, 'volume', 'cold_mig_revert', True)),
-        mark.p1((5, 'dedicated', 'prefer', None, 'volume', 'cold_mig_revert', False)),
-        mark.p1((4, 'dedicated', 'isolate', None, 'image', ['suspend', 'resume', 'rebuild'], False)),
-        mark.p1((6, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], True)),
-        mark.p1((5, 'dedicated', 'prefer', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False)),
-        mark.domain_sanity((3, 'dedicated', 'require', 'strict', 'volume', ['suspend', 'resume', 'rebuild'], False)),
+    @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol', 'flv_or_img', 'vs_numa_affinity', 'boot_source', 'nova_actions'), [
+        mark.priorities('domain_sanity', 'nightly')((2, 'dedicated', 'isolate', 'image', None, 'volume', 'live_migrate')),
+        mark.domain_sanity((4, 'dedicated', 'require', 'image', 'strict', 'image', 'live_migrate')),
+        mark.domain_sanity((3, 'dedicated', 'require', 'image', 'strict', 'volume', 'live_migrate')),
+        mark.p1((4, 'dedicated', 'prefer', 'image', 'strict', 'image', 'live_migrate')),
+        mark.p1((1, 'dedicated', 'isolate', 'flavor', 'strict', 'volume', 'live_migrate')),
+        mark.p1((3, 'dedicated', 'prefer', 'flavor', None, 'volume', 'live_migrate')),
+        mark.p1((3, 'dedicated', 'require', 'flavor', None, 'volume', 'live_migrate')),
+        mark.domain_sanity((3, 'dedicated', 'isolate', 'image', None, 'volume', 'cold_migrate')),
+        mark.domain_sanity((2, 'dedicated', 'require', 'image', None, 'volume', 'cold_migrate')),
+        mark.p1((2, 'dedicated', 'require', 'flavor', None, 'volume', 'cold_mig_revert')),
+        mark.p1((5, 'dedicated', 'prefer', 'image', None, 'volume', 'cold_mig_revert')),
+        mark.p1((4, 'dedicated', 'isolate', 'image', None, 'image', ['suspend', 'resume', 'rebuild'])),
+        mark.p1((6, 'dedicated', 'require', 'flavor', 'strict', 'volume', ['suspend', 'resume', 'rebuild'])),
+        mark.p1((5, 'dedicated', 'prefer', 'image', 'strict', 'volume', ['suspend', 'resume', 'rebuild'])),
+        mark.domain_sanity((3, 'dedicated', 'require', 'image', 'strict', 'volume', ['suspend', 'resume', 'rebuild'])),
     ], ids=id_gen)
-    def test_cpu_thread_image_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, vs_numa_affinity,
-                                                       boot_source, nova_actions, cpu_thr_in_flv, ht_hosts_):
+    def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, flv_or_img, vs_numa_affinity,
+                                                       boot_source, nova_actions, ht_hosts_):
         ht_hosts, non_ht_hosts = ht_hosts_
         if 'mig' in nova_actions:
             if len(ht_hosts) + len(non_ht_hosts) < 2:
@@ -829,7 +831,7 @@ class TestHTEnabled:
         if vs_numa_affinity:
             specs[FlavorSpec.VSWITCH_NUMA_AFFINITY] = vs_numa_affinity
 
-        if cpu_thr_in_flv:
+        if flv_or_img == 'flavor':
             specs[FlavorSpec.CPU_POLICY] = cpu_pol
             specs[FlavorSpec.CPU_THREAD_POLICY] = cpu_thr_pol
 
@@ -837,23 +839,18 @@ class TestHTEnabled:
             LOG.tc_step("Set following extra specs: {}".format(specs))
             nova_helper.set_flavor_extra_specs(flavor_id, **specs)
 
-        image_meta = {ImageMetadata.CPU_POLICY: cpu_pol, ImageMetadata.CPU_THREAD_POLICY: cpu_thr_pol}
-        LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-        image_id = glance_helper.create_image(name=name_str, cleanup='function', **image_meta)[1]
-
-        if boot_source == 'volume':
-            LOG.tc_step("Create a volume from above image")
-            source_id = cinder_helper.create_volume(name=name_str, image_id=image_id)[1]
-            ResourceCleanup.add('volume', source_id)
-        else:
-            source_id = image_id
+        image_id = None
+        if flv_or_img == 'image':
+            image_meta = {ImageMetadata.CPU_POLICY: cpu_pol, ImageMetadata.CPU_THREAD_POLICY: cpu_thr_pol}
+            LOG.tc_step("Create image with following metadata: {}".format(image_meta))
+            image_id = glance_helper.create_image(name=name_str, cleanup='function', **image_meta)[1]
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
         hosts_to_check = ht_hosts if cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
         pre_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_to_check, rtn_val='used_now')
 
         LOG.tc_step("Boot a vm from {} with above flavor".format(boot_source))
-        vm_id = vm_helper.boot_vm(name=name_str, flavor=flavor_id, source=boot_source, source_id=source_id,
+        vm_id = vm_helper.boot_vm(name=name_str, flavor=flavor_id, source=boot_source, image_id=image_id,
                                   cleanup='function')[1]
 
         vm_host = nova_helper.get_vm_host(vm_id)
@@ -867,7 +864,6 @@ class TestHTEnabled:
             check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         prev_cpus = pre_hosts_cpus[vm_host]
-
         prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus,
                                                           cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host)[1]
 

@@ -440,6 +440,7 @@ class TestNovaSchedulerAVS:
 
         return final_hosts_configured, storage_backing, ht_enabled
 
+    # Deprecated - numa pinning. vswitch affinity is covered by test_vswitch_numa_affinity_sched_vms_two_hosts_avail
     @mark.parametrize(('vswitch_numa_affinity', 'numa_0', 'numa_nodes', 'expt_err'), [
         ('strict', 0, None, "NumaErr.NUMA_VSWITCH_MISMATCH"),  # This error message has inconsistent formatting
         ('prefer', 0, None, None),
@@ -447,7 +448,7 @@ class TestNovaSchedulerAVS:
         ('prefer', None, None, None),
         ('strict', None, 2, 'NumaErr.TWO_NUMA_ONE_VSWITCH')  # This error message is confusing
     ])
-    def test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0,
+    def _test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0,
                                            numa_nodes, expt_err):
         """
 
@@ -693,7 +694,8 @@ class TestNovaSchedulerAVS:
 
         return initial_host, other_host, flavor_vcpu_num, storage_backing, vm_count
 
-    def test_vswitch_numa_affinity_sched_vms_one_host_avail(self, cal_vm_cores_one_host):
+    # Deprecated. virtual numa pinning + vswitch affinity restricted the vm to be on one host. numa pinning is removed.
+    def _test_vswitch_numa_affinity_sched_vms_one_host_avail(self, cal_vm_cores_one_host):
         """
         Test vswitch numa affinity strict when numa_0.0 = 1 which limits the vm host to only 1 host
 
@@ -876,7 +878,8 @@ class TestNovaSchedulerAVS:
                 assert vswitch_proc != post_numa_nodes[0], "VM did not move to non-vSwitch numa node"
 
 
-class TestSpanNumaNodes:
+# Deprecated. numa pinning is removed. VM cannot be on two numa nodes.
+class _TestSpanNumaNodes:
     @fixture(scope='class')
     def span_numa_hosts(self, skip_for_ovs, get_hosts, config_host_class):
         host0, host1, storage_backing, ht_enabled = get_hosts
@@ -984,7 +987,7 @@ class TestSpanNumaNodes:
         # (2, 'prefer', None, None, None, None, None, None),
         # (3, 'prefer', 0, None, None, 1, None, None, 'NumaErr.UNDEVISIBLE')
     ])
-    def test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
+    def _test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
                                                 numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
         """
         Test nova actions on 2 numa nodes vm with vswitch numa affinity set

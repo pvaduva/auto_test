@@ -650,7 +650,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None, 
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
-    volume_id = snapshot_id = new_vol = None
+    volume_id = snapshot_id = new_vol = image = None
     if source != 'block_device':
         if source is None:
             if min_count is None and max_count is None:
@@ -674,11 +674,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None, 
                                                                       rtn_exist=False, image_id=image_id)[1]
 
         elif source.lower() == 'image':
-            if source_id:
-                image_id = source_id
-            if not image_id:
+            image = source_id if source_id else image_id
+            if not image:
                 img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
-                image_id = glance_helper.get_image_id_from_name(img_name, strict=True, fail_ok=False)
+                image = glance_helper.get_image_id_from_name(img_name, strict=True, fail_ok=False)
 
         elif source.lower() == 'snapshot':
             if not snapshot_id:
@@ -700,7 +699,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None, 
 
     # create cmd
     optional_args_dict = {'--flavor': flavor,
-                          '--image': image_id,
+                          '--image': image,
                           '--boot-volume': volume_id,
                           '--snapshot': snapshot_id,
                           '--min-count': str(min_count) if min_count is not None else None,

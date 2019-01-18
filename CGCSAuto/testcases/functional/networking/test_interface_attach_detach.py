@@ -81,7 +81,7 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
                                              use_existing=False if cleanup else True)
 
     if glance_vif:
-        glance_helper.set_image(image_id, hw_vif_model=glance_vif)
+        glance_helper.set_image(image_id, hw_vif_model=glance_vif, new_name='{}_{}'.format(guest_os, glance_vif))
 
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]

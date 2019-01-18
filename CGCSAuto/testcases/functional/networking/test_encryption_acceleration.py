@@ -78,7 +78,7 @@ def _flavors(hosts_pci_device_info):
         ResourceCleanup.add('flavor', flavor_id, scope='module')
         if vf > 0:
             extra_spec = {FlavorSpec.PCI_PASSTHROUGH_ALIAS: '{}:{}'.format(pci_alias, vf),
-                          FlavorSpec.NUMA_NODES: '2',
+                          # FlavorSpec.NUMA_NODES: '2',     # feature deprecated. May need to update test case as well.
                           FlavorSpec.CPU_POLICY: 'dedicated'}
 
             nova_helper.set_flavor_extra_specs(flavor_id, **extra_spec)

@@ -39,7 +39,7 @@ def test_flavor_default_specs():
     mark.p3((FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'])),
     mark.p3((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
     mark.p3((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
-    mark.p3((FlavorSpec.NUMA_NODES, [1])),
+    # mark.p3((FlavorSpec.NUMA_NODES, [1])),    # feature deprecated
     mark.p2((FlavorSpec.AUTO_RECOVERY, ['true', 'false', 'TRUE', 'FALSE'])),
 ])
 def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):

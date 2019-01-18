@@ -57,9 +57,9 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
         FlavorSpec.CPU_REALTIME: cpu_rt,
         FlavorSpec.CPU_REALTIME_MASK: rt_mask,
         FlavorSpec.SHARED_VCPU: shared_vcpu,
-        FlavorSpec.NUMA_NODES: numa_nodes,
+        # FlavorSpec.NUMA_NODES: numa_nodes,
         FlavorSpec.CPU_THREAD_POLICY: cpu_thread,
-        FlavorSpec.MIN_VCPUS: min_vcpus
+        # FlavorSpec.MIN_VCPUS: min_vcpus
     }
 
     extra_specs = {}
@@ -229,14 +229,14 @@ def check_hosts():
 
 
 @mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread', 'min_vcpus'), [
-    (3, None, '^0', 'flavor', None, None, 'prefer', 1),
-    (4, 'yes', '^0', 'favor', None, 2, 'require', None),
+    (3, None, '^0', 'flavor', None, None, 'prefer', None),   # min_vcpu deprecated
+    (4, 'yes', '^0', 'favor', None, None, 'require', None),     # numa_nodes deprecated
     #   (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
-    (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', None),     # temp
-    (3, 'yes', '^0-1', 'image', None, None, None, 2),
-    (4, 'no', '^0-2', 'image', 0, 2, None, None),
+    (6, 'yes', '^2-3', 'flavor', None, None, 'isolate', None),     # tmp. numa nodes deprecated
+    (2, 'yes', '^1', 'flavor', 1, None, None, None),
+    (3, 'yes', '^0-1', 'image', None, None, None, None),    # Deprecated - vcpu
+    # (4, 'no', '^0-2', 'image', 0, 2, None, None),     # numa_nodes deprecated
     (3, 'yes', '^1-2', 'image', None, None, 'isolate', None),
-    (2, 'yes', '^1', 'flavor', 1, 1, None, None),
     (4, 'no', '^0-2', 'flavor', 2, None, None, None),
     (4, 'no', '^0-2', 'image', None, None, None, None),
 ])
@@ -250,7 +250,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
         rt_source (str): flavor or image
         rt_mask (str):
         shared_vcpu (int|None):min_vcpus
-        numa_nodes (int): number of numa_nodes to boot vm on
+        numa_nodes (int|None): number of numa_nodes to boot vm on
         cpu_thread
         min_vcpus
         check_hosts (tuple): test fixture

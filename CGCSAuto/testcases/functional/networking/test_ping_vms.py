@@ -19,7 +19,7 @@ def id_gen(val):
     return new_val
 
 
-def _compose_nics(vifs, net_ids, image_id):
+def _compose_nics(vifs, net_ids, image_id, guest_os):
     nics = []
     glance_vif = None
     if isinstance(vifs, str):
@@ -34,7 +34,7 @@ def _compose_nics(vifs, net_ids, image_id):
         nics.append(nic)
 
     if glance_vif:
-        glance_helper.set_image(image=image_id, hw_vif_model=glance_vif)
+        glance_helper.set_image(image=image_id, hw_vif_model=glance_vif, new_name='{}_{}'.format(guest_os, glance_vif))
 
     return nics
 
@@ -75,7 +75,7 @@ def test_ping_between_two_vms(guest_os, vm1_vifs, vm2_vifs, skip_for_ovs):
     vms = []
     for vifs_for_vm in (vm1_vifs, vm2_vifs):
         # compose vm nics
-        nics = _compose_nics(vifs_for_vm, net_ids=net_ids, image_id=image_id)
+        nics = _compose_nics(vifs_for_vm, net_ids=net_ids, image_id=image_id, guest_os=guest_os)
         net_types = ['mgmt', 'data', 'internal'][:len(nics)]
         LOG.tc_step("Create a volume from {} image".format(guest_os))
         vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, guest_image=guest_os,
