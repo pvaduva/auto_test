@@ -12,7 +12,7 @@ from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FI
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
 from consts.bios import TerminalKeys
@@ -1422,10 +1422,17 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
 
-
     connection = controller0_node.telnet_conn
-    cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
-                                                                             system_backup)
+
+    if RestoreVars.get_restore_var('REINSTALL_STORAGE'):
+        storage_opt = 'include-storage-reinstall'
+    else:
+        storage_opt = 'exclude-storage-reinstall'
+
+    cmd = 'echo "{}" | sudo -S config_controller --restore-system {} {}'.format(HostLinuxCreds.get_password(),
+        storage_opt,
+        system_backup)
+
     os.environ["TERM"] = "xterm"
 
     blob = list(outputs_restore_system_conf)

@@ -726,6 +726,7 @@ def pytest_addoption(parser):
     # Restore only
     parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
                      action='store', help="The build id of the backup")
+
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
@@ -740,9 +741,11 @@ def pytest_addoption(parser):
                                                               "By default, do not reinstall them.")
     parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
                      action='store_true', help="Use existing feed on tuxlab (tuxlab1/2)")
+
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
+
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',  help="Comma separated list of AIO lab short names where the cloned image iso "

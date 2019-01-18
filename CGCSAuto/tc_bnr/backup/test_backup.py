@@ -317,15 +317,16 @@ def test_backup(pre_system_backup):
     backup_info['copy_to_usb'] = copy_to_usb
     backup_info['backup_file_prefix'] = get_backup_file_name_prefix(backup_info)
     backup_info['cinder_backup'] = BackupVars.get_backup_var('cinder_backup')
+    reinstall_storage = BackupVars.get_backup_var('reinstall_storage')
 
-    if not backup_info['cinder_backup']:
+    if reinstall_storage:
+        if is_ceph:
+            backup_cinder_volumes(backup_info)
+
         backup_sysconfig_images(backup_info)
-
-        if is_ceph:
-            backup_cinder_volumes(backup_info)
     else:
-        if is_ceph:
-            backup_cinder_volumes(backup_info)
+        # if is_ceph:
+        #     backup_cinder_volumes(backup_info)
 
         backup_sysconfig_images(backup_info)
 

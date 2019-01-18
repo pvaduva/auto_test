@@ -34,7 +34,7 @@ class ProjVar:
                   'IS_DC': False,
                   'PRIMARY_SUBCLOUD': None,
                   'BUILD_INFO': None,
-                  'TEMP_DIR': '',  
+                  'TEMP_DIR': '',
                   }
 
     @classmethod

@@ -21,6 +21,8 @@ def pytest_configure(config):
     delete_backups = not config.getoption('keep_backups')
     dest_labs = config.getoption('dest_labs')
     cinder_backup = config.getoption('cinder_backup')
+    reinstall_storage = config.getoption('reinstall_storage')
+    BackupVars.set_backup_vars(reinstall_storage=reinstall_storage)   
 
     backup_dest = 'usb' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None,
@@ -74,7 +76,10 @@ def pytest_collectstart():
     global con_ssh
     con_ssh = setups.setup_tis_ssh(InstallVars.get_install_var("LAB"))
     InstallVars.set_install_var(con_ssh=con_ssh)
-    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
+    auth = setups.get_auth_via_openrc(con_ssh)
+    if auth:
+        CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
+
     Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
