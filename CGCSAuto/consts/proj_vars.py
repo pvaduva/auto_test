@@ -305,7 +305,7 @@ class PatchingVars:
         return cls.__var_dict[var_name]
 
     @classmethod
-    def set_patching_var(cls, *, patch_dir=None, **kwargs):
+    def set_patching_var(cls, patch_dir=None, **kwargs):
         cls.__var_dict.update(patch_dir=patch_dir)
         kwargs = {k.upper(): v for k, v in kwargs.items()}
         cls.__var_dict.update(**kwargs)
@@ -316,7 +316,7 @@ class RestoreVars:
     __var_dict = {}
 
     @classmethod
-    def set_restore_vars(cls, *, backup_src='local', **kwargs):
+    def set_restore_vars(cls, backup_src='local', **kwargs):
         kwargs = kwargs if kwargs else {}
         cls.__var_dict = {
             'BACKUP_SRC': backup_src,
@@ -357,7 +357,7 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, *, **kwargs):
+    def set_backup_vars(cls, backup_dest=None, **kwargs):
         kwargs = kwargs if kwargs else {}
         cls.__var_dict = {
             'BACKUP_DEST': backup_dest,
