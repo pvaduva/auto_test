@@ -7,7 +7,6 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, VMStatus, DevClassID
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', params=['pci-passthrough', 'pci-sriov'])
@@ -49,8 +48,7 @@ def vif_model_check(request):
     LOG.info("PCI network selected to boot vm: {}".format(pci_net))
 
     LOG.fixture_step("Create a flavor with dedicated cpu policy")
-    flavor_id = nova_helper.create_flavor(name='dedicated', ram=2048)[1]
-    ResourceCleanup.add('flavor', flavor_id, scope='module')
+    flavor_id = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='module')[1]
 
     extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
@@ -58,7 +56,7 @@ def vif_model_check(request):
     LOG.fixture_step("Boot a base vm with above flavor and virtio nics")
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    pci_net_id = network_helper._get_net_ids(net_name=pci_net)[0]
+    pci_net_id = network_helper.get_networks(name=pci_net, strict=True)[0]
     pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
     pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
 
@@ -374,30 +372,22 @@ class TestVmPCIOperations:
         self.check_numa_affinity(msg_prefx=step)
 
     def create_flavor_for_pci(self, vcpus=4, ram=1024):
-        self.vcpus = vcpus
-        self.ram = ram
-        self.extra_specs = {}
-        self.flavor_id = None
 
-        flavor_id = nova_helper.create_flavor(name='dedicated_pci_extras',  vcpus=self.vcpus, ram=self.ram)[1]
+        flavor_id = nova_helper.create_flavor(name='dedicated_pci_extras',  vcpus=vcpus, ram=ram, cleanup='function')[1]
 
-        if flavor_id:
-            ResourceCleanup.add('flavor', flavor_id)
+        pci_alias_spec = '{}:{}'.format(self.pci_alias_names[0], self.pci_alias) if self.pci_alias else None
+        LOG.tc_step('Set extra-specs to the flavor {}'.format(flavor_id))
+        extra_specs = {
+            FlavorSpec.CPU_POLICY: 'dedicated',
+            FlavorSpec.PCI_NUMA_AFFINITY: self.pci_numa_affinity,
+            FlavorSpec.PCI_PASSTHROUGH_ALIAS: pci_alias_spec,
+            FlavorSpec.PCI_IRQ_AFFINITY_MASK: self.pci_irq_affinity_mask}
+        extra_specs = {k: str(v) for k, v in extra_specs.items() if v is not None}
 
-            pci_alias_spec = '{}:{}'.format(self.pci_alias_names[0], self.pci_alias) if self.pci_alias else None
-            LOG.tc_step('Set extra-specs to the flavor {}'.format(flavor_id))
-            extra_specs = {
-                FlavorSpec.CPU_POLICY: 'dedicated',
-                FlavorSpec.PCI_NUMA_AFFINITY: self.pci_numa_affinity,
-                FlavorSpec.PCI_PASSTHROUGH_ALIAS: pci_alias_spec,
-                FlavorSpec.PCI_IRQ_AFFINITY_MASK: self.pci_irq_affinity_mask}
-            extra_specs = {k: str(v) for k, v in extra_specs.items() if v is not None}
+        if extra_specs:
+            nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
 
-            if extra_specs:
-                nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
-                self.extra_specs = extra_specs
-
-            self.flavor_id = flavor_id
+        return flavor_id
 
     def is_pci_device_supported(self, pci_alias, nova_pci_devices=None):
         if nova_pci_devices is None:
@@ -413,7 +403,7 @@ class TestVmPCIOperations:
         for dev, dev_dict in nova_pci_devices.items():
             for host, dev_info in dev_dict.items():
                 avail_vfs_on_host = int(dev_info['pci_vfs_configured']) - int(dev_info['pci_vfs_used'])
-                free_vfs_num[host] = free_vfs_num.pop(host, 0) + avail_vfs_on_host
+                free_vfs_num[host] = free_vfs_num.get(host, 0) + avail_vfs_on_host
 
         min_vfs = min(list(free_vfs_num.values()))
 
@@ -424,11 +414,11 @@ class TestVmPCIOperations:
 
     @mark.nics
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
-        mark.p1((None, None, None)),
+        mark.nightly((None, None, None)),
         mark.p1(('strict', None, None)),
-        mark.nightly(('strict', 'irqmask_1,3', None)),
+        # mark.nightly(('strict', 'irqmask_1,3', None)),    # pci_irq_affinity is deprecated
         mark.p1(('strict', None, 'pcialias_3')),
-        mark.p2(('strict', 'irqmask_1,3', 'pcialias_3')),
+        # mark.p2(('strict', 'irqmask_1,3', 'pcialias_3')),     # pci_irq_affinity is deprecated
         # mark.p3(('prefer', '1,3', '3')),  # TODO: expt behavior on msi_irq > cpulist mapping unknown
         # mark.p3(('prefer', None, None)),  # TODO same as above
     ])
@@ -482,7 +472,7 @@ class TestVmPCIOperations:
             self.pnet_id, self.extra_pcipt_net_name, self.extra_pcipt_net = vif_model_check
 
         LOG.tc_step("Create a flavor with specified extra-specs and dedicated cpu policy")
-        self.create_flavor_for_pci()
+        flavor_id = self.create_flavor_for_pci()
 
         LOG.tc_step("Boot a vm with {} vif model on internal net".format(self.vif_model))
         resource_param = 'pci_vfs_used' if 'sriov' in self.vif_model else 'pci_pfs_used'
@@ -490,7 +480,7 @@ class TestVmPCIOperations:
         LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(self.vif_model))
         pre_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
 
-        res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=self.flavor_id, cleanup='function',
+        res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=flavor_id, cleanup='function',
                                                     nics=self.nics_to_test, fail_ok=boot_forbidden)
         if boot_forbidden:
             assert res > 0, "VM booted successfully while it numa node for pcipt/sriov and pci alias mismatch"
@@ -573,14 +563,13 @@ class TestVmPCIOperations:
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
 
         LOG.fixture_step("Create a flavor with dedicated cpu policy")
-        resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048)[1]
-        ResourceCleanup.add('flavor', resize_flavor, scope='module')
+        resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='module')[1]
 
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
         nova_helper.set_flavor_extra_specs(flavor=resize_flavor, **extra_specs)
 
         origin_host = nova_helper.get_vm_host(vm_id=vm_id)
-        LOG.info("Orignal host where VM {} hosted is {}".format(vm_id, origin_host))
+        LOG.info("Original host where VM {} hosted is {}".format(vm_id, origin_host))
         LOG.tc_step("Resize the vm and verify if it becomes Active")
         vm_helper.resize_vm(self.vm_id, resize_flavor)
         new_host = nova_helper.get_vm_host(self.vm_id)

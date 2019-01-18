@@ -38,7 +38,7 @@ def id_gen(val):
     mark.p3(('shared', None, '0', None, 'SharedCPUErr.DEDICATED_CPU_REQUIRED')),
     mark.p2(('dedicated', 'isolate', '0', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),
     mark.p2(('dedicated', 'require', '1', None, 'CPUThreadErr.UNSET_SHARED_VCPU')),
-    mark.p2(('dedicated', 'require', None, '2', 'CPUThreadErr.UNSET_MIN_VCPUS')),     # Allowed with isolate
+    # mark.p2(('dedicated', 'require', None, '2', 'CPUThreadErr.UNSET_MIN_VCPUS')),    # Deprecated. vcpu scale
 
 ])
 def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vcpu, min_vcpus, expt_err):
@@ -200,13 +200,13 @@ class TestHTEnabled:
         return ht_hosts, non_ht_hosts
 
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
-        mark.p1((5, 'isolate', 2)),
+        # mark.p1((5, 'isolate', 2)),       # Deprecated. vcpu scale
         mark.p1((4, 'isolate', None)),
         mark.p1((4, 'require', None)),
         mark.p1((3, 'require', None)),
         mark.p2((3, 'prefer', None)),
-        mark.p2((2, 'prefer', 1)),
-        mark.p2((3, None, 1)),          # should default to prefer policy behaviour
+        # mark.p2((2, 'prefer', 1)),
+        # mark.p2((3, None, 1)),          # Deprecated. vcpu scale # should default to prefer policy behaviour
         mark.p2((2, None, None)),       # should default to prefer policy behaviour
     ])
     def test_boot_vm_cpu_thread_positive(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
@@ -1054,12 +1054,12 @@ class TestHTDisabled:
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus', 'expt_err'), [
         mark.p1((2, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
         mark.p1((3, 'require', None, 'CPUThreadErr.HT_HOST_UNAVAIL')),
-        mark.p2((2, 'isolate', 2, None)),
+        # mark.p2((2, 'isolate', 2, None)),     # Deprecated. vcpu scale
         mark.p2((3, 'isolate', None, None)),
         # (3, 'isolate', None, 'CPUThreadErr.HT_HOST_UNAVAIL'),
         # (2, 'isolate', '2', 'CPUThreadErr.HT_HOST_UNAVAIL'),
         mark.p3((2, 'prefer', None, None)),
-        mark.p3((3, 'prefer', 2, None)),
+        # mark.p3((3, 'prefer', 2, None)),      # Deprecated. vcpu scale
     ])
     def test_boot_vm_cpu_thread_ht_disabled(self, vcpus, cpu_thread_policy, min_vcpus, expt_err):
         """
@@ -1165,7 +1165,7 @@ class TestVariousHT:
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
         mark.p3((2, 'isolate', None)),
         mark.p3((2, 'require', None)),
-        mark.p3((2, 'isolate', 2)),
+        # mark.p3((2, 'isolate', 2)),   # Deprecated. vcpu scale
         mark.p3((3, 'prefer', None)),
         mark.p3((3, 'require', None)),
     ])
