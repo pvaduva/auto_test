@@ -230,7 +230,7 @@ def parse_args():
                               " containing directories for Titanium Server loads"
                               "\n(default: %(default)s)")
     bld_grp.add_argument('--tis-bld-dir', metavar='DIR',
-                         dest='tis_bld_dir', default=LATEST_BUILD_DIR,
+                         dest='tis_bld_dir', default=GA_LOAD,
                          help='Specific directory under "--tis-blds-dir"'
                               " containing Titanium Server load"
                               " \n(default: %(default)s)")
@@ -322,15 +322,29 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
             log.error(msg)
             wr_exit()._exit(1, msg)
 
-    if tis_bld_dir == LATEST_BUILD_DIR or not tis_bld_dir:
-        cmd = "readlink " + load_path + "/" + LATEST_BUILD_DIR
+    # tis_bld_dir check (ga_load then latest_build)
+    if tis_bld_dir == GA_LOAD or not tis_bld_dir:
+        test_load_path = load_path + "/" + GA_LOAD
+        cmd = "test -h " + test_load_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0:
+            log.info("GA_LOAD symlink doesn't exist for this release.  Use latest_build instead")
+            test_load_path = load_path + "/" + LATEST_BUILD_DIR
+            cmd = "test -h " + test_load_path
+            if bld_server_conn.exec_cmd(cmd)[0] != 0:
+                msg = "Build path doesn't exist: {}".format(test_load_path)
+                log.error(msg)
+                wr_exit()._exit(1, msg)
+        cmd = "readlink " + test_load_path
         tis_bld_dir = bld_server_conn.exec_cmd(cmd, expect_pattern=TIS_BLD_DIR_REGEX)
-    load_path += "/" + tis_bld_dir
-    cmd = "test -d " + load_path
-    if bld_server_conn.exec_cmd(cmd)[0] != 0:
-        msg = "Load path {} not found".format(load_path)
-        log.error(msg)
-        wr_exit()._exit(1, msg)
+        load_path += "/" + tis_bld_dir
+    else:
+        load_path = load_path + "/" + tis_bld_dir
+        cmd = "test -d " + load_path
+        if bld_server_conn.exec_cmd(cmd)[0] != 0:
+            msg = "Build path doesn't exist: {}".format(load_path)
+            log.error(msg)
+            wr_exit()._exit(1, msg)
+
 
     return load_path, prestage_load_path
 
@@ -1990,7 +2004,7 @@ def main():
     if args.tis_bld_dir != "":
         tis_bld_dir = args.tis_bld_dir
     else:
-        tis_bld_dir = "latest_build"
+        tis_bld_dir = GA_LOAD
 
     if args.guest_bld_dir != "":
         guest_bld_dir = args.guest_bld_dir
