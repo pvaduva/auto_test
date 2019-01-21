@@ -117,7 +117,7 @@ class OrchestrationPhaseTimeout:
 
 class DCTimeout:
     SYNC = 660    # 10 minutes + 1
-    SUBCLOUD_AUDIT = 240    # 3 minutes + 1
+    SUBCLOUD_AUDIT = 300    # 4 minutes + 1
     PATCH_AUDIT = 240   # 3 minutes + 1
 
 

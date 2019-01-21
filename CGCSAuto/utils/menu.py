@@ -305,10 +305,9 @@ class USBBootMenu(KickstartMenu):
         controller_sub_menu.options = [KickstartOption(name="Serial Console", index=0, key="Enter"),
                                        KickstartOption(name="Graphical Console", index=1, key="Enter")]
 
-
         self.sub_menus.append(controller_sub_menu)
 
-        console_sub_menu = KickstartMenu(name="Serial Console",
+        console_sub_menu = KickstartMenu(name="Console",
                                          prompt=bios.BootMenus.USB.Serial_Console['prompt'].encode())
 
         console_sub_menu.options = [KickstartOption(name="STANDARD Security", index=0, key="Enter"),

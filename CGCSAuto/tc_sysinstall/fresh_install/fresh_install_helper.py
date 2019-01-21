@@ -306,11 +306,12 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
 
+
         LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
                                                                 SubcloudStatus.MGMT_UNMANAGED))
         LOG.info("Managing subcloud {} ... ".format(subcloud))
         LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
-        dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn)
+        dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn, fail_ok=True)
 
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
@@ -943,6 +944,13 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         guest_server_obj = initialize_server(guest_server)
 
     set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
+
+    boot_type = InstallVars.get_install_var("BOOT_TYPE")
+    if "usb" in boot_type:
+        # check if oam nic is set
+        controller0_node = lab['controller-0']
+        if not controller0_node.host_nic:
+            controller0_node.host_nic = install_helper.get_nic_from_config(conf_server=file_server_obj)
 
     servers = {
                "build": bld_server,

@@ -2524,7 +2524,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
 
 def setup_networking(controller0, conf_server=None, conf_dir=None):
     if not controller0.host_nic:
-        controller0.host_nic = get_nic_from_config()
+        controller0.host_nic = get_nic_from_config(conf_server=conf_server)
     nic_interface = controller0.host_nic
     if not controller0.telnet_conn:
         controller0.telnet_conn = open_telnet_session(controller0)
@@ -3595,15 +3595,18 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if boot_menu.sub_menus:
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
-        LOG.info("submenu prompt = {}".format(sub_menu_prompts))
+
         try:
             sub_menus_navigated = 0
 
             while len(sub_menu_prompts) > 0:
+                LOG.info("submenu prompt = {}".format(sub_menu_prompts))
                 prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+
                 LOG.info("submenu index = {}".format(prompt_index))
 
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
+                LOG.info("submenu  {}".format(sub_menu.name))
                 if sub_menu.name == "Controller Configuration":
 
                     # sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+> ',
@@ -3612,18 +3615,20 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'Console',
                     #                       end_of_menu=b'.*(\x1b\[\d+;\d+H)+',
                     #                       newline=b'(\x1b\[\d+;\d+H)')
-
+                    LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
-                    time.sleep(2)
+                    time.sleep(5)
                 elif sub_menu.name == "Console":
 
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
                     #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
                     #                       newline=b'(\x1b\[\d+;\d+H)+')
+                    LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
                 else:
+                    LOG.info("Selecting for  unknown")
                     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                      tag=tag if not index else None)
                 sub_menu_prompts.pop(prompt_index)

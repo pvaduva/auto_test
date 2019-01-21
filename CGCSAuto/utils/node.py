@@ -166,6 +166,7 @@ class Node(object):
         self.operational = None
         self.availability = None
         self.barcode = None
+        self.host_nic = None
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
