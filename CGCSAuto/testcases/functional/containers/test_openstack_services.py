@@ -140,7 +140,6 @@ def test_stx_openstack_helm_override_update_and_reset(skip_for_no_openstack, res
     Teardown:
         - Update nova helm-override to reset values
         - Re-apply stx-openstack application and ensure it is applied
-        -
 
     """
     valid_hosts, conf_path = reset_if_modified

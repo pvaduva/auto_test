@@ -154,7 +154,7 @@ def remove_cache_and_pull(con_ssh, name, fail_ok=False):
 ])
 def test_push_docker_image_to_local_registry(controller):
     """
-
+    Test push a docker image to local docker registry
     Args:
         controller:
 
@@ -228,8 +228,8 @@ def test_upload_helm_charts(copy_test_apps, controller):
         - Copy test files from test server to tis system (module)
 
     Test Steps:
-        - Upload helm charts from given controller
-        - Verify the charts appear on both controllers (if applicable)
+        - Upload helm charts from given controller via 'helm-upload <tar_file>'
+        - Verify the charts appear at /www/pages/helm_charts/ on both controllers (if applicable)
 
     """
     app_dir = copy_test_apps

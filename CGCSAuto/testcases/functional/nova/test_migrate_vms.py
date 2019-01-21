@@ -339,6 +339,21 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     # mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),  # FIXME temp remove due to feature not ready
 ])
 def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
+    """
+    Test migrate vms for given guest type
+    Args:
+        check_system:
+        guest_os:
+        mig_type:
+        cpu_pol:
+
+    Test Steps:
+        - Create a glance image from given guest type
+        - Create a vm from cinder volume using above image
+        - Live/cold migrate the vm
+        - Ensure vm moved to other host and in good state (active and reachabe from NatBox)
+
+    """
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
     ResourceCleanup.add('flavor', flavor_id)

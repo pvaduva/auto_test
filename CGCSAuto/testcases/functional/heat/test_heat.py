@@ -311,7 +311,7 @@ def test_heat_template(template_name, revert_quota):
 
     Test Steps:
         - Create a heat stack with the given template
-        - Verify heat stack is created sucessfully
+        - Verify heat stack is created successfully
         - Verify heat resources are created
         - Delete Heat stack and verify resource deletion
 

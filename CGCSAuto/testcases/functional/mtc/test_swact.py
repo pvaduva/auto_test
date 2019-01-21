@@ -80,7 +80,6 @@ def test_swact_controller_platform(wait_for_con_drbd_sync_complete):
     Verify swact active controller
 
     Test Steps:
-        - Boot a vm on system and check ping works
         - Swact active controller
         - Verify standby controller and active controller are swapped
         - Verify nodes are ready in kubectl get nodes

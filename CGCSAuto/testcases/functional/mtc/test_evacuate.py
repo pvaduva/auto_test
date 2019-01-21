@@ -81,6 +81,28 @@ class TestTisGuest:
     @mark.sanity
     @mark.cpe_sanity
     def test_evacuate_vms(self, vms_):
+        """
+        Test evacuated vms
+        Args:
+            vms_: (fixture to create vms)
+
+        Pre-requisites:
+            - At least two up hypervisors on system
+
+        Test Steps:
+            - Create vms with various options:
+                - vm booted from cinder volume,
+                - vm booted from glance image,
+                - vm booted from glance image, and have an extra cinder volume attached after launch,
+                - vm booed from cinder volume with ephemeral and swap disks
+            - Move vms onto same hypervisor
+            - sudo reboot -f on the host
+            - Ensure vms are successfully evacuated to other host
+            - Live migrate vms back to original host
+            - Check vms can move back, and vms are still reachable from natbox
+            - Check system services are enabled and neutron agents are alive
+
+        """
         vms, target_host = vms_
 
         pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
