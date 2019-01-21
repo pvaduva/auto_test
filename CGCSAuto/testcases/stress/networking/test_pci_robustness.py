@@ -113,7 +113,7 @@ def get_host_with_min_vm_cores_per_proc(candidate_hosts):
     min_core_host = None
     for host_ in candidate_hosts:
         proc0_cores, proc1_cores = host_helper.get_logcores_counts(host_, proc_ids=(0, 1), thread=['0', '1'],
-                                                                   functions='VMs')
+                                                                   functions='Applications')
         min_cores = min(proc0_cores, proc1_cores)
         if min_cores < min_cores_per_proc:
             min_cores_per_proc = min_cores

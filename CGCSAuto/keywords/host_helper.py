@@ -2111,7 +2111,7 @@ def compare_host_to_cpuprofile(host, profile_uuid):
             if not check_range(shared_cores, i):
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
-        elif functions[i] == 'VMs':
+        elif functions[i] == 'Applications':
             if not check_range(vm_cores, i):
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
@@ -2175,7 +2175,7 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch', core_type='log_cor
 
     Args:
         hostname (str): hostname to pass to system host-cpu-list
-        func (str|tuple|list): such as 'Platform', 'vSwitch', or 'VMs'
+        func (str|tuple|list): such as 'Platform', 'vSwitch', or 'Applications'
         core_type (str): 'phy_core' or 'log_core'
         thread (int|None): thread number. 0 or 1
         con_ssh (SSHClient):

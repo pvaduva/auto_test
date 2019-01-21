@@ -121,6 +121,7 @@ class TestVSwitchCPUReconfig:
         ((2, 0), (1, 1), None, 'AIO'),       # CPE only
         ((1, 2), (3, 2), None, None),
         ((1, 2), (2, 2), None, None),
+        ((2, 0), (0, 0), None, None),       # Shared vswitch core feature, which allows 0 dedicated vswitch core
         ((1, 0), (1, 0), 'nonHT', 'nonAIO'),     # Standard lab only
         ((2, 0), (1, 0), 'nonHT', 'AIO'),      # CPE only
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
@@ -209,7 +210,7 @@ class TestVSwitchCPUReconfig:
         mark.p3(((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         mark.p1(((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
         mark.p3(((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total <= 10 cores/per proc&thread
-        mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")),
+        # mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")), shared vswitch core feature
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required,
                                            expt_err):
@@ -250,7 +251,7 @@ class TestVSwitchCPUReconfig:
         # FIXME
         # total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
         total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1),
-                                                             functions=['VMs', 'vSwitch', 'Platform'])
+                                                             functions=['Applications', 'vSwitch', 'Platform'])
 
         # convert test params if host to config has more than 10 cores per proc & threaad
         if 'NO_VM_CORE' in expt_err:
@@ -320,7 +321,7 @@ def _get_vms_cores_nums(host, vswitch_cores_dict):
     """
     #  vswitch and non-vswitch nodes should be one each when this is called
 
-    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='VMs')
+    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Applications')
 
     vswitch_procs = [proc for proc in vms_cores_dict if vswitch_cores_dict[proc]]
     nonvswitch_procs = [proc for proc in vms_cores_dict if not vswitch_cores_dict[proc]]
@@ -511,7 +512,7 @@ class TestNovaSchedulerAVS:
             hosts_configured[1]: 0,
         }
         for host in hosts_configured:
-            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='VMs')
+            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Applications')
             vswitch_vm_cores = len(vms_cores_dict[hosts_vswitch_proc[host]])
             if system_helper.is_hyperthreading_enabled(host):
                 vswitch_vm_cores *= 2
@@ -679,7 +680,7 @@ class TestNovaSchedulerAVS:
         LOG.fixture_step("(class) Determine host to boot vms on and calculate the vcpus for flavor")
 
         initial_host, other_host = hosts_configured
-        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='VMs')
+        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='Applications')
         p1_vm_cores = len(vms_cores_dict[1])
         # p0_vm_cores = len(vms_cores_dict[0])
         if system_helper.is_hyperthreading_enabled(initial_host):

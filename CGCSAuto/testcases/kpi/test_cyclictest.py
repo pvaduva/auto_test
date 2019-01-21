@@ -125,7 +125,7 @@ def get_cpu_info(hypervisor):
 
     non_vm_cores = {}
     for core, assigned in core_function:
-        if assigned != 'VMs':   # and assigned != 'Shared':
+        if assigned != 'Applications':   # and assigned != 'Shared':
             if assigned in non_vm_cores:
                 non_vm_cores[assigned].append(int(core))
             else:

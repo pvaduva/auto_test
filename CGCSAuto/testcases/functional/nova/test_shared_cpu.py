@@ -396,7 +396,7 @@ class TestSharedCpuEnabled:
 
         LOG.fixture_step("Get VMs cores for each host")
         for host in shared_cpu_hosts:
-            vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, func='VMs', thread=None)
+            vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, func='Applications', thread=None)
             if len(vm_cores_per_proc[0]) > max_vcpus_proc0:
                 max_vcpus_proc0 = len(vm_cores_per_proc[0])
                 host_max_proc0 = host
