@@ -333,7 +333,7 @@ def ensure_vms_on_same_host(vms):
     return most_common
 
 
-def test_qos_weight_enforced(request, skip_if_25g):
+def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
     """
     Verify QoS weights are impacting networks
     DPDK-only test case (kpktgen does not supply enough Tx rate)
@@ -352,9 +352,6 @@ def test_qos_weight_enforced(request, skip_if_25g):
     Test Teardown:
         - Delete qoses, vms, volumes, flavors
     """
-    if not system_helper.is_avs():
-        skip("vshell not available on ovs systems")
-
     vm_type = 'dpdk'
     vif_model = 'avp'
     tenant_name = Tenant.get_primary()['tenant']
@@ -520,7 +517,7 @@ def setup_busy_loop_net(host, vlan_a, vlan_b, request, mtu=1492, eth='eth0'):
     'virtio',
     'avp',
 ])
-def test_qos_phb_enforced(vm_type, skip_if_25g, update_network_quotas):
+def test_qos_phb_enforced(vm_type, no_ovs, skip_if_25g, update_network_quotas):
     """
     Verify QoS PHB policies are applied via traffic, driven by Ixia
     PHB precedence weights are hardcoded
@@ -535,9 +532,6 @@ def test_qos_phb_enforced(vm_type, skip_if_25g, update_network_quotas):
     Test Teardown:
         - Delete vms, volumes, flavors, networks, subnets
     """
-    if not system_helper.is_avs():
-        skip("cannot properly setup guests without avs")
-
     vm_test = vm_helper.launch_vm_with_both_providernets(vm_type)
     nic_test = (network_helper.get_data_ips_for_vms(vm_test)[0], vm_test)
     nic_observer = (network_helper.get_data_ips_for_vms(vm_test)[1], vm_test)

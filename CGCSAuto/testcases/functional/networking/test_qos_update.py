@@ -47,8 +47,7 @@ def test_qos_update(setup_qos):
 
 
 @fixture()
-def setup_qos(request):
-
+def setup_qos(request, no_ovs):
     LOG.fixture_step("Creating new QoS")
     scheduler = {'weight': 100}
     qos_new = network_helper.create_qos(scheduler=scheduler, description="Test QoS")[1]

@@ -35,6 +35,12 @@ def skip_for_ovs():
 
 
 @fixture(scope='session')
+def no_ovs():
+    if not system_helper.is_avs():
+        skip('Test unsupported by OVS')
+
+
+@fixture(scope='session')
 def no_simplex():
     LOG.fixture_step("(Session) Skip if Simplex")
     if system_helper.is_simplex():
