@@ -595,13 +595,14 @@ def is_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None):
         for pod_info in pods_info:
             pod_name = pod_info.get('name')
             pod_status = pod_info.get('status')
+            expt_status = status
             if not status:
-                status = [PodStatus.RUNNING] if 'api' in pod_name else \
+                expt_status = [PodStatus.RUNNING] if 'api' in pod_name else \
                     [PodStatus.RUNNING, PodStatus.COMPLETED]
             elif isinstance(status, str):
-                status = [status]
+                expt_status = [status]
 
-            if pod_status not in status:
+            if pod_status not in expt_status:
                 bad_pods.append({pod_name: pod_status})
                 msg = "Pod {} status is {}. Expect: {}".format(pod_name, pod_status, status)
                 LOG.info(msg)
