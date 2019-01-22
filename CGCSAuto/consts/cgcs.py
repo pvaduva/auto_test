@@ -42,6 +42,7 @@ TIMESTAMP_PATTERN = r'\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
+PLATFORM_CONF_PATH = '/etc/platform/platform.conf'
 
 MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
 SUBCLOUD_PATTERN = 'subcloud'
@@ -110,8 +111,8 @@ class GuestImages:
 
 
 class Networks:
-    MGMT_NET_NAME = 'tenant\d-mgmt-net'
-    DATA_NET_NAME = 'tenant\d-net'
+    MGMT_NET_NAME = r'tenant\d-mgmt-net'
+    DATA_NET_NAME = r'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
 
     # MGMT_IP and EXT_IP patterns are based on "NAT accessible IP address allocations" table in lab connectivity wiki
@@ -211,13 +212,13 @@ class HostTask:
 
 
 class Prompt:
-    CONTROLLER_0 = r'.*controller\-0[:| ].*\$ '
-    CONTROLLER_1 = r'.*controller\-1[:| ].*\$ '
+    CONTROLLER_0 = r'.*controller\-0[:| ].*\$'
+    CONTROLLER_1 = r'.*controller\-1[:| ].*\$'
     CONTROLLER_PROMPT = r'.*controller\-[01][:| ].*\$ '
 
     VXWORKS_PROMPT = '-> '
 
-    ADMIN_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ '
+    ADMIN_PROMPT = r'\[wrsroot@controller\-[01].*\(keystone_admin\)\]\$'
     # ADMIN_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = r'\[wrsroot@controller\-[01] .*\(keystone_tenant2\)\]\$ '
@@ -231,7 +232,8 @@ class Prompt:
     SUDO_PASSWORD_PROMPT = 'Password: '
     BUILD_SERVER_PROMPT_BASE = r'{}@{}\:~.*'
     TEST_SERVER_PROMPT_BASE = r'\[{}@.*\]\$ '
-    TIS_NODE_PROMPT_BASE = r'{}\:~\$ '
+    # TIS_NODE_PROMPT_BASE = r'{}\:~\$ '
+    TIS_NODE_PROMPT_BASE = r'{}[: ]?~.*$'
     ADD_HOST = r'.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = r'.*\(y/n\)\?.*'
@@ -301,7 +303,7 @@ class ImageMetadata:
     CPU_RT_MASK = 'hw_cpu_realtime_mask'
     CPU_RT = 'hw_cpu_realtime'
     CPU_MODEL = 'hw_cpu_model'
-    HW_FIRMWARE_TYPE = 'hw_firmware_type'
+    FIRMWARE_TYPE = 'hw_firmware_type'
 
 
 class VMMetaData:

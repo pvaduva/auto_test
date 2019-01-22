@@ -581,21 +581,9 @@ def pytest_addoption(parser):
                        "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
     heat_help = "The full path to the python heat templates" \
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
-
-    subcloud_boot_help = "Boot information for each subcloud in distributed cloud system. Each option specifies space" \
-                    "separated subcloud name, boot type and boot server " \
-                          "system. \n" \
-                          "Usage  --subcloud <subcloud1 name> <boot type> <boot server>  ... \n" \
-                          "<boot> options are: \n" \
-                            "pxe: boot from the network using pxeboot \n" \
-                            "burn: burn the USB using iso-path and boot from it \n" \
-                            "usb: Boot from load existing on USB \n" \
-                            "iso: iso install flag" \
-                            "labsetup: Do not run lab_setup post lab install \n" \
-                            "pxeboot: Don't modify pxeboot.cfg \n" \
-                            "feed: skip setup of network feed \n" \
-                          "<boot server> options are yow-tuxlab2 or yow-cgcstux-lx"
-
+    dcfloatip_help = " The distributed cloud central region floating ip if subcloud is specified."
+    openstack_install_help = 'flag for openstack install or not; default is false;' \
+                             ''
                 # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
                      help=file_dir_help)
@@ -612,8 +600,10 @@ def pytest_addoption(parser):
                      help=iso_path_help)
     parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
     parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
-    parser.addoption('--subcloud-boot',  action='append', nargs='*', dest='subcloud_boot_list',
-                     metavar=('subcloud-name', 'boot-type', 'boot-server'), default=[], help=subcloud_boot_help)
+    parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
+                     help=dcfloatip_help)
+    parser.addoption('--openstack-install',  dest='openstack_install', action='store_true', default=False,
+                     help=openstack_install_help)
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
@@ -736,19 +726,25 @@ def pytest_addoption(parser):
     # Restore only
     parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
                      action='store', help="The build id of the backup")
+
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
+    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
+                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
 
+    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
+                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
+
+    parser.addoption('--reinstall-storage', '--reinstall-storage',  dest='reinstall_storage',
+                     action='store_true', default=False, help="Whether to reinstall storage nodes or not. "
+                                                              "By default, do not reinstall them.")
     parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
                      action='store_true', help="Use existing feed on tuxlab (tuxlab1/2)")
+
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
-    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
-                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
-    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
-                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
 
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',

@@ -230,9 +230,9 @@ def boot_vms(is_boot):
 
 
 def get_lab_dict(labname):
+
     labname = labname.strip().lower().replace('-', '_')
-    labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
-    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
+    labs = get_labs_list()
 
     for lab in labs:
         if labname in lab.get('name').replace('-', '_').lower().strip() \
@@ -246,6 +246,32 @@ def get_lab_dict(labname):
         lab_valid_short_names = [lab.get('short_name') for lab in labs]
         # lab_valid_names = [lab['name'] for lab in labs]
         raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
+
+
+def get_labs_list():
+    labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
+    return labs
+
+
+def get_dc_labs_list(labs):
+    if not labs:
+        labs = get_labs_list()
+
+    dc_labs = [lab for lab in labs if any([k for k, v in lab.items() if 'subcloud' in k and isinstance(v, dict)])]
+    return dc_labs
+
+
+def is_lab_subcloud(lab):
+    dc_labs = get_dc_labs_list(get_labs_list())
+    for dc_lab in dc_labs:
+        subclouds = [k for k, v in dc_lab.items() if 'subcloud' in k]
+        for subcloud in subclouds:
+            if lab['short_name'] == dc_lab[subcloud]['short_name']:
+                dc_float_ip = dc_lab['floating ip']
+                return True, subcloud, dc_float_ip
+
+    return False, None, None
 
 
 def get_natbox_dict(natboxname):
@@ -374,7 +400,7 @@ def copy_test_files():
     _rsync_files_to_con1(con_ssh=con_ssh, central_region=central_region)
 
 
-def get_auth_via_openrc(con_ssh):
+def get_auth_via_openrc(con_ssh, use_telnet=False, con_telnet=None):
     valid_keys = ['OS_AUTH_URL',
                   'OS_ENDPOINT_TYPE',
                   'CINDER_ENDPOINT_TYPE',
@@ -384,8 +410,11 @@ def get_auth_via_openrc(con_ssh):
                   'OS_REGION_NAME',
                   'OS_INTERFACE',
                   'OS_KEYSTONE_REGION_NAME']
+    if use_telnet and con_telnet:
+        code, output = con_telnet.exec_cmd('cat /etc/nova/openrc')
+    else:
+        code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
 
-    code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
     if code != 0:
         return None
 
@@ -599,7 +628,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                        patch_dir=None, ovs=False, build_server=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
                        boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
-                       kubernetes=False, subcloud_boot=None):
+                       kubernetes=False, dc_float_ip=None, install_subcloud=None, openstack_install=False):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -612,7 +641,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                              guest_image=None, heat_templates=None, security=security,
                                              low_latency=low_latency, stop=stop, skip=skip, resume=resume,
                                              boot_server=boot_server, boot=boot, iso_path=iso_path, ovs=ovs,
-                                             patch_dir=patch_dir, kubernetes=kubernetes, subcloud_boot=subcloud_boot)
+                                             patch_dir=patch_dir, kubernetes=kubernetes)
 
     print("Setting Install vars : {} ".format(locals()))
 
@@ -844,7 +873,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         guest_server, guest_image = guest_image.split(':', 1)
 
     iso_server = bs
-    iso_path = iso_path if iso_path else os.path.join(host_build_dir, '/export/bootimage.iso')
+    iso_path = iso_path if iso_path else os.path.join(host_build_dir, 'export/bootimage.iso')
     if ':/' in iso_path:
         iso_server, iso_path = iso_path.split(':', 1)
     patch_server = bs
@@ -880,15 +909,17 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  patch_server=patch_server,
                                  multi_region=multi_region_lab,
                                  dist_cloud=dist_cloud_lab,
-                                 subcloud_boot=subcloud_boot,
+                                 dc_float_ip=dc_float_ip,
+                                 install_subcloud=install_subcloud,
                                  ovs=ovs,
                                  kubernetes=kubernetes,
+                                 openstack_install=openstack_install
                                  )
 
 
 def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_build_dir,
                       compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
-                      low_latency, security, stop, ovs,  boot_server, resume, skip, kubernetes, subcloud_boot):
+                      low_latency, security, stop, ovs,  boot_server, resume, skip, kubernetes):
 
     """
     Writes a file in ini format of the fresh_install variables
@@ -971,7 +1002,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
                   "KUBERNETES_CONFIG": str(kubernetes)}
 
     boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server if boot_server else '', "SECURITY_PROFILE": security,
-                 "LOW_LATENCY_INSTALL": low_latency, "SUBCLOUD_BOOT": subcloud_boot if subcloud_boot else ''}
+                 "LOW_LATENCY_INSTALL": low_latency}
     control_dict = {"RESUME_POINT": resume if resume else '',
                     "STEPS_TO_SKIP": skip if skip else '', "STOP_POINT": stop if (stop or stop == 0) else ''}
     config["LAB"] = labconf_lab_dict
@@ -980,6 +1011,9 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
     config["CONF_FILES"] = files_dict
     config["BOOT"] = boot_dict
     config["CONTROL"] = control_dict
+
+    for k in config:
+       config[k] = {kv: vv if vv else '' for kv, vv in config[k].items()}
 
     install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
     install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name

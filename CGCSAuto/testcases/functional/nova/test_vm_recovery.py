@@ -353,9 +353,9 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    nics = [{'net-id': mgmt_net_id},
+            {'net-id': tenant_net_id},
+            {'net-id': internal_net_id}]
     vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     target_host = nova_helper.get_vm_host(vm_id)
@@ -365,9 +365,9 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
 
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get_secondary())
         tenant_net_id = network_helper.get_tenant_net_id(auth_info=Tenant.get_secondary())
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-                {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+        nics = [{'net-id': mgmt_net_id},
+                {'net-id': tenant_net_id},
+                {'net-id': internal_net_id}]
         vm_observer = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function', auth_info=Tenant.get_secondary())[1]
 
         vm_helper.setup_kernel_routing(vm_observer)

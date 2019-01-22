@@ -244,3 +244,6 @@ class KubeError(TiSError):
 class KubeCmdError(KubeError):
     message = 'Kubernetes cmd failed.'
 
+
+class InstallError(TiSError):
+    message = 'Install error'

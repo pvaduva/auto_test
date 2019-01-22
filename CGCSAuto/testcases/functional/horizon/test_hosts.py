@@ -100,6 +100,7 @@ def test_horizon_host_inventory_display(host_inventory_pg):
                 assert expt_val.upper() in horizon_val.upper(),\
                     '{} display incorrectly, expect: {} actual: {}'.format(horizon_header, expt_val, horizon_val)
 
+    horizon.test_result = True
 
 
 @mark.parametrize('host_name', [

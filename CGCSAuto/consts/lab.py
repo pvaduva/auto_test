@@ -482,8 +482,10 @@ class Labs:
         'controller_nodes': [23318, 23319],
         'compute_nodes': [23320, 23321, 23322],
         'ixia_ports': [{'port': (7, 11), 'range': (3602, 3651)}, {'port': (7, 12), 'range': (3702, 3751)}],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500', 'compute-0': '0400', 'compute-1': '0400',
-                              'compute-2': '0400'},
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500',
+                              'compute-0': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
+                              'compute-1': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
+                              'compute-2': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01'},
     }
 
     WCP_82_83 = {
@@ -533,7 +535,7 @@ class Labs:
         'controller-0 ip': '128.224.151.86',
         'controller-1 ip': '128.224.151.229',
         'controller_nodes': [23325, 23326],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0400'},
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500'},
     }
 
     WCP_89 = {
@@ -783,7 +785,7 @@ class Labs:
     # Distributed Cloud
     WCP_80_91 = {
         'short_name': 'wcp_80_91',
-        'name': 'yow-cgcs-distributed_cloud',
+        'name': 'yow-cgcs-distributed_cloud-1',
         'floating ip': WCP_90_91['floating ip'],
         'central_region': WCP_90_91,
         'subcloud-1': WCP_80_84,     # wcp80-81(84)

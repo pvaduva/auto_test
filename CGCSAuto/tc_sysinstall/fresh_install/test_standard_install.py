@@ -12,6 +12,7 @@ from utils.tis_log import LOG
 def install_setup(request):
     lab = InstallVars.get_install_var("LAB")
     install_type = ProjVar.get_var('SYS_TYPE')
+
     if install_type != SysType.REGULAR:
         skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
                     .format(SysType.REGULAR, install_type))
@@ -38,8 +39,9 @@ def install_setup(request):
 
     request.addfinalizer(install_cleanup)
 
-    _install_setup = fresh_install_helper.setup_fresh_install(lab)
+    is_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD") is not None
 
+    _install_setup = fresh_install_helper.setup_fresh_install(lab, subcloud=is_subcloud)
     return _install_setup
 
 
@@ -74,6 +76,7 @@ def test_standard_install(install_setup):
     patch_dir = install_setup["directories"]["patches"]
     patch_server = install_setup["servers"]["patches"]
     guest_server = install_setup["servers"]["guest"]
+    install_subcloud = install_setup.get("install_subcloud")
 
     if final_step == '0' or final_step == "setup":
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -85,14 +88,20 @@ def test_standard_install(install_setup):
     fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     lab_files_server = install_setup["servers"]["lab_files"]
+    lab_files_dir = install_setup["directories"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,
-                                            guest_server=guest_server,
+                                            guest_server=guest_server, lab_files_dir=lab_files_dir,
                                             load_path=InstallVars.get_install_var("TIS_BUILD_DIR"),
                                             license_path=InstallVars.get_install_var("LICENSE"),
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
-    fresh_install_helper.configure_controller(controller0_node)
+    if install_subcloud:
+        fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,
+                                                final_step=final_step)
+    else:
+        fresh_install_helper.configure_controller(controller0_node)
+
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
@@ -120,3 +129,4 @@ def test_standard_install(install_setup):
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
     fresh_install_helper.reset_global_vars()
+    fresh_install_helper.verify_install_uuid(lab)

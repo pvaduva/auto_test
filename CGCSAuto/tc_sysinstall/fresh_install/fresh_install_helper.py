@@ -3,9 +3,10 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, network_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
+from utils.clients.ssh import ControllerClient
 from setups import initialize_server
 from consts.auth import Tenant
 from consts.timeout import InstallTimeout
@@ -188,6 +189,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
+    if not InstallVars.get_install_var("OPENSTACK_INSTALL"):
+        controller0_node = lab['controller-0']
+        controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
+
 
 def set_license_var(sys_version=None, sys_type=None):
     if sys_version is None:
@@ -253,12 +258,12 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-
         install_helper.controller_system_config(lab=lab, config_file=config_file,
                                                 con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes)
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+
         LOG.info("Run lab_setup after config controller")
         run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
         if do_step("unlock_active_controller"):
@@ -266,6 +271,66 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
             host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
                                     check_first=False, con0_install=True)
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        reset_global_vars()
+        skip("stopping at install step: {}".format(LOG.test_step))
+
+
+def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1', lab=None, final_step=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Configure subcloud"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+
+        subcloud_config = subcloud.replace('-', '') + '.config'
+
+        install_helper.controller_system_config(lab=lab, config_file=subcloud_config,
+                                                con_telnet=subcloud_controller0_node.telnet_conn,
+                                                subcloud=True)
+
+        if subcloud_controller0_node.ssh_conn is None:
+            subcloud_controller0_node.ssh_conn = install_helper.establish_ssh_connection(
+                subcloud_controller0_node.host_ip)
+
+        ControllerClient.set_active_controller(subcloud_controller0_node.ssh_conn)
+        # install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
+        LOG.info("Auto_info before update: {}".format(Tenant.get('admin', 'RegionOne')))
+        if not main_cloud_node.ssh_conn:
+            main_cloud_node.ssh_conn = install_helper.establish_ssh_connection(main_cloud_node.host_ip)
+        install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
+        LOG.info("Auto_info after update: {}".format(Tenant.get('admin', 'RegionOne')))
+        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                           mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
+
+        LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
+                                                                SubcloudStatus.MGMT_UNMANAGED))
+        LOG.info("Managing subcloud {} ... ".format(subcloud))
+        LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+        dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn)
+
+        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                           mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
+                                           con_ssh=main_cloud_node.ssh_conn)
+
+        LOG.info("Running config for subcloud {} ... ".format(subcloud))
+        install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
+        LOG.info("Run lab_setup after config controller")
+
+        run_lab_setup(con_ssh=subcloud_controller0_node.ssh_conn)
+        if do_step("unlock_active_controller"):
+            LOG.info("unlocking {}".format(subcloud_controller0_node.name))
+            host_helper.unlock_host(host=subcloud_controller0_node.name, con_ssh=subcloud_controller0_node.ssh_conn,
+                                    timeout=2400, check_hypervisor_up=False, check_webservice_up=False,
+                                    check_subfunc=True, check_first=False, con0_install=True)
+
+        LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
+        subcloud_license_path = WRSROOT_HOME + "license.lic"
+        system_helper.install_license(subcloud_license_path, con_ssh=subcloud_controller0_node.ssh_conn)
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -389,7 +454,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         if len(hostnames) == 1:
-            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only)
+            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400)
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
         host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
@@ -573,7 +638,7 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_t
     install_helper.download_hosts_bulk_add_xml_file(lab, build_server, files_path)
     install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=subcloud_controller0.ssh_conn)
     boot_device = lab['boot_device_dict']
-    hostnames = [node.name for node in subcloud_nodes if node.name != 'controller-0']
+    hostnames = [node.host_name for node in subcloud_nodes if node.host_name != 'controller-0']
     boot_hosts(boot_device, hostnames=hostnames)
     host_helper.wait_for_hosts_ready(hostnames,  con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
 
@@ -589,11 +654,12 @@ def install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_t
     LOG.info("Subcloud {} installed successfully ... ".format(subcloud))
 
 
-def add_subclouds(controller0_node, ip_ver=4):
+def add_subclouds(controller0_node, name=None, ip_ver=4):
     """
 
     Args:
         controller0_node:
+        name
         ip_ver:
 
     Returns:
@@ -605,35 +671,63 @@ def add_subclouds(controller0_node, ip_ver=4):
     if ip_ver not in [4, 6]:
         raise ValueError("The distributed cloud IP version must be either ipv4 or ipv6;  currently set to {}"
                          .format("ipv" + str(ip_ver)))
+    if name is None:
+        name = 'subcloud'
 
     if not controller0_node.ssh_conn._is_connected():
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
+    existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
+    if name and 'subcloud' in name and name in existing_subclouds:
+        LOG.info("Subcloud {} already exits; do nothing".format(name))
+        return 0, [name]
 
-    if controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subclouds_file))[0] == 0:
-        controller0_node.ssh_conn.exec_cmd("chmod 777 {}{}".format(WRSROOT_HOME, subclouds_file))
+    if name is not None and name is not '':
+        subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
+        subclouds_file_path = WRSROOT_HOME + name + '/' + subclouds_file
+    else:
+        subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
+        subclouds_file_path = WRSROOT_HOME + subclouds_file
+
+    cmd = "test -f {}".format(subclouds_file_path)
+    cmd2 = "chmod 777 {}".format(subclouds_file_path)
+
+    if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
+        controller0_node.ssh_conn.exec_cmd(cmd2)
     else:
         assert False, "The subclouds text file {} is missing in system controller {}"\
-            .format(subclouds_file, controller0_node.name)
+            .format(subclouds_file, controller0_node.host_name)
 
     LOG.info("Generating subclouds config info from {}".format(subclouds_file))
-    controller0_node.ssh_conn.exec_cmd("cd; ./{}".format(subclouds_file))
+    controller0_node.ssh_conn.exec_cmd("{}".format(subclouds_file_path))
     LOG.info("Checking if subclouds are added and config files are generated.....")
-    subclouds = dc_helper.get_subclouds()
+    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
+    added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
 
-    for subcloud in subclouds:
+    config_generated = []
+    for subcloud in added_subclouds:
         if re.match(r'subcloud-\d{1,2}', subcloud):
             subcloud_config = subcloud.replace('-', '') + ".config"
         else:
             subcloud_config = subcloud + ".config"
 
-        assert controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subcloud_config))[0] == 0, \
-            "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
+        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subcloud_config))[0]
+        if rc == 0:
+            config_generated.append(subcloud_config)
+            config_path = WRSROOT_HOME + subcloud
+            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(WRSROOT_HOME, subcloud_config, config_path))
+        else:
+            msg = "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
+            LOG.warning(msg)
+            assert False, msg
 
-    LOG.info("Subclouds added and config files generated successfully; subclouds: {}".format(subclouds))
+    if len(added_subclouds) == len(config_generated):
+        LOG.info("Subclouds added and config files generated successfully; subclouds: {}"
+                 .format(list(zip(added_subclouds, config_generated))))
+    else:
+        LOG.info("One or more subcloud config are missing, please try to generate the missing configs manually")
 
-    return subclouds
+    return 0, added_subclouds
 
 
 def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=None, patch_dir=None,
@@ -689,13 +783,13 @@ def get_subcloud_nodes_from_lab_dict(subcloud_lab):
     Args:
         subcloud_lab:
 
-    Returns:
+    Returns (list of Node):
 
     """
     if not isinstance(subcloud_lab, dict):
         raise ValueError("The subcloud lab info dictionary must be provided")
 
-    return [v for k, v in subcloud_lab.items() if isinstance(v, Node)]
+    return [v for v in subcloud_lab.values() if isinstance(v, Node)]
 
 
 def parse_subcloud_boot_info(subcloud_boot_info):
@@ -736,8 +830,16 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
             LOG.info("System controller {} is healthy".format(system_controller_lab['name']))
             return True
         else:
-            LOG.warning("System controller is not healthy: {}".format(health))
-            return False
+            if len(health) == 1:
+                if 'No alarms' in health:
+                    # alarm_ids = system_helper.get_alarms(combine_entries=False)
+                    # if all([alarm for alarm in alarm_ids if 'subcloud-' in alarm[1]]):
+                    LOG.info("System controller {} report alarms; ignoring the alarm".
+                             format(system_controller_lab['name']))
+                    return True
+
+            LOG.info("System controller {} not  healthy: {}".format(system_controller_lab['name'], health))
+
     else:
         LOG.warning("System controller not reachable: {}")
         return False
@@ -753,7 +855,7 @@ def reset_controller_telnet_port(controller_node):
     if controller_node.telnet_conn is None:
         controller_node.telnet_conn = install_helper.open_telnet_session(controller_node)
         try:
-            network_helper.reset_telnet_port(controller_node.telnet_conn)
+            install_helper.reset_telnet_port(controller_node.telnet_conn)
         except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout):
             pass
 
@@ -777,6 +879,13 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
     except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
         LOG.error(e_.__str__())
 
+    try:
+        if active_controller_node.ssh_conn:
+            active_controller_node.ssh_conn.connect(retry=True, retry_interval=3, retry_timeout=300)
+            active_controller_node.ssh_conn.flush()
+    except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) as e_:
+        LOG.error(e_.__str__())
+
     LOG.fixture_step("unreserving hosts")
     if dist_cloud:
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
@@ -789,11 +898,10 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
 
-def setup_fresh_install(lab, dist_cloud=False):
+def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
-    install_type = ProjVar.get_var('SYS_TYPE')
 
     build_server = InstallVars.get_install_var('BUILD_SERVER')
     build_dir = InstallVars.get_install_var("TIS_BUILD_DIR")
@@ -808,10 +916,19 @@ def setup_fresh_install(lab, dist_cloud=False):
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     bld_server = initialize_server(build_server)
-    if file_server == bld_server.name:
-        file_server_obj = bld_server
+    dc_float_ip = None
+    if subcloud:
+        dc_float_ip = InstallVars.get_install_var("DC_FLOAT_IP")
+        install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
+        file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
+        file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
+        add_subclouds(file_server_obj, name=install_sub)
     else:
-        file_server_obj = initialize_server(file_server)
+        if file_server == bld_server.name:
+            file_server_obj = bld_server
+        else:
+            file_server_obj = initialize_server(file_server)
+
     if iso_host == bld_server.name:
         iso_host_obj = bld_server
     else:
@@ -842,7 +959,8 @@ def setup_fresh_install(lab, dist_cloud=False):
     paths = {"guest_img": InstallVars.get_install_var("GUEST_IMAGE"),
              "license": InstallVars.get_install_var("LICENSE")}
 
-    boot = {"boot_type": InstallVars.get_install_var("BOOT_TYPE"),
+    boot = {"boot_server": boot_server,
+            "boot_type": InstallVars.get_install_var("BOOT_TYPE"),
             "security": InstallVars.get_install_var("SECURITY"),
             "low_latency": InstallVars.get_install_var("LOW_LATENCY")}
 
@@ -858,9 +976,13 @@ def setup_fresh_install(lab, dist_cloud=False):
                       "skips": skip_list,
                       "active_controller": active_con}
 
+    if subcloud and install_subcloud:
+        _install_setup['install_subcloud'] = install_subcloud
+        _install_setup['dc_float_ip'] = dc_float_ip
+
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
         LOG.fixture_step("Setting up {} boot".format(boot["boot_type"]))
-        lab_dict = lab if not dist_cloud else lab['central_region']
+        lab_dict = lab if not dist_cloud else (lab['central_region'] if not subcloud else lab[subcloud])
 
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)
@@ -887,3 +1009,30 @@ def setup_fresh_install(lab, dist_cloud=False):
 
     return _install_setup
 
+
+def verify_install_uuid(lab=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    LOG.info("Getting the install uuid from controller-0")
+    install_uuid = install_helper.get_host_install_uuid(controller0_node.name, controller0_node.ssh_conn)
+    LOG.info("The install uuid from controller-0 = {}".format(install_uuid))
+
+    LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))
+    hosts = lab['hosts']
+    hosts.remove('controller-0')
+    for host in hosts:
+        with host_helper.ssh_to_host(host) as host_ssh:
+            host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
+            assert host_install_uuid == install_uuid, "The host {} install uuid {} is not same with controller-0 " \
+                                                      "uuid {}".format(host, host_install_uuid, install_uuid)
+            LOG.info("Host {} install uuid verified".format(host))
+    LOG.info("Installation UUID {} verified in all lab hosts".format(install_uuid))
+
+    return True

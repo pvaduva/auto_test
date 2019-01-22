@@ -488,7 +488,52 @@ def auto_mount_vm_disks(vm_id, disks=None, guest_os=None):
     return mounted_on
 
 
-def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None, nics=None, hint=None,
+vif_map = {
+    'e1000': 'normal',
+    'rt18139': 'normal',
+    'virtio': 'normal',
+    'pci-sriov': 'direct',
+    'pci-passthrough': 'direct-physical'}
+
+
+def _convert_vnics(nics, con_ssh, auth_info, cleanup):
+    """
+    Conversion from wrs vif-model to upstream implementation
+    Args:
+        nics (list|tuple):
+        con_ssh
+        auth_info
+        cleanup (None|str)
+
+    Returns (list):
+
+    """
+    converted_nics = []
+    for nic in nics:
+        nic = dict(nic)     # Do not modify original nic param
+        if 'vif-model' in nic and 'avp' != nic['vif-model']:
+            # temporarily ignore avp until avp change implemented
+            vif_model = nic.pop('vif-model')
+            if vif_model:
+                vnic_type = vif_map[vif_model]
+                if 'port-id' in nic:
+                    port_id = nic['port-id']
+                    if network_helper.get_port_values(port=port_id, fields='binding_vnic_type',
+                                                      con_ssh=con_ssh, auth_info=auth_info)[0] != vnic_type:
+                        network_helper.set_port(port_id, vnic_type=vnic_type, con_ssh=con_ssh, auth_info=auth_info)
+                else:
+                    net_id = nic.pop('net-id')
+                    port_name = common.get_unique_name('port_{}'.format(vif_model))
+                    port_id = network_helper.create_port(net_id, name=port_name,
+                                                         vnic_type=vnic_type, con_ssh=con_ssh, auth_info=auth_info,
+                                                         cleanup=cleanup)[1]
+                    nic['port-id'] = port_id
+        converted_nics.append(nic)
+
+    return converted_nics
+
+
+def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None, min_count=None, nics=None, hint=None,
             max_count=None, key_name=None, swap=None, ephemeral=None, user_data=None, block_device=None,
             block_device_mapping=None, sec_group_name=None, vm_host=None, avail_zone=None, file=None,
             config_drive=False, meta=None,
@@ -500,6 +545,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         flavor (str):
         source (str): 'image', 'volume', 'snapshot', or 'block_device'
         source_id (str): id of the specified source. such as volume_id, image_id, or snapshot_id
+        image_id (str): id of glance image. Will not be used if source is image and source_id is specified
         min_count (int):
         max_count (int):
         key_name (str):
@@ -528,7 +574,8 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
         meta (dict): key/value pairs for vm meta data. e.g., {'sw:wrs:recovery_priority': 1, ...}
         fail_ok (bool):
         reuse_vol (bool): whether or not to reuse the existing volume
-        guest_os (str): Valid values: 'cgcs-guest', 'ubuntu_14', 'centos_6', 'centos_7', etc
+        guest_os (str): Valid values: 'cgcs-guest', 'ubuntu_14', 'centos_6', 'centos_7', etc.
+            This will be overriden by image_id if specified.
         poll (bool):
         cleanup (str|None): valid values: 'module', 'session', 'function', 'class', vm (and volume) will be deleted as
             part of teardown
@@ -570,26 +617,22 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
 
     # Handle mandatory arg - nics
     if not nics:
-        vif_model = 'virtio'
-        if guest_os == 'vxworks':
-            vif_model = 'e1000'
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info, con_ssh=con_ssh)
         if not mgmt_net_id:
             raise exceptions.NeutronError("Cannot find management network")
-        nics = [{'net-id': mgmt_net_id, 'vif-model': vif_model}]
+        nics = [{'net-id': mgmt_net_id}]
 
         if 'edge' not in guest_os and 'vxworks' not in guest_os:
             tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info, con_ssh=con_ssh)
             # tenant_vif = random.choice(['virtio', 'avp'])
             if tenant_net_id:
-                nics.append({'net-id': tenant_net_id, 'vif-model': 'virtio'})
+                nics.append({'net-id': tenant_net_id})
 
     if isinstance(nics, dict):
         nics = [nics]
-
+    nics = _convert_vnics(nics, con_ssh=con_ssh, auth_info=auth_info, cleanup=cleanup)
     possible_keys = ['net-id', 'v4-fixed-ip', 'v6-fixed-ip', 'port-id', 'vif-model', 'vif-pci-address']
     nics_args_list = []
-
     for nic in nics:
         nic_args_list = []
 
@@ -607,7 +650,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
     nics_args = ' '.join(nics_args_list)
 
     # Handle mandatory arg - boot source id
-    volume_id = image = snapshot_id = new_vol = None
+    volume_id = snapshot_id = new_vol = image = None
     if source != 'block_device':
         if source is None:
             if min_count is None and max_count is None:
@@ -628,12 +671,13 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, min_count=None,
                 else:
                     new_vol = volume_id = cinder_helper.create_volume(name=vol_name, auth_info=auth_info,
                                                                       con_ssh=con_ssh, guest_image=guest_os,
-                                                                      rtn_exist=False)[1]
+                                                                      rtn_exist=False, image_id=image_id)[1]
 
         elif source.lower() == 'image':
-            img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
-            image = source_id if source_id else glance_helper.get_image_id_from_name(img_name, strict=True,
-                                                                                     fail_ok=False)
+            image = source_id if source_id else image_id
+            if not image:
+                img_name = guest_os if guest_os else GuestImages.DEFAULT_GUEST
+                image = glance_helper.get_image_id_from_name(img_name, strict=True, fail_ok=False)
 
         elif source.lower() == 'snapshot':
             if not snapshot_id:
@@ -1560,28 +1604,13 @@ def _ping_vms(ssh_client, vm_ids=None, con_ssh=None, num_pings=5, timeout=15, fa
         raise exceptions.VMNetworkError(err_msg)
 
 
-def get_vm_interfaces(vm_id, rtn_val='IP addresses', **filters):
-    """
-    Get vm interfaces values via nova interface-list <vm_id>
-    Args:
-        vm_id:
-        rtn_val:
-        **filters:
-
-    Returns:
-
-    """
-    table_ = table_parser.table(cli.nova('interface-list', vm_id))
-    return table_parser.get_values(table_, target_header=rtn_val, **filters)
-
-
-def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None, restart_service=True, reboot=False):
+def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, ports=None, vm_prompt=None, restart_service=True, reboot=False):
     """
     Configure vm routes if the vm has multiple vifs on same network.
     Args:
         vm_id (str):
         vm_ips (str|list): ips for specific vifs. Only works if vifs are up with ips assigned
-        vnics (list of dict): vnics to configure.
+        ports (list of dict): vm ports to configure.
         vm_prompt (None|str)
         restart_service
         reboot
@@ -1594,29 +1623,29 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
         vm_ips = [vm_ips]
 
     vnics_info = {}
-    if vnics:
+    if ports:
         LOG.info("Get vm interfaces' mac and ip addressess")
-        if isinstance(vnics, dict):
-            vnics = [vnics]
-        vm_interfaces_table = table_parser.table(cli.nova('interface-list', vm_id))
-        vm_interfaces_dict = table_parser.row_dict_table(table_=vm_interfaces_table, key_header='Port ID')
-        for i in range(len(vnics)):
-            vnic = vnics[i]
-            port_id = vnic['port_id']
+        if isinstance(ports, str):
+            ports = [ports]
+        vm_interfaces_table = table_parser.table(cli.openstack('port list', '--server {}'.format(vm_id)))
+        vm_interfaces_dict = table_parser.row_dict_table(table_=vm_interfaces_table, key_header='ID')
+        for i in range(len(ports)):
+            port_id = ports[i]
             vif_info = vm_interfaces_dict[port_id]
-            vif_ip = vif_info['ip addresses']
+            vif_ip = vif_info['fixed ip addresses']
             if not vif_ip:
                 if not vm_ips:
                     raise ValueError("vm_ips for matching vnics has to be provided for ports without ip address "
                                      "listed in neutron port-list")
                 vif_ip = vm_ips[i]
             cidr = vif_ip.rsplit('.', maxsplit=1)[0] + '.0/24'
-            vif_mac = vif_info['mac addr']
+            vif_mac = vif_info['mac address']
             vnics_info[vif_mac] = (cidr, vif_ip)
 
+    LOG.info("Configure vm routes if the vm has multiple vifs on same network.")
     with ssh_to_vm_from_natbox(vm_id=vm_id, prompt=vm_prompt) as vm_ssh:
         vifs_to_conf = {}
-        if not vnics:
+        if not ports:
             extra_grep = '| grep --color=never -E "{}"'.format('|'.join(vm_ips)) if vm_ips else ''
             kernel_routes = vm_ssh.exec_cmd('ip route | grep --color=never "proto kernel" {}'.format(extra_grep))[1]
             cidr_dict = {}
@@ -1669,11 +1698,12 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, vnics=None, vm_prompt=None
             vm_ssh.exec_sudo_cmd('echo "{}" > {}'.format(rule, VMPath.ETH_RULE_SCRIPT.format(eth_name)))
 
         if restart_service and not reboot:
-            LOG.info("Restart network service")
+            LOG.info("Restart network service after configure vm routes")
             vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=120)
             vm_ssh.exec_cmd('ip addr')
 
     if reboot:
+        LOG.info("Reboot vm after configure vm routes")
         reboot_vm(vm_id=vm_id)
 
 
@@ -2190,21 +2220,12 @@ class VMInfo:
         self.name = table_parser.get_value_two_col_table(self.initial_table_, 'name', strict=True)
         self.tenant_id = table_parser.get_value_two_col_table(self.initial_table_, 'tenant_id')
         self.user_id = table_parser.get_value_two_col_table(self.initial_table_, 'user_id')
-        self.interface = self.__get_nics()[0]['nic1']['vif_model']
         self.boot_info = self.__get_boot_info()
         VMInfo.__instances[vm_id] = self            # add instance to class variable for tracking
 
     def refresh_table(self):
         self.table_ = table_parser.table(cli.nova('show', self.vm_id, ssh_client=self.con_ssh,
                                                   auth_info=self.auth_info, timeout=60))
-
-    def __get_nics(self):
-        raw_nics = table_parser.get_value_two_col_table(self.initial_table_, 'wrs-if:nics')
-        if isinstance(raw_nics, str):
-            raw_nics = [raw_nics]
-        print("raw_nics: {}".format(raw_nics))
-        nics = [eval(nic) for nic in raw_nics]
-        return nics
 
     def get_host_name(self):
         self.refresh_table()
@@ -3114,7 +3135,101 @@ def perform_action_on_vm(vm_id, action, auth_info=Tenant.get('admin'), con_ssh=N
     return action_function_map[action](vm_id, con_ssh=con_ssh, auth_info=auth_info, **kwargs)
 
 
-def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=None, guest_os=None):
+def get_vm_nics_info(vm_id, network=None, vnic_type=None, rtn_dict=False):
+    """
+    Get vm nics info
+    Args:
+        vm_id:
+        network:
+        vnic_type:
+        rtn_dict:
+
+    Returns (list of dict|dict of dict):
+    list or dict (port as key) of port_info_dict. Each port_info_dict contains following info:
+        {
+            'port_id': <port_id>,
+            'network': <net_name>,
+            'network_id': <net_id>,
+            'vnic_type': <vnic_type>,
+            'mac_address': <mac_address>,
+            'subnet_id': <subnet_id>,
+            'subnet_cidr': <subnet_cidr>
+        }
+
+    """
+    vm_ports, vm_macs, vm_ips_info = network_helper.get_ports(server=vm_id, network=network,
+                                                              rtn_val=('ID', 'MAC Address', 'Fixed IP Addresses'))
+    vm_ips = []
+    vm_subnets = []
+    for ip_info in vm_ips_info:
+        vm_ips.append(ip_info.get('ip_address'))
+        vm_subnets.append(ip_info.get('subnet_id'))
+
+    indexes = list(range(len(vm_ports)))
+    vnic_types = []
+    vm_net_ids = []
+    for port in vm_ports:
+        port_vnic_type, port_net_id = network_helper.get_port_values(port=port,
+                                                                     fields=('binding_vnic_type', 'network_id'))
+        vnic_types.append(port_vnic_type)
+        vm_net_ids.append(port_net_id)
+        if vnic_type and vnic_type != port_vnic_type:
+            indexes.remove(list(vm_ports).index(port))
+
+    vm_net_names = []
+    ids_, names_, = network_helper.get_networks(rtn_val=('ID', 'Name'), strict=False)
+    for net_id in vm_net_ids:
+        vm_net_names.append(names_[ids_.index(net_id)])
+
+    res_dict = {}
+    res = []
+    for i in indexes:
+        port_dict = {
+            'port_id': vm_ports[i],
+            'network': vm_net_names[i],
+            'network_id': vm_net_ids[i],
+            'vnic_type': vnic_types[i],
+            'mac_address': vm_macs[i],
+        }
+        if rtn_dict:
+            res_dict[vm_ports[i]] = port_dict
+        else:
+            res.append(port_dict)
+
+    return res_dict if rtn_dict else res
+
+
+def get_vm_interfaces_via_virsh(vm_id, con_ssh=None):
+    """
+
+    Args:
+        vm_id:
+        con_ssh:
+
+    Returns (list of tuple):
+        [(mac_0, vif_model_0)...]
+
+    """
+    vm_host = nova_helper.get_vm_host(vm_id=vm_id, con_ssh=con_ssh)
+    inst_name = nova_helper.get_vm_instance_name(vm_id=vm_id, con_ssh=con_ssh)
+
+    vm_ifs = []
+    with host_helper.ssh_to_host(vm_host, con_ssh=con_ssh) as host_ssh:
+        output = host_ssh.exec_sudo_cmd('virsh domiflist {}'.format(inst_name), fail_ok=False)[1]
+        if_lines = output.split('-------------------------------\n', 1)[-1].splitlines()
+        for line in if_lines:
+            if not line.strip():
+                continue
+
+            interface, type_, source, model, mac = line.split()
+            vm_ifs.append((mac, model))
+
+    LOG.info("yyy vm_ifs: {}".format(vm_ifs))
+
+    return vm_ifs
+
+
+def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None):
     """
     Add vlan for vm pci-passthrough interface and restart networking service.
     Do nothing if expected vlan interface already exists in 'ip addr'.
@@ -3123,7 +3238,6 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
         vm_id (str):
         net_seg_id (int|str|dict): such as 1792
         retry (int): max number of times to reboot vm to try to recover it from non-exit
-        exclude_nets (list|None): network names to exclude
         guest_os (str): guest os type. Default guest os assumed if None is given.
 
     Returns: None
@@ -3149,7 +3263,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
         net_seg_id = None
 
     for i in range(retry):
-        vm_pcipt_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, vif_model='pci-passthrough')
+        vm_pcipt_nics = get_vm_nics_info(vm_id, vnic_type='direct-physical')
 
         if not vm_pcipt_nics:
             LOG.warning("No pci-passthrough device found for vm from nova show {}".format(vm_id))
@@ -3157,19 +3271,6 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, exclude_nets=No
 
         with ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
             for pcipt_nic in vm_pcipt_nics:
-                if exclude_nets:
-                    if isinstance(exclude_nets, str):
-                        exclude_nets = [exclude_nets]
-
-                    skip_nic = False
-                    for net_to_exclude in exclude_nets:
-                        if pcipt_nic['network'] == net_to_exclude:
-                            LOG.info("pcipt nic in {} is ignored: {}".format(net_to_exclude, pcipt_nic))
-                            skip_nic = True
-                            break
-
-                    if skip_nic:
-                        continue
 
                 mac_addr = pcipt_nic['mac_address']
                 eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
@@ -3950,7 +4051,7 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
 
     args += ' {}'.format(vm_id)
 
-    prev_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
+    prev_ports = network_helper.get_ports(server=vm_id, auth_info=auth_info, con_ssh=con_ssh)
     code, output = cli.nova('interface-attach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                             auth_info=auth_info)
 
@@ -3958,60 +4059,48 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
         return code, output
 
     LOG.info("Post interface-attach checks started...")
-    post_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
-    last_nic = post_nics[-1]
-    last_port = last_nic['port_id']
+    post_ports = network_helper.get_ports(server=vm_id, auth_info=auth_info, con_ssh=con_ssh)
+    attached_port = list(set(post_ports) - set(prev_ports))
 
     err_msgs = []
-    if len(post_nics) - len(prev_nics) != 1:
+    if len(attached_port) != 1:
         err_msg = "NICs for vm {} is not incremented by 1".format(vm_id)
         err_msgs.append(err_msg)
+    else:
+        attached_port = attached_port[0]
 
     if net_id:
         net_name = network_helper.get_net_name_from_id(net_id, con_ssh=con_ssh, auth_info=auth_info)
-        if not net_name == last_nic['network']:
-            err_msg = "Network is not as specified for VM's last nic. Expt: {}. Actual: {}".\
-                format(net_name, last_nic['network'])
+        net_ips = nova_helper.get_vm_nova_show_value(vm_id, field=net_name, strict=False, con_ssh=con_ssh,
+                                                     auth_info=auth_info)
+        if fixed_ip and fixed_ip not in net_ips.split(sep=', '):
+            err_msg = "specified fixed ip {} is not found in nova show {}".format(fixed_ip, vm_id)
             err_msgs.append(err_msg)
 
-        if fixed_ip:
-            net_ips = nova_helper.get_vm_nova_show_value(vm_id, field=net_name, strict=False, con_ssh=con_ssh,
-                                                         auth_info=auth_info)
-            if fixed_ip not in net_ips.split(sep=', '):
-                err_msg = "specified fixed ip {} is not found in nova show {}".format(fixed_ip, vm_id)
-                err_msgs.append(err_msg)
-
-    elif port_id:
-        if not port_id == last_port:
-            err_msg = "port_id is not as specified for VM's last nic. Expt: {}. Actual: {}".format(port_id, last_port)
-            err_msgs.append(err_msg)
-
-    if vif_model:
-        if not vif_model == last_nic['vif_model']:
-            err_msg = "vif_model is not as specified for VM's last nic. Expt: {}. Actual:{}".\
-                format(vif_model, last_nic['vif_model'])
-            err_msgs.append(err_msg)
+    elif port_id and port_id not in post_ports:
+        err_msg = "port {} is not associated to VM".format(port_id)
+        err_msgs.append(err_msg)
 
     if err_msgs:
         err_msgs_str = "Post interface attach check failed:\n{}".format('\n'.join(err_msgs))
         if fail_ok:
             LOG.warning(err_msgs_str)
-            return 2, last_port
+            return 2, attached_port
         raise exceptions.NovaError(err_msgs_str)
 
-    succ_msg = "Port {} successfully attached to VM {}".format(last_port, vm_id)
+    succ_msg = "Port {} successfully attached to VM {}".format(attached_port, vm_id)
     LOG.info(succ_msg)
-    return 0, last_port
+    return 0, attached_port
 
 
-def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no', reboot=True, vm_prompt=None,
+def add_ifcfg_scripts(vm_id, mac_addrs, static_ips=None, ipv6='no', reboot=True, vm_prompt=None,
                       **extra_configs):
     """
 
     Args:
         vm_id:
         vm_eths (str|list):
-        vnics (list of dict):
+        mac_addrs (list of str):
         static_ips (None|str|list):
         ipv6:
         reboot:
@@ -4021,20 +4110,13 @@ def add_ifcfg_scripts(vm_id, vm_eths=None, vnics=None, static_ips=None, ipv6='no
     Returns:
 
     """
-
+    LOG.info('Add ifcfg script(s) to VM {}'.format(vm_id))
     with ssh_to_vm_from_natbox(vm_id, prompt=vm_prompt) as vm_ssh:
-        if not vm_eths:
-            vm_eths = []
-            if not vnics:
-                raise ValueError("vm_eths or vnics has to be provided")
-
-            for vnic in vnics:
-                mac_addr = vnic['mac_address']
-                eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-                assert eth_name, "vif not found for expected mac_address {} in vm {}".format(mac_addr, vm_id)
-                vm_eths.append(eth_name)
-        elif isinstance(vm_eths, str):
-            vm_eths = [vm_eths]
+        vm_eths = []
+        for mac_addr in mac_addrs:
+            eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+            assert eth_name, "vif not found for expected mac_address {} in vm {}".format(mac_addr, vm_id)
+            vm_eths.append(eth_name)
 
         if static_ips:
             if isinstance(static_ips, str):
@@ -4083,33 +4165,35 @@ def detach_interface(vm_id, port_id, cleanup_route=False, fail_ok=False, auth_in
     """
     target_ips = None
     if cleanup_route:
-        fixed_ips = network_helper.get_ports(rtn_val='fixed_ips', port_id=port_id, merge_lines=False,
+        fixed_ips = network_helper.get_ports(rtn_val='Fixed IP Addresses', port_id=port_id, merge_lines=False,
                                              con_ssh=con_ssh, auth_info=auth_info)[0]
-        if isinstance(fixed_ips, str):
+        if isinstance(fixed_ips, dict):
             fixed_ips = [fixed_ips]
-        target_ips = [eval(fixed_ip)['ip_address'] for fixed_ip in fixed_ips]
+        target_ips = [fixed_ip['ip_address'] for fixed_ip in fixed_ips]
 
     mac_to_check = None
     if verify_virsh:
-        prev_nics = nova_helper.get_vm_interfaces_info(vm_id, auth_info=auth_info, con_ssh=con_ssh)
-        for prev_nic in prev_nics:
-            if port_id == prev_nic['port_id']:
-                mac_to_check = prev_nic['mac_address']
+        prev_ports, prev_macs = network_helper.get_ports(server=vm_id, auth_info=auth_info, con_ssh=con_ssh,
+                                                         rtn_val=('ID', 'MAC Address'))
+        for prev_port in prev_ports:
+            if port_id == prev_port:
+                mac_to_check = prev_macs[list(prev_ports).index(prev_port)]
+                break
 
     LOG.info("Detaching port {} from vm {}".format(port_id, vm_id))
     args = '{} {}'.format(vm_id, port_id)
     code, output = cli.nova('interface-detach', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
                             auth_info=auth_info)
-
     if code == 1:
         return code, output
 
-    post_nics = nova_helper.get_vm_interfaces_info(vm_id, auth_info=auth_info, con_ssh=con_ssh)
-    for nic in post_nics:
-        if port_id == nic['port_id']:
-            err_msg = "Port {} is not detached from VM {}".format(port_id, vm_id)
-            if fail_ok:
-                return 2, err_msg
+    post_ports = network_helper.get_ports(server=vm_id, auth_info=auth_info, con_ssh=con_ssh)
+    if port_id in post_ports:
+        err_msg = "Port {} is not detached from VM {}".format(port_id, vm_id)
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.NeutronError('port {} is still listed for vm {} after detaching'.format(port_id, vm_id))
 
     succ_msg = "Port {} is successfully detached from VM {}".format(port_id, vm_id)
     LOG.info(succ_msg)
@@ -4515,7 +4599,7 @@ def launch_vms(vm_type, count=1, nics=None, flavor=None, storage_backing=None, i
         tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info)
         internal_net_id = network_helper.get_internal_net_id(auth_info=auth_info)
 
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+        nics = [{'net-id': mgmt_net_id},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
                 {'net-id': internal_net_id, 'vif-model': vif_model}]
 
@@ -4866,7 +4950,7 @@ def wait_for_migration_status(vm_id, migration_id=None, migration_type=None, exp
 
 def get_vms_ports_info(vms, rtn_subnet_id=False):
     """
-    Get VMs' ports' (ip_addr, cidr, mac_addr).
+    Get VMs' ports' (ip_addr, subnet_cidr_or_id, mac_addr).
 
     Args:
         vms (str|list):
@@ -4875,38 +4959,31 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
             replaces cidr with subnet_id in result
 
     Returns (dict):
-        {vms[0]: [(ip_addr, cidr, mac_addr), ...], vms[1]: [...], ...}
+        {vms[0]: [(ip_addr, subnet, ...], vms[1]: [...], ...}
     """
     if not issubclass(type(vms), (list, tuple)):
         vms = [vms]
 
-    info = dict()
-    port_table = table_parser.table(cli.neutron('port-list', auth_info=Tenant.get('admin')))
-    subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.get('admin')))
+    info = {}
+    subnet_tab_ = table_parser.table(cli.openstack('subnet list', auth_info=Tenant.get('admin')))
     for vm in vms:
-        table = table_parser.table(cli.nova('show', vm, auth_info=Tenant.get('admin')))
-        nics = table_parser.get_value_two_col_table(table, "wrs-if:nics")
-        if not issubclass(type(nics), list):
-            nics = [nics]
-        for nic in nics:
-            nic = eval(nic)
-            nic = nic[list(nic.keys())[0]]
-            fixed_ips = table_parser.get_values(port_table, 'fixed_ips', id=nic['port_id'])
-            mac = nic['mac_address']
-            if not issubclass(type(fixed_ips), list):
+        info[vm] = []
+        vm_ports, vm_macs, vm_fixed_ips = network_helper.get_ports(server=vm,
+                                                                   rtn_val=('ID', 'MAC Address', 'Fixed IP Addresses'))
+        for i in range(len(vm_ports)):
+            port = vm_ports[i]
+            mac = vm_macs[i]
+            fixed_ips = vm_fixed_ips[i]
+            if not isinstance(fixed_ips, list):
                 fixed_ips = [fixed_ips]
-            for fixed_ip in fixed_ips:
-                fixed_ip = eval(fixed_ip)
-                if rtn_subnet_id:
-                    cidr = fixed_ip['subnet_id']
-                    LOG.info("VM {} interface {} ip={} subnet_id={}".format(vm, mac, fixed_ip['ip_address'], cidr))
-                else:
-                    cidr = table_parser.get_values(subnet_table, 'cidr', id=fixed_ip['subnet_id'])[0]
-                    LOG.info("VM {} interface {} ip={} cidr={}".format(vm, mac, fixed_ip['ip_address'], cidr))
 
-                if vm not in info:
-                    info[vm] = list()
-                info[vm].append((fixed_ip['ip_address'], cidr, mac))
+            for fixed_ip in fixed_ips:
+                subnet_id = fixed_ip['subnet_id']
+                ip_addr = fixed_ip['ip_address']
+                subnet = subnet_id if rtn_subnet_id else table_parser.get_values(subnet_tab_, 'Subnet', id=subnet_id)[0]
+
+                LOG.info("VM {} port {}: mac={} ip={} subnet={}".format(vm, port, mac, ip_addr, subnet))
+                info[vm].append((ip_addr, subnet, mac))
 
     return info
 
@@ -5254,11 +5331,10 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
 
     # collect IPs in-use, so the IxNetwork interfaces could choose one from the remaining ones
     unavailable_ips = set()
-    for ports in network_helper.get_ports('fixed_ips', merge_lines=False):
-        if not issubclass(type(ports), list):
+    for ports in network_helper.get_ports('Fixed IP Addresses', merge_lines=False):
+        if isinstance(ports, dict):
             ports = [ports]
         for port in ports:
-            port = eval(port)
             unavailable_ips.add(ipaddress.ip_address(port["ip_address"]))
 
     with ExitStack() as stack:
@@ -5428,7 +5504,7 @@ def launch_vm_pair(vm_type='virtio', primary_kwargs=None, secondary_kwargs=None,
             auth_info_ = tenant_info['auth_info']
             mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info_)
             tenant_net_id = network_helper.get_tenant_net_id(auth_info=auth_info_)
-            nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+            nics = [{'net-id': mgmt_net_id},
                     {'net-id': tenant_net_id, 'vif-model': vif_model},
                     {'net-id': internal_net_id, 'vif-model': vif_model}]
             tenant_info['nics'] = nics
@@ -5486,11 +5562,11 @@ def launch_vm_with_both_providernets(vm_type, cidr_tenant1="172.168.33.0/24", ci
                                  tenant_name=Tenant.TENANT2['tenant'], auth_info=Tenant.get('admin'), cleanup=cleanup)
 
     if vm_type in ('virtio', 'vhost'):
-        vif_model = 'virtio'
+        vif_model = None
     else:
         vif_model = 'avp'
 
-    nics = [{'net-id': network_helper.get_mgmt_net_id(), 'vif-model': 'virtio'},
+    nics = [{'net-id': network_helper.get_mgmt_net_id()},
             {'net-id': nw_primary, 'vif-model': vif_model},
             {'net-id': nw_secondary, 'vif-model': vif_model},
             ]

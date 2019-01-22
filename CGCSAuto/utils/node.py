@@ -141,6 +141,7 @@ def create_vlm_node_dict(nodes, personality):
 
     return node_dict
 
+
 class Node(object):
     """Host representation.
 

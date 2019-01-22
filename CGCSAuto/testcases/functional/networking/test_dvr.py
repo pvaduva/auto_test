@@ -149,10 +149,11 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
     mgmt_net_id = network_helper.get_mgmt_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    vif = 'avp' if system_helper.is_avs() else 'e1000'
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': vif}]
+    internal_vif = {'net-id': internal_net_id}
+    if system_helper.is_avs():
+        internal_vif['vif-model'] = 'avp'
+
+    nics = [{'net-id': mgmt_net_id}, {'net-id': tenant_net_id}, internal_vif]
     for i in range(vms_num):
         vol = cinder_helper.create_volume(rtn_exist=False)[1]
         ResourceCleanup.add(resource_type='volume', resource_id=vol)

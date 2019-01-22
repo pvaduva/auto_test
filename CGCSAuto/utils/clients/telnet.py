@@ -171,7 +171,8 @@ class TelnetClient(Telnet):
             blobs.append(blob)
 
         try:
-            index, re_obj, matched_text = super(TelnetClient, self).expect(list=blobs, timeout=timeout)
+            # index, re_obj, matched_text = super(TelnetClient, self).expect(list=blobs, timeout=timeout)
+            index, re_obj, matched_text = super(TelnetClient, self).expect(blobs, timeout=timeout)
             # Reformat the output
             output = self._process_output(output=matched_text, rm_date=rm_date)
             if index >= 0:

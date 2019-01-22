@@ -3,6 +3,7 @@ import re
 import time
 import random
 import configparser
+import pexpect.exceptions
 
 from pytest import fixture, skip
 
@@ -43,7 +44,9 @@ def collect_logs(msg):
         LOG.info('collecting logs: ' + msg)
         active_controller = ControllerClient.get_active_controller()
         collect_tis_logs(active_controller)
-    except:
+    except pexpect.exceptions.TIMEOUT:
+        active_controller.flush()
+        active_controller.exec_cmd('cat /etc/buid.info')
         pass
 
 
@@ -288,9 +291,10 @@ def test_backup(pre_system_backup):
     backup_info['con_ssh'] = con_ssh
 
     is_ceph = backup_info.get('is_storage_lab', False)
+    LOG.debug('This is a {} lab'.format('Storage/Ceph' if is_ceph else 'Non-Storage/Ceph'))
 
     if is_ceph:
-        # con_ssh.exec_sudo_cmd('touch /etc/ceph/ceph.client.None.keyring')
+        con_ssh.exec_sudo_cmd('touch /etc/ceph/ceph.client.None.keyring')
         pre_backup_test(backup_info, con_ssh)
 
     lab = InstallVars.get_install_var('LAB')
@@ -313,15 +317,16 @@ def test_backup(pre_system_backup):
     backup_info['copy_to_usb'] = copy_to_usb
     backup_info['backup_file_prefix'] = get_backup_file_name_prefix(backup_info)
     backup_info['cinder_backup'] = BackupVars.get_backup_var('cinder_backup')
+    reinstall_storage = BackupVars.get_backup_var('reinstall_storage')
 
-    if not backup_info['cinder_backup']:
+    if reinstall_storage:
+        if is_ceph:
+            backup_cinder_volumes(backup_info)
+
         backup_sysconfig_images(backup_info)
-
-        if is_ceph:
-            backup_cinder_volumes(backup_info)
     else:
-        if is_ceph:
-            backup_cinder_volumes(backup_info)
+        # if is_ceph:
+        #     backup_cinder_volumes(backup_info)
 
         backup_sysconfig_images(backup_info)
 

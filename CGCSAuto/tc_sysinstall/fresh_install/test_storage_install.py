@@ -38,7 +38,8 @@ def install_setup(request):
 
     request.addfinalizer(install_cleanup)
 
-    _install_setup = fresh_install_helper.setup_fresh_install(lab)
+    is_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD") is not None
+    _install_setup = fresh_install_helper.setup_fresh_install(lab, subcloud=is_subcloud)
 
     return _install_setup
 
@@ -69,6 +70,7 @@ def test_storage_install(install_setup):
     patch_dir = install_setup["directories"]["patches"]
     patch_server = install_setup["servers"]["patches"]
     guest_server = install_setup["servers"]["guest"]
+    install_subcloud = install_setup.get("install_subcloud")
 
     if final_step == '0' or final_step == "setup":
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -87,7 +89,12 @@ def test_storage_install(install_setup):
                                             license_path=InstallVars.get_install_var("LICENSE"),
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
-    fresh_install_helper.configure_controller(controller0_node)
+    if install_subcloud:
+        fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,
+                                                final_step=final_step)
+    else:
+        fresh_install_helper.configure_controller(controller0_node)
+
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
@@ -123,3 +130,4 @@ def test_storage_install(install_setup):
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
     fresh_install_helper.reset_global_vars()
+    fresh_install_helper.verify_install_uuid(lab)

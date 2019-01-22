@@ -137,7 +137,7 @@ def test_dynamic_vxlan_functional(version, mode):
 
     for auth_info, vm_host in zip([primary_tenant, other_tenant], vxlan_computes):
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info)
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+        nics = [{'net-id': mgmt_net_id},
                 {'net-id': internal_net_ids[0], 'vif-model': vif_model}]
         vm_name = common.get_unique_name(name_str='vxlan')
         vm_ids.append(vm_helper.boot_vm(name=vm_name, vm_host=vm_host, nics=nics, avail_zone=aggregate_name,

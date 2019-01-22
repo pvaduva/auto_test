@@ -49,6 +49,9 @@ def pytest_configure(config):
     RestoreVars.set_restore_vars(backup_src=backup_src, backup_src_path=backup_src_path, build_server=build_server,
                                  backup_build_id=backup_build_id,  backup_builds_dir=backup_builds_dir)
 
+    reinstall_storage = config.getoption('reinstall_storage')
+    RestoreVars.set_restore_var(reinstall_storage=reinstall_storage)
+
     RestoreVars.set_restore_var(skip_setup_feed=skip_setup_feed)
     RestoreVars.set_restore_var(skip_reinstall=skip_reinstall)
     RestoreVars.set_restore_var(low_latency=low_latency)

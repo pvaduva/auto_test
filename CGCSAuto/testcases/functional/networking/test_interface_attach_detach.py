@@ -26,11 +26,11 @@ def base_vm():
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
 
-    mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
-    tenant_nic = {'net-id': tenant_net_id, 'vif-model': 'virtio'}
+    mgmt_nic = {'net-id': mgmt_net_id}
+    tenant_nic = {'net-id': tenant_net_id}
     nics = [mgmt_nic,
-            {'net-id': internal_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'}]
+            {'net-id': internal_net_id},
+            {'net-id': tenant_net_id}]
 
     vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
@@ -40,7 +40,7 @@ def base_vm():
 @mark.nics
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
     ('tis-centos-guest', 'net_id', [('virtio', 2)]),
-    ('tis-centos-guest', 'net_id', [('avp', 4), ('virtio', 4), ('rtl8139', 4), ('e1000', 3)]),
+    ('tis-centos-guest', 'net_id', [('avp', 8), ('rtl8139', 7)]),
     ('vxworks', 'net_id', [('e1000', 0)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_for_ovs, base_vm):
@@ -70,14 +70,18 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
 
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
 
-    if if_attach_arg == 'port_id':
-        LOG.tc_step("Create a new port")
-        internal_port_id = network_helper.create_port(internal_net_id, 'if_attach_port')[1]
-        ResourceCleanup.add('port', internal_port_id)
+    glance_vif = None
+    for vif in vifs:
+        if vif[0] in ('e1000', 'rtl8139'):
+            glance_vif = vif[0]
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
-    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
-    image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
+    cleanup = None if (not glance_vif and re.search(GuestImages.TIS_GUEST_PATTERN, guest_os)) else 'function'
+    image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup,
+                                             use_existing=False if cleanup else True)
+
+    if glance_vif:
+        glance_helper.set_image(image_id, hw_vif_model=glance_vif, new_name='{}_{}'.format(guest_os, glance_vif))
 
     LOG.tc_step("Create a flavor with 2 vcpus")
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
@@ -90,44 +94,37 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
     assert 0 == code, "Issue occurred when creating volume"
     source_id = vol_id
 
-    if guest_os == 'vxworks':
-        mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'e1000'}
-
     LOG.tc_step("Boot a vm with mgmt nic only")
     vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=[mgmt_nic], source_id=source_id, flavor=flavor_id,
                                       guest_os=guest_os, cleanup='function')[1]
-
+    prev_port_count = 1
     for vm_actions in [['live_migrate'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume'],
                        ['stop', 'start']]:
         tenant_port_ids = []
         if 'vxworks' not in guest_os:
             LOG.tc_step("Attach specified vnics to the VM before {} and bring up interfaces".format(vm_actions))
-            vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-            LOG.info("current nic no {}".format(vnics_attached))
             expt_vnics = 1
-            new_vnics = 0
-            vif_model = 'virtio'
             for vif in vifs:
                 vif_model, vif_count = vif
                 expt_vnics += vif_count
                 LOG.info("iter {}".format(vif_count))
                 for i in range(vif_count):
+                    # TODO Update vif model config. Right now vif model avp still under implementation
                     tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model,
                                                                 net_id=tenant_net_id)[1]
-                    new_vnics += 1
                     tenant_port_ids.append(tenant_port_id)
                 LOG.info("Attached new vnics to the VM {}".format(tenant_port_ids))
 
-            vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-            LOG.info("vnics attached to VM: {}" .format(vnics_attached))
-            assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
+            vm_ports_count = len(network_helper.get_ports(server=vm_under_test))
+            LOG.info("vnics attached to VM: {}" .format(vm_ports_count))
+            assert vm_ports_count == expt_vnics, "vnics attached is not equal to max number."
 
             LOG.info("Bring up all the attached new vifs {} on tenant net from vm".format(vifs))
-            _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics, base_vm=base_vm_id)
+            _bring_up_attached_interface(vm_under_test, ports=tenant_port_ids, guest_os=guest_os, base_vm=base_vm_id)
 
             if expt_vnics == 16:
                 LOG.tc_step("Verify no more vnic can be attached after reaching upper limit 16")
-                res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id,
+                res = vm_helper.attach_interface(vm_under_test, net_id=tenant_net_id,
                                                  fail_ok=True)[0]
                 assert res == 1, "vnics attach exceed maximum limit"
 
@@ -154,10 +151,12 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
                         "after {}".format(vm_actions))
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt', 'data'], retry=10)
 
-            LOG.tc_step("Detach all the {} interface {} after {}".format(vif_model, tenant_port_ids, vm_actions))
+            LOG.tc_step("Detach all attached interface {} after {}".format(tenant_port_ids, vm_actions))
             for tenant_port_id in tenant_port_ids:
                 vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id, cleanup_route=True)
 
+            vm_ports_count = len(network_helper.get_ports(server=vm_under_test))
+            assert prev_port_count == vm_ports_count, "VM ports still listed after interface-detach"
             res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
                                              net_types=['data'])[0]
             assert not res, "Detached interface still works"
@@ -193,38 +192,22 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
     """
 
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
-
+    # TODO Update vif model config. Right now vif model avp still under implementation
     if if_attach_arg == 'port_id':
         LOG.tc_step("Create a new port")
-        internal_port_id = network_helper.create_port(internal_net_id, 'if_attach_port')[1]
-        ResourceCleanup.add('port', internal_port_id)
-
-    initial_port_id = network_helper.create_port(tenant_net_id, 'if_attach_tenant_port')[1]
+        init_port_id = network_helper.create_port(tenant_net_id, 'tenant_port', cleanup='function')[1]
+        tenant_net_nic = {'port-id': init_port_id, 'vif-model': 'avp'}
+    else:
+        tenant_net_nic = {'net-id': tenant_net_id, 'vif-model': 'avp'}
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
     cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
     image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
 
-    LOG.tc_step("Create a flavor with 2 vcpus")
-    flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
-    ResourceCleanup.add('flavor', flavor_id)
-
-    source_id = image_id
-    if boot_source == 'volume':
-        LOG.tc_step("Create a volume from {} image".format(guest_os))
-        code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
-                                                   fail_ok=True)
-        ResourceCleanup.add('volume', vol_id)
-        assert 0 == code, "Issue occurred when creating volume"
-        source_id = vol_id
-
-    nics = [mgmt_nic,
-            {'port-id': initial_port_id, 'vif-model': 'avp'}]
-
     LOG.tc_step("Boot a {} vm and flavor from {} with a mgmt and a data interface".format(guest_os, boot_source))
-    vm_under_test = vm_helper.boot_vm('if_attach-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
-                                      nics=nics, source=boot_source, source_id=source_id, guest_os=guest_os,
-                                      cleanup='function')[1]
+    vm_under_test = vm_helper.boot_vm('if_attach-{}-{}'.format(guest_os, boot_source),
+                                      nics=[mgmt_nic, tenant_net_nic], source=boot_source, image_id=image_id,
+                                      guest_os=guest_os, cleanup='function')[1]
 
     _ping_vm_data(vm_under_test=vm_under_test, base_vm_id=base_vm_id, action='boot')
 
@@ -232,37 +215,44 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
     vm_helper.perform_action_on_vm(vm_under_test, action='pause')
 
     LOG.tc_step("Attach maximum number of vnics to the VM")
-    tenant_port_ids = [initial_port_id]
-    vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-    LOG.info("current nic no {}".format(vnics_attached))
+    tenant_port_ids = network_helper.get_ports(server=vm_under_test, network=tenant_net_id)
+
     expt_vnics = 2
     new_vnics = 0
-    vif_model = 'virtio'
     for vif in vifs:
         vif_model, vif_count = vif
         expt_vnics += vif_count
         LOG.info("iter {}".format(vif_count))
         for i in range(vif_count):
-            tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
+            # TODO Update vif model config. Right now vif model avp still under implementation
+            port_id = None
+            net_id = tenant_net_id
+            if if_attach_arg == 'port_id':
+                name = 'attached_port-{}'.format(i)
+                port_id = network_helper.create_port(net_id=tenant_net_id, name=name, wrs_vif=vif_model)
+                net_id = vif_model = None
+
+            tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=net_id,
+                                                        port_id=port_id)[1]
             new_vnics += 1
             tenant_port_ids.append(tenant_port_id)
         LOG.info("Attached new vnics to the VM {}".format(tenant_port_ids))
 
-    vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
-    LOG.info("vnics attached to VM: {}".format(vnics_attached))
-    assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
+    vm_ports_count = len(network_helper.get_ports(server=vm_under_test))
+    LOG.info("vnics attached to VM: {}".format(vm_ports_count))
+    assert vm_ports_count == expt_vnics, "vnics attached is not equal to max number."
 
     if expt_vnics == 16:
-        res = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id, fail_ok=True)[0]
+        res = vm_helper.attach_interface(vm_under_test, net_id=tenant_net_id, fail_ok=True)[0]
         assert res == 1, "vnics attach exceed maximum limit"
 
     LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live_migrate and unpause'))
     vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
     vm_helper.perform_action_on_vm(vm_under_test, action='unpause')
 
-    LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm and ping them".
-                format(new_vnics, vif_model))
-    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1, base_vm=base_vm_id,
+    LOG.tc_step("Bring up all the attached new tenant interfaces {} from vm and ping them".
+                format(new_vnics))
+    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, ports=tenant_port_ids, base_vm=base_vm_id,
                                  action='pause, attach interfaces, live migrate and unpause')
 
     for i in range(live_migrations):
@@ -273,7 +263,7 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
         vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
         _ping_vm_data(vm_under_test, base_vm_id, action='live migrate')
 
-    LOG.tc_step("Detach all the {} interface {}".format(vif_model, tenant_port_ids))
+    LOG.tc_step("Detach ports: {}".format(tenant_port_ids))
     for tenant_port_id in tenant_port_ids:
         vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
         new_vnics -= 1
@@ -282,22 +272,22 @@ def test_interface_attach_detach_on_paused_vm(guest_os, if_attach_arg, boot_sour
                                      net_types=['data'])[0]
     assert not res, "Ping from base_vm to vm via detached interface still works"
 
-    LOG.tc_step("Attach single {} interface with tenant id {}".format(vif_model, tenant_net_id))
-    vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)
+    LOG.tc_step("Attach single interface with tenant id {}".format(tenant_net_id))
+    port_id = vm_helper.attach_interface(vm_under_test, net_id=tenant_net_id)[1]
     new_vnics += 1
 
     LOG.tc_step("Perform following action(s) on vm  {}: {} {} time".format(vm_under_test, 'live migrate', 1))
     vm_helper.perform_action_on_vm(vm_under_test, action='live_migrate')
 
-    LOG.tc_step("Bring up all the attached new {} {} tenant interface from vm".format(new_vnics, vif_model))
-    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, num=new_vnics+1, base_vm=base_vm_id,
+    LOG.tc_step("Bring up all the attached new tenant interfaces {} from vm".format(new_vnics))
+    _bring_up_attached_interface(vm_under_test, guest_os=guest_os, ports=[port_id], base_vm=base_vm_id,
                                  action='attach interface and live migrate')
 
 
-@mark.parametrize(('guest_os', 'if_attach_arg', 'boot_source'), [
+@mark.parametrize(('guest_os', 'nic_arg', 'boot_source'), [
     ('tis-centos-guest', 'port_id', 'image')
 ], ids=id_gen)
-def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg, boot_source):
+def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, nic_arg, boot_source):
     """
     Setups:
         - Boot a base vm with mgmt net and tenant_port_id (module)
@@ -314,46 +304,30 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, if_attach_arg
     """
 
     base_vm_id, mgmt_nic, tenant_nic, internal_net_id, tenant_net_id, mgmt_net_id = base_vm
-    vif_type = 'avp' if system_helper.is_avs() else 'virtio'
-
-    if if_attach_arg == 'port_id':
-        LOG.tc_step("Create a new port")
-        internal_port_id = network_helper.create_port(internal_net_id, 'if_attach_port')[1]
-        ResourceCleanup.add('port', internal_port_id)
-
-    initial_port_id = network_helper.create_port(tenant_net_id, 'if_attach_tenant_port')[1]
+    vif_type = 'avp' if system_helper.is_avs() else None
 
     LOG.tc_step("Get/Create {} glance image".format(guest_os))
-    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'module'
+    cleanup = None if re.search(GuestImages.TIS_GUEST_PATTERN, guest_os) else 'function'
     image_id = glance_helper.get_guest_image(guest_os=guest_os, cleanup=cleanup)
 
-    LOG.tc_step("Create a flavor with 1 vcpus")
-    flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
-    ResourceCleanup.add('flavor', flavor_id)
-
-    source_id = image_id
-    if boot_source == 'volume':
-        LOG.tc_step("Create a volume from {} image".format(guest_os))
-        code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
-                                                   fail_ok=True)
-        ResourceCleanup.add('volume', vol_id)
-        assert 0 == code, "Issue occurred when creating volume"
-        source_id = vol_id
-
-    nics = [mgmt_nic,
-            {'port-id': initial_port_id, 'vif-model': vif_type}]
-    for i in range(14):
-        nics.append({'net-id': tenant_net_id, 'vif-model': vif_type})
+    # TODO Update vif model config. Right now vif model avp still under implementation
+    nics = [mgmt_nic]
+    for i in range(15):
+        if nic_arg == 'port_id':
+            port_id = network_helper.create_port(tenant_net_id, 'tenant_port-{}'.format(i), wrs_vif=vif_type,
+                                                 cleanup='function')[1]
+            nics.append({'port-id': port_id})
+        else:
+            nics.append({'net-id': tenant_net_id, 'vif-model': vif_type})
 
     LOG.tc_step("Boot a {} vm and flavor from {} with 1 mgmt and 15 data interfaces".format(guest_os, boot_source))
-    vm_under_test = vm_helper.boot_vm('max_vifs-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
-                                      nics=nics, source=boot_source, source_id=source_id, guest_os=guest_os,
-                                      cleanup='function')[1]
+    vm_under_test = vm_helper.boot_vm('max_vifs-{}-{}'.format(guest_os, boot_source), nics=nics, source=boot_source,
+                                      image_id=image_id, guest_os=guest_os, cleanup='function')[1]
 
-    vnics_attached = len(nova_helper.get_vm_interfaces_info(vm_id=vm_under_test))
+    vm_ports_count = len(network_helper.get_ports(server=vm_under_test))
     expt_vnics = 16
-    LOG.info("vnics attached to VM: {}".format(vnics_attached))
-    assert vnics_attached == expt_vnics, "vnics attached is not equal to max number."
+    LOG.info("vnics attached to VM: {}".format(vm_ports_count))
+    assert vm_ports_count == expt_vnics, "vnics attached is not equal to max number."
 
     _ping_vm_data(vm_under_test, vm_under_test, action='boot')
     vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
@@ -408,17 +382,16 @@ def _ping_vm_data(vm_under_test, base_vm_id, action):
 #             vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
 
 
-def _bring_up_attached_interface(vm_id, guest_os, base_vm, num=1, action='attach interfaces'):
+def _bring_up_attached_interface(vm_id, ports, guest_os, base_vm, action='attach interfaces'):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
         vm_id (str):
     """
-    vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
+    vm_macs = network_helper.get_ports(rtn_val='MAC Address', server=vm_id, port_id=ports)
     prompt = Prompt.VXWORKS_PROMPT if guest_os == 'vxworks' else None
-    vm_nics = vm_nics[-num:]
-    vm_helper.add_ifcfg_scripts(vm_id=vm_id, vm_prompt=prompt, vnics=vm_nics, reboot=False)
-    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, vnics=vm_nics, vm_prompt=prompt, reboot=True)
+    vm_helper.add_ifcfg_scripts(vm_id=vm_id, vm_prompt=prompt, mac_addrs=vm_macs, reboot=False)
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, ports=ports, vm_prompt=prompt, reboot=True)
     _ping_vm_data(vm_under_test=vm_id, base_vm_id=base_vm, action=action)
 
 

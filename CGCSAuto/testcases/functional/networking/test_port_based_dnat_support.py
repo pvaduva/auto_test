@@ -78,7 +78,7 @@ def _vms():
         tenant_net_ids += tenant_net_ids
     assert len(tenant_net_ids) >= VMS_COUNT
 
-    vif = 'avp' if system_helper.is_avs() else 'e1000'
+    vif = 'avp' if system_helper.is_avs() else 'virtio'
     vm_vif_models = {'virtio_vm1': ('virtio', tenant_net_ids[0]),
                      '{}_vm1'.format(vif): (vif, tenant_net_ids[1]),
                      'virtio_vm2': ('virtio', tenant_net_ids[2]),
@@ -87,7 +87,7 @@ def _vms():
     vms = []
     for vm_name, vifs in vm_vif_models.items():
         vif_model, tenant_net_id = vifs
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+        nics = [{'net-id': mgmt_net_id},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
                 {'net-id': internal_net_id, 'vif-model': vif_model}]
 

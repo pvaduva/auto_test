@@ -303,7 +303,7 @@ def restore_setup(pre_restore_checkup):
             # establish ssh connection with controller
             LOG.fixture_step("Establishing ssh connection with controller-0 after install...")
 
-            node_name_in_ini = '{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
+            node_name_in_ini = r'{}.*\~\$ '.format(install_helper.get_lab_info(controller_node.barcode)['name'])
             controller_prompt = re.sub(r'([^\d])0*(\d+)', r'\1\2', node_name_in_ini)
 
     controller_prompt = controller_prompt + '|' + Prompt.TIS_NODE_PROMPT_BASE.format(
@@ -682,7 +682,8 @@ def test_restore(restore_setup):
 
     controller_node = lab[controller0]
     con_ssh = ControllerClient.get_active_controller(name=lab['short_name'], fail_ok=True)
-    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format('.*' + lab['name'].split('_')[0]) + r'|' + Prompt.CONTROLLER_0
+    controller_node.telnet_conn.set_prompt(controller_prompt)
 
     if not con_ssh:
         LOG.info("Establish ssh connection with {}".format(controller0))
@@ -699,6 +700,7 @@ def test_restore(restore_setup):
     LOG.tc_step("Restoring {}".format(controller0))
 
     LOG.info("System config restore from backup file {} ...".format(system_backup_file))
+
     if backup_src.lower() == 'usb':
         system_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, system_backup_file)
     else:
@@ -710,13 +712,15 @@ def test_restore(restore_setup):
 
     # return
 
-    LOG.info("Source Keystone user admin environment ...")
-    controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
-
     LOG.info('re-connect to the active controller using ssh')
     con_ssh.close()
     controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
                                                                        initial_prompt=controller_prompt)
+    LOG.info("Source Keystone user admin environment ...")
+    LOG.info("set prompt to:{}, telnet_conn:{}".format(controller_prompt, controller_node.telnet_conn))
+
+    controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+
 
     con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
     controller_node.ssh_conn = con_ssh
@@ -733,7 +737,7 @@ def test_restore(restore_setup):
 
     LOG.info("Images restore from backup file {} ...".format(images_backup_file))
 
-    new_prompt = '{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|controller\-0.*~.*\$ '
+    new_prompt = r'{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|controller\-0.*~.*\$ '
     LOG.info('set prompt to:{}'.format(new_prompt))
     con_ssh.set_prompt(new_prompt)
 
@@ -943,7 +947,7 @@ def check_volumes_spaces(con_ssh):
 
         LOG.info('Deleting known LVM alarms')
 
-        expected_reason = 'Cinder LVM .* Usage threshold exceeded; threshold: (\d+(\.\d+)?)%, actual: (\d+(\.\d+)?)%'
+        expected_reason = r'Cinder LVM .* Usage threshold exceeded; threshold: (\d+(\.\d+)?)%, actual: (\d+(\.\d+)?)%'
         expected_entity = 'host=controller'
         value_titles = ('UUID', 'Alarm ID', 'Reason Text', 'Entity ID')
         lvm_pool_usage = system_helper.get_alarms(rtn_vals=value_titles, con_ssh=con_ssh)

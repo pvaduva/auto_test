@@ -379,8 +379,8 @@ def _setup_vm(vm_ids, hosts_to_boot):
 
     internal_net_id = network_helper.get_internal_net_id()
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
-    internal_nic = {'net-id': internal_net_id, 'vif-model': 'virtio'}
+    mgmt_nic = {'net-id': mgmt_net_id}
+    internal_nic = {'net-id': internal_net_id}
     nics = [mgmt_nic, internal_nic]
 
     source_vm_id = vm_helper.boot_vm(name='source_vm', nics=nics, cleanup='function', vm_host=hosts_to_boot[0])[1]
@@ -408,14 +408,12 @@ def _setup_sfc_vm(sfc_vm_ids, hosts_to_boot, mgmt_nic, internal_net_id):
     """
 
     LOG.info("Create two ports for SFC VM")
-    ingress_port_id = network_helper.create_port(internal_net_id, 'sfc_port1')[1]
-    ResourceCleanup.add('port', ingress_port_id)
-    egress_port_id = network_helper.create_port(internal_net_id, 'sfc_port2')[1]
-    ResourceCleanup.add('port', egress_port_id)
+    ingress_port_id = network_helper.create_port(internal_net_id, 'sfc_port1', cleanup='function')[1]
+    egress_port_id = network_helper.create_port(internal_net_id, 'sfc_port2', cleanup='function')[1]
     LOG.info("Created ingress {} and egress port {}".format(ingress_port_id, egress_port_id))
 
-    internal_nic1 = {'port-id': ingress_port_id, 'vif-model': 'virtio'}
-    internal_nic2 = {'port-id': egress_port_id, 'vif-model': 'virtio'}
+    internal_nic1 = {'port-id': ingress_port_id}
+    internal_nic2 = {'port-id': egress_port_id}
     sfc_nics = [mgmt_nic, internal_nic1, internal_nic2]
 
     sfc_vm_under_test = vm_helper.boot_vm(name='sfc_vm_under_test', nics=sfc_nics, cleanup='function',

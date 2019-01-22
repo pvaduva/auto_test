@@ -10,11 +10,12 @@ from consts.auth import Tenant, CliAuth
 # from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN,\
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE
+    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
+from consts.bios import TerminalKeys
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
 from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
@@ -23,6 +24,7 @@ from utils.clients.telnet import TelnetClient, LOGIN_REGEX
 from utils.clients.local import LocalHostClient
 from utils.node import create_node_boot_dict, create_node_dict
 from utils.tis_log import LOG
+from utils.node import Node
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 UPGRADE_LOAD_SIG_FILE = "bootimage.sig"
@@ -302,6 +304,10 @@ def open_telnet_session(node_obj):
             _telnet_conn.login()
     except exceptions.TelnetTimeout:
         pass
+    except exceptions.TelnetError as e:
+        if "Unable to login to {} credential {}/{}".format(node_obj.name, HostLinuxCreds.get_user(),
+                                                           HostLinuxCreds.get_password()) in e.message:
+            _telnet_conn.login(reset=True)
 
     return _telnet_conn
 
@@ -588,6 +594,8 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if not conf_server:
         conf_server = server
 
+    conf_server_name = conf_server.host_name if isinstance(conf_server, Node) else conf_server.name
+
     sys_version = extract_software_version_from_string_path(load_path)
     default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) \
         if sys_version else load_path + BuildServerPath.LAB_CONF_DIR_PREV
@@ -599,7 +607,6 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if not lab_config_path or lab_config_path == '':
         lab_config_path = default_lab_config_path + "/yow/{}".format(lab['name'])
 
-
     config_path = lab_config_path
     script_path = os.path.join(default_lab_config_path, "scripts")
 
@@ -608,16 +615,16 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     cmd = "test -e " + config_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
-            server.name, config_path)
+    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
+            conf_server_name, config_path)
     conf_server.ssh_conn.rsync(config_path + "/*",
                           lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
     cmd = "test -e " + script_path
-    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            conf_server.name, script_path)
-    conf_server.ssh_conn.rsync(script_path + "/*",
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
+    server.ssh_conn.rsync(script_path + "/*",
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
 
@@ -1415,13 +1422,23 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
         controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
 
-
     connection = controller0_node.telnet_conn
-    cmd = 'echo "{}" | sudo -S config_controller --restore-system {}'.format(HostLinuxCreds.get_password(),
-                                                                             system_backup)
+
+    if RestoreVars.get_restore_var('REINSTALL_STORAGE'):
+        storage_opt = 'include-storage-reinstall'
+    else:
+        storage_opt = 'exclude-storage-reinstall'
+
+    cmd = 'echo "{}" | sudo -S config_controller --restore-system {} {}'.format(HostLinuxCreds.get_password(),
+        storage_opt,
+        system_backup)
+
     os.environ["TERM"] = "xterm"
 
-    rc, output = connection.exec_cmd(cmd, blob=[outputs_restore_system_conf, connection.prompt],
+    blob = list(outputs_restore_system_conf)
+    blob.append(connection.prompt)
+
+    rc, output = connection.exec_cmd(cmd, blob=blob,
                                      expect_timeout=InstallTimeout.SYSTEM_RESTORE)
     compute_configured = False
     if rc == 0:
@@ -2475,7 +2492,11 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
                           lab=lab)
 
     LOG.info("Initial login and password set for " + controller0.name)
-    controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
+    if boot_usb:
+        controller0.telnet_conn.set_prompt(r'(-[\d]+)|(localhost):~\$ ')
+    else:
+        controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
+
     controller0.telnet_conn.login(handle_init_login=True)
 
     if boot_usb:
@@ -2688,7 +2709,7 @@ def wipedisk_via_helper(ssh_con):
         LOG.info("wipedisk_via_helper files are not on the load, will not do wipedisk_via_helper")
 
 
-def update_auth_url(ssh_con, region=None, fail_ok=True):
+def update_auth_url(ssh_con, region=None, use_telnet=False, con_telnet=None, fail_ok=True):
     """
 
     Args:
@@ -2702,7 +2723,7 @@ def update_auth_url(ssh_con, region=None, fail_ok=True):
 
     LOG.info('Attempt to update OS_AUTH_URL from openrc')
 
-    CliAuth.set_vars(**setups.get_auth_via_openrc(ssh_con))
+    CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh=ssh_con, use_telnet=use_telnet, con_telnet=con_telnet ))
     Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
@@ -3307,7 +3328,7 @@ def get_git_name(lab_name):
 
 
 def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
-                             banner=True, branding=True, kubernetes=False):
+                             banner=True, branding=True, kubernetes=False, subcloud=False):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -3338,10 +3359,10 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
             con_telnet.exec_cmd("source {}".format(bashrc_path))
         con_telnet.exec_cmd("export USER=wrsroot")
-
         con_telnet.exec_cmd("test -f {}".format(config_file), fail_ok=False)
         config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
-            else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')
+            else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '') if not subcloud \
+            else "config_subcloud"
         cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
@@ -3356,6 +3377,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         admin_prompt = r"\[.*\(keystone_admin\)\]\$ "
         con_telnet.set_prompt(admin_prompt)
         con_telnet.exec_cmd('source /etc/nova/openrc')
+        update_auth_url(ssh_con=None, use_telnet=True, con_telnet=con_telnet)
         host_helper.wait_for_hosts_states(controller0.name,
                                           availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                           use_telnet=True, con_telnet=con_telnet)
@@ -3566,18 +3588,39 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
+
     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None, tag=tag if not index else None)
+    time.sleep(2)
+
+
     if boot_menu.sub_menus:
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
+        LOG.info("submenu prompt = {}".format(sub_menu_prompts))
         try:
             sub_menus_navigated = 0
+
             while len(sub_menu_prompts) > 0:
                 prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                LOG.info("submenu index = {}".format(prompt_index))
+
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 if sub_menu.name == "Controller Configuration":
+
+                    # sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+> ',
+                    #                                     end_of_menu=b'(\x1b\[01;00H){2,}|\x1b.*\sGraphical Console\s+>(\x1b\[\d+;\d+H)+',
+                    #                                     newline=b'(\x1b\[\d+;\d+H)+')
+                    # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'Console',
+                    #                       end_of_menu=b'.*(\x1b\[\d+;\d+H)+',
+                    #                       newline=b'(\x1b\[\d+;\d+H)')
+
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
-                elif sub_menu.name == "Serial Console":
+                    time.sleep(2)
+                elif sub_menu.name == "Console":
+
+                    # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
+                    #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
+                    #                       newline=b'(\x1b\[\d+;\d+H)+')
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
                 else:
@@ -3591,6 +3634,41 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
             LOG.error("Not enough indexes were given for the menu. {} indexes was given for {} amount of menus".format(
                 str(len(index)), str(len(boot_menu.sub_menus + 1))))
             raise
+
+
+    # if index:
+    #     index = None
+    # pattern = None
+    # while option.sub_menu is not None:
+    #     sub_menu_prompt = option.sub_menu.prompt
+    #     LOG.info("Submenu prompt: {} sub_menu {}".format(sub_menu_prompt, option.sub_menu.name))
+    #
+    #     try:
+    #
+    #         node_obj.telnet_conn.expect(sub_menu_prompt.encode(), 60)
+    #         if 'Console' in option.sub_menu.name:
+    #             LOG.info("Console sub menu output: {}".format(node_obj.telnet_conn.cmd_output.encode()))
+    #         option.sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'([\w]+\s)+\s+> ',
+    #                                      end_of_menu=b'(\x1b\[01;00H){1,}',
+    #                                      newline=b'(\x1b\[\d+;\d+H)+')
+    #         LOG.info("Submenu Options : {}".format(option.sub_menu.options))
+    #         if "Controller Configuration" in option.sub_menu.name:
+    #             pattern = "erial"
+    #             LOG.info("Controller configuration On submenu {}".format(option.sub_menu.name))
+    #         elif "Console" in option.sub_menu.name:
+    #             LOG.info("Console On submenu {}".format(option.sub_menu.name))
+    #             pattern = security
+    #         else:
+    #             index = 0
+    #             LOG.info("Unlknwon On submenu {}".format(option.sub_menu.name))
+    #         option = option.sub_menu.select(node_obj.telnet_conn, index=index, pattern=pattern)
+    #
+    #     except exceptions.TelnetTimeout:
+    #         pass
+    #     except IndexError:
+    #         LOG.error("Invalid index {} or pattern {} was given for the options sub menu {} "
+    #                   .format(index, pattern,option.sub_menu.name))
+    #         raise
 
     return 0
 
@@ -3645,14 +3723,15 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         LOG.info('Boot device selected')
 
         expt_prompts.pop(0)
-        if expt_prompts:
+        if node_obj.name == pxe_host:
+            expt_prompts.append("(\x1b\[0;1;36;44m\s{45,60})")
+            expt_prompts.append("\x1b.*\*{56,60}")
+        if len(expt_prompts) > 0:
             telnet_conn.expect(expt_prompts, 360)
-            index = 1
-    if index == 1:
-        LOG.info('In Kickstart menu')
-        select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-                              security=security, usb=usb, expect_prompt=False)
-        LOG.info('Kick start option selected')
+            LOG.info('In Kickstart menu index = {}'.format(index))
+            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                                  security=security, usb=usb, expect_prompt=False)
+    LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
@@ -3706,7 +3785,8 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
         LOG.info("Burning the system cloned image iso file to usb flash drive {}".format(usb_device))
 
         iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
-                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password())
+                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
+                                timeout=180,)
 
         # Write the ISO to USB
         cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
@@ -3952,13 +4032,15 @@ def copy_files_to_subcloud(subcloud):
 
 
 
-def run_config_subcloud(subcloud, con_ssh=None, timeout=1800, fail_ok=True):
+def run_config_subcloud(subcloud, con_ssh=None, lab=None, fail_ok=True):
 
-    dc_lab = InstallVars.get_install_var("LAB")
-    lab = dc_lab[subcloud]
-    subcloud_controller_node = lab['controller-0']
+
+    if not lab:
+        lab = InstallVars.get_install_var("LAB")
+
     if not con_ssh:
-        if  subcloud_controller_node.ssh_conn:
+        subcloud_controller_node = lab['controller-0']
+        if subcloud_controller_node.ssh_conn:
             con_ssh = subcloud_controller_node.ssh_conn
         else:
             subcloud_controller_node.ssh_conn = establish_ssh_connection(subcloud_controller_node.host_ip)
@@ -3973,10 +4055,43 @@ def run_config_subcloud(subcloud, con_ssh=None, timeout=1800, fail_ok=True):
         return rc, msg
 
     cmd = "config_subcloud {}".format(subcloud_config)
-    rc, msg = con_ssh.exec_sudo_cmd(cmd)
+    rc, msg = con_ssh.exec_sudo_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT)
     if rc != 0:
         msg = " {} run failed: {}".format(subcloud_config, msg)
         LOG.warning(msg)
         return rc, msg
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(subcloud_config)
+
+
+def get_host_install_uuid(host, host_ssh, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var('LAB')
+    if host_ssh is None:
+        raise ValueError("Host ssh client connection must be provided")
+
+    if host_ssh.exec_cmd("test -f {}".format(PLATFORM_CONF_PATH))[0] != 0:
+        msg = "The {} file is missing in host {}".format(PLATFORM_CONF_PATH, host)
+        raise exceptions.InstallError(msg)
+    cmd = 'cat {}'.format(PLATFORM_CONF_PATH)
+    exitcode, output = host_ssh.exec_cmd(cmd, rm_date=True)
+    if exitcode != 0:
+        raise exceptions.SSHExecCommandFailed("Command {} failed to execute.".format(cmd))
+
+    install_uuid_line = [l for l in output.splitlines() if "INSTALL_UUID" in l]
+    if len(install_uuid_line) == 0:
+        raise exceptions.InstallError("The install uuid does not exist in {} file: {}"
+                                      .format(PLATFORM_CONF_PATH, output))
+    install_uuid = install_uuid_line[0].split("=")[1].strip()
+    LOG.info("The install uuid from host {} is {}".format(host, install_uuid))
+    return install_uuid
+
+
+def reset_telnet_port(telnet_conn):
+    telnet_conn.send_control("\\")
+    index = telnet_conn.expect(["anonymous:.+:PortCommand> ", "Login:"], timeout=5)
+    if index == 1:
+        telnet_conn.write(b"\r\n")
+
+    telnet_conn.send("resetport")
+    telnet_conn.login()

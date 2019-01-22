@@ -1,4 +1,3 @@
-import time
 import random
 
 from pytest import mark, fixture, skip
@@ -17,7 +16,7 @@ def list_nova_device():
 
 
 def get_vif_type():
-    return 'avp' if system_helper.is_avs() else 'e1000'
+    return 'avp' if system_helper.is_avs() else None
 
 
 @fixture(scope='module', autouse=True)
@@ -79,7 +78,7 @@ def _flavors(hosts_pci_device_info):
         ResourceCleanup.add('flavor', flavor_id, scope='module')
         if vf > 0:
             extra_spec = {FlavorSpec.PCI_PASSTHROUGH_ALIAS: '{}:{}'.format(pci_alias, vf),
-                          FlavorSpec.NUMA_NODES: '2',
+                          # FlavorSpec.NUMA_NODES: '2',     # feature deprecated. May need to update test case as well.
                           FlavorSpec.CPU_POLICY: 'dedicated'}
 
             nova_helper.set_flavor_extra_specs(flavor_id, **extra_spec)
@@ -151,7 +150,7 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_info, enable_device_an
     internal_net_id = network_helper.get_internal_net_id()
     vif_type = get_vif_type()
 
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': tenant_net_id, 'vif-model': vif_type},
             {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]
 
@@ -252,7 +251,7 @@ def test_ea_vm_with_multiple_crypto_vfs(vfs, _flavors, hosts_pci_device_info):
     internal_net_id = network_helper.get_internal_net_id()
     vif_type = get_vif_type()
 
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': tenant_net_id, 'vif-model': vif_type},
             {'net-id': internal_net_id, 'vif-model': vif_type}]
 
@@ -295,20 +294,20 @@ def test_ea_vm_co_existence_with_and_without_crypto_vfs(_flavors):
     internal_net_id = network_helper.get_internal_net_id()
     vif_type = get_vif_type()
 
-    vm_params = {'vm_no_crypto_1': [_flavors['flavor_none'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    vm_params = {'vm_no_crypto_1': [_flavors['flavor_none'], [{'net-id': mgmt_net_id},
                                                               {'net-id': tenant_net_ids[0], 'vif-model': vif_type},
                                                               {'net-id': internal_net_id, 'vif-model': vif_type}]],
-                 'vm_no_crypto_2': [_flavors['flavor_none'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                 'vm_no_crypto_2': [_flavors['flavor_none'], [{'net-id': mgmt_net_id},
                                                               {'net-id': tenant_net_ids[1], 'vif-model': vif_type},
                                                               {'net-id': internal_net_id, 'vif-model': vif_type}]],
                  'vm_sriov_crypto': [_flavors['flavor_qat_vf_1'],
-                                     [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                                     [{'net-id': mgmt_net_id},
                                       {'net-id': tenant_net_ids[2], 'vif-model': vif_type},
                                       {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]],
-                 'vm_crypto_1': [_flavors['flavor_qat_vf_1'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                 'vm_crypto_1': [_flavors['flavor_qat_vf_1'], [{'net-id': mgmt_net_id},
                                                                {'net-id': tenant_net_ids[3], 'vif-model': vif_type},
                                                                {'net-id': internal_net_id, 'vif-model': vif_type}]],
-                 'vm_crypto_2': [_flavors['flavor_qat_vf_1'], [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+                 'vm_crypto_2': [_flavors['flavor_qat_vf_1'], [{'net-id': mgmt_net_id},
                                                                {'net-id': tenant_net_ids[4], 'vif-model': vif_type},
                                                                {'net-id': internal_net_id, 'vif-model': vif_type}]],
                  }
@@ -371,7 +370,7 @@ def test_ea_max_vms_with_crypto_vfs(_flavors, hosts_pci_device_info):
     tenant_net_id = network_helper.get_tenant_net_id()
     vif_type = get_vif_type()
 
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': tenant_net_id, 'vif-model': vif_type}]
 
     vm_helper.ensure_vms_quotas(number_of_vms + 10)
