@@ -29,6 +29,8 @@ def instances_pg(tenant_home_pg_container, request):
 
 
 @mark.sanity
+@mark.cpe_sanity
+@mark.sx_sanity
 def test_horizon_create_delete_instance(instances_pg):
     """
     Test the instance creation and deletion functionality:
