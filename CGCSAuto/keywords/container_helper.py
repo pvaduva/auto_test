@@ -44,14 +44,12 @@ def exec_docker_cmd(sub_cmd, args, timeout=120, con_ssh=None, fail_ok=False):
     return code, output
 
 
-def upload_helm_charts(tar_file, delete_first=False, check_both_controllers=True, con_ssh=None, timeout=120,
-                       fail_ok=False):
+def upload_helm_charts(tar_file, delete_first=False, con_ssh=None, timeout=120, fail_ok=False):
     """
     Upload helm charts via helm-upload cmd
     Args:
         tar_file:
         delete_first:
-        check_both_controllers:
         con_ssh:
         timeout:
         fail_ok:
@@ -67,13 +65,14 @@ def upload_helm_charts(tar_file, delete_first=False, check_both_controllers=True
 
     abs_dir = os.path.abspath(TiSPath.HELM_CHARTS_DIR)
     file_path = os.path.join(abs_dir, os.path.basename(tar_file))
-    hosts_to_check = [con_ssh.get_hostname()]
-    if check_both_controllers and not system_helper.is_simplex(con_ssh=con_ssh):
-        con_name = 'controller-1' if hosts_to_check[0] == 'controller-0' else 'controller-0'
-        hosts_to_check.append(con_name)
+    current_host = con_ssh.get_hostname()
+    controllers = [current_host]
+    if not system_helper.is_simplex(con_ssh=con_ssh):
+        con_name = 'controller-1' if controllers[0] == 'controller-0' else 'controller-0'
+        controllers.append(con_name)
 
     if delete_first:
-        for host in hosts_to_check:
+        for host in controllers:
             with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
                 if host_ssh.file_exists(file_path):
                     host_ssh.exec_sudo_cmd('rm -f {}'.format(file_path))
@@ -82,15 +81,9 @@ def upload_helm_charts(tar_file, delete_first=False, check_both_controllers=True
     if code != 0:
         return 1, output
 
-    for host in hosts_to_check:
-        with host_helper.ssh_to_host(hostname=host, con_ssh=con_ssh) as host_ssh:
-            file_exist = host_ssh.file_exists(file_path)
-
-        if not file_exist:
-            if fail_ok:
-                return 2, host
-            else:
-                raise exceptions.ContainerError("{} not found on {}".format(file_path, host))
+    file_exist = con_ssh.file_exists(file_path)
+    if not file_exist:
+        raise exceptions.ContainerError("{} not found on {} after helm-upload".format(file_path, current_host))
 
     LOG.info("Helm charts {} uploaded successfully".format(file_path))
     return 0, file_path

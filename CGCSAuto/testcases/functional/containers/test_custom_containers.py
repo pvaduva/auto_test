@@ -49,7 +49,7 @@ def delete_test_pod():
     'active',
     'standby'
 ])
-def test_launch_app_via_kubectl(copy_test_apps, delete_test_pod, controller):
+def test_launch_pod_via_kubectl(copy_test_apps, delete_test_pod, controller):
     """
     Test custom pod apply and delete
     Args:
@@ -213,16 +213,11 @@ def test_push_docker_image_to_local_registry(controller):
 
 
 @mark.platform_sanity
-@mark.parametrize('controller', [
-    'active',
-    'standby'
-])
-def test_upload_helm_charts(copy_test_apps, controller):
+def test_upload_charts_via_helm_upload(copy_test_apps):
     """
-    Test upload helm charts from given controller
+    Test upload helm charts via helm-upload cmd directly. i.e., without using sysinv cmd.
     Args:
         copy_test_apps:
-        controller:
 
     Setups:
         - Copy test files from test server to tis system (module)
@@ -233,13 +228,17 @@ def test_upload_helm_charts(copy_test_apps, controller):
 
     """
     app_dir = copy_test_apps
-    host = controller_precheck(controller)
 
-    LOG.tc_step("Upload helm charts from {} controller {}, and verify it appears on both controllers (if applicable)".
-                format(controller, host))
-    with host_helper.ssh_to_host(hostname=host) as con_ssh:
-        container_helper.upload_helm_charts(tar_file=os.path.join(app_dir, HELM_TAR), delete_first=True,
-                                            con_ssh=con_ssh)
+    LOG.tc_step("Upload helm charts via helm-upload cmd from active controller and check charts are in /www/pages/")
+    file_path = container_helper.upload_helm_charts(tar_file=os.path.join(app_dir, HELM_TAR), delete_first=True)[1]
+
+    if system_helper.get_standby_controller_name():
+        LOG.tc_step("Swact active controller and verify uploaded charts are synced over")
+        host_helper.swact_host()
+        con_ssh = ControllerClient.get_active_controller()
+        charts_exist = con_ssh.file_exists(file_path)
+        assert charts_exist, "{} does not exist after swact to {}".format(file_path, con_ssh.get_hostname())
+        LOG.info("{} successfully synced after swact".format(file_path))
 
 
 def controller_precheck(controller):
