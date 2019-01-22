@@ -23,7 +23,7 @@ def defaults_pg(admin_home_pg_container, request):
     return default_pg
 
 
-def test_update_defaults(defaults_pg):
+def test_horizon_update_defaults(defaults_pg):
     """Tests the Update Default Quotas functionality:
 
     Setups:

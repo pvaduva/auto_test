@@ -21,7 +21,7 @@ def hypervisors_pg(admin_home_pg_container, request):
     return hypervisors_pg
 
 
-def test_compute_host_disable_service_negative(hypervisors_pg):
+def test_horizon_compute_host_disable_service_negative(hypervisors_pg):
     host_name = host_helper.get_up_hypervisors()[0]
     hypervisors_pg.go_to_compute_host_tab()
 

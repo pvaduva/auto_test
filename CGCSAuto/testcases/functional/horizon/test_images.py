@@ -26,7 +26,7 @@ def admin_images_pg(admin_home_pg_container, request):
     return images_pg, image_name
 
 
-def test_image_create_delete(admin_images_pg):
+def test_horizon_image_create_delete(admin_images_pg):
     """
     Test the image creation and deletion functionality:
 
@@ -64,7 +64,7 @@ def test_image_create_delete(admin_images_pg):
         horizon.test_result = True
 
 
-def test_update_image_metadata(admin_images_pg):
+def test_horizon_update_image_metadata(admin_images_pg):
     """
     Test update image metadata
 
@@ -102,7 +102,7 @@ def test_update_image_metadata(admin_images_pg):
         horizon.test_result = True
 
 
-def test_remove_protected_image(admin_images_pg):
+def test_horizon_remove_protected_image(admin_images_pg):
     """
     Test that protected image is not deletable:
 
@@ -208,7 +208,7 @@ def test_edit_image_description_and_name(admin_images_pg):
         horizon.test_result = True
 
 
-def test_create_volume_from_image(admin_images_pg):
+def test_horizon_create_volume_from_image(admin_images_pg):
     """
     Test create volume from image functionality:
 
@@ -323,7 +323,7 @@ def tenant_images_pg(tenant_home_pg_container, request):
     return images_pg, image_name
 
 
-def test_launch_instance_from_image(tenant_images_pg):
+def test_horizon_launch_instance_from_image(tenant_images_pg):
     """
     Test launch instance from image functionality:
 

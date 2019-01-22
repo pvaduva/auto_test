@@ -28,7 +28,7 @@ def keypairs_pg(tenant_home_pg_container, request):
     return keypairs_pg
 
 
-def test_keypair(keypairs_pg):
+def test_horizon_keypair(keypairs_pg):
     """
     Test the keypair creation/deletion functionality:
 

@@ -174,7 +174,9 @@ def test_stx_openstack_helm_override_update_and_reset(skip_for_no_openstack, res
     for host in valid_hosts:
         with host_helper.ssh_to_host(hostname=host) as host_ssh:
             LOG.tc_step("Wait for all nova-cell-setup pods reach completed status on {}".format(host))
-            kube_helper.wait_for_openstack_pods_in_status(pod_names='nova-cell-setup', status=PodStatus.COMPLETED)
+            kube_helper.wait_for_openstack_pods_in_status(pod_names='nova-cell-setup',
+                                                          status=PodStatus.COMPLETED,
+                                                          con_ssh=host_ssh)
 
             LOG.tc_step("Check nova compute pods names are changed in kubectl get on {}".format(host))
             post_nova_cell_setup_pods, post_nova_compute_pods = \

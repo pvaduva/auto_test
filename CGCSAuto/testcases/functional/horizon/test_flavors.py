@@ -38,7 +38,7 @@ def flavors_pg_action(flavors_pg, request):
     return flavors_pg, flavor_name
 
 
-def test_flavor_create(flavors_pg):
+def test_horizon_flavor_create(flavors_pg):
     """
     Tests the flavor creation and deletion functionality:
 
@@ -72,7 +72,7 @@ def test_flavor_create(flavors_pg):
     horizon.test_result = True
 
 
-def test_flavor_update_info(flavors_pg_action):
+def test_horizon_flavor_update_info(flavors_pg_action):
     """
     Tests the flavor Edit row action functionality:
 
@@ -139,7 +139,7 @@ def test_flavor_update_info(flavors_pg_action):
     '''
 
 
-def test_create_flavor_with_excessive_vcpu_negative(flavors_pg):
+def test_horizon_create_flavor_with_excessive_vcpu_negative(flavors_pg):
     """
     Test that flavor creation fails:
 

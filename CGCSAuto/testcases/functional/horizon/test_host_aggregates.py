@@ -20,7 +20,7 @@ def host_aggregates_pg(admin_home_pg_container, request):
     return hostaggregates_pg
 
 
-def test_host_aggregate_create(host_aggregates_pg):
+def test_horizon_host_aggregate_create(host_aggregates_pg):
     """
     Test the host aggregate creation and deletion functionality:
 

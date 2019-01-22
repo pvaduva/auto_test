@@ -8,7 +8,7 @@ from utils.horizon.pages import loginpage
     ('admin', 'platform'),
     ('tenant1', 'container')
 ])
-def test_login(driver, username, service):
+def test_horizon_login(driver, username, service):
     """
     Test the login functionality:
 

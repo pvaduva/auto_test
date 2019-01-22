@@ -21,7 +21,7 @@ def fault_management_pg(admin_home_pg, request):
 
 
 @mark.parametrize('event_id', ['100.101'])
-def test_suppress_event(fault_management_pg, event_id):
+def test_horizon_suppress_event(fault_management_pg, event_id):
 
     fault_management_pg.go_to_events_suppression_tab()
 

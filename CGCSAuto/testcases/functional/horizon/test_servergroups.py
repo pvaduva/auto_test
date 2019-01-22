@@ -35,7 +35,7 @@ def server_groups_pg(tenant_home_pg_container, request):
     ('affinity', 'best_effort', 10),
     ('anti-affinity', None, None)
 ])
-def test_create_delete_server_group(server_groups_pg,
+def test_horizon_create_delete_server_group(server_groups_pg,
                                     policy,
                                     best_effort,
                                     group_size):

@@ -22,7 +22,7 @@ def roles_pg(admin_home_pg_container, request):
     return roles_pg, role_name
 
 
-def test_create_edit_delete_role(roles_pg):
+def test_horizon_create_edit_delete_role(roles_pg):
     """
     Tests the role creation/edit/deletion functionality:
 

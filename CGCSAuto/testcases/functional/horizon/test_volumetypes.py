@@ -52,7 +52,7 @@ def _delete_volume_type(volume_types_pg, volume_type_name):
     assert not volume_types_pg.is_volume_type_present(volume_type_name)
 
 
-def test_volume_type_create_delete(volume_types_pg):
+def test_horizon_volume_type_create_delete(volume_types_pg):
     """
     Test the create, delete volume type:
 
@@ -96,7 +96,7 @@ def _delete_qos_spec(volume_types_pg, qos_spec_name):
     assert not volume_types_pg.is_qos_spec_present(qos_spec_name)
     
 
-def test_qos_spec_create_delete(volume_types_pg):
+def test_horizon_qos_spec_create_delete(volume_types_pg):
     """
     Test the QoS Spec creation and deletion functionality:
 
@@ -127,7 +127,7 @@ def test_qos_spec_create_delete(volume_types_pg):
     horizon.test_result = True
 
 
-def test_qos_spec_edit_consumer(volume_qos_spec_action):
+def test_horizon_qos_spec_edit_consumer(volume_qos_spec_action):
     """
     Test the QoS Spec creation and deletion functionality:
 

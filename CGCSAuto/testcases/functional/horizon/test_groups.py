@@ -36,7 +36,7 @@ def groups_pg_action(groups_pg, request):
     return groups_pg
 
 
-def test_create_delete_group(groups_pg):
+def test_horizon_create_delete_group(groups_pg):
     """
     Tests the group creation and deletion functionality:
 
@@ -70,7 +70,7 @@ def test_create_delete_group(groups_pg):
     horizon.test_result = True
 
 
-def test_edit_group(groups_pg_action):
+def test_horizon_edit_group(groups_pg_action):
     """
     Tests the group edit row action functionality:
 

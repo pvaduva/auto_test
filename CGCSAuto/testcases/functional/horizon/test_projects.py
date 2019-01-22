@@ -43,7 +43,7 @@ def projects_pg_action(self, admin_home_pg_container, request):
     return projects_pg, project_name
 
 
-def test_create_delete_project(projects_pg):
+def test_horizon_create_delete_project(projects_pg):
     """
     Test the project creation and deletion functionality:
     
@@ -80,7 +80,7 @@ def test_create_delete_project(projects_pg):
     horizon.test_result = True
 
 
-def test_add_member(projects_pg_action):
+def test_horizon_add_member(projects_pg_action):
     """
     Test the the projects add-member action functionality:
 

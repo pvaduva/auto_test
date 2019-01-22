@@ -13,7 +13,7 @@ from utils.horizon.pages.settings import usersettingspage
 from utils.horizon.pages.settings import changepasswordpage
 
 
-def test_dashboard_help_redirection(admin_home_pg_container):
+def test_horizon_dashboard_help_redirection(admin_home_pg_container):
     """Verifies Help link redirects to the right URL."""
 
     if not system_helper.is_avs():
@@ -100,7 +100,7 @@ def new_user(admin_home_pg_container, request):
     return password_change_pg, username
 
 
-def test_password_change(new_user):
+def test_horizon_password_change(new_user):
     # Changes the password, verifies it was indeed changed and
     # resets to default password.
     # !!!!! the password cannot be change to previous password
@@ -151,7 +151,7 @@ def verify_user_settings_change(settings_page, changed_settings):
                                      % (setting, expected, observed)
 
 
-def test_user_settings_change(user_setting_pg):
+def test_horizon_user_settings_change(user_setting_pg):
     """tests the user's settings options:
 
     * changes the system's language

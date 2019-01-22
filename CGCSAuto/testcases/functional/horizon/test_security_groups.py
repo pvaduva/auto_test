@@ -42,7 +42,7 @@ def security_groups_pg_action(security_groups_pg, request):
     return security_groups_pg
 
 
-def test_securitygroup_create_delete(security_groups_pg):
+def test_horizon_securitygroup_create_delete(security_groups_pg):
     """
     Test the security group creation and deletion functionality:
 
@@ -77,7 +77,7 @@ def test_securitygroup_create_delete(security_groups_pg):
     horizon.test_result = True
 
 
-def test_managerules_create_delete(security_groups_pg_action):
+def test_horizon_managerules_create_delete(security_groups_pg_action):
     """
     Test the manage rules creation and deletion functionality:
 
@@ -116,7 +116,7 @@ def test_managerules_create_delete(security_groups_pg_action):
     horizon.test_result = True
 
 
-def test_managerules_create_delete_by_table(security_groups_pg_action):
+def test_horizon_managerules_create_delete_by_table(security_groups_pg_action):
     """
     Test the manage rules creation and deletion functionality:
 

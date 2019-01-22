@@ -41,7 +41,7 @@ def instances_pg(tenant_home_pg_container, request):
     return instances_page
 
 
-def test_floating_ip(floating_ips_pg_tenant):
+def test_horizon_floating_ip(floating_ips_pg_tenant):
     """
     Tests the floating-ip allocate/release functionality:
 
@@ -77,7 +77,7 @@ def test_floating_ip(floating_ips_pg_tenant):
     horizon.test_result = True
 
 
-def test_floating_ip_associate_disassociate(instances_pg):
+def test_horizon_floating_ip_associate_disassociate(instances_pg):
     """
     Tests the floating-ip allocate/release functionality:
 
@@ -168,7 +168,7 @@ def floating_ips_pg_admin(admin_home_pg_container, request):
     return floating_ips_pg
 
 
-def test_allocate_floating_ip_admin(floating_ips_pg_admin):
+def test_horizon_allocate_floating_ip_admin(floating_ips_pg_admin):
     LOG.tc_step('Allocates floating ip')
     floating_ip = floating_ips_pg_admin.allocate_floatingip(tenant=Tenant.get_primary()['tenant'])
 

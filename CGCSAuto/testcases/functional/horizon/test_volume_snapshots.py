@@ -34,7 +34,7 @@ def volumes_pg(tenant_home_pg_container, request):
     return volumes_pg, volume_name, volume_snapshot_name
 
 
-def test_create_edit_delete_volume_snapshot(volumes_pg):
+def test_horizon_create_edit_delete_volume_snapshot(volumes_pg):
     """
     Test the create/delete volume snapshot action
 
@@ -86,7 +86,7 @@ def test_create_edit_delete_volume_snapshot(volumes_pg):
     horizon.test_result = True
 
 
-def test_create_volume_from_snapshot(volumes_pg):
+def test_horizon_create_volume_from_snapshot(volumes_pg):
     """
     Test the create volume from snapshot action
 

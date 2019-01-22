@@ -48,7 +48,7 @@ def instances_pg(tenant_home_pg_container, request):
     (None, None),
     ('Image', 'tis-centos-guest')
 ])
-def test_volume_create_delete(volumes_pg, volume_source_type, source_name):
+def test_horizon_volume_create_delete(volumes_pg, volume_source_type, source_name):
     """
     Test the create, delete volume functionality:
 
@@ -87,7 +87,7 @@ def test_volume_create_delete(volumes_pg, volume_source_type, source_name):
     horizon.test_result = True
 
 
-def test_manage_volume_attachments(instances_pg):
+def test_horizon_manage_volume_attachments(instances_pg):
     """
     Test the attach/detach actions for volume:
 
@@ -181,7 +181,7 @@ def volumes_pg_action(tenant_home_pg_container, request):
     return volumes_pg, volume_name
 
 
-def test_volume_edit(volumes_pg_action):
+def test_horizon_volume_edit(volumes_pg_action):
     """
     Test the edit volume functionality
 
@@ -213,7 +213,7 @@ def test_volume_edit(volumes_pg_action):
     horizon.test_result = True
 
 
-def test_volume_extend(volumes_pg_action):
+def test_horizon_volume_extend(volumes_pg_action):
     """
     This test case checks extend volume functionality:
 
@@ -243,7 +243,7 @@ def test_volume_extend(volumes_pg_action):
     horizon.test_result = True
 
 
-def test_volume_upload_to_image(volumes_pg_action):
+def test_horizon_volume_upload_to_image(volumes_pg_action):
     """
     This test case checks upload volume to image functionality:
 
@@ -289,7 +289,7 @@ def test_volume_upload_to_image(volumes_pg_action):
     horizon.test_result = True
 
 
-def test_volume_launch_as_instance(volumes_pg_action):
+def test_horizon_volume_launch_as_instance(volumes_pg_action):
     """
     This test case checks launch volume as instance functionality:
 
@@ -342,7 +342,7 @@ def test_volume_launch_as_instance(volumes_pg_action):
     horizon.test_result = True
 
 
-def test_non_bootable_volume_launch_as_instance_negative(volumes_pg_action):
+def test_horizon_non_bootable_volume_launch_as_instance_negative(volumes_pg_action):
     """
     This test case checks launch as instance option does not exist for non-bootable volume:
 

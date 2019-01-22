@@ -36,7 +36,7 @@ def routers_pg_action(routers_pg, request):
     return routers_pg, router_name
 
 
-def test_router_create(routers_pg):
+def test_horizon_router_create(routers_pg):
     """
     Test router creation and deletion functionality:
 
@@ -71,7 +71,7 @@ def test_router_create(routers_pg):
     horizon.test_result = True
 
 
-def test_router_gateway(routers_pg_action):
+def test_horizon_router_gateway(routers_pg_action):
     """
     Test the gateway set/clear functionality:
 
@@ -109,7 +109,7 @@ def test_router_gateway(routers_pg_action):
     horizon.test_result = True
 
 
-def test_router_add_delete_interface(routers_pg_action):
+def test_horizon_router_add_delete_interface(routers_pg_action):
     """
     Test the router interface creation and deletion functionality:
 
@@ -153,7 +153,7 @@ def test_router_add_delete_interface(routers_pg_action):
     horizon.test_result = True
 
 
-def test_router_overview_data(routers_pg_action):
+def test_horizon_router_overview_data(routers_pg_action):
     """
     Test the router overview data is correct:
 
@@ -189,7 +189,7 @@ def test_router_overview_data(routers_pg_action):
     horizon.test_result = True
 
 
-def test_router_admin_edit(routers_pg_action):
+def test_horizon_router_admin_edit(routers_pg_action):
     """
     Test admin edit on router:
 

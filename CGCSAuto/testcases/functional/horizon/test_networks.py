@@ -25,7 +25,7 @@ def project_networks_pg(tenant_home_pg_container, request):
     return networks_pg
 
 
-def test_network_subnet_create_tenant(project_networks_pg):
+def test_horizon_network_subnet_create_tenant(project_networks_pg):
     """
     Test the network creation and deletion functionality:
 
@@ -91,7 +91,7 @@ def admin_networks_pg(admin_home_pg_container, request):
     return networks_pg
 
 
-def test_network_subnet_create_admin(get_pnet, admin_networks_pg):
+def test_horizon_network_subnet_create_admin(get_pnet, admin_networks_pg):
     """
     Test the network creation and deletion functionality:
 
