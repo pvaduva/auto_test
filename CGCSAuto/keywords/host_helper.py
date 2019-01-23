@@ -658,7 +658,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
         raise exceptions.HostPostCheckFailed(msg)
 
 
-def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
+def wait_for_ssh_disconnect(ssh=None, timeout=120, check_interval=3, fail_ok=False):
     if ssh is None:
         ssh = ControllerClient.get_active_controller()
 
@@ -668,6 +668,8 @@ def wait_for_ssh_disconnect(ssh=None, timeout=120, fail_ok=False):
             if fail_ok:
                 return False
             raise exceptions.HostTimeout("Timed out waiting {} ssh to disconnect".format(ssh.host))
+
+        time.sleep(check_interval)
 
     LOG.info("ssh to {} disconnected".format(ssh.host))
     return True
@@ -681,7 +683,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
             con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
             con_ssh = ControllerClient.get_active_controller(name=con_name)
 
-        wait_for_ssh_disconnect(ssh=con_ssh, timeout=120)
+        wait_for_ssh_disconnect(ssh=con_ssh, check_interval=10, timeout=300)
         time.sleep(30)
         con_ssh.connect(retry=True, retry_timeout=timeout)
         ControllerClient.set_active_controller(con_ssh)
@@ -1782,8 +1784,8 @@ def _get_actual_mems(host):
         if code == 0:
             raise exceptions.SysinvError('system host-memory-modify is not rejected when 2M pages exceeds mem_avail')
 
-        # Processor 0:No available space for 2M huge page allocation, max 2M pages: 27464
-        actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
+        # Processor 0:No available space for 2M huge page allocation, max 2M VM pages: 27464
+        actual_mem = int(re.findall(r'max 2M VM pages: (\d+)', output)[0]) * 2
         actual_mems[proc] = (actual_mem, actual_1g)
 
     return actual_mems
