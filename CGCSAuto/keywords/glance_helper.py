@@ -926,7 +926,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
 
     for key, val in other_args.items():
         if val[0] is not None:
-            args[key] = val[0]
+            args.append('{} {}'.format(key, val[0]))
             if val[1]:
                 post_checks[val[1]] = val[0]
 
