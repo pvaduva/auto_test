@@ -333,14 +333,15 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, nic_arg, boot
     vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
     _ping_vm_data(vm_under_test, base_vm_id, action='configure routes')
 
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate --force'))
     destination_host = vm_helper.get_dest_host_for_live_migrate(vm_id=vm_under_test)
-    vm_helper.live_migrate_vm(vm_id=vm_under_test, destination_host=destination_host, force=True)
-    _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
+    if destination_host:
+        LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate --force'))
+        vm_helper.live_migrate_vm(vm_id=vm_under_test, destination_host=destination_host, force=True)
+        _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
 
-    LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate'))
-    vm_helper.live_migrate_vm(vm_id=vm_under_test)
-    _ping_vm_data(vm_under_test, base_vm_id, action='live-migrate')
+        LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate'))
+        vm_helper.live_migrate_vm(vm_id=vm_under_test)
+        _ping_vm_data(vm_under_test, base_vm_id, action='live-migrate')
 
     LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'hard reboot'))
     vm_helper.reboot_vm(vm_id=vm_under_test, hard=True)
