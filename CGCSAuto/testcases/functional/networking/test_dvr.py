@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import RouterStatus
-from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper
+from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper, nova_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -131,6 +131,15 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         - Revert router to
 
     """
+    # Increase instance quota count if needed
+    instance_quota = nova_helper.get_quotas('instances')[0]
+    current_vms = len(nova_helper.get_vms(strict=False))
+    quota_needed = current_vms + vms_num
+    if instance_quota < quota_needed:
+        LOG.tc_step("Increase the instance quota from {} to {}".format(instance_quota, quota_needed))
+        quota_diff = quota_needed - instance_quota
+        nova_helper.update_quotas(instances=instance_quota + quota_diff)
+
     if srv_grp_policy == 'anti-affinity' and len(host_helper.get_up_hypervisors()) == 1:
         skip("Only one nova host on the system.")
 
