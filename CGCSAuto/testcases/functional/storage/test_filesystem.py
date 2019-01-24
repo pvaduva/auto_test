@@ -448,19 +448,18 @@ def test_increase_cinder():
             if float(available_gib) < 10:
                 skip("Insufficient disk space available for test")
 
-            LOG.tc_step("Modify the cinder partition to a larger size")
-            #host_helper.lock_host(host)
+            LOG.tc_step("Modify the cinder partition to a larger size for host {}".format(host))
             table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(host, device_path)))
             partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
             partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
             partition_size_gib = float(partition_size_mib) / 1024
             LOG.info("Current partition size is {}".format(partition_size_gib))
-            if len(hosts) > 1:
-                partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10))
-            else:
-                final_status = [PartitionStatus.READY, PartitionStatus.IN_USE]
-                partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10), final_status=final_status)
-            #host_helper.unlock_host(host, available_only=True)
+            final_status = [PartitionStatus.READY, PartitionStatus.IN_USE]
+            partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10), final_status=final_status)
+            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                              entity_id="host={}".format(host))
+            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC,
+                                              timeout=300)
 
     # Need to swact again for cinder-volumes to be updated on both controllers 
     if len(hosts) > 1:
