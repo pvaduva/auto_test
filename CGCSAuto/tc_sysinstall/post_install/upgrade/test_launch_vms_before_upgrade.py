@@ -47,13 +47,13 @@ def test_launch_vms_pre_upgrade():
         LOG.tc_step("Create or get a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.get_flavor(name='flv_rootdisk')
         if flavor_1 is None or flavor_1 == '':
-            flavor_1 = nova_helper.create_flavor('flv_rootdisk', check_storage_backing=False)[1]
+            flavor_1 = nova_helper.create_flavor('flv_rootdisk')[1]
             ResourceCleanup.add('flavor', flavor_1)
 
         LOG.tc_step("Create or get another flavor with ephemeral and swap disks")
         flavor_2 = nova_helper.get_flavor(name='flv_ephemswap', ephemeral=1)
         if flavor_2 is None or flavor_2 == '':
-            flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, check_storage_backing=False)[1]
+            flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512)[1]
             ResourceCleanup.add('flavor', flavor_2)
 
         for i in range(int(count - exiting_count)):

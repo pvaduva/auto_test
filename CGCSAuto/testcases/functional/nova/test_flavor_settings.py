@@ -8,7 +8,7 @@ from keywords import nova_helper
 
 @fixture(scope='module', autouse=True)
 def flavor_to_test():
-    flavor_id = nova_helper.create_flavor(check_storage_backing=False, cleanup='module')[1]
+    flavor_id = nova_helper.create_flavor(cleanup='module')[1]
 
     return flavor_id
 
@@ -23,7 +23,7 @@ def test_flavor_default_specs():
        - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
     """
     LOG.tc_step("Create flavor with minimal input.")
-    flavor = nova_helper.create_flavor(check_storage_backing=False, cleanup='function')[1]
+    flavor = nova_helper.create_flavor(cleanup='function')[1]
 
     extra_specs = nova_helper.get_flavor_extra_specs(flavor=flavor)
     LOG.tc_step("Check local_image storage is by default included in flavor extra specs")
@@ -31,7 +31,7 @@ def test_flavor_default_specs():
 
 
 @mark.parametrize(('extra_spec_name', 'values'), [
-    mark.p3((FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'])),
+    # mark.p3((FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'])),     # feature deprecated
     mark.p3((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
     mark.p3((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
     # mark.p3((FlavorSpec.NUMA_NODES, [1])),    # feature deprecated

@@ -136,7 +136,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
     LOG.tc_step("Create a flavor with {} vcpus, {}G ephemera disk, {}M swap disk".format(vcpus, ephemeral, swap))
 
     flavor_id = nova_helper.create_flavor(name='flv_4k', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
-                                          storage_backing=storage_backing, check_storage_backing=False)[1]
+                                          storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     specs = {FlavorSpec.MEM_PAGE_SIZE: 'small'}

@@ -279,7 +279,6 @@ class TestPrioritizedVMEvacuation:
                 'root_disk': self.root_disk[sn],
                 'is_public': True,
                 'storage_backing': self.storage_backing,
-                'check_storage_backing': False,
             }
             if self.swap_disk:
                 options['swap'] = self.swap_disk[sn]

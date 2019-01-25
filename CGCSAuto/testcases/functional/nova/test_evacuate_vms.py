@@ -124,13 +124,11 @@ class TestDefaultGuest:
         target_host = hosts[0]
 
         LOG.tc_step("Create a flavor without ephemeral or swap disks")
-        flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing,
-                                             check_storage_backing=False)[1]
+        flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_1, scope='function')
 
         LOG.tc_step("Create another flavor with ephemeral and swap disks")
-        flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing,
-                                             check_storage_backing=False)[1]
+        flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_2, scope='function')
 
         LOG.tc_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")

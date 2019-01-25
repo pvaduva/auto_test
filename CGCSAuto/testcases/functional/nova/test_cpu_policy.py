@@ -211,8 +211,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         else:
             vcpus = vcpus_shared
         LOG.tc_step("Create {} flavor with {} vcpus".format(x, vcpus))
-        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus, storage_backing=storage_backing,
-                                              check_storage_backing=False)[1]
+        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_id)
 
         if pol_source == 'flavor':

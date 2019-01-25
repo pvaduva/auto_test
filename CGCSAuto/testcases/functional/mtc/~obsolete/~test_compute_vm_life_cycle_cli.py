@@ -69,7 +69,7 @@ def launch_instance_on_compute(network_name=None,
     elif host_name in remote_hosts:
         backing = 'remote'
     flavor_id = nova_helper.create_flavor(host_name, storage_backing=backing,
-                                          check_storage_backing=False, guest_os=image_name)[1]
+                                          guest_os=image_name)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     LOG.tc_step('Booting instances on {}'.format(host_name))

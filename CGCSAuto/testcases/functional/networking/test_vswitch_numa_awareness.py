@@ -108,8 +108,7 @@ class TestVSwitchCPUReconfig:
     @fixture(scope='class')
     def flavor_(self, host_to_config):
         storage_backing = host_to_config[-1]
-        flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing), storage_backing=storage_backing,
-                                           check_storage_backing=False)[1]
+        flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing), storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor, scope='class')
 
         return flavor
@@ -923,8 +922,7 @@ class _TestSpanNumaNodes:
 
         LOG.tc_step("Create a 1024ram flavor with specified vcpus")
         name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)
-        flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, storage_backing=storage_backing,
-                                           check_storage_backing=False)[1]
+        flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flv_id)
 
         specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: 2,
@@ -950,7 +948,7 @@ class _TestSpanNumaNodes:
         host_span, host_other, storage_backing, ht_enabled = span_numa_hosts
         LOG.fixture_step("(class) Create a 1024ram flavor with specified vcpus")
         flv_id = nova_helper.create_flavor(name='vswitch_affinity_strict_2vcpu', vcpus=4, ram=1024,
-                                           storage_backing=storage_backing, check_storage_backing=False)[1]
+                                           storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flv_id, scope='class')
 
         specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: 2,

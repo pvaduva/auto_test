@@ -82,7 +82,7 @@ def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='ded
     63
 ])
 def test_set_shared_vcpu_spec(vcpu_id):
-    flavor = nova_helper.create_flavor(name='shared_vcpus', vcpus=64, check_storage_backing=False)[1]
+    flavor = nova_helper.create_flavor(name='shared_vcpus', vcpus=64)[1]
     ResourceCleanup.add('flavor', resource_id=flavor)
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.SHARED_VCPU: vcpu_id})
 
@@ -114,7 +114,7 @@ def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, shared_vcpu):
     """
     LOG.tc_step("Create flavor with {} vcpus, and set cpu_policy to {}".format(vcpus, cpu_policy))
 
-    flavor = nova_helper.create_flavor(vcpus=vcpus, check_storage_backing=False)[1]
+    flavor = nova_helper.create_flavor(vcpus=vcpus)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
     nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
 

@@ -25,7 +25,7 @@ def test_flavor_setting_numa_negative(vcpus, vswitch_affinity, numa_nodes, numa0
 
     LOG.tc_step("Create a 1024ram flavor with {} vcpus".format(vcpus))
     name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)
-    flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, check_storage_backing=False)[1]
+    flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024)[1]
     ResourceCleanup.add('flavor', flv_id)
 
     specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: numa_nodes,

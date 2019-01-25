@@ -12,6 +12,7 @@ TEST_DATA = [('compute-0', 'local_image'),
              ('compute-0', 'local_lvm'),
              ('compute-0', 'remote'), ]
 
+
 @fixture(scope='module', params=TEST_DATA)
 def modify_system_backing(request):
     """
@@ -63,8 +64,7 @@ def test_something_avoid(modify_system_backing):
     """
     LOG.tc_step("Create a flavor with specified storage backing")
     storage_backing = modify_system_backing
-    flv_id = nova_helper.create_flavor(name='test_avoid_flv', storage_backing=storage_backing,
-                                       check_storage_backing=False)[1]
+    flv_id = nova_helper.create_flavor(name='test_avoid_flv', storage_backing=storage_backing)[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flv_id)
 
     LOG.tc_step("Boot vm from above flavor")
@@ -137,8 +137,7 @@ def test_something(host_to_modify, storage_backing):
                                 lock=True, unlock=True)
 
     LOG.tc_step("Create a flavor with specified storage backing")
-    flv_id = nova_helper.create_flavor(name='test_avoid_flv', storage_backing=storage_backing,
-                                       check_storage_backing=False)[1]
+    flv_id = nova_helper.create_flavor(name='test_avoid_flv', storage_backing=storage_backing)[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flv_id)
 
     LOG.tc_step("Boot vm from above flavor")

@@ -62,7 +62,7 @@ def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vc
 
     """
     LOG.tc_step("Create a flavor with 2 vcpus")
-    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False, vcpus=2)[1]
+    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', vcpus=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     specs_dict = {FlavorSpec.CPU_POLICY: cpu_policy,
@@ -112,7 +112,7 @@ def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
 
     """
     LOG.tc_step("Create a flavor with 2 vcpus")
-    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', check_storage_backing=False, vcpus=2)[1]
+    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg1', vcpus=2)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     LOG.tc_step("Set following extra specs: {}".format(specs_preset))
@@ -157,7 +157,7 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 
     """
     LOG.tc_step("Create a flavor")
-    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg2', check_storage_backing=False)[1]
+    flavor_id = nova_helper.create_flavor(name='cpu_thread_neg2')[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated'}

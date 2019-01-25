@@ -2,7 +2,7 @@ from pytest import mark, skip, fixture
 
 from consts.cgcs import FlavorSpec
 from consts.reasons import SkipHypervisor
-from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper, system_helper
+from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
@@ -127,7 +127,7 @@ def test_evacuate_dpdk_and_vhost_vms(add_admin_role_func):
         - Wait for failed host to recover
         - Delete created vms
     """
-    storage, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    hosts = host_helper.get_up_hypervisors()
     if len(hosts) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 

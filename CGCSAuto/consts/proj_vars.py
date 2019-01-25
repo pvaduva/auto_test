@@ -35,6 +35,7 @@ class ProjVar:
                   'PRIMARY_SUBCLOUD': None,
                   'BUILD_INFO': None,
                   'TEMP_DIR': '',
+                  'INSTANCE_BACKING': [],
                   }
 
     @classmethod

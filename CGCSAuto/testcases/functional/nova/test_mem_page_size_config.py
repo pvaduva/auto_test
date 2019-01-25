@@ -18,8 +18,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 @fixture(scope='module')
 def flavor_2g(add_1g_and_4k_pages):
     hosts, storage_backing = add_1g_and_4k_pages
-    flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048, check_storage_backing=False,
-                                       storage_backing=storage_backing)[1]
+    flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', resource_id=flavor, scope='module')
 
     return flavor, hosts, storage_backing

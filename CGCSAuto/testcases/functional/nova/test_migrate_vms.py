@@ -309,15 +309,13 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
     LOG.tc_step("Create a flavor with {} vcpus, {}G ephemera disk, {}M swap disk".format(vcpus, ephemeral, swap))
     flavor_id = nova_helper.create_flavor(name='migration_test', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
-                                          check_storage_backing=False)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+                                          storage_backing=storage_backing, cleanup='function')[1]
 
-    specs = {FlavorSpec.STORAGE_BACKING: storage_backing}
     if cpu_pol is not None:
-        specs[FlavorSpec.CPU_POLICY] = cpu_pol
+        specs = {FlavorSpec.CPU_POLICY: cpu_pol}
 
-    LOG.tc_step("Add following extra specs: {}".format(specs))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+        LOG.tc_step("Add following extra specs: {}".format(specs))
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
@@ -340,8 +338,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 ])
 def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9, cleanup='function')[1]
 
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
@@ -404,8 +401,8 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, ram=ram, guest_os=guest_os)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, ram=ram, guest_os=guest_os,
+                                          cleanup='function')[1]
 
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}

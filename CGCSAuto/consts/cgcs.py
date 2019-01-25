@@ -63,6 +63,13 @@ TIMEZONES = [
 ]
 
 
+STORAGE_AGGREGATE = {
+    # 'local_lvm' : 'local_storage_lvm_hosts',
+    'local_image': 'local_storage_image_hosts',
+    'remote': 'remote_storage_hosts',
+}
+
+
 class NtpPool:
     NTP_POOL_1 = '2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org'
     NTP_POOL_2 = '1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org'
@@ -155,7 +162,7 @@ class SystemType:
     STANDARD = 'Standard'
 
 
-class HostStorageBacking:
+class StorageAggregate:
     LOCAL_LVM = 'local_storage_lvm_hosts'
     LOCAL_IMAGE = 'local_storage_image_hosts'
     REMOTE = 'remote_storage_hosts'
@@ -259,7 +266,8 @@ class FlavorSpec:
     CPU_THREAD_POLICY = 'hw:cpu_thread_policy'
     VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
     MIN_VCPUS = "hw:wrs:min_vcpus"
-    STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
+    # STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
+    STORAGE_BACKING = 'stx_storage'
     # LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
     DISK_READ_BYTES = 'quota:disk_read_bytes_sec'
     DISK_READ_IOPS = 'quota:disk_read_iops_sec'

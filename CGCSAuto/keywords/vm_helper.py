@@ -3224,8 +3224,6 @@ def get_vm_interfaces_via_virsh(vm_id, con_ssh=None):
             interface, type_, source, model, mac = line.split()
             vm_ifs.append((mac, model))
 
-    LOG.info("yyy vm_ifs: {}".format(vm_ifs))
-
     return vm_ifs
 
 

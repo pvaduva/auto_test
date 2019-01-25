@@ -27,7 +27,7 @@ def check_system():
 def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=None, group_size=None,
                                    best_effort=None):
     LOG.tc_step("Create a flavor with server group messaging set to {}".format(srv_grp_msging))
-    flavor_id = nova_helper.create_flavor('srv_grp', check_storage_backing=False, storage_backing=storage_backing)[1]
+    flavor_id = nova_helper.create_flavor('srv_grp', storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', resource_id=flavor_id)
 
     srv_grp_msg_flv = False
