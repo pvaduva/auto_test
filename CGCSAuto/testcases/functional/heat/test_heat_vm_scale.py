@@ -6,7 +6,8 @@ from pytest import mark, fixture
 from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages, VMStatus
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
-from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, common
+from keywords import nova_helper, vm_helper, heat_helper, network_helper, host_helper, system_helper, common, \
+    kube_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG

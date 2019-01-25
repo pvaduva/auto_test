@@ -5,7 +5,7 @@ import yaml
 from utils import table_parser, exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
-from keywords import common, system_helper, host_helper
+from keywords import common, system_helper
 from consts.cgcs import PodStatus
 
 
@@ -78,7 +78,7 @@ def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_
         rtn_list (bool)
         grep (str|list|tuple|None)
 
-    Returns (dict|list):
+    Returns (dict|list of dict):
         key is the name prefix, e.g., service, default, deployment.apps, replicaset.apps
         value is a list. Each item is a dict rep for a row with lowercase keys.
             e.g., [{'name': 'cinder-api', 'age': '4d19h', ... },  ...]
@@ -160,6 +160,7 @@ def apply_pod(file_path, pod_name, namespace=None, recursive=None, select_all=No
     if check_both_controllers and not system_helper.is_simplex(con_ssh=con_ssh):
         LOG.info("Check pod is running on the other controller as well")
         con_name = 'controller-1' if con_ssh.get_hostname() == 'controller-0' else 'controller-0'
+        from keywords import host_helper
         with host_helper.ssh_to_host(hostname=con_name, con_ssh=con_ssh) as other_con:
             res, pods_info = wait_for_pods(pod_names=pod_name, namespace=namespace, con_ssh=other_con, fail_ok=fail_ok)
             if not res:
@@ -327,6 +328,7 @@ def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=Non
     if check_both_controllers and not system_helper.is_simplex(con_ssh=con_ssh):
         LOG.info("Check pod is running on the other controller as well")
         con_name = 'controller-1' if con_ssh.get_hostname() == 'controller-0' else 'controller-0'
+        from keywords import host_helper
         with host_helper.ssh_to_host(hostname=con_name, con_ssh=con_ssh) as other_con:
             res, remaining = wait_for_pods_gone(pod_names=pod_names, namespace=namespace, types=pods_types,
                                                 con_ssh=other_con, fail_ok=fail_ok)
@@ -473,7 +475,8 @@ def wait_for_nodes_ready(hosts=None, timeout=120, check_interval=5, con_ssh=None
         raise exceptions.KubeError(msg)
 
 
-def exec_cmd_in_container(cmd, pod, namespace=None, container_name=None, stdin=None, tty=None, con_ssh=None, fail_ok=False):
+def exec_cmd_in_container(cmd, pod, namespace=None, container_name=None, stdin=None, tty=None, con_ssh=None,
+                          fail_ok=False):
     """
     Execute given cmd in given pod via kubectl exec
     Args:
@@ -525,7 +528,7 @@ def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=
         if isinstance(pod_names, str):
             pod_names = (pod_names,)
 
-        grep= '|'.join(pod_names)
+        grep = '|'.join(pod_names)
         grep += '|NAME'
 
     openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep,
@@ -609,3 +612,33 @@ def is_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None):
 
     res = False if bad_pods else True
     return res, bad_pods
+
+
+def get_pod_logs(pod_name, namespace='openstack', grep_pattern=None, tail_count=10, strict=False,
+                 fail_ok=False, con_ssh=None):
+    """
+    Get logs for given pod via kubectl logs cmd
+    Args:
+        pod_name (str): partial or full pod_name. If full name, set strict to True.
+        namespace (str|None):
+        grep_pattern (str|None):
+        tail_count (int|None):
+        strict (bool):
+        fail_ok:
+        con_ssh:
+
+    Returns (str):
+
+    """
+    if pod_name and not strict:
+        grep = '{}|NAME'.format(pod_name)
+        pod_name = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True,
+                                  grep=grep, fail_ok=fail_ok)[0].get('name')
+    namespace = '-n {} '.format(namespace) if namespace else ''
+    grep = ' | grep --color=never -i -E "{}"'.format(grep_pattern) if grep_pattern else ''
+    tail = ' | tail -n {}'.format(tail_count) if tail_count else ''
+    args = '{}{}{}{}'.format(namespace, pod_name, grep, tail)
+    code, output = exec_kube_cmd(sub_cmd='logs', args=args, con_ssh=con_ssh)
+    if not output and not fail_ok:
+        raise exceptions.KubeError("No kubectl logs found with args: {}".format(args))
+    return output

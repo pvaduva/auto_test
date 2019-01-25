@@ -372,15 +372,16 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     # numa_nodes = list(range(len(procs)))
     vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
     assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
-    with host_helper.ssh_to_host(vm_host) as host_ssh:
 
-        LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
-                 format(SEP, expt_increase))
-        expt_total = round(prev_total_cpus + expt_increase, 4)
-        post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_total_cpus,
-                                                                                  expt_cpus=expt_total, fail_ok=True)
-        assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
-                                             'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+    LOG.info("{}Check total allocated vcpus increased by {} from nova-compute log for {}".
+             format(SEP, expt_increase, vm_host))
+    expt_total = round(prev_total_cpus + expt_increase, 4)
+    post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(vm_host, prev_cpus=prev_total_cpus,
+                                                                              expt_cpus=expt_total, fail_ok=True)
+    assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
+                                         'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+
+    with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check vcpus for vm via sudo virsh vcpupin".format(SEP))
         vcpu_pins = host_helper.get_vcpu_pins_for_instance_via_virsh(host_ssh=host_ssh,

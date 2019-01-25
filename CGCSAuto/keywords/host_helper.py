@@ -13,8 +13,7 @@ from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE, TrafficControl, PLATFORM_NET_TYPES
 
-from keywords import system_helper, common
-from keywords.security_helper import LinuxUser
+from keywords import system_helper, common, kube_helper, security_helper
 from utils import cli, exceptions, table_parser
 from utils import telnet as telnetlib
 from utils.clients.ssh import ControllerClient, SSHFromSSH, SSHClient
@@ -112,7 +111,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
     LOG.info('\n{}'.format(out))
 
     is_simplex = system_helper.is_simplex()
-    user, password = LinuxUser.get_current_user_password()
+    user, password = security_helper.LinuxUser.get_current_user_password()
     # reboot hosts other than active controller
     cmd = 'sudo reboot -f' if force_reboot else 'sudo reboot'
 
@@ -2632,52 +2631,59 @@ def __parse_total_cpus(output):
     return total
 
 
-def get_total_allocated_vcpus_in_log(host, con_ssh=None):
+def get_total_allocated_vcpus_in_log(host=None, pod_name=None, con_ssh=None):
     """
 
     Args:
-        host:
+        host (str|None):
+        pod_name (str|None): full name of nova compute pod
         con_ssh:
 
     Returns (float): float with 4 digits after decimal point
-
     """
-    with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-        cmd = 'cat /var/log/nova/nova-compute.log | grep -i --color=never "Final resource view" | tail -n 3'
-        output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
-        assert output, "Empty return from cmd: {}".format(cmd)
-        total_allocated_vcpus = __parse_total_cpus(output)
-        return total_allocated_vcpus
+    if not host and not pod_name:
+        raise ValueError("host or pod_name has to be provided.")
+
+    strict = True
+    if not pod_name:
+        strict = False
+        pod_name = 'nova-compute-{}'.format(host)
+
+    output = kube_helper.get_pod_logs(pod_name=pod_name, namespace='openstack', strict=strict,
+                                      grep_pattern='Final resource view', tail_count=3, con_ssh=con_ssh)
+
+    total_allocated_vcpus = __parse_total_cpus(output)
+    return total_allocated_vcpus
 
 
-def wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=None, expt_cpus=None, timeout=60, fail_ok=False):
+def wait_for_total_allocated_vcpus_update_in_log(host, prev_cpus=None, expt_cpus=None, timeout=60, fail_ok=False,
+                                                 con_ssh=None):
     """
     Wait for total allocated vcpus in nova-compute.log gets updated to a value that is different than given value
 
     Args:
-        host_ssh (SSHFromSSH):
+        host:
         prev_cpus (None|float|int):
         expt_cpus (int|None)
         timeout (int):
         fail_ok (bool): whether to raise exception when allocated vcpus number did not change
+        con_ssh
 
     Returns (float): New value of total allocated vcpus as float with 4 digits after decimal point
 
     """
-    cmd = 'cat /var/log/nova/nova-compute.log | grep -i --color=never "Final resource view" | tail -n 3'
+    pod_name = kube_helper.get_openstack_pods_info('nova-compute-{}'.format(host), con_ssh=con_ssh)[0][0].get('name')
 
     end_time = time.time() + timeout
     if prev_cpus is None and expt_cpus is None:
-        prev_output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
-        prev_cpus = __parse_total_cpus(prev_output)
+        prev_cpus = get_total_allocated_vcpus_in_log(pod_name=pod_name, con_ssh=con_ssh)
 
     # convert to str
     if prev_cpus:
         prev_cpus = round(prev_cpus, 4)
 
     while time.time() < end_time:
-        output = host_ssh.exec_cmd(cmd, fail_ok=False)[1]
-        allocated_cpus = __parse_total_cpus(output)
+        allocated_cpus = get_total_allocated_vcpus_in_log(pod_name=pod_name, con_ssh=con_ssh)
         if expt_cpus is not None:
             if allocated_cpus == expt_cpus:
                 return expt_cpus
@@ -4616,7 +4622,7 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
         ssh_client = ControllerClient.get_active_controller()
 
     if not use_telnet:
-        default_user, default_password = LinuxUser.get_current_user_password()
+        default_user, default_password = security_helper.LinuxUser.get_current_user_password()
     else:
         default_user = HostLinuxCreds.get_user()
         default_password = HostLinuxCreds.get_password()
