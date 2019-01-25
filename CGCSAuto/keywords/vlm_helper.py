@@ -1,11 +1,10 @@
 import re
 import time
 from multiprocessing import Process, Queue, Event
-
-from consts.proj_vars import InstallVars
+from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
-from consts.auth import SvcCgcsAuto
+from consts.auth import SvcCgcsAuto,Tenant
 from keywords import host_helper, system_helper
 from utils import exceptions, local_host
 from utils.clients.ssh import ControllerClient
@@ -132,7 +131,10 @@ def get_lab_dict():
 def get_barcodes_dict(lab=None):
     if lab is None:
         lab = get_lab_dict()
-    
+        if ProjVar.get_var('IS_DC'):
+            subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
+            lab = lab[subcloud]
+
     if not isinstance(lab, dict):
         raise ValueError("lab dict or None should be provided")
     
@@ -163,7 +165,7 @@ def get_barcodes_from_hostnames(hostnames,  lab=None):
     """
     if isinstance(hostnames, str):
         hostnames = [hostnames]
-        
+
     barcodes_dict = get_barcodes_dict(lab=lab)
     barcodes = []
     
@@ -248,7 +250,7 @@ def power_off_hosts(hosts, lab=None, reserve=True):
 
 
 def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
-                   hosts_to_check=None, con_ssh=None):
+                   hosts_to_check=None, con_ssh=None, region=None):
     """
 
     Args:
@@ -259,6 +261,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         reconnect_timeout (int): max seconds to wait before reconnect succeeds
         hosts_to_check (list|str|None): host(s) to perform post check after power-on. when None, hosts_to_check=hosts
         con_ssh (SSHClient):
+        region:
 
     Returns:
 
@@ -267,22 +270,26 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, reserve=reserve)
+    lab = None
+    if region and ProjVar.get_var('IS_DC'):
+        lab = ProjVar.get_var('LAB')[region]
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=lab, reserve=reserve)
 
     if post_check:
         if con_ssh is None:
-            con_ssh = ControllerClient.get_active_controller()
-
+            con_ssh = ControllerClient.get_active_controller(name=region)
+        auth_info = Tenant.get('admin', dc_region='RegionOne' if region and region == 'central_region' else region)
         if reconnect:
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
-            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, timeout=300, reconnect=True)
+            host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, auth_info=auth_info, timeout=300,
+                                                       reconnect=True)
 
         if not hosts_to_check:
             hosts_to_check = hosts
         elif isinstance(hosts_to_check, str):
             hosts_to_check = [hosts_to_check]
 
-        host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
+        host_helper.wait_for_hosts_ready(hosts_to_check, auth_info=auth_info, con_ssh=con_ssh)
 
 
 def reboot_hosts(hosts, lab=None, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
@@ -321,11 +328,12 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, r
         _vlm_exec_cmd(action, barcode, reserve=reserve, fail_ok=fail_ok)
 
 
-def power_off_hosts_simultaneously(hosts=None):
+def power_off_hosts_simultaneously(hosts=None, region=None):
     """
     Power off hosts in multi-processes to simulate power outage. This can be used for DOR.
     Args:
         hosts (list|None): when None, all hosts on system will be powered off
+        region:
 
     Returns:
 
@@ -348,10 +356,15 @@ def power_off_hosts_simultaneously(hosts=None):
             LOG.error("Failed to power off {}.".format(barcode_))
         output_queue.put({barcode_: rtn})
 
+    auth_info = Tenant.get('admin', dc_region='RegionOne' if region and region == 'central_region' else region)
     if not hosts:
-        hosts = system_helper.get_hostnames()
+        hosts = system_helper.get_hostnames(auth_info=auth_info)
 
-    barcodes = get_barcodes_from_hostnames(hosts)
+    lab = None
+    if region and ProjVar.get_var('IS_DC'):
+        lab = ProjVar.get_var('LAB')[region]
+
+    barcodes = get_barcodes_from_hostnames(hostnames=hosts, lab=lab)
     # Use event to send power off signal to all processes
     power_off_event = Event()
     new_ps = []

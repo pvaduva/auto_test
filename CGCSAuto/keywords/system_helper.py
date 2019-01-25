@@ -222,6 +222,10 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     Returns (list): hostnames
 
     """
+    if not con_ssh:
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
+
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, use_telnet=use_telnet,
                                            con_telnet=con_telnet, auth_info=auth_info))
 
