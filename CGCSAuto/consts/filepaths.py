@@ -84,6 +84,7 @@ class BuildServerPath:
     HEAT_TEMPLATES = 'export/heat-templates'
     LAB_CONF_DIR_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
     LAB_CONF_DIR = "lab"
+    STX_HELM_CHARTS = 'std/build-helm/stx'
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
                            '18.10': HEAT_TEMPLATES, '19.01': HEAT_TEMPLATES,}

@@ -3,7 +3,7 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, network_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
@@ -189,9 +189,14 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
-    if not InstallVars.get_install_var("OPENSTACK_INSTALL"):
+    if InstallVars.get_install_var("NO_OPENSTACK_INSTALL"):
         controller0_node = lab['controller-0']
         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
+
+    if InstallVars.get_install_var("KUBERNETES"):
+        LOG.info("WK: Downloading the helm charts to active controller ...")
+        helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
+        install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
 
 
 def set_license_var(sys_version=None, sys_type=None):
@@ -264,13 +269,16 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
-        LOG.info("Run lab_setup after config controller")
-        run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
-        if do_step("unlock_active_controller"):
-            LOG.info("unlocking {}".format(controller0_node.name))
-            host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                    check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
-                                    check_first=False, con0_install=True)
+    LOG.info("Run lab_setup after config controller")
+    run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
+
+    test_step = "unlock_active_controller"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        LOG.info("unlocking {}".format(controller0_node.name))
+        host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
+                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
+                                check_first=False, con0_install=True)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -514,7 +522,13 @@ def attempt_to_run_post_install_scripts(controller0_node=None):
         rc, msg = install_helper.post_install(controller0_node=controller0_node)
         LOG.info(msg)
         assert rc >= 0, msg
+
+    # TODO Workaround for kubernetes install
+    if InstallVars.get_install_var("KUBERNETES"):
+        kubernetes_post_install()
+
     reset_global_vars()
+
 
 
 def get_resume_step(lab=None, install_progress_path=None):
@@ -530,7 +544,7 @@ def get_resume_step(lab=None, install_progress_path=None):
                 return int(line.split("End step: ")[1].strip()) + 1
 
 
-def install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
+def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
                      patch_dir=None, patch_server_conn=None, final_step=None):
 
     if not subcloud:
@@ -771,7 +785,7 @@ def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=No
         if do_step(test_step):
             if subcloud in subcloud_boots.keys():
                 boot_type = subcloud_boots.get(subcloud, 'pxe')
-                rc, msg = install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, boot_type=boot_type,
+                rc, msg = _install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, boot_type=boot_type,
                                            patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
                                            final_step=final_step)
                 LOG.info(msg)
@@ -948,7 +962,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if "usb" in boot_type:
         # check if oam nic is set
-        controller0_node = lab['controller-0']
+        controller0_node = lab['controller-0'] if not dist_cloud else lab['central_region']['controller-0']
         if not controller0_node.host_nic:
             controller0_node.host_nic = install_helper.get_nic_from_config(conf_server=file_server_obj)
 
@@ -984,8 +998,8 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
                       "skips": skip_list,
                       "active_controller": active_con}
 
-    if subcloud and install_subcloud:
-        _install_setup['install_subcloud'] = install_subcloud
+    if subcloud and install_sub:
+        _install_setup['install_subcloud'] = install_sub
         _install_setup['dc_float_ip'] = dc_float_ip
 
     if not InstallVars.get_install_var("RESUME") and "0" not in skip_list and "setup" not in skip_list:
@@ -1044,3 +1058,63 @@ def verify_install_uuid(lab=None):
     LOG.info("Installation UUID {} verified in all lab hosts".format(install_uuid))
 
     return True
+
+
+def kubernetes_post_install():
+    """
+    Installs kubernetes work arounds post install
+    Args:
+        lab: (the current lab dictionary)
+        # server(build server object): The build server object where helm charts reside.
+        # load_path(str): The path to helm charts
+
+    Returns:
+
+    """
+    # if lab is None or server is None or load_path is None:
+    #     raise ValueError("The lab dictionary, build server object and load path must be specified")
+    lab = InstallVars.get_install_var("LAB")
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    # LOG.info("WK: Trying to execute workaround for neutron-ovs-agent on each hypervisor ...")
+    # hypervisors = host_helper.get_hypervisors(con_ssh=controller0_node.ssh_conn)
+    # for hypervisor in hypervisors:
+    #     with host_helper.ssh_to_host(hypervisor) as host_ssh:
+    #         host_ssh.exec_sudo_cmd('sh -c "echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables"')
+    # LOG.info("WK: Executed workaround for neutron-ovs-agentr ...")
+    #
+    # LOG.info("WK: Adding DNS for cluster ...")
+    # nameservers = ["8.8.8.8"]
+    # rc, output = controller0_node.ssh_conn.exec_cmd("kubectl describe svc -n kube-system kube-dns | "
+    #                                                 "awk /IP:/'{print $2}'")
+    # if rc == 0:
+    #     nameservers.append(output)
+    #
+    # system_helper.set_dns_servers(nameservers)
+    # LOG.info("WK: Added DNS  for the cluster...")
+    #
+    # LOG.info("WK: Generating the stx-openstack application tarball ...")
+    # LOG.info("WK: Downloading the helm charts to active controller ...")
+    # helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
+    # install_helper.download_stx_help_charts(lab, server, stx_helm_charts_path=helm_chart_path)
+
+    LOG.info("WK: Creating hosts and binding interface ...")
+    hosts = lab['hosts']
+    hypervisors = host_helper.get_hypervisors(con_ssh=controller0_node.ssh_conn)
+    for host in hosts:
+        uuid = host_helper.get_hostshow_value(host, 'uuid')
+        cmd = "neutron host-create {} --id {} --availablitiy up".format(host, uuid)
+        controller0_node.ssh_conn.exec_cmd(cmd)
+
+    providernets = network_helper.get_providernets(rtn_val='name')
+    for hypervisor in hypervisors:
+        data0_uuid = system_helper.get_host_if_show_values(hypervisor, "data0", "id").pop()
+        data1_uuid = system_helper.get_host_if_show_values(hypervisor, "data1", "id").pop()
+        for prov in providernets:
+            cmd0 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}".format(data0_uuid, prov, hypervisor)
+            cmd1 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}".format(data1_uuid, prov, hypervisor)
+            controller0_node.ssh_conn.exec_cmd(cmd0)
+            controller0_node.ssh_conn.exec_cmd(cmd1)

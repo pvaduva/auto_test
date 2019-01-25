@@ -146,15 +146,15 @@ def test_distributed_cloud_install(install_setup):
     # TODO
 
     LOG.info("Running lab setup script ...")
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    #fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Unlocking controller-1 ...")
     fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],
                                       lab=central_region_lab, con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Running lab setup script ...")
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if dc_lab.get("floating ip"):
         collect_sys_net_info(dc_lab)

@@ -235,3 +235,7 @@ class PatchError(TiSError):
 
 class InstallError(TiSError):
     message = 'Install error'
+
+
+class K8sError(TiSError):
+    message = 'K8s error'

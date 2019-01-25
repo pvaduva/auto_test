@@ -614,6 +614,13 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
+    cmd = "test -e " + script_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
+    server.ssh_conn.rsync(script_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
+
     cmd = "test -e " + config_path
     assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             conf_server_name, config_path)
@@ -621,12 +628,6 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
-    cmd = "test -e " + script_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            server.name, script_path)
-    server.ssh_conn.rsync(script_path + "/*",
-                          lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
 
 
 def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf'):
@@ -776,14 +777,20 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
 
         if rc != 0:
             msg = "The {} file missing from active controller".format(conf_file)
-            return rc, msg
+            if fail_ok:
+                return rc, msg
+            else:
+                raise exceptions.InstallError(msg)
 
     cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
     rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
-        return rc, msg
+        if fail_ok:
+            return rc, msg
+        else:
+            raise exceptions.InstallError(msg)
 
     if conf_file:
         cmd = "cd; source /etc/nova/openrc; ./{}.sh -f {}".format(script, conf_file)
@@ -796,7 +803,10 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
         scp_logs_to_log_dir([LogPath.LAB_SETUP_LOG, LogPath.HEAT_SETUP_LOG], con_ssh=con_ssh)
-        return rc, msg
+        if fail_ok:
+           return rc, msg
+        else:
+            raise exceptions.InstallError(msg)
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
 
@@ -3381,6 +3391,11 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         host_helper.wait_for_hosts_states(controller0.name,
                                           availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                           use_telnet=True, con_telnet=con_telnet)
+        # if kubernetes:
+        #     LOG.info("Setting DNS server ...")
+        #     system_helper.set_dns_servers(["8.8.8.8"], with_action_option='apply', use_telnet=True,
+        #                                   con_telnet=con_telnet)
+
     finally:
         if close_telnet:
             con_telnet.close()
@@ -4100,3 +4115,31 @@ def reset_telnet_port(telnet_conn):
 
     telnet_conn.send("resetport")
     telnet_conn.login()
+
+
+def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
+    """
+    Downloads the stx helm charts from build server
+    Args:
+        lab:
+        server:
+        stx_helm_charts_path:
+
+    Returns:
+
+    """
+    if lab is None or server is None:
+        raise ValueError("The lab dictionary and build server object must be specified")
+
+    if stx_helm_charts_path is None:
+        stx_helm_charts_path = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, BuildServerPath.LATEST_BUILD,
+                                            BuildServerPath.STX_HELM_CHARTS)
+
+    cmd = "test -e " + stx_helm_charts_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' STX Helm charts path not found in {}:{}'.format(
+            server.name, stx_helm_charts_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+    server.ssh_conn.rsync(stx_helm_charts_path + "/*.tgz",
+                          lab['floating ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)

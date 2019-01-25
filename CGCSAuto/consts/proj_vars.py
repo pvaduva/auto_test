@@ -124,7 +124,7 @@ class InstallVars:
                          skips=None,
                          dc_float_ip=None,
                          install_subcloud=None,
-                         openstack_install=False,):
+                         no_openstack_install=False,):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -137,7 +137,7 @@ class InstallVars:
             'DISTRIBUTED_CLOUD': dist_cloud,
             'OVS': ovs,
             "KUBERNETES": kubernetes,
-            "OPENSTACK_INSTALL": openstack_install,
+            "NO_OPENSTACK_INSTALL": no_openstack_install,
             # TIS BUILD info
             'BUILD_SERVER': build_server,
             'TIS_BUILD_DIR': host_build_dir,
