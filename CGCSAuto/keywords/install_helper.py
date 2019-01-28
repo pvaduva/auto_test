@@ -614,6 +614,13 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
+    cmd = "test -e " + script_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
+            server.name, script_path)
+    server.ssh_conn.rsync(script_path + "/*",
+                          lab['controller-0 ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)
+
     cmd = "test -e " + config_path
     assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
             conf_server_name, config_path)
@@ -621,12 +628,6 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                           lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
-    cmd = "test -e " + script_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            server.name, script_path)
-    server.ssh_conn.rsync(script_path + "/*",
-                          lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
 
 
 def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf'):
@@ -776,14 +777,20 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
 
         if rc != 0:
             msg = "The {} file missing from active controller".format(conf_file)
-            return rc, msg
+            if fail_ok:
+                return rc, msg
+            else:
+                raise exceptions.InstallError(msg)
 
     cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
     rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
-        return rc, msg
+        if fail_ok:
+            return rc, msg
+        else:
+            raise exceptions.InstallError(msg)
 
     if conf_file:
         cmd = "cd; source /etc/nova/openrc; ./{}.sh -f {}".format(script, conf_file)
@@ -796,7 +803,10 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
         scp_logs_to_log_dir([LogPath.LAB_SETUP_LOG, LogPath.HEAT_SETUP_LOG], con_ssh=con_ssh)
-        return rc, msg
+        if fail_ok:
+           return rc, msg
+        else:
+            raise exceptions.InstallError(msg)
     # con_ssh.set_prompt()
     return 0, "{} run successfully".format(script)
 
@@ -2524,7 +2534,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
 
 def setup_networking(controller0, conf_server=None, conf_dir=None):
     if not controller0.host_nic:
-        controller0.host_nic = get_nic_from_config()
+        controller0.host_nic = get_nic_from_config(conf_server=conf_server)
     nic_interface = controller0.host_nic
     if not controller0.telnet_conn:
         controller0.telnet_conn = open_telnet_session(controller0)
@@ -3381,6 +3391,11 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         host_helper.wait_for_hosts_states(controller0.name,
                                           availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                           use_telnet=True, con_telnet=con_telnet)
+        # if kubernetes:
+        #     LOG.info("Setting DNS server ...")
+        #     system_helper.set_dns_servers(["8.8.8.8"], with_action_option='apply', use_telnet=True,
+        #                                   con_telnet=con_telnet)
+
     finally:
         if close_telnet:
             con_telnet.close()
@@ -3595,15 +3610,18 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if boot_menu.sub_menus:
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
-        LOG.info("submenu prompt = {}".format(sub_menu_prompts))
+
         try:
             sub_menus_navigated = 0
 
             while len(sub_menu_prompts) > 0:
+                LOG.info("submenu prompt = {}".format(sub_menu_prompts))
                 prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+
                 LOG.info("submenu index = {}".format(prompt_index))
 
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
+                LOG.info("submenu  {}".format(sub_menu.name))
                 if sub_menu.name == "Controller Configuration":
 
                     # sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+> ',
@@ -3612,18 +3630,20 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'Console',
                     #                       end_of_menu=b'.*(\x1b\[\d+;\d+H)+',
                     #                       newline=b'(\x1b\[\d+;\d+H)')
-
+                    LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
-                    time.sleep(2)
+                    time.sleep(5)
                 elif sub_menu.name == "Console":
 
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
                     #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
                     #                       newline=b'(\x1b\[\d+;\d+H)+')
+                    LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
                 else:
+                    LOG.info("Selecting for  unknown")
                     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                      tag=tag if not index else None)
                 sub_menu_prompts.pop(prompt_index)
@@ -4095,3 +4115,31 @@ def reset_telnet_port(telnet_conn):
 
     telnet_conn.send("resetport")
     telnet_conn.login()
+
+
+def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
+    """
+    Downloads the stx helm charts from build server
+    Args:
+        lab:
+        server:
+        stx_helm_charts_path:
+
+    Returns:
+
+    """
+    if lab is None or server is None:
+        raise ValueError("The lab dictionary and build server object must be specified")
+
+    if stx_helm_charts_path is None:
+        stx_helm_charts_path = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, BuildServerPath.LATEST_BUILD,
+                                            BuildServerPath.STX_HELM_CHARTS)
+
+    cmd = "test -e " + stx_helm_charts_path
+    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' STX Helm charts path not found in {}:{}'.format(
+            server.name, stx_helm_charts_path)
+
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+    server.ssh_conn.rsync(stx_helm_charts_path + "/*.tgz",
+                          lab['floating ip'],
+                          WRSROOT_HOME, pre_opts=pre_opts)

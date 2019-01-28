@@ -602,7 +602,7 @@ def pytest_addoption(parser):
     parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
     parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
                      help=dcfloatip_help)
-    parser.addoption('--openstack-install',  dest='openstack_install', action='store_true', default=False,
+    parser.addoption('--no-openstack-install',  dest='no_openstack_install', action='store_true', default=False,
                      help=openstack_install_help)
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 

@@ -114,11 +114,14 @@ def test_distributed_cloud_install(install_setup):
                                             license_path=InstallVars.get_install_var("LICENSE"),
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
-    config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
-    config_file = 'TiS_config.ini_centos_{}_SysCont'.format(config_file_ext)
-    lab_setup_config_file = 'lab_setup_system_controller'
-    fresh_install_helper.configure_controller(controller0_node, config_file=config_file,
-                                              lab_setup_conf_file=lab_setup_config_file,  lab=central_region_lab)
+    # TODO Change config and lab setup files to common name
+    # config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
+    # config_file = 'TiS_config.ini_centos_{}_SysCont'.format(config_file_ext)
+    # lab_setup_config_file = 'lab_setup_system_controller'
+    # fresh_install_helper.configure_controller(controller0_node, config_file=config_file,
+    #                                           lab_setup_conf_file=lab_setup_config_file,  lab=central_region_lab)
+    fresh_install_helper.configure_controller(controller0_node, lab=central_region_lab)
+
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
@@ -143,15 +146,15 @@ def test_distributed_cloud_install(install_setup):
     # TODO
 
     LOG.info("Running lab setup script ...")
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    #fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Unlocking controller-1 ...")
     fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],
                                       lab=central_region_lab, con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Running lab setup script ...")
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_config_file)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if dc_lab.get("floating ip"):
         collect_sys_net_info(dc_lab)

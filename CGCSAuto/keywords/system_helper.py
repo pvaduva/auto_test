@@ -8,7 +8,7 @@ from pytest import skip
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID, PLATFORM_NET_TYPES
 from consts.proj_vars import ProjVar
-from consts.timeout import SysInvTimeout
+from consts.timeout import SysInvTimeout, K8sTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -222,6 +222,10 @@ def get_hostnames(personality=None, administrative=None, operational=None, avail
     Returns (list): hostnames
 
     """
+    if not con_ssh:
+        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
+        con_ssh = ControllerClient.get_active_controller(name=con_name)
+
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, use_telnet=use_telnet,
                                            con_telnet=con_telnet, auth_info=auth_info))
 
@@ -1269,7 +1273,7 @@ def get_retention_period(name='metering_time_to_live', con_ssh=None):
     return int(ret_per)
 
 
-def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None):
+def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None,):
     """
     Get the DNS servers currently in-use in the System
 
@@ -1280,7 +1284,8 @@ def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None):
     Returns (list): a list of DNS servers will be returned
 
     """
-    table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                           auth_info=auth_info))
     dns_servers = table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
 
     region = ''
@@ -1292,7 +1297,7 @@ def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None):
 
 
 def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail_ok=True, con_ssh=None,
-                    auth_info=Tenant.get('admin'), ):
+                    use_telnet=False, con_telnet=None,   auth_info=Tenant.get('admin')):
     """
     Set the DNS servers
 
@@ -1316,7 +1321,8 @@ def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail
         raise ValueError("Please specify DNS server(s).")
 
     if check_first:
-        dns_servers = get_dns_servers(con_ssh=con_ssh, auth_info=auth_info)
+        dns_servers = get_dns_servers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                                      auth_info=auth_info)
         if dns_servers == nameservers:
             msg = 'DNS servers already set to {}. Do nothing.'.format(dns_servers)
             LOG.info(msg)
@@ -1328,12 +1334,13 @@ def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail
         args_ += ' action={}'.format(with_action_option)
 
     LOG.info('args_:{}'.format(args_))
-    code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True, timeout=SysInvTimeout.DNS_MODIFY)
+    code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                              auth_info=auth_info, fail_ok=fail_ok, rtn_list=True, timeout=SysInvTimeout.DNS_MODIFY)
     if code == 1:
         return 1, output
 
-    post_dns_servers = get_dns_servers(auth_info=auth_info, con_ssh=con_ssh)
+    post_dns_servers = get_dns_servers(auth_info=auth_info, con_ssh=con_ssh, use_telnet=use_telnet,
+                                       con_telnet=con_telnet)
     if post_dns_servers != nameservers:
         raise exceptions.SysinvError('dns servers expected: {}; actual: {}'.format(nameservers, post_dns_servers))
 
@@ -4197,3 +4204,145 @@ def modify_timezone(timezone, check_first=True, fail_ok=False, clear_alarm=True,
 
     LOG.info("Timezone is successfully modified to {}".format(timezone))
     return 0, timezone
+
+
+def get_k8s_application_list_table(header='application', application=None, manifest_name=None, manifest_file=None, status=None,
+                                   progress=None, auth_info=Tenant.get('admin'), con_ssh=None, strict=True, regex=None,
+                                   **kwargs):
+    """
+
+    Args:
+        header:
+        manifest_name:
+        manifest_file:
+        status:
+        progress:
+        auth_info:
+        con_ssh:
+        strict:
+        regex:
+        **kwargs:
+
+    Returns:
+
+    """
+
+    table_ = table_parser.table(cli.system('application-list',
+                                           ssh_client=con_ssh,
+                                           auth_info=auth_info))
+    args_temp = {
+        'application': application,
+        'manifest name': manifest_name,
+        'manifest file': manifest_file,
+        'status': status,
+        'progress': progress
+    }
+    for key, value in args_temp.items():
+        if value is not None:
+            kwargs[key] = value
+    return table_parser.get_values(table_, header, strict=strict, regex=regex, **kwargs)
+
+
+def wait_for_k8s_application_status(application, status, timeout=K8sTimeout.APP_UPLOAD, check_interval=5, duration=3, con_ssh=None,
+                           fail_ok=False, auth_info=Tenant.get('admin')):
+
+    if not application:
+        raise ValueError("No application(s) provided to wait for status.")
+    if not status and status not in ['uploaded', 'applied', 'applied-failed']:
+        raise ValueError("Valid status value must be specified; status value {} is invalid.".format(status))
+
+    current_status = get_k8s_application_list_table(header='status', application=application).pop()
+    if current_status == status:
+        return True, ''
+    if current_status == 'applied' and status != 'applied':
+        msg = "The application {} is already in applied status"
+        LOG.warning(msg)
+        return 0, msg
+
+    LOG.info("Waiting for {} to reach status: {}...".format(application, status))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        if get_k8s_application_list_table(header='status', application=application).pop() == status:
+            LOG.info("{} have reached status: {}".format(application, status))
+            return True
+        time.sleep(check_interval)
+    else:
+        msg = "Timed out waiting for {} in status - {}".format(application, status)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.K8sError(msg)
+
+
+def upload_k8s_application(application, tar_file, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
+    """
+    Uploads application Helm chart(s) and manifest
+    Args:
+        application:
+        tar_file:
+        con_ssh:
+        fail_ok:
+        auth_info:
+
+    Returns:
+
+    """
+    if not application and not tar_file:
+        raise ValueError("The application name and tar file must be specified")
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    cmd = "test -e {}".format(tar_file)
+    if con_ssh.exec_cmd(cmd, fail_ok=True)[0] != 0:
+        msg = "The {} file missing from active controller".format(tar_file)
+        if fail_ok:
+            LOG.warning(msg)
+            return 1, msg
+        else:
+            raise exceptions.K8sError(msg)
+    cmd_args = application + " " + tar_file
+
+    rc, output = cli.system('application-upload', cmd_args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if rc == 0:
+        wait_for_k8s_application_status(application, "uploaded",  con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+        return 0, None
+    else:
+        msg = "Fail to upload application {} tar_file {}: {}".format(application, tar_file, output)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        else:
+            raise exceptions.K8sError(msg)
+
+
+def apply_k8s_application(application, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
+    """
+    Apply/reapply the application manifest
+    Args:
+        application:
+        con_ssh:
+        fail_ok:
+        auth_info:
+
+    Returns:
+
+    """
+    if not application:
+        raise ValueError("The application name must be specified")
+
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    rc, output = cli.system('application-apply', application, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if rc == 0:
+        wait_for_k8s_application_status(application, "applied",  con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+        return 0, None
+    else:
+        msg = "Fail to apply application {}: {}".format(application, output)
+        if fail_ok:
+            LOG.warning(msg)
+            return 2, msg
+        else:
+            raise exceptions.K8sError(msg)
+

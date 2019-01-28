@@ -3224,8 +3224,6 @@ def get_vm_interfaces_via_virsh(vm_id, con_ssh=None):
             interface, type_, source, model, mac = line.split()
             vm_ifs.append((mac, model))
 
-    LOG.info("yyy vm_ifs: {}".format(vm_ifs))
-
     return vm_ifs
 
 
@@ -4099,7 +4097,6 @@ def add_ifcfg_scripts(vm_id, mac_addrs, static_ips=None, ipv6='no', reboot=True,
 
     Args:
         vm_id:
-        vm_eths (str|list):
         mac_addrs (list of str):
         static_ips (None|str|list):
         ipv6:

@@ -76,6 +76,7 @@ def test_duplex_install(install_setup):
     patch_server = install_setup["servers"]["patches"]
     guest_server = install_setup["servers"]["guest"]
     install_subcloud = install_setup.get("install_subcloud")
+    lab_files_server = install_setup["servers"]["lab_files"]
 
     if final_step == '0' or final_step == "setup":
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -86,7 +87,6 @@ def test_duplex_install(install_setup):
     controller0_node.telnet_conn.flush()
     fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
-    lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,
                                             guest_server=guest_server,

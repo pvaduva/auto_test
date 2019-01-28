@@ -30,12 +30,10 @@ def _boot_migrable_vms(storage_backing):
         vms_info : [(vm_id1, block_mig1), (vm_id2, block_mig2), ...]
 
     """
-    storage_spec = {'aggregate_instance_extra_specs:storage': storage_backing}
     vms_to_test = []
     flavors_created = []
-    flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0, check_storage_backing=False)[1]
+    flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0, storage_backing=storage_backing)[1]
     flavors_created.append(flavor_no_localdisk)
-    nova_helper.set_flavor_extra_specs(flavor=flavor_no_localdisk, **storage_spec)
 
     vm_1 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='volume')[1]
 
@@ -49,10 +47,8 @@ def _boot_migrable_vms(storage_backing):
     if storage_backing == 'remote':
         LOG.info("Boot a VM from volume with local disks if storage backing is remote...")
         ephemeral_swap = random.choice([[0, 512], [1, 512], [1, 0]])
-        flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0], swap=ephemeral_swap[1],
-                                                            check_storage_backing=False)[1]
+        flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0], swap=ephemeral_swap[1])[1]
         flavors_created.append(flavor_with_localdisk)
-        nova_helper.set_flavor_extra_specs(flavor=flavor_with_localdisk, **storage_spec)
         vm_3 = vm_helper.boot_vm(flavor=flavor_with_localdisk, source='volume')[1]
         block_mig_3 = False
         vms_to_test.append((vm_3, block_mig_3))

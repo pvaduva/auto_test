@@ -38,18 +38,18 @@ def test_flavor_cpu_realtime_negative(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vc
 
     """
 
-    flv_id, code, output = create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, True, False)
+    flv_id, code, output = create_rt_flavor(vcpus, cpu_pol=cpu_pol, cpu_rt=cpu_rt, rt_mask=rt_mask,
+                                            shared_vcpu=shared_vcpu, fail_ok=True)
 
     LOG.tc_step("Check extra specs is rejected and proper error message displayed")
     assert 1 == code
     assert re.search(eval(expt_err), output), "Actual: {}".format(output)
 
 
-def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False, check_storage_backing=True,
+def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False,
                      storage_backing=None, numa_nodes=None, cpu_thread=None, min_vcpus=None):
     LOG.tc_step("Create a flavor with {} vcpus".format(vcpus))
-    flv_id = nova_helper.create_flavor(name='cpu_rt_{}'.format(vcpus), vcpus=vcpus,
-                                       check_storage_backing=check_storage_backing, storage_backing=storage_backing)[1]
+    flv_id = nova_helper.create_flavor(name='cpu_rt_{}'.format(vcpus), vcpus=vcpus, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flv_id)
 
     args = {
@@ -297,7 +297,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     name = 'rt-{}_mask-{}_{}vcpu'.format(cpu_rt, rt_mask_flv, vcpus)
     flv_id = create_rt_flavor(vcpus, cpu_pol='dedicated', cpu_rt=cpu_rt_flv, rt_mask=rt_mask_flv,
                               shared_vcpu=shared_vcpu, numa_nodes=numa_nodes, cpu_thread=cpu_thread,
-                              min_vcpus=min_vcpus, check_storage_backing=False, storage_backing=storage_backing)[0]
+                              min_vcpus=min_vcpus, storage_backing=storage_backing)[0]
 
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function', source='volume', source_id=vol_id)[1]

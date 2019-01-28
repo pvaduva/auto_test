@@ -117,9 +117,13 @@ class OrchestrationPhaseTimeout:
 
 class DCTimeout:
     SYNC = 660    # 10 minutes + 1
-    SUBCLOUD_AUDIT = 240    # 3 minutes + 1
+    SUBCLOUD_AUDIT = 600    # 4 minutes + 1
     PATCH_AUDIT = 240   # 3 minutes + 1
 
 
 class MiscTimeout:
     NTPQ_UPDATE = 1260     # timeout for two audits. 'sudo ntpq' got pulled every 10 minutes in /var/log/user.log
+
+class K8sTimeout:
+    APP_UPLOAD = 300  # TBD
+    APP_APPLY = 120  # TBD

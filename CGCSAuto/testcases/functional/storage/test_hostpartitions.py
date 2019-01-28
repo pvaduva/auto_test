@@ -549,7 +549,7 @@ def test_attempt_host_unlock_during_partition_creation():
 
         for uuid in free_disks:
             size_gib = float(free_disks[uuid])
-            if size_gib == 0.0:
+            if size_gib < 2.0:
                 LOG.info("Skip this disk due to insufficient space")
                 continue
 

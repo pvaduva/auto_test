@@ -55,8 +55,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
 
         LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage".format(storage_backing))
         boot_source = 'image'
-        flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing,
-                                           check_storage_backing=False)[1]
+        flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing)[1]
     else:
         target_host = None
         boot_source = 'volume'
@@ -226,7 +225,7 @@ def _test_check_vm_disk_on_compute(storage, hosts_per_backing):
         skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(storage))
 
     LOG.tc_step("Create flavor and boot vm")
-    flavor = nova_helper.create_flavor(storage_backing=storage, check_storage_backing=False)[1]
+    flavor = nova_helper.create_flavor(storage_backing=storage)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
     vm = vm_helper.boot_vm(source='image', flavor=flavor, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm)

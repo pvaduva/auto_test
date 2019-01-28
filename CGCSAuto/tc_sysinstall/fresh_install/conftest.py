@@ -44,7 +44,7 @@ def pytest_configure(config):
     patch_dir = config.getoption('patch_dir')
     ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
-    openstack_install = config.getoption('openstack_install')
+    no_openstack_install = config.getoption('no_openstack_install')
 
     if lab_arg:
         lab_dict = get_lab_dict(lab_arg)
@@ -107,7 +107,8 @@ def pytest_configure(config):
                            controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
                            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                            patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
-                           install_subcloud=sublcoud_name, kubernetes=kubernetes, openstack_install=openstack_install)
+                           install_subcloud=sublcoud_name, kubernetes=kubernetes,
+                           no_openstack_install=no_openstack_install)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

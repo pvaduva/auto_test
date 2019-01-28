@@ -184,7 +184,7 @@ class BootMenus:
         }
 
         Serial_Console = {
-            "name": "Serial Console",
+            "name": "Console",
             "prompt": r'\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?',
             "wrap_around": True
         }

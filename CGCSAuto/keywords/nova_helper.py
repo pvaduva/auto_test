@@ -8,7 +8,8 @@ from utils import table_parser
 from utils.tis_log import LOG
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages
+from consts.cgcs import BOOT_FROM_VOLUME, UUID, ServerGroupMetadata, NovaCLIOutput, FlavorSpec, GuestImages, \
+    STORAGE_AGGREGATE
 from keywords import keystone_helper, host_helper, common
 from keywords.common import Count
 from testfixtures.fixture_resources import ResourceCleanup
@@ -16,7 +17,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.get('admin'),
-                  con_ssh=None, storage_backing=None, check_storage_backing=True, rtn_id=True, cleanup=None):
+                  con_ssh=None, storage_backing=None, rtn_id=True, cleanup=None):
     """
     Create a flavor with given criteria.
 
@@ -37,8 +38,6 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         con_ssh (SSHClient):
         storage_backing (str): storage backing in extra flavor. Auto set storage backing based on system config if None.
             Valid values: 'local_image', 'remote'
-        check_storage_backing (bool): whether to check the system storage backing configuration to auto determine the
-            local_storage extra spec if storage_backing param is set to None.
         rtn_id (bool): return id or name
         cleanup (str|None): cleanup scope. function, class, module, or session
 
@@ -90,20 +89,152 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     if cleanup:
         ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
 
-    if not storage_backing:
-        if check_storage_backing:
-            LOG.info("Choose storage backing used by most hosts")
-            storage_backing = get_storage_backing_with_max_hosts(con_ssh=con_ssh)[0]
-        else:
-            storage_backing = 'local_image'
+    if storage_backing:
+        sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
+        if not sys_inst_backing:
+            hosts_per_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
+                                                                          con_ssh=con_ssh)
+            for inst_backing in hosts_per_backing:
+                if hosts_per_backing[inst_backing]:
+                    sys_inst_backing.append(inst_backing)
 
-    if storage_backing != 'local_image':
+            if len(sys_inst_backing) > 1:
+                aggregates = get_aggregates(con_ssh=con_ssh, auth_info=auth_info)
+                for inst_backing in hosts_per_backing:
+                    expt_hosts = sorted(hosts_per_backing[inst_backing])
+                    aggregate_name = STORAGE_AGGREGATE[inst_backing]
+                    if aggregate_name not in aggregates:
+                        create_aggregate(name=aggregate_name, check_first=False, con_ssh=con_ssh, auth_info=auth_info)
+                    properties, hosts_in_aggregate = get_aggregate_values(aggregate_name,
+                                                                          fields=('properties', 'hosts'),
+                                                                          con_ssh=con_ssh, auth_info=auth_info)
+                    if FlavorSpec.STORAGE_BACKING not in properties:
+                        set_aggregate(aggregate_name, properties={FlavorSpec.STORAGE_BACKING: inst_backing},
+                                      con_ssh=con_ssh, auth_info=auth_info)
+
+                    if expt_hosts != hosts_in_aggregate:
+                        hosts_to_remove = list(set(hosts_in_aggregate) - set(expt_hosts))
+                        hosts_to_add = list(set(expt_hosts) - set(hosts_in_aggregate))
+                        if hosts_to_add:
+                            add_hosts_to_aggregate(aggregate=aggregate_name, hosts=hosts_to_add, check_first=False,
+                                                   con_ssh=con_ssh, auth_info=auth_info)
+                        if hosts_to_remove:
+                            remove_hosts_from_aggregate(aggregate=aggregate_name, hosts=hosts_to_remove,
+                                                        check_first=False, con_ssh=con_ssh, auth_info=auth_info)
+            elif storage_backing == sys_inst_backing[0]:
+                storage_backing = None
+
+    if storage_backing:
         LOG.info("Setting local_storage extra spec to {}".format(storage_backing))
         set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
                                **{FlavorSpec.STORAGE_BACKING: storage_backing})
 
     flavor = flavor_id if rtn_id else flavor_name
     return 0, flavor, storage_backing
+
+
+def set_aggregate(aggregate, properties=None, no_property=None, zone=None, name=None, fail_ok=False, con_ssh=None,
+                  auth_info=Tenant.get('admin')):
+    """
+    Set aggregate with given params
+    Args:
+        aggregate (str): aggregate to set
+        properties (dict|None):
+        no_property (bool|None):
+        zone (str|None):
+        name (str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, "Aggregate <aggregate> set successfully with param: <params>)
+        (1, <std_err>)      returns only if fail_ok=True
+
+    """
+    args_dict = {
+        '--zone': zone,
+        '--name': name,
+        '--property': properties,
+        '--no-property': no_property,
+    }
+
+    args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), aggregate)
+    code, output = cli.openstack('aggregate set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                 rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    msg = "Aggregate set successfully with param: {}".format(aggregate, args)
+    LOG.info(msg)
+    return 0, msg
+
+
+def unset_aggregate(aggregate, properties, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Unset given properties for aggregate
+    Args:
+        aggregate (str): aggregate to unset
+        properties (list|tuple|str|None):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, "Aggregate <aggregate> set successfully with param: <params>)
+        (1, <std_err>)      returns only if fail_ok=True
+
+    """
+    if isinstance(properties, str):
+        properties = (properties, )
+
+    args = ' '.join(['--property {}'.format(key) for key in properties])
+    args = '{} {}'.format(args, aggregate)
+    code, output = cli.openstack('aggregate unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                 rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    msg = "Aggregate {} properties unset successfully: {}".format(aggregate, properties)
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_aggregate_values(aggregate, fields, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get values of a nova aggregate for given fields
+    Args:
+        aggregate (str):
+        fields (str|list|tuple):
+        con_ssh:
+        auth_info (dict):
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('aggregate show', aggregate, ssh_client=con_ssh, auth_info=auth_info))
+
+    if isinstance(fields, str):
+        fields = (fields, )
+
+    values = []
+    for field in fields:
+        val = table_parser.get_value_two_col_table(table_, field=field)
+        if field.lower() == 'hosts':
+            val = sorted(eval(val))
+        elif field.lower() == 'properties':
+            if val.strip():
+                properties = val.split(sep=', ')
+                val = {}
+                for item in properties:
+                    k, v = item.split('=')
+                    val[k] = v[1:-1]
+            else:
+                val = {}
+
+        values.append(val)
+
+    return values
 
 
 def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
@@ -1515,8 +1646,7 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
         new_name = "{}-{}".format(old_name, new_name)
     swap = swap if swap else 0
     new_flavor_id = create_flavor(name=new_name, vcpus=vcpus, ram=ram, swap=swap, root_disk=disk, ephemeral=ephemeral,
-                                  is_public=is_public, rxtx_factor=rxtx_factor, con_ssh=con_ssh,
-                                  check_storage_backing=False)[1]
+                                  is_public=is_public, rxtx_factor=rxtx_factor, con_ssh=con_ssh)[1]
     set_flavor_extra_specs(new_flavor_id, con_ssh=con_ssh, **extra_specs)
 
     return new_flavor_id
@@ -1650,15 +1780,16 @@ def get_nova_services_table(auth_info=Tenant.get('admin'), con_ssh=None):
     return table_parser.table(cli.nova('service-list', ssh_client=con_ssh, auth_info=auth_info))
 
 
-def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=True, fail_ok=False, con_ssh=None,
-                     auth_info=Tenant.get('admin')):
+def create_aggregate(rtn_val='name', name=None, avail_zone=None, properties=None, check_first=True, fail_ok=False,
+                     con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Add a aggregate with given name and availability zone.
 
     Args:
         rtn_val (str): name or id
         name (str): name for aggregate to create
-        avail_zone (str):
+        avail_zone (str|None):
+        properties (dict|None)
         check_first (bool)
         fail_ok (bool):
         con_ssh (SSHClient):
@@ -1674,9 +1805,11 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=Tru
         existing_names = get_aggregates(rtn_val='name')
         name = common.get_unique_name(name_str='cgcsauto', existing_names=existing_names)
 
-    subcmd = name
-    if avail_zone:
-        subcmd += ' {}'.format(avail_zone)
+    args_dict = {
+        '--zone': avail_zone,
+        '--property': properties,
+    }
+    args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), name)
 
     if check_first:
         aggregates_ = get_aggregates(rtn_val=rtn_val, name=name, avail_zone=avail_zone)
@@ -1685,26 +1818,16 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, check_first=Tru
             return -1, aggregates_[0]
 
     LOG.info("Adding aggregate {}".format(name))
-
-    res, out = cli.nova('aggregate-create', subcmd, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
-                        fail_ok=fail_ok)
+    res, out = cli.openstack('aggregate create', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+                             fail_ok=fail_ok)
     if res == 1:
         return res, out
 
     out_tab = table_parser.table(out)
-    expt_avail = avail_zone if avail_zone else ''
-    actual_values = table_parser.get_values(out_tab, rtn_val, **{'Name': name, 'Availability Zone': expt_avail})
-
-    if not actual_values:
-        err_msg = "Created aggregate is not as specified"
-        if fail_ok:
-            return 2, err_msg
-        else:
-            raise exceptions.NovaError(err_msg)
 
     succ_msg = "Aggregate {} is successfully created".format(name)
     LOG.info(succ_msg)
-    return 0, actual_values[0]
+    return 0, table_parser.get_value_two_col_table(out_tab, rtn_val)
 
 
 def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.get('admin')):

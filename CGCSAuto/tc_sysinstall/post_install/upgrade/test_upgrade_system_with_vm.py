@@ -38,11 +38,11 @@ def vms_with_upgrade():
 
     """
     LOG.fixture_step("Create a flavor without ephemeral or swap disks")
-    flavor_1 = nova_helper.create_flavor('flv_rootdisk', check_storage_backing=False)[1]
+    flavor_1 = nova_helper.create_flavor('flv_rootdisk')[1]
     ResourceCleanup.add('flavor', flavor_1)
 
     LOG.fixture_step("Create another flavor with ephemeral and swap disks")
-    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, check_storage_backing=False)[1]
+    flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512)[1]
     ResourceCleanup.add('flavor', flavor_2)
 
     LOG.fixture_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
