@@ -3157,20 +3157,18 @@ def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True, 
     for host_ in hosts:
         pnets_list_for_host = []
         for pci_type_ in pci_type:
-            pnets_for_type = []
 
             pnets_list = system_helper.get_host_interfaces(host_, rtn_val='data networks', net_type=pci_type_,
                                                            con_ssh=con_ssh, auth_info=auth_info)
+            pnets_for_type = []
+            for pnets_ in pnets_list:
+                pnets_for_type += pnets_
 
-            for pnets_str in pnets_list:
-                if pnets_str != 'None':
-                    pnets_for_type += pnets_str.split(',')
-
-            if pnets_for_type:
-                pnets_list_for_host.append(pnets_for_type)
-            else:
+            if not pnets_for_type:
+                LOG.info("{} {} interface data network not found".format(host_, pci_type_))
                 pnets_list_for_host = []
                 break
+            pnets_list_for_host.append(list(set(pnets_for_type)))
 
         if pnets_list_for_host:
             pnets_final = pnets_list_for_host[0]

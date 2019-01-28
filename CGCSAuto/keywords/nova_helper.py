@@ -121,8 +121,8 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
                         if hosts_to_remove:
                             remove_hosts_from_aggregate(aggregate=aggregate_name, hosts=hosts_to_remove,
                                                         check_first=False, con_ssh=con_ssh, auth_info=auth_info)
-            elif storage_backing == sys_inst_backing[0]:
-                storage_backing = None
+        if [storage_backing] == sys_inst_backing:
+            storage_backing = None
 
     if storage_backing:
         LOG.info("Setting local_storage extra spec to {}".format(storage_backing))
