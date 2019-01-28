@@ -367,17 +367,15 @@ def test_modify_drdb_swact_then_reboot():
     LOG.tc_step("Increase the size of the backup and img-conversions filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
-    if float(free_space) > 10:
-        backup_freespace = math.trunc(float(free_space) / 10)
-    else:
-        backup_freespace = 1
+    backup_freespace = math.trunc(float(free_space) / 10)
     new_partition_value = backup_freespace + int(partition_value)
     cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
     cli.system(cmd)
+
     partition_name = "img-conversions"
     partition_value = drbdfs_val[partition_name]
-    cgcs_free_space = math.trunc(backup_freespace / 2)
-    new_partition_value = backup_freespace + int(partition_value)
+    cgcs_freespace = math.trunc(backup_freespace / 2)
+    new_partition_value = cgcs_freespace + int(partition_value)
     cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
     cli.system(cmd)
 

@@ -31,7 +31,7 @@ def get_vlan_providernet():
 
     LOG.fixture_step("Get provider network with the greatest max segmentation range")
     kwargs = {'uuid': '{}'.format(target_interface_id)}
-    providernets = table_parser.get_values(table_, 'data networks', **kwargs)[0].split(",")
+    providernets = eval(table_parser.get_values(table_, 'data networks', **kwargs)[0])
 
     cmd = cli.neutron("providernet-range-list --nowrap", auth_info=Tenant.get('admin'))
     table_ = table_parser.table(cmd)

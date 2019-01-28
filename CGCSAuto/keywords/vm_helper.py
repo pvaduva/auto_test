@@ -3352,9 +3352,13 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None):
                     if vlan_name not in output_post_ipaddr:
                         raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking "
                                                         "service.".format(vlan_name))
+                    time.sleep(5)
                     if not is_ip_assigned(vm_ssh, eth_name=vlan_name):
-                        LOG.warning('No IP assigned to {} vlan interface'.format(vlan_name))
-                    LOG.info("vlan {} is successfully added and an IP is assigned.".format(vlan_name))
+                        msg = 'No IP assigned to {} vlan interface for VM {}'.format(vlan_name, vm_id)
+                        LOG.warning(msg)
+                        raise exceptions.VMNetworkError(msg)
+                    else:
+                        LOG.info("vlan {} is successfully added and an IP is assigned.".format(vlan_name))
             else:
                 # did not break, meaning no 'rename' interface detected, vlan either existed or successfully added
                 return

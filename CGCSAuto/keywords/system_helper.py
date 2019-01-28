@@ -1961,7 +1961,7 @@ def get_host_interfaces(host, rtn_val='name', net_type=None, if_type=None, uses_
     vals = []
     for header in rtn_val:
         values = table_parser.get_column(table_, header=header)
-        if header in ['ports', 'used by i/f', 'uses i/f']:
+        if header.lower() in ['ports', 'used by i/f', 'uses i/f', 'data networks']:
             values = [eval(item) for item in values]
         vals.append(values)
 

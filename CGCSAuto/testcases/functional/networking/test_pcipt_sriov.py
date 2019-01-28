@@ -242,7 +242,7 @@ class TestVmPCIOperations:
         # Get number of hosts that has pcipt/sriov interface on same numa node as pci device
         numa_match = 0
         for host_ in hosts:
-            LOG.info('\n\nPCI_NUMA_{}: {}; PCIIF_PROCS_{}: {}'.format(host_, hosts_pci_numa[host_], host_,
+            LOG.info('PCI_NUMA_{}: {}; PCIIF_PROCS_{}: {}'.format(host_, hosts_pci_numa[host_], host_,
                                                                       hosts_pciif_procs[host_]))
             if set(hosts_pci_numa[host_]).intersection(set(hosts_pciif_procs[host_])):
                 numa_match += 1
