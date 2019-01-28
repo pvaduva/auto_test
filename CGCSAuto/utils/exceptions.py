@@ -247,10 +247,7 @@ class KubeCmdError(KubeError):
 
 class InstallError(TiSError):
     message = 'Install error'
-<<<<<<< HEAD
-=======
 
 
 class K8sError(TiSError):
     message = 'K8s error'
->>>>>>> develop
