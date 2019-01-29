@@ -251,3 +251,4 @@ class InstallError(TiSError):
 
 class K8sError(TiSError):
     message = 'K8s error'
+

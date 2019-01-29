@@ -8,7 +8,6 @@ from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.timeout import DCTimeout
 from consts.filepaths import SysLogPath
-from consts.cgcs import SubcloudStatus
 from keywords import system_helper
 
 
@@ -21,9 +20,10 @@ def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
         name:
         avail:
         sync:
-        mgmt
+        mgmt:
         auth_info:
         con_ssh:
+        source_openrc:
 
     Returns:
 
@@ -96,6 +96,7 @@ def manage_subcloud(subcloud=None, check_first=True, fail_ok=False, conn_ssh=Non
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
+        conn_ssh(SSClient):
 
     Returns (tuple):
         (-1, [])                            All give subcloud(s) already managed. Do nothing.
@@ -114,6 +115,7 @@ def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False, conn_ssh=N
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
+        conn_ssh(SSHClient):
 
     Returns (tuple):
         (-1, [])                        All give subcloud(s) already unmanaged. Do nothing.
@@ -391,21 +393,27 @@ def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=
     return res
 
 
-def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout=DCTimeout.SUBCLOUD_AUDIT, check_interval=30,
-                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, source_openrc=None, fail_ok=False):
+def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout=DCTimeout.SUBCLOUD_AUDIT,
+                             check_interval=30, auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None,
+                             source_openrc=None, fail_ok=False):
     """
-    Wait for subcloud status
+
     Args:
         subcloud:
         avail:
         sync:
         mgmt:
+        timeout:
+        check_interval:
         auth_info:
         con_ssh:
+        source_openrc:
+        fail_ok:
 
     Returns:
 
     """
+
     if not subcloud:
         raise ValueError("Subcloud name must be specified")
     if not avail and not sync and not mgmt:
@@ -417,13 +425,14 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
         while time.time() < end_time:
 
             LOG.info("Check availability status for {} ".format(subcloud))
-            subclouds = get_subclouds(rtn_val='name', name=subcloud, avail=avail, sync=sync, mgmt=mgmt, con_ssh=con_ssh)
+            subclouds = get_subclouds(rtn_val='name', name=subcloud, avail=avail, sync=sync, mgmt=mgmt, con_ssh=con_ssh,
+                                      source_openrc=source_openrc, auth_info=auth_info)
             if subcloud in subclouds:
                 return 0, subcloud
 
             time.sleep(check_interval)
         exp_status = "avail = {}; sync = {}; mgmt = {}".format(avail if avail else "n/a", sync if sync else "n/a",
-                                                           mgmt if mgmt else "n/a")
+                                                               mgmt if mgmt else "n/a")
         msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, exp_status, timeout)
 
         if fail_ok:

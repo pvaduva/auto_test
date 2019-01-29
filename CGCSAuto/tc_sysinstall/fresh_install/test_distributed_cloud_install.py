@@ -160,7 +160,7 @@ def test_distributed_cloud_install(install_setup):
         collect_sys_net_info(dc_lab)
         setup_tis_ssh(dc_lab)
 
-    host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=central_region_lab)
 
     # LOG.info("Adding subcloud info ...")
     # subclouds, subcloud_configs = fresh_install_helper.add_subclouds(controller0_node)
