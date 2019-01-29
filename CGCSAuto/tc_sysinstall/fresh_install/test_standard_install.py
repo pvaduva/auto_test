@@ -15,7 +15,7 @@ def install_setup(request):
 
     if install_type != SysType.REGULAR:
         skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
-                    .format(SysType.REGULAR, install_type))
+             .format(SysType.REGULAR, install_type))
 
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
     barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
@@ -111,7 +111,7 @@ def test_standard_install(install_setup):
 
     fresh_install_helper.boot_hosts(boot_device)
     fresh_install_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
-                                     lab=lab)
+                                              lab=lab)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
@@ -127,6 +127,6 @@ def test_standard_install(install_setup):
 
     fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
 
-    #fresh_install_helper.attempt_to_run_post_install_scripts()
+    # fresh_install_helper.attempt_to_run_post_install_scripts()
     fresh_install_helper.reset_global_vars()
     fresh_install_helper.verify_install_uuid(lab)

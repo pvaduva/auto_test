@@ -314,7 +314,6 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
 
-
         LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
                                                                 SubcloudStatus.MGMT_UNMANAGED))
         LOG.info("Managing subcloud {} ... ".format(subcloud))
@@ -530,7 +529,6 @@ def attempt_to_run_post_install_scripts(controller0_node=None):
     reset_global_vars()
 
 
-
 def get_resume_step(lab=None, install_progress_path=None):
     if lab is None:
         lab = ProjVar.get_var("LAB")
@@ -545,7 +543,7 @@ def get_resume_step(lab=None, install_progress_path=None):
 
 
 def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
-                     patch_dir=None, patch_server_conn=None, final_step=None):
+                      patch_dir=None, patch_server_conn=None, final_step=None):
 
     if not subcloud:
         raise ValueError("The subcloud name must be provided")
@@ -786,8 +784,8 @@ def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=No
             if subcloud in subcloud_boots.keys():
                 boot_type = subcloud_boots.get(subcloud, 'pxe')
                 rc, msg = _install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, boot_type=boot_type,
-                                           patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
-                                           final_step=final_step)
+                                            patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
+                                            final_step=final_step)
                 LOG.info(msg)
                 assert rc >= 0, msg
 
@@ -932,6 +930,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     bld_server = initialize_server(build_server)
     dc_float_ip = None
+    install_sub = None
     if subcloud:
         dc_float_ip = InstallVars.get_install_var("DC_FLOAT_IP")
         install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
@@ -1064,7 +1063,6 @@ def kubernetes_post_install():
     """
     Installs kubernetes work arounds post install
     Args:
-        lab: (the current lab dictionary)
         # server(build server object): The build server object where helm charts reside.
         # load_path(str): The path to helm charts
 
@@ -1112,7 +1110,6 @@ def kubernetes_post_install():
         cmd = "neutron host-create {} --id {} --availablitiy up".format(host, uuid)
         controller0_node.ssh_conn.exec_cmd(cmd)
 
-
     for node in nodes:
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
         data0_info = system_helper.get_host_if_show_values(node, "data0", ["uuid", "providernetworks"],
@@ -1123,7 +1120,7 @@ def kubernetes_post_install():
         cmd0 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
                 .format(data0_info[0], data0_info[1], node)
         cmd1 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
-                .format(data1_info[0], data1_info[1], node)
+            .format(data1_info[0], data1_info[1], node)
         controller0_node.ssh_conn.exec_cmd(cmd_auth)
         controller0_node.ssh_conn.exec_cmd(cmd0)
         controller0_node.ssh_conn.exec_cmd(cmd1)

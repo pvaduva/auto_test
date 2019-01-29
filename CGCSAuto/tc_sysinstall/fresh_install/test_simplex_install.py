@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import host_helper, install_helper, vlm_helper
+from keywords import install_helper, vlm_helper
 from setups import setup_tis_ssh
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils.tis_log import LOG
@@ -14,7 +14,7 @@ def install_setup(request):
     install_type = ProjVar.get_var('SYS_TYPE')
     if install_type != SysType.AIO_SX:
         skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
-                    .format(SysType.AIO_SX, install_type))
+             .format(SysType.AIO_SX, install_type))
 
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
     barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
@@ -104,5 +104,5 @@ def test_simplex_install(install_setup):
 
     fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
 
-    #fresh_install_helper.attempt_to_run_post_install_scripts()
+    # fresh_install_helper.attempt_to_run_post_install_scripts()
     fresh_install_helper.reset_global_vars()

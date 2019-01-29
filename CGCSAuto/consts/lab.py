@@ -670,7 +670,7 @@ class Labs:
         'compute_nodes': [94867, 18658, 40810],
     }
 
-    WP_08_12 = {
+    WP_8_12 = {
 
         'short_name': 'wp_8_12',
         'name': 'yow-cgcs-wolfpass-08_12',
