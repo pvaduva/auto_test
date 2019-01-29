@@ -317,12 +317,13 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     GuestLogs.remove(vm_id)
 
 
+# Deprecated - KVM crash detection
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize('heartbeat', [
     # mark.p1(True),    # remove - covered by test_vm_with_health_check_failure
     mark.priorities('sanity', 'cpe_sanity', 'sx_sanity', 'kpi')(False)
 ])
-def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
+def _test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     """
     Test vm auto recovery by killing the host kvm.
 
