@@ -1652,30 +1652,6 @@ def get_host_used_mem_values(host, proc_id=0, auth_info=Tenant.get('admin'), con
     return used_mem
 
 
-def get_processors_shared_cpu_nums(host, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get number of shared cores for each processor of given host.
-
-    Args:
-        host (str): hostname
-        con_ssh (SSHClient):
-        auth_info (dict):
-
-    Returns (dict): proc_id(str) and num_of_cores(int) pairs. e.g.,: {'0': 1, '1': 1}
-
-    """
-    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh, auth_info=auth_info))
-    proc_ids = set(table_parser.get_column(table_, 'processor'))
-    table_ = table_parser.filter_table(table_, assigned_function='Shared')
-
-    results = {}
-    for proc_id in proc_ids:
-        cores = len(table_parser.get_values(table_, 'log_core', processor=proc_id))
-        results[proc_id] = cores
-
-    return results
-
-
 def is_hyperthreading_enabled(host, con_ssh=None):
     table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
     return len(set(table_parser.get_column(table_, 'thread'))) > 1

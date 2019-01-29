@@ -1847,7 +1847,7 @@ def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail
 
     Args:
         host (str): hostname of host to be modified
-        cpu_function (str): cpu function to modify. e.g., 'shared'
+        cpu_function (str): cpu function to modify. e.g., 'vSwitch', 'platform'
         timeout (int): Timeout waiting for system host-cpu-modify cli to return
         fail_ok (bool):
         con_ssh (SSHClient):
