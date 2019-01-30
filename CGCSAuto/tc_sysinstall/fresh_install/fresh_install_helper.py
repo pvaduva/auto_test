@@ -3,7 +3,7 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, network_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
@@ -314,7 +314,6 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
 
-
         LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
                                                                 SubcloudStatus.MGMT_UNMANAGED))
         LOG.info("Managing subcloud {} ... ".format(subcloud))
@@ -530,7 +529,6 @@ def attempt_to_run_post_install_scripts(controller0_node=None):
     reset_global_vars()
 
 
-
 def get_resume_step(lab=None, install_progress_path=None):
     if lab is None:
         lab = ProjVar.get_var("LAB")
@@ -545,7 +543,7 @@ def get_resume_step(lab=None, install_progress_path=None):
 
 
 def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
-                     patch_dir=None, patch_server_conn=None, final_step=None):
+                      patch_dir=None, patch_server_conn=None, final_step=None):
 
     if not subcloud:
         raise ValueError("The subcloud name must be provided")
@@ -695,6 +693,12 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
     if name and 'subcloud' in name and name in existing_subclouds:
         LOG.info("Subcloud {} already exits; do nothing".format(name))
+        managed = dc_helper.get_subclouds(name=name, avail="managed", con_ssh=controller0_node.ssh_conn,
+                                          source_openrc=True)
+        if name in managed:
+            LOG.info("Subcloud {} is in managed status; unamanage subcloud before install".format(name))
+            dc_helper._manage_unmanage_subcloud(subcloud=name, con_ssh=controller0_node.ssh_conn)
+
         return 0, [name]
 
     if name is not None and name is not '':
@@ -786,8 +790,8 @@ def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=No
             if subcloud in subcloud_boots.keys():
                 boot_type = subcloud_boots.get(subcloud, 'pxe')
                 rc, msg = _install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, boot_type=boot_type,
-                                           patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
-                                           final_step=final_step)
+                                            patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
+                                            final_step=final_step)
                 LOG.info(msg)
                 assert rc >= 0, msg
 
@@ -932,6 +936,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
     bld_server = initialize_server(build_server)
     dc_float_ip = None
+    install_sub = None
     if subcloud:
         dc_float_ip = InstallVars.get_install_var("DC_FLOAT_IP")
         install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
@@ -1064,7 +1069,6 @@ def kubernetes_post_install():
     """
     Installs kubernetes work arounds post install
     Args:
-        lab: (the current lab dictionary)
         # server(build server object): The build server object where helm charts reside.
         # load_path(str): The path to helm charts
 
@@ -1101,20 +1105,56 @@ def kubernetes_post_install():
     # helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
     # install_helper.download_stx_help_charts(lab, server, stx_helm_charts_path=helm_chart_path)
 
-    LOG.info("WK: Creating hosts and binding interface ...")
-    hosts = lab['hosts']
-    hypervisors = host_helper.get_hypervisors(con_ssh=controller0_node.ssh_conn)
-    for host in hosts:
-        uuid = host_helper.get_hostshow_value(host, 'uuid')
-        cmd = "neutron host-create {} --id {} --availablitiy up".format(host, uuid)
-        controller0_node.ssh_conn.exec_cmd(cmd)
+    # LOG.info("WK: Creating hosts and binding interface ...")
+    # hosts = lab['hosts']
+    # nodes = kube_helper.get_nodes_values(rtn_val='NAME', con_ssh=controller0_node.ssh_conn)
+    # cmd_auth = "export OS_AUTH_URL=http://keystone.openstack.svc.cluster.local/v3"
+    # for host in nodes:
+    #
+    #     uuid = host_helper.get_hostshow_value(host, 'uuid')
+    #     controller0_node.ssh_conn.exec_cmd(cmd_auth)
+    #     cmd = "neutron host-create {} --id {} --availablitiy up".format(host, uuid)
+    #     controller0_node.ssh_conn.exec_cmd(cmd)
+    #
+    # for node in nodes:
+    #     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+    #     data0_info = system_helper.get_host_if_show_values(node, "data0", ["uuid", "providernetworks"],
+    #                                                        con_ssh=controller0_node.ssh_conn)
+    #     data1_info = system_helper.get_host_if_show_values(node, "data1", ["uuid", "providernetworks"],
+    #                                                        con_ssh=controller0_node.ssh_conn)
+    #
+    #     cmd0 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
+    #             .format(data0_info[0], data0_info[1], node)
+    #     cmd1 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
+    #         .format(data1_info[0], data1_info[1], node)
+    #     controller0_node.ssh_conn.exec_cmd(cmd_auth)
+    #     controller0_node.ssh_conn.exec_cmd(cmd0)
+    #     controller0_node.ssh_conn.exec_cmd(cmd1)
+    #
+    # install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
-    providernets = network_helper.get_providernets(rtn_val='name')
-    for hypervisor in hypervisors:
-        data0_uuid = system_helper.get_host_if_show_values(hypervisor, "data0", "id").pop()
-        data1_uuid = system_helper.get_host_if_show_values(hypervisor, "data1", "id").pop()
-        for prov in providernets:
-            cmd0 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}".format(data0_uuid, prov, hypervisor)
-            cmd1 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}".format(data1_uuid, prov, hypervisor)
-            controller0_node.ssh_conn.exec_cmd(cmd0)
-            controller0_node.ssh_conn.exec_cmd(cmd1)
+
+def wait_for_hosts_ready(hosts,  lab=None):
+    """
+
+    Args:
+        hosts:
+        lab:
+        con_ssh:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    # kubernetes = InstallVars.get_install_var("KUBERNETES")
+    # if kubernetes:
+    #     # kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
+    # else:
+    host_helper.wait_for_hosts_ready(hosts, con_ssh=controller0_node.ssh_conn)
