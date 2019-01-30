@@ -4141,5 +4141,5 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(stx_helm_charts_path + "/*.tgz",
-                          lab['floating ip'],
+                          lab['controller-0 ip'],
                           WRSROOT_HOME, pre_opts=pre_opts)
