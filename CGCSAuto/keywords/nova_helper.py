@@ -286,7 +286,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     if has_up_hosts or not rtn_down_hosts:
         selected_hosts = list(set(selected_hosts) & set(hosts))
     LOG.info("{} storage aggregate has most hypervisors".format(selected_backing))
-    return selected_backing, selected_hosts
+    return selected_backing, selected_hosts, up_hosts
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):

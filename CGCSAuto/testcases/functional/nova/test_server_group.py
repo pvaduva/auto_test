@@ -7,10 +7,10 @@ from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, ServerGroupMetadata
+from consts.cgcs import ServerGroupMetadata
 from consts.cli_errs import SrvGrpErr
 from keywords import nova_helper, vm_helper, keystone_helper
-from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 MSG = 'HELLO SRV GRP MEMBERS!'
@@ -18,61 +18,41 @@ MSG = 'HELLO SRV GRP MEMBERS!'
 
 @fixture(scope='module', autouse=True)
 def check_system():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
 
-    return hosts, storage_backing
+    return hosts, storage_backing, up_hypervisors
 
 
-def create_flavor_and_server_group(storage_backing, srv_grp_msging=None, policy=None, group_size=None,
-                                   best_effort=None):
-    LOG.tc_step("Create a flavor with server group messaging set to {}".format(srv_grp_msging))
-    flavor_id = nova_helper.create_flavor('srv_grp', storage_backing=storage_backing)[1]
-    ResourceCleanup.add('flavor', resource_id=flavor_id)
-
-    srv_grp_msg_flv = False
-    if srv_grp_msging is not None:
-        srv_grp_msg_flv = True if 'true' in srv_grp_msging.lower() else False
-        nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.SRV_GRP_MSG: srv_grp_msg_flv})
+def create_flavor_and_server_group(storage_backing=None, policy=None):
+    LOG.tc_step("Create a flavor{}".format(' with {} aggregate'.format(storage_backing) if storage_backing else ''))
+    flavor_id = nova_helper.create_flavor('srv_grp', storage_backing=storage_backing, cleanup='function')[1]
 
     srv_grp_id = None
     if policy is not None:
-
         LOG.tc_step("Create a server group with policy set to {}".format(policy))
         srv_grp_id = nova_helper.create_server_group(policy=policy)[1]
         ResourceCleanup.add(resource_type='server_group', resource_id=srv_grp_id)
 
-        metadata = {}
-        if group_size is not None:
-            metadata[ServerGroupMetadata.GROUP_SIZE] = group_size
-        if best_effort is not None:
-            metadata[ServerGroupMetadata.BEST_EFFORT] = best_effort
-
-        LOG.tc_step("Add server group metadata: {}".format(metadata))
-        nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
-
-    return flavor_id, srv_grp_msg_flv, srv_grp_id
+    return flavor_id, srv_grp_id
 
 
 # TC2915 + TC2915 + TC_6566 + TC2917
 # server group messaging is removed since STX
-@mark.parametrize(('srv_grp_msging', 'policy', 'group_size', 'best_effort', 'vms_num'), [
-    mark.priorities('nightly', 'domain_sanity', 'sx_nightly')((None, 'affinity', 4, None, 2)),
-    (None, 'anti_affinity', 3, True, 3),
-    mark.priorities('nightly', 'domain_sanity')((None, 'anti_affinity', 3, None, 2)),   # For system with 2+ hypervisors
-    (None, 'affinity', 4, True, 3),
+@mark.parametrize(('policy', 'vms_num'), [
+    mark.priorities('nightly', 'domain_sanity', 'sx_nightly')(('affinity', 2)),
+    # ('soft_anti_affinity', 3),    TODO add after cutover
+    mark.priorities('nightly', 'domain_sanity')(('anti_affinity', 2)),   # For system with 2+ hypervisors
+    # ('soft_affinity', 3),     TODO add after cutover
 ])
-def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, vms_num, check_system):
+def test_server_group_boot_vms(policy, vms_num, check_system):
     """
     Test server group policy and messaging
     Test live migration with anti-affinity server group (TC6566)
     Test changing size of existing server group via CLI (TC2917)
 
     Args:
-        srv_grp_msging (str): server group messaging flavor spec
         policy (str): server group policy to set when creating the group
-        group_size (int): group size metadata to set for server group
-        best_effort (bool): best effort metadata to set for server group
         vms_num (int): number of vms to boot
 
     Test Steps:
@@ -94,17 +74,16 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
         - Delete created vms, flavor, server group
 
     """
-    hosts, storage_backing = check_system
+    hosts, storage_backing, up_hypervisors = check_system
     host_count = len(hosts)
-    if host_count == 1 and policy == 'anti_affinity' and not best_effort:
+    if host_count == 1 and policy == 'anti_affinity':
         skip("Skip anti_affinity strict for system with 1 up host in storage aggregate")
 
-    flavor_id, srv_grp_msg_flv, srv_grp_id = create_flavor_and_server_group(storage_backing, srv_grp_msging, policy,
-                                                                            group_size, best_effort)
+    flavor_id, srv_grp_id = create_flavor_and_server_group(storage_backing=storage_backing, policy=policy)
     vm_hosts = []
     members = []
     failed_num = 0
-    if policy == 'anti_affinity' and not best_effort and vms_num > host_count:
+    if policy == 'anti_affinity' and vms_num > host_count:
         failed_num = vms_num - host_count
         vms_num = host_count
 
@@ -144,23 +123,9 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
     for vm in members:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
 
-    # if srv_grp_msging:
-    #     for vm in members:
-    #         GuestLogs.add(vm)
-
-    # if srv_grp_msg_flv:
-    #     LOG.tc_step("Check server group message can be sent/received among group members")
-    #     check_server_group_messaging_enabled(vms=members, action='message')
-    #
-    #     LOG.tc_step("Check server group message received when a member is paused")
-    #     check_server_group_messaging_enabled(vms=members, action='pause')
-    # else:
-    #     LOG.tc_step("Check server group message is not enabled")
-    #     check_server_group_messaging_disabled(vms=members)
-
     if host_count > 1:
         # TC6566 verified here
-        expt_fail = not best_effort and (policy == 'affinity' or (policy == 'anti_affinity' and host_count-vms_num < 1))
+        expt_fail = policy == 'affinity' or (policy == 'anti_affinity' and host_count-vms_num < 1)
 
         for action in ('live_migrate', 'cold_migrate'):
             LOG.tc_step("Attempt to {} VMs and ensure it {}".format(action, 'fails' if expt_fail else 'pass'))
@@ -175,20 +140,11 @@ def test_server_group_boot_vms(srv_grp_msging, policy, group_size, best_effort, 
                 vm_hosts_after_mig.append(vm_host)
                 vm_helper.wait_for_vm_pingable_from_natbox(vm)
 
-            if not best_effort:
-                if policy == 'affinity':
-                    assert len(list(set(vm_hosts_after_mig))) == 1
-                else:
-                    assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some VMs are on same host with " \
-                                                                          "strict anti-affinity polity"
-
-    #     if srv_grp_msg_flv:
-    #         LOG.tc_step("Check server group message after attempted migrations")
-    #         check_server_group_messaging_enabled(vms=members, action='message')
-    #
-    # if srv_grp_msging:
-    #     for vm in members:
-    #         GuestLogs.remove(vm)
+            if policy == 'affinity':
+                assert len(list(set(vm_hosts_after_mig))) == 1
+            elif policy == 'anti_affinity':
+                assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some VMs are on same host with " \
+                                                                      "strict anti-affinity polity"
 
 
 def _wait_for_srv_grp_msg(vm_id, msg, timeout, res_events, listener_event, sent_event):
@@ -294,25 +250,21 @@ def check_server_group_messaging_disabled(vms):
             assert code > 0
 
 
+# Deprecated - align with upstream.
 # TC2913, TC2915
-@mark.parametrize(('policy', 'group_size', 'best_effort', 'min_count', 'max_count'), [
-    mark.p2(('affinity', 3, False, 3, 4)),
-    mark.p2(('affinity', 2, True, 3, 4)),
-    mark.p2(('anti_affinity', 3, True, 3, None)),
-    mark.p2(('anti_affinity', 4, None, 3, None)),    # negative res for last vm
-    mark.p2(('anti_affinity', 3, False, 1, 3))
-    # ('affinity', 2, True, 2)
+@mark.parametrize(('policy', 'min_count', 'max_count'), [
+    # ('soft_affinity', 3, 4),  TODO: add after cutover to stein
+    ('affinity', 3, 4),
+    # ('soft_anti_affinity', 3, None),  TODO: add after cutover to stein
+    ('anti_affinity', 1, 3),
+
 ])
-def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, min_count, max_count, check_system):
+def test_server_group_launch_vms_in_parallel(policy, min_count, max_count, check_system):
     """
     Test launch vms with server group in parallel using min_count, max_count param in nova boot
 
     Args:
         policy (str): affinity or anti_affinity
-        group_size (int): max vms in server group
-        best_effort (bool|None): best_effort flag to set
-        min_count (int):
-        max_count (int|None):
         check_system (tuple): test fixture
 
     Test Steps
@@ -328,13 +280,12 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
         - Delete created vms, flavor, server group
 
     """
-    hosts, storage_backing = check_system
-    host_count = len(hosts)
-    if host_count == 1 and policy == 'anti_affinity' and not best_effort:
-        skip("Skip anti_affinity strict for system with 1 host in same storage aggregate")
+    hosts, storage_backing, up_hypervisors = check_system
+    host_count = len(up_hypervisors)
+    if host_count == 1 and policy == 'anti_affinity':
+        skip("Skip anti_affinity strict for system with 1 hypervisor")
 
-    flavor_id, srv_grp_msg_flv, srv_grp_id = create_flavor_and_server_group(storage_backing, None, policy, group_size,
-                                                                            best_effort)
+    flavor_id, srv_grp_id = create_flavor_and_server_group(policy=policy)
 
     LOG.tc_step("Boot vms with {} server group policy and min/max count".format(policy))
     code, vms, msg = vm_helper.boot_vm(name='srv_grp_parallel', flavor=flavor_id, hint={'group': srv_grp_id},
@@ -344,17 +295,7 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
     if max_count is None:
         max_count = min_count
 
-    if min_count > group_size:
-        LOG.tc_step("Check vms failed to boot when min_count > group_size")
-        assert 1 == code, msg
-        assert max_count == len(vms)
-
-        expt_err = SrvGrpErr.EXCEEDS_GRP_SIZE.format(srv_grp_id, group_size)
-        for vm in vms:
-            fault = nova_helper.get_vm_fault_message(vm)
-            assert expt_err in fault
-
-    elif policy == 'anti_affinity' and not best_effort and min_count > host_count:
+    if policy == 'anti_affinity' and min_count > host_count:
         LOG.tc_step("Check anti-affinity strict vms failed to boot when min_count > hosts_count")
         assert 1 == code, msg
         expt_err = SrvGrpErr.HOST_UNAVAIL_ANTI_AFFINITY
@@ -362,18 +303,13 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
             fault = nova_helper.get_vm_fault_message(vm)
             assert expt_err in fault
 
-    elif policy == 'anti_affinity' and not best_effort and max_count > host_count:
+    elif policy == 'anti_affinity' and max_count > host_count:
         LOG.tc_step("Check anti-affinity strict vms_count=host_count when min_count <= hosts_count <= max_count")
         assert 0 == code, msg
         assert host_count == len(vms), "VMs number is not the same as qualified hosts number"
 
-    elif max_count > group_size:
-        LOG.tc_step("Check vms_count=group_size when min_count <= group_size <= max_count")
-        assert 0 == code, msg
-        assert group_size == len(vms), "Expecting vms booted is the same as server group size due to max count " \
-                                       "larger than group size."
     else:
-        LOG.tc_step("Check vms_count=max_count when max_count <= group_size and no other constrains")
+        LOG.tc_step("Check vms_count=max_count when policy={} and host_count={}".format(policy, host_count))
         assert 0 == code, msg
         assert max_count == len(vms), "Expecting vms booted is the same as max count when max count <= group size"
 
@@ -383,7 +319,8 @@ def test_server_group_launch_vms_in_parallel(policy, group_size, best_effort, mi
     assert set(vms) <= set(members), "Some vms are not in srv group"
 
 
-def test_server_group_update():
+# Deprecated - align with upstream
+def _test_server_group_update():
     """
     - test server group metadata key removal (TC2910)
     - check server group project ID (TC2914)

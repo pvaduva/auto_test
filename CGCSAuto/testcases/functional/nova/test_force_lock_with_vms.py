@@ -8,7 +8,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper
 
 @fixture(scope='module')
 def get_hosts_with_backing(add_admin_role_module):
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     if len(hosts) < 2:
         skip("Minimum of two hypervisors must support the same storage_backing.")
 

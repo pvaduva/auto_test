@@ -66,7 +66,7 @@ class TestPrioritizedVMEvacuation:
     def setup_quota_and_hosts(self, request, add_admin_role_class, add_cgcsauto_zone):
         vm_helper.ensure_vms_quotas(vms_num=10, cores_num=50, vols_num=20)
 
-        storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip("Less than two up hosts have same storage backing")
 

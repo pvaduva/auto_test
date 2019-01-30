@@ -18,7 +18,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def hosts_with_backing():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
 
     LOG.fixture_step("Hosts with {} backing: {}".format(storage_backing, hosts))
     return storage_backing, hosts

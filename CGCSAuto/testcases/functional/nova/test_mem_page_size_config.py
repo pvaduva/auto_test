@@ -135,7 +135,7 @@ def print_hosts_memories(add_1g_and_4k_pages):
 
 @fixture(scope='module')
 def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_role_module):
-    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
 
     if len(target_hosts) < 2:
         skip("Less than two up hosts have same storage backing")
