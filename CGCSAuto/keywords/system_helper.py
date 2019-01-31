@@ -12,7 +12,7 @@ from consts.timeout import SysInvTimeout, K8sTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from testfixtures.resource_mgmt import ResourceCleanup
+from testfixtures.fixture_resources import ResourceCleanup
 from keywords import common
 
 
