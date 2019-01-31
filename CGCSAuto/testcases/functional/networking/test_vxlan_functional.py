@@ -36,7 +36,7 @@ def get_vxlan_endpoint_stats(compute, rtn_val='packets-unicast'):
     """
     Get the stats from vshell for vxlan-endpoint-stats-list
     Args:
-        ssh_client (str): ssh con handle
+        compute
         rtn_val (str): Filter to use to parse packets
 
         Returns:
@@ -56,7 +56,7 @@ def clear_vxlan_endpoint_stats(compute):
     """
     Clear the vxlan-endpoint-stats
     Args:
-        ssh_client (str): ssh con handle
+        compute
 
         Returns:
             code
@@ -126,7 +126,7 @@ def test_dynamic_vxlan_functional(version, mode):
 
     LOG.tc_step("Getting Internal net ids.")
     internal_net_ids = network_helper.get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id=vxlan_provider_net_id,
-                                                                                  ip_version=version, mode=mode)
+                                                                          ip_version=version, mode=mode)
     if not internal_net_ids:
         skip("No networks found for ip version {} on the vxlan provider net".format(version))
 
@@ -141,7 +141,7 @@ def test_dynamic_vxlan_functional(version, mode):
                 {'net-id': internal_net_ids[0], 'vif-model': vif_model}]
         vm_name = common.get_unique_name(name_str='vxlan')
         vm_ids.append(vm_helper.boot_vm(name=vm_name, vm_host=vm_host, nics=nics, avail_zone=aggregate_name,
-                                        auth_info=auth_info,cleanup='function')[1])
+                                        auth_info=auth_info, cleanup='function')[1])
 
     # make sure VMS are not in the same compute, I don;t need it but just in case (double checking):
     if nova_helper.get_vm_host(vm_id=vm_ids[0]) == nova_helper.get_vm_host(vm_id=vm_ids[1]):
@@ -165,7 +165,7 @@ def test_dynamic_vxlan_functional(version, mode):
             stats = int(stats_after_boot_vm[1])
             LOG.info("Got the stats for packets {} after vm launched is {}".format(filter_stat_at_boot, stats))
         else:
-            assert "Failed to get stats from compute"
+            assert 0, "Failed to get stats from compute"
         assert 0 < int(stats), "stats are not incremented as expected"
 
     # clear stats
@@ -189,7 +189,7 @@ def test_dynamic_vxlan_functional(version, mode):
         stats_known_vtep = int(stats_after_ping[1])
         LOG.info("Got the stats for packets {} after ping {}".format(filter_known_vtep, stats_known_vtep))
     else:
-        assert "Failed to get stats from compute"
+        assert 0, "Failed to get stats from compute"
     assert 0 < int(stats_known_vtep), "stats are not incremented as expected"
 
     # clear stats
@@ -209,7 +209,7 @@ def test_dynamic_vxlan_functional(version, mode):
     LOG.tc_step("Checking stats on computes after vm ping on unknown IP.")
     stats_after_ping_unknown_vtep = get_vxlan_endpoint_stats(computes[1], rtn_val=filter_unknown_vtep)
     if not stats_after_ping_unknown_vtep:
-        assert "Compute stats are empty"
+        assert 0, "Compute stats are empty"
 
     if len(stats_after_ping_unknown_vtep) is 3:
         stats_unknown_vtep = int(stats_after_ping_unknown_vtep[1]) + int(stats_after_ping_unknown_vtep[2])
@@ -220,5 +220,5 @@ def test_dynamic_vxlan_functional(version, mode):
         LOG.info("Got the stats for packets {} after ping uknown vtep {}".format(filter_unknown_vtep,
                                                                                  stats_unknown_vtep))
     else:
-        assert "Failed to get stats from compute"
+        assert 0, "Failed to get stats from compute"
     assert 0 < int(stats_unknown_vtep), "stats are not incremented as expected"

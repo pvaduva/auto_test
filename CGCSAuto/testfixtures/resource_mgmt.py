@@ -5,8 +5,7 @@ from utils import exceptions
 
 from consts.auth import Tenant
 from consts.heat import Heat
-from consts.proj_vars import ProjVar
-from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper
+from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 # SIMPLEX_RECOVERED = False
@@ -157,6 +156,7 @@ def _delete_resources(resources, scope):
         ('network', network_helper.delete_network, {}, False),
         ('security_group', network_helper.delete_security_group, {}, False),
         ('aggregate', __del_aggregate, {}, False),
+        ('datanetwork', system_helper.delete_data_network, {}, False),
         ('providernet', network_helper.delete_providernet, {}, False),
     ]
 

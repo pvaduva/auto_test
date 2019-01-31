@@ -12,6 +12,8 @@ from consts.timeout import SysInvTimeout, K8sTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from testfixtures.resource_mgmt import ResourceCleanup
+from keywords import common
 
 
 def get_buildinfo(con_ssh=None, use_telnet=False, con_telnet=None):
@@ -4322,3 +4324,108 @@ def apply_k8s_application(application, con_ssh=None, fail_ok=False, auth_info=Te
         else:
             raise exceptions.K8sError(msg)
 
+
+def create_data_network(name, net_type='vlan', mode=None, mtu=None, port_num=None, multicast_group=None, ttl=None,
+                        description=None, rtn_val='uuid', fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
+                        cleanup=None):
+    """
+    Add a datanetwork
+    Args:
+        name (str):
+        net_type (str): vlan, vxlan or flat
+        mode (None|str|None):
+        mtu (int|str|None):
+        port_num (int|str|None):
+        multicast_group (str|None):
+        ttl (int|str|None):
+        description (str|None):
+        rtn_val (str): uuid or name
+        fail_ok:
+        con_ssh:
+        auth_info:
+        cleanup (str|None): function, class, module or session
+
+    Returns (tuple):
+        (0, <datanetwork>)
+        (1, <std_err>)
+
+    """
+    args_dict = {
+        'description': description,
+        'mtu': mtu,
+        'port_num': port_num,
+        'multicast_group': multicast_group,
+        'ttl': ttl,
+        'mode': mode,
+    }
+    args = '{} {} {}'.format(common.parse_args(args_dict), name, net_type)
+    code, output = cli.system('datanetwork-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    LOG.info("data network {} is created successfully".format(name))
+
+    if cleanup:
+        uuid = table_parser.get_value_two_col_table(table_, field='uuid')
+        ResourceCleanup.add('datanetwork', uuid, scope=cleanup)
+
+    return 0, table_parser.get_value_two_col_table(table_, rtn_val)
+
+
+def get_data_network_values(datanetwork, fields=('uuid', ), fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get datanetwork values from system datanetwork-show table.
+    Args:
+        datanetwork (str): name or uuid of datanetwork
+        fields (str|tuple|list):
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns (list|None): values for given fields. None if cli is rejected.
+
+    """
+    code, output = cli.system('datanetwork-show', datanetwork, ssh_client=con_ssh, auth_info=auth_info,
+                              fail_ok=fail_ok, rtn_list=True)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    if isinstance(fields, str):
+        fields = (fields, )
+    return [table_parser.get_value_two_col_table(table_, field) for field in fields]
+
+
+def delete_data_network(uuid, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Delete given datanetwork
+    Args:
+        uuid (str):
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (0, "datanetwork <uuid> deleted successfully")
+        (1, <std_err>)
+        (2, "datanetwork <uuid> still exists after deletion")
+
+    """
+    code, output = cli.system('datanetwork-delete', uuid, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    if get_data_network_values(datanetwork=uuid, con_ssh=con_ssh, auth_info=auth_info, fail_ok=True):
+        err = 'datanetwork {} still exists after deletion'.format(uuid)
+        LOG.warning(err)
+        if fail_ok:
+            return 2, err
+        else:
+            raise exceptions.SysinvError(err)
+
+    msg = 'datanetwork {} deleted successfully'.format(uuid)
+    LOG.info(msg)
+    return 0, msg
