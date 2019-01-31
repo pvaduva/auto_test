@@ -168,11 +168,11 @@ class IxiaSession(object):
             self._connected = True
             self._connected_remote = (tcl_server_ip, tcl_server_port, tcl_server_ver)
             self._ixnet.connect(tcl_server_ip, '-port', tcl_server_port, '-version', tcl_server_ver)
-        except Exception as err:
+        except Exception:
             # if connect failed, do not expect the user to call disconnect
             # all resources allocated by connect shall be released
             self.disconnect()
-            raise err
+            raise
 
     def disconnect(self, traffic_stop=False):
         """
@@ -267,7 +267,7 @@ class IxiaSession(object):
         self._ixnet.commit()
         chassis = self._ixnet.remapIds(chassis)[0]
 
-        if (default):
+        if default:
             chassis = self.set_default_chassis(chassis)
 
         # verify the chassis is ready
@@ -306,7 +306,7 @@ class IxiaSession(object):
         LOG.info("Clearing port: " + port_id)
         try:
             self._ixnet.execute('clearOwnership', port_id)
-        except Exception as err:
+        except Exception:
             # Unable to release ownership is ok when the configuration is blanked already
             pass
 
@@ -457,7 +457,7 @@ class IxiaSession(object):
         # verify if the interface exists
         try:
             self._ixnet.execute('sendArpAndNS', interface)
-        except IxNetwork.IxNetError as err:
+        except IxNetwork.IxNetError:
             if create_if_nonexistent:
                 LOG.warning("the specified interface does not exist, creating instead")
                 interface = self._ixnet.add(self._port_map[port_id], "interface")
@@ -494,11 +494,11 @@ class IxiaSession(object):
         if validate:
             vport = '/'.join(interface.split('/')[:-1])
 
-            def _validate(vport, interface):
-                self._ixnet.execute("clearNeighborTable", vport)
-                self._ixnet.execute('sendArpAndNS', interface)
+            def _validate(vport_, interface_):
+                self._ixnet.execute("clearNeighborTable", vport_)
+                self._ixnet.execute('sendArpAndNS', interface_)
                 time.sleep(5)
-                neighbors = self.getList(vport, 'discoveredNeighbor')
+                neighbors = self.getList(vport_, 'discoveredNeighbor')
                 if not neighbors:
                     return False
 
@@ -508,7 +508,7 @@ class IxiaSession(object):
                     if not r:
                         return False
                     else:
-                        LOG.info("{} resolved. MAC: {}".format(vport, self.getAttribute(neighbor, 'neighborMac')))
+                        LOG.info("{} resolved. MAC: {}".format(vport_, self.getAttribute(neighbor, 'neighborMac')))
                 return True
 
             r, val = common.wait_for_val_from_func(True, validate_timeout, 10, _validate, vport, interface)
@@ -826,7 +826,7 @@ class IxiaSession(object):
         Args:
             obj_ref (str):
                 the identifier for the object
-            **kwargs (dict):
+            **kwargs:
                 attributeName==attributeValue
                 to be tested
 
@@ -981,6 +981,7 @@ class IxiaSession(object):
             timeout (int):
                 max. time to wait for the delta to become stable
                 used only if stable=True
+            interval (int)
 
         Returns (int):
             int(.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])

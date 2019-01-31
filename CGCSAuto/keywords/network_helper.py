@@ -2829,7 +2829,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
     args_dict = {
         '--tenant-id': tenant_id if auth_info == Tenant.get('admin') else None,
-        '--inside_addr': inside_addr,
+        '--inside-addr': inside_addr,
         '--inside-port': inside_port,
         '--outside-port': outside_port,
         '--protocol': protocol,
