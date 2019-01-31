@@ -1855,7 +1855,8 @@ def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, aut
     return table_parser.get_values(aggregates_tab, rtn_val, **kwargs)
 
 
-def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None,
+                     auth_info=Tenant.get('admin')):
     """
     Add a aggregate with given name and availability zone.
 

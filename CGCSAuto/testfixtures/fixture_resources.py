@@ -1,15 +1,12 @@
 from copy import deepcopy
 
 VALID_SCOPES = ['function', 'class', 'module', 'session']
-_RESOURCE_TYPES = ['vm', 'volume', 'volume_type', 'qos', 'flavor', 'image', 'server_group', 'router',
-                   'router_interface', 'subnet', 'floating_ip', 'heat_stack', 'port', 'trunk', 'network',
+_RESOURCE_TYPES = ['vm', 'volume', 'volume_type', 'volume_qos', 'flavor', 'image', 'server_group', 'router',
+                   'subnet', 'floating_ip', 'heat_stack', 'port', 'trunk', 'network',
                    'security_group', 'network_qos', 'vol_snapshot', 'aggregate',
-                   'vol_snapshot', 'aggregate', 'port_pair', 'port_pair_group', 'flow_classifier', 'port_chain']
+                   'port_pair', 'port_pair_group', 'flow_classifier', 'port_chain', 'providernet']
 
-__special_types = ('vm', 'qos')
-__updated_types = ['vms_with_vols', 'vms_no_vols', 'qos_ids']
-__resource_keys = ['{}s'.format(item) for item in _RESOURCE_TYPES if item not in __special_types] + __updated_types
-_RESOURCE_DICT = {key: [] for key in __resource_keys}
+_RESOURCE_DICT = {key: [] for key in _RESOURCE_TYPES+['vm_with_vol']}
 
 
 def _check_values(value, val_type='scope', valid_vals=None):
@@ -51,21 +48,14 @@ class ResourceCleanup:
         _check_values(scope)
         _check_values(resource_type, val_type='resource_type', valid_vals=_RESOURCE_TYPES)
 
-        if resource_type == 'vm':
-            if del_vm_vols:
-                key = 'vms_with_vols'
-            else:
-                key = 'vms_no_vols'
-        elif resource_type == 'qos':
-            key = 'qos_ids'
-        else:
-            key = resource_type + 's'
+        if resource_type == 'vm' and del_vm_vols:
+            resource_type = 'vm_with_vol'
 
         if not isinstance(resource_id, (list, tuple)):
             resource_id = [resource_id]
 
         for res_id in resource_id:
-            cls.__resources_to_cleanup[scope][key].append(res_id)
+            cls.__resources_to_cleanup[scope][resource_type].append(res_id)
 
     @classmethod
     def remove(cls, resource_type, resource_id, scope='function', del_vm_vols=True):
@@ -85,20 +75,13 @@ class ResourceCleanup:
         _check_values(scope)
         _check_values(resource_type, val_type='resource_type', valid_vals=_RESOURCE_TYPES)
 
-        if resource_type == 'vm':
-            if del_vm_vols:
-                key = 'vms_with_vols'
-            else:
-                key = 'vms_no_vols'
-        elif resource_type == 'qos':
-            key = 'qos_ids'
-        else:
-            key = resource_type + 's'
+        if resource_type == 'vm' and del_vm_vols:
+            resource_type = 'vm_with_vol'
 
         if not isinstance(resource_id, (list, tuple)):
             resource_id = [resource_id]
 
-        existing_list = cls.__resources_to_cleanup[scope][key]
+        existing_list = cls.__resources_to_cleanup[scope][resource_type]
         for res_id in resource_id:
             if res_id in existing_list:
                 existing_list.remove(res_id)

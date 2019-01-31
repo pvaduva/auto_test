@@ -82,7 +82,7 @@ class TestQoS:
         LOG.tc_step("Create QoS spec: {}".format(qos_specs))
         # consumer must be set to both or xmldump will not display correct tag and data
         qos_id = cinder_helper.create_qos_specs(consumer='both', qos_name=name_str, **qos_specs)[1]
-        ResourceCleanup.add('qos', qos_id)
+        ResourceCleanup.add('volume_qos', qos_id)
 
         LOG.tc_step("Create volume type and associate above QoS spec to it")
         volume_type_id = cinder_helper.create_volume_type("test_volume_type")[1]

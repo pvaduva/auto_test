@@ -257,7 +257,6 @@ def check_server_group_messaging_disabled(vms):
     ('affinity', 3, 4),
     # ('soft_anti_affinity', 3, None),  TODO: add after cutover to stein
     ('anti_affinity', 1, 3),
-
 ])
 def test_server_group_launch_vms_in_parallel(policy, min_count, max_count, check_system):
     """
