@@ -124,10 +124,15 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         if [storage_backing] == sys_inst_backing:
             storage_backing = None
 
+    extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'any'}
+    nat_name = ProjVar.get_var('NATBOX').get('name')
+    if not (nat_name == 'localhost' or nat_name.startswith('128.224.')):
+        extra_specs[FlavorSpec.HYPERVISOR_TYPE] = 'kvm'
     if storage_backing:
-        LOG.info("Setting local_storage extra spec to {}".format(storage_backing))
-        set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info,
-                               **{FlavorSpec.STORAGE_BACKING: storage_backing})
+        extra_specs[FlavorSpec.STORAGE_BACKING] = storage_backing
+
+    LOG.info("Setting flavor specs: {}".format(extra_specs))
+    set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info, **extra_specs)
 
     flavor = flavor_id if rtn_id else flavor_name
     return 0, flavor, storage_backing
