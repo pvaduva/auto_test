@@ -75,8 +75,8 @@ def test_modify_non_existing_cpu_negative(lock_):
         fake_proc_num += 1
     fake_proc = 'p{}'.format(fake_proc_num)
     map_ = {fake_proc: 1}
-    LOG.tc_step("Attempt to modify fake processor {}'s function to shared".format(fake_proc))
-    code, out = host_helper.modify_host_cpu(host, 'shared', fail_ok=True, **map_)
+    LOG.tc_step("Attempt to modify fake processor {}'s function to vSwitch".format(fake_proc))
+    code, out = host_helper.modify_host_cpu(host, 'vSwitch', fail_ok=True, **map_)
     assert 0 != code, "FAIL: Modifying a non existing processor was not rejected"
 
     hosts = system_helper.get_hostnames()
@@ -85,8 +85,8 @@ def test_modify_non_existing_cpu_negative(lock_):
         if name not in hosts:
             break
         name += "a"
-    LOG.tc_step("Attempt to modify fake host {}'s processor p0 function to shared".format(name))
-    code, out = host_helper.modify_host_cpu(name, 'shared', p0=1, fail_ok=True)
+    LOG.tc_step("Attempt to modify fake host {}'s processor p0 function to vSwitch".format(name))
+    code, out = host_helper.modify_host_cpu(name, 'vSwitch', p0=1, fail_ok=True)
     LOG.tc_step("Verifying that the cli was rejected")
     assert 1 == code, "FAIL: Modifying a cpu on a non-existant host was not rejected"
 

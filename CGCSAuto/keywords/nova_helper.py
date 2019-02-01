@@ -286,7 +286,7 @@ def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=Fals
     if has_up_hosts or not rtn_down_hosts:
         selected_hosts = list(set(selected_hosts) & set(hosts))
     LOG.info("{} storage aggregate has most hypervisors".format(selected_backing))
-    return selected_backing, selected_hosts
+    return selected_backing, selected_hosts, up_hosts
 
 
 def flavor_exists(flavor, header='ID', con_ssh=None, auth_info=None):
@@ -1855,7 +1855,8 @@ def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, aut
     return table_parser.get_values(aggregates_tab, rtn_val, **kwargs)
 
 
-def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def delete_aggregate(name, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None,
+                     auth_info=Tenant.get('admin')):
     """
     Add a aggregate with given name and availability zone.
 
@@ -2070,3 +2071,87 @@ def get_compute_with_cpu_model(hosts, cpu_models, con_ssh=None, auth_info=Tenant
             return_hosts.append(host)
 
     return return_hosts
+
+
+def create_keypair(kp_name, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Create a new keypair
+    Args:
+        kp_name (str): keypair name to create
+        fail_ok (bool)
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+
+    """
+    args = '"{}"'.format(kp_name)
+    code, out = cli.openstack('keypair create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                              rtn_list=True)
+
+    if code > 0:
+        return 1, out
+
+    return 0
+
+
+def get_keypair(con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get keypair
+    Args:
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.openstack('keypair list', ssh_client=con_ssh, auth_info=auth_info))
+
+    return table_parser.get_values(table_, 'Name')
+
+
+def delete_keypair(kp_names, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Delete keypair
+    Args:
+        kp_names (list/str): keypair name to delete
+        check_first (bool)
+        fail_ok (bool)
+        con_ssh (SSHClient):
+        auth_info (dict):
+
+    Returns (tuple):
+
+    """
+    if isinstance(kp_names, str):
+        kp_names = kp_names.split(sep=' ')
+    else:
+        kp_names = list(kp_names)
+
+    if check_first:
+        current_keypairs = get_keypair(con_ssh=con_ssh, auth_info=auth_info)
+        kp_names = [kp_name for kp_name in kp_names if kp_name in current_keypairs]
+        if not kp_names:
+            msg = '"{}" keypair does not exist. Do nothing.'.format(kp_names)
+            LOG.info(msg)
+            return -1, msg
+
+    LOG.info('Deleting keypair: {}'.format(kp_names))
+    code = -1
+    out = ''
+    for kp_name in kp_names:
+        code, out = cli.openstack('keypair delete', kp_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                  rtn_list=True)
+
+    post_kp_names = get_keypair(con_ssh=con_ssh, auth_info=auth_info)
+    undeleted_kp_names = [kp_name for kp_name in kp_names if kp_name in post_kp_names]
+    if undeleted_kp_names:
+        raise exceptions.SysinvError("keypair still exist after deletion: {}".format(undeleted_kp_names))
+
+    if code == 0:
+        msg = 'keypair "{}" is deleted successfully'.format(kp_names)
+    else:
+        msg = 'keypair "{}" failed to delete'.format(kp_names)
+
+    LOG.info(msg)
+    return code, out

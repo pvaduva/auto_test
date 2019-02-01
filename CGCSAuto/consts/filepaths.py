@@ -226,3 +226,4 @@ class LogPath:
 
 class SysLogPath:
     DC_MANAGER = '/var/log/dcmanager/dcmanager.log'
+    DC_ORCH = '/var/log/dcorch/dcorch.log'

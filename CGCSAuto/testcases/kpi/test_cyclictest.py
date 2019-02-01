@@ -3,6 +3,7 @@ import random
 import re
 import time
 
+from pexpect import exceptions
 from pytest import fixture, skip, mark
 
 from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
@@ -25,22 +26,19 @@ SHELL_FILE = 'runcyclictest.sh'
 RESULT_FILE = 'result'
 RUN_LOG = 'runlog'
 INCLUDING_RATIO = 0.999999
+TARGET_CPU_TYPE = 'Applications'
+VM_CPU_NUM = 4
 
-# RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest-rt/CGCS_5.0_RT_Guest/latest_tis-centos-guest-rt.img'
 RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_RT_Guest/latest_tis-centos-guest-rt.img'
 BUILD_SERVER = DEFAULT_BUILD_SERVER['ip']
 
-# ./cyclictest -S -p99 -n -m -d0 -H 20 -D 3600
-# CYCLICTEST_OPTS_TEMPLATE = r'{program} -S -p {priority} -n -m -d {distance} -H {histofall} -l {loops}'
 cyclictest_params = {
-    'smp': '',
     'priority': 99,
     'nanosleep': '',
     'mlock': '',
-    'distance': 0,
+    # 'distance': 0,
     'histofall': 20,
     'histfile': '{}/{}'.format(CYCLICTEST_DIR, HISTOGRAM_FILE),
-    # 'duration': 30,
     'duration': 3600,
 }
 
@@ -123,16 +121,13 @@ def get_cpu_info(hypervisor):
 
     core_function = table_parser.get_columns(cpu_table, ['log_core', 'assigned_function'])
 
-    non_vm_cores = {}
+    vm_cores = []
     for core, assigned in core_function:
-        if assigned != 'Applications':   # and assigned != 'Shared':
-            if assigned in non_vm_cores:
-                non_vm_cores[assigned].append(int(core))
-            else:
-                non_vm_cores[assigned] = [int(core)]
+        if assigned == TARGET_CPU_TYPE:
+            vm_cores.append(int(core))
 
-    LOG.info('non_vm_cores={}'.format(non_vm_cores))
-    return eval(cpu_info), num_threads, non_vm_cores, len(core_function)
+    LOG.info('vm_cores={}'.format(vm_cores))
+    return eval(cpu_info), num_threads, vm_cores, len(core_function)
 
 
 def get_suitable_hypervisors():
@@ -167,7 +162,7 @@ def get_suitable_hypervisors():
         if not personalities or 'lowlatency' not in personalities:
             continue
 
-        cpu_info, num_threads, non_vm_cores, num_cores = get_cpu_info(hypervisor)
+        cpu_info, num_threads, vm_cores, num_cores = get_cpu_info(hypervisor)
         if cpu_info and 'topology' in cpu_info and cpu_info['topology']['threads'] == 1:
             if num_threads != 1:
                 LOG.warn('conflicting info: num_threads={}, while cpu_info.threads={}'.format(
@@ -175,7 +170,7 @@ def get_suitable_hypervisors():
             testable_hypervisors[hypervisor] = {
                 'personalities': personalities,
                 'cpu_info': cpu_info,
-                'non_vm_cores': non_vm_cores,
+                'vm_cores': vm_cores,
                 'num_cores': num_cores,
                 'for_host_test': False,
                 'for_vm_test': False,
@@ -289,7 +284,7 @@ def _calculate_runlog(run_log, cores_to_ignore=None):
     return average
 
 
-def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
+def _calculate_histfile(hist_file, num_cores=None, cores_to_ignore=None):
     global cyclictest_params
 
     LOG.info('Calculate results from hist-file')
@@ -307,12 +302,12 @@ def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
                 if len(numbers) == num_item:
                     result2[int(numbers[0])] = [int(n) for n in numbers[1:-1]]
             else:
-                m = re.match('^# Total:\s+((\d+\s+)*\d+)\s*$', line)
+                m = re.match(r'^# Total:\s+((\d+\s+)*\d+)\s*$', line)
                 if m and len(m.groups()) == 2:
                     totals = [int(n) for n in m.group(1).split()]
                     totals = totals[:-1]
                 else:
-                    m = re.match('^# Histogram Overflows:\s+((\d+\s+)*\d+)\s*$', line)
+                    m = re.match(r'^# Histogram Overflows:\s+((\d+\s+)*\d+)\s*$', line)
                     if m and len(m.groups()) == 2:
                         overflows = [int(n) for n in m.group(1).split()]
                         overflows = overflows[:-1]
@@ -320,6 +315,7 @@ def _calculate_histfile(hist_file, num_cores, cores_to_ignore=None):
     if not cores_to_ignore:
         cores_to_ignore = []
     LOG.info('ignore cpu:{}'.format(cores_to_ignore))
+    LOG.info('result2:{}'.format(result2))
 
     accumulated = [[d for i, d in enumerate(result2[0]) if i not in cores_to_ignore]]
     total_count = sum([t for i, t in enumerate(totals) if i not in cores_to_ignore])
@@ -386,19 +382,22 @@ def _wait_for_results(con_target, run_log=None, hist_file=None, duration=60, sta
     cmd_timeout = max(int(duration / 20), 90)
 
     while time.time() < end_time:
-
-        if con_target.file_exists(end_file):
-            LOG.info('Run completed on {} !!!'.format(con_target.host))
-            cmd = 'tail -n 30 {} {}; echo'.format(run_log, hist_file)
-            cmd_timeout = max(int(duration/3), 900)
-            output = con_target.exec_cmd(cmd, expect_timeout=cmd_timeout)[1]
-            LOG.info('\n{}\n'.format(output))
-            return True
-
-        else:
-            LOG.info('Running ... on ' + con_target.host)
-            output = con_target.exec_cmd('tail {}; echo'.format(run_log), expect_timeout=cmd_timeout)[1]
-            LOG.info('\n{}\n'.format(output))
+        try:
+            if con_target.file_exists(end_file):
+                LOG.info('Run completed on {} !!!'.format(con_target.host))
+                cmd = 'tail -n 30 {} {}; echo'.format(run_log, hist_file)
+                cmd_timeout = max(int(duration/3), 900)
+                output = con_target.exec_cmd(cmd, expect_timeout=cmd_timeout)[1]
+                LOG.info('\n{}\n'.format(output))
+                return True
+            else:
+                LOG.info('Running ... on ' + con_target.host)
+                output = con_target.exec_cmd('tail {}; echo'.format(run_log), expect_timeout=cmd_timeout)[1]
+                LOG.info('\n{}\n'.format(output))
+        except pexpect.exceptions.EOF as e:
+            LOG.debug('ignore pexpect exception:{}'.format(e))
+        except Except as e:
+            LOG.debug('ignore unknown exception:{}'.format(e))
 
         time.sleep(wait_per_checking)
 
@@ -407,7 +406,39 @@ def _wait_for_results(con_target, run_log=None, hist_file=None, duration=60, sta
         assert False, 'Timeout when running on target after {} seconds'.format(total_timeout)
 
 
-def run_cyclictest(target_ssh, program, target_hypervisor, settings=None, cyclictest_dir=CYCLICTEST_DIR):
+def _normalize_cpu_list(cpus):
+    if not isinstance(cpus, list):
+        return str(cpus)
+    elif len(cpus) < 3:
+        return ','.join([str(n) for n in cpus])
+
+    unique_cores = list(set(cpus))
+    unique_cores.sort()
+
+    beg = unique_cores[0]
+    prv = beg
+    ranges = []
+    for c in unique_cores[1:]:
+        if c > prv + 1:
+            ranges.append((beg, prv))
+            beg = c
+        prv = c
+
+    ranges.append((beg, unique_cores[-1]))
+
+    normalized = []
+    for r in ranges:
+        if r[1] < r[0] + 3:
+            normalized.append(','.join([str(n) for n in range(r[0], r[1]+1)]))
+        else:
+            normalized.append(str(r[0]) + '-' + str(r[1]))
+
+    return ','.join(normalized)
+
+
+def run_cyclictest(target_ssh, program, target_hypervisor, cpu_info=None, 
+    settings=None, cyclictest_dir=CYCLICTEST_DIR):
+
     LOG.tc_step('On target: {}, run program: {}'.format(target_hypervisor, program))
 
     if settings is None or not isinstance(settings, dict):
@@ -423,6 +454,14 @@ def run_cyclictest(target_ssh, program, target_hypervisor, settings=None, cyclic
     end_file = os.path.join(cyclictest_dir, 'end-{}.txt'.format(start_time))
 
     options = ' '.join(('--' + key + ' ' + str(value) for key, value in actual_settings.items()))
+
+    if cpu_info:
+        vm_cores = cpu_info['vm_cores']
+        options += ' --affinity ' + _normalize_cpu_list(vm_cores)
+        options += ' --threads ' + str(len(vm_cores))
+
+    LOG.debug('options:{}'.format(options))
+
     cmd = program + ' ' + options
 
     LOG.info('-create a temporary shell file to run CYCLICTEST')
@@ -458,7 +497,7 @@ def create_rt_vm(hypervisor):
     LOG.tc_step('Create/get glance image using rt guest image')
     image_id = glance_helper.get_guest_image(guest_os='tis-centos-guest-rt', cleanup='module')
 
-    vcpu_count = 4
+    vcpu_count = VM_CPU_NUM
     non_rt_core = 0
     LOG.tc_step('Create a flavor with specified cpu model, cpu policy, realtime mask, and 2M pagesize')
     flavor_id, storage_backing = nova_helper.create_flavor(ram=1024, vcpus=vcpu_count, root_disk=2,
@@ -513,17 +552,15 @@ def test_kpi_cyclictest_hypervisor(collect_kpi, prepare_test_session, get_hyperv
 
     with host_helper.ssh_to_host(chosen_hypervisor) as target_ssh:
         prep_test_on_host(target_ssh, chosen_hypervisor, program, active_controller_name)
-        run_log, hist_file = run_cyclictest(target_ssh, program, target_hypervisor=chosen_hypervisor)
+        run_log, hist_file = run_cyclictest(target_ssh, program, target_hypervisor=chosen_hypervisor, cpu_info=cpu_info)
 
         LOG.info("Process and upload test results")
         local_run_log, local_hist_file = fetch_results_from_target(target_ssh=target_ssh, target_host=chosen_hypervisor,
                                                                    active_con_name=active_controller_name,
                                                                    run_log=run_log, hist_file=hist_file)
 
-    non_vm_cores = sum(list(cpu_info['non_vm_cores'].values()), [])
-    num_cores = cpu_info['num_cores']
     avg_val, six_nines_val = calculate_results(run_log=local_run_log, hist_file=local_hist_file,
-                                               cores_to_ignore=non_vm_cores, num_cores=num_cores)
+                                               cores_to_ignore=None, num_cores=len(cpu_info['vm_cores']))
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=CyclicTest.NAME_HYPERVISOR_AVG,
                               kpi_val=six_nines_val, uptime=15, unit=CyclicTest.UNIT)
@@ -546,17 +583,20 @@ def test_kpi_cyclictest_vm(collect_kpi, prepare_test_session, get_rt_guest_image
     cyclictest_dir = '/root/cyclictest/'
     program = os.path.join(os.path.abspath(cyclictest_dir), os.path.basename(CYCLICTEST_EXE))
     program_active_con = os.path.join(os.path.abspath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
+
+    cpu_info = {'vm_cores': [id for id in range(vcpu_count) if id != non_rt_core]}
+
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         prep_test_on_host(vm_ssh, vm_id, program_active_con, ControllerClient.get_active_controller().host,
                           cyclictest_dir=cyclictest_dir)
-        run_log, hist_file = run_cyclictest(vm_ssh, program, target_hypervisor=vm_id, cyclictest_dir=cyclictest_dir)
+        run_log, hist_file = run_cyclictest(vm_ssh, program, target_hypervisor=vm_id, cyclictest_dir=cyclictest_dir, cpu_info=cpu_info)
 
         LOG.info("Process and upload test results")
         local_run_log, local_hist_file = fetch_results_from_target(target_ssh=vm_ssh, target_host=vm_id,
                                                                    run_log=run_log, hist_file=hist_file, is_guest=True)
 
     avg_val, six_nines_val = calculate_results(run_log=local_run_log, hist_file=local_hist_file,
-                                               cores_to_ignore=non_rt_core, num_cores=vcpu_count)
+                                               cores_to_ignore=None, num_cores=(vcpu_count - 1))
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=CyclicTest.NAME_VM_AVG,
                               kpi_val=avg_val, uptime=15, unit=CyclicTest.UNIT)

@@ -47,7 +47,7 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     if len(nova_hosts) < 1:
         skip("No nova compute host available in the system, no host to lock and reconfigure.")
 
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     host = hosts[0]
     host_other = hosts[1] if len(hosts) > 1 else None
 
@@ -363,7 +363,7 @@ def _create_flavor(vcpus, storage_backing, vswitch_numa_affinity=None, numa_0=No
 def get_hosts(host_to_config):
     host0, ht_enabled, is_cpe, host1, storage_backing = host_to_config
     if not host1:
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("Less than two up hypervisors support same storage backing")
         else:

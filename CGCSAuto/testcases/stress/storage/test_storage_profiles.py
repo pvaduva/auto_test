@@ -390,11 +390,6 @@ def test_storage_profile(personality, from_backing, to_backing):
         if not storage_helper.is_ceph_healthy():
             skip("Cannot run test when ceph is not healthy")
 
-        lab = InstallVars.get_install_var("LAB")
-        lab.update(create_node_dict(lab['storage_nodes'], 'storage'))
-        lab['boot_device_dict'] = create_node_boot_dict(lab['name'])
-        install_helper.open_vlm_console_thread(to_host)
-
         LOG.tc_step("Delete the host {}".format(to_host))
         cli.system("host-bulk-export")
         cli.system("host-delete {}".format(to_host), rtn_list=True)

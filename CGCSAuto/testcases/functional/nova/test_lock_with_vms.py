@@ -70,7 +70,7 @@ class TestLockWithVMs:
         to target host before test start.
         """
 
-        storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 

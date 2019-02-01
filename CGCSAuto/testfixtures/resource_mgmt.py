@@ -1,10 +1,11 @@
 from pytest import fixture
 
 from utils.tis_log import LOG
+from utils import exceptions
 
 from consts.auth import Tenant
 from consts.heat import Heat
-from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper
+from keywords import nova_helper, vm_helper, cinder_helper, glance_helper, network_helper, heat_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 # SIMPLEX_RECOVERED = False
@@ -117,202 +118,68 @@ def _delete_resources(resources, scope):
     #     host_helper.recover_simplex(fail_ok=True)
     #     SIMPLEX_RECOVERED = True
 
-    vms_with_vols = resources['vms_with_vols']
-    vms_no_vols = resources['vms_no_vols']
-    volumes = resources['volumes']
-    volume_types = resources['volume_types']
-    qos_ids = resources['qos_ids']
-    flavors = resources['flavors']
-    images = resources['images']
-    server_groups = resources['server_groups']
-    routers = resources['routers']
-    subnets = resources['subnets']
-    floating_ips = resources['floating_ips']
-    heat_stacks = resources['heat_stacks']
-    ports = resources['ports']
-    trunks = resources['trunks']
-    networks = resources['networks']
-    security_groups = resources['security_groups']
-    network_qoss = resources['network_qoss']
-    vol_snapshots = resources['vol_snapshots']
-    aggregates = resources['aggregates']
-    port_pairs = resources['port_pairs']
-    port_pair_groups = resources['port_pair_groups']
-    port_chains = resources['port_chains']
-    flow_classifiers = resources['flow_classifiers']
+    def __del_heat_stacks(stack, **kwargs):
+        auth_info = None
+        heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
+        if heat_user is 'admin':
+            auth_info = Tenant.get('admin')
+        kwargs['auth_info'] = auth_info
+        return heat_helper.delete_stack(stack, check_first=True, **kwargs)
+
+    def __del_aggregate(aggregate_, **kwargs):
+        nova_helper.remove_hosts_from_aggregate(aggregate=aggregate_, check_first=False, **kwargs)
+        return nova_helper.delete_aggregate(name=aggregate_, **kwargs)
+
+    # List resources in proper order if there are dependencies!
+    del_list = [
+        # resource, del_fun, fun_params, whether to delete all resources together.
+        ('heat_stack', __del_heat_stacks, {}, False),
+        ('port_chain', network_helper.delete_port_chain, {'check_first': True}, False),
+        ('flow_classifier', network_helper.delete_flow_classifier, {'check_first': True}, False),
+        ('vm', vm_helper.delete_vms, {'delete_volumes': False}, True),
+        ('vm_with_vol', vm_helper.delete_vms, {'delete_volumes': True}, True),
+        ('vol_snapshot', cinder_helper.delete_volume_snapshots, {}, True),
+        ('volume', cinder_helper.delete_volumes, {}, True),
+        ('volume_type', cinder_helper.delete_volume_types, {}, True),
+        ('volume_qos', cinder_helper.delete_qos_list, {}, True),
+        ('flavor', nova_helper.delete_flavors, {}, True),
+        ('image', glance_helper.delete_images, {}, True),
+        ('server_group', nova_helper.delete_server_groups, {}, True),
+        ('floating_ip', network_helper.delete_floating_ip, {'fip_val': 'ip'}, False),
+        ('trunk', network_helper.delete_trunk, {}, False),
+        ('port_pair_group', network_helper.delete_port_pair_group, {'check_first': True}, False),
+        ('port_pair', network_helper.delete_port_pairs, {'check_first': True}, True),
+        ('port', network_helper.delete_port, {}, False),
+        ('router', network_helper.delete_router, {}, False),
+        ('subnet', network_helper.delete_subnet, {}, False),
+        ('network_qos', network_helper.delete_qos, {}, False),
+        ('network', network_helper.delete_network, {}, False),
+        ('security_group', network_helper.delete_security_group, {}, False),
+        ('aggregate', __del_aggregate, {}, False),
+        ('datanetwork', system_helper.delete_data_network, {}, False),
+        ('providernet', network_helper.delete_providernet, {}, False),
+    ]
 
     err_msgs = []
-    if heat_stacks:
-        LOG.fixture_step("({}) Attempt to delete following heat stacks: {}".format(scope, heat_stacks))
-        auth_info = None
-        for stack in heat_stacks:
-            heat_user = getattr(Heat, stack.split('-')[0])['heat_user']
-            if heat_user is 'admin':
-                auth_info = Tenant.get('admin')
-            code, msg = heat_helper.delete_stack(stack, check_first=True, auth_info=auth_info, fail_ok=True)
-            if code > 0:
-                err_msgs.append(msg)
+    for item in del_list:
+        resource_type, del_fun, fun_kwargs, del_all = item
+        resource_ids = resources.get(resource_type, [])
+        if not resource_ids:
+            continue
 
-    if port_chains:
-        LOG.fixture_step("({}) Attempt to delete following port chains: {}".format(scope, port_chains))
-        for port_chain in port_chains:
-            code, msg = network_helper.delete_port_chain(port_chain, check_first=True, auth_info=Tenant.ADMIN,
-                                                         fail_ok=True)
-            if code > 0:
-                err_msgs.append('Failed to delete port chain(s): {}'.format(msg))
+        LOG.fixture_step("({}) Attempt to delete following {}: {}".format(scope, resource_type, resource_ids))
+        if 'auth_info' not in fun_kwargs:
+            fun_kwargs['auth_info'] = Tenant.get('admin')
 
-    if flow_classifiers:
-        LOG.fixture_step("({}) Attempt to delete following port flow classifiers: {}".format(scope, flow_classifiers))
-        for flow_classifier in flow_classifiers:
-            code, msg = network_helper.delete_flow_classifier(flow_classifier, check_first=True, auth_info=Tenant.ADMIN,
-                                                              fail_ok=True)
-            if code > 0:
-                err_msgs.append('Failed to delete flow classifiers(s): {}'.format(msg))
-
-    if vms_with_vols:
-        LOG.fixture_step(
-            "({}) Attempt to delete following vms and attached volumes: {}".format(scope, vms_with_vols))
-        code, msg = vm_helper.delete_vms(vms_with_vols, delete_volumes=True, fail_ok=True,
-                                         auth_info=Tenant.get('admin'))
-        if code not in [0, -1]:
-            err_msgs.append(msg)
-
-    if vms_no_vols:
-        LOG.fixture_step("({}) Attempt to delete following vms: {}".format(scope, vms_no_vols))
-        code, msg = vm_helper.delete_vms(vms_no_vols, delete_volumes=False, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code not in [0, -1]:
-            err_msgs.append(msg)
-
-    if vol_snapshots:
-        LOG.fixture_step("({}) Attempt to delete following volume snapshots: {}".format(scope, vol_snapshots))
-        code, msg = cinder_helper.delete_volume_snapshots(snapshots=vol_snapshots, fail_ok=True,
-                                                          auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if volumes:
-        LOG.fixture_step("({}) Attempt to delete following volumes: {}".format(scope, volumes))
-        code, msg = cinder_helper.delete_volumes(volumes, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if volume_types:
-        LOG.fixture_step("({}) Attempt to delete following volume_types: {}".format(scope, volume_types))
-        code, msg = cinder_helper.delete_volume_types(volume_types, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if qos_ids:
-        LOG.fixture_step("({}) Attempt to delete following qos_ids: {}".format(scope, qos_ids))
-        code, msg = cinder_helper.delete_qos_list(qos_ids, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if flavors:
-        LOG.fixture_step("({}) Attempt to delete following flavors: {}".format(scope, flavors))
-        code, msg = nova_helper.delete_flavors(flavors, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if images:
-        LOG.fixture_step("({}) Attempt to delete following images: {}".format(scope, images))
-        code, msg = glance_helper.delete_images(images, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if server_groups:
-        LOG.fixture_step("({}) Attempt to delete following server groups: {}".format(scope, server_groups))
-        code, msg = nova_helper.delete_server_groups(server_groups, fail_ok=True, auth_info=Tenant.get('admin'))
-        if code > 0:
-            err_msgs.append(msg)
-
-    if floating_ips:
-        LOG.fixture_step("({}) Attempt to delete following floating ips: {}".format(scope, floating_ips))
-        for fip in floating_ips:
-            code, msg = network_helper.delete_floating_ip(fip, fip_val='ip', fail_ok=True,
-                                                          auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-    if trunks:
-        LOG.fixture_step("({}) Attempt to delete following trunks: {}".format(scope, trunks))
-        for trunk in trunks:
-            code, msg = network_helper.delete_trunk(trunk, auth_info=Tenant.get('admin'), fail_ok=True)
-            if code > 0:
-                err_msgs.append(msg)
-
-    if port_pair_groups:
-        LOG.fixture_step("({}) Attempt to delete following port pair groups: {}".format(scope, port_pair_groups))
-        for port_pair_group in port_pair_groups:
-            code, msg = network_helper.delete_port_pair_group(port_pair_group, check_first=True, auth_info=Tenant.ADMIN,
-                                                              fail_ok=True)
-            if code > 0:
-                err_msgs.append('Failed to delete port pair group(s): {}'.format(msg))
-
-    if port_pairs:
-        LOG.fixture_step("({}) Attempt to delete following port pairs: {}".format(scope, port_pairs))
-        code, succ_pairs, rej_pairs = network_helper.delete_port_pairs(port_pairs, check_first=True, fail_ok=True,
-                                                                       auth_info=Tenant.ADMIN)[:3]
-        if code > 0:
-            err_msgs.append('Failed to delete port pair(s): {}'.format(rej_pairs))
-
-    if ports:
-        LOG.fixture_step("({}) Attempt to delete following ports: {}".format(scope, ports))
-        for port in ports:
-            code, msg = network_helper.delete_port(port, auth_info=Tenant.get('admin'), fail_ok=True)
-            if code > 0:
-                err_msgs.append(msg)
-
-    if routers:
-        LOG.fixture_step("{}) Attempt to delete following routers: {}".format(scope, routers))
-        for router in routers:
-            code, msg = network_helper.delete_router(router, fail_ok=True, auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-    if subnets:
-        LOG.fixture_step("({}) Attempt to delete following subnets: {}".format(scope, subnets))
-        for subnet in subnets:
-            code, msg = network_helper.delete_subnet(subnet_id=subnet, fail_ok=True, auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-    if network_qoss:
-        LOG.fixture_step("({}) Attempt to delete following network QoSes: {}".format(scope, network_qoss))
-        for qos in network_qoss:
-            code, msg = network_helper.delete_qos(qos_id=qos, fail_ok=True, auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-            if code > 0:
-                err_msgs.append(msg)
-
-    if network_qoss:
-        LOG.fixture_step("({}) Attempt to delete following network QoSes: {}".format(scope, network_qoss))
-        for qos in network_qoss:
-            code, msg = network_helper.delete_qos(qos_id=qos, fail_ok=True, auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-    if networks:
-        LOG.fixture_step("({}) Attempt to delete following networks: {}".format(scope, networks))
-        for network in networks:
-            code, msg = network_helper.delete_network(network_id=network, fail_ok=True, auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-    if security_groups:
-        LOG.fixture_step("({}) Attempt to delete following security groups: {}".format(scope, security_groups))
-        for group in security_groups:
-            code, msg = network_helper.delete_security_group(group, fail_ok=True, auth_info=Tenant.get('admin'))
-            if code > 0:
-                err_msgs.append(msg)
-
-    if aggregates:
-        LOG.fixture_step("({}) Attempt to delete following aggregates: {}".format(scope, aggregates))
-        for aggregate in aggregates:
-            nova_helper.remove_hosts_from_aggregate(aggregate=aggregate, check_first=False)
-            nova_helper.delete_aggregate(name=aggregate)
+        if del_all:
+            resource_ids = [resource_ids]
+        for resource_id in resource_ids:
+            try:
+                code, msg = del_fun(resource_id, fail_ok=True, **fun_kwargs)[0:2]
+                if code > 0:
+                    err_msgs.append(msg)
+            except exceptions.TiSError as e:
+                err_msgs.append(e.__str__())
 
     # Attempt all deletions before raising exception.
     if err_msgs:

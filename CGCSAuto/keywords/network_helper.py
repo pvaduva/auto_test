@@ -2829,7 +2829,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
     args_dict = {
         '--tenant-id': tenant_id if auth_info == Tenant.get('admin') else None,
-        '--inside_addr': inside_addr,
+        '--inside-addr': inside_addr,
         '--inside-port': inside_port,
         '--outside-port': outside_port,
         '--protocol': protocol,
@@ -5242,3 +5242,104 @@ def vconsole(ssh_client):
     LOG.info("Exiting vconsole")
     ssh_client.set_prompt(original_prompt)
     ssh_client.exec_cmd("quit")
+
+
+def create_providernet(name=None, pnet_type='vlan', mtu=None, vlan_transparent=None, description=None, rtn_val='id',
+                       fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'), cleanup=None):
+    """
+    Create a neutron provider network
+    Args:
+        name (str|None):
+        pnet_type (str): vlan, vxlan, or flat
+        mtu (int|str):
+        vlan_transparent (str|None):
+        description (str|None):
+        rtn_val (str): name or id
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+        cleanup (None|str): function, class, module or session
+
+    Returns (tuple):
+        (0, <pnet id or name>)      # providernet created successfully
+        (1, <std_err>)              # cli rejected
+
+    """
+    args_dict = {
+        'type': pnet_type,
+        'description': description,
+        'vlan-transparent': vlan_transparent,
+        'mtu': mtu,
+    }
+    if not name:
+        name = common.get_unique_name(name_str='cgcsauto_pnet')
+    args = '{} {}'.format(common.parse_args(args_dict), name)
+    code, output = cli.openstack('providernet create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    table_ = table_parser.table(output)
+    pnet_created = table_parser.get_value_two_col_table(table_, rtn_val)
+    LOG.info("Providernet {} is successfully created.".format(pnet_created))
+
+    if cleanup:
+        pnet_id = pnet_created
+        if rtn_val.lower() != 'id':
+            pnet_id = table_parser.get_value_two_col_table(table_, 'id')
+        ResourceCleanup.add('providernet', pnet_id, scope=cleanup)
+
+    return 0, pnet_created
+
+
+def get_providernet_values(pnet, fields=('type', ), fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get values from openstack providernet show table
+    Args:
+        pnet (str): name or id of a providernet
+        fields (str|tuple):
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns (list|None): Values for given fields. None if 'openstack providernet show' is rejected.
+
+    """
+    code, output = cli.openstack('providernet show', pnet, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(output)
+    if isinstance(fields, str):
+        fields = (fields, )
+    vals = [table_parser.get_value_two_col_table(table_, field) for field in fields]
+    return vals
+
+
+def delete_providernet(pnet, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Delete given providernet
+    Args:
+        pnet (str): name or id of a providernet
+        fail_ok (bool):
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    code, output = cli.openstack('providernet delete', pnet, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    pnet_name = get_providernet_values(pnet, fields='name', fail_ok=True, con_ssh=con_ssh, auth_info=auth_info)
+    if pnet_name:
+        err = 'providernet {} still exists after deletion'.format(pnet_name[0])
+        if fail_ok:
+            return 2, err
+
+    msg = 'providernet {} is successfully deleted'.format(pnet)
+    LOG.info(msg)
+    return 0, msg

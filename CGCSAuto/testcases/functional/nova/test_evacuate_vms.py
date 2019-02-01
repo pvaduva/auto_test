@@ -213,7 +213,7 @@ class TestDefaultGuest:
 
     @fixture(scope='function')
     def check_hosts(self):
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("at least two hosts with the same storage backing are required")
 
@@ -328,7 +328,7 @@ class TestOneHostAvail:
             return zone
 
         zone = 'cgcsauto'
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         host = hosts[0]
         LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
         nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=[host])

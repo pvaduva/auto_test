@@ -4215,6 +4215,13 @@ def check_devs_detached(vm_id, mac_addrs, con_ssh=None):
     if isinstance(mac_addrs, str):
         mac_addrs = [mac_addrs]
 
+    LOG.info("Check dev detached from vm")
+    vm_err = ''
+    with ssh_to_vm_from_natbox(vm_id=vm_id, con_ssh=con_ssh) as vm_ssh:
+        for mac_addr in mac_addrs:
+            if vm_ssh.exec_cmd('ip addr | grep -B 1 "{}"'.format(mac_addr))[0] == 0:
+                vm_err += 'Interface with mac address {} still exists in vm\n'.format(mac_addr)
+
     LOG.info("Check virsh xmldump on compute host")
     inst_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
     host_err = ''
@@ -4223,13 +4230,6 @@ def check_devs_detached(vm_id, mac_addrs, con_ssh=None):
             if host_ssh.exec_sudo_cmd('virsh dumpxml {} | grep -B 1 -A 1 "{}"'.format(inst_name, mac_addr))[0] == 0:
                 host_err += 'VM interface with mac address {} still exists in virsh\n'.format(mac_addr)
     assert not host_err, host_err
-
-    LOG.info("Check dev detached from vm")
-    vm_err = ''
-    with ssh_to_vm_from_natbox(vm_id=vm_id, con_ssh=con_ssh) as vm_ssh:
-        for mac_addr in mac_addrs:
-            if vm_ssh.exec_cmd('ip addr | grep -B 1 "{}"'.format(mac_addr))[0] == 0:
-                vm_err += 'Interface with mac address {} still exists in vm\n'.format(mac_addr)
 
     assert not vm_err, vm_err
 

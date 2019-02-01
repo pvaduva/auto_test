@@ -13,7 +13,7 @@ from utils.tis_log import LOG
 
 @fixture(scope='module')
 def target_hosts():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     return hosts
 
 
@@ -137,7 +137,7 @@ class TestSharedCpuDisabled:
 
     @fixture(scope='class')
     def remove_shared_cpu(self, request, config_host_class):
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         assert hosts, "No hypervisor in storage aggregate"
 
         avail_zone = None
@@ -332,7 +332,7 @@ class TestSharedCpuEnabled:
         Returns:
 
         """
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("Less than two hypervisors with same storage backend")
 
@@ -782,7 +782,7 @@ class TestMixSharedCpu:
 
     @fixture(scope='class')
     def config_host_cpus(self, no_simplex, config_host_class):
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
 
         if len(hosts) < 3:
             skip("Require at least three hosts with same storage backing")

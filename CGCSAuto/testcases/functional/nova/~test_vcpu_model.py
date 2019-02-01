@@ -16,7 +16,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def cpu_models_supported():
-    storage_backing, hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hypervisors, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     hosts_cpu_model_dict = host_helper.get_hypervisor_info(hosts=hypervisors, rtn_val='cpu_info_model')
     all_cpu_models = list(CpuModel.CPU_MODELS)
     max_index = second_index = len(all_cpu_models)

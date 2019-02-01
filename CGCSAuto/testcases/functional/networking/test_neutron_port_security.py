@@ -1,49 +1,16 @@
 import random
+
 from pytest import fixture
+
 from utils.tis_log import LOG
-
-from consts.cgcs import VMStatus, FlavorSpec, GuestImages, DevClassID
-from consts.filepaths import WRSROOT_HOME
-
-from keywords import network_helper, nova_helper, vm_helper, glance_helper, system_helper, host_helper, common
-from consts.auth import HostLinuxCreds, ComplianceCreds, Tenant, CliAuth
-from testfixtures.fixture_resources import ResourceCleanup
+from keywords import network_helper, nova_helper, vm_helper, system_helper, common
+from consts.auth import Tenant
 
 
 @fixture(scope='module', autouse=True)
-def setup_port_security(request):
-    LOG.fixture_step("Create nova device list for gpu device")
-    service = 'network'
-    LOG.fixture_step("Perform system service-parameter-list")
-    result_list = system_helper.get_service_parameter_values(name='extension_drivers')
-    LOG.info("result list {}".format(result_list))
-    expected_result = ['port_security']
-    revert = False
-    if result_list != expected_result:
-        revert = True
-        system_helper.create_service_parameter(service=service, section='ml2', value='port_security',
-                                               name='extension_drivers')
-        uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ml2',
-                                                          name='extension_drivers')[0]
-
-        code, msg = system_helper.apply_service_parameters(service=service, wait_for_config=False)
-        assert code == 0, "Expected network port security params apply to pass"
-
-        system_helper.wait_and_clear_config_out_of_date_alarms(host_type='compute', lock_unlock=True,
-                                                               wait_with_best_effort=True)
-
-    # def revert_port_security():
-    #     if revert:
-    #         uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ml2',
-    #                                                           name='extension_drivers')[0]
-    #         system_helper.delete_service_parameter(uuid=uuid, fail_ok=False, check_first=True)
-    #
-    #         host_type = ['controller', 'compute']
-    #         system_helper.wait_and_clear_config_out_of_date_alarms(host_type=host_type, lock_unlock=True,
-    #                                                                wait_with_best_effort=True)
-    #         time.sleep(120)
-    #
-    # request.addfinalizer(revert_port_security)
+def setup_port_security():
+    LOG.fixture_step("Ensure neutron port security is enabled")
+    system_helper.enable_port_security_param()
 
 
 def test_neutron_port_security():
@@ -73,7 +40,6 @@ def test_neutron_port_security():
     port_security = network_helper.get_net_show_values('external-net0', 'port_security_enabled')[0]
     port_security = eval(port_security)
     if not port_security:
-        system_helper.enable_port_security_param()
         networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
         for net in networks:
             network_helper.set_network(net_id=net, enable_port_security=True)

@@ -43,7 +43,17 @@ def skip_if_25g():
 
 
 @fixture(scope='module')
-def security_groups():
+def security_groups(request):
+    LOG.fixture_step("(module) Ensure neutron port security is enabled")
+    system_helper.enable_port_security_param()
+    networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
+    for net in networks:
+        network_helper.set_network(net_id=net, enable_port_security=True)
+
+    def disable_port_security_for_networks():
+        for net_ in networks:
+            network_helper.set_network(net_id=net_, enable_port_security=False)
+    request.addfinalizer(disable_port_security_for_networks)
 
     LOG.fixture_step("(module) Create two security groups")
     sg_primary = network_helper.create_security_group(
@@ -70,12 +80,13 @@ def security_groups():
     return sg_primary, sg_secondary
 
 
-# US118544 in complete
-@mark.skip()
 class TestPacketTypeSecurity:
 
     @fixture(scope='class', params=['virtio', 'avp', 'dpdk'])
     def vm_type(self, request):
+        if system_helper.is_avs():
+            skip("Security group support is still being worked on for ovs-dpdk. story2002944")
+
         vm_type_ = request.param
         if vm_type_ in ('avp', 'dpdk') and not system_helper.is_avs():
             skip("avp and dpdk unsupported by OVS")

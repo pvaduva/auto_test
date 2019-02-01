@@ -14,7 +14,8 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper, common
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
-def test_vm_with_health_check_failure():
+# Deprecated - KVM crash detection
+def _test_vm_with_health_check_failure():
     """
     Test vm when a health check failure occurs
 

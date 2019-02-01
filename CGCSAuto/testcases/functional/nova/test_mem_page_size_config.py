@@ -135,7 +135,7 @@ def print_hosts_memories(add_1g_and_4k_pages):
 
 @fixture(scope='module')
 def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_role_module):
-    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
 
     if len(target_hosts) < 2:
         skip("Less than two up hosts have same storage backing")
@@ -373,7 +373,7 @@ def test_compute_mempage_vars(hosts=None):
     LOG.info("---Collect host memory info via system host-memory-list cmd")
     for host in hosts:
 
-        LOG.info("---Check {} memory info in nova hypervisor-show is the same as system host-memory-list".format(host))
+        LOG.info("---Check {} memory info in system host-memory-list is the same as vm-topology tool".format(host))
         headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G',
                    'vm_hp_avail_2M', 'vm_hp_avail_1G']
         host_helper.wait_for_mempage_update(host)
@@ -385,26 +385,31 @@ def check_meminfo_via_sysinv_nova_cli(host, headers):
     end_time = time.time() + 306
     err = None
     while time.time() < end_time:
-        nova_mems = host_helper.get_hypervisor_info(hosts=host, rtn_val=('memory_mb_node', 'memory_mb_used_node'))[host]
-        hypervisor_total, hypervisor_used = nova_mems
+        compute_table = system_helper.get_vm_topology_tables('computes')[0]
+        host_values = {}
+        for field in ('node', 'A:mem_2M', 'A:mem_1G'):
+            values = table_parser.get_values(table_=compute_table, target_header=field, host=host)[0]
+            if isinstance(values, str):
+                # in case of only 1 processor.
+                values = [values]
+            host_values[field] = values
+
+        procs = host_values.pop('node')
         sysinv_mems = system_helper.get_host_mem_values(host, headers, rtn_dict=False)
         proc_vars = []
         for proc in range(len(sysinv_mems)):
-            hypervisor_proc_total = hypervisor_total[str(proc)]
-            hypervisor_proc_used = hypervisor_used[str(proc)]
-            hypervisor_mems = []
-            for memsize in ('2M', '1G', '4K'):
-                mem_mib_total = hypervisor_proc_total[memsize]
-                mem_mib_avail = mem_mib_total - hypervisor_proc_used[memsize]
-                hypervisor_mems += [mem_mib_total, mem_mib_avail]
-            hypervisor_mems = hypervisor_mems[:-1]
-            LOG.info("{} memories in MiB via nova hypervisor-show: {}".format(host, hypervisor_mems))
+            vm_topology_hp_mibs = []
+            vm_topology_index = procs.index(str(proc))
+            for header in ('A:mem_2M', 'A:mem_1G'):
+                value = int(host_values[header][vm_topology_index])
+                vm_topology_hp_mibs.append(value)
 
+            LOG.info("{} proc{} memories in MiB via vm-topogy: {}".format(host, proc, vm_topology_hp_mibs))
             proc_mems = sysinv_mems[proc]
             vs_size, vs_page, vm_4k, vm_2m, vm_1g, vm_avail_2m, vm_avail_1g = proc_mems
-            syinv_mems = [vm_2m * 2, vm_avail_2m * 2, vm_1g * 1024, vm_avail_1g * 1024, int(vm_4k * 4 / 1024)]
-            if hypervisor_mems != syinv_mems:
-                err = "{} proc{} mem info in system host-memory-list is different than nova hypervisor-show".\
+            syinv_hp_avails = [vm_avail_2m*2, vm_avail_1g*1024]
+            if vm_topology_hp_mibs != syinv_hp_avails:
+                err = "{} proc{} mem info in system host-memory-list is different than vm-topology".\
                     format(host, proc)
                 LOG.info(err)
                 time.sleep(5)

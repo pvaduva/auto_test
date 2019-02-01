@@ -16,7 +16,7 @@ from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 @fixture(scope='module')
 def setups(no_simplex):
     vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     if len(hosts) < 2:
         skip("Less than two hosts with in same storage aggregate")
 
@@ -116,7 +116,7 @@ def _check_affinity_vms():
 
 
 def _check_anti_affinity_vms():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     best_effort = True if len(hosts) < 3 else False
     anti_affinity_vms = nova_helper.get_server_group_info(group_name='grp_anti_affinity', headers='Members')[0]
 

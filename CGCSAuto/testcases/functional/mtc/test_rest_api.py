@@ -236,7 +236,7 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
 
     assert found, "FAIL: {} is not listed in the API".format(hostname)
 
-    LOG.tc_step("Locking {}".format(hostname))
+    LOG.tc_step("Locking {} via restAPI".format(hostname))
     url = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER, "ihosts/{}".format(uuid))
     lock_data = [{"path": "/action", "value": "lock", "op": "replace"}]
     HostsToRecover.add(hostname, scope='function')
@@ -247,13 +247,15 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     hostinfo = html_helper.get_request(url=url, headers=headers, verify=False)
     assert 'locked' == hostinfo['administrative'], "FAIL: Couldn't lock {}".format(hostname)
 
-    res, out = host_helper.modify_host_cpu(hostname, 'shared', p0=1, p1=1)
+    LOG.tc_step("Modify {} vSwitch cpu using CLI".format(hostname))
+    res, out = host_helper.modify_host_cpu(hostname, 'vSwitch', p0=0, p1=2)
     assert 0 == res, "FAIL: The cpus weren't even modified by cli"
 
-    LOG.tc_step("Applying cpu profile")
+    LOG.tc_step("Applying cpu profile with original config to {} via restAPI".format(hostname))
     data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},
             {"path": "/action", "value": "apply-profile", "op": "replace"}]
     html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
 
+    LOG.tc_step("Check host cpu configuration reverted to original")
     res, out = host_helper.compare_host_to_cpuprofile(hostname, iprofile_uuid)
     assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"

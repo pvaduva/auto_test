@@ -8,7 +8,7 @@ from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.timeout import DCTimeout
 from consts.filepaths import SysLogPath
-from keywords import system_helper
+from keywords import system_helper, nova_helper
 
 
 def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
@@ -69,7 +69,8 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     LOG.info("Attempt to {}: {}".format(operation, subclouds_to_update))
     failed_subclouds = []
     for subcloud_ in subclouds_to_update:
-        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_list=True, ssh_client=con_ssh)
+        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_list=True,
+                                  auth_info=auth_info, ssh_client=con_ssh)
         if code > 0:
             failed_subclouds.append(subcloud_)
 
@@ -81,7 +82,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
         raise exceptions.DCError(err)
 
     LOG.info("Check management status for {} after dcmanager subcloud {}".format(subclouds_to_update, operation))
-    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update, con_ssh=con_ssh)
+    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update, auth_info=auth_info, con_ssh=con_ssh)
     failed_subclouds = [subclouds_to_update[i] for i in range(len(mgmt_states)) if mgmt_states[i] != expt_state]
     if failed_subclouds:
         raise exceptions.DCError("{} not {} after dcmanger subcloud {}".format(failed_subclouds, expt_state, operation))
@@ -89,14 +90,14 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     return 0, subclouds_to_update
 
 
-def manage_subcloud(subcloud=None, check_first=True, fail_ok=False, conn_ssh=None):
+def manage_subcloud(subcloud=None, check_first=True, fail_ok=False, con_ssh=None):
     """
     Manage subcloud(s)
     Args:
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
-        conn_ssh(SSClient):
+        con_ssh(SSClient):
 
     Returns (tuple):
         (-1, [])                            All give subcloud(s) already managed. Do nothing.
@@ -105,17 +106,17 @@ def manage_subcloud(subcloud=None, check_first=True, fail_ok=False, conn_ssh=Non
 
     """
     return _manage_unmanage_subcloud(subcloud=subcloud, manage=True, check_first=check_first, fail_ok=fail_ok,
-                                     con_ssh=conn_ssh)
+                                     con_ssh=con_ssh)
 
 
-def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False, conn_ssh=None):
+def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False, con_ssh=None):
     """
     Unmanage subcloud(s)
     Args:
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
-        conn_ssh(SSHClient):
+        con_ssh(SSHClient):
 
     Returns (tuple):
         (-1, [])                        All give subcloud(s) already unmanaged. Do nothing.
@@ -124,7 +125,7 @@ def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False, conn_ssh=N
 
     """
     return _manage_unmanage_subcloud(subcloud=subcloud, manage=False, check_first=check_first, fail_ok=fail_ok,
-                                     con_ssh=conn_ssh)
+                                     con_ssh=con_ssh)
 
 
 def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, expected_value=None, auth_name='admin',
@@ -207,13 +208,14 @@ def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, 
         raise exceptions.DCError(msg)
 
 
-def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, timeout=DCTimeout.SYNC):
+def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, filters_regex=None, timeout=DCTimeout.SYNC):
     """
     Wait for Updating subcloud log msg in dcmanager.log for given subcloud(s)
     Args:
         subclouds (list|tuple|str):
         con_ssh:
         fail_ok:
+        filters_regex: e.g., ['audit_action.*keypair', 'Clean audit.*ntp'], '\/compute'
         timeout:
 
     Returns (tuple):
@@ -228,26 +230,39 @@ def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, timeout=DCTimeou
         subclouds = [subclouds]
 
     LOG.info("Waiting for sync audit in dcmanager.log for: {}".format(subclouds))
+    if not filters_regex:
+        filters_regex = ['platform', 'volume', 'compute', 'network', 'patching', 'identity']
+    elif isinstance(filters_regex, str):
+        filters_regex = [filters_regex]
 
-    expt_list = ['Handling update_subcloud_endpoint_status request for: {}'.format(subcloud) for subcloud in subclouds]
+    subclouds_dict = {subcloud: list(filters_regex) for subcloud in subclouds}
     res = {subcloud: False for subcloud in subclouds}
     subclouds_to_wait = list(subclouds)
     end_time = time.time() + timeout
 
-    con_ssh.send('tail -n 0 -f {}'.format(SysLogPath.DC_MANAGER))
+    expt_list = []
+    for subcloud in subclouds_dict:
+        expt_list += ['{}.*{}'.format(subcloud, service) for service in subclouds_dict[subcloud]]
+
+    con_ssh.send('tail -n 0 -f {}'.format(SysLogPath.DC_ORCH))
+
     try:
         while time.time() < end_time:
-
             index = con_ssh.expect(expt_list, timeout=timeout, fail_ok=True)
             if index >= 0:
-                res[subclouds_to_wait.pop(index)] = True
+                subcloud_, service_ = expt_list[index].split('.*', maxsplit=1)
+                subclouds_dict[subcloud_].remove(service_)
                 expt_list.pop(index)
+                if not subclouds_dict[subcloud_]:
+                    subclouds_to_wait.remove(subcloud_)
+                    subclouds_dict.pop(subcloud_)
+                    res[subcloud_] = True
                 if not subclouds_to_wait:
                     LOG.info("sync request logged for: {}".format(subclouds))
                     return True, res
             else:
-                msg = 'sync request for {} not shown in {} in {}s'.format(subclouds_to_wait,
-                                                                          SysLogPath.DC_MANAGER, timeout)
+                msg = 'sync audit for {} not shown in {} in {}s: {}'.format(subclouds_to_wait, SysLogPath.DC_ORCH,
+                                                                            timeout, subclouds_dict)
                 if fail_ok:
                     LOG.info(msg)
                     for subcloud in subclouds_to_wait:
@@ -397,7 +412,7 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
                              check_interval=30, auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None,
                              source_openrc=None, fail_ok=False):
     """
-
+    Wait for subcloud status
     Args:
         subcloud:
         avail:
@@ -416,27 +431,55 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
 
     if not subcloud:
         raise ValueError("Subcloud name must be specified")
-    if not avail and not sync and not mgmt:
-        raise ValueError("At least one  expected status of the subcloud must be specified.")
+
+    expt_status = {}
     if avail:
-        LOG.info("Wait for {} availability to be {}".format(subcloud, avail))
+        expt_status['avail'] = avail
+    if sync:
+        expt_status['sync'] = sync
+    if mgmt:
+        expt_status['mgmt'] = mgmt
 
-        end_time = time.time() + timeout + check_interval
-        while time.time() < end_time:
+    if not expt_status:
+        raise ValueError("At least one  expected status of the subcloud must be specified.")
 
-            LOG.info("Check availability status for {} ".format(subcloud))
-            subclouds = get_subclouds(rtn_val='name', name=subcloud, avail=avail, sync=sync, mgmt=mgmt, con_ssh=con_ssh,
-                                      source_openrc=source_openrc, auth_info=auth_info)
-            if subcloud in subclouds:
-                return 0, subcloud
+    LOG.info("Wait for {} status: {}".format(subcloud, expt_status))
+    end_time = time.time() + timeout + check_interval
+    while time.time() < end_time:
+        if get_subclouds(rtn_val='name', name=subcloud, con_ssh=con_ssh, source_openrc=source_openrc,
+                         auth_info=auth_info, **expt_status):
+            return 0, subcloud
+        LOG.info("Not in expected states yet...")
+        time.sleep(check_interval)
 
-            time.sleep(check_interval)
-        exp_status = "avail = {}; sync = {}; mgmt = {}".format(avail if avail else "n/a", sync if sync else "n/a",
-                                                               mgmt if mgmt else "n/a")
-        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, exp_status, timeout)
+    msg = '{} status did not reach {} within {} seconds'.format(subcloud, expt_status, timeout)
+    LOG.warning(msg)
+    if fail_ok:
+        return 1, msg
+    else:
+        raise exceptions.DCError(msg)
 
-        if fail_ok:
-            LOG.info(msg)
-            return 1, msg
-        else:
-            raise exceptions.DCError(msg)
+
+def wait_for_subcloud_keypair(subcloud=None, subcloud_ssh=None, expected_keypair=None, fail_ok=False,
+                              timeout=DCTimeout.SYNC, check_interval=30):
+    """
+    Wait for dns configuration to reach expected value
+    Args:
+        subcloud (str|None):
+        subcloud_ssh (None|SSHClient):
+        expected_keypair (None|str|list):
+        fail_ok (bool):
+        timeout (int):
+        check_interval (int):
+
+    Returns (tuple):
+        (0, <subcloud_dns_servers>)     # same as expected
+        (1, <subcloud_dns_servers>)     # did not update within timeout
+        (2, <subcloud_dns_servers>)     # updated to unexpected value
+
+    """
+    func = nova_helper.get_keypair
+    func_kwargs = {'con_ssh': subcloud_ssh} if subcloud_ssh else {}
+    return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='Name',
+                                    expected_value=expected_keypair, fail_ok=fail_ok, timeout=timeout,
+                                    check_interval=check_interval, strict_order=False, **func_kwargs)

@@ -1893,7 +1893,7 @@ def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail
 
     Args:
         host (str): hostname of host to be modified
-        cpu_function (str): cpu function to modify. e.g., 'shared'
+        cpu_function (str): cpu function to modify. e.g., 'vSwitch', 'platform'
         timeout (int): Timeout waiting for system host-cpu-modify cli to return
         fail_ok (bool):
         con_ssh (SSHClient):
@@ -2728,13 +2728,22 @@ def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', numa_node=None, con
             hosts_cpus[host] = float(total_cpu) - float(used_cpu)
     else:
         numa_node = str(numa_node)
-        cpus_node_info = get_hypervisor_info(hosts=hosts, rtn_val=('vcpus_node', 'vcpus_used_node'), con_ssh=con_ssh)
+        compute_table = system_helper.get_vm_topology_tables('computes', con_ssh=con_ssh)[0]
+
         hosts_cpus = {}
         for host in hosts:
-            total_cpu_dict, used_cpu_dict = cpus_node_info[host]
-            total_cpu = float(total_cpu_dict[numa_node])
-            used_cpu = float(used_cpu_dict[numa_node]['shared']) + float(used_cpu_dict[numa_node]['dedicated'])
-            hosts_cpus[host] = total_cpu - used_cpu
+            numa_index = None
+            host_values = {}
+            for field in ('node', 'pcpus', 'U:dedicated', 'U:shared'):
+                values = table_parser.get_values(table_=compute_table, target_header=field, host=host)[0]
+                if isinstance(values, str):
+                    values = [values]
+                if field == 'node':
+                    numa_index = values.index(numa_node)
+                    continue
+                host_values[field] = float(values[numa_index])
+
+            hosts_cpus[host] = host_values['pcpus'] - host_values['U:dedicated'] - host_values['U:shared']
 
     return hosts_cpus
 
