@@ -8,7 +8,7 @@ from pytest import skip
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID, PLATFORM_NET_TYPES
 from consts.proj_vars import ProjVar
-from consts.timeout import SysInvTimeout, K8sTimeout
+from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -1282,6 +1282,8 @@ def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=Fals
     Args:
         auth_info(dict)
         con_ssh
+        use_telnet
+        con_telnet
 
     Returns (list): a list of DNS servers will be returned
 
@@ -1299,7 +1301,7 @@ def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=Fals
 
 
 def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail_ok=True, con_ssh=None,
-                    use_telnet=False, con_telnet=None,   auth_info=Tenant.get('admin')):
+                    auth_info=Tenant.get('admin'), use_telnet=False, con_telnet=None):
     """
     Set the DNS servers
 
@@ -1308,6 +1310,8 @@ def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail
         check_first
         con_ssh:
         auth_info:
+        use_telnet
+        con_telnet
         nameservers (list|tuple): list of IP addresses (in plain text) of new DNS servers to change to
         with_action_option: whether invoke the CLI with or without "action" option
                             - None      no "action" option at all
