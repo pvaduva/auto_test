@@ -552,7 +552,7 @@ def test_kpi_cyclictest_hypervisor(collect_kpi, prepare_test_session, get_hyperv
 
     with host_helper.ssh_to_host(chosen_hypervisor) as target_ssh:
         prep_test_on_host(target_ssh, chosen_hypervisor, program, active_controller_name)
-        run_log, hist_file = run_cyclictest(target_ssh, program, target_hypervisor=chosen_hypervisor, cpu_info=cpu_info)
+        run_log, hist_file = run_cyclictest(target_ssh, program, chosen_hypervisor, cpu_info=cpu_info)
 
         LOG.info("Process and upload test results")
         local_run_log, local_hist_file = fetch_results_from_target(target_ssh=target_ssh, target_host=chosen_hypervisor,
@@ -589,7 +589,7 @@ def test_kpi_cyclictest_vm(collect_kpi, prepare_test_session, get_rt_guest_image
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         prep_test_on_host(vm_ssh, vm_id, program_active_con, ControllerClient.get_active_controller().host,
                           cyclictest_dir=cyclictest_dir)
-        run_log, hist_file = run_cyclictest(vm_ssh, program, target_hypervisor=vm_id, cyclictest_dir=cyclictest_dir, cpu_info=cpu_info)
+        run_log, hist_file = run_cyclictest(vm_ssh, program, vm_id, cyclictest_dir=cyclictest_dir, cpu_info=cpu_info)
 
         LOG.info("Process and upload test results")
         local_run_log, local_hist_file = fetch_results_from_target(target_ssh=vm_ssh, target_host=vm_id,
