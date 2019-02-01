@@ -376,6 +376,7 @@ class EventLogID:
     INFRA_PORT_FAIL = '100.110'
     FS_THRESHOLD_EXCEEDED = '100.104'
     CPU_USAGE_HIGH = '100.101'
+    MNFA_MODE = '200.020'
 
 
 class NetworkingVmMapping:
