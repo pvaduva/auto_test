@@ -648,7 +648,7 @@ class Labs:
         'system_mode': 'simplex',
     }
 
-    WP_01_02 = {
+    WP_1_2 = {
         'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
         'floating ip': '128.224.150.254',
@@ -660,7 +660,7 @@ class Labs:
         'ixia_ports': [{'port': (8, 7), 'range': (1700, 1799)}, {'port': (8, 8), 'range': (1800, 1849)}],
     }
 
-    WP_03_07 = {
+    WP_3_7 = {
         'short_name': 'wp_3_7',
         'name': 'yow-cgcs-wolfpass-03_07',
         'floating ip': '128.224.151.165',
@@ -670,7 +670,7 @@ class Labs:
         'compute_nodes': [94867, 18658, 40810],
     }
 
-    WP_08_12 = {
+    WP_8_12 = {
 
         'short_name': 'wp_8_12',
         'name': 'yow-cgcs-wolfpass-08_12',
