@@ -8,7 +8,7 @@ from pytest import skip
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID, PLATFORM_NET_TYPES
 from consts.proj_vars import ProjVar
-from consts.timeout import SysInvTimeout, K8sTimeout
+from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
