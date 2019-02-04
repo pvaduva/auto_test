@@ -3,7 +3,7 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, keystone_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
@@ -318,6 +318,7 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
                                                                 SubcloudStatus.MGMT_UNMANAGED))
         LOG.info("Managing subcloud {} ... ".format(subcloud))
         LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+        install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
         dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn, fail_ok=True)
 
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
@@ -701,6 +702,7 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
 
         return 0, [name]
 
+
     if name is not None and name is not '':
         subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
         subclouds_file_path = WRSROOT_HOME + name + '/' + subclouds_file
@@ -722,6 +724,11 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     LOG.info("Checking if subclouds are added and config files are generated.....")
     subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
     added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
+    if name not in added_subclouds:
+        msg = "Fail to add subcloud {}. Existing subclouds= {}; Added subclouds = {}".format(name, existing_subclouds,
+                                                                                             added_subclouds)
+        LOG.warning(msg)
+        assert False, msg
 
     config_generated = []
     for subcloud in added_subclouds:
@@ -864,6 +871,36 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
         return False
 
 
+def is_dcloud_system_controller_ipv6(controller0_node):
+    """
+    Checks if the system controller in dc system is configured as ipv6 by checking endpoints urls.
+    Args:
+        controller0_node:
+
+    Returns:
+
+    """
+    if controller0_node is None:
+        raise ValueError("The distributed cloud system controller lab dictionary must be provided")
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    if controller0_node.ssh_conn._is_connected():
+        install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+        urls = keystone_helper.get_endpoints(rtn_val='URL', service_name='sysinv', service_type='platform', enabled='True',
+                                      interface='admin', region='SystemController', con_ssh=controller0_node.ssh_conn)
+
+        if len(urls) > 0:
+            ip_addr = urls[0].strip().split('//')[1].split('/')[0].rsplit(':',1)[0]
+            if len(ip_addr.split(':')) > 1:
+                LOG.info("System controller {} is ipv6".format(controller0_node.host_name))
+                return True
+
+    LOG.warning("System controller {} is ipv4".format(controller0_node.host_name))
+    return False
+
+
 def reset_controller_telnet_port(controller_node):
 
     if not controller_node:
@@ -942,7 +979,18 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
-        add_subclouds(file_server_obj, name=install_sub)
+        ipv6_config = InstallVars.get_install_var("IPV6_CONFIG")
+        v6 = is_dcloud_system_controller_ipv6(file_server_obj)
+        if not v6:
+            if ipv6_config:
+                LOG.warning("The DC System controller is configured as IPV4; Switching to IPV4")
+                ipv6_config = False
+        else:
+            LOG.warning("The DC System controller is configured as IPV6; Configuring subcloud {} as IPV6"
+                        .format(install_sub))
+            ipv6_config = True
+        InstallVars.set_install_var(ipv6_config=ipv6_config)
+        add_subclouds(file_server_obj, name=install_sub, ip_ver=6 if ipv6_config else 4)
     else:
         if file_server == bld_server.name:
             file_server_obj = bld_server

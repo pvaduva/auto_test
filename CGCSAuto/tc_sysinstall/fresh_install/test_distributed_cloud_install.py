@@ -106,6 +106,8 @@ def test_distributed_cloud_install(install_setup):
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     load_path = InstallVars.get_install_var("TIS_BUILD_DIR")
+    ipv6_install = InstallVars.get_install_var("IPV6_CONFIG")
+
 
     fresh_install_helper.download_lab_files(lab=central_region_lab, lab_files_server=lab_files_server,
                                             build_server=build_server,
@@ -114,13 +116,11 @@ def test_distributed_cloud_install(install_setup):
                                             license_path=InstallVars.get_install_var("LICENSE"),
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
+
     # TODO Change config and lab setup files to common name
     # config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
-    # config_file = 'TiS_config.ini_centos_{}_SysCont'.format(config_file_ext)
-    # lab_setup_config_file = 'lab_setup_system_controller'
-    # fresh_install_helper.configure_controller(controller0_node, config_file=config_file,
-    #                                           lab_setup_conf_file=lab_setup_config_file,  lab=central_region_lab)
-    fresh_install_helper.configure_controller(controller0_node, lab=central_region_lab)
+    config_file = 'TiS_config_ipv6.ini_centos' if ipv6_install else 'TiS_config.ini_centos'
+    fresh_install_helper.configure_controller(controller0_node, config_file=config_file, lab=central_region_lab)
 
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
@@ -167,7 +167,7 @@ def test_distributed_cloud_install(install_setup):
     #
     # LOG.info("DC subclouds added are:{}".format(subclouds))
     # LOG.info("DC subclouds configs are:{}".format(subcloud_configs))
-    fresh_install_helper.attempt_to_run_post_install_scripts()
+    fresh_install_helper.attempt_to_run_post_install_scripts(controller0_node=controller0_node)
 
     fresh_install_helper.reset_global_vars()
     fresh_install_helper.verify_install_uuid(lab=central_region_lab)

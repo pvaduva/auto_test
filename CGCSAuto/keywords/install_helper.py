@@ -665,6 +665,10 @@ def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
             return rc, None, msg
         hosts = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, rtn_tuple=True)
         return 0, hosts, ''
+    else:
+        msg = "{} file not found in {}".format(hosts_xml_file, WRSROOT_HOME)
+        LOG.warning(msg)
+        return 1, None, msg
 
 
 def download_hosts_bulk_add_xml_file(lab, server, file_path):
@@ -3824,7 +3828,7 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
         LOG.info(" The cloned image iso file copied to USB: {}".format(output))
 
         LOG.info("Deleting system cloned image iso file from the dest lab folder ")
-        node_ssh.exec_sudo_cmd("rm -f {}".format(iso_dest_path))
+        node_ssh.exec_sudo_cmd("rm -f {}".format(iso_dest_path, expect_timeout=120))
 
         LOG.info("Cloned image iso file transfer to dest lab {} completed successfully".format(lab_dict['short_name']))
 
