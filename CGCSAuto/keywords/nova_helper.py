@@ -124,10 +124,8 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         if [storage_backing] == sys_inst_backing:
             storage_backing = None
 
-    extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'any'}
-    nat_name = ProjVar.get_var('NATBOX').get('name')
-    if not (nat_name == 'localhost' or nat_name.startswith('128.224.')):
-        extra_specs[FlavorSpec.HYPERVISOR_TYPE] = 'kvm'
+    # extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'any'}
+    extra_specs = {FlavorSpec.MEM_PAGE_SIZE: '2048'}
     if storage_backing:
         extra_specs[FlavorSpec.STORAGE_BACKING] = storage_backing
 

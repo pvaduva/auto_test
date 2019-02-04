@@ -300,7 +300,6 @@ class FlavorSpec:
     NUMA0_L3_CACHE = 'hw:cache_l3.0'
     NUMA1_L3_CACHE = 'hw:cache_l3.1'
     LIVE_MIG_TIME_OUT = 'hw:wrs:live_migration_timeout'
-    HYPERVISOR_TYPE = 'hypervisor_type'
 
 
 class ImageMetadata:

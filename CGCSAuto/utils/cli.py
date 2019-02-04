@@ -122,7 +122,10 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             syscon_cmds = ('system', 'fm')
             region = 'RegionOne' if sys_cmd in syscon_cmds else 'SystemController'
 
-        flags += ' --os-region-name {}'.format(region)
+        if sys_cmd == 'cinder':
+            flags += ' --os_region_name {}'.format(region)
+        else:
+            flags += ' --os-region-name {}'.format(region)
 
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags.strip(), sub_cmd, positional_args]).strip()
 

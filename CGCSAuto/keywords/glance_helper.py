@@ -354,7 +354,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         '--min-disk': min_disk,
         '--min-ram': min_ram,
         '--file': file_path,
-        '--wait': 0 if wait else 1
+        # '--wait': 0 if wait else 1
     }
     optional_args_str = ''
     if cache_raw:
