@@ -110,7 +110,7 @@ class SSHClient(pxssh.pxssh):
 
         return output
 
-    def exec_cmd(self, cmd, timeout=SSH_EXPECT_TIMEOUT, expect_pattern=None, show_output=True):
+    def exec_cmd(self, cmd, timeout=SSH_EXPECT_TIMEOUT, expect_pattern=None, show_output=True, fail_ok=False):
         output = None
         # hide the password if
         if cmd.startswith("sshpass"):
@@ -130,7 +130,10 @@ class SSHClient(pxssh.pxssh):
                 msg = 'Timeout occurred: Failed to find "{}" in output:'\
                       "\n{}".format(expect_pattern, self.before)
                 log.exception(msg)
-                wr_exit()._exit(1, msg)
+                if not fail_ok:
+                    wr_exit()._exit(1, msg)
+                else:
+                    return
 
             output = self.match.group().strip()
             log.info("Match: " + output)

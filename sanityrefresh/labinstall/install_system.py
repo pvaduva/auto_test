@@ -334,9 +334,12 @@ def get_load_path(bld_server_conn, bld_server_wkspce, tis_blds_dir,
                 msg = "Build path doesn't exist: {}".format(test_load_path)
                 log.error(msg)
                 wr_exit()._exit(1, msg)
-        cmd = "readlink " + test_load_path
-        tis_bld_dir = bld_server_conn.exec_cmd(cmd, expect_pattern=TIS_BLD_DIR_REGEX)
-        load_path += "/" + tis_bld_dir
+        cmd = "readlink -f " + test_load_path
+        tis_bld_dir = bld_server_conn.exec_cmd(cmd, expect_pattern=TIS_BLD_DIR_REGEX, timeout=5, fail_ok=True)
+        if tis_bld_dir:
+            load_path += "/" + tis_bld_dir
+        else:
+            load_path = test_load_path
     else:
         load_path = load_path + "/" + tis_bld_dir
         cmd = "test -d " + load_path
@@ -562,7 +565,9 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     '''
 
     logutils.print_step("Set feed for {} network boot".format(barcode))
-    tuxlab_sub_dir = USERNAME + '/' + os.path.basename(load_path)
+    #tuxlab_sub_dir = USERNAME + '/' + os.path.basename(load_path)
+    #tuxlab_sub_dir = USERNAME + '/' + os.path.basename(os.path.dirname(load_path))
+    tuxlab_sub_dir = USERNAME + '/' + os.path.basename(os.path.abspath(load_path))
 
     tuxlab_conn = SSHClient(log_path=install_output_dir + "/" + tuxlab_server + ".ssh.log")
     tuxlab_conn.connect(hostname=tuxlab_server, username=USERNAME,
@@ -607,6 +612,7 @@ def set_network_boot_feed(barcode, tuxlab_server, bld_server_conn, load_path, ho
     if host_os == "centos":
         log.info("Installing Centos load")
         bld_server_conn.sendline("cd " + load_path)
+        print("this is load path: {}".format(load_path))
         bld_server_conn.find_prompt()
         bld_server_conn.rsync(CENTOS_INSTALL_REL_PATH + "/", USERNAME, tuxlab_server, feed_path,
                               ["--delete", "--force", "--chmod=Du=rwx"])
