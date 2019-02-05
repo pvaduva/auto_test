@@ -160,6 +160,9 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         load_path = set_load_path(build_server_conn=build_server.ssh_conn, sys_version=sys_version)
     if not load_path.endswith("/"):
         load_path += "/"
+    if not sys_version:
+        sys_version = ProjVar.get_var('SW_VERSION')[0]
+
     if guest_path is None or guest_path == BuildServerPath.DEFAULT_GUEST_IMAGE_PATH:
         guest_path = set_guest_image_var(sys_version=sys_version)
     if license_path is None or license_path == BuildServerPath.DEFAULT_LICENSE_PATH:
@@ -168,9 +171,9 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         lab = InstallVars.get_install_var('LAB')
 
     heat_path = InstallVars.get_install_var("HEAT_TEMPLATES")
-    if not sys_version:
-        sys_version = ProjVar.get_var('SW_VERSION')[0]
+
     if not heat_path:
+        sys_version = sys_version if sys_version in BuildServerPath.HEAT_TEMPLATES_EXTS else 'default'
         heat_path = os.path.join(load_path, BuildServerPath.HEAT_TEMPLATES_EXTS[sys_version])
 
     test_step = "Download lab files"
@@ -213,6 +216,7 @@ def set_license_var(sys_version=None, sys_type=None):
     else:
         index = 0
 
+    sys_version = sys_version if sys_version in BuildServerPath.TIS_LICENSE_PATHS else 'default'
     license_paths = BuildServerPath.TIS_LICENSE_PATHS[sys_version]
     LOG.debug(license_paths)
     LOG.debug(license_paths[index])
@@ -237,6 +241,8 @@ def set_load_path(build_server_conn, sys_version=None):
 def set_guest_image_var(sys_version=None):
     if sys_version is None:
         sys_version = ProjVar.get_var('SW_VERSION')[0]
+
+    sys_version = sys_version if sys_version in BuildServerPath.GUEST_IMAGE_PATHS else 'default'
     guest_path = BuildServerPath.GUEST_IMAGE_PATHS[sys_version]
 
     InstallVars.set_install_var(guest_image=guest_path)
