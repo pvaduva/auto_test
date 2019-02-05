@@ -3,7 +3,12 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, keystone_helper
+
+
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
+    keystone_helper
+from utils import cli
+
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
@@ -1214,3 +1219,146 @@ def wait_for_hosts_ready(hosts,  lab=None):
         kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
     else:
         host_helper.wait_for_hosts_ready(hosts, con_ssh=controller0_node.ssh_conn)
+
+
+def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
+    """
+
+    Args:
+        active_controller_node:
+        host:
+        conf_file:
+
+    Returns:
+
+    """
+
+    if not active_controller_node.ssh_conn:
+        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+
+    devices_pci = []
+    rc, output = active_controller_node.ssh_conn.exec_cmd("grep OSD_DEVICES {}".format(conf_file))
+    if rc == 0 and output:
+        lines = output.splitlines()
+        host_line = None
+        common_line = None
+        for line in lines:
+            if host.upper().replace('-', '') in line:
+                host_line = line.split('=')[1].replace('\"', '').strip()
+            elif line.startswith("OSD_DEVICES"):
+                common_line = line.split('=')[1].replace('\"', '').strip()
+            else:
+                pass
+        osd_devices = host_line if host_line else common_line
+        if osd_devices:
+            osd_devices = osd_devices.split(' ')
+            for osd_dev in osd_devices:
+                devices_pci.append(osd_dev.split('|')[0].strip())
+
+    LOG.info("OSD disks for host {} are {}".format(host, devices_pci))
+
+    return devices_pci
+
+
+def add_ceph_ceph_mon_to_host(active_controller_node, host):
+    """
+
+    Args:
+        lab:
+
+    Returns:
+
+    """
+
+    if not active_controller_node.ssh_conn:
+        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+
+    LOG.info("Adding ceph mon to {} ...".format(host))
+    storage_helper.add_ceph_mon(host, con_ssh=active_controller_node.ssh_conn)
+    LOG.info("Added ceph mon to host {} ...".format(host))
+
+
+def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf'):
+    """
+
+    Args:
+        active_controller_node:
+        host:
+        lab:
+        conf_file:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+    controller1_node = lab['controller-1']
+    floating_ip = lab.get('floating ip')
+    active_node_ssh = install_helper.establish_ssh_connection(floating_ip)
+    ControllerClient.set_active_controller(active_node_ssh)
+
+    controller0_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller0_node.name)
+    controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node,  controller1_node.name)
+    assert len(controller0_disk_paths) > 0 and len(controller1_disk_paths) > 0, \
+            "Unable to find OSD devices from conf file {} for the controllers".format(conf_file)
+
+    if host_helper.is_active_controller(controller0_node.name, con_ssh=active_node_ssh):
+        hosts = [controller1_node.name, controller0_node.name]
+        active_node = controller0_node
+    else:
+        hosts = [controller0_node.name, controller1_node.name]
+        active_node = controller1_node
+
+    tier_uuid = storage_helper.get_storage_tier_values("ceph_cluster", con_ssh=active_node_ssh)
+
+    for host in hosts:
+        LOG.info("Adding ceph osd to {} ..".format(host))
+        if not host_helper.is_host_locked(host, con_ssh=active_node_ssh):
+            host_helper.lock_host(host, con_ssh=active_node_ssh)
+
+        disk_paths = controller1_disk_paths if host == 'controller-1' else controller0_disk_paths
+
+        for disk_path in disk_paths:
+            disk_uuid = system_helper.get_disk_values(host, device_path=disk_path,
+                                                      con_ssh=active_node_ssh)[0]
+            storage_helper.add_storage_ceph_osd(host, disk_uuid, tier_uuid=tier_uuid[0],
+                                                con_ssh=active_node_ssh)
+
+        LOG.info("Unlocking host {} after adding ceph osds ..".format(host))
+        host_helper.unlock_host(host, con_ssh=active_node_ssh)
+        host_helper.swact_host(active_node.name, con_ssh=active_node_ssh)
+        active_node = lab[host]
+        active_node_ssh.close()
+        active_node_ssh = install_helper.establish_ssh_connection(floating_ip)
+        ControllerClient.set_active_controller(active_node_ssh)
+
+
+def apply_node_labels(hosts, active_controller_node):
+    """
+
+    Args:
+        hosts:
+        active_controller_node:
+
+    Returns:
+
+    """
+    if not active_controller_node:
+        raise ValueError("Active controller node object must be provided")
+    if not active_controller_node.ssh_conn:
+        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    if "controller-0" in hosts:
+        hosts.remove('controller-0')
+    cmd = "host-label-assign {}"
+    for host in hosts:
+        LOG.info("Applying node label for host {}".format(host))
+        cli.system(cmd.format(host), "openstack-control-plane=enable", ssh_client=active_controller_node.ssh_conn)
+        if "controller" not in host:
+            cli.system(cmd.format(host), "openvswitch=enabled", ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "sriov=enabled", ssh_client=active_controller_node.ssh_conn)
+

@@ -3809,7 +3809,7 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
 
         iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
                                 dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                                timeout=180,)
+                                timeout=300,)
 
         # Write the ISO to USB
         cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\

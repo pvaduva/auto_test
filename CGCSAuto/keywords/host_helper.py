@@ -848,7 +848,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 return 8, err_msg
 
     from keywords.kube_helper import wait_for_nodes_ready
-    if not use_telnet and not wait_for_nodes_ready(hosts=host, timeout=20, con_ssh=con_ssh, fail_ok=fail_ok)[0]:
+    if not use_telnet and not wait_for_nodes_ready(hosts=host, timeout=40, con_ssh=con_ssh, fail_ok=fail_ok)[0]:
         err_msg = "{} is not ready in kubectl get nodes after unlock".format(host)
         return 10, err_msg
 
