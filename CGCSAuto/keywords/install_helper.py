@@ -606,7 +606,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
         script_path = lab_file_dir
         if '/lab/yow/' in lab_file_dir:
-            script_path = os.path.join(lab_file_dir.rsplit('/lab/yow/', maxsplit=1)[0], '/lab/scripts')
+            script_path = os.path.join(lab_file_dir.rsplit('/lab/yow/', maxsplit=1)[0], 'lab/scripts')
 
     else:
         lab_file_dir = default_lab_config_path + "/yow/{}".format(lab['name'])
