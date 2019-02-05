@@ -767,7 +767,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     conf_final_step = installer_steps["STOP_POINT"]
     conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
     if conf_resume_step:
-        resume = eval(conf_resume_step)
+        resume = conf_resume_step
     if conf_final_step:
         stop = conf_final_step
     if conf_skip_steps:
