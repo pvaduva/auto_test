@@ -28,7 +28,7 @@ def test_system_persist_over_host_reboot(host_type):
     """
     if host_type == 'controller':
         # FIXME temp workaround
-        if not system_helper.is_simplex():
+        if system_helper.is_two_node_cpe():
             assert 0, "mariadb issue. Fail without testing for now."
         host = system_helper.get_active_controller_name()
     elif host_type == 'compute':

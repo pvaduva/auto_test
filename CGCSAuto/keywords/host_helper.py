@@ -546,7 +546,7 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
     """
     # FIXME temp workaround
     if 'controller' in host and not fail_ok and not use_telnet \
-            and not system_helper.is_simplex(con_ssh=con_ssh, auth_info=auth_info):
+            and system_helper.is_two_node_cpe(con_ssh=con_ssh, auth_info=auth_info):
         from keywords.kube_helper import get_openstack_pods_info
         if get_openstack_pods_info(pod_names='mariadb', fail_ok=True, con_ssh=con_ssh):
             assert 0, "mariadb issue. Fail without testing for now."
@@ -1254,7 +1254,7 @@ def wait_for_host_values(host, timeout=HostTimeout.REBOOT, check_interval=3, str
             return True
         time.sleep(check_interval)
     else:
-        msg = "{} did not reach state(s) - {}".format(host, kwargs)
+        msg = "{} did not reach state(s) within {}s - {}".format(host, timeout, kwargs)
         if fail_ok:
             LOG.warning(msg)
             return False
