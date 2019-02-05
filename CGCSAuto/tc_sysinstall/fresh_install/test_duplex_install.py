@@ -122,10 +122,13 @@ def test_duplex_install(install_setup):
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
+
     fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
 
     fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
+
     fresh_install_helper.reset_global_vars()
+
     fresh_install_helper.verify_install_uuid(lab)

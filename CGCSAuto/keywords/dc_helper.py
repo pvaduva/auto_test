@@ -14,7 +14,7 @@ from keywords import system_helper, nova_helper
 def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
                   auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, source_openrc=None):
     """
-
+    Getting subclouds info
     Args:
         rtn_val:
         name:
@@ -28,6 +28,7 @@ def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
     Returns:
 
     """
+
     # auth_info = Tenant.get('admin', 'SystemController')
     LOG.info("Auth_info: {}".format(auth_info))
     table_ = table_parser.table(cli.dcmanager('subcloud list', auth_info=auth_info, ssh_client=con_ssh,
@@ -39,7 +40,8 @@ def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
 
 
 def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fail_ok=False, con_ssh=None,
-                              auth_info=Tenant.get('admin', 'RegionOne')):
+                              auth_info=Tenant.get('admin', 'RegionOne'), source_openrc=False):
+
     """
     Manage/Unmanage given subcloud(s)
     Args:
@@ -70,7 +72,8 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     failed_subclouds = []
     for subcloud_ in subclouds_to_update:
         code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_list=True,
-                                  auth_info=auth_info, ssh_client=con_ssh)
+                                  auth_info=auth_info, ssh_client=con_ssh, source_openrc=source_openrc)
+
         if code > 0:
             failed_subclouds.append(subcloud_)
 

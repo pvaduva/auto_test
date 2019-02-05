@@ -3,7 +3,7 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, keystone_helper
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
@@ -111,7 +111,7 @@ def do_step(step_name=None):
         in_skip_list = current_step_num in skip_list
     # if resume flag is given do_step if it's currently the specified resume step or a step after that point
     if resume_step:
-        on_resume_step = (int(resume_step) == int(current_step_num) or resume_step == step_name) and \
+        on_resume_step = (str(resume_step) == str(current_step_num) or resume_step == step_name) and \
                          not completed_resume_step
     else:
         on_resume_step = True
@@ -160,6 +160,9 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         load_path = set_load_path(build_server_conn=build_server.ssh_conn, sys_version=sys_version)
     if not load_path.endswith("/"):
         load_path += "/"
+    if not sys_version:
+        sys_version = ProjVar.get_var('SW_VERSION')[0]
+
     if guest_path is None or guest_path == BuildServerPath.DEFAULT_GUEST_IMAGE_PATH:
         guest_path = set_guest_image_var(sys_version=sys_version)
     if license_path is None or license_path == BuildServerPath.DEFAULT_LICENSE_PATH:
@@ -168,9 +171,9 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         lab = InstallVars.get_install_var('LAB')
 
     heat_path = InstallVars.get_install_var("HEAT_TEMPLATES")
-    if not sys_version:
-        sys_version = ProjVar.get_var('SW_VERSION')[0]
+
     if not heat_path:
+        sys_version = sys_version if sys_version in BuildServerPath.HEAT_TEMPLATES_EXTS else 'default'
         heat_path = os.path.join(load_path, BuildServerPath.HEAT_TEMPLATES_EXTS[sys_version])
 
     test_step = "Download lab files"
@@ -213,6 +216,7 @@ def set_license_var(sys_version=None, sys_type=None):
     else:
         index = 0
 
+    sys_version = sys_version if sys_version in BuildServerPath.TIS_LICENSE_PATHS else 'default'
     license_paths = BuildServerPath.TIS_LICENSE_PATHS[sys_version]
     LOG.debug(license_paths)
     LOG.debug(license_paths[index])
@@ -237,6 +241,8 @@ def set_load_path(build_server_conn, sys_version=None):
 def set_guest_image_var(sys_version=None):
     if sys_version is None:
         sys_version = ProjVar.get_var('SW_VERSION')[0]
+
+    sys_version = sys_version if sys_version in BuildServerPath.GUEST_IMAGE_PATHS else 'default'
     guest_path = BuildServerPath.GUEST_IMAGE_PATHS[sys_version]
 
     InstallVars.set_install_var(guest_image=guest_path)
@@ -318,6 +324,7 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
                                                                 SubcloudStatus.MGMT_UNMANAGED))
         LOG.info("Managing subcloud {} ... ".format(subcloud))
         LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+        install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
         dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn, fail_ok=True)
 
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
@@ -587,15 +594,16 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     install_helper.copy_files_to_subcloud(subcloud)
 
     system_version = install_helper.extract_software_version_from_string_path(load_path)
+    license_version = system_version if system_version in BuildServerPath.DEFAULT_LICENSE_PATH else 'default'
     sys_type = lab['system_mode']
     if sys_type == SysType.REGULAR:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][0]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
     elif sys_type == SysType.AIO_DX:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][1]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][1]
     elif sys_type == SysType.AIO_SX:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][2]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][2]
     else:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][0]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
 
     install_helper.download_license(lab, build_server, license_path=license_path, dest_name='license')
 
@@ -646,6 +654,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     LOG.info("Installing other {} hosts ... ".format(subcloud))
 
     if not files_path:
+        system_version = system_version if system_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
         files_path = load_path + '/' + BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[system_version]
 
     install_helper.download_hosts_bulk_add_xml_file(lab, build_server, files_path)
@@ -693,7 +702,14 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
     if name and 'subcloud' in name and name in existing_subclouds:
         LOG.info("Subcloud {} already exits; do nothing".format(name))
+        managed = dc_helper.get_subclouds(name=name, avail="managed", con_ssh=controller0_node.ssh_conn,
+                                          source_openrc=True)
+        if name in managed:
+            LOG.info("Subcloud {} is in managed status; unamanage subcloud before install".format(name))
+            dc_helper._manage_unmanage_subcloud(subcloud=name, con_ssh=controller0_node.ssh_conn)
+
         return 0, [name]
+
 
     if name is not None and name is not '':
         subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
@@ -716,6 +732,11 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     LOG.info("Checking if subclouds are added and config files are generated.....")
     subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
     added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
+    if name not in added_subclouds:
+        msg = "Fail to add subcloud {}. Existing subclouds= {}; Added subclouds = {}".format(name, existing_subclouds,
+                                                                                             added_subclouds)
+        LOG.warning(msg)
+        assert False, msg
 
     config_generated = []
     for subcloud in added_subclouds:
@@ -858,6 +879,36 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
         return False
 
 
+def is_dcloud_system_controller_ipv6(controller0_node):
+    """
+    Checks if the system controller in dc system is configured as ipv6 by checking endpoints urls.
+    Args:
+        controller0_node:
+
+    Returns:
+
+    """
+    if controller0_node is None:
+        raise ValueError("The distributed cloud system controller lab dictionary must be provided")
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    if controller0_node.ssh_conn._is_connected():
+        install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+        urls = keystone_helper.get_endpoints(rtn_val='URL', service_name='sysinv', service_type='platform', enabled='True',
+                                      interface='admin', region='SystemController', con_ssh=controller0_node.ssh_conn)
+
+        if len(urls) > 0:
+            ip_addr = urls[0].strip().split('//')[1].split('/')[0].rsplit(':',1)[0]
+            if len(ip_addr.split(':')) > 1:
+                LOG.info("System controller {} is ipv6".format(controller0_node.host_name))
+                return True
+
+    LOG.warning("System controller {} is ipv4".format(controller0_node.host_name))
+    return False
+
+
 def reset_controller_telnet_port(controller_node):
 
     if not controller_node:
@@ -936,7 +987,18 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
-        add_subclouds(file_server_obj, name=install_sub)
+        ipv6_config = InstallVars.get_install_var("IPV6_CONFIG")
+        v6 = is_dcloud_system_controller_ipv6(file_server_obj)
+        if not v6:
+            if ipv6_config:
+                LOG.warning("The DC System controller is configured as IPV4; Switching to IPV4")
+                ipv6_config = False
+        else:
+            LOG.warning("The DC System controller is configured as IPV6; Configuring subcloud {} as IPV6"
+                        .format(install_sub))
+            ipv6_config = True
+        InstallVars.set_install_var(ipv6_config=ipv6_config)
+        add_subclouds(file_server_obj, name=install_sub, ip_ver=6 if ipv6_config else 4)
     else:
         if file_server == bld_server.name:
             file_server_obj = bld_server

@@ -72,7 +72,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             if not ssh_client:
                 ssh_client = ControllerClient.get_active_controller()
 
-    if source_openrc is None:
+    if not source_openrc:
         source_openrc = ProjVar.get_var('SOURCE_CREDENTIAL')
 
     if source_openrc:

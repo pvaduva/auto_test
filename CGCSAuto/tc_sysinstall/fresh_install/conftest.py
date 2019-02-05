@@ -45,6 +45,7 @@ def pytest_configure(config):
     ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
     no_openstack_install = config.getoption('no_openstack_install')
+    ipv6_config = config.getoption('ipv6')
 
     if lab_arg:
         lab_dict = get_lab_dict(lab_arg)
@@ -108,7 +109,7 @@ def pytest_configure(config):
                            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                            patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
                            install_subcloud=sublcoud_name, kubernetes=kubernetes,
-                           no_openstack_install=no_openstack_install)
+                           no_openstack_install=no_openstack_install, ipv6_config=ipv6_config)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

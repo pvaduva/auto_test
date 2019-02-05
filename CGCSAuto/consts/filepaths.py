@@ -91,10 +91,10 @@ class BuildServerPath:
     STX_HELM_CHARTS = 'std/build-helm/stx'
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
-                           '18.10': HEAT_TEMPLATES, '19.01': HEAT_TEMPLATES,}
+                           'default': HEAT_TEMPLATES}
 
     DEFAULT_LAB_CONFIG_PATH_EXTS = {'16.10': LAB_CONF_DIR_PREV, '17.06': LAB_CONF_DIR_PREV,
-                                    '18.03': LAB_CONF_DIR_PREV, '18.10': LAB_CONF_DIR, '19.01': LAB_CONF_DIR,}
+                                    '18.03': LAB_CONF_DIR_PREV, 'default': LAB_CONF_DIR}
 
     class BldsDirNames:
         TS_15_12_HOST = 'TS_15.12_Host'
@@ -108,7 +108,7 @@ class BuildServerPath:
         CGCS_6_0_HOST = 'CGCS_6.0_Host'
         TITANIUM_R6_BUILD = 'Titanium_R6_build'
         STARLINGX_18_10 = 'StarlingX_18.10'
-        STARLINGX_UPSTREAM_BUILD = 'StarlingX_Upstream_build'
+        STARLINGX_UPSTREAM = 'StarlingX_Upstream_build'
 
         R2_VERSION_SEARCH_REGEX = r'(?:15.12|CGTS_2.0)'
         R3_VERSION_SEARCH_REGEX = r'(?:_16.10|CGCS_3.0)'
@@ -124,16 +124,11 @@ class BuildServerPath:
                                '18.03': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TC_18_03_HOST, LATEST_BUILD),
                                          os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TC_18_03_PRESTAGING_BUILD,
                                                       LATEST_BUILD)],
-                               '18.10': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD,
-                                                      LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)],
-                               '19.01': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM_BUILD,
-                                                      LATEST_BUILD),
-                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)]
+                               'default':
+                                   [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
+                                    os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
+                                    os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM, LATEST_BUILD),
+                                    os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)],
                                }
 
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
@@ -146,11 +141,8 @@ class BuildServerPath:
                                    '/folk/cgts/lab/R5-AIO-SX-full.lic'],
                          '18.07': ['/folk/cgts/lab/R6-EAR1-eval.lic', '/folk/cgts/lab/R6-EAR1-AIO-DX-eval.lic',
                                    '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
-                         '18.10': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
-                                   '/folk/cgts/lab/R6-AIO-SX-full.lic'],
-                         '19.01': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
-                                   '/folk/cgts/lab/R6-AIO-SX-full.lic'],
-
+                         'default': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
+                                     '/folk/cgts/lab/R6-AIO-SX-full.lic'],
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
@@ -158,10 +150,12 @@ class BuildServerPath:
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
                        '18.03': DEFAULT_PATCH_DIR + '18.03',
                        '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
+                       'default': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                        }
 
     TEST_PATCH_DIR_PATHS = {'18.03': DEFAULT_WORK_SPACE + '/TC_18.03_Test_Patch_Build/latest_build',
                             '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
+                            'default': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                            }
 
     PATCH_ENABLE_DEV_CERTIFICATES = {
@@ -179,9 +173,7 @@ class BuildServerPath:
                              '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img',
                          '18.07':
                              '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img',
-                         '18.10':
-                             '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
-                         '19.01':
+                         'default':
                              '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
                          }
 
