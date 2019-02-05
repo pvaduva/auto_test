@@ -588,15 +588,16 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     install_helper.copy_files_to_subcloud(subcloud)
 
     system_version = install_helper.extract_software_version_from_string_path(load_path)
+    license_version = system_version if system_version in BuildServerPath.DEFAULT_LICENSE_PATH else 'default'
     sys_type = lab['system_mode']
     if sys_type == SysType.REGULAR:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][0]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
     elif sys_type == SysType.AIO_DX:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][1]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][1]
     elif sys_type == SysType.AIO_SX:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][2]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][2]
     else:
-        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[system_version][0]
+        license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
 
     install_helper.download_license(lab, build_server, license_path=license_path, dest_name='license')
 
@@ -647,6 +648,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     LOG.info("Installing other {} hosts ... ".format(subcloud))
 
     if not files_path:
+        system_version = system_version if system_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
         files_path = load_path + '/' + BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[system_version]
 
     install_helper.download_hosts_bulk_add_xml_file(lab, build_server, files_path)

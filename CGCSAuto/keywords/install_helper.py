@@ -560,6 +560,7 @@ def download_heat_templates(lab, server, load_path, heat_path=None):
 
     if not heat_path:
         sys_version = extract_software_version_from_string_path(load_path)
+        sys_version = sys_version if sys_version in BuildServerPath.HEAT_TEMPLATES_EXTS else 'default'
         heat_path = os.path.join(load_path, BuildServerPath.HEAT_TEMPLATES_EXTS[sys_version])
     else:
         heat_path = heat_path
@@ -583,51 +584,49 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if 'vbox' in lab["name"]:
         return
     if not lab_file_dir:
-        lab_config_path = InstallVars.get_install_var("LAB_SETUP_PATH")
-    else:
-        lab_config_path = lab_file_dir
+        lab_file_dir = InstallVars.get_install_var("LAB_SETUP_PATH")
+
+    if not os.path.isabs(lab_file_dir):
+        raise ValueError("Abs path required for {}".format(lab_file_dir))
 
     lab_name = lab['name']
-    if "yow" in lab_name:
-        lab_name = lab_name[4:]
+    lab_name = lab_name.split('yow-', maxsplit=1)[-1]
 
     if not conf_server:
         conf_server = server
 
-    conf_server_name = conf_server.host_name if isinstance(conf_server, Node) else conf_server.name
-
     sys_version = extract_software_version_from_string_path(load_path)
-    default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) \
-        if sys_version else load_path + BuildServerPath.LAB_CONF_DIR_PREV
+    sys_version = sys_version if sys_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
+    default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version])
 
-    if lab_config_path and 'yow' in lab_config_path.split('/'):
-        if os.path.basename(lab_config_path) == 'yow':
-            lab_config_path += '\{}'.format(lab_name)
+    if lab_file_dir:
+        lab_file_dir = os.path.abspath(lab_file_dir)
+        if os.path.basename(lab_file_dir) == 'yow':
+            lab_file_dir += '/{}'.format(lab_name)
 
-    if not lab_config_path or lab_config_path == '':
-        lab_config_path = default_lab_config_path + "/yow/{}".format(lab['name'])
+        script_path = lab_file_dir
+        if '/lab/yow/' in lab_file_dir:
+            script_path = os.path.join(lab_file_dir.rsplit('/lab/yow/', maxsplit=1)[0], '/lab/scripts')
 
-    config_path = lab_config_path
-    script_path = os.path.join(default_lab_config_path, "scripts")
+    else:
+        lab_file_dir = default_lab_config_path + "/yow/{}".format(lab['name'])
+        script_path = os.path.join(default_lab_config_path, "scripts")
 
-    LOG.info("Getting lab config file from specified path: {}".format(lab_config_path))
+    LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     cmd = "test -e " + script_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab scripts path not found in {}:{}'.format(
-            server.name, script_path)
-    server.ssh_conn.rsync(script_path + "/*",
-                          lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    conf_server.ssh_conn.rsync(script_path + "/*",
+                               lab['controller-0 ip'],
+                               WRSROOT_HOME, pre_opts=pre_opts)
 
-    cmd = "test -e " + config_path
-    assert conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' lab config path not found in {}:{}'.format(
-            conf_server_name, config_path)
-    conf_server.ssh_conn.rsync(config_path + "/*",
-                          lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
-
+    cmd = "test -e " + lab_file_dir
+    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    conf_server.ssh_conn.rsync(lab_file_dir + "/*",
+                               lab['controller-0 ip'],
+                               WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
 
 def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf'):
@@ -3997,6 +3996,7 @@ def get_default_lab_config_files_path(builds_dir_name):
         else:
             sys_version = sys_version[0]
 
+        sys_version = sys_version if sys_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
         return os.path.join(get_default_latest_build_path(version=sys_version, builds_dir_name=builds_dir_name),
                             BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version]) if sys_version else None
     else:
@@ -4005,10 +4005,8 @@ def get_default_lab_config_files_path(builds_dir_name):
 
 def extract_software_version_from_string_path(path):
 
-
     version = None
     if path:
-
         if re.compile(BuildServerPath.BldsDirNames.R2_VERSION_SEARCH_REGEX).search(path):
             version = '15.12'
         elif re.compile(BuildServerPath.BldsDirNames.R3_VERSION_SEARCH_REGEX).search(path):
@@ -4018,9 +4016,7 @@ def extract_software_version_from_string_path(path):
         elif re.compile(BuildServerPath.BldsDirNames.R5_VERSION_SEARCH_REGEX).search(path):
             version = '18.03'
         elif re.compile(BuildServerPath.BldsDirNames.R6_VERSION_SEARCH_REGEX).search(path):
-            version = '18.10'
-        else:
-            version = None
+            version = 'default'
 
     LOG.info("Version extracted from {} is {}".format(path, version))
     return version

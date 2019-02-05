@@ -1056,6 +1056,7 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
         lab_files_path = conf_dir
     elif lab_name is not None and host_build_dir is not None:
         version = install_helper.extract_software_version_from_string_path(host_build_dir)
+        version = version if version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
         lab_files_path = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[version],
                                                install_helper.get_git_name(lab_name))
     else:
