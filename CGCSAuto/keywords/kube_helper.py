@@ -588,12 +588,12 @@ def is_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None):
         pod_names = (pod_names,)
 
     pods_info_set = get_openstack_pods_info(pod_names=pod_names, con_ssh=con_ssh, fail_ok=True)
-    bad_pods = []
+    bad_pods = {}
     for i in range(len(pods_info_set)):
         pods_info = pods_info_set[i]
         if not pods_info:
             k = pod_names[i] if pod_names else 'all'
-            bad_pods.append({k: None})
+            bad_pods[k] = None
 
         for pod_info in pods_info:
             pod_name = pod_info.get('name')
@@ -606,7 +606,7 @@ def is_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None):
                 expt_status = [status]
 
             if pod_status not in expt_status:
-                bad_pods.append({pod_name: pod_status})
+                bad_pods[pod_name] = pod_status
                 msg = "Pod {} status is {}. Expect: {}".format(pod_name, pod_status, status)
                 LOG.info(msg)
 
