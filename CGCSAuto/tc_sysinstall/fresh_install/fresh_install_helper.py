@@ -203,7 +203,7 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
 
     if InstallVars.get_install_var("KUBERNETES"):
         LOG.info("WK: Downloading the helm charts to active controller ...")
-        helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
+        helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
         install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
 
 
@@ -477,7 +477,8 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400)
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
-        host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
+        kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
+        #host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 

@@ -125,7 +125,8 @@ class InstallVars:
                          dc_float_ip=None,
                          install_subcloud=None,
                          no_openstack_install=False,
-                         ipv6_config=False):
+                         ipv6_config=False,
+                         helm_chart_path=None):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -164,6 +165,7 @@ class InstallVars:
             'HOSTS_BULK_ADD': hosts_bulk_add,
             'BOOT_IF_SETTINGS': boot_if_settings,
             'LAB_SETUP_PATH': lab_setup,
+            'HELM_CHART_PATH': helm_chart_path,
 
             # Generic
             'LICENSE': license_path,
