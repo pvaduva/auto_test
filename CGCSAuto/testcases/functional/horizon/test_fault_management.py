@@ -20,6 +20,7 @@ def fault_management_pg(admin_home_pg, request):
     return fault_management_pg
 
 
+# move out from suite for now until fixed. This failure will cause all of the rest horizon testcases to fail.
 @mark.parametrize('event_id', ['100.101'])
 def _test_horizon_suppress_event(fault_management_pg, event_id):
 

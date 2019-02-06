@@ -559,6 +559,8 @@ def test_kpi_cyclictest_hypervisor(collect_kpi, prepare_test_session, get_hyperv
                                                                    active_con_name=active_controller_name,
                                                                    run_log=run_log, hist_file=hist_file)
 
+    testable_hypervisors[chosen_hypervisor]['for_host_test'] = False
+
     avg_val, six_nines_val = calculate_results(run_log=local_run_log, hist_file=local_hist_file,
                                                cores_to_ignore=None, num_cores=len(cpu_info['vm_cores']))
 
@@ -594,6 +596,8 @@ def test_kpi_cyclictest_vm(collect_kpi, prepare_test_session, get_rt_guest_image
         LOG.info("Process and upload test results")
         local_run_log, local_hist_file = fetch_results_from_target(target_ssh=vm_ssh, target_host=vm_id,
                                                                    run_log=run_log, hist_file=hist_file, is_guest=True)
+
+    testable_hypervisors[hypervisor]['for_vm_test'] = False
 
     avg_val, six_nines_val = calculate_results(run_log=local_run_log, hist_file=local_hist_file,
                                                cores_to_ignore=None, num_cores=(vcpu_count - 1))
