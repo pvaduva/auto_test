@@ -75,6 +75,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
     if not source_openrc:
         source_openrc = ProjVar.get_var('SOURCE_CREDENTIAL')
 
+    raw_cmd = cmd.strip().split()[0]
     if source_openrc:
         source_file = _get_rc_path(tenant=auth_info['tenant'], remote_cli=use_remote_cli)
         if use_telnet:
@@ -83,46 +84,33 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
             source_openrc_file(ssh_client=ssh_client, auth_info=auth_info, rc_file=source_file, fail_ok=fail_ok,
                                remote_cli=use_remote_cli, force=force_source)
         flags = ''
-    else:
-        if auth_info:
-            # hack starts
-            if cmd not in ('fm', 'system'):
-                auth_info = dict(auth_info)
-                auth_info['auth_url'] = 'http://keystone.openstack.svc.cluster.local/v3'
-            # hack ends
-            auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {} "
-                         "--os-user-domain-name Default --os-project-domain-name Default".
-                         format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
+    elif auth_info:
+        # os auth url handling
+        if raw_cmd not in ('fm', 'system'):
+            auth_info = dict(auth_info)
+            auth_info['auth_url'] = 'http://keystone.openstack.svc.cluster.local/v3'
 
-            # if cmd in ('openstack', 'sw-manager'):
-            #     flags += ' --os-interface internal'
-            # else:
-            #     flags += ' --os-endpoint-type internalURL'
-            #
-            # if cmd != 'dcmanager':
-            #     region = auth_info['region']
-            #     if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
-            #         syscon_cmds = ('system', 'fm')
-            #         region = 'RegionOne' if cmd in syscon_cmds else 'SystemController'
-            #
-            #     flags += ' --os-region-name {}'.format(region)
+        # auth params handling
+        auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {} "
+                     "--os-user-domain-name Default --os-project-domain-name Default".
+                     format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
 
-            flags = '{} {}'.format(auth_args.strip(), flags.strip())
+        flags = '{} {}'.format(auth_args.strip(), flags.strip())
 
-    sys_cmd = cmd if not use_telnet else ( cmd.split(';')[1].strip() if len(cmd.split(';')) > 1 else cmd.strip())
-
-    if sys_cmd in ('openstack', 'sw-manager'):
+    # internal URL handling
+    if raw_cmd in ('openstack', 'sw-manager'):
         flags += ' --os-interface internal'
     else:
         flags += ' --os-endpoint-type internalURL'
 
-    if sys_cmd != 'dcmanager':
+    # region name handling
+    if raw_cmd != 'dcmanager':
         region = auth_info['region']
         if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
             syscon_cmds = ('system', 'fm')
-            region = 'RegionOne' if sys_cmd in syscon_cmds else 'SystemController'
+            region = 'RegionOne' if raw_cmd in syscon_cmds else 'SystemController'
 
-        if sys_cmd == 'cinder':
+        if raw_cmd == 'cinder':
             flags += ' --os_region_name {}'.format(region)
         else:
             flags += ' --os-region-name {}'.format(region)
