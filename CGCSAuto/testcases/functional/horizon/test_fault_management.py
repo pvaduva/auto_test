@@ -22,7 +22,13 @@ def events_suppression_pg(admin_home_pg, request):
 
 @mark.parametrize('event_id', ['100.101'])
 def test_suppress_event(events_suppression_pg, event_id):
-
+    """
+        Test Steps:
+        -Suppress event
+        -Check for success message
+        -Unsuppress event
+        -Check for success message
+    """
     events_suppression_pg.suppress_event(event_id)
     assert events_suppression_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not events_suppression_pg.find_message_and_dismiss(messages.ERROR)
