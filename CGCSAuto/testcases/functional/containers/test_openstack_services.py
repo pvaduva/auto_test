@@ -44,10 +44,10 @@ def test_openstack_services_healthy():
 @mark.sanity
 @mark.sx_sanity
 @mark.cpe_sanity
-def test_reapply_stx_openstack(skip_for_no_openstack):
+def test_reapply_stx_openstack(check_stx_openstack):
     """
     Args:
-        skip_for_no_openstack:
+        check_stx_openstack:
 
     Pre-requisite:
         - stx-openstack application in applied state
@@ -77,6 +77,13 @@ def reset_if_modified(request, check_openstack_pods):
     conf_path = '/etc/nova/nova.conf'
 
     def reset():
+        app_name = 'stx-openstack'
+        post_status = container_helper.get_apps_values(apps=(app_name,), rtn_dict=False)[0][0]
+        if not post_status.endswith('ed'):
+            LOG.fixture_step("Wait for application apply finish")
+            container_helper.wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=1800,
+                                                  check_interval=15, fail_ok=False)
+
         user_overrides = container_helper.get_helm_override_info(chart='nova', namespace='openstack',
                                                                  fields='user_overrides')[0]
         if not user_overrides or user_overrides == 'None':
@@ -120,11 +127,11 @@ def reset_if_modified(request, check_openstack_pods):
 @mark.sanity
 @mark.sx_sanity
 @mark.cpe_sanity
-def test_stx_openstack_helm_override_update_and_reset(skip_for_no_openstack, reset_if_modified):
+def test_stx_openstack_helm_override_update_and_reset(reset_if_modified):
     """
     Test helm override for openstack nova chart and reset
     Args:
-        skip_for_no_openstack:
+        check_stx_openstack:
 
     Pre-requisite:
         - stx-openstack application in applied state

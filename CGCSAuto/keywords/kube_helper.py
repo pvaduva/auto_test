@@ -642,3 +642,22 @@ def get_pod_logs(pod_name, namespace='openstack', grep_pattern=None, tail_count=
     if not output and not fail_ok:
         raise exceptions.KubeError("No kubectl logs found with args: {}".format(args))
     return output
+
+
+def dump_pods_info(con_ssh=None):
+    """
+    Dump pods info for debugging purpose.
+    Args:
+        con_ssh:
+
+    Returns:
+
+    """
+    exec_kube_cmd('get pods', '–all-namespaces -o wide', con_ssh=con_ssh, fail_ok=True)
+    exec_kube_cmd('get pods' '--all-namespaces -o wide | grep -v -e Running -e Completed', con_ssh=con_ssh,
+                  fail_ok=True)
+    exec_kube_cmd('get pods', """"--all-namespaces -o wide | grep -v -e Running -e Completed -e NAMESPACE | 
+    awk '{system("kubectl describe pods -n "$1" "$2)}'""", con_ssh=con_ssh, fail_ok=True)
+
+    # exec_kube_cmd('get pods', """--all-namespaces -o wide |
+    # grep -v -e Running -e Completed -e NAMESPACE | awk '{system("kubectl logs -n "$1" "$2)}'""")

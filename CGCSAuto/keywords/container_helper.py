@@ -672,5 +672,5 @@ def is_stx_openstack_applied(applied_only=False, con_ssh=None, auth_info=Tenant.
                              use_telnet=False, con_telnet=None):
     openstack_status = get_apps_values(apps='stx-openstack', con_ssh=con_ssh, auth_info=auth_info,
                                        use_telnet=use_telnet, con_telnet=con_telnet)[0]
-    expt_status = 'applied' if applied_only else 'appl'
-    return openstack_status and expt_status in openstack_status[0].lower()
+    expt_status = [AppStatus.APPLIED] if applied_only else [AppStatus.APPLIED, AppStatus.APPLY_FAILED]
+    return openstack_status and openstack_status[0].lower() in expt_status
