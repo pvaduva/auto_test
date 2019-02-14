@@ -856,7 +856,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     return 0, "Host is unlocked and in available state."
 
 
-def wait_for_tasks_affined(host, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def wait_for_tasks_affined(host, timeout=180, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     if system_helper.is_simplex(con_ssh=con_ssh, auth_info=auth_info):
         return True
 
@@ -1332,7 +1332,8 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
                     return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
 
                 for host in ('controller-0', 'controller-1'):
-                    task_aff_res = wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+                    task_aff_res = wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                                          timeout=300)
                     if not task_aff_res:
                         return 7, "tasks affining incomplete on {} after swact from {}".format(host, hostname)
 

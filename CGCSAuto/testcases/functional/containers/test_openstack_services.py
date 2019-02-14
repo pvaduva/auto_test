@@ -161,11 +161,11 @@ def test_stx_openstack_helm_override_update_and_reset(reset_if_modified):
     combined_overrides, system_overrides, user_overrides = \
         container_helper.get_helm_override_info(chart='nova', namespace='openstack', fields=fields)
 
-    assert 'bar' == user_overrides['conf']['nova']['DEFAULT'].get('foo'), \
+    assert 'bar' == user_overrides['conf']['nova'].get('DEFAULT', {}).get('foo'), \
         "{} is not shown in user overrides".format(new_conf)
-    assert 'bar' == combined_overrides['conf']['nova']['DEFAULT'].get('foo'), \
+    assert 'bar' == combined_overrides['conf']['nova'].get('DEFAULT', {}).get('foo'), \
         "{} is not shown in combined overrides".format(new_conf)
-    assert not system_overrides['conf']['nova']['DEFAULT'].get('foo'), \
+    assert not system_overrides['conf']['nova'].get('DEFAULT', {}).get('foo'), \
         "User override {} listed in system overrides unexpectedly".format(new_conf)
 
     prev_nova_cell_setup_pods, prev_nova_compute_pods = \
