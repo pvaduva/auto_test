@@ -69,7 +69,7 @@ def test_horizon_create_delete_instance(instances_pg):
 
     LOG.tc_step('Delete instance {}'.format(instance_name))
     instances_pg.delete_instance_by_row(instance_name)
-    assert instances_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert instances_pg.find_message_and_dismiss(messages.INFO)
     assert not instances_pg.find_message_and_dismiss(messages.ERROR)
 
     LOG.tc_step('Verify the instance does not appear in the table after deletion')
