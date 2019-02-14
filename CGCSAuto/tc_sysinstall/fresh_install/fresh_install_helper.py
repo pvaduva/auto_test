@@ -280,6 +280,10 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
+    # WK Touch .this_didnt_work to avoid using heat for kubernetes
+    if kubernetes:
+        controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
+
     LOG.info("Run lab_setup after config controller")
     run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
 

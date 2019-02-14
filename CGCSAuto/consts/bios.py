@@ -179,12 +179,12 @@ class BootMenus:
         Controller_Configuration = {
             "name": "Controller Configuration",
             #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
-            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)',
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the \^ and v keys to change the selection',
             "wrap_around": True
         }
 
         Serial_Console = {
             "name": "Console",
-            "prompt": r'\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?',
+            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to change the selection',
             "wrap_around": True
         }

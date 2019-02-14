@@ -183,7 +183,7 @@ class KickstartMenu(Menu):
                 self.index = self.options[i].index
         return super().get_current_option()
 
-    def find_options(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+    def find_options(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press (\[Tab\]|\'e\') to edit".encode(),
                      option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
                      newline=r'(\x1b\[\d+;\d+H)+'.encode()):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier,
@@ -316,7 +316,7 @@ class USBBootMenu(KickstartMenu):
         self.sub_menus.append(console_sub_menu)
         LOG.info("USB sub menu added: {}".format( console_sub_menu.name))
 
-    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
+    def find_options(self, telnet_conn, end_of_menu=r"utomatic(ally)?( boot)? in|Press (\[Tab\]|\'e\') to edit the selected .*prompt\.".encode(),
                      option_identifier=r"[A-Z][A-Za-z]".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier, newline=newline)
 
