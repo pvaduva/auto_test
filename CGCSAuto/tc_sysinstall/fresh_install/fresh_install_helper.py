@@ -1362,8 +1362,11 @@ def apply_node_labels(hosts, active_controller_node):
     cmd = "host-label-assign {}"
     for host in hosts:
         LOG.info("Applying node label for host {}".format(host))
-        cli.system(cmd.format(host), "openstack-control-plane=enable", ssh_client=active_controller_node.ssh_conn)
         if "controller" not in host:
+            cli.system(cmd.format(host), "openstack-compute-node=enabled", ssh_client=active_controller_node.ssh_conn)
             cli.system(cmd.format(host), "openvswitch=enabled", ssh_client=active_controller_node.ssh_conn)
             cli.system(cmd.format(host), "sriov=enabled", ssh_client=active_controller_node.ssh_conn)
+        else:
+            cli.system(cmd.format(host), "openstack-control-plane=enabled", ssh_client=active_controller_node.ssh_conn)
+
 
