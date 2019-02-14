@@ -84,7 +84,7 @@ class TestPacketTypeSecurity:
 
     @fixture(scope='class', params=['virtio', 'avp', 'dpdk'])
     def vm_type(self, request):
-        if system_helper.is_avs():
+        if not system_helper.is_avs():
             skip("Security group support is still being worked on for ovs-dpdk. story2002944")
 
         vm_type_ = request.param

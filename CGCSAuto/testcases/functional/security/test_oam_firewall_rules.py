@@ -72,7 +72,7 @@ def test_firewall_rules_default():
         default_ports.remove(5000)
         default_ports.remove(9292)
 
-    default_ports.append(443) if CliAuth.get_var('HTTPS') else default_ports.append(80)
+    default_ports.append(8443) if CliAuth.get_var('HTTPS') else default_ports.append(8080)
 
     active_controller = system_helper.get_active_controller_name()
     con_ssh = ControllerClient.get_active_controller()
