@@ -116,10 +116,12 @@ def test_standard_install(install_setup):
                                            controller0_node)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+
 
     # Unlock controller-1
     fresh_install_helper.unlock_hosts(['controller-1'], con_ssh=controller0_node.ssh_conn)
+
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     #WK1 - adding ceph mon to compute-0
     fresh_install_helper.add_ceph_ceph_mon_to_host(controller0_node, 'compute-0')
@@ -130,8 +132,8 @@ def test_standard_install(install_setup):
 
     # WK2-  add ceph osds to controllers:
     fresh_install_helper.add_ceph_osds_to_controller(lab=lab)
-    if controller0_node.ssh_conn is None:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    controller0_node.ssh_conn.close()
+    controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 

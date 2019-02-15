@@ -786,7 +786,7 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
              if os.path.splitext(conf_file)[1] == '':
                 conf_file += '.conf'
 
-        cmd = "test -e {}".format(WRSROOT_HOME, conf_file)
+        cmd = "test -e {}".format(WRSROOT_HOME + conf_file)
         rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
         if rc != 0:

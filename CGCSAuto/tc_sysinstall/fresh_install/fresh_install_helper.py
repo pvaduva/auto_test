@@ -1281,6 +1281,7 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host):
     LOG.info("Adding ceph mon to {} ...".format(host))
     storage_helper.add_ceph_mon(host, con_ssh=active_controller_node.ssh_conn)
     LOG.info("Added ceph mon to host {} ...".format(host))
+    active_controller_node.ssh_conn.exec_cmd("touch /home/wrsroot/.lab_setup.done.group0.ceph-mon")
 
 
 def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf'):
