@@ -70,7 +70,7 @@ NEW_NOVA_COMPUTE_PODS = None
 
 @fixture()
 def reset_if_modified(request, check_openstack_pods):
-    if not container_helper.is_stx_openstack_applied(applied_only=True):
+    if not container_helper.is_stx_openstack_deployed(applied_only=True):
         skip('stx-openstack application is not in Applied status. Skip test.')
 
     valid_hosts = get_valid_controllers()

@@ -36,6 +36,7 @@ class ProjVar:
                   'BUILD_INFO': None,
                   'TEMP_DIR': '',
                   'INSTANCE_BACKING': [],
+                  'OPENSTACK_DEPLOYED': None,
                   }
 
     @classmethod

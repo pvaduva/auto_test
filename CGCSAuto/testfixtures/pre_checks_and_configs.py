@@ -16,7 +16,7 @@ from utils.tis_log import LOG
 @fixture(scope='function')
 def check_stx_openstack(request):
     app_name = 'stx-openstack'
-    if not container_helper.is_stx_openstack_applied(applied_only=True):
+    if not container_helper.is_stx_openstack_deployed(applied_only=True):
         skip('stx-openstack application is not applied')
 
     def wait_for_recover():
@@ -30,7 +30,7 @@ def check_stx_openstack(request):
                 LOG.fixture_step("Wait for application apply finish")
                 container_helper.wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=3600,
                                                       check_interval=15, fail_ok=False)
-        request.addfinalizer(wait_for_recover)
+    request.addfinalizer(wait_for_recover)
 
 
 @fixture(scope='session')

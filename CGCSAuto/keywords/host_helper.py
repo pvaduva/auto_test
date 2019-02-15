@@ -1143,8 +1143,8 @@ def _wait_for_openstack_cli_enable(con_ssh=None, timeout=HostTimeout.SWACT, fail
         else:
             wait_for_task_clear_and_subfunction_ready(hosts=active_con, con_ssh=con_ssh, use_telnet=use_telnet,
                                                       con_telnet=con_telnet, auth_info=auth_info)
-        is_openstack_applied = container_helper.is_stx_openstack_applied(con_ssh=con_ssh, auth_info=auth_info,
-                                                                   use_telnet=use_telnet, con_telnet=con_telnet)
+        is_openstack_applied = container_helper.is_stx_openstack_deployed(con_ssh=con_ssh, auth_info=auth_info,
+                                                                          use_telnet=use_telnet, con_telnet=con_telnet)
         LOG.info("system cli and subfunction enabled")
         return is_openstack_applied
 

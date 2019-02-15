@@ -6,6 +6,7 @@ from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
+from consts.proj_vars import ProjVar
 from consts.cgcs import AppStatus, Prompt, EventLogID
 from consts.filepaths import TiSPath
 from keywords import system_helper, host_helper
@@ -668,9 +669,32 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
     return 0, overrides
 
 
-def is_stx_openstack_applied(applied_only=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                             use_telnet=False, con_telnet=None):
+def is_stx_openstack_deployed(applied_only=False, con_ssh=None, auth_info=Tenant.get('admin'), force_check=False,
+                              use_telnet=False, con_telnet=None):
+    """
+    Whether stx-openstack application  is deployed.
+    Args:
+        applied_only (bool): if True, then only return True when application is in applied state
+        con_ssh:
+        auth_info:
+        force_check:
+        use_telnet:
+        con_telnet:
+
+    Returns (bool):
+
+    """
+    openstack_deployed = ProjVar.get_var('OPENSTACK_DEPLOYED')
+    if not applied_only and not force_check and openstack_deployed is not None:
+        return openstack_deployed
+
     openstack_status = get_apps_values(apps='stx-openstack', con_ssh=con_ssh, auth_info=auth_info,
                                        use_telnet=use_telnet, con_telnet=con_telnet)[0]
-    expt_status = [AppStatus.APPLIED] if applied_only else [AppStatus.APPLIED, AppStatus.APPLY_FAILED]
-    return openstack_status and openstack_status[0].lower() in expt_status
+
+    res = False
+    if openstack_status and 'appl' in openstack_status[0].lower():
+        res = True
+        if applied_only and openstack_status[0] != AppStatus.APPLIED:
+            res = False
+
+    return res
