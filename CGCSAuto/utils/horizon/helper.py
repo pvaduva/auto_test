@@ -4,18 +4,6 @@ import os
 import time
 
 from selenium import webdriver
-try:
-    from pyvirtualdisplay import Display
-except ImportError as err:
-
-    class ImportFailedModule(object):
-        def __init__(self, imp_err):
-            self._exception = imp_err
-
-        def __getattr__(self, name):
-            raise self._exception
-
-    Display = ImportFailedModule(err)
 
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
@@ -74,6 +62,7 @@ class HorizonDriver:
         # profile.update_preferences()
         display = None
         try:
+            from pyvirtualdisplay import Display
             display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
             display.start()
         except:
