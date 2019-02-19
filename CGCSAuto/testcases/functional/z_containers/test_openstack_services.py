@@ -1,4 +1,6 @@
-from pytest import skip, mark,fixture
+import time
+
+from pytest import skip, mark, fixture
 
 from keywords import container_helper, system_helper, host_helper, kube_helper
 from consts.cgcs import HostAvailState, PodStatus, AppStatus
@@ -44,7 +46,11 @@ def test_openstack_services_healthy():
 @mark.sanity
 @mark.sx_sanity
 @mark.cpe_sanity
-def test_reapply_stx_openstack(check_stx_openstack):
+@mark.parametrize('controller', [
+    'controller-0',
+    'controller-1'
+])
+def test_reapply_stx_openstack_no_change(check_stx_openstack, controller):
     """
     Args:
         check_stx_openstack:
@@ -57,6 +63,18 @@ def test_reapply_stx_openstack(check_stx_openstack):
         - Check openstack pods healthy
 
     """
+    if system_helper.is_simplex() and controller != 'controller-0':
+        skip('Simplex system only has controller-0')
+
+    active, standby = system_helper.get_active_standby_controllers()
+    if active != controller:
+        if not standby:
+            skip('{} is not ready to take over'.format(controller))
+
+        LOG.tc_step("Swact active controller to test reapply from {}".format(controller))
+        host_helper.swact_host()
+        time.sleep(60)
+
     LOG.tc_step("Re-apply stx-openstack application")
     container_helper.apply_app(app_name='stx-openstack')
 
@@ -131,7 +149,7 @@ def test_stx_openstack_helm_override_update_and_reset(reset_if_modified):
     """
     Test helm override for openstack nova chart and reset
     Args:
-        check_stx_openstack:
+        reset_if_modified:
 
     Pre-requisite:
         - stx-openstack application in applied state
