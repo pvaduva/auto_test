@@ -128,7 +128,7 @@ def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_tim
     return 0, msg
 
 
-def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False,
+def get_apps_values(apps='all', rtn_vals=('status',), con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False,
                     use_telnet=False, con_telnet=None):
     """
     Get applications values for give apps and fields via system application-list
@@ -155,6 +155,9 @@ def get_apps_values(apps, rtn_vals=('status',), con_ssh=None, auth_info=Tenant.g
                                            use_telnet=use_telnet, con_telnet=con_telnet))
     if not table_['values']:
         return {app: None for app in apps} if rtn_dict else [None]*len(apps)
+
+    if apps == ['all']:
+        apps = table_parser.get_column(table_, 'application')
 
     table_ = table_parser.row_dict_table(table_, key_header='application', lower_case=True)
     apps_vals = []

@@ -15,7 +15,7 @@ from consts.auth import Tenant
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper, storage_helper
+    glance_helper, storage_helper, kube_helper, container_helper
 
 SEP = '\n------------------------------------ '
 
@@ -814,13 +814,21 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_
         LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
         network_helper.schedule_providernet_connectivity_test(auth_info=auth_info, con_ssh=con_ssh)
 
+    res = True
+    remaining_alarms = None
     if new_alarms:
         LOG.info("New alarms detected. Waiting for new alarms to clear.")
         res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=timeout,
                                                                    check_interval=check_interval,
                                                                    auth_info=auth_info, con_ssh=con_ssh)
-        assert res, "New alarm(s) found and did not clear within {} seconds. " \
-                    "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
+
+    LOG.info("----- Dump application and pods info")
+    container_helper.get_apps_values()
+    kube_helper.dump_pods_info()
+    LOG.info("----- Pods info collected. Continue to check alarms.")
+
+    assert res, "New alarm(s) found and did not clear within {} seconds. " \
+                "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
 
 
 def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
