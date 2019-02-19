@@ -1262,7 +1262,8 @@ def wait_for_host_values(host, timeout=HostTimeout.REBOOT, check_interval=3, str
 
 
 def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_complete_timeout=HostTimeout.SWACT,
-               fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None):
+               fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None,
+               wait_for_alarm=False):
     """
     Swact active controller from given hostname.
 
@@ -1275,6 +1276,7 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         auth_info
         use_telnet
         con_telnet
+        wait_for_alarm (bool),: whether to wait for pre-swact alarms after swact
 
     Returns (tuple): (rtn_code(int), msg(str))      # 1, 3, 4 only returns when fail_ok=True
         (0, "Active controller is successfully swacted.")
@@ -1288,6 +1290,10 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
                                                            con_telnet=con_telnet, auth_info=auth_info)
     if hostname is None:
         hostname = active_host
+
+    pre_alarms = None
+    if wait_for_alarm:
+        pre_alarms = system_helper.get_alarms(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
 
     exitcode, msg = cli.system('host-swact', hostname, ssh_client=con_ssh, auth_info=auth_info,
                                fail_ok=fail_ok, rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
@@ -1307,35 +1313,45 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT, swact_compl
         rtn = wait_for_swact_complete(hostname, con_ssh, swact_start_timeout=swact_start_timeout, auth_info=auth_info,
                                       swact_complete_timeout=swact_complete_timeout, fail_ok=fail_ok)
     if rtn[0] == 0:
-        if use_telnet:
-            new_active_host = 'controller-1' if hostname == 'controller-0' else 'controller-0'
-            telnet_session = get_host_telnet_session(new_active_host)
-            res = wait_for_webservice_up(new_active_host, use_telnet=True, con_telnet=telnet_session,
-                                         fail_ok=fail_ok)[0]
-            if not res:
-                return 5, "Web-services for new controller is not active"
+        try:
+            if use_telnet:
+                new_active_host = 'controller-1' if hostname == 'controller-0' else 'controller-0'
+                telnet_session = get_host_telnet_session(new_active_host)
+                res = wait_for_webservice_up(new_active_host, use_telnet=True, con_telnet=telnet_session,
+                                             fail_ok=fail_ok)[0]
+                if not res:
+                    return 5, "Web-services for new controller is not active"
 
-            hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, use_telnet=True,
-                                                        con_telnet=telnet_session)
-            if not hypervisor_up_res:
-                return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
-        else:
-            res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok,
-                                         auth_info=auth_info, con_ssh=con_ssh)[0]
-            if not res:
-                return 5, "Web-services for new controller is not active"
-
-            if system_helper.is_two_node_cpe(con_ssh=con_ssh, auth_info=auth_info):
-                hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh,
-                                                            auth_info=auth_info)
+                hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, use_telnet=True,
+                                                            con_telnet=telnet_session)
                 if not hypervisor_up_res:
                     return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
+            else:
+                res = wait_for_webservice_up(system_helper.get_active_controller_name(), fail_ok=fail_ok,
+                                             auth_info=auth_info, con_ssh=con_ssh)[0]
+                if not res:
+                    return 5, "Web-services for new controller is not active"
 
-                for host in ('controller-0', 'controller-1'):
-                    task_aff_res = wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                                                          timeout=300)
-                    if not task_aff_res:
-                        return 7, "tasks affining incomplete on {} after swact from {}".format(host, hostname)
+                if system_helper.is_two_node_cpe(con_ssh=con_ssh, auth_info=auth_info):
+                    hypervisor_up_res = wait_for_hypervisors_up(hostname, fail_ok=fail_ok, con_ssh=con_ssh,
+                                                                auth_info=auth_info)
+                    if not hypervisor_up_res:
+                        return 6, "Hypervisor state is not up for {} after swacted".format(hostname)
+
+                    for host in ('controller-0', 'controller-1'):
+                        task_aff_res = wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                                                              timeout=300)
+                        if not task_aff_res:
+                            return 7, "tasks affining incomplete on {} after swact from {}".format(host, hostname)
+        finally:
+            # After swact, there is a delay for alarms to re-appear on new active controller, thus the wait.
+            if pre_alarms:
+                post_alarms = system_helper.get_alarms(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
+                for alarm in pre_alarms:
+                    if alarm not in post_alarms:
+                        alarm_id, entity_id = alarm.split('::::')
+                        system_helper.wait_for_alarm(alarm_id=alarm_id, entity_id=entity_id, fail_ok=True, timeout=300,
+                                                     check_interval=15)
 
     return rtn
 

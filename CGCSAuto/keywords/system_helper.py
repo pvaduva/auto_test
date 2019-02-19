@@ -444,7 +444,7 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
         con_ssh (SSHClient):
         auth_info (dict):
         combine_entries (bool): return list of strings when set to True, else return a list of tuples.
-            e.g., when True, returns ["800.003 cluster=829851fa", "250.001 host=controller-0"]
+            e.g., when True, returns ["800.003::::cluster=829851fa", "250.001::::host=controller-0"]
                   when False, returns [("800.003", "cluster=829851fa"), ("250.001", "host=controller-0")]
         use_telnet
         con_telnet

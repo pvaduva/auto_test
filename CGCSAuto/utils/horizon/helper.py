@@ -4,7 +4,18 @@ import os
 import time
 
 from selenium import webdriver
-from pyvirtualdisplay import Display
+try:
+    from pyvirtualdisplay import Display
+except ImportError as err:
+
+    class ImportFailedModule(object):
+        def __init__(self, imp_err):
+            self._exception = imp_err
+
+        def __getattr__(self, name):
+            raise self._exception
+
+    Display = ImportFailedModule(err)
 
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
