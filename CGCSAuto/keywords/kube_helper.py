@@ -654,9 +654,9 @@ def dump_pods_info(con_ssh=None):
 
     """
     exec_kube_cmd('get pods', '--all-namespaces -o wide', con_ssh=con_ssh, fail_ok=True)
-    exec_kube_cmd('get pods' '--all-namespaces -o wide | grep -v -e Running -e Completed', con_ssh=con_ssh,
+    exec_kube_cmd('get pods', '--all-namespaces -o wide | grep -v -e Running -e Completed', con_ssh=con_ssh,
                   fail_ok=True)
-    exec_kube_cmd('get pods', """"--all-namespaces -o wide | grep -v -e Running -e Completed -e NAMESPACE | 
+    exec_kube_cmd('get pods', """--all-namespaces -o wide | grep -v -e Running -e Completed -e NAMESPACE | 
     awk '{system("kubectl describe pods -n "$1" "$2)}'""", con_ssh=con_ssh, fail_ok=True)
 
     # exec_kube_cmd('get pods', """--all-namespaces -o wide |
