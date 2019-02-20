@@ -90,7 +90,7 @@ NEW_NOVA_COMPUTE_PODS = None
 
 
 @fixture()
-def reset_if_modified(request, check_openstack_pods):
+def reset_if_modified(request):
     if not container_helper.is_stx_openstack_deployed(applied_only=True):
         skip('stx-openstack application is not in Applied status. Skip test.')
 

@@ -2690,7 +2690,7 @@ def get_total_allocated_vcpus_in_log(host=None, pod_name=None, con_ssh=None):
         pod_name = 'nova-compute-{}'.format(host)
 
     output = kube_helper.get_pod_logs(pod_name=pod_name, namespace='openstack', strict=strict,
-                                      grep_pattern='Final resource view', tail_count=3, con_ssh=con_ssh)
+                                      grep_pattern='-i "Final resource view"', tail_count=3, con_ssh=con_ssh)
 
     total_allocated_vcpus = __parse_total_cpus(output)
     return total_allocated_vcpus

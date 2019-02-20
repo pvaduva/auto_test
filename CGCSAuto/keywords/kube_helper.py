@@ -32,9 +32,10 @@ def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False, grep=None):
     if cmd.endswith(';echo'):
         get_exit_code = False
     if grep:
-        if not isinstance(grep, str):
-            grep = '|'.join(grep)
-        cmd += '| grep -E -i --color=never "{}"'.format(grep)
+        if isinstance(grep, str):
+            grep = (grep, )
+        for grep_str in grep:
+            cmd += ' | grep --color=never {}'.format(grep_str)
 
     code, out = con_ssh.exec_cmd(cmd, fail_ok=True, get_exit_code=get_exit_code)
     if code <= 0:
@@ -63,6 +64,33 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False, g
 
     tables = table_parser.tables_kube(out)
     return code, tables
+
+
+def get_pods(namespace=None, rtn_val='NAME', name=None, status=None, restarts=None, exclude=False, strict=True,
+             con_ssh=None):
+    """
+    Get pods
+    Args:
+        namespace (str|None): when None, --all-namespaces will be used.
+        rtn_val (str): table header
+        name (str|None|tuple|list): OR relation for items in tuple/list
+        status (str|None|tuple|list):
+        restarts (str|None|tuple|list):
+        exclude (bool):
+        strict (bool):
+        con_ssh:
+
+    Returns (list):
+
+    """
+    code, out = __get_kube_tables(namespace=namespace, types='pod', con_ssh=con_ssh, fail_ok=True)
+    if code > 0:
+        return []
+
+    table_ = out[0]
+    values = table_parser.get_values(table_, rtn_val, exclude=exclude, strict=strict, name=name,
+                                     status=status, restarts=restarts)
+    return values
 
 
 def get_pods_info(namespace=None, type_names='pod', keep_type_prefix=False, con_ssh=None, fail_ok=False,
@@ -319,7 +347,7 @@ def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=Non
     if code > 0:
         return 1, output
 
-    LOG.info("Check pod is running on current host")
+    LOG.info("Check pod is not running on current host")
     res, remaining = wait_for_pods_gone(pod_names=pod_names, types=pods_types, namespace=namespace, con_ssh=con_ssh,
                                         fail_ok=fail_ok)
     if not res:
@@ -527,9 +555,9 @@ def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=
     if pod_names:
         if isinstance(pod_names, str):
             pod_names = (pod_names,)
-
-        grep = '|'.join(pod_names)
+        grep += '|'.join(pod_names)
         grep += '|NAME'
+        grep = '-E -i "{}"'.format(grep)
 
     openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep,
                                    fail_ok=fail_ok)
@@ -631,11 +659,16 @@ def get_pod_logs(pod_name, namespace='openstack', grep_pattern=None, tail_count=
 
     """
     if pod_name and not strict:
-        grep = '{}|NAME'.format(pod_name)
+        grep = '-E -i "{}|NAME"'.format(pod_name)
         pod_name = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True,
                                   grep=grep, fail_ok=fail_ok)[0].get('name')
     namespace = '-n {} '.format(namespace) if namespace else ''
-    grep = ' | grep --color=never -i -E "{}"'.format(grep_pattern) if grep_pattern else ''
+
+    grep = ''
+    if grep_pattern:
+        if isinstance(grep_pattern, str):
+            grep_pattern = (grep_pattern, )
+        grep = ''.join([' | grep --color=never {}'.format(grep_str) for grep_str in grep_pattern])
     tail = ' | tail -n {}'.format(tail_count) if tail_count else ''
     args = '{}{}{}{}'.format(namespace, pod_name, grep, tail)
     code, output = exec_kube_cmd(sub_cmd='logs', args=args, con_ssh=con_ssh)
@@ -653,11 +686,12 @@ def dump_pods_info(con_ssh=None):
     Returns:
 
     """
-    exec_kube_cmd('get pods', '--all-namespaces -o wide', con_ssh=con_ssh, fail_ok=True)
+    # exec_kube_cmd('get pods', '--all-namespaces -o wide', con_ssh=con_ssh, fail_ok=True)
     exec_kube_cmd('get pods', '--all-namespaces -o wide | grep -v -e Running -e Completed', con_ssh=con_ssh,
                   fail_ok=True)
-    exec_kube_cmd('get pods', """--all-namespaces -o wide | grep -v -e Running -e Completed -e NAMESPACE | 
-    awk '{system("kubectl describe pods -n "$1" "$2)}'""", con_ssh=con_ssh, fail_ok=True)
+    exec_kube_cmd('get pods',
+                  """--all-namespaces -o wide | grep -v -e Running -e Completed -e NAMESPACE | awk '{system("kubectl describe pods -n "$1" "$2)}'""",
+                  con_ssh=con_ssh, fail_ok=True)
 
     # exec_kube_cmd('get pods', """--all-namespaces -o wide |
     # grep -v -e Running -e Completed -e NAMESPACE | awk '{system("kubectl logs -n "$1" "$2)}'""")

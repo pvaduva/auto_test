@@ -141,6 +141,9 @@ def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
     LOG.tc_step("Delete uninstalled app")
     container_helper.delete_app(app_name=app_name)
 
+    LOG.tc_step("Wait for pod terminate")
+    kube_helper.wait_for_pods_gone(pod_names=HELM_POD_FULL_NAME, strict=False, check_interval=10, namespace='default')
+
 
 def remove_cache_and_pull(con_ssh, name, fail_ok=False):
     container_helper.remove_docker_images(images=(TEST_IMAGE, name), con_ssh=con_ssh, fail_ok=fail_ok)

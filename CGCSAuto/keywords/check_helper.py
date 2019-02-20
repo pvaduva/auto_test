@@ -788,7 +788,7 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
 
 
-def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_ssh=None):
+def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
@@ -822,13 +822,14 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_
                                                                    check_interval=check_interval,
                                                                    auth_info=auth_info, con_ssh=con_ssh)
 
-    LOG.info("----- Dump application and pods info")
-    container_helper.get_apps_values()
-    kube_helper.dump_pods_info()
-    LOG.info("----- Pods info collected. Continue to check alarms.")
+    if not res:
+        msg = "New alarm(s) found and did not clear within {} seconds. Alarm IDs and Entity IDs: {}".\
+            format(timeout, remaining_alarms)
+        LOG.warning(msg)
+        if not fail_ok:
+            assert res, msg
 
-    assert res, "New alarm(s) found and did not clear within {} seconds. " \
-                "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
+    return res, remaining_alarms
 
 
 def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
