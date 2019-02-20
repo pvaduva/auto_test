@@ -73,7 +73,7 @@ def test_reapply_stx_openstack_no_change(check_stx_openstack, controller):
 
         if controller == 'controller-1':
             assert 0, "Fail without running. CGTS-10708."
-        
+
         LOG.tc_step("Swact active controller to test reapply from {}".format(controller))
         host_helper.swact_host()
         time.sleep(60)

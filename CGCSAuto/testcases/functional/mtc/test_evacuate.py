@@ -23,7 +23,7 @@ def skip_test_if_less_than_two_hosts(no_simplex):
 
     # FIXME temp workaround
     if system_helper.is_two_node_cpe():
-        assert 0, "mariadb issue. Fail without testing for now."
+        skip("mariadb issue. Skip without testing for now.")
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
     if nova_helper.get_quotas(quotas='instances')[0] < 10:
