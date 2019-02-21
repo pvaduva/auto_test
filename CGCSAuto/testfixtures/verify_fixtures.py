@@ -1,3 +1,5 @@
+import re
+
 from pytest import fixture, skip
 
 from consts.auth import Tenant
@@ -42,7 +44,10 @@ def __verify_alarms(request, scope):
         res, new_alarms = check_helper.check_alarms(before_alarms=before_alarms, fail_ok=True)
 
         container_helper.get_apps_values()
-        post_bad_pods = kube_helper.get_pods(status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
+        post_bad_pods = kube_helper.get_pods(rtn_val=('NAME', 'STATUS'),
+                                             status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
+        post_bad_pods = [pod[0] for pod in post_bad_pods if
+                         not (pod[0] == PodStatus.POD_INIT and re.search('-audit-|-cleaner-', pod[0]))]
         new_bad_pods = [k for k in post_bad_pods if k not in prev_bad_pods]
 
         assert res, "New alarm(s) appeared within test {}: {}".format(scope, new_alarms)

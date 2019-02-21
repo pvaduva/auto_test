@@ -72,7 +72,7 @@ def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=N
     Get pods
     Args:
         namespace (str|None): when None, --all-namespaces will be used.
-        rtn_val (str): table header
+        rtn_val (str|tuple|list): table header
         name (str|None|tuple|list): OR relation for items in tuple/list
         status (str|None|tuple|list):
         restarts (str|None|tuple|list):
@@ -88,8 +88,20 @@ def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=N
         return []
 
     table_ = out[0]
-    values = table_parser.get_values(table_, rtn_val, exclude=exclude, strict=strict, name=name,
-                                     status=status, restarts=restarts)
+    multi_header = True
+    if isinstance(rtn_val, str):
+        rtn_val = (rtn_val, )
+        multi_header = False
+
+    values = []
+    for header in rtn_val:
+        values.append(table_parser.get_values(table_, header, exclude=exclude, strict=strict, name=name,
+                                              status=status, restarts=restarts))
+    if not multi_header:
+        values = values[0]
+    else:
+        values = list(zip(*values))
+
     return values
 
 

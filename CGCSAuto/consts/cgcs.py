@@ -754,6 +754,7 @@ class PodStatus:
     RUNNING = 'Running'
     COMPLETED = 'Completed'
     CRASH = 'CrashLoopBackOff'
+    POD_INIT = 'PodInitializing'
 
 
 class AppStatus:
