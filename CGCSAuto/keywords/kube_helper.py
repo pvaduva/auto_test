@@ -66,7 +66,7 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False, g
     return code, tables
 
 
-def get_pods(namespace=None, rtn_val='NAME', name=None, status=None, restarts=None, exclude=False, strict=True,
+def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=None, exclude=False, strict=True,
              con_ssh=None):
     """
     Get pods
