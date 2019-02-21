@@ -555,9 +555,8 @@ def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=
     if pod_names:
         if isinstance(pod_names, str):
             pod_names = (pod_names,)
-        grep += '|'.join(pod_names)
-        grep += '|NAME'
-        grep = '-E -i "{}"'.format(grep)
+        grep_str = '|'.join(pod_names) + '|NAME'
+        grep = '-E -i "{}"'.format(grep_str)
 
     openstack_pods = get_pods_info(namespace='openstack', type_names='pod', con_ssh=con_ssh, rtn_list=True, grep=grep,
                                    fail_ok=fail_ok)
