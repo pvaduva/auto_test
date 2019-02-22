@@ -623,7 +623,8 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK, timeout=HostTime
                                     use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info):
 
             #  vim_progress_status | Lock of host compute-0 rejected because there are no other hypervisors available.
-            vim_status = get_hostshow_value(host, field='vim_progress_status', auth_info=auth_info, con_ssh=con_ssh)
+            vim_status = get_hostshow_value(host, field='vim_progress_status', auth_info=auth_info, con_ssh=con_ssh,
+                                            merge_lines=True)
             if re.search('ock .* host .* rejected.*', vim_status):
                 msg = "Lock host {} is rejected. Details in host-show vim_process_status.".format(host)
                 code = 4

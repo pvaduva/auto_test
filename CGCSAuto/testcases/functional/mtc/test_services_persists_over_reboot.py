@@ -26,6 +26,7 @@ def test_system_persist_over_host_reboot(host_type):
         - Validate key items from inventory persist over reboot
 
     """
+    skip('Skip force reboot sanity test as requested until lock/unlock stabilize')
     if host_type == 'controller':
         # FIXME temp workaround
         if system_helper.is_two_node_cpe():
