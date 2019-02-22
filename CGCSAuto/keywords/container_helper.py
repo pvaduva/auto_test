@@ -215,6 +215,7 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
     check_failed = []
     end_time = time.time() + timeout
 
+    LOG.info("Wait for {} application(s) to reach status: {}".format(apps, status))
     while time.time() < end_time:
         apps_status = get_apps_values(apps=apps_to_check, rtn_vals='status', con_ssh=con_ssh, auth_info=auth_info)
         checked = []
@@ -240,6 +241,7 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
                 else:
                     raise exceptions.ContainerError(msg)
 
+            LOG.info("{} reached expected status {}".format(apps, status))
             return True, None
 
         time.sleep(check_interval)
@@ -280,6 +282,7 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
             LOG.info(msg)
             return -1, msg
 
+    LOG.info("Apply application: {}".format(app_name))
     code, output = cli.system('application-apply', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                               rtn_list=True)
     if code > 0:
