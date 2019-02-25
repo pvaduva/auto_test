@@ -47,7 +47,7 @@ def __verify_alarms(request, scope):
         post_bad_pods = kube_helper.get_pods(rtn_val=('NAME', 'STATUS'),
                                              status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
         post_bad_pods = [pod[0] for pod in post_bad_pods if
-                         not (pod[0] in (PodStatus.POD_INIT, PodStatus.INIT) and
+                         not (pod[1] in (PodStatus.POD_INIT, PodStatus.INIT) and
                               re.search('-audit-|-cleaner-', pod[0]))]
         new_bad_pods = [k for k in post_bad_pods if k not in prev_bad_pods]
 
