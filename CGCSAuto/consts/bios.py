@@ -1,6 +1,8 @@
+
 class TerminalKeys:
     Keys = {
-        "Enter": '\r\r',
+        "Enter_": '\r\r',
+        "Enter": '\r',
         "Return": '\r\r',
         "Esc": '\x1b',
         "Escape": '\x1b',
@@ -167,7 +169,6 @@ class BootMenus:
         }
 
 
-
     class USB:
 
         Kernel = {
@@ -179,12 +180,31 @@ class BootMenus:
         Controller_Configuration = {
             "name": "Controller Configuration",
             #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
-            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the \^ and v keys to change the selection',
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to'
+                      r' change the selection',
             "wrap_around": True
         }
 
         Serial_Console = {
             "name": "Console",
-            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to change the selection',
+            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
+                      r'change the selection',
             "wrap_around": True
         }
+
+    class Sub_Menu_Prompts:
+
+        Controller_Configuration = {
+            "wolfpass": r'Use the . and . keys to change the selection',
+            "wildcat": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to change the selection',
+        }
+
+        Console = {
+            "wolfpass": r'Use the . and . keys to change the selection',
+            "wildcat": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|'
+                       r'Use the \^ and v keys to change the selection',
+        }
+
+
+
+

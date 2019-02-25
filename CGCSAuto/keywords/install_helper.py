@@ -3617,10 +3617,10 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
-
-    boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None, tag=tag if not index else None)
+    curser_move = 2 if "wolfpass" in node_obj.host_name else 1
+    boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None,
+                     tag=tag if not index else None, curser_move=curser_move)
     time.sleep(2)
-
 
     if boot_menu.sub_menus:
         sub_menu_prompts = list([sub_menu.prompt for sub_menu in boot_menu.sub_menus])
@@ -3637,13 +3637,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 LOG.info("submenu  {}".format(sub_menu.name))
                 if sub_menu.name == "Controller Configuration":
-
-                    # sub_options = sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+> ',
-                    #                                     end_of_menu=b'(\x1b\[01;00H){2,}|\x1b.*\sGraphical Console\s+>(\x1b\[\d+;\d+H)+',
-                    #                                     newline=b'(\x1b\[\d+;\d+H)+')
-                    # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'Console',
-                    #                       end_of_menu=b'.*(\x1b\[\d+;\d+H)+',
-                    #                       newline=b'(\x1b\[\d+;\d+H)')
+                    sub_menu.find_options(node_obj.telnet_conn)
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
@@ -3732,7 +3726,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
     if usb:
         LOG.debug("creating USB boot menu")
-        kickstart_menu = menu.USBBootMenu()
+        kickstart_menu = menu.USBBootMenu(host_name=node_obj.host_name)
     else:
         LOG.debug("creating {} boot menu".format("UEFI" if uefi else "PXE"))
         kickstart_menu = menu.KickstartMenu(uefi=uefi)
@@ -3761,8 +3755,9 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
             expt_prompts.append("(\x1b\[0;1;36;44m\s{45,60})")
             expt_prompts.append("\x1b.*\*{56,60}")
         if len(expt_prompts) > 0:
-            telnet_conn.expect(expt_prompts, 360)
-            LOG.info('In Kickstart menu index = {}'.format(index))
+            ind = telnet_conn.expect(expt_prompts, 360)
+            LOG.info('In Kickstart menu index = {}'.format(ind))
+            time.sleep(2)
             select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                                   security=security, usb=usb, expect_prompt=False)
     LOG.info('Kick start option selected')
