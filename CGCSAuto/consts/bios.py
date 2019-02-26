@@ -174,6 +174,7 @@ class BootMenus:
         Kernel = {
             "name": "kernel options",
             "prompt": b"Select kernel options and boot kernel",
+            "option_identifiers": "Controller Configuration",
             "wrap_around": True
         }
 
@@ -182,6 +183,7 @@ class BootMenus:
             #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
             "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to'
                       r' change the selection',
+            "option_identifiers": "Serial|Graphical",
             "wrap_around": True
         }
 
@@ -189,6 +191,7 @@ class BootMenus:
             "name": "Console",
             "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
                       r'change the selection',
+            "option_identifiers": "STANDARD|EXTENDED",
             "wrap_around": True
         }
 

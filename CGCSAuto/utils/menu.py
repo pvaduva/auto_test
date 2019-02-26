@@ -17,6 +17,7 @@ class Menu(object):
             self.index = kwargs.get("index", index)
             self.prompt = kwargs.get("prompt", kwargs["name"])
             self.wrap_around = kwargs.get("wrap_around", True)
+            self.option_identifier = kwargs.get("option_identifiers", None)
             if kwargs.get("options"):
                 option_count = 0
                 for option in kwargs["options"]:
@@ -343,8 +344,10 @@ class USBBootMenu(KickstartMenu):
         output = str.encode(telnet_conn.cmd_output)
         options = re.split(newline, output)
         options = [option for option in options if re.search(option_identifier, option)]
+
         for i in range(0, len(options)):
             self.options.append(KickstartOption(name=options[i].decode(), index=i))
+
         current_option = self.get_current_option(telnet_conn)
         LOG.info("USB current option: {}; index {}".format(current_option.name, current_option.index))
         self.index = current_option.index

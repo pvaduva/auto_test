@@ -3631,23 +3631,22 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
             while len(sub_menu_prompts) > 0:
                 LOG.info("submenu prompt = {}".format(sub_menu_prompts))
                 prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
-
                 LOG.info("submenu index = {}".format(prompt_index))
-
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 LOG.info("submenu  {}".format(sub_menu.name))
                 if sub_menu.name == "Controller Configuration":
-                    sub_menu.find_options(node_obj.telnet_conn)
+                    sub_menu.find_options(node_obj.telnet_conn, option_identifier=sub_menu.option_identifier.encode())
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern="erial" if not index else None)
                     time.sleep(5)
+
                 elif sub_menu.name == "Console":
 
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
                     #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
                     #                       newline=b'(\x1b\[\d+;\d+H)+')
-                    sub_menu.find_options(node_obj.telnet_conn)
+                    sub_menu.find_options(node_obj.telnet_conn, option_identifier=sub_menu.option_identifier.encode())
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)

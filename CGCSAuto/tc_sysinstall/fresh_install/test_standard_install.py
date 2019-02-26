@@ -113,14 +113,7 @@ def test_standard_install(install_setup):
     fresh_install_helper.wait_for_hosts_to_be_online([host for host in hosts if controller0_node.name not in host],
                                                      lab=lab)
 
-    # fresh_install_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
-    #                                           lab=lab)
-
-    fresh_install_helper.apply_node_labels([host for host in hosts if controller0_node.name not in host],
-                                           controller0_node)
-
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-
 
     # Unlock controller-1
     fresh_install_helper.unlock_hosts(['controller-1'], con_ssh=controller0_node.ssh_conn)
