@@ -15,7 +15,7 @@ from utils.clients.ssh import ControllerClient
 from setups import initialize_server
 from consts.auth import Tenant
 from consts.timeout import InstallTimeout
-from consts.cgcs import SysType, SubcloudStatus
+from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 
@@ -1232,6 +1232,31 @@ def wait_for_hosts_ready(hosts,  lab=None):
         kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
     else:
         host_helper.wait_for_hosts_ready(hosts, con_ssh=controller0_node.ssh_conn)
+
+
+def wait_for_hosts_to_be_online(hosts,  lab=None):
+    """
+
+    Args:
+        hosts:
+        lab:
+        con_ssh:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
+    host_helper.wait_for_hosts_states(hosts, check_interval=20, con_ssh=controller0_node.ssh_conn,
+                                      administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
+                                      availability=HostAvailState.ONLINE)
 
 
 def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):

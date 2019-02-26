@@ -334,7 +334,6 @@ class USBBootMenu(KickstartMenu):
                     self.sub_menus.append(sub)
         LOG.info("USB sub menu added: {}".format( [sub_.name for sub_ in self.sub_menus] ))
 
-
     def find_options(self, telnet_conn,
                      end_of_menu=r"(utomatic(ally)?( boot)? in)|(Press (\[Tab\]|\'e\') to edit\s.*(\.)$)|"
                                  r"keys to change the selection\.".encode(),

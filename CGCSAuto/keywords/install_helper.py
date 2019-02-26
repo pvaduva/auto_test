@@ -3647,6 +3647,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
                     #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
                     #                       newline=b'(\x1b\[\d+;\d+H)+')
+                    sub_menu.find_options(node_obj.telnet_conn)
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)

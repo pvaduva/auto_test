@@ -548,7 +548,7 @@ def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_file
     if compute_nodes:
         lab_info_["compute_nodes"] = compute_nodes
     if storage_nodes:
-        lab_info_["storage_nodes"] = compute_nodes
+        lab_info_["storage_nodes"] = storage_nodes
     lab_dict = update_lab(lab_dict_name=lab_info_["short_name"].upper(), lab_name=lab_info_["short_name"],
                           floating_ip=None, **lab_info_)
     LOG.warning("Discovered the following lab info: {}".format(lab_dict))
