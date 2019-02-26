@@ -64,9 +64,9 @@ def test_reapply_stx_openstack_no_change(check_stx_openstack, controller):
         - Check openstack pods healthy
 
     """
-    if controller == 'controller-1':
-        skip("CGTS-10708")
-        
+    # if controller == 'controller-1':
+    #     skip("CGTS-10708")
+
     if system_helper.is_simplex() and controller != 'controller-0':
         skip('Simplex system only has controller-0')
 
