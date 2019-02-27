@@ -35,6 +35,8 @@ def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False, grep=None):
         if isinstance(grep, str):
             grep = (grep, )
         for grep_str in grep:
+            if '-v ' not in grep_str and '-e ' in grep_str and 'NAMESPACE' not in grep_str:
+                grep_str += ' -e NAMESPACE'
             cmd += ' | grep --color=never {}'.format(grep_str)
 
     code, out = con_ssh.exec_cmd(cmd, fail_ok=True, get_exit_code=get_exit_code)
@@ -57,6 +59,7 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False, g
         args += ' --all-namespaces'
     elif namespace:
         args += ' --namespace {}'.format(namespace)
+    args += ' -o wide'
 
     code, out = exec_kube_cmd(sub_cmd='get', args=args, con_ssh=con_ssh, fail_ok=fail_ok, grep=grep)
     if code > 0:
@@ -66,8 +69,8 @@ def __get_kube_tables(namespace=None, types=None, con_ssh=None, fail_ok=False, g
     return code, tables
 
 
-def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=None, exclude=False, strict=True,
-             con_ssh=None):
+def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=None, node=None,
+             exclude=False, strict=True, con_ssh=None, grep=None):
     """
     Get pods
     Args:
@@ -76,14 +79,16 @@ def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=N
         name (str|None|tuple|list): OR relation for items in tuple/list
         status (str|None|tuple|list):
         restarts (str|None|tuple|list):
+        node (str|None|tuple|list):
         exclude (bool):
         strict (bool):
         con_ssh:
+        grep (str|None)
 
     Returns (list):
 
     """
-    code, out = __get_kube_tables(namespace=namespace, types='pod', con_ssh=con_ssh, fail_ok=True)
+    code, out = __get_kube_tables(namespace=namespace, types='pod', con_ssh=con_ssh, fail_ok=True, grep=grep)
     if code > 0:
         return []
 
@@ -95,7 +100,7 @@ def get_pods(namespace='all', rtn_val='NAME', name=None, status=None, restarts=N
 
     values = []
     for header in rtn_val:
-        values.append(table_parser.get_values(table_, header, exclude=exclude, strict=strict, name=name,
+        values.append(table_parser.get_values(table_, header, exclude=exclude, strict=strict, name=name, node=node,
                                               status=status, restarts=restarts))
     if not multi_header:
         values = values[0]
@@ -585,6 +590,51 @@ def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=
         filtered_pods.append(pods_info_per_name)
 
     return filtered_pods
+
+
+def wait_for_pods_ready(pod_names=None, namespace='all', node=None, timeout=120, check_interval=5, con_ssh=None,
+                        fail_ok=False, strict=False, pods_to_exclude=None):
+    """
+    Wait for pods ready
+    Args:
+        pod_names:
+        namespace:
+        node:
+        timeout:
+        check_interval:
+        con_ssh:
+        fail_ok:
+        strict:
+        pods_to_exclude (None|str|list|tuple)
+
+    Returns:
+
+    """
+    LOG.info("Wait for pods ready..")
+    bad_pods = None
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        bad_pods = {}
+        bad_pods_info = get_pods(rtn_val=('NAME', 'STATUS'), namespace=namespace, name=pod_names, node=node,
+                                 grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING),
+                                 con_ssh=con_ssh, strict=strict)
+
+        for pod_info in bad_pods_info:
+            if pods_to_exclude and pod_info[0] not in pods_to_exclude:
+                bad_pods[pod_info[0]] = pod_info[1]
+
+        if not bad_pods:
+            LOG.info("All pods are healthy.")
+            return True, bad_pods
+
+        time.sleep(check_interval)
+
+    msg = 'Some pods are not healthy: {}'.format(bad_pods)
+    LOG.warning(msg)
+    if fail_ok:
+        return False, bad_pods
+    else:
+        raise exceptions.KubeError(msg)
 
 
 def wait_for_openstack_pods_in_status(pod_names=None, status=None, con_ssh=None, timeout=60, check_interval=5,

@@ -11,7 +11,7 @@ from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout, CMDTimeout, MiscTimeout
 from consts.filepaths import WRSROOT_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
-    Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE, TrafficControl, PLATFORM_NET_TYPES
+    Networks, EventLogID, HostTask, PLATFORM_AFFINE_INCOMPLETE, TrafficControl, PLATFORM_NET_TYPES, PodStatus, AppStatus
 
 from keywords import system_helper, common, kube_helper, security_helper
 from utils import cli, exceptions, table_parser
@@ -713,7 +713,8 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
 
 def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin'), check_hypervisor_up=True,
-                check_webservice_up=True, check_subfunc=True, check_first=True, con0_install=False):
+                check_webservice_up=True, check_subfunc=True, check_first=True, con0_install=False,
+                check_containers=True):
     """
     Unlock given host
     Args:
@@ -731,6 +732,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         check_subfunc (bool): whether to check subfunction_oper and subfunction_avail for CPE system
         check_first (bool): whether to check host state before unlock.
         con0_install (bool)
+        check_containers (bool)
 
     Returns (tuple):  Only -1, 0, 4 senarios will be returned if fail_ok=False
         (-1, "Host already unlocked. Do nothing")
@@ -770,6 +772,13 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                           auth_info=auth_info)
 
+    check_stx = prev_bad_pods = None
+    if check_containers and not use_telnet:
+        from keywords import kube_helper, container_helper
+        check_stx = container_helper.is_stx_openstack_deployed(applied_only=True, con_ssh=con_ssh, auth_info=auth_info,
+                                                               use_telnet=use_telnet, con_telnet=con_telnet)
+        prev_bad_pods = kube_helper.get_pods(node=host, con_ssh=con_ssh,
+                                             grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING))
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
                                   con_telnet=con_telnet, rtn_list=True, fail_ok=fail_ok, timeout=60)
     if exitcode == 1:
@@ -859,10 +868,21 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 LOG.warning(err_msg)
                 return 8, err_msg
 
-    from keywords.kube_helper import wait_for_nodes_ready
-    if not use_telnet and not wait_for_nodes_ready(hosts=host, timeout=40, con_ssh=con_ssh, fail_ok=fail_ok)[0]:
-        err_msg = "{} is not ready in kubectl get nodes after unlock".format(host)
-        return 10, err_msg
+    if check_containers and not use_telnet:
+        from keywords import kube_helper, container_helper
+
+        res_nodes = kube_helper.wait_for_nodes_ready(hosts=host, timeout=40, con_ssh=con_ssh, fail_ok=fail_ok)[0]
+        res_app = True
+        if check_stx:
+            res_app = container_helper.wait_for_apps_status(apps='stx-openstack', status=AppStatus.APPLIED,
+                                                            con_ssh=con_ssh, check_interval=10, fail_ok=fail_ok)[0]
+
+        res_pods = kube_helper.wait_for_pods_ready(check_interval=10, con_ssh=con_ssh, fail_ok=fail_ok, node=host,
+                                                   pods_to_exclude=prev_bad_pods)[0]
+
+        if not (res_nodes and res_app and res_pods):
+            err_msg = "Container check failed after unlock {}".format(host)
+            return 10, err_msg
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."

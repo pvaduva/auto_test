@@ -235,8 +235,8 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
         if not apps_to_check:
             if check_failed:
                 msg = '{} failed to reach status - {}'.format(check_failed, status)
+                LOG.warning(msg)
                 if fail_ok:
-                    LOG.info(msg)
                     return False, check_failed
                 else:
                     raise exceptions.ContainerError(msg)
@@ -248,8 +248,8 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
 
     check_failed += apps_to_check
     msg = '{} did not reach status {} within {}s'.format(check_failed, status, timeout)
+    LOG.warning(msg)
     if fail_ok:
-        LOG.info(msg)
         return False, check_failed
     raise exceptions.ContainerError(msg)
 
