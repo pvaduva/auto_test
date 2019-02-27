@@ -325,7 +325,7 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         LOG.info("Managing subcloud {} ... ".format(subcloud))
         LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
         install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
-        dc_helper.manage_subcloud(subcloud=subcloud, conn_ssh=main_cloud_node.ssh_conn, fail_ok=True)
+        dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=main_cloud_node.ssh_conn, fail_ok=True)
 
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
@@ -696,20 +696,19 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     if name is None:
         name = 'subcloud'
 
+    ProjVar.set_var(source_credential=True)
     if not controller0_node.ssh_conn._is_connected():
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
+    existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
     if name and 'subcloud' in name and name in existing_subclouds:
         LOG.info("Subcloud {} already exits; do nothing".format(name))
-        managed = dc_helper.get_subclouds(name=name, avail="managed", con_ssh=controller0_node.ssh_conn,
-                                          source_openrc=True)
+        managed = dc_helper.get_subclouds(name=name, avail="managed", con_ssh=controller0_node.ssh_conn)
         if name in managed:
             LOG.info("Subcloud {} is in managed status; unamanage subcloud before install".format(name))
             dc_helper._manage_unmanage_subcloud(subcloud=name, con_ssh=controller0_node.ssh_conn)
 
         return 0, [name]
-
 
     if name is not None and name is not '':
         subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
@@ -730,7 +729,7 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     LOG.info("Generating subclouds config info from {}".format(subclouds_file))
     controller0_node.ssh_conn.exec_cmd("{}".format(subclouds_file_path))
     LOG.info("Checking if subclouds are added and config files are generated.....")
-    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn, source_openrc=True)
+    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
     added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
     if name not in added_subclouds:
         msg = "Fail to add subcloud {}. Existing subclouds= {}; Added subclouds = {}".format(name, existing_subclouds,
@@ -900,7 +899,7 @@ def is_dcloud_system_controller_ipv6(controller0_node):
                                       interface='admin', region='SystemController', con_ssh=controller0_node.ssh_conn)
 
         if len(urls) > 0:
-            ip_addr = urls[0].strip().split('//')[1].split('/')[0].rsplit(':',1)[0]
+            ip_addr = urls[0].strip().split('//')[1].split('/')[0].rsplit(':', 1)[0]
             if len(ip_addr.split(':')) > 1:
                 LOG.info("System controller {} is ipv6".format(controller0_node.host_name))
                 return True
@@ -1196,7 +1195,6 @@ def wait_for_hosts_ready(hosts,  lab=None):
     Args:
         hosts:
         lab:
-        con_ssh:
 
     Returns:
 

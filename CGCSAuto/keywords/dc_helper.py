@@ -91,7 +91,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     return 0, subclouds_to_update
 
 
-def manage_subcloud(subcloud=None, check_first=True, fail_ok=False):
+def manage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False):
     """
     Manage subcloud(s)
     Args:
@@ -106,7 +106,8 @@ def manage_subcloud(subcloud=None, check_first=True, fail_ok=False):
         (1, [<cli_rejected_subclouds>])     dcmanager manage cli failed on these subcloud(s)
 
     """
-    return _manage_unmanage_subcloud(subcloud=subcloud, manage=True, check_first=check_first, fail_ok=fail_ok)
+    return _manage_unmanage_subcloud(subcloud=subcloud, manage=True, check_first=check_first, con_ssh=con_ssh,
+                                     fail_ok=fail_ok)
 
 
 def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False):
