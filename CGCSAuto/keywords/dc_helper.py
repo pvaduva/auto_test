@@ -61,7 +61,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
 
     subclouds_to_update = list(subcloud)
     if check_first:
-        subclouds_in_state = get_subclouds(mgmt=expt_state)
+        subclouds_in_state = get_subclouds(mgmt=expt_state, con_ssh=con_ssh)
         subclouds_to_update = list(set(subclouds_to_update) - set(subclouds_in_state))
         if not subclouds_to_update:
             LOG.info("{} already {}. Do nothing.".format(subcloud, expt_state))
@@ -83,7 +83,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
         raise exceptions.DCError(err)
 
     LOG.info("Check management status for {} after dcmanager subcloud {}".format(subclouds_to_update, operation))
-    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update)
+    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update, con_ssh=con_ssh)
     failed_subclouds = [subclouds_to_update[i] for i in range(len(mgmt_states)) if mgmt_states[i] != expt_state]
     if failed_subclouds:
         raise exceptions.DCError("{} not {} after dcmanger subcloud {}".format(failed_subclouds, expt_state, operation))
@@ -98,7 +98,7 @@ def manage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
-        conn_ssh (SSHClient):
+        con_ssh (SSHClient):
 
     Returns (tuple):
         (-1, [])                            All give subcloud(s) already managed. Do nothing.
@@ -110,14 +110,14 @@ def manage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False
                                      fail_ok=fail_ok)
 
 
-def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False):
+def unmanage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False):
     """
     Unmanage subcloud(s)
     Args:
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
-        conn_ssh (SSHClient):
+        con_ssh (SSHClient):
 
     Returns (tuple):
         (-1, [])                        All give subcloud(s) already unmanaged. Do nothing.
@@ -125,7 +125,8 @@ def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False):
         (1, [<cli_rejected_subclouds>])     dcmanager unmanage cli failed on these subcloud(s)
 
     """
-    return _manage_unmanage_subcloud(subcloud=subcloud, manage=False, check_first=check_first, fail_ok=fail_ok)
+    return _manage_unmanage_subcloud(subcloud=subcloud, manage=False, check_first=check_first, con_ssh=con_ssh,
+                                     fail_ok=fail_ok)
 
 
 def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, expected_value=None, auth_name='admin',
