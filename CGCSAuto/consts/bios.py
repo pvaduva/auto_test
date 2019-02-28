@@ -60,6 +60,7 @@ class TerminalKeys:
         "Ctrl-_": '\x1F',
     }
 
+NODES_WITH_KERNEL_BOOT_OPTION_SPACING = ['yow-cgcs-wildcat-76']
 
 class BiosMenus:
     Supermicro = {
@@ -169,12 +170,39 @@ class BootMenus:
         }
 
 
+    class PXE_ISO:
+
+        Kernel = {
+            "name": "kernel options",
+            "prompt": b"Boot from hard drive",
+            "option_identifiers": b"hard drive|Controller Configuration",
+            "wrap_around": True
+        }
+
+        Controller_Configuration = {
+            "name": "Controller Configuration",
+            #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to'
+                      r' change the selection',
+            "option_identifiers": "Serial|Graphical",
+            "wrap_around": True
+        }
+
+        Serial_Console = {
+            "name": "Console",
+            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
+                      r'change the selection',
+            "option_identifiers": "STANDARD|EXTENDED",
+            "wrap_around": True
+        }
+
+
     class USB:
 
         Kernel = {
             "name": "kernel options",
             "prompt": b"Select kernel options and boot kernel",
-            "option_identifiers": "Controller Configuration",
+            "option_identifiers": b"Controller Configuration",
             "wrap_around": True
         }
 

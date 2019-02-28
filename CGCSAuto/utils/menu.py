@@ -40,7 +40,10 @@ class Menu(object):
     def select(self, telnet_conn=None, index=None, pattern=None, tag=None, curser_move=1):
         if not self.options:
             try:
-                self.find_options(telnet_conn)
+                if self.option_identifier:
+                    self.find_options(telnet_conn, option_identifier=self.option_identifier)
+                else:
+                    self.find_options(telnet_conn)
             except TypeError:
                 LOG.error("{} has no options".format(self.name))
                 raise
@@ -197,11 +200,20 @@ class KickstartMenu(Menu):
     def find_options(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press (\[Tab\]|\'e\') to edit".encode(),
                      option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
                      newline=r'(\x1b\[\d+;\d+H)+'.encode()):
+
+        # telnet_conn.expect([end_of_menu], 5, fail_ok=True)
+        # output = str.encode(telnet_conn.cmd_output)
+        # options = re.split(newline, output)
+        # options = [option for option in options if re.search(option_identifier, option)]
+        #
+        # for i in range(0, len(options)):
+        #     self.options.append(KickstartOption(name=options[i].decode(), index=i))
+
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier,
                              newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
-
+        LOG.info("Kickstart options = {}".format(self.options))
         for option in self.options:
             # TODO: would like to make this more general, but it's impossible to determine the prompt
             matches = re.search(r"\s([A-Za-z\-\(\)]{2,}\s)+\s", option.name)
@@ -217,18 +229,26 @@ class KickstartMenu(Menu):
             if "controller configuration" in option.name.lower() and "  >" in option.name.lower():
                 if not self.get_sub_menu("Controller Configuration"):
 
-                    controller_sub_menu = KickstartMenu(name="Controller Configuration",
-                                                        prompt=bios.BootMenus.Kickstart.Controller_Configuration['prompt'].encode())
+                    kwargs = {'name': 'Controller Configuration',
+                              'prompt':bios.BootMenus.Kickstart.Controller_Configuration['prompt'].encode(),
+                              'option_identifiers': "Serial|Graphical"}
+                    controller_sub_menu = KickstartMenu(name=kwargs['name'], kwargs=kwargs)
+
                     controller_sub_menu.options = [KickstartOption(name="Serial Console", index=0, key="Enter"),
                                                    KickstartOption(name="Graphical Console", index=1, key="Enter")]
-
 
                     self.sub_menus.append(controller_sub_menu)
                     LOG.info("Kickstart sub menu added to menu {}: {}".format(self.name, controller_sub_menu.name))
 
+            if "console" in option.name.lower() and "  >" in option.name.lower():
                 if not self.get_sub_menu("Console"):
+
+                    kwargs = {'name': 'Console',
+                              'prompt': bios.BootMenus.Kickstart.Console['prompt'].encode(),
+                              'option_identifiers': "STANDARD|EXTENDED"}
+
                     console_sub_menu = KickstartMenu(name="Console",
-                                                     prompt=bios.BootMenus.Kickstart.Console['prompt'].encode())
+                                                     kwargs=kwargs)
 
                     console_sub_menu.options = [KickstartOption(name="STANDARD Security", index=0, key="Enter"),
                                                    KickstartOption(name="EXTENDED Security", index=1, key="Enter")]
@@ -298,6 +318,65 @@ class KickstartMenu(Menu):
             tag = tag_dict
 
         super().select(telnet_conn=telnet_conn,  index=index, pattern=pattern, tag=tag, curser_move=curser_move)
+
+
+class PXEISOBootMenu(KickstartMenu):
+    def __init__(self, host_name=None):
+
+        super().__init__(name="PXE ISO boot menu", kwargs=bios.BootMenus.PXE_ISO.Kernel)
+        public_sub_menu_vars = [getattr(bios.BootMenus.PXE_ISO, var) for var in vars(bios.BootMenus.PXE_ISO) if not var.startswith('__')]
+        sub_menu_dicts = [public_var for public_var in public_sub_menu_vars if isinstance(public_var, dict)
+                          and public_var['name'] != "kernel options"]
+        subs_ = []
+        host_type = None
+        if host_name:
+            if "wolfpass" in host_name:
+                host_type = "wolfpass"
+            elif "wildcat" in host_name:
+                host_type = "wildcat"
+
+        for sub_menu_dict in sub_menu_dicts:
+            sub_menu = super().__new__(PXEISOBootMenu)
+            Menu.__init__(self=sub_menu, name=sub_menu_dict["name"], kwargs=sub_menu_dict)
+
+            subs_.append(sub_menu)
+
+        if len(subs_) > 0:
+            for sub in subs_:
+                if sub.name == "Controller Configuration":
+                    if host_type:
+                        sub.prompt = bios.BootMenus.Sub_Menu_Prompts.Controller_Configuration[host_type]
+                    self.sub_menus.append(sub)
+            for sub in subs_:
+                if sub.name == "Console":
+                    if host_type:
+                        sub.prompt = bios.BootMenus.Sub_Menu_Prompts.Console[host_type]
+
+                    self.sub_menus.append(sub)
+        LOG.info("PXE Iso sub menu added: {}".format( [sub_.name for sub_ in self.sub_menus] ))
+
+    def find_options(self, telnet_conn,
+                     end_of_menu=r"(utomatic(ally)?( boot)? in)".encode(),
+                     option_identifier=r"[A-Z][A-Za-z]".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
+
+        telnet_conn.expect([end_of_menu], 5, fail_ok=True)
+        output = str.encode(telnet_conn.cmd_output)
+        options = re.split(newline, output)
+        options = [option for option in options if re.search(option_identifier, option)]
+
+        for i in range(0, len(options)):
+            self.options.append(KickstartOption(name=options[i].decode(), index=i))
+
+        current_option = self.get_current_option(telnet_conn)
+        LOG.info("PXE ISO current option: {}; index {}".format(current_option.name, current_option.index))
+        self.index = current_option.index
+        if "Controller Configuration" in current_option.name and current_option.index == 0:
+            # increment indices of options by one
+            for option in self.options:
+                option.index += 1
+
+        LOG.debug("{} options are: {}".format(self.name, [option.name for option in self.options]))
+
 
 
 class USBBootMenu(KickstartMenu):

@@ -372,6 +372,9 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if not lab:
         lab = InstallVars.get_install_var('LAB')
+    hosts = lab["hosts"]
+    hosts.remove('controller-0')
+
     if not con_ssh:
         con_ssh = lab["controller-0"].ssh_conn
     test_step = "Bulk add hosts"
@@ -380,7 +383,10 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=con_ssh)
         assert rc == 0, msg
         LOG.info("system host-bulk-add added: {}".format(added_hosts))
-        # assert added_hosts[0] + added_hosts[1] + added_hosts[2] == hosts, "hosts_bulk_add failed to add all hosts
+        for host in hosts:
+            assert any( host in host_list for host_list in added_hosts), "The host_bulk_add command failed to all " \
+                                                                         "hosts {}".format(hosts)
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -485,10 +491,11 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
 
     LOG.tc_step(test_step)
     if do_step(test_step):
-        if len(hostnames) == 1:
-            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400)
-        else:
-            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
+        # if len(hostnames) == 1:
+        #     host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
+        #                             check_hypervisor_up=False, check_webservice_up=False)
+        # else:
+        host_helper.unlock_hosts(hostnames[0], con_ssh=con_ssh)
         kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
         #host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
     if LOG.test_step == final_step or test_step == final_step:
@@ -1088,7 +1095,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)
 
-        elif "pxe_iso" in boot["boot_type"]:
+        elif "pxe_iso" in boot["boot_type"] and 'feed' not in skip_list:
             install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab_dict)
             install_helper.mount_boot_server_iso(lab_dict=lab_dict)
 

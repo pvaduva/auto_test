@@ -15,7 +15,7 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
-from consts.bios import TerminalKeys
+from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
 from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
@@ -3617,7 +3617,8 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
-    curser_move = 2 if "wolfpass" in node_obj.host_name else 1
+    curser_move = 2 if "wolfpass" in node_obj.host_name or node_obj.host_name in NODES_WITH_KERNEL_BOOT_OPTION_SPACING\
+        else 1
     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None,
                      tag=tag if not index else None, curser_move=curser_move)
     time.sleep(2)
@@ -3630,7 +3631,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
             while len(sub_menu_prompts) > 0:
                 LOG.info("submenu prompt = {}".format(sub_menu_prompts))
-                prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 60)
+                prompt_index = node_obj.telnet_conn.expect(sub_menu_prompts, 5, fail_ok=True)
                 LOG.info("submenu index = {}".format(prompt_index))
                 sub_menu = boot_menu.sub_menus[prompt_index + sub_menus_navigated]
                 LOG.info("submenu  {}".format(sub_menu.name))
@@ -3708,7 +3709,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     boot_device_menu = menu.BootDeviceMenu()
     boot_device_regex = next((value for key, value in boot_device_dict.items()
                               if key == node_obj.name or key == node_obj.personality), None)
-
+    boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if boot_device_regex:
         uefi = "UEFI" in boot_device_regex or re.search("r\d+", node_obj.host_name)
     else:
@@ -3723,10 +3724,13 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     if security is None:
         security = InstallVars.get_install_var("SECURITY")
     if usb is None and node_obj == 'controller-0':
-        usb = "burn" in InstallVars.get_install_var("BOOT_TYPE") or "usb" in InstallVars.get_install_var("BOOT_TYPE")
+        usb = "burn" in boot_type or "usb" in boot_type
     if usb:
         LOG.debug("creating USB boot menu")
         kickstart_menu = menu.USBBootMenu(host_name=node_obj.host_name)
+    elif 'pxe_iso' in boot_type:
+        LOG.debug("creating PXE ISO boot menu")
+        kickstart_menu = menu.PXEISOBootMenu(host_name=node_obj.host_name)
     else:
         LOG.debug("creating {} boot menu".format("UEFI" if uefi else "PXE"))
         kickstart_menu = menu.KickstartMenu(uefi=uefi)
@@ -3752,12 +3756,15 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
         expt_prompts.pop(0)
         if node_obj.name == pxe_host:
-            expt_prompts.append("(\x1b\[0;1;36;44m\s{45,60})")
+            # expt_prompts.append("(\x1b\[0;1;36;44m\s{45,60})")
             expt_prompts.append("\x1b.*\*{56,60}")
         if len(expt_prompts) > 0:
-            ind = telnet_conn.expect(expt_prompts, 360)
-            LOG.info('In Kickstart menu index = {}'.format(ind))
-            time.sleep(2)
+            LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
+
+            telnet_conn.read_until(kickstart_menu.prompt)
+            #ind = telnet_conn.expect(expt_prompts, 360)
+            #LOG.info('In Kickstart menu index = {}'.format(ind))
+            #time.sleep(2)
             select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                                   security=security, usb=usb, expect_prompt=False)
     LOG.info('Kick start option selected')
