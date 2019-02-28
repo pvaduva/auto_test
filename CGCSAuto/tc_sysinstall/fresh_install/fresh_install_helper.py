@@ -342,14 +342,16 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
 
         LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
                                                                 SubcloudStatus.MGMT_UNMANAGED))
-        LOG.info("Managing subcloud {} ... ".format(subcloud))
-        LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
-        install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
-        dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=main_cloud_node.ssh_conn, fail_ok=True)
+        no_manage = InstallVars.get_install_var("NO_MANAGE")
+        if not no_manage:
+            LOG.info("Managing subcloud {} ... ".format(subcloud))
+            LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+            install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
+            dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=main_cloud_node.ssh_conn, fail_ok=True)
 
-        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                           mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
-                                           con_ssh=main_cloud_node.ssh_conn)
+            dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                               mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
+                                               con_ssh=main_cloud_node.ssh_conn)
 
         LOG.info("Running config for subcloud {} ... ".format(subcloud))
         install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)

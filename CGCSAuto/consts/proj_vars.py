@@ -127,7 +127,9 @@ class InstallVars:
                          install_subcloud=None,
                          no_openstack_install=False,
                          ipv6_config=False,
-                         helm_chart_path=None):
+                         helm_chart_path=None,
+                         no_manage=False):
+
 
         cls.__var_dict = {
             'LAB': lab,
@@ -158,6 +160,7 @@ class InstallVars:
             'LOW_LATENCY': low_latency,
             'DC_FLOAT_IP': dc_float_ip,
             'INSTALL_SUBCLOUD': install_subcloud,
+            'NO_MANAGE' : no_manage,
             'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.

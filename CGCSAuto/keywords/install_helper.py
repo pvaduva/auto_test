@@ -617,8 +617,8 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
     cmd = "test -e " + script_path
-    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    conf_server.ssh_conn.rsync(script_path + "/*",
+    server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    server.ssh_conn.rsync(script_path + "/*",
                                lab['controller-0 ip'],
                                WRSROOT_HOME, pre_opts=pre_opts)
 
