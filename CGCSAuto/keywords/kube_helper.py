@@ -620,7 +620,7 @@ def wait_for_pods_ready(pod_names=None, namespace='all', node=None, timeout=120,
                                  con_ssh=con_ssh, strict=strict)
 
         for pod_info in bad_pods_info:
-            if pods_to_exclude and pod_info[0] not in pods_to_exclude:
+            if not (pods_to_exclude and pod_info[0] in pods_to_exclude):
                 bad_pods[pod_info[0]] = pod_info[1]
 
         if not bad_pods:
