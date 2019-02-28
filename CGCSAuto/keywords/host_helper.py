@@ -711,7 +711,7 @@ def _wait_for_simplex_reconnect(con_ssh=None, timeout=HostTimeout.CONTROLLER_UNL
         LOG.info("Re-connected via ssh and openstack CLI enabled")
 
 
-def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=False, fail_ok=False, con_ssh=None,
+def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False, con_ssh=None,
                 use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin'), check_hypervisor_up=True,
                 check_webservice_up=True, check_subfunc=True, check_first=True, con0_install=False,
                 check_containers=True):
@@ -802,19 +802,6 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                                 auth_info=auth_info, use_telnet=use_telnet, con_telnet=con_telnet, task=''):
         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
 
-    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
-                          con_telnet=con_telnet) == HostAvailState.DEGRADED:
-        if not available_only:
-            LOG.warning("Host is in degraded state after unlocked.")
-            return 4, "Host is in degraded state after unlocked."
-        else:
-            if not wait_for_host_values(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                        use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
-                                        availability=HostAvailState.AVAILABLE):
-                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
-                LOG.warning(err_msg)
-                return 8, err_msg
-
     if check_hypervisor_up or check_webservice_up or check_subfunc:
 
         table_ = table_parser.table(cli.system('host-show', host, ssh_client=con_ssh, auth_info=auth_info,
@@ -855,19 +842,6 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
                 LOG.warning(err_msg)
                 return 9, err_msg
 
-    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-                          auth_info=auth_info) == HostAvailState.DEGRADED:
-        if not available_only:
-            LOG.warning("Host is in degraded state after unlocked.")
-            return 4, "Host is in degraded state after unlocked."
-        else:
-            if not wait_for_host_values(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-                                        use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
-                                        availability=HostAvailState.AVAILABLE):
-                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
-                LOG.warning(err_msg)
-                return 8, err_msg
-
     if check_containers and not use_telnet:
         from keywords import kube_helper, container_helper
 
@@ -883,6 +857,19 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=Fals
         if not (res_nodes and res_app and res_pods):
             err_msg = "Container check failed after unlock {}".format(host)
             return 10, err_msg
+
+    if get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                          auth_info=auth_info) == HostAvailState.DEGRADED:
+        if not available_only:
+            LOG.warning("Host is in degraded state after unlocked.")
+            return 4, "Host is in degraded state after unlocked."
+        else:
+            if not wait_for_host_values(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
+                                        use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info,
+                                        availability=HostAvailState.AVAILABLE):
+                err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
+                LOG.warning(err_msg)
+                return 8, err_msg
 
     LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
