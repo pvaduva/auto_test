@@ -1138,7 +1138,10 @@ def verify_install_uuid(lab=None):
 
     LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))
     hosts = lab['hosts']
-    hosts.remove('controller-0')
+    try:
+        hosts.remove('controller-0')
+    except ValueError:
+        pass
     for host in hosts:
         with host_helper.ssh_to_host(host) as host_ssh:
             host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
