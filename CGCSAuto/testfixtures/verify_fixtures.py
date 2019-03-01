@@ -44,19 +44,12 @@ def __verify_alarms(request, scope):
         res, new_alarms = check_helper.check_alarms(before_alarms=before_alarms, fail_ok=True)
 
         container_helper.get_apps_values()
-        post_bad_pods = kube_helper.get_pods(rtn_val=('NAME', 'STATUS'),
-                                             status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
-        post_bad_pods = [pod[0] for pod in post_bad_pods if
-                         not (pod[1] in (PodStatus.POD_INIT, PodStatus.INIT) and
-                              re.search('-audit-|-cleaner-', pod[0]))]
+        post_bad_pods = kube_helper.get_pods(status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
         new_bad_pods = [k for k in post_bad_pods if k not in prev_bad_pods]
+        if new_bad_pods:
+            kube_helper.wait_for_pods_ready(pods_to_exclude=prev_bad_pods, timeout=120)
 
         assert res, "New alarm(s) appeared within test {}: {}".format(scope, new_alarms)
-
-        if new_bad_pods:
-            LOG.info("----- Dump pods info")
-            kube_helper.dump_pods_info()
-            assert not new_bad_pods, "Some pod(s) in unexpected status: {}".format(new_bad_pods)
 
     request.addfinalizer(verify_)
 
