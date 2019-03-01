@@ -303,7 +303,8 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
         host_helper.unlock_host(host=controller0_node.name,
                                 available_only=False if sys_mode == "duplex-direct" else True,
                                 con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False, 
+                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False,
+                                check_first=False, con0_install=True)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
