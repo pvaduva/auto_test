@@ -286,8 +286,7 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
         # WK Touch .this_didnt_work to avoid using heat for kubernetes
-        if kubernetes:
-            controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
+        controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
 
         LOG.info("Run lab_setup after config controller")
         run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
@@ -376,8 +375,9 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if not lab:
         lab = InstallVars.get_install_var('LAB')
-    hosts = lab["hosts"]
-    hosts.remove('controller-0')
+
+    hosts = [host for host in lab["hosts"] if host != 'controller-0']
+    #hosts.remove('controller-0')
 
     if not con_ssh:
         con_ssh = lab["controller-0"].ssh_conn
@@ -499,7 +499,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         #     host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
         #                             check_hypervisor_up=False, check_webservice_up=False)
         # else:
-        host_helper.unlock_hosts(hostnames[0], con_ssh=con_ssh)
+        host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
         kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
         #host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
     if LOG.test_step == final_step or test_step == final_step:
@@ -1153,75 +1153,6 @@ def verify_install_uuid(lab=None):
     return True
 
 
-def kubernetes_post_install():
-    """
-    Installs kubernetes work arounds post install
-    Args:
-        # server(build server object): The build server object where helm charts reside.
-        # load_path(str): The path to helm charts
-
-    Returns:
-
-    """
-    # if lab is None or server is None or load_path is None:
-    #     raise ValueError("The lab dictionary, build server object and load path must be specified")
-    lab = InstallVars.get_install_var("LAB")
-    controller0_node = lab['controller-0']
-
-    if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-
-    # LOG.info("WK: Trying to execute workaround for neutron-ovs-agent on each hypervisor ...")
-    # hypervisors = host_helper.get_hypervisors(con_ssh=controller0_node.ssh_conn)
-    # for hypervisor in hypervisors:
-    #     with host_helper.ssh_to_host(hypervisor) as host_ssh:
-    #         host_ssh.exec_sudo_cmd('sh -c "echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables"')
-    # LOG.info("WK: Executed workaround for neutron-ovs-agentr ...")
-    #
-    # LOG.info("WK: Adding DNS for cluster ...")
-    # nameservers = ["8.8.8.8"]
-    # rc, output = controller0_node.ssh_conn.exec_cmd("kubectl describe svc -n kube-system kube-dns | "
-    #                                                 "awk /IP:/'{print $2}'")
-    # if rc == 0:
-    #     nameservers.append(output)
-    #
-    # system_helper.set_dns_servers(nameservers)
-    # LOG.info("WK: Added DNS  for the cluster...")
-    #
-    # LOG.info("WK: Generating the stx-openstack application tarball ...")
-    # LOG.info("WK: Downloading the helm charts to active controller ...")
-    # helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
-    # install_helper.download_stx_help_charts(lab, server, stx_helm_charts_path=helm_chart_path)
-
-    # LOG.info("WK: Creating hosts and binding interface ...")
-    # hosts = lab['hosts']
-    # nodes = kube_helper.get_nodes_values(rtn_val='NAME', con_ssh=controller0_node.ssh_conn)
-    # cmd_auth = "export OS_AUTH_URL=http://keystone.openstack.svc.cluster.local/v3"
-    # for host in nodes:
-    #
-    #     uuid = host_helper.get_hostshow_value(host, 'uuid')
-    #     controller0_node.ssh_conn.exec_cmd(cmd_auth)
-    #     cmd = "neutron host-create {} --id {} --availablitiy up".format(host, uuid)
-    #     controller0_node.ssh_conn.exec_cmd(cmd)
-    #
-    # for node in nodes:
-    #     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
-    #     data0_info = system_helper.get_host_if_show_values(node, "data0", ["uuid", "providernetworks"],
-    #                                                        con_ssh=controller0_node.ssh_conn)
-    #     data1_info = system_helper.get_host_if_show_values(node, "data1", ["uuid", "providernetworks"],
-    #                                                        con_ssh=controller0_node.ssh_conn)
-    #
-    #     cmd0 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
-    #             .format(data0_info[0], data0_info[1], node)
-    #     cmd1 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
-    #         .format(data1_info[0], data1_info[1], node)
-    #     controller0_node.ssh_conn.exec_cmd(cmd_auth)
-    #     controller0_node.ssh_conn.exec_cmd(cmd0)
-    #     controller0_node.ssh_conn.exec_cmd(cmd1)
-    #
-    # install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
-
-
 def wait_for_hosts_ready(hosts,  lab=None):
     """
 
@@ -1241,11 +1172,7 @@ def wait_for_hosts_ready(hosts,  lab=None):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    kubernetes = InstallVars.get_install_var("KUBERNETES")
-    if kubernetes:
-        kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
-    else:
-        host_helper.wait_for_hosts_ready(hosts, con_ssh=controller0_node.ssh_conn)
+    kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
 
 
 def wait_for_hosts_to_be_online(hosts,  lab=None):
