@@ -3617,8 +3617,11 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
     if expect_prompt:
         node_obj.telnet_conn.expect([boot_menu.get_prompt()], 120)
-    curser_move = 2 if "wolfpass" in node_obj.host_name or node_obj.host_name in NODES_WITH_KERNEL_BOOT_OPTION_SPACING\
-        else 1
+    boot_type = InstallVars.get_install_var("BOOT_TYPE")
+    curser_move = 1
+    if boot_type != 'feed':
+        curser_move = 2 if "wolfpass" in node_obj.host_name or node_obj.host_name in NODES_WITH_KERNEL_BOOT_OPTION_SPACING\
+            else 1
     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[0] if index else None,
                      tag=tag if not index else None, curser_move=curser_move)
     time.sleep(2)
