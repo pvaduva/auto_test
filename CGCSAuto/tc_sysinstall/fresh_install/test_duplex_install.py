@@ -105,7 +105,7 @@ def test_duplex_install(install_setup):
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    #fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
 

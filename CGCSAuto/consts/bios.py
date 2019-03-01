@@ -139,19 +139,19 @@ class BootMenus:
 
         PXE_Boot = {
             "name": "PXE Boot Menu",
-            "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+            "prompt": b"Automatic Anaconda / Kickstart Boot Menu",
             "wrap_around": True
         }
 
         UEFI_Boot = {
             "name": "UEFI Boot Menu",
-            "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+            "prompt": b"Automatic Anaconda / Kickstart Boot Menu",
             "wrap_around": False
         }
 
         Security = {
             "name": "PXE Security Menu",
-            "prompt": "Security Profile Enabled Boot Options",
+            "prompt": b"Security Profile Enabled Boot Options",
             "wrap_around": True
         }
 

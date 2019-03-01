@@ -298,10 +298,13 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
+        sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=controller0_node.ssh_conn)
         LOG.info("unlocking {}".format(controller0_node.name))
-        host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False,
-                                check_first=False, con0_install=True)
+        host_helper.unlock_host(host=controller0_node.name,
+                                available_only=False if sys_mode == "duplex-direct" else True,
+                                con_ssh=controller0_node.ssh_conn, timeout=2400,
+                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False, 
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
