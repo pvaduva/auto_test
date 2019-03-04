@@ -201,10 +201,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         controller0_node = lab['controller-0']
         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
 
-    if InstallVars.get_install_var("KUBERNETES"):
-        LOG.info("WK: Downloading the helm charts to active controller ...")
-        helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
-        install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
+    #if InstallVars.get_install_var("KUBERNETES"):
+    LOG.info("WK: Downloading the helm charts to active controller ...")
+    helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
+    install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
 
 
 def set_license_var(sys_version=None, sys_type=None):
