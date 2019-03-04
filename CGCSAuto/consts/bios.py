@@ -1,6 +1,8 @@
+
 class TerminalKeys:
     Keys = {
-        "Enter": '\r\r',
+        "Enter_": '\r\r',
+        "Enter": '\r',
         "Return": '\r\r',
         "Esc": '\x1b',
         "Escape": '\x1b',
@@ -58,6 +60,7 @@ class TerminalKeys:
         "Ctrl-_": '\x1F',
     }
 
+NODES_WITH_KERNEL_BOOT_OPTION_SPACING = ['yow-cgcs-wildcat-76']
 
 class BiosMenus:
     Supermicro = {
@@ -136,19 +139,19 @@ class BootMenus:
 
         PXE_Boot = {
             "name": "PXE Boot Menu",
-            "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+            "prompt": b"Automatic Anaconda / Kickstart Boot Menu",
             "wrap_around": True
         }
 
         UEFI_Boot = {
             "name": "UEFI Boot Menu",
-            "prompt": "Automatic Anaconda / Kickstart Boot Menu",
+            "prompt": b"Automatic Anaconda / Kickstart Boot Menu",
             "wrap_around": False
         }
 
         Security = {
             "name": "PXE Security Menu",
-            "prompt": "Security Profile Enabled Boot Options",
+            "prompt": b"Security Profile Enabled Boot Options",
             "wrap_around": True
         }
 
@@ -167,24 +170,72 @@ class BootMenus:
         }
 
 
-
-    class USB:
+    class PXE_ISO:
 
         Kernel = {
             "name": "kernel options",
-            "prompt": b"Select kernel options and boot kernel",
+            "prompt": b"Boot from hard drive",
+            "option_identifiers": b"hard drive|Controller Configuration",
             "wrap_around": True
         }
 
         Controller_Configuration = {
             "name": "Controller Configuration",
             #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
-            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)',
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to'
+                      r' change the selection',
+            "option_identifiers": "Serial|Graphical",
             "wrap_around": True
         }
 
         Serial_Console = {
             "name": "Console",
-            "prompt": r'\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?',
+            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
+                      r'change the selection',
+            "option_identifiers": "STANDARD|EXTENDED",
             "wrap_around": True
         }
+
+
+    class USB:
+
+        Kernel = {
+            "name": "kernel options",
+            "prompt": b"Select kernel options and boot kernel",
+            "option_identifiers": b"Controller Configuration",
+            "wrap_around": True
+        }
+
+        Controller_Configuration = {
+            "name": "Controller Configuration",
+            #"prompt": b"\x1b\[0;1;36;44m\s+(\w|-)+ (\(?low(\s|_)?latency\)? )?Controller Configuration",
+            "prompt": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to'
+                      r' change the selection',
+            "option_identifiers": "Serial|Graphical",
+            "wrap_around": True
+        }
+
+        Serial_Console = {
+            "name": "Console",
+            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
+                      r'change the selection',
+            "option_identifiers": "STANDARD|EXTENDED",
+            "wrap_around": True
+        }
+
+    class Sub_Menu_Prompts:
+
+        Controller_Configuration = {
+            "wolfpass": r'Use the . and . keys to change the selection',
+            "wildcat": r'(\x1b.*\*?.*\sController Configuration\s.*\*?(\x1b\[\d+;\d+H)?)|Use the . and . keys to change the selection',
+        }
+
+        Console = {
+            "wolfpass": r'Use the . and . keys to change the selection',
+            "wildcat": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|'
+                       r'Use the \^ and v keys to change the selection',
+        }
+
+
+
+

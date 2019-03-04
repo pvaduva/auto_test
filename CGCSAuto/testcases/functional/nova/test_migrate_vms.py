@@ -330,13 +330,27 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
 
 @mark.parametrize(('guest_os', 'mig_type', 'cpu_pol'), [
-    mark.sanity(('ubuntu_14', 'live', 'dedicated')),
-    mark.sanity(('ubuntu_14', 'cold', 'dedicated')),
-    # mark.sanity(('cgcs-guest', 'live', None)),
-    mark.sanity(('tis-centos-guest', 'live', None)),
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),
+    ('ubuntu_14', 'live', 'dedicated'),  # Live migration with pinned VM may not be unsupported
+    mark.priorities('sanity', 'cpe_sanity')(('ubuntu_14', 'cold', 'dedicated')),
+    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'live', None)),
+    ('tis-centos-guest', 'cold', None),
 ])
 def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
+    """
+    Test migrate vms for given guest type
+    Args:
+        check_system:
+        guest_os:
+        mig_type:
+        cpu_pol:
+
+    Test Steps:
+        - Create a glance image from given guest type
+        - Create a vm from cinder volume using above image
+        - Live/cold migrate the vm
+        - Ensure vm moved to other host and in good state (active and reachabe from NatBox)
+
+    """
     LOG.tc_step("Create a flavor with 1 vcpu")
     flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9, cleanup='function')[1]
 
@@ -425,23 +439,24 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
                               source=boot_source, source_id=source_id, guest_os=guest_os, cleanup='function')[1]
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-    vm_host_origin = nova_helper.get_vm_host(vm_id)
-    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
-                                                      vm_host=vm_host_origin, cpu_pol=cpu_pol, guest=guest_os)[1]
+    vm_host = nova_helper.get_vm_host(vm_id)
+    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host],
+                                                      vm_host=vm_host, cpu_pol=cpu_pol, guest=guest_os)[1]
 
+    # Live migration may not be unsupported for pinned vm.
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)
 
     LOG.tc_step("Ping vm from NatBox after live migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    vm_host_live_mig = nova_helper.get_vm_host(vm_id)
+    vm_host = nova_helper.get_vm_host(vm_id)
     # vm topology from inside vm will not change after live-migrate between HT and non-HT vm
     if not cpu_pol == 'dedicated':
         prev_siblings = None
 
-    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig], cpu_pol=cpu_pol,
-                                      vm_host=vm_host_live_mig, prev_siblings=prev_siblings, guest=guest_os)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host], cpu_pol=cpu_pol,
+                                      vm_host=vm_host, prev_siblings=prev_siblings, guest=guest_os)
 
     LOG.tc_step("Cold migrate vm and check vm is moved to different host")
     vm_helper.cold_migrate_vm(vm_id)

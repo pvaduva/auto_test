@@ -11,7 +11,6 @@ from utils.tis_log import LOG
 from consts.cgcs import EventLogID, HostAvailState, HostOperState
 from keywords import host_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.verify_fixtures import check_alarms
 
 # NOTE: This is removed due to CGTS-7651 - ifconfig down or ifdown is not valid procedure for infra failure test
 # Will be reworked via US102236

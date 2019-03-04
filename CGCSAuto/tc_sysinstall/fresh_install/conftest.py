@@ -46,6 +46,7 @@ def pytest_configure(config):
     kubernetes = config.getoption('kubernetes_config')
     no_openstack_install = config.getoption('no_openstack_install')
     ipv6_config = config.getoption('ipv6')
+    helm_chart_path = config.getoption('helm_chart_path')
 
     if lab_arg:
         lab_dict = get_lab_dict(lab_arg)
@@ -92,6 +93,8 @@ def pytest_configure(config):
             heat_templates = os.path.join(host_build_dir_path, BuildServerPath.HEAT_TEMPLATES)
         elif not os.path.isabs(heat_templates):
             heat_templates = os.path.join(host_build_dir_path, heat_templates)
+        if not helm_chart_path:
+            helm_chart_path = os.path.join(host_build_dir_path, BuildServerPath.STX_HELM_CHARTS)
 
         install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
                                          lab_files_dir=lab_file_dir, patch_dir=patch_dir,
@@ -101,7 +104,7 @@ def pytest_configure(config):
                                          heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
                                          security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
                                          boot_server=boot_server, resume=resume_install, skip=skiplist,
-                                         kubernetes=kubernetes)
+                                         kubernetes=kubernetes, helm_chart_path=helm_chart_path)
 
         set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
                            installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
@@ -109,7 +112,8 @@ def pytest_configure(config):
                            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
                            patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
                            install_subcloud=sublcoud_name, kubernetes=kubernetes,
-                           no_openstack_install=no_openstack_install, ipv6_config=ipv6_config)
+                           no_openstack_install=no_openstack_install, ipv6_config=ipv6_config,
+                           helm_chart_path=helm_chart_path)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

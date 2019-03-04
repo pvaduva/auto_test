@@ -1,16 +1,16 @@
-from utils.horizon.regions import messages
-from utils.horizon.pages.admin.compute import hypervisorspage
-from pytest import fixture, mark
-from testfixtures.horizon import admin_home_pg, driver
-from utils.tis_log import LOG
+from pytest import fixture
+
 from consts import horizon
 from keywords import host_helper
+from utils.tis_log import LOG
+from utils.horizon.regions import messages
+from utils.horizon.pages.admin.compute import hypervisorspage
 
 
 @fixture(scope='function')
-def hypervisors_pg(admin_home_pg, request):
+def hypervisors_pg(admin_home_pg_container, request):
     LOG.fixture_step('Go to Admin > Compute > Hypervisors')
-    hypervisors_pg = hypervisorspage.HypervisorsPage(admin_home_pg.driver)
+    hypervisors_pg = hypervisorspage.HypervisorsPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     hypervisors_pg.go_to_target_page()
 
     def teardown():
@@ -21,7 +21,7 @@ def hypervisors_pg(admin_home_pg, request):
     return hypervisors_pg
 
 
-def test_compute_host_disable_service_negative(hypervisors_pg):
+def test_horizon_compute_host_disable_service_negative(hypervisors_pg):
     host_name = host_helper.get_up_hypervisors()[0]
     hypervisors_pg.go_to_compute_host_tab()
 

@@ -340,6 +340,26 @@ class TestOneHostAvail:
 
     @mark.sx_sanity
     def test_reboot_only_host(self, get_zone):
+        """
+        Test reboot only hypervisor on the system
+
+        Args:
+            get_zone: fixture to create cgcsauto aggregate, to ensure vms can only on one host
+
+        Setups:
+            - If more than 1 hypervisor: Create cgcsauto aggregate and add one host to the aggregate
+
+        Test Steps:
+            - Launch various vms on target host
+                - vm booted from cinder volume,
+                - vm booted from glance image,
+                - vm booted from glance image, and have an extra cinder volume attached after launch,
+                - vm booed from cinder volume with ephemeral and swap disks
+            - sudo reboot -f only host
+            - Check host is recovered
+            - Check vms are recovered and reachable from NatBox
+
+        """
         zone = get_zone
 
         LOG.tc_step("Launch 5 vms in {} zone".format(zone))

@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import host_helper, install_helper, vlm_helper
+from keywords import system_helper, install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
@@ -110,20 +110,35 @@ def test_standard_install(install_setup):
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.boot_hosts(boot_device)
-    fresh_install_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
-                                              lab=lab)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.wait_for_hosts_to_be_online([host for host in hosts if controller0_node.name not in host],
+                                                     lab=lab)
+
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
-    fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],
-                                      con_ssh=controller0_node.ssh_conn)
+    # Unlock controller-1
+    fresh_install_helper.unlock_hosts(['controller-1'], con_ssh=controller0_node.ssh_conn)
+
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+
+    #WK1 - adding ceph mon to compute-0
+    fresh_install_helper.add_ceph_ceph_mon_to_host(controller0_node, 'compute-0')
+    hosts_to_unlock = system_helper.get_hostnames(administrative='locked', availability='online',
+                                con_ssh=controller0_node.ssh_conn)
+    #hosts_to_unlock = [host for host in hosts if controller0_node.name not in host and 'controller-1' not in host]
+    if len(hosts_to_unlock) > 0:
+        fresh_install_helper.unlock_hosts(hosts_to_unlock, con_ssh=controller0_node.ssh_conn)
+
+    # WK2-  add ceph osds to controllers:
+    fresh_install_helper.add_ceph_osds_to_controller(lab=lab)
+    controller0_node.ssh_conn.close()
+    controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
-    host_helper.wait_for_hosts_ready(controller0_node.name, con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
 
     fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
 

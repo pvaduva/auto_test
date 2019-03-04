@@ -580,8 +580,6 @@ class ItemTextDescription(baseregion.BaseRegion):
         keys = []
         values = []
         for section in self._get_elements(*self._separator_locator):
-            print('------------------------------------------------------')
-            print(section)
             keys.extend([x.text for x in
                          section.find_elements(*self._key_locator)])
             values.extend([x.text for x in

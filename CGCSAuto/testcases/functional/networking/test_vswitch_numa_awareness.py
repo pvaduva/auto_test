@@ -1,6 +1,7 @@
 import re
 from pytest import mark, fixture, skip
 
+from utils import table_parser
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment, NumaErr   # Do not remove this. Used in eval()
 from consts.cgcs import FlavorSpec
@@ -80,8 +81,11 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     ht_enabled = system_helper.is_hyperthreading_enabled(host)
     is_small_system = system_helper.is_small_footprint()
 
+    host_cpu_table = system_helper.get_host_cpu_list_table(host=host)
+    proc_ids = sorted(list(set(table_parser.get_column(host_cpu_table, 'processor'))))
+
     LOG.info("{} is selected. Hyper-threading is {}enabled".format(host, "not " if ht_enabled else ""))
-    return host, ht_enabled, is_small_system, host_other, storage_backing
+    return host, proc_ids, ht_enabled, is_small_system, host_other, storage_backing
 
 
 def id_params_cores(val):
@@ -155,7 +159,7 @@ class TestVSwitchCPUReconfig:
             - Revert host platform and vswitch cpu configs      (module)
 
         """
-        host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
+        host, proc_ids, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
         HostsToRecover.add(host, scope='class')
 
         ht_required, cpe_required = _convert_ht_cpe_req(ht_required, cpe_required)
@@ -168,8 +172,8 @@ class TestVSwitchCPUReconfig:
         if platform is not None or vswitch is not None:
             LOG.tc_step("Reconfigure host cpus. Platform: {}, vSwitch: {}".format(platform, vswitch))
             platform_args = {}
-            for i in range(len(platform)):
-                if i is not None:
+            for i in range(len(proc_ids)):
+                if platform[i] is not None:
                     platform_args['p'+str(i)] = platform[i]
 
             vswitch_args = {}
@@ -235,7 +239,10 @@ class TestVSwitchCPUReconfig:
             - Revert host platform and vswitch cpu configs      (module)
 
         """
-        host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
+        host, proc_ids, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
+
+        if len(proc_ids) < 2:
+            skip('Two processors are required for this test')
 
         HostsToRecover.add(host, scope='class')
 
@@ -449,7 +456,7 @@ class TestNovaSchedulerAVS:
         ('strict', None, 2, 'NumaErr.TWO_NUMA_ONE_VSWITCH')  # This error message is confusing
     ])
     def _test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0,
-                                           numa_nodes, expt_err):
+                                            numa_nodes, expt_err):
         """
 
         Args:
@@ -608,8 +615,7 @@ class TestNovaSchedulerAVS:
             total_cpus[vm_host] += flavor_vcpu_num
             expt_total = total_cpus[vm_host]
             LOG.tc_step("Check total allocated vcpus is {} from nova-compute.log on {}".format(expt_total, other_host))
-            with host_helper.ssh_to_host(vm_host) as host_ssh:
-                host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, expt_cpus=expt_total, fail_ok=False)
+            host_helper.wait_for_total_allocated_vcpus_update_in_log(vm_host, expt_cpus=expt_total, fail_ok=False)
 
         # Now vswitch nodes on both hosts are full. Attempt to boot another VM
         extra_str = 'rejected' if vswitch_numa_affinity == 'strict' else ' booted on non-vSwitch node - proc_0'
@@ -639,8 +645,7 @@ class TestNovaSchedulerAVS:
             vms_to_del = nova_helper.get_vms_on_hypervisor(other_host)
             vm_helper.delete_vms(vms_to_del)
             LOG.tc_step("Check total allocated vcpus is 0 from nova-compute.log on {}".format(other_host))
-            with host_helper.ssh_to_host(other_host) as host_ssh:
-                host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, expt_cpus=0, fail_ok=False)
+            host_helper.wait_for_total_allocated_vcpus_update_in_log(other_host, expt_cpus=0, fail_ok=False)
 
             vswitch_vm_num = len(final_host_vms) if vswitch_numa_affinity == 'strict' else (len(final_host_vms) - 1)
 
@@ -979,15 +984,15 @@ class _TestSpanNumaNodes:
 
         return vcpu_on_numa
 
-    @mark.parametrize(
-        ('vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'),[
+    @mark.parametrize((
+            'vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'), [
         (3, 'strict', 0, 0, 512, 1, '1,2', 512),
         (2, 'strict', None, 0, 512, None, 1, 512),
         # (2, 'prefer', None, None, None, None, None, None),
         # (3, 'prefer', 0, None, None, 1, None, None, 'NumaErr.UNDEVISIBLE')
     ])
     def _test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
-                                                numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
+                                                 numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
         """
         Test nova actions on 2 numa nodes vm with vswitch numa affinity set
 
@@ -1125,7 +1130,7 @@ def test_compute_cpu_kernel_boot_args(hosts=None):
             file = '/proc/cmdline'     # do not check /etc/default/grub since it's only the default
             output = host_ssh.exec_cmd('cat {}'.format(file), fail_ok=False)[1]
             for k, expt_v in expt_dict.items():
-                actual_v = re.findall('{}=([\d\-,]+)(\s|$)'.format(k), output)
+                actual_v = re.findall(r'{}=([\d\-,]+)(\s|$)'.format(k), output)
                 assert actual_v, "{} match not found in {} on {}".format(k, file, host)
                 actual_v = common.parse_cpus_list(cpus=actual_v[0][0])
                 assert sorted(expt_v) == actual_v, \

@@ -6,6 +6,15 @@ from utils.tis_log import LOG
 
 @mark.sx_sanity
 def test_add_host_simplex_negative(simplex_only):
+    """
+    Test add second controller is rejected on simplex system
+    Args:
+        simplex_only: skip if non-sx system detected
+
+    Test Steps:
+        - On simplex system, check 'system host-add -n controller-1' is rejected
+
+    """
     LOG.tc_step("Check adding second controller is rejected on simplex system")
     code, out = cli.system('host-add', '-n controller-1', fail_ok=True, rtn_list=True)
 

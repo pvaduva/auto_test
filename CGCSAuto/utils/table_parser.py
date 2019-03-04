@@ -1,11 +1,13 @@
-import re, copy
+import re
+import copy
 
 from utils import exceptions
 from utils.tis_log import LOG
 """Collection of utilities for parsing CLI clients output."""
 
 
-delimiter_line = re.compile('^\+-[+\-]+-\+$')
+delimiter_line = re.compile(r'^\+-[+\-]+-\+$')
+kute_sep = re.compile(r'\s\s[^\s]')
 
 
 def __details_multiple(output_lines, with_label=False):
@@ -97,7 +99,7 @@ def tables(output_lines, combine_multiline_entry=False):
     return tables_
 
 
-def __table(output_lines):
+def __table(output_lines, rstrip_value=False):
     """Parse single table from cli output.
     Return dict with list of column names in 'headers' key and
     rows in 'values' key.
@@ -124,7 +126,9 @@ def __table(output_lines):
             continue
         row = []
         for col in columns:
-            row.append(line[col[0]:col[1]].strip())
+            raw_row = line[col[0]:col[1]]
+            stripped_row = raw_row.rstrip() if rstrip_value else raw_row.strip()
+            row.append(stripped_row)
         if table_['values']:
             table_['values'].append(row)
         else:
@@ -165,42 +169,25 @@ def __table_columns(first_table_row):
 TWO_COLUMN_TABLE_HEADERS = [['Field', 'Value'], ['Property', 'Value']]
 
 
-def table(output_lines, combine_multiline_entry=False):
-    """
-    Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
-    a net has multiple subnets, then tempest table will create multiple entries in table_['values']
-    param output_lines: output from cli command
-    return: Dictionary of a table with.multi-line entry taken into account.table_['values'] is list of entries. If
-    multi-line entry, then this entry itself is a list.
-    """
-    table_ = __table(output_lines)
-    rows = get_all_rows(table_)
-    if not rows:
-        if not table_['headers']:
-            LOG.debug('No table returned')
-        else:
-            LOG.debug("Empty table returned")
-        return table_
-
-    line_count = len(rows)
-    # no need to check for multiple line entry if it's a one line table.
+def __convert_multilines_values(values, merge_lines=False):
+    line_count = len(values)
     if line_count == 1:
-        return table_
+        return values
 
     entries = []
     start_index = 0  # start_index for first entry
-    for i in range(line_count):      # line_count > 1 if code can get here.
+    for i in range(line_count):  # line_count > 1 if code can get here.
         # if first value for the NEXT row is not empty string, then next row is the start of a new entry,
         # and the current row is the last row of current entry
-        if i == line_count-1 or rows[i+1][0]:
+        if i == line_count - 1 or values[i + 1][0]:
             end_index = i
-            if start_index == end_index:   # single-line entry
-                entry = rows[start_index]
-            else:       # multi-line entry
-                entry_lines = [rows[index] for index in range(start_index, end_index+1)]
+            if start_index == end_index:  # single-line entry
+                entry = values[start_index]
+            else:  # multi-line entry
+                entry_lines = [values[index] for index in range(start_index, end_index + 1)]
                 # each column value is a list
                 entry_combined = [list(filter(None, list(t))) for t in zip(*entry_lines)]
-                if combine_multiline_entry:
+                if merge_lines:
                     entry = [' '.join(item) for item in entry_combined]
                 else:
                     # convert column value to string if list len is 1
@@ -210,7 +197,29 @@ def table(output_lines, combine_multiline_entry=False):
             entries.append(entry)
             start_index = i + 1  # start_index for next entry
 
-    table_['values'] = entries
+    return entries
+
+
+def table(output_lines, combine_multiline_entry=False, rstrip_value=False):
+    """
+    Tempest table does not take into account when multiple lines are used for one entry. Such as neutron net-list -- if
+    a net has multiple subnets, then tempest table will create multiple entries in table_['values']
+    param output_lines: output from cli command
+    return: Dictionary of a table with.multi-line entry taken into account.table_['values'] is list of entries. If
+    multi-line entry, then this entry itself is a list.
+    """
+    table_ = __table(output_lines, rstrip_value=rstrip_value)
+    rows = get_all_rows(table_)
+    if not rows:
+        if not table_['headers']:
+            LOG.debug('No table returned')
+        else:
+            LOG.debug("Empty table returned")
+        return table_
+
+    values = __convert_multilines_values(values=rows, merge_lines=combine_multiline_entry)
+
+    table_['values'] = values
     return table_
 
 
@@ -334,7 +343,7 @@ def get_column(table_, header, merge_lines=False):
 
 
 def __get_row_indexes_string(table_, header, value, strict=False, exclude=False):
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         value = ''.join(value)
 
     if not isinstance(value, str):
@@ -351,22 +360,15 @@ def __get_row_indexes_string(table_, header, value, strict=False, exclude=False)
         if isinstance(actual_val, list):
             actual_val = ''.join(actual_val)
         actual_val = actual_val.strip().lower()
-
         if strict:
             is_valid = actual_val == value
-        # elif isinstance(value, list):
-        #     is_valid = True
-        #     for v in value:
-        #         if v not in actual_val:
-        #             is_valid = False
-        #             break
         else:
             is_valid = value in actual_val
 
         if is_valid is not exclude:
             row_index.append(i)
 
-    LOG.debug("row index list for {}: {}: {}".format(header, value, row_index))
+    # LOG.debug("row index list for {}: {}: {}".format(header, value, row_index))
     return row_index
 
 
@@ -632,6 +634,7 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
 
     """
     table_ = table_.copy()
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
     if not kwargs:
         LOG.debug("No kwargs specified. Skip filtering")
         return table_
@@ -715,9 +718,9 @@ def compare_tables(table_one, table_two):
     return 0, "Both Table contain same headers and values"
 
 
-__sm_delimeter_line = re.compile('^-.*[\-]{3,}$')
-__sm_category_line = re.compile('^-([A-Z].*[a-z])[\-]{3,}$')
-__sm_item_line = re.compile('([a-z-]+)[\t\s$]')
+__sm_delimeter_line = re.compile(r'^-.*[\-]{3,}$')
+__sm_category_line = re.compile(r'^-([A-Z].*[a-z])[\-]{3,}$')
+__sm_item_line = re.compile(r'([a-z-]+)[\t\s$]')
 
 
 def sm_dump_table(output_lines):
@@ -936,3 +939,71 @@ def get_columns(table_, headers):
         results.append([row[i] for i in selected_column_positions])
 
     return results
+
+
+def table_kube(output_lines, merge_lines=False):
+    """
+    Parse single table from kubectl output.
+
+    Args:
+        output_lines (str|list): output of kubectl cmd
+        merge_lines (bool): if a value spans on multiple lines, whether to join them or return as list
+
+    Return dict with list of column names in 'headers' key and
+    rows in 'values' key.
+    """
+    table_ = {'headers': [], 'values': []}
+
+    if not isinstance(output_lines, list):
+        output_lines = output_lines.split('\n')
+
+    if not output_lines or len(output_lines) < 2:
+        return table_
+
+    if not output_lines[-1]:
+        # skip last line if empty (just newline at the end)
+        output_lines = output_lines[:-1]
+    if not output_lines[0]:
+        output_lines = output_lines[1:]
+
+    if not output_lines:
+        return table_
+
+    for i in range(len(output_lines)):
+        line = output_lines[i]
+        if '  ' not in line:
+            LOG.debug('Invalid kube table line: {}'.format(line))
+        else:
+            header_row = line
+            output_lines = output_lines[i+1:]
+            break
+    else:
+        return table_
+
+    table_['headers'] = re.split(r'\s[\s]+', header_row)
+
+    m = re.finditer(kute_sep, header_row)
+    starts = [0] + [sep.start()+2 for sep in m]
+    col_count = len(starts)
+    for line in output_lines:
+        row = []
+        indices = list(starts) + [len(line)]
+        for i in range(col_count):
+            row.append(line[indices[i]:indices[i+1]].strip())
+        table_['values'].append(row)
+
+    if table_['values'] and len(table_['values'][0]) != len(table_['headers']):
+        raise exceptions.CommonError('Unable to parse given lines: \n{}'.format(output_lines))
+
+    table_['values'] = __convert_multilines_values(table_['values'], merge_lines=merge_lines)
+
+    return table_
+
+
+def tables_kube(output_lines, merge_lines=False):
+    output_lines_list = output_lines.split('\n\n')
+    tables_ = []
+    for output_lines_ in output_lines_list:
+        tables_.append(table_kube(output_lines_, merge_lines=merge_lines))
+
+    return tables_

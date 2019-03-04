@@ -1,18 +1,22 @@
+from pytest import fixture
+
+from consts import horizon
+from consts.cgcs import GuestImages
+from consts.auth import Tenant
+from keywords import nova_helper
+from utils.tis_log import LOG
+from utils.horizon import helper
 from utils.horizon.regions import messages
 from utils.horizon.pages.project.network import floatingipspage as project_floatingipspage
 from utils.horizon.pages.admin.network import floatingipspage as admin_floatingipspage
 from utils.horizon.pages.project.compute import instancespage
-from pytest import fixture
-from utils.horizon import helper
-from testfixtures.horizon import admin_home_pg, tenant_home_pg, driver
-from utils.tis_log import LOG
-from consts import horizon
 
 
 @fixture(scope='function')
-def floating_ips_pg_tenant(tenant_home_pg, request):
+def floating_ips_pg_tenant(tenant_home_pg_container, request):
     LOG.fixture_step('Go to Project > Network > Floating IPs')
-    floatingips_pg = project_floatingipspage.FloatingipsPage(tenant_home_pg.driver)
+    floatingips_pg = project_floatingipspage.FloatingipsPage(tenant_home_pg_container.driver,
+                                                             port=tenant_home_pg_container.port)
     floatingips_pg.go_to_target_page()
 
     def teardown():
@@ -24,9 +28,9 @@ def floating_ips_pg_tenant(tenant_home_pg, request):
 
 
 @fixture(scope='function')
-def instances_pg(tenant_home_pg, request):
+def instances_pg(tenant_home_pg_container, request):
     LOG.fixture_step('Go to Project > Compute > Instances')
-    instances_page = instancespage.InstancesPage(tenant_home_pg.driver)
+    instances_page = instancespage.InstancesPage(tenant_home_pg_container.driver, port=tenant_home_pg_container.port)
     instances_page.go_to_target_page()
 
     def teardown():
@@ -37,7 +41,7 @@ def instances_pg(tenant_home_pg, request):
     return instances_page
 
 
-def test_floating_ip(floating_ips_pg_tenant):
+def test_horizon_floating_ip(floating_ips_pg_tenant):
     """
     Tests the floating-ip allocate/release functionality:
 
@@ -73,7 +77,7 @@ def test_floating_ip(floating_ips_pg_tenant):
     horizon.test_result = True
 
 
-def test_floating_ip_associate_disassociate(instances_pg):
+def test_horizon_floating_ip_associate_disassociate(instances_pg):
     """
     Tests the floating-ip allocate/release functionality:
 
@@ -95,19 +99,23 @@ def test_floating_ip_associate_disassociate(instances_pg):
     """
     instance_name = helper.gen_resource_name('instance')
     LOG.tc_step('Create new instance {}'.format(instance_name))
+    mgmt_net_name = '-'.join([Tenant.get_primary()['tenant'], 'mgmt', 'net'])
+    flv_name = nova_helper.get_basic_flavor(rtn_id=False)
+    guest_img = GuestImages.DEFAULT_GUEST
+
     instances_pg.create_instance(instance_name,
                                  boot_source_type='Image',
                                  create_new_volume=False,
-                                 source_name='tis-centos-guest',
-                                 flavor_name='small',
-                                 network_names=['tenant1-mgmt-net'])
+                                 source_name=guest_img,
+                                 flavor_name=flv_name,
+                                 network_names=[mgmt_net_name])
     assert not instances_pg.find_message_and_dismiss(messages.ERROR)
     assert instances_pg.is_instance_active(instance_name)
 
     instance_ipv4 = instances_pg.get_fixed_ipv4(instance_name)
     instance_info = "{} {}".format(instance_name, instance_ipv4)
 
-    floating_ips_page = project_floatingipspage.FloatingipsPage(instances_pg.driver)
+    floating_ips_page = project_floatingipspage.FloatingipsPage(instances_pg.driver, port=instances_pg.port)
     floating_ips_page.go_to_target_page()
 
     LOG.tc_step('Allocates floating ip')
@@ -146,9 +154,10 @@ def test_floating_ip_associate_disassociate(instances_pg):
 
 
 @fixture(scope='function')
-def floating_ips_pg_admin(admin_home_pg, request):
+def floating_ips_pg_admin(admin_home_pg_container, request):
     LOG.fixture_step('Go to Admin > Network > Floating IPs')
-    floating_ips_pg = admin_floatingipspage.FloatingipsPage(admin_home_pg.driver)
+    floating_ips_pg = admin_floatingipspage.FloatingipsPage(admin_home_pg_container.driver,
+                                                            port=admin_home_pg_container.port)
     floating_ips_pg.go_to_target_page()
 
     def teardown():
@@ -159,9 +168,9 @@ def floating_ips_pg_admin(admin_home_pg, request):
     return floating_ips_pg
 
 
-def test_allocate_floating_ip_admin(floating_ips_pg_admin):
+def test_horizon_allocate_floating_ip_admin(floating_ips_pg_admin):
     LOG.tc_step('Allocates floating ip')
-    floating_ip = floating_ips_pg_admin.allocate_floatingip(tenant='tenant1')
+    floating_ip = floating_ips_pg_admin.allocate_floatingip(tenant=Tenant.get_primary()['tenant'])
 
     LOG.tc_step('Verifies that the floating ip {} is present'.format(floating_ip))
     assert floating_ips_pg_admin.find_message_and_dismiss(messages.SUCCESS)

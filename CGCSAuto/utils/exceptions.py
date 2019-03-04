@@ -161,6 +161,10 @@ class SysinvError(TiSError):
     message = 'Sysinv error.'
 
 
+class ContainerError(SysinvError):
+    message = 'Container error.'
+
+
 class CinderError(TiSError):
     message = 'Cinder error.'
 
@@ -233,9 +237,18 @@ class PatchError(TiSError):
     message = 'Patch error.'
 
 
+class KubeError(TiSError):
+    message = 'Kubernetes error.'
+
+
+class KubeCmdError(KubeError):
+    message = 'Kubernetes cmd failed.'
+
+
 class InstallError(TiSError):
     message = 'Install error'
 
 
 class K8sError(TiSError):
     message = 'K8s error'
+

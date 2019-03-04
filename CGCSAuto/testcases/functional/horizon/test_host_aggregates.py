@@ -1,15 +1,15 @@
+from pytest import fixture
+
+from consts import horizon
+from utils.tis_log import LOG
 from utils.horizon.regions import messages
 from utils.horizon.pages.admin.compute import hostaggregatespage
-from pytest import fixture
-from utils.tis_log import LOG
-from testfixtures.horizon import admin_home_pg, driver
-from consts import horizon
 
 
 @fixture(scope='function')
-def host_aggregates_pg(admin_home_pg, request):
+def host_aggregates_pg(admin_home_pg_container, request):
     LOG.fixture_step('Go to Admin > Compute > Host Aggregates')
-    hostaggregates_pg = hostaggregatespage.HostaggregatesPage(admin_home_pg.driver)
+    hostaggregates_pg = hostaggregatespage.HostaggregatesPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     hostaggregates_pg.go_to_target_page()
 
     def teardown():
@@ -20,7 +20,7 @@ def host_aggregates_pg(admin_home_pg, request):
     return hostaggregates_pg
 
 
-def test_host_aggregate_create(host_aggregates_pg):
+def test_horizon_host_aggregate_create(host_aggregates_pg):
     """
     Test the host aggregate creation and deletion functionality:
 

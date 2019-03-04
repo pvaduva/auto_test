@@ -12,7 +12,7 @@ from keywords import system_helper, nova_helper
 
 
 def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
-                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None):
+                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, source_openrc=None):
     """
     Getting subclouds info
     Args:
@@ -31,7 +31,8 @@ def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
 
     # auth_info = Tenant.get('admin', 'SystemController')
     LOG.info("Auth_info: {}".format(auth_info))
-    table_ = table_parser.table(cli.dcmanager('subcloud list', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.dcmanager('subcloud list', auth_info=auth_info, ssh_client=con_ssh,
+                                              source_openrc=source_openrc))
     arg_dict = {'name': name, 'availability': avail, 'sync': sync, 'management': mgmt}
     kwargs = {key: val for key, val in arg_dict.items() if val is not None}
     subclouds = table_parser.get_values(table_, target_header=rtn_val, **kwargs)
@@ -61,7 +62,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
 
     subclouds_to_update = list(subcloud)
     if check_first:
-        subclouds_in_state = get_subclouds(mgmt=expt_state, con_ssh=con_ssh)
+        subclouds_in_state = get_subclouds(mgmt=expt_state, con_ssh=con_ssh, auth_info=auth_info)
         subclouds_to_update = list(set(subclouds_to_update) - set(subclouds_in_state))
         if not subclouds_to_update:
             LOG.info("{} already {}. Do nothing.".format(subcloud, expt_state))
@@ -70,8 +71,9 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     LOG.info("Attempt to {}: {}".format(operation, subclouds_to_update))
     failed_subclouds = []
     for subcloud_ in subclouds_to_update:
-        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_list=True, ssh_client=con_ssh,
-                                  source_openrc=source_openrc)
+        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_list=True,
+                                  auth_info=auth_info, ssh_client=con_ssh, source_openrc=source_openrc)
+
         if code > 0:
             failed_subclouds.append(subcloud_)
 
@@ -83,7 +85,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
         raise exceptions.DCError(err)
 
     LOG.info("Check management status for {} after dcmanager subcloud {}".format(subclouds_to_update, operation))
-    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update, con_ssh=con_ssh)
+    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update, auth_info=auth_info, con_ssh=con_ssh)
     failed_subclouds = [subclouds_to_update[i] for i in range(len(mgmt_states)) if mgmt_states[i] != expt_state]
     if failed_subclouds:
         raise exceptions.DCError("{} not {} after dcmanger subcloud {}".format(failed_subclouds, expt_state, operation))
@@ -91,14 +93,14 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     return 0, subclouds_to_update
 
 
-def manage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False):
+def manage_subcloud(subcloud=None, check_first=True, fail_ok=False, con_ssh=None):
     """
     Manage subcloud(s)
     Args:
         subcloud (str|tuple|list):
         check_first (bool):
         fail_ok (bool):
-        con_ssh (SSHClient):
+        con_ssh(SSClient):
 
     Returns (tuple):
         (-1, [])                            All give subcloud(s) already managed. Do nothing.
@@ -106,11 +108,11 @@ def manage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False
         (1, [<cli_rejected_subclouds>])     dcmanager manage cli failed on these subcloud(s)
 
     """
-    return _manage_unmanage_subcloud(subcloud=subcloud, manage=True, check_first=check_first, con_ssh=con_ssh,
-                                     fail_ok=fail_ok)
+    return _manage_unmanage_subcloud(subcloud=subcloud, manage=True, check_first=check_first, fail_ok=fail_ok,
+                                     con_ssh=con_ssh)
 
 
-def unmanage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=False):
+def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False, con_ssh=None):
     """
     Unmanage subcloud(s)
     Args:
@@ -125,8 +127,8 @@ def unmanage_subcloud(subcloud=None, check_first=True, con_ssh=None, fail_ok=Fal
         (1, [<cli_rejected_subclouds>])     dcmanager unmanage cli failed on these subcloud(s)
 
     """
-    return _manage_unmanage_subcloud(subcloud=subcloud, manage=False, check_first=check_first, con_ssh=con_ssh,
-                                     fail_ok=fail_ok)
+    return _manage_unmanage_subcloud(subcloud=subcloud, manage=False, check_first=check_first, fail_ok=fail_ok,
+                                     con_ssh=con_ssh)
 
 
 def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, expected_value=None, auth_name='admin',
@@ -430,34 +432,35 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
 
     """
 
-    status = ''
-
     if not subcloud:
         raise ValueError("Subcloud name must be specified")
-    if not avail and not sync and not mgmt:
-        raise ValueError("At least one  expected status of the subcloud must be specified.")
+
+    expt_status = {}
     if avail:
-        LOG.info("Wait for {} availability to be {}".format(subcloud, avail))
+        expt_status['avail'] = avail
+    if sync:
+        expt_status['sync'] = sync
+    if mgmt:
+        expt_status['mgmt'] = mgmt
 
-        end_time = time.time() + timeout + check_interval
-        while time.time() < end_time:
+    if not expt_status:
+        raise ValueError("At least one  expected status of the subcloud must be specified.")
 
-            LOG.info("Check availability status for {} ".format(subcloud))
-            subclouds = get_subclouds(rtn_val='name', name=subcloud, avail=avail, sync=sync, mgmt=mgmt, con_ssh=con_ssh,
-                                      auth_info=auth_info)
-            if subcloud in subclouds:
-                return 0, subcloud
+    LOG.info("Wait for {} status: {}".format(subcloud, expt_status))
+    end_time = time.time() + timeout + check_interval
+    while time.time() < end_time:
+        if get_subclouds(rtn_val='name', name=subcloud, con_ssh=con_ssh, source_openrc=source_openrc,
+                         auth_info=auth_info, **expt_status):
+            return 0, subcloud
+        LOG.info("Not in expected states yet...")
+        time.sleep(check_interval)
 
-            time.sleep(check_interval)
-        exp_status = "avail = {}; sync = {}; mgmt = {}".format(avail if avail else "n/a", sync if sync else "n/a",
-                                                               mgmt if mgmt else "n/a")
-        msg = '{} avaiability status did not reach: {} within {} seconds'.format(subcloud, exp_status, timeout)
-
-        if fail_ok:
-            LOG.info(msg)
-            return 1, status
-        else:
-            raise exceptions.DCError(msg)
+    msg = '{} status did not reach {} within {} seconds'.format(subcloud, expt_status, timeout)
+    LOG.warning(msg)
+    if fail_ok:
+        return 1, msg
+    else:
+        raise exceptions.DCError(msg)
 
 
 def wait_for_subcloud_keypair(subcloud=None, subcloud_ssh=None, expected_keypair=None, fail_ok=False,

@@ -1,7 +1,8 @@
+from pytest import fixture, mark
+
 from utils.horizon.regions import messages
 from utils.horizon.pages.admin.fault_management import eventssuppressionpage
-from pytest import fixture, mark
-from testfixtures.horizon import admin_home_pg, driver
+
 from utils.tis_log import LOG
 from consts import horizon
 

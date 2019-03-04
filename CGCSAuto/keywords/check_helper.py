@@ -15,7 +15,7 @@ from consts.auth import Tenant
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper, storage_helper
+    glance_helper, storage_helper, kube_helper, container_helper
 
 SEP = '\n------------------------------------ '
 
@@ -372,15 +372,16 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     # numa_nodes = list(range(len(procs)))
     vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
     assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
-    with host_helper.ssh_to_host(vm_host) as host_ssh:
 
-        LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
-                 format(SEP, expt_increase))
-        expt_total = round(prev_total_cpus + expt_increase, 4)
-        post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_total_cpus,
-                                                                                  expt_cpus=expt_total, fail_ok=True)
-        assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
-                                             'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+    LOG.info("{}Check total allocated vcpus increased by {} from nova-compute log for {}".
+             format(SEP, expt_increase, vm_host))
+    expt_total = round(prev_total_cpus + expt_increase, 4)
+    post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(vm_host, prev_cpus=prev_total_cpus,
+                                                                              expt_cpus=expt_total, fail_ok=True)
+    assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
+                                         'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+
+    with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check vcpus for vm via sudo virsh vcpupin".format(SEP))
         vcpu_pins = host_helper.get_vcpu_pins_for_instance_via_virsh(host_ssh=host_ssh,
@@ -787,7 +788,7 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
 
 
-def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_ssh=None):
+def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
@@ -813,13 +814,22 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_
         LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
         network_helper.schedule_providernet_connectivity_test(auth_info=auth_info, con_ssh=con_ssh)
 
+    res = True
+    remaining_alarms = None
     if new_alarms:
         LOG.info("New alarms detected. Waiting for new alarms to clear.")
         res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=timeout,
                                                                    check_interval=check_interval,
                                                                    auth_info=auth_info, con_ssh=con_ssh)
-        assert res, "New alarm(s) found and did not clear within {} seconds. " \
-                    "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
+
+    if not res:
+        msg = "New alarm(s) found and did not clear within {} seconds. Alarm IDs and Entity IDs: {}".\
+            format(timeout, remaining_alarms)
+        LOG.warning(msg)
+        if not fail_ok:
+            assert res, msg
+
+    return res, remaining_alarms
 
 
 def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):

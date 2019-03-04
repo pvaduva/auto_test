@@ -1,21 +1,17 @@
+from pytest import fixture
+
+from consts import horizon
+from utils.tis_log import LOG
+from utils.horizon import helper
 from utils.horizon.regions import messages
 from utils.horizon.pages.identity import rolespage
-from pytest import fixture
-from utils.horizon import helper
-from utils.tis_log import LOG
-# from testfixtures.horizon import admin_home_pg, driver     # DO NOT remove
-from consts import horizon
-
-
-ROLE_NAME = None
 
 
 @fixture(scope='function')
-def roles_pg(admin_home_pg, request):
+def roles_pg(admin_home_pg_container, request):
     LOG.fixture_step('Go to Identity > Roles')
-    global ROLE_NAME
-    ROLE_NAME = helper.gen_resource_name('roles')
-    roles_pg = rolespage.RolesPage(admin_home_pg.driver)
+    role_name = helper.gen_resource_name('roles')
+    roles_pg = rolespage.RolesPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     roles_pg.go_to_target_page()
 
     def teardown():
@@ -23,10 +19,10 @@ def roles_pg(admin_home_pg, request):
         roles_pg.go_to_target_page()
 
     request.addfinalizer(teardown)
-    return roles_pg
+    return roles_pg, role_name
 
 
-def test_create_edit_delete_role(roles_pg):
+def test_horizon_create_edit_delete_role(roles_pg):
     """
     Tests the role creation/edit/deletion functionality:
 
@@ -46,21 +42,21 @@ def test_create_edit_delete_role(roles_pg):
         - Delete the newly created role
         - Verify the role does not appear in the table after deletion
     """
-    roles_pg.create_role(ROLE_NAME)
+    roles_pg, role_name = roles_pg
+
+    roles_pg.create_role(role_name)
     assert roles_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not roles_pg.find_message_and_dismiss(messages.ERROR)
-    assert roles_pg.is_role_present(ROLE_NAME)
+    assert roles_pg.is_role_present(role_name)
 
-    newname = 'edit' + ROLE_NAME
-    roles_pg.edit_role(ROLE_NAME, newname)
+    newname = 'edit' + role_name
+    roles_pg.edit_role(role_name, newname)
     assert roles_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not roles_pg.find_message_and_dismiss(messages.ERROR)
     assert roles_pg.is_role_present(newname)
-    global ROLE_NAME
-    ROLE_NAME = newname
 
-    roles_pg.delete_role(ROLE_NAME)
+    roles_pg.delete_role(newname)
     assert roles_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not roles_pg.find_message_and_dismiss(messages.ERROR)
-    assert not roles_pg.is_role_present(ROLE_NAME)
+    assert not roles_pg.is_role_present(newname)
     horizon.test_result = True

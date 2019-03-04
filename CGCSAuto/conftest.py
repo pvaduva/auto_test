@@ -584,7 +584,7 @@ def pytest_addoption(parser):
     dcfloatip_help = " The distributed cloud central region floating ip if subcloud is specified."
     openstack_install_help = 'flag for openstack install or not; default is false.'
     ipv6_install_help = 'flag for ipv6 install or not; default is false.'
-
+    helm_chart_path_help = 'Full path to Helm charts files. Default is <build-dir>/std/build-helm/stx'
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
                      help=file_dir_help)
@@ -607,6 +607,8 @@ def pytest_addoption(parser):
                      help=openstack_install_help)
     parser.addoption('--ipv6',  dest='ipv6', action='store_true', default=False,
                      help=ipv6_install_help)
+    parser.addoption('--helm-chart-path', '--helmchartpath', '--helm_chart_path', dest='helm_chart_path',
+                     action='store', default=None,  help=helm_chart_path_help)
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
@@ -890,10 +892,10 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
 
-    try:
-        setups.list_migration_history(con_ssh=con_ssh)
-    except:
-        LOG.warning("Failed to run nova migration-list")
+    # try:
+    #     setups.list_migration_history(con_ssh=con_ssh)
+    # except:
+    #     LOG.warning("Failed to run nova migration-list")
 
     if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure

@@ -8,13 +8,10 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, HostUnlock, KPI_DATE_FORMAT
 from testfixtures.recover_hosts import HostsToRecover
-from testfixtures.pre_checks_and_configs import no_simplex
-
-from keywords import host_helper, system_helper, common
+from keywords import host_helper, system_helper, common, kube_helper
 
 
-@mark.sanity
-@mark.cpe_sanity
+@mark.platform_sanity
 def test_lock_active_controller_reject(no_simplex):
     """
     Verify lock unlock active controller. Expected it to fail
@@ -26,7 +23,6 @@ def test_lock_active_controller_reject(no_simplex):
     """
     LOG.tc_step('Retrieve the active controller from the lab')
     active_controller = system_helper.get_active_controller_name()
-
     assert active_controller, "No active controller available"
 
     # lock standby controller node and verify it is successfully locked
@@ -38,7 +34,7 @@ def test_lock_active_controller_reject(no_simplex):
 
 
 @mark.parametrize('host_type', [
-    mark.priorities('sanity', 'cpe_sanity', 'kpi')('controller'),
+    mark.priorities('platform_sanity', 'sanity', 'cpe_sanity', 'kpi')('controller'),
     mark.priorities('kpi')('compute'),
     mark.priorities('kpi')('storage'),
 ])

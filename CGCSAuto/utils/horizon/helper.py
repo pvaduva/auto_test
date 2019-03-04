@@ -5,6 +5,11 @@ import time
 
 from selenium import webdriver
 
+try:
+    from pyvirtualdisplay import Display
+except ImportError:
+    Display = None
+
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 
@@ -61,12 +66,10 @@ class HorizonDriver:
         profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/plain,application/x-shellscript")
         # profile.update_preferences()
         display = None
-        try:
-            from pyvirtualdisplay import Display
+        if Display is not None:
             display = Display(visible=ProjVar.get_var('HORIZON_VISIBLE'), size=(1920, 1080))
             display.start()
-        except:
-            pass
+
         driver_ = webdriver.Firefox(firefox_profile=profile)
         # driver_.maximize_window()
         cls.driver_info.append((driver_, display))

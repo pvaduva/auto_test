@@ -124,7 +124,7 @@ def test_modify_timezone_log_timestamps():
             epoch_diff_prev_log = new_log_epoch - prev_log_epoch
 
             LOG.info('timezone modify time used: {}; pre-modify sys time - last log time: {}'.
-                  format(mod_diff, epoch_diff_prev_log_to_sys))
+                     format(mod_diff, epoch_diff_prev_log_to_sys))
             if abs(epoch_diff_prev_log) > max(mod_diff, 180) + epoch_diff_prev_log_to_sys:
                 LOG.info("{} has new log entry. Adding to logs_to_test.".format(log_name))
                 logs_to_test[log_name] = new_log_epoch

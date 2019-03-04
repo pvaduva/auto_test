@@ -99,6 +99,7 @@ def test_simplex_install(install_setup):
 
     if lab.get("floating ip"):
         setup_tis_ssh(lab)
+
     fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
 
     fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)

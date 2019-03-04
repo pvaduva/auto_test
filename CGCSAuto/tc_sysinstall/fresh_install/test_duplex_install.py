@@ -105,13 +105,13 @@ def test_duplex_install(install_setup):
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
+    #fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.boot_hosts(boot_device)
 
-    host_helper.wait_for_hosts_ready(["controller-1"], con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.wait_for_hosts_to_be_online(["controller-1"], lab=lab)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
@@ -130,4 +130,5 @@ def test_duplex_install(install_setup):
     fresh_install_helper.attempt_to_run_post_install_scripts()
 
     fresh_install_helper.reset_global_vars()
+
     fresh_install_helper.verify_install_uuid(lab)

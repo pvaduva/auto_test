@@ -1,3 +1,4 @@
+import time
 from pytest import mark, skip
 
 from utils.tis_log import LOG
@@ -25,7 +26,11 @@ def test_system_persist_over_host_reboot(host_type):
         - Validate key items from inventory persist over reboot
 
     """
+    skip('Skip force reboot sanity test as requested until lock/unlock stabilize')
     if host_type == 'controller':
+        # FIXME temp workaround
+        if system_helper.is_two_node_cpe():
+            skip("mariadb issue. Fail without testing for now.")
         host = system_helper.get_active_controller_name()
     elif host_type == 'compute':
         if system_helper.is_small_footprint():
@@ -67,4 +72,5 @@ def test_system_persist_over_host_reboot(host_type):
     if host in up_hypervisors:
         LOG.tc_step("Check {} can still host vm after reboot".format(host))
         if not nova_helper.get_vm_host(vm_id) == host:
+            time.sleep(30)
             vm_helper.live_migrate_vm(vm_id, destination_host=host)

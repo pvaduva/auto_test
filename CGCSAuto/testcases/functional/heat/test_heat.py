@@ -272,7 +272,7 @@ def revert_quota(request):
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
-    mark.sanity('WR_Neutron_ProviderNetRange.yaml'),
+    # mark.sanity('WR_Neutron_ProviderNetRange.yaml'),  Need update due to datanetwork change
     mark.priorities('nightly', 'sx_nightly')('WR_Neutron_ProviderNet.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'),
@@ -291,7 +291,7 @@ def revert_quota(request):
     # mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),    CGTS-10095
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_Stack.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_VolumeAttachment.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Nova_Server.yaml'),
+    mark.priorities('sx_sanity', 'sanity', 'cpe_sanity')('OS_Nova_Server.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_AccessPolicy.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_AutoScalingGroup.yaml'),
     ])
@@ -311,7 +311,7 @@ def test_heat_template(template_name, revert_quota):
 
     Test Steps:
         - Create a heat stack with the given template
-        - Verify heat stack is created sucessfully
+        - Verify heat stack is created successfully
         - Verify heat resources are created
         - Delete Heat stack and verify resource deletion
 

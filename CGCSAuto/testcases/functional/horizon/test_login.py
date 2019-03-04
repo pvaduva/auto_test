@@ -1,13 +1,14 @@
-from utils.horizon.pages import loginpage
 from pytest import mark
-from testfixtures.horizon import driver
+
+from consts.auth import Tenant
+from utils.horizon.pages import loginpage
 
 
-@mark.parametrize(('username', 'password'), [
-        ('admin', 'Li69nux*'),
-        ('tenant1', 'Li69nux*')
-    ])
-def test_login(driver, username, password):
+@mark.parametrize(('username', 'service'), [
+    ('admin', 'platform'),
+    ('tenant1', 'container')
+])
+def test_horizon_login(driver, username, service):
     """
     Test the login functionality:
 
@@ -16,9 +17,10 @@ def test_login(driver, username, password):
         - Verify is-logged-in
         - Logout
     """
-
-    login_pg = loginpage.LoginPage(driver)
+    port = 31000 if service == 'container' else None
+    login_pg = loginpage.LoginPage(driver, port=port)
     login_pg.go_to_target_page()
-    home_pg = login_pg.login(username, password)
+    password = Tenant.get(username)['password']
+    home_pg = login_pg.login(username, password=password)
     assert home_pg.is_logged_in
     home_pg.log_out()

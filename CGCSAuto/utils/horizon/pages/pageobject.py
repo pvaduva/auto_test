@@ -27,6 +27,7 @@ class PageObject(basewebobject.BaseWebObject):
         if CliAuth.get_var('HTTPS'):
             prefix = 'https'
         oam_ip = ProjVar.get_var("LAB")['floating ip']
+
         if not self.port:
             self.port = 8080 if prefix == 'http' else 8443
         base_url = '{}://{}:{}'.format(prefix, oam_ip, self.port)    # horizon url matt

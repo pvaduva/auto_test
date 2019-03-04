@@ -1,24 +1,22 @@
 from pytest import fixture, skip, mark
 
+
+from consts import horizon
+from keywords import system_helper, filesystem_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.horizon import helper
 from utils.horizon.pages.admin.platform import systemconfigurationpage
-from consts import horizon
-from keywords import system_helper, filesystem_helper
-from testfixtures.horizon import admin_home_pg
-
-TEST_ADDRESS_NAME = None
 
 
-@fixture()
+@fixture(scope='module')
 def storage_precheck():
     if not system_helper.is_storage_system():
         skip("This test only applies to storage nodes")
 
 
 @fixture()
-def sys_config_pg(admin_home_pg):
+def sys_config_pg(storage_precheck, admin_home_pg):
     LOG.fixture_step('Go to Admin > Platform > System Configuration')
     system_configuration_pg = systemconfigurationpage.SystemConfigurationPage(admin_home_pg.driver)
     system_configuration_pg.go_to_target_page()
@@ -196,7 +194,7 @@ def test_horizon_sysconfig_ptp_cancel_edit(sys_config_pg):
         horizon_header = headers_map[cli_headers[i]]
         expt_horizon[horizon_header] = cli_vals[i]
     table_name = sys_config_pg.ptp_table.name
-    sys_config_pg.check_horizon_displays(expt_horizon = expt_horizon, table_name = table_name)
+    sys_config_pg.check_horizon_displays(expt_horizon=expt_horizon, table_name=table_name)
 
     LOG.tc_step('Edit PTP but not submit')
     sys_config_pg.edit_ptp(cancel=True)
@@ -233,7 +231,6 @@ def test_horizon_sysconfig_oam_cancel_edit(sys_config_pg):
         expt_horizon[horizon_header] = table_parser.get_value_two_col_table(oam_table, field=cli_header)
     table_name = sys_config_pg.oam_table.name
     sys_config_pg.check_horizon_displays(table_name=table_name, expt_horizon=expt_horizon)
-
 
     LOG.tc_step('Edit the OAM but not submit')
     sys_config_pg.edit_oam(cancel=True)

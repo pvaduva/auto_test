@@ -3,14 +3,19 @@ import re
 import time
 from pytest import skip
 
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, keystone_helper
+
+
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
+    keystone_helper
+from utils import cli
+
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
 from setups import initialize_server
 from consts.auth import Tenant
 from consts.timeout import InstallTimeout
-from consts.cgcs import SysType, SubcloudStatus
+from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 
@@ -35,9 +40,9 @@ def set_completed_resume_step(val=False):
 
 def reset_global_vars():
     lab_setup_count_ = set_lab_setup_count(0)
-    complete_resume_step = set_completed_resume_step(False)
+    completed_resume_step_ = set_completed_resume_step(False)
 
-    return lab_setup_count_, complete_resume_step
+    return lab_setup_count_, completed_resume_step_
 
 
 def set_preinstall_projvars(build_dir, build_server):
@@ -97,7 +102,7 @@ def do_step(step_name=None):
 
     if step_name:
         step_name = step_name.lower().replace(' ', '_')
-        if step_name == 'run_lab_setup':
+        if 'run_lab_setup' == step_name:
             global lab_setup_count
             step_name = step_name + '-{}'.format(lab_setup_count)
             lab_setup_count += 1
@@ -196,10 +201,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         controller0_node = lab['controller-0']
         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
 
-    if InstallVars.get_install_var("KUBERNETES"):
-        LOG.info("WK: Downloading the helm charts to active controller ...")
-        helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
-        install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
+    #if InstallVars.get_install_var("KUBERNETES"):
+    LOG.info("WK: Downloading the helm charts to active controller ...")
+    helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
+    install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
 
 
 def set_license_var(sys_version=None, sys_type=None):
@@ -275,16 +280,31 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
-    LOG.info("Run lab_setup after config controller")
-    run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
+    test_step = 'run_lab_setup'
+    if do_step(test_step):
+        if controller0_node.ssh_conn is None:
+            controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+        # WK Touch .this_didnt_work to avoid using heat for kubernetes
+        controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
+
+        LOG.info("Run lab_setup after config controller")
+        run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
 
     test_step = "unlock_active_controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
+        if controller0_node.ssh_conn is None:
+            controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+        sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=controller0_node.ssh_conn)
         LOG.info("unlocking {}".format(controller0_node.name))
-        host_helper.unlock_host(host=controller0_node.name, con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=True,
+        host_helper.unlock_host(host=controller0_node.name,
+                                available_only=False if sys_mode == "duplex-direct" else True,
+                                con_ssh=controller0_node.ssh_conn, timeout=2400,
+                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False,
                                 check_first=False, con0_install=True)
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -355,6 +375,10 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if not lab:
         lab = InstallVars.get_install_var('LAB')
+
+    hosts = [host for host in lab["hosts"] if host != 'controller-0']
+    #hosts.remove('controller-0')
+
     if not con_ssh:
         con_ssh = lab["controller-0"].ssh_conn
     test_step = "Bulk add hosts"
@@ -363,7 +387,10 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=con_ssh)
         assert rc == 0, msg
         LOG.info("system host-bulk-add added: {}".format(added_hosts))
-        # assert added_hosts[0] + added_hosts[1] + added_hosts[2] == hosts, "hosts_bulk_add failed to add all hosts
+        for host in hosts:
+            assert any( host in host_list for host_list in added_hosts), "The host_bulk_add command failed to all " \
+                                                                         "hosts {}".format(hosts)
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -468,11 +495,13 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
 
     LOG.tc_step(test_step)
     if do_step(test_step):
-        if len(hostnames) == 1:
-            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400)
-        else:
-            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
-        host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
+        # if len(hostnames) == 1:
+        #     host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
+        #                             check_hypervisor_up=False, check_webservice_up=False)
+        # else:
+        host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
+        kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
+        #host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -530,8 +559,8 @@ def attempt_to_run_post_install_scripts(controller0_node=None):
         assert rc >= 0, msg
 
     # TODO Workaround for kubernetes install
-    if InstallVars.get_install_var("KUBERNETES"):
-        kubernetes_post_install()
+    # if InstallVars.get_install_var("KUBERNETES"):
+    #     kubernetes_post_install()
 
     reset_global_vars()
 
@@ -1069,7 +1098,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         if "burn" in boot["boot_type"]:
             install_helper.burn_image_to_usb(iso_host_obj, lab_dict=lab_dict)
 
-        elif "pxe_iso" in boot["boot_type"]:
+        elif "pxe_iso" in boot["boot_type"] and 'feed' not in skip_list:
             install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab_dict)
             install_helper.mount_boot_server_iso(lab_dict=lab_dict)
 
@@ -1108,7 +1137,10 @@ def verify_install_uuid(lab=None):
 
     LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))
     hosts = lab['hosts']
-    hosts.remove('controller-0')
+    try:
+        hosts.remove('controller-0')
+    except ValueError:
+        pass
     for host in hosts:
         with host_helper.ssh_to_host(host) as host_ssh:
             host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
@@ -1120,76 +1152,29 @@ def verify_install_uuid(lab=None):
     return True
 
 
-def kubernetes_post_install():
+def wait_for_hosts_ready(hosts,  lab=None):
     """
-    Installs kubernetes work arounds post install
+
     Args:
-        # server(build server object): The build server object where helm charts reside.
-        # load_path(str): The path to helm charts
+        hosts:
+        lab:
+        con_ssh:
 
     Returns:
 
     """
-    # if lab is None or server is None or load_path is None:
-    #     raise ValueError("The lab dictionary, build server object and load path must be specified")
-    lab = InstallVars.get_install_var("LAB")
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
     controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    # LOG.info("WK: Trying to execute workaround for neutron-ovs-agent on each hypervisor ...")
-    # hypervisors = host_helper.get_hypervisors(con_ssh=controller0_node.ssh_conn)
-    # for hypervisor in hypervisors:
-    #     with host_helper.ssh_to_host(hypervisor) as host_ssh:
-    #         host_ssh.exec_sudo_cmd('sh -c "echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables"')
-    # LOG.info("WK: Executed workaround for neutron-ovs-agentr ...")
-    #
-    # LOG.info("WK: Adding DNS for cluster ...")
-    # nameservers = ["8.8.8.8"]
-    # rc, output = controller0_node.ssh_conn.exec_cmd("kubectl describe svc -n kube-system kube-dns | "
-    #                                                 "awk /IP:/'{print $2}'")
-    # if rc == 0:
-    #     nameservers.append(output)
-    #
-    # system_helper.set_dns_servers(nameservers)
-    # LOG.info("WK: Added DNS  for the cluster...")
-    #
-    # LOG.info("WK: Generating the stx-openstack application tarball ...")
-    # LOG.info("WK: Downloading the helm charts to active controller ...")
-    # helm_chart_path = os.path.join(load_path, BuildServerPath.STX_HELM_CHARTS)
-    # install_helper.download_stx_help_charts(lab, server, stx_helm_charts_path=helm_chart_path)
-
-    # LOG.info("WK: Creating hosts and binding interface ...")
-    # hosts = lab['hosts']
-    # nodes = kube_helper.get_nodes_values(rtn_val='NAME', con_ssh=controller0_node.ssh_conn)
-    # cmd_auth = "export OS_AUTH_URL=http://keystone.openstack.svc.cluster.local/v3"
-    # for host in nodes:
-    #
-    #     uuid = host_helper.get_hostshow_value(host, 'uuid')
-    #     controller0_node.ssh_conn.exec_cmd(cmd_auth)
-    #     cmd = "neutron host-create {} --id {} --availablitiy up".format(host, uuid)
-    #     controller0_node.ssh_conn.exec_cmd(cmd)
-    #
-    # for node in nodes:
-    #     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
-    #     data0_info = system_helper.get_host_if_show_values(node, "data0", ["uuid", "providernetworks"],
-    #                                                        con_ssh=controller0_node.ssh_conn)
-    #     data1_info = system_helper.get_host_if_show_values(node, "data1", ["uuid", "providernetworks"],
-    #                                                        con_ssh=controller0_node.ssh_conn)
-    #
-    #     cmd0 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
-    #             .format(data0_info[0], data0_info[1], node)
-    #     cmd1 = "neutron host-bind-interface --interface {} --providernets {} --mtu 1500 {}"\
-    #         .format(data1_info[0], data1_info[1], node)
-    #     controller0_node.ssh_conn.exec_cmd(cmd_auth)
-    #     controller0_node.ssh_conn.exec_cmd(cmd0)
-    #     controller0_node.ssh_conn.exec_cmd(cmd1)
-    #
-    # install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+    kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
 
 
-def wait_for_hosts_ready(hosts,  lab=None):
+def wait_for_hosts_to_be_online(hosts,  lab=None):
     """
 
     Args:
@@ -1207,8 +1192,154 @@ def wait_for_hosts_ready(hosts,  lab=None):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    # kubernetes = InstallVars.get_install_var("KUBERNETES")
-    # if kubernetes:
-    #     # kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn)
-    # else:
-    host_helper.wait_for_hosts_ready(hosts, con_ssh=controller0_node.ssh_conn)
+    LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
+    host_helper.wait_for_hosts_states(hosts, check_interval=20, con_ssh=controller0_node.ssh_conn,
+                                      administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
+                                      availability=HostAvailState.ONLINE)
+
+
+def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
+    """
+
+    Args:
+        active_controller_node:
+        host:
+        conf_file:
+
+    Returns:
+
+    """
+
+    if not active_controller_node.ssh_conn:
+        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+
+    devices_pci = []
+    rc, output = active_controller_node.ssh_conn.exec_cmd("grep OSD_DEVICES {}".format(conf_file))
+    if rc == 0 and output:
+        lines = output.splitlines()
+        host_line = None
+        common_line = None
+        for line in lines:
+            if host.upper().replace('-', '') in line:
+                host_line = line.split('=')[1].replace('\"', '').strip()
+            elif line.startswith("OSD_DEVICES"):
+                common_line = line.split('=')[1].replace('\"', '').strip()
+            else:
+                pass
+        osd_devices = host_line if host_line else common_line
+        if osd_devices:
+            osd_devices = osd_devices.split(' ')
+            for osd_dev in osd_devices:
+                devices_pci.append(osd_dev.split('|')[0].strip())
+
+    LOG.info("OSD disks for host {} are {}".format(host, devices_pci))
+
+    return devices_pci
+
+
+def add_ceph_ceph_mon_to_host(active_controller_node, host):
+    """
+
+    Args:
+        lab:
+
+    Returns:
+
+    """
+
+    if not active_controller_node.ssh_conn:
+        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+
+    LOG.info("Adding ceph mon to {} ...".format(host))
+    storage_helper.add_ceph_mon(host, con_ssh=active_controller_node.ssh_conn)
+    LOG.info("Added ceph mon to host {} ...".format(host))
+    active_controller_node.ssh_conn.exec_cmd("touch /home/wrsroot/.lab_setup.done.group0.ceph-mon")
+
+
+def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf'):
+    """
+
+    Args:
+        active_controller_node:
+        host:
+        lab:
+        conf_file:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+    controller1_node = lab['controller-1']
+    floating_ip = lab.get('floating ip')
+    active_node_ssh = install_helper.establish_ssh_connection(floating_ip)
+    ControllerClient.set_active_controller(active_node_ssh)
+
+    controller0_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller0_node.name)
+    controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node,  controller1_node.name)
+    assert len(controller0_disk_paths) > 0 and len(controller1_disk_paths) > 0, \
+            "Unable to find OSD devices from conf file {} for the controllers".format(conf_file)
+
+    if host_helper.is_active_controller(controller0_node.name, con_ssh=active_node_ssh):
+        hosts = [controller1_node.name, controller0_node.name]
+        active_node = controller0_node
+    else:
+        hosts = [controller0_node.name, controller1_node.name]
+        active_node = controller1_node
+
+    tier_uuid = storage_helper.get_storage_tier_values("ceph_cluster", con_ssh=active_node_ssh)
+
+    for host in hosts:
+        LOG.info("Adding ceph osd to {} ..".format(host))
+        if not host_helper.is_host_locked(host, con_ssh=active_node_ssh):
+            host_helper.lock_host(host, con_ssh=active_node_ssh)
+
+        disk_paths = controller1_disk_paths if host == 'controller-1' else controller0_disk_paths
+
+        for disk_path in disk_paths:
+            disk_uuid = system_helper.get_disk_values(host, device_path=disk_path,
+                                                      con_ssh=active_node_ssh)[0]
+            storage_helper.add_storage_ceph_osd(host, disk_uuid, tier_uuid=tier_uuid[0],
+                                                con_ssh=active_node_ssh)
+
+        LOG.info("Unlocking host {} after adding ceph osds ..".format(host))
+        host_helper.unlock_host(host, con_ssh=active_node_ssh)
+        host_helper.swact_host(active_node.name, con_ssh=active_node_ssh)
+        active_node = lab[host]
+        active_node_ssh.close()
+        active_node_ssh = install_helper.establish_ssh_connection(floating_ip)
+        ControllerClient.set_active_controller(active_node_ssh)
+
+
+def apply_node_labels(hosts, active_controller_node):
+    """
+
+    Args:
+        hosts:
+        active_controller_node:
+
+    Returns:
+
+    """
+    if not active_controller_node:
+        raise ValueError("Active controller node object must be provided")
+    if not active_controller_node.ssh_conn:
+        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    if "controller-0" in hosts:
+        hosts.remove('controller-0')
+    cmd = "host-label-assign {}"
+    for host in hosts:
+        LOG.info("Applying node label for host {}".format(host))
+        if "controller" not in host:
+            cli.system(cmd.format(host), "openstack-compute-node=enabled", ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "openvswitch=enabled", ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "sriov=enabled", ssh_client=active_controller_node.ssh_conn)
+        else:
+            cli.system(cmd.format(host), "openstack-control-plane=enabled", ssh_client=active_controller_node.ssh_conn)
+
+

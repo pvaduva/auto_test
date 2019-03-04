@@ -38,7 +38,7 @@ class LoginPage(pageobject.PageObject):
         timeout = 30
         end_time = time.time() + timeout
         while time.time() < end_time:
-            page = overviewpage.OverviewPage(self.driver)
+            page = overviewpage.OverviewPage(self.driver, self.port)
             if page.is_logged_in:
                 return page
         raise HorizonError("Did not log in within 30 seconds.")

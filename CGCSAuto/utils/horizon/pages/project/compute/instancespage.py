@@ -244,6 +244,9 @@ class InstancesPage(basepage.BasePage):
         instance_form.switch_to(2)
         instance_form.addelement('Name', flavor_name)
         instance_form.switch_to(3)
+
+        if isinstance(network_names, str):
+            network_names = [network_names]
         instance_form.addelements('Network', network_names)
         if server_group_name is not None:
             instance_form.switch_to(8)

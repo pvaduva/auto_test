@@ -56,6 +56,7 @@ def format_uptime(uptime):
         return '{} month'.format(uptime_months, uptime_weeks)
 
 
+@mark.platform_sanity
 def test_horizon_host_inventory_display(host_inventory_pg):
     """
     Test the hosts inventory display:
@@ -98,6 +99,7 @@ def test_horizon_host_inventory_display(host_inventory_pg):
             else:
                 assert expt_val.upper() in horizon_val.upper(),\
                     '{} display incorrectly, expect: {} actual: {}'.format(horizon_header, expt_val, horizon_val)
+
     horizon.test_result = True
 
 

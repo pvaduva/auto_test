@@ -16,10 +16,14 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
-def skip_test_if_less_than_two_hosts():
+def skip_test_if_less_than_two_hosts(no_simplex):
     hypervisors = host_helper.get_up_hypervisors()
     if len(hypervisors) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
+
+    # FIXME temp workaround
+    if system_helper.is_two_node_cpe():
+        skip("mariadb issue. Skip without testing for now.")
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
     if nova_helper.get_quotas(quotas='instances')[0] < 10:
@@ -77,6 +81,28 @@ class TestTisGuest:
     @mark.sanity
     @mark.cpe_sanity
     def test_evacuate_vms(self, vms_):
+        """
+        Test evacuated vms
+        Args:
+            vms_: (fixture to create vms)
+
+        Pre-requisites:
+            - At least two up hypervisors on system
+
+        Test Steps:
+            - Create vms with various options:
+                - vm booted from cinder volume,
+                - vm booted from glance image,
+                - vm booted from glance image, and have an extra cinder volume attached after launch,
+                - vm booed from cinder volume with ephemeral and swap disks
+            - Move vms onto same hypervisor
+            - sudo reboot -f on the host
+            - Ensure vms are successfully evacuated to other host
+            - Live migrate vms back to original host
+            - Check vms can move back, and vms are still reachable from natbox
+            - Check system services are enabled and neutron agents are alive
+
+        """
         vms, target_host = vms_
 
         pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)

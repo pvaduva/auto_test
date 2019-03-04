@@ -1,8 +1,11 @@
+import re
+
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import SysType
-from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper
+from consts.cgcs import SysType, PodStatus
+from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper, \
+    kube_helper, container_helper
 from utils.tis_log import LOG
 
 
@@ -32,27 +35,24 @@ def check_alarms_module(request):
     __verify_alarms(request=request, scope='module')
 
 
-# @fixture(scope='session', autouse=True)
-def check_alarms_session(request):
-    """
-    Check system alarms before and after test session.
-
-    Args:
-        request: caller of this fixture. i.e., test func.
-    """
-    __verify_alarms(request=request, scope='session')
-
-
 def __verify_alarms(request, scope):
-    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
-    before_alarms = system_helper.get_alarms()
+    before_alarms = __get_alarms(scope=scope)
+    prev_bad_pods = kube_helper.get_pods(status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
 
-    def verify_alarms():
-        LOG.fixture_step("({}) Verifying system alarms after test {} ended...".format(scope, scope))
-        check_helper.check_alarms(before_alarms=before_alarms)
-        LOG.info("({}) System alarms verified.".format(scope))
+    def verify_():
+        LOG.fixture_step("({}) Verify system alarms and pods status after test {} ended...".format(scope, scope))
+        res, new_alarms = check_helper.check_alarms(before_alarms=before_alarms, fail_ok=True)
 
-    request.addfinalizer(verify_alarms)
+        container_helper.get_apps_values()
+        post_bad_pods = kube_helper.get_pods(status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
+        new_bad_pods = [k for k in post_bad_pods if k not in prev_bad_pods]
+        if new_bad_pods:
+            kube_helper.wait_for_pods_ready(pods_to_exclude=prev_bad_pods, timeout=120)
+
+        assert res, "New alarm(s) appeared within test {}: {}".format(scope, new_alarms)
+
+    request.addfinalizer(verify_)
+
     return
 
 

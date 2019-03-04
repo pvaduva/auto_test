@@ -4,13 +4,33 @@ import time
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailState
+from consts.cgcs import EventLogID, HostAvailState, AppStatus
 from consts.filepaths import HeatTemplate
 from consts.proj_vars import ProjVar, PatchingVars
 from consts.reasons import SkipSysType
-from keywords import system_helper, host_helper, keystone_helper, security_helper, common
+from keywords import system_helper, host_helper, keystone_helper, security_helper, container_helper, common, kube_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+
+
+@fixture(scope='function')
+def check_stx_openstack(request):
+    app_name = 'stx-openstack'
+    if not container_helper.is_stx_openstack_deployed(applied_only=True):
+        skip('stx-openstack application is not applied')
+
+    def wait_for_recover():
+
+        post_status = container_helper.get_apps_values(apps=(app_name,), rtn_dict=False)[0][0]
+        if not post_status == AppStatus.APPLIED:
+            LOG.info("Dump info for unhealthy pods")
+            kube_helper.dump_pods_info()
+
+            if not post_status.endswith('ed'):
+                LOG.fixture_step("Wait for application apply finish")
+                container_helper.wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=3600,
+                                                      check_interval=15, fail_ok=False)
+    request.addfinalizer(wait_for_recover)
 
 
 @fixture(scope='session')

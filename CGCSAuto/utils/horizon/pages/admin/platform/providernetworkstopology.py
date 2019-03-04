@@ -6,7 +6,6 @@ from utils.horizon.regions import baseregion, tables, forms
 from utils import exceptions
 
 
-
 class ContainerRegion(baseregion.BaseRegion):
     name = None
     _element_locator = (by.By.CSS_SELECTOR, 'a')
@@ -64,8 +63,8 @@ class ProviderNetworkDetail(forms.ItemTextDescription):
 class ProviderNetworkTopologyPage(basepage.BasePage):
 
     PARTIAL_URL = 'admin/host_topology'
-    #SERVICES_TAB_INDEX = 0
-    #USAGE_TAB_INDEX = 1)
+    # SERVICES_TAB_INDEX = 0
+    # USAGE_TAB_INDEX = 1)
 
     @property
     def host_list(self):
@@ -83,13 +82,6 @@ class ProviderNetworkTopologyPage(basepage.BasePage):
 
     def go_to_pnet_overview(self, name):
         link = self._get_element(by.By.LINK_TEXT, name)
-        print('----------------------------------------')
-        print(link.get_attribute('href'))
-        print(link)
         link.click()
 
         return ProvidernetOverviewPage(HorizonDriver.get_driver(), name)
-
-
-
-
